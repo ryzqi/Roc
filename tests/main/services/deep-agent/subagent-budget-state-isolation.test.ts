@@ -15,6 +15,7 @@ import {
   createRocSubagentStateIsolationMiddleware
 } from '../../../../src/main/services/deep-agent/subagent-state-isolation';
 import { defaultErrorTracker } from '../../../../src/main/services/forge-guardrails';
+import { createDeepAgentTestSnapshot } from '../../deep-agent-test-helpers';
 
 describe('subagent budget state isolation', () => {
   it('removes only native budget state from task commands and preserves routing fields', async () => {
@@ -119,25 +120,23 @@ describe('subagent budget state isolation', () => {
       const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
       const agent = buildDeepAgent({
         backend,
-        capabilityManifest,
         checkpointer: new RocSqliteCheckpointer(db),
-        contextBudgetTokens: undefined,
-        filesystemPermissions: [],
-        interruptOn: undefined,
         memorySources: [],
-        mode: 'run',
+        snapshot: createDeepAgentTestSnapshot({
+          capabilityManifest,
+          budget: {
+            modelCallLimit: 10,
+            modelThreadCallLimit: 100,
+            toolCallLimit: 10,
+            toolThreadCallLimit: 100
+          }
+        }),
         model: mainModel,
-        modelCallLimit: 10,
-        modelThreadCallLimit: 100,
         skillSources: [],
         store: new InMemoryStore(),
         subagents,
         systemPrompt: 'Delegate all three branches in one model turn.',
-        toolCallLimit: 10,
-        toolThreadCallLimit: 100,
-        tools: [],
-        workflowHint: null,
-        workspacePath: null
+        tools: []
       });
 
       const result = await agent.invoke(
@@ -346,24 +345,17 @@ function createAgentFixture(
   const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
   return buildDeepAgent({
     backend,
-    capabilityManifest,
     checkpointer: new RocSqliteCheckpointer(db),
-    contextBudgetTokens: undefined,
-    filesystemPermissions: [],
-    interruptOn: undefined,
     memorySources: [],
-    mode: 'run',
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      budget: limits
+    }),
     model,
-    modelCallLimit: limits.modelCallLimit,
-    modelThreadCallLimit: limits.modelThreadCallLimit,
     skillSources: [],
     store: new InMemoryStore(),
     subagents,
     systemPrompt: 'Delegate the requested deterministic branches.',
-    toolCallLimit: limits.toolCallLimit,
-    toolThreadCallLimit: limits.toolThreadCallLimit,
-    tools: [],
-    workflowHint: null,
-    workspacePath: null
+    tools: []
   });
 }

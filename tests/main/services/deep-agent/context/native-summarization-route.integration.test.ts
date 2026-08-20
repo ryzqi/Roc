@@ -12,6 +12,7 @@ import type { RocCompositeBackend } from '../../../../../src/main/services/deep-
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import { defaultErrorTracker } from '../../../../../src/main/services/forge-guardrails';
 import { RocSqliteCheckpointer } from '../../../../../src/main/services/deep-agent/sqlite-checkpointer';
+import { createDeepAgentTestSnapshot } from '../../../deep-agent-test-helpers';
 
 class AnthropicFakeToolCallingModel extends FakeToolCallingModel {
   override getName(): string {
@@ -83,7 +84,14 @@ describe('Deep Agents native summarization route integration', () => {
         workflowHint: null
       }).manifest;
       const agent = buildDeepAgent({
-        mode: 'run',
+        snapshot: createDeepAgentTestSnapshot({
+          capabilityManifest,
+          runId: 'run_real_subagent_route',
+          threadId: 'thread_real_subagent_route',
+          workspacePath: 'F:\\Code\\Roc',
+          workspaceHash: 'workspace_real_subagent_route',
+          budget: { contextBudgetTokens: 500 }
+        }),
         model,
         systemPrompt: 'Delegate the request to the research subagent.',
         backend,
@@ -99,13 +107,7 @@ describe('Deep Agents native summarization route integration', () => {
           }
         ],
         tools: [],
-        capabilityManifest,
-        filesystemPermissions: [],
-        workspacePath: 'F:\\Code\\Roc',
-        interruptOn: undefined,
         checkpointer: new RocSqliteCheckpointer(db),
-        workflowHint: null,
-        contextBudgetTokens: 500,
         contextCompaction: {
           artifactStore: new ContextArtifactStore(db),
           budgetProfile: {
@@ -117,9 +119,6 @@ describe('Deep Agents native summarization route integration', () => {
             safetyMarginTokens: 200
           },
           emitEvent: (event) => contextEvents.push(event.type),
-          mode: 'run',
-          runId: 'run_real_subagent_route',
-          threadId: 'thread_real_subagent_route',
           tokenCounter: {
             countMessages: async (messages) => ({
               estimated: false,
@@ -127,13 +126,8 @@ describe('Deep Agents native summarization route integration', () => {
             }),
             countText: async () => ({ estimated: false, tokens: 1 }),
             wasEstimated: () => false
-          },
-          workspaceHash: 'workspace_real_subagent_route'
-        },
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
+          }
+        }
       });
 
       const options = Reflect.get(agent as object, 'options');

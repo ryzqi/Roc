@@ -14,6 +14,7 @@ import {
   tagForgeMessage
 } from '../../../../../src/main/services/forge-guardrails';
 import { createForgeTieredCompactionEdits } from '../../../../../src/main/services/forge-guardrails/middleware/forge-tiered-compaction';
+import { createDeepAgentTestSnapshot } from '../../../deep-agent-test-helpers';
 
 const mocked = vi.hoisted(() => ({
   createDeepAgentMock: vi.fn(() => ({
@@ -64,8 +65,13 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     },
     skills: []
   }).manifest;
-  buildDeepAgent({
-    mode: 'run',
+  const defaults: DeepAgentBuildInput = {
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      workflowHint: 'propose_background_task',
+      workspacePath: 'F:\\Code\\Roc',
+      budget: { contextBudgetTokens: 4096 }
+    }),
     model: 'model-ready' as never,
     systemPrompt: 'system prompt',
     backend: { routePrefixes: ['/memory/'] } as RocCompositeBackend,
@@ -74,19 +80,9 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     skillSources: [],
     subagents: [],
     tools: [fakeTool('propose_background_task'), fakeTool('schedule_background_task')],
-    capabilityManifest,
-    filesystemPermissions: [],
-    workspacePath: 'F:\\Code\\Roc',
-    interruptOn: undefined,
     checkpointer: undefined,
-    workflowHint: 'propose_background_task',
-    contextBudgetTokens: 4096,
-    modelCallLimit: 20,
-    modelThreadCallLimit: 100,
-    toolCallLimit: 40,
-    toolThreadCallLimit: 200,
-    ...input
-  });
+  };
+  buildDeepAgent({ ...defaults, ...input });
   const calls = mocked.createDeepAgentMock.mock.calls as unknown as Array<[unknown]>;
   const createAgentInput = calls.at(-1)?.[0] as { middleware?: MiddlewareDescriptor[] } | undefined;
   return createAgentInput?.middleware ?? [];

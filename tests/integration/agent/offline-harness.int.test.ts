@@ -11,6 +11,7 @@ import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/ru
 import { applyAgentDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
+import { createDeepAgentTestSnapshot } from '../../main/deep-agent-test-helpers';
 import { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../src/main/services/forge-guardrails';
 
@@ -164,7 +165,15 @@ function createIntegrationAgent(model: BaseChatModel, checkpointer: RocSqliteChe
   }).manifest;
 
   return buildDeepAgent({
-    mode: 'run',
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      budget: {
+        modelCallLimit: 6,
+        modelThreadCallLimit: 6,
+        toolCallLimit: 4,
+        toolThreadCallLimit: 4
+      }
+    }),
     model,
     systemPrompt: 'Use tools only when the request requires them.',
     backend,
@@ -173,17 +182,7 @@ function createIntegrationAgent(model: BaseChatModel, checkpointer: RocSqliteChe
     skillSources: [],
     subagents: [],
     tools: [],
-    capabilityManifest,
-    filesystemPermissions: [],
-    workspacePath: null,
-    interruptOn: undefined,
-    checkpointer,
-    workflowHint: null,
-    contextBudgetTokens: undefined,
-    modelCallLimit: 6,
-    modelThreadCallLimit: 6,
-    toolCallLimit: 4,
-    toolThreadCallLimit: 4
+    checkpointer
   });
 }
 

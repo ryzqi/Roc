@@ -1,4 +1,8 @@
 import type { SubAgent } from 'deepagents';
+import type {
+  RunCapabilityManifestV1,
+  RunExecutionSnapshotV2
+} from '../../src/shared/types';
 
 export type BuiltSubagent = SubAgent | { name: string; description: string; runnable: unknown };
 
@@ -30,6 +34,49 @@ export function getSubagentTools(value: BuiltSubagent): readonly { name: string 
     throw new Error('compiled_subagent_tools_missing');
   }
   return tools as readonly { name: string }[];
+}
+
+export function createDeepAgentTestSnapshot(input: {
+  capabilityManifest: RunCapabilityManifestV1;
+  budget?: Partial<RunExecutionSnapshotV2['budget']>;
+  mode?: RunExecutionSnapshotV2['mode'];
+  runId?: string;
+  runOrigin?: RunExecutionSnapshotV2['runOrigin'];
+  threadId?: string;
+  workflowHint?: RunExecutionSnapshotV2['workflowHint'];
+  workspaceHash?: string;
+  workspacePath?: string | null;
+}): RunExecutionSnapshotV2 {
+  const workspacePath = input.workspacePath ?? null;
+  return {
+    schemaVersion: 2,
+    runId: input.runId ?? 'run-test',
+    threadId: input.threadId ?? 'thread-test',
+    runOrigin: input.runOrigin ?? 'chat',
+    model: {
+      providerId: 'provider-test',
+      modelId: 'model-test'
+    },
+    mode: input.mode ?? 'run',
+    workspace: workspacePath === null
+      ? null
+      : {
+          path: workspacePath,
+          hash: input.workspaceHash ?? 'workspace-test-hash'
+        },
+    capabilityManifest: input.capabilityManifest,
+    workflowHint: input.workflowHint ?? null,
+    explicitSkillIds: [],
+    inputMessageId: 'message-test',
+    dispatchKey: null,
+    budget: {
+      contextBudgetTokens: input.budget?.contextBudgetTokens ?? null,
+      modelCallLimit: input.budget?.modelCallLimit ?? 20,
+      modelThreadCallLimit: input.budget?.modelThreadCallLimit ?? 100,
+      toolCallLimit: input.budget?.toolCallLimit ?? 40,
+      toolThreadCallLimit: input.budget?.toolThreadCallLimit ?? 200
+    }
+  };
 }
 
 function readRunnableOptions(value: BuiltSubagent): object {

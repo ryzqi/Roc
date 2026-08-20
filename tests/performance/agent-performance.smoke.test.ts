@@ -37,6 +37,7 @@ import {
 import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import { RocSqliteCheckpointer } from '../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../src/main/services/forge-guardrails';
+import { createDeepAgentTestSnapshot } from '../main/deep-agent-test-helpers';
 import type { ChatRunEvent, RunCapabilityManifestV1 } from '../../src/shared/types';
 import {
   assertAgentPerformanceBaselineCompatible,
@@ -746,29 +747,31 @@ function createPerformanceAgent(input: {
 }) {
   const tools = input.tools === undefined ? [] : input.tools;
   const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
+  const capabilityManifest = createPerformanceCapabilityManifest(
+    tools.some((candidate) => candidate.name === performanceToolName)
+  );
+  const modelCallLimit = input.modelCallLimit === undefined ? 8 : input.modelCallLimit;
+  const toolCallLimit = input.toolCallLimit === undefined ? 4 : input.toolCallLimit;
   return buildDeepAgent({
     backend,
-    capabilityManifest: createPerformanceCapabilityManifest(
-      tools.some((candidate) => candidate.name === performanceToolName)
-    ),
     checkpointer: input.checkpointer,
-    contextBudgetTokens: undefined,
-    filesystemPermissions: [],
-    interruptOn: undefined,
     memorySources: [],
-    mode: 'run',
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      workspacePath: input.workspacePath,
+      budget: {
+        modelCallLimit,
+        modelThreadCallLimit: modelCallLimit,
+        toolCallLimit,
+        toolThreadCallLimit: toolCallLimit
+      }
+    }),
     model: input.model,
-    modelCallLimit: input.modelCallLimit === undefined ? 8 : input.modelCallLimit,
-    modelThreadCallLimit: input.modelCallLimit === undefined ? 8 : input.modelCallLimit,
     skillSources: [],
     store: new InMemoryStore(),
     subagents: input.subagents === undefined ? [] : input.subagents,
     systemPrompt: 'Execute only the deterministic performance fixture requested by the user.',
-    toolCallLimit: input.toolCallLimit === undefined ? 4 : input.toolCallLimit,
-    toolThreadCallLimit: input.toolCallLimit === undefined ? 4 : input.toolCallLimit,
-    tools,
-    workflowHint: null,
-    workspacePath: input.workspacePath
+    tools
   });
 }
 

@@ -6,13 +6,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
-import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
+import { buildDeepAgent } from '../../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import { runContextCompactionForTest } from '../../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { ensureRocHarnessProfilesRegistered } from '../../../../../src/main/services/deep-agent/harness-profiles';
 import { markIterationOnMessage } from '../../../../../src/main/services/forge-guardrails';
 import { RocSqliteCheckpointer } from '../../../../../src/main/services/deep-agent/sqlite-checkpointer';
-import { getSubagentMiddleware, isBuiltSubagent } from '../../../deep-agent-test-helpers';
+import {
+  createDeepAgentTestSnapshot,
+  getSubagentMiddleware,
+  isBuiltSubagent
+} from '../../../deep-agent-test-helpers';
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -230,7 +234,14 @@ describe('Deep Agents native summarization conformance', () => {
         workflowHint: null
       }).manifest;
       buildDeepAgent({
-        mode: 'run',
+        snapshot: createDeepAgentTestSnapshot({
+          capabilityManifest,
+          runId: 'run_subagent_conformance',
+          threadId: 'thread_subagent_conformance',
+          workspacePath: 'F:\\Code\\Roc',
+          workspaceHash: 'workspace_subagent_conformance',
+          budget: { contextBudgetTokens: 500 }
+        }),
         model: model as never,
         systemPrompt: 'system',
         backend: {} as never,
@@ -247,13 +258,7 @@ describe('Deep Agents native summarization conformance', () => {
           }
         ],
         tools: [],
-        capabilityManifest,
-        filesystemPermissions: undefined,
-        workspacePath: 'F:\\Code\\Roc',
-        interruptOn: undefined,
         checkpointer: undefined,
-        workflowHint: null,
-        contextBudgetTokens: 500,
         contextCompaction: {
           artifactStore,
           budgetProfile: {
@@ -265,21 +270,13 @@ describe('Deep Agents native summarization conformance', () => {
             safetyMarginTokens: 200
           },
           emitEvent: () => {},
-          mode: 'run',
-          runId: 'run_subagent_conformance',
-          threadId: 'thread_subagent_conformance',
           tokenCounter: {
             countMessages: async () => ({ estimated: false, tokens: 1 }),
             countText: async () => ({ estimated: false, tokens: 1 }),
             wasEstimated: () => false
-          },
-          workspaceHash: 'workspace_subagent_conformance'
-        },
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
-      } as DeepAgentBuildInput);
+          }
+        }
+      });
 
       ensureRocHarnessProfilesRegistered();
       const profile = getHarnessProfile('anthropic:conformance-model');

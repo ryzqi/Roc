@@ -9,7 +9,7 @@ import {
 } from 'deepagents';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ClientTool } from '@langchain/core/tools';
-import type { FilesystemPermission, SubAgent } from 'deepagents';
+import type { SubAgent } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import {
   anthropicPromptCachingMiddleware,
@@ -21,7 +21,7 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshotV2, WorkflowHint } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshotV2 } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
@@ -46,6 +46,10 @@ import {
   type RocContextCompactionOptions
 } from './context/context-compaction-pipeline';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
+import {
+  createRocFilesystemPermissions,
+  createRocReadOnlyFilesystemPermissions
+} from './filesystem-tool-contract';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import {
   createRocPlanRuntimeToolGuardMiddleware,
@@ -65,7 +69,7 @@ import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
-  mode: RunExecutionSnapshotV2['mode'];
+  snapshot: RunExecutionSnapshotV2;
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -74,33 +78,15 @@ export type DeepAgentBuildInput = {
   skillSources: string[];
   subagents: RuntimeSubagent[];
   tools: ClientTool[];
-  capabilityManifest: RunCapabilityManifestV1;
-  filesystemPermissions: FilesystemPermission[] | undefined;
-  workspacePath: string | null;
-  interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   checkpointer: BaseCheckpointSaver | undefined;
-  workflowHint: WorkflowHint;
-  contextBudgetTokens: number | undefined;
-  modelCallLimit: number;
-  modelThreadCallLimit: number;
-  toolCallLimit: number;
-  toolThreadCallLimit: number;
   hookMiddleware?: RocHookMiddlewareOptions;
-  toolEffectIdempotency?: {
-    runId: string;
-    threadId: string;
-    store: AgentToolEffectStore;
-  };
+  toolEffectStore?: AgentToolEffectStore;
   contextCompaction?: {
     artifactStore: ContextArtifactStore;
     artifactRecoveryEnabled?: boolean;
     budgetProfile: ContextBudgetProfile;
     emitEvent: RocContextCompactionOptions['emitEvent'];
-    mode: RunExecutionSnapshotV2['mode'];
-    runId: string;
-    threadId: string;
     tokenCounter: ContextTokenCounter;
-    workspaceHash: string | null;
   };
 };
 
@@ -111,22 +97,85 @@ const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
 ]);
 type SubagentTools = NonNullable<SubAgent['tools']>;
 
+type DeepAgentBuildPolicy = {
+  runId: string;
+  threadId: string;
+  mode: RunExecutionSnapshotV2['mode'];
+  capabilityManifest: RunCapabilityManifestV1;
+  filesystemPermissions: ReturnType<typeof createRocFilesystemPermissions>;
+  interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
+  workspacePath: string | null;
+  contextBudgetTokens: number | undefined;
+  modelCallLimit: number;
+  modelThreadCallLimit: number;
+  toolCallLimit: number;
+  toolThreadCallLimit: number;
+};
+
+function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuildPolicy {
+  const { snapshot } = input;
+  return {
+    runId: snapshot.runId,
+    threadId: snapshot.threadId,
+    mode: snapshot.mode,
+    capabilityManifest: snapshot.capabilityManifest,
+    filesystemPermissions: snapshot.mode === 'plan'
+      ? createRocReadOnlyFilesystemPermissions()
+      : createRocFilesystemPermissions(),
+    interruptOn: compileInterruptPolicy(snapshot),
+    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
+    contextBudgetTokens: snapshot.budget.contextBudgetTokens === null
+      ? undefined
+      : snapshot.budget.contextBudgetTokens,
+    modelCallLimit: snapshot.budget.modelCallLimit,
+    modelThreadCallLimit: snapshot.budget.modelThreadCallLimit,
+    toolCallLimit: snapshot.budget.toolCallLimit,
+    toolThreadCallLimit: snapshot.budget.toolThreadCallLimit
+  };
+}
+
+function compileInterruptPolicy(
+  snapshot: RunExecutionSnapshotV2
+): DeepAgentBuildPolicy['interruptOn'] {
+  const interruptOn: NonNullable<DeepAgentBuildPolicy['interruptOn']> = {};
+  for (const tool of snapshot.capabilityManifest.tools) {
+    if (tool.approvalPolicy.kind === 'required') {
+      interruptOn[tool.modelVisibleName] = {
+        allowedDecisions: tool.approvalPolicy.allowedDecisions
+      };
+    }
+  }
+  if (
+    snapshot.runOrigin === 'workbench_creation' &&
+    (snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change')
+  ) {
+    interruptOn.update_background_task = {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    };
+    interruptOn.cancel_background_task = {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    };
+  }
+  return Object.keys(interruptOn).length === 0 ? undefined : interruptOn;
+}
+
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();
+  const policy = compileDeepAgentBuildPolicy(input);
   const knownToolCandidates = (): RescueToolCandidate[] => {
     const candidates = [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
-    if (input.mode !== 'plan') {
+    if (policy.mode !== 'plan') {
       return candidates;
     }
     return candidates.filter((candidate) =>
       isPlanModeModelVisibleToolName(typeof candidate === 'string' ? candidate : candidate.name)
     );
   };
-  const tools = input.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
-  const subagents = createDeepAgentSubagents(input, tools);
+  const tools = policy.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
+  const subagents = createDeepAgentSubagents(input, policy, tools);
   const hookMiddleware = createRunHookMiddleware(input);
   const planModeMiddleware =
-    input.mode === 'plan'
+    policy.mode === 'plan'
       ? [
           createRocPlanReadOnlyMemoryMiddleware({
             backend: input.backend,
@@ -141,9 +190,9 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     todoListMiddleware(),
     ...hookMiddleware,
     ...planModeMiddleware,
-    ...createExecutionSafetyMiddleware(input, 'main'),
-    ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware(input, knownToolCandidates),
+    ...createExecutionSafetyMiddleware(policy, 'main'),
+    ...createContextCompactionMiddleware(input, policy),
+    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore, knownToolCandidates),
     createForgeCleanupMiddleware()
   ];
 
@@ -152,12 +201,12 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     systemPrompt: input.systemPrompt,
     backend: input.backend,
     store: input.store,
-    memory: input.mode === 'plan' ? [] : input.memorySources,
+    memory: policy.mode === 'plan' ? [] : input.memorySources,
     skills: input.skillSources,
     subagents,
     tools,
-    permissions: input.filesystemPermissions,
-    interruptOn: input.interruptOn,
+    permissions: policy.filesystemPermissions,
+    interruptOn: policy.interruptOn,
     checkpointer: input.checkpointer,
     middleware: guardrails
   });
@@ -172,12 +221,12 @@ function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
   });
 }
 
-function createDeepAgentSubagents(input: DeepAgentBuildInput, tools: ClientTool[]): RuntimeSubagent[] {
+function createDeepAgentSubagents(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, tools: ClientTool[]): RuntimeSubagent[] {
   const declarativeSubagents = requireDeclarativeSubagents(input.subagents);
-  if (input.mode === 'plan') {
-    return createPlanModeSubagents(input, tools, declarativeSubagents);
+  if (policy.mode === 'plan') {
+    return createPlanModeSubagents(input, policy, tools, declarativeSubagents);
   }
-  return createRunModeSubagents(input, tools, declarativeSubagents);
+  return createRunModeSubagents(input, policy, tools, declarativeSubagents);
 }
 
 function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
@@ -193,53 +242,55 @@ function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
 
 function createRunModeSubagents(
   input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
   tools: ClientTool[],
   subagents: SubAgent[]
 ): RuntimeSubagent[] {
-  const scopedTools = filterToolsForExecutionScope(tools, input.capabilityManifest, 'subagent');
+  const scopedTools = filterToolsForExecutionScope(tools, policy.capabilityManifest, 'subagent');
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
     tools: scopedTools as unknown as SubagentTools,
     skills: [...input.skillSources],
-    middleware: createRunModeSubagentMiddleware(input),
-    ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn })
+    middleware: createRunModeSubagentMiddleware(input, policy),
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
   };
   return [
-    compileRocSubagent(input, generalPurposeSubagent),
+    compileRocSubagent(input, policy, generalPurposeSubagent),
     ...subagents.map((subagent) =>
-      compileRocSubagent(input, applyRunModeSubagentMiddleware(input, subagent, scopedTools))
+      compileRocSubagent(input, policy, applyRunModeSubagentMiddleware(input, policy, subagent, scopedTools))
     )
   ];
 }
 
 function createPlanModeSubagents(
   input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
   planTools: ClientTool[],
   subagents: SubAgent[]
 ): RuntimeSubagent[] {
-  const scopedTools = filterToolsForExecutionScope(planTools, input.capabilityManifest, 'subagent');
+  const scopedTools = filterToolsForExecutionScope(planTools, policy.capabilityManifest, 'subagent');
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
     tools: scopedTools as unknown as SubagentTools,
     skills: [...input.skillSources],
-    middleware: createPlanModeSubagentMiddleware(input),
-    ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn })
+    middleware: createPlanModeSubagentMiddleware(input, policy),
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
   };
   return [
-    compileRocSubagent(input, generalPurposeSubagent),
+    compileRocSubagent(input, policy, generalPurposeSubagent),
     ...subagents
-      .map((subagent) => compileRocSubagent(input, applyPlanModeSubagentMiddleware(input, subagent, scopedTools)))
+      .map((subagent) => compileRocSubagent(input, policy, applyPlanModeSubagentMiddleware(input, policy, subagent, scopedTools)))
   ];
 }
 
-function compileRocSubagent(input: DeepAgentBuildInput, spec: SubAgent): CompiledSubAgent {
+function compileRocSubagent(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, spec: SubAgent): CompiledSubAgent {
   const tools = spec.tools === undefined ? [] : spec.tools;
   const model = spec.model === undefined ? input.model : spec.model;
   const middleware = [
     todoListMiddleware(),
     createFilesystemMiddleware({
       backend: input.backend,
-      permissions: spec.permissions === undefined ? input.filesystemPermissions : spec.permissions
+      permissions: spec.permissions === undefined ? policy.filesystemPermissions : spec.permissions
     }),
     createPatchToolCallsMiddleware(),
     ...(spec.skills === undefined || spec.skills.length === 0
@@ -326,35 +377,37 @@ function isAnthropicModel(model: unknown): boolean {
 
 function applyPlanModeSubagentMiddleware(
   input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
   subagent: SubAgent,
   defaultTools: ClientTool[]
 ): SubAgent {
   const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
   const tools = subagent.tools === undefined
     ? defaultTools
-    : filterToolsForExecutionScope(subagent.tools, input.capabilityManifest, 'subagent');
+    : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
   return {
     ...subagent,
     tools: tools as unknown as SubagentTools,
-    ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn }),
-    middleware: [...middleware, ...createPlanModeSubagentMiddleware(input)]
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
+    middleware: [...middleware, ...createPlanModeSubagentMiddleware(input, policy)]
   };
 }
 
 function applyRunModeSubagentMiddleware(
   input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
   subagent: SubAgent,
   defaultTools: ClientTool[]
 ): SubAgent {
   const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
   const tools = subagent.tools === undefined
     ? defaultTools
-    : filterToolsForExecutionScope(subagent.tools, input.capabilityManifest, 'subagent');
+    : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
   return {
     ...subagent,
     tools: tools as unknown as SubagentTools,
-    ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn }),
-    middleware: [...middleware, ...createRunModeSubagentMiddleware(input)]
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
+    middleware: [...middleware, ...createRunModeSubagentMiddleware(input, policy)]
   };
 }
 
@@ -371,7 +424,7 @@ function filterToolsForExecutionScope<T extends { name: string }>(
   return tools.filter((tool) => allowedToolNames.has(tool.name));
 }
 
-function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
+function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
   return [
     ...createHookToolScopeMiddleware(input),
     createRocPlanReadOnlyMemoryMiddleware({
@@ -381,28 +434,31 @@ function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
     createRocPlanToolExposureMiddleware(),
     createRocPlanRuntimeToolGuardMiddleware(),
     createRocPlanFilesystemDefaultPathMiddleware(),
-    ...createExecutionSafetyMiddleware(input, 'subagent'),
-    ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware(input)
+    ...createExecutionSafetyMiddleware(policy, 'subagent'),
+    ...createContextCompactionMiddleware(input, policy),
+    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore)
   ];
 }
 
-function createRunModeSubagentMiddleware(input: DeepAgentBuildInput) {
+function createRunModeSubagentMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
   return [
     ...createHookToolScopeMiddleware(input),
-    ...createExecutionSafetyMiddleware(input, 'subagent'),
-    ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware(input)
+    ...createExecutionSafetyMiddleware(policy, 'subagent'),
+    ...createContextCompactionMiddleware(input, policy),
+    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore)
   ];
 }
 
-function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionScope: RunCapabilityExecutionScopeV1) {
-  const budgetMiddleware = createNativeBudgetMiddleware(input);
+function createExecutionSafetyMiddleware(
+  policy: DeepAgentBuildPolicy,
+  executionScope: RunCapabilityExecutionScopeV1
+) {
+  const budgetMiddleware = createNativeBudgetMiddleware(policy);
   return [
-    createRocShellPolicyMiddleware({ workspacePath: input.workspacePath }),
+    createRocShellPolicyMiddleware({ workspacePath: policy.workspacePath }),
     createRTKMiddleware(new RTKBinaryManager()),
     createToolProtocolMiddleware({
-      capabilityManifest: input.capabilityManifest,
+      capabilityManifest: policy.capabilityManifest,
       executionScope
     }),
     ...(executionScope === 'subagent'
@@ -417,23 +473,24 @@ function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionSc
   ];
 }
 
-function createNativeBudgetMiddleware(input: DeepAgentBuildInput) {
+function createNativeBudgetMiddleware(policy: DeepAgentBuildPolicy) {
   return [
     modelCallLimitMiddleware({
-      runLimit: input.modelCallLimit,
-      threadLimit: input.modelThreadCallLimit,
+      runLimit: policy.modelCallLimit,
+      threadLimit: policy.modelThreadCallLimit,
       exitBehavior: 'error'
     }),
     toolCallLimitMiddleware({
-      runLimit: input.toolCallLimit,
-      threadLimit: input.toolThreadCallLimit,
+      runLimit: policy.toolCallLimit,
+      threadLimit: policy.toolThreadCallLimit,
       exitBehavior: 'error'
     })
   ];
 }
 
 function createExecutionErrorEnvelopeMiddleware(
-  input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
+  toolEffectStore: AgentToolEffectStore | undefined,
   knownToolCandidates?: () => RescueToolCandidate[]
 ) {
   const rescueMiddleware = knownToolCandidates === undefined
@@ -450,7 +507,7 @@ function createExecutionErrorEnvelopeMiddleware(
     }),
     createToolRuntimeErrorMiddleware(),
     createToolResolutionMiddleware(),
-    ...createToolEffectMiddleware(input)
+    ...createToolEffectMiddleware(policy, toolEffectStore)
   ];
 }
 
@@ -478,25 +535,25 @@ function createHookToolScopeMiddleware(input: DeepAgentBuildInput) {
   ];
 }
 
-function createToolEffectMiddleware(input: DeepAgentBuildInput) {
-  if (input.toolEffectIdempotency === undefined) {
+function createToolEffectMiddleware(policy: DeepAgentBuildPolicy, toolEffectStore: AgentToolEffectStore | undefined) {
+  if (toolEffectStore === undefined) {
     return [];
   }
   return [
     createToolEffectIdempotencyMiddleware({
-      runId: input.toolEffectIdempotency.runId,
-      threadId: input.toolEffectIdempotency.threadId,
-      store: input.toolEffectIdempotency.store,
-      capabilityManifest: input.capabilityManifest
+      runId: policy.runId,
+      threadId: policy.threadId,
+      store: toolEffectStore,
+      capabilityManifest: policy.capabilityManifest
     })
   ];
 }
 
-function createContextCompactionMiddleware(input: DeepAgentBuildInput) {
+function createContextCompactionMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
   if (input.contextCompaction === undefined) {
     return [
       createForgeTieredCompactionMiddleware({
-        budgetTokens: input.contextBudgetTokens
+        budgetTokens: policy.contextBudgetTokens
       })
     ];
   }
@@ -506,13 +563,13 @@ function createContextCompactionMiddleware(input: DeepAgentBuildInput) {
       artifactRecoveryEnabled: input.contextCompaction.artifactRecoveryEnabled,
       budgetProfile: input.contextCompaction.budgetProfile,
       emitEvent: input.contextCompaction.emitEvent,
-      mode: input.contextCompaction.mode,
+      mode: input.snapshot.mode,
       model: input.model,
-      runId: input.contextCompaction.runId,
-      threadId: input.contextCompaction.threadId,
+      runId: input.snapshot.runId,
+      threadId: input.snapshot.threadId,
       tokenCounter: input.contextCompaction.tokenCounter,
-      workspaceHash: input.contextCompaction.workspaceHash,
-      workspacePath: input.workspacePath
+      workspaceHash: input.snapshot.workspace === null ? null : input.snapshot.workspace.hash,
+      workspacePath: policy.workspacePath
     })
   ];
 }

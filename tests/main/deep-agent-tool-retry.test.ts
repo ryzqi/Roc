@@ -7,6 +7,7 @@ import type { RocCompositeBackend } from '../../src/main/services/deep-agent/bac
 import type { DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
 import { RocDomainError } from '../../src/main/services/errors';
+import { createDeepAgentTestSnapshot } from './deep-agent-test-helpers';
 
 type ToolRetryConfig = {
   backoffFactor?: number;
@@ -177,8 +178,20 @@ describe('deep agent tool retry policy', () => {
 });
 
 function createBuildInput(): DeepAgentBuildInput {
+  const capabilityManifest = compileRunCapabilityManifest({
+    deleteFileApprovalMode: 'fully_automatic',
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: [],
+    mode: 'chat',
+    workflowHint: 'propose_background_task',
+    requestedCapabilities: { mcpServers: [], skills: [] },
+    skills: []
+  }).manifest;
   return {
-    mode: 'run',
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      workspacePath: 'F:\\Code\\Roc'
+    }),
     model: {} as never,
     systemPrompt: 'system',
     backend: { routePrefixes: [] } as unknown as RocCompositeBackend,
@@ -190,25 +203,7 @@ function createBuildInput(): DeepAgentBuildInput {
       fakeTool('web_read'),
       fakeTool('schedule_background_task')
     ],
-    capabilityManifest: compileRunCapabilityManifest({
-      deleteFileApprovalMode: 'fully_automatic',
-      mcpApprovalMode: 'fully_automatic',
-      mcpServers: [],
-      mode: 'chat',
-      workflowHint: 'propose_background_task',
-      requestedCapabilities: { mcpServers: [], skills: [] },
-      skills: []
-    }).manifest,
-    filesystemPermissions: [],
-    workspacePath: 'F:\\Code\\Roc',
-    interruptOn: undefined,
-    checkpointer: undefined,
-    workflowHint: null,
-    contextBudgetTokens: undefined,
-    modelCallLimit: 20,
-    modelThreadCallLimit: 100,
-    toolCallLimit: 40,
-    toolThreadCallLimit: 200
+    checkpointer: undefined
   };
 }
 

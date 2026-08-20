@@ -6,7 +6,12 @@ import { z } from 'zod';
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../../../src/main/services/deep-agent/harness-profiles';
-import { getSubagentMiddleware, getSubagentTools, isBuiltSubagent } from '../../deep-agent-test-helpers';
+import {
+  createDeepAgentTestSnapshot,
+  getSubagentMiddleware,
+  getSubagentTools,
+  isBuiltSubagent
+} from '../../deep-agent-test-helpers';
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -24,17 +29,19 @@ describe('execution safety middleware scopes', () => {
       description: 'Inspect a permitted workspace resource.',
       schema: z.object({})
     });
-    const interruptOn = {
-      delete_file: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      }
-    };
-    const input = {
-      mode: 'chat',
-      model: {} as unknown,
+    const capabilityManifest = createCapabilityManifest(['inspect_workspace']);
+    const input: DeepAgentBuildInput = {
+      snapshot: createDeepAgentTestSnapshot({
+        capabilityManifest,
+        runId: 'run_1',
+        threadId: 'thread_1',
+        workspacePath: 'F:\\Code\\Roc',
+        budget: { contextBudgetTokens: 4096 }
+      }),
+      model: {} as never,
       systemPrompt: 'system',
-      backend: {} as unknown,
-      store: {} as unknown,
+      backend: {} as never,
+      store: {} as never,
       memorySources: [],
       skillSources: ['/skills/'],
       subagents: [
@@ -46,13 +53,7 @@ describe('execution safety middleware scopes', () => {
         }
       ],
       tools: [inspectTool],
-      capabilityManifest: createCapabilityManifest(['inspect_workspace']),
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn,
-      checkpointer: {} as unknown,
-      workflowHint: null,
-      contextBudgetTokens: 4096,
+      checkpointer: {} as never,
       contextCompaction: {
         artifactStore: {} as never,
         budgetProfile: {
@@ -64,26 +65,14 @@ describe('execution safety middleware scopes', () => {
           safetyMarginTokens: 200
         },
         emitEvent: vi.fn(),
-        mode: 'chat',
-        runId: 'run_1',
-        threadId: 'thread_1',
         tokenCounter: {
           countMessages: vi.fn(),
           countText: vi.fn(),
           wasEstimated: vi.fn(() => false)
-        },
-        workspaceHash: null
+        }
       },
-      modelCallLimit: 20,
-      modelThreadCallLimit: 100,
-      toolCallLimit: 40,
-      toolThreadCallLimit: 200,
-      toolEffectIdempotency: {
-        runId: 'run_1',
-        threadId: 'thread_1',
-        store: {} as never
-      }
-    } as unknown as DeepAgentBuildInput;
+      toolEffectStore: {} as never
+    };
 
     buildDeepAgent(input);
 
@@ -144,34 +133,28 @@ describe('execution safety middleware scopes', () => {
   });
 
   it('rejects opaque subagents because Roc cannot attach the required safety contract', () => {
-    const input = {
-      mode: 'chat',
-      model: {} as unknown,
+    const input: DeepAgentBuildInput = {
+      snapshot: createDeepAgentTestSnapshot({
+        capabilityManifest: createCapabilityManifest(),
+        workspacePath: 'F:\\Code\\Roc',
+        budget: { contextBudgetTokens: 4096 }
+      }),
+      model: {} as never,
       systemPrompt: 'system',
-      backend: {} as unknown,
-      store: {} as unknown,
+      backend: {} as never,
+      store: {} as never,
       memorySources: [],
       skillSources: [],
       subagents: [
         {
           name: 'compiled',
           description: 'Opaque compiled subagent.',
-          runnable: {}
+          runnable: {} as never
         }
       ],
       tools: [],
-      capabilityManifest: createCapabilityManifest(),
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: 4096,
-      modelCallLimit: 20,
-      modelThreadCallLimit: 100,
-      toolCallLimit: 40,
-      toolThreadCallLimit: 200
-    } as unknown as DeepAgentBuildInput;
+      checkpointer: undefined
+    };
 
     expect(() => buildDeepAgent(input)).toThrow('agent_subagent_safety_contract_unsupported:compiled');
   });
@@ -187,12 +170,16 @@ describe('execution safety middleware scopes', () => {
       description: 'Inspect a permitted workspace resource.',
       schema: z.object({})
     });
-    const input = {
-      mode: 'chat',
-      model: {} as unknown,
+    const input: DeepAgentBuildInput = {
+      snapshot: createDeepAgentTestSnapshot({
+        capabilityManifest: createCapabilityManifest(['inspect_workspace']),
+        workspacePath: 'F:\\Code\\Roc',
+        budget: { contextBudgetTokens: 4096 }
+      }),
+      model: {} as never,
       systemPrompt: 'system',
-      backend: {} as unknown,
-      store: {} as unknown,
+      backend: {} as never,
+      store: {} as never,
       memorySources: [],
       skillSources: [],
       subagents: [
@@ -204,18 +191,8 @@ describe('execution safety middleware scopes', () => {
         }
       ],
       tools: [askUserTool, inspectTool],
-      capabilityManifest: createCapabilityManifest(['inspect_workspace']),
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: 4096,
-      modelCallLimit: 20,
-      modelThreadCallLimit: 100,
-      toolCallLimit: 40,
-      toolThreadCallLimit: 200
-    } as unknown as DeepAgentBuildInput;
+      checkpointer: undefined
+    };
 
     buildDeepAgent(input);
 
@@ -245,7 +222,7 @@ function createCapabilityManifest(customToolNames: string[] = []) {
         }
       ];
   return compileRunCapabilityManifest({
-    deleteFileApprovalMode: 'fully_automatic',
+    deleteFileApprovalMode: 'default',
     mcpApprovalMode: 'fully_automatic',
     mcpServers,
     requestedCapabilities: {

@@ -5,13 +5,14 @@ import { createDeepAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { z } from 'zod';
 import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
-import { toChatRunMode } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
-import { getSubagentMiddleware, getSubagentTools, isBuiltSubagent } from './deep-agent-test-helpers';
-
-type BuildFixtureInput = Omit<DeepAgentBuildInput, 'capabilityManifest' | 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'> &
-  Partial<Pick<DeepAgentBuildInput, 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'>>;
+import {
+  createDeepAgentTestSnapshot,
+  getSubagentMiddleware,
+  getSubagentTools,
+  isBuiltSubagent
+} from './deep-agent-test-helpers';
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -36,7 +37,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('registers Roc harness profiles before assembling the agent', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -45,16 +50,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
-        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -63,7 +60,9 @@ describe('buildDeepAgent harness profile wiring', () => {
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     expect(createDeepAgentInput).toMatchObject({
       permissions: [
-        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
         { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
       ]
     });
@@ -72,9 +71,14 @@ describe('buildDeepAgent harness profile wiring', () => {
     );
   });
 
-  it('installs native model and tool call limit middleware from the frozen budget', () => {
+  it('derives background task approval interrupts from the snapshot origin and workflow', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      runOrigin: 'workbench_creation',
+      workflowHint: 'background_task_change',
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -83,17 +87,43 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
       checkpointer: undefined,
+    } as unknown as DeepAgentBuildInput;
+
+    buildFixtureAgent(input, []);
+
+    expect(vi.mocked(createDeepAgent).mock.calls[0]?.[0]).toMatchObject({
+      interruptOn: {
+        update_background_task: { allowedDecisions: ['approve', 'edit', 'reject'] },
+        cancel_background_task: { allowedDecisions: ['approve', 'edit', 'reject'] }
+      }
+    });
+  });
+
+  it('installs native model and tool call limit middleware from the frozen budget', () => {
+    const input = {
+      snapshot: createFixtureSnapshot({
+      mode: 'run',
       workflowHint: null,
-      contextBudgetTokens: 4096,
-      modelCallLimit: 7,
-      modelThreadCallLimit: 35,
-      toolCallLimit: 11,
-      toolThreadCallLimit: 55
-    } as unknown as BuildFixtureInput;
+      workspacePath: 'F:\\Code\\Roc',
+      budget: {
+        contextBudgetTokens: 4096,
+        modelCallLimit: 7,
+        modelThreadCallLimit: 35,
+        toolCallLimit: 11,
+        toolThreadCallLimit: 55,
+      },
+    }),
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -108,7 +138,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('adds plan model tool exposure middleware only for plan mode', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'plan',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -117,16 +151,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
-        { operations: ['write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -146,7 +172,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('keeps Roc filesystem path policy before filesystem tool error classification', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -155,18 +185,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-        { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
-        { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
-        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -187,7 +207,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('does not add plan model tool exposure middleware for chat mode', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -196,13 +220,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -217,7 +236,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('limits plan rescue candidates to plan-visible tools', async () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'plan',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -226,16 +249,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [createNamedTool('mcp_docs_lookup')],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
-        { operations: ['write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, ['mcp_docs_lookup']);
 
@@ -309,7 +324,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('runs Roc shell path policy before RTK can rewrite or deny shell commands', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -318,13 +337,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -336,7 +350,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('leaves prompt cache breakpoint injection to DeepAgents native middleware', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -345,13 +363,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: ['/skills/'],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -369,7 +382,11 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires hook middleware before Roc guardrails when hook runtime is provided', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -378,12 +395,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined,
       hookMiddleware: {
         hookRuntime: {
           runEvent: vi.fn(async () => ({
@@ -407,7 +419,8 @@ describe('buildDeepAgent harness profile wiring', () => {
         },
         emitHookEvent: vi.fn()
       }
-    } as unknown as BuildFixtureInput;
+
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -421,7 +434,11 @@ describe('buildDeepAgent harness profile wiring', () => {
   it('wires tool-scoped hook middleware into DeepAgents subagents when hooks are enabled', () => {
     const inspectTool = createNamedTool('inspect_workspace');
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -437,12 +454,7 @@ describe('buildDeepAgent harness profile wiring', () => {
         }
       ],
       tools: [inspectTool],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined,
       hookMiddleware: {
         hookRuntime: {
           runEvent: vi.fn(async () => ({
@@ -466,7 +478,8 @@ describe('buildDeepAgent harness profile wiring', () => {
         },
         emitHookEvent: vi.fn()
       }
-    } as unknown as BuildFixtureInput;
+
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, ['inspect_workspace']);
 
@@ -504,7 +517,14 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires tool effects inside product error mapping and outside the tool handler', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      runId: 'run_1',
+      threadId: 'thread_1',
+    }),
+    toolEffectStore: {} as never,
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -513,18 +533,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined,
-      toolEffectIdempotency: {
-        runId: 'run_1',
-        threadId: 'thread_1',
-        store: {} as never
-      }
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -559,7 +569,21 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires Roc context compaction pipeline in normal runs when context options are provided', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      workspaceHash: 'workspace_hash_context',
+      budget: {
+        contextBudgetTokens: 4096,
+      },
+    }),
+      contextCompaction: {
+        budgetProfile: 'balanced',
+        tokenCounter: vi.fn(),
+        artifactStore: {} as never,
+        emitEvent: vi.fn(),
+      },
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -568,21 +592,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: 4096,
-      contextCompaction: {
-        artifactStore: {} as never,
-        emitEvent: vi.fn(),
-        mode: 'run',
-        runId: 'run_context_1',
-        threadId: 'thread_context_1',
-        workspaceHash: 'workspace_hash_context'
-      }
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, []);
 
@@ -606,7 +617,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       query: z.string()
     });
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -621,16 +636,8 @@ describe('buildDeepAgent harness profile wiring', () => {
           schema: internetSearchSchema
         })
       ],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
-        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, ['internet_search']);
 
@@ -677,7 +684,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       schema: inspectSchema
     });
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'run',
+      workflowHint: null,
+      workspacePath: 'F:\\\\Code\\\\Roc',
+    }),
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -686,16 +697,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: ['/skills/'],
       subagents: [],
       tools: [inspectTool],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\\\Code\\\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, ['mcp_docs_lookup']);
 
@@ -726,7 +729,18 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('builds plan mode without file mutation tools while preserving non-file tools', () => {
     const input = {
+      snapshot: createFixtureSnapshot({
       mode: 'plan',
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      workspaceHash: 'workspace_hash_plan',
+    }),
+      contextCompaction: {
+        budgetProfile: 'balanced',
+        tokenCounter: vi.fn(),
+        artifactStore: {} as never,
+        emitEvent: vi.fn(),
+      },
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -755,24 +769,8 @@ describe('buildDeepAgent harness profile wiring', () => {
         createNamedTool('edit_file'),
         createNamedTool('delete_file')
       ],
-      filesystemPermissions: [
-        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-        { operations: ['write'], paths: ['/**'], mode: 'deny' }
-      ],
-      workspacePath: 'F:\\Code\\Roc',
-      interruptOn: undefined,
-      checkpointer: undefined,
-      workflowHint: null,
-      contextBudgetTokens: undefined,
-      contextCompaction: {
-        artifactStore: {} as never,
-        emitEvent: vi.fn(),
-        mode: 'plan',
-        runId: 'run_plan_context',
-        threadId: 'thread_plan_context',
-        workspaceHash: 'workspace_hash_plan'
-      }
-    } as unknown as BuildFixtureInput;
+      checkpointer: undefined
+    } as unknown as DeepAgentBuildInput;
 
     buildFixtureAgent(input, [
       'web_search',
@@ -870,7 +868,7 @@ describe('buildDeepAgent harness profile wiring', () => {
   });
 });
 
-function buildFixtureAgent(input: BuildFixtureInput, customToolNames: string[]): void {
+function buildFixtureAgent(input: DeepAgentBuildInput, customToolNames: string[]): void {
   const mcpServers = customToolNames.length === 0
     ? []
     : [
@@ -888,22 +886,32 @@ function buildFixtureAgent(input: BuildFixtureInput, customToolNames: string[]):
     deleteFileApprovalMode: 'fully_automatic',
     mcpApprovalMode: 'fully_automatic',
     mcpServers,
-    mode: toChatRunMode(input.mode),
-    workflowHint: input.workflowHint,
+    mode: input.snapshot.mode === 'run' ? 'chat' : input.snapshot.mode,
+    workflowHint: input.snapshot.workflowHint,
     requestedCapabilities: {
       mcpServers: customToolNames.length === 0 ? [] : ['fixture-mcp'],
       skills: []
     },
     skills: []
   }).manifest;
-
   buildDeepAgent({
     ...input,
-    capabilityManifest,
-    modelCallLimit: input.modelCallLimit === undefined ? 20 : input.modelCallLimit,
-    modelThreadCallLimit: input.modelThreadCallLimit === undefined ? 100 : input.modelThreadCallLimit,
-    toolCallLimit: input.toolCallLimit === undefined ? 40 : input.toolCallLimit,
-    toolThreadCallLimit: input.toolThreadCallLimit === undefined ? 200 : input.toolThreadCallLimit
+      snapshot: { ...input.snapshot, capabilityManifest }
+  });
+}
+
+function createFixtureSnapshot(input: Omit<Parameters<typeof createDeepAgentTestSnapshot>[0], 'capabilityManifest'>): DeepAgentBuildInput['snapshot'] {
+  return createDeepAgentTestSnapshot({
+    ...input,
+    capabilityManifest: compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      mode: input.mode === undefined || input.mode === 'run' ? 'chat' : input.mode,
+      workflowHint: input.workflowHint ?? null,
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: []
+    }).manifest
   });
 }
 
@@ -914,3 +922,5 @@ function createNamedTool(name: string) {
     schema: z.object({})
   });
 }
+
+

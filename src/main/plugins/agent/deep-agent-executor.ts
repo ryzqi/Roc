@@ -40,8 +40,6 @@ import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/b
 import { createBackend } from '../../services/deep-agent/backend';
 import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import {
-  createRocFilesystemPermissions,
-  createRocReadOnlyFilesystemPermissions,
   toWorkspaceRelativePath
 } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
@@ -284,7 +282,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         initialHookContexts.push(...sessionStart.additionalContexts);
       }
       const agent = buildDeepAgent({
-        mode,
+        snapshot: input.snapshot,
         model: handle.model,
         systemPrompt: contextHarness.systemPrompt,
         backend: runtimeBackend.backend,
@@ -293,37 +291,15 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         skillSources: contextHarness.skillSources,
         subagents: runSubagents,
         tools: contextHarness.tools,
-        capabilityManifest: input.snapshot.capabilityManifest,
-        filesystemPermissions:
-          mode === 'plan'
-            ? createRocReadOnlyFilesystemPermissions()
-            : createRocFilesystemPermissions(),
-        workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        interruptOn: readInterruptPolicy(input.snapshot.capabilityManifest, input.snapshot),
         checkpointer: options.checkpointer,
-        workflowHint,
-        contextBudgetTokens:
-          input.snapshot.budget.contextBudgetTokens === null ? undefined : input.snapshot.budget.contextBudgetTokens,
-        modelCallLimit: input.snapshot.budget.modelCallLimit,
-        modelThreadCallLimit: input.snapshot.budget.modelThreadCallLimit,
-        toolCallLimit: input.snapshot.budget.toolCallLimit,
-        toolThreadCallLimit: input.snapshot.budget.toolThreadCallLimit,
         contextCompaction: {
           artifactStore: options.contextArtifactStore,
           artifactRecoveryEnabled: mainManifestToolNames.includes('read_context_artifact'),
           budgetProfile: contextBudgetProfile,
           emitEvent: emitContextMaintenanceEvent,
-          mode,
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          tokenCounter: contextTokenCounter,
-          workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
+          tokenCounter: contextTokenCounter
         },
-        toolEffectIdempotency: {
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          store: options.toolEffectStore
-        },
+        toolEffectStore: options.toolEffectStore,
         hookMiddleware:
           options.hookRuntime === undefined
             ? undefined
@@ -577,44 +553,6 @@ function recordPromptCacheMetrics(input: {
     providerId: input.providerId,
     modelId: input.modelId
   });
-}
-
-function readInterruptPolicy(
-  manifest: RunCapabilityManifestV1,
-  snapshot: RunExecutionSnapshotV2
-): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
-  const backgroundTaskInterrupts = createBackgroundTaskInterruptPolicy(snapshot);
-  const interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> = {};
-  for (const tool of manifest.tools) {
-    if (tool.approvalPolicy.kind === 'required') {
-      interruptOn[tool.modelVisibleName] = {
-        allowedDecisions: tool.approvalPolicy.allowedDecisions
-      };
-    }
-  }
-  if (backgroundTaskInterrupts === undefined) {
-    return Object.keys(interruptOn).length === 0 ? undefined : interruptOn;
-  }
-  return {
-    ...interruptOn,
-    ...backgroundTaskInterrupts
-  };
-}
-
-function createBackgroundTaskInterruptPolicy(
-  snapshot: RunExecutionSnapshotV2
-): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
-  if (!isBackgroundTaskWorkflow(snapshot) || snapshot.runOrigin !== 'workbench_creation') {
-    return undefined;
-  }
-  return {
-    update_background_task: {
-      allowedDecisions: ['approve', 'edit', 'reject']
-    },
-    cancel_background_task: {
-      allowedDecisions: ['approve', 'edit', 'reject']
-    }
-  };
 }
 
 function createInitialState(input: string, attachments: readonly ChatValidatedImageAttachment[] | undefined): unknown {

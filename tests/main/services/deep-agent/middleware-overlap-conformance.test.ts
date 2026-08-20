@@ -29,6 +29,7 @@ import type { RocCompositeBackend } from '../../../../src/main/services/deep-age
 import { createBackgroundTaskTools } from '../../../../src/main/services/deep-agent/background-task-tools';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
+import { createDeepAgentTestSnapshot } from '../../deep-agent-test-helpers';
 import { RocDomainError } from '../../../../src/main/services/errors';
 import {
   defaultErrorTracker,
@@ -751,7 +752,19 @@ function createTestAgent(input: {
 }) {
   const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
   const buildInput: DeepAgentBuildInput = {
-    mode: 'run',
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest: manifestFor(input.manifestTools),
+      runId: input.runId,
+      threadId: input.threadId,
+      workspacePath: 'F:\\Code\\Roc',
+      budget: {
+        contextBudgetTokens: null,
+        modelCallLimit: 6,
+        modelThreadCallLimit: 6,
+        toolCallLimit: 6,
+        toolThreadCallLimit: 6
+      }
+    }),
     model: input.model,
     systemPrompt: 'Use the requested tool once, then finish.',
     backend,
@@ -760,22 +773,8 @@ function createTestAgent(input: {
     skillSources: [],
     subagents: input.subagents === undefined ? [] : input.subagents,
     tools: input.tools,
-    capabilityManifest: manifestFor(input.manifestTools),
-    filesystemPermissions: [],
-    workspacePath: 'F:\\Code\\Roc',
-    interruptOn: undefined,
     checkpointer: new RocSqliteCheckpointer(input.db),
-    workflowHint: null,
-    contextBudgetTokens: undefined,
-    modelCallLimit: 6,
-    modelThreadCallLimit: 6,
-    toolCallLimit: 6,
-    toolThreadCallLimit: 6
-  };
-  buildInput.toolEffectIdempotency = {
-    runId: input.runId,
-    threadId: input.threadId,
-    store: input.effectStore === undefined ? new AgentToolEffectStore(input.db) : input.effectStore
+    toolEffectStore: input.effectStore === undefined ? new AgentToolEffectStore(input.db) : input.effectStore
   };
   return buildDeepAgent(buildInput);
 }

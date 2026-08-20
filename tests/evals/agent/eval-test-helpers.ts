@@ -9,6 +9,7 @@ import { toRunExecutionMode } from '../../../src/main/plugins/agent/run-executio
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
 import type { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
+import { createDeepAgentTestSnapshot } from '../../main/deep-agent-test-helpers';
 
 export const todoItemSchema = z
   .object({
@@ -57,7 +58,16 @@ export function createEvalAgent(input: {
   }).manifest;
 
   return buildDeepAgent({
-    mode: toRunExecutionMode(input.mode),
+    snapshot: createDeepAgentTestSnapshot({
+      capabilityManifest,
+      mode: toRunExecutionMode(input.mode),
+      budget: {
+        modelCallLimit: 6,
+        modelThreadCallLimit: 6,
+        toolCallLimit: 4,
+        toolThreadCallLimit: 4
+      }
+    }),
     model: input.model,
     systemPrompt: input.systemPrompt,
     backend,
@@ -66,17 +76,7 @@ export function createEvalAgent(input: {
     skillSources: [],
     subagents: [],
     tools: [],
-    capabilityManifest,
-    filesystemPermissions: [],
-    workspacePath: null,
-    interruptOn: undefined,
-    checkpointer: input.checkpointer,
-    workflowHint: null,
-    contextBudgetTokens: undefined,
-    modelCallLimit: 6,
-    modelThreadCallLimit: 6,
-    toolCallLimit: 4,
-    toolThreadCallLimit: 4
+    checkpointer: input.checkpointer
   });
 }
 

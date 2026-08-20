@@ -434,13 +434,7 @@ describe('createAgentDeepAgentExecutor', () => {
     ]);
     expect(buildInput.backend.routePrefixes).not.toContain('/agents/');
     expect('execute' in buildInput.backend).toBe(false);
-    expect(buildInput.workspacePath).toBe(workspacePath);
-    expect(buildInput.filesystemPermissions).toEqual([
-      { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-      { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
-      { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
-      { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-    ]);
+    expect(buildInput.snapshot.workspace?.path).toBe(workspacePath);
   });
 
   it('applies current memory settings to DeepAgents memory backend writes', async () => {

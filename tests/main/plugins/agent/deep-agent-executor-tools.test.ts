@@ -32,19 +32,15 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('adds background task change interrupts inside workbench background task workflows', async () => {
+  it('passes the authoritative background task snapshot to the builder', async () => {
     await buildExecutorOnce(createCapabilities([], { capabilityPreview: true }), {
       workflowHint: 'background_task_change',
       taskSource: 'workbench'
     });
 
-    expect(readBuildInput().interruptOn).toEqual({
-      update_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
-      cancel_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      }
+    expect(readBuildInput().snapshot).toMatchObject({
+      runOrigin: 'workbench_creation',
+      workflowHint: 'background_task_change'
     });
   });
 
@@ -77,7 +73,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const toolNames = readBuiltTools().map((tool) => tool.name);
 
-    expect(readBuildInput().mode).toBe('plan');
+    expect(readBuildInput().snapshot.mode).toBe('plan');
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('session_search');
     expect(toolNames).toContain('read_context_artifact');
@@ -112,7 +108,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const toolNames = readBuiltTools().map((tool) => tool.name);
 
-    expect(readBuildInput().mode).toBe('plan');
+    expect(readBuildInput().snapshot.mode).toBe('plan');
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('ask_user');
     expect(toolNames).toContain('session_search');
@@ -141,17 +137,14 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(planToolNames).not.toContain('delete_file');
   });
 
-  it('uses read-only filesystem permissions in plan mode', async () => {
+  it('passes plan mode only through the authoritative snapshot', async () => {
     await buildExecutorOnce(createCapabilities([]), {
       mode: 'plan',
       workflowHint: null,
       taskSource: null
     });
 
-    expect(readBuildInput().filesystemPermissions).toEqual([
-      { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-      { operations: ['write'], paths: ['/**'], mode: 'deny' }
-    ]);
+    expect(readBuildInput().snapshot.mode).toBe('plan');
   });
 
 
