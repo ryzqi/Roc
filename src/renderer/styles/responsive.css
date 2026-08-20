@@ -100,6 +100,32 @@
 }
 
 @media (max-width: 760px) {
+  .chat-page-shell,
+  .chat-feedback-stack,
+  .chat-transcript,
+  .chat-transcript-item,
+  .chat-message-row,
+  .chat-bubble,
+  .chat-assistant-content,
+  .chat-bottom-stack,
+  .composer--chat {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .chat-bubble--user {
+    max-width: 100%;
+  }
+
+  .chat-empty-copy {
+    padding-inline: 12px;
+  }
+
+  .chat-scroll-bottom {
+    right: 12px;
+    bottom: 12px;
+  }
+
   .workspace:not(.workspace--chat) {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);

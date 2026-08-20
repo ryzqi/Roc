@@ -84,7 +84,7 @@ export function AppSidebar({
           }}
         />
       )}
-      <div className="sidebar-block sidebar-block--history">
+      <div className={showHistorySearch ? 'sidebar-block sidebar-block--history sidebar-block--history-search' : 'sidebar-block sidebar-block--history'}>
         <div className="side-title">历史会话</div>
         {showHistorySearch ? (
           <label className="history-search-field">

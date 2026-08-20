@@ -209,6 +209,200 @@ describe('chat transcript helpers', () => {
     });
   });
 
+  it('keeps identical user content from different runs as separate messages', () => {
+    const messages = appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running'
+      },
+      pendingUserInput: '重复问题',
+      persistedMessages: [
+        {
+          key: 'user-run-previous',
+          source: 'persisted',
+          role: 'user',
+          content: '重复问题',
+          attachments: [],
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      ],
+      selectedThreadId: 'thread-current'
+    });
+
+    expect(messages.map((message) => message.key)).toEqual([
+      'user-run-previous',
+      'user-run-current'
+    ]);
+  });
+
+  it('updates the persisted assistant row from live state for the same run', () => {
+    const messages = appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        assistantMessage: '完整的流式回复',
+        activityBlocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '继续分析'
+          }
+        ]
+      },
+      pendingUserInput: null,
+      persistedMessages: [
+        {
+          key: 'user-run-current',
+          source: 'persisted',
+          role: 'user',
+          content: '问题',
+          attachments: [],
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        },
+        {
+          key: 'assistant-run-current',
+          source: 'persisted',
+          role: 'assistant',
+          content: '部分回复',
+          attachments: [],
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      ],
+      selectedThreadId: 'thread-current'
+    });
+
+    expect(messages.map((message) => message.key)).toEqual([
+      'user-run-current',
+      'assistant-run-current'
+    ]);
+    expect(messages[1]).toMatchObject({
+      source: 'persisted',
+      content: '完整的流式回复',
+      reasoning: '继续分析',
+      blocks: [
+        {
+          id: 'reasoning-run-current',
+          kind: 'reasoning',
+          content: '继续分析',
+          isStreaming: true
+        }
+      ],
+      isStreaming: true
+    });
+  });
+
+  it('rejects duplicate transcript keys instead of returning an ambiguous identity', () => {
+    const duplicateMessage = {
+      key: 'user-run-duplicate',
+      source: 'persisted' as const,
+      role: 'user' as const,
+      content: '重复 identity',
+      attachments: [],
+      reasoning: null,
+      blocks: [],
+      interrupts: [],
+      isStreaming: false
+    };
+
+    expect(() => appendLiveTranscriptMessages({
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      persistedMessages: [duplicateMessage, { ...duplicateMessage }],
+      selectedThreadId: 'thread-current'
+    })).toThrow('chat_transcript_duplicate_key:user-run-duplicate');
+  });
+
+  it('rejects a pending user identity already occupied by another role', () => {
+    expect(() => appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-conflict',
+        threadId: 'thread-current',
+        status: 'running'
+      },
+      pendingUserInput: '当前问题',
+      persistedMessages: [
+        {
+          key: 'user-run-conflict',
+          source: 'persisted',
+          role: 'assistant',
+          content: '错误占用',
+          attachments: [],
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      ],
+      selectedThreadId: 'thread-current'
+    })).toThrow('chat_transcript_identity_role_conflict:user-run-conflict');
+  });
+
+  it('does not project pending input from another thread into the selected history', () => {
+    const messages = appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        assistantMessage: '当前线程流式内容'
+      },
+      pendingUserInput: '当前线程问题',
+      persistedMessages: [
+        {
+          key: 'assistant-run-history',
+          source: 'persisted',
+          role: 'assistant',
+          content: '历史线程内容',
+          attachments: [],
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      ],
+      selectedThreadId: 'thread-history'
+    });
+
+    expect(messages.map((message) => message.key)).toEqual(['assistant-run-history']);
+  });
+
+  it('rejects persisted events that produce duplicate transcript keys', () => {
+    expect(() => buildPersistedTranscriptMessages([
+      {
+        id: 'user-duplicate-1',
+        threadId: 'thread-current',
+        runId: 'run-duplicate',
+        type: 'message',
+        payload: { role: 'user', content: '第一次' },
+        createdAt: '2026-08-20T00:00:00.000Z',
+        sequence: 1
+      },
+      {
+        id: 'user-duplicate-2',
+        threadId: 'thread-current',
+        runId: 'run-duplicate',
+        type: 'message',
+        payload: { role: 'user', content: '第二次' },
+        createdAt: '2026-08-20T00:00:01.000Z',
+        sequence: 2
+      }
+    ], 'thread-current')).toThrow('chat_transcript_duplicate_key:user-run-duplicate');
+  });
+
 
   it('shows an empty new conversation when no thread is selected and no run is active', () => {
     const snapshot = createSnapshot({

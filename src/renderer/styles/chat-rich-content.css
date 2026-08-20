@@ -1,6 +1,8 @@
 .chat-approval-card {
   position: relative;
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 12px;
   padding: 14px 16px 12px;
   border-radius: var(--r-lg);
@@ -43,6 +45,8 @@
 
 .chat-approval-actions {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -51,6 +55,8 @@
 
 .chat-approval-item {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 6px;
   padding: 10px 12px;
   border-radius: var(--r-md);
@@ -71,9 +77,12 @@
   font-size: var(--font-code-size);
   font-weight: 500;
   font-feature-settings: var(--font-feature-mono);
+  overflow-wrap: anywhere;
 }
 
 .chat-approval-args {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 8px 10px;
   border-radius: 8px;
@@ -155,6 +164,8 @@
 }
 
 .code-card {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   border-radius: 12px;
   background: var(--code-surface);
@@ -232,6 +243,8 @@
 
 .chat-bottom-stack {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 0;
   padding-top: 12px;
   justify-items: center;

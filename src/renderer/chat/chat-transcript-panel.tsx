@@ -76,6 +76,7 @@ export function ChatTranscriptPanel({
         data-message-count={messages.length}
         style={{ height: '100%' }}
         customScrollParent={scrollParent === null ? undefined : scrollParent}
+        alignToBottom
         data={messages}
         {...(messages.length > 20
           ? { initialTopMostItemIndex: virtualIndex + messages.length - 1 }
@@ -85,7 +86,9 @@ export function ChatTranscriptPanel({
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (
-          <ChatMessageRow message={message} onApprovalDecision={onApprovalDecision} />
+          <div className="chat-transcript-item">
+            <ChatMessageRow message={message} onApprovalDecision={onApprovalDecision} />
+          </div>
         )}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {

@@ -135,14 +135,21 @@
 }
 
 .chat-transcript {
-  display: grid;
-  gap: var(--chat-gap);
-  align-content: end;
+  min-width: 0;
+  max-width: 100%;
   padding-top: 24px;
+}
+
+.chat-transcript-item {
+  min-width: 0;
+  max-width: 100%;
+  padding-bottom: var(--chat-gap);
 }
 
 .chat-message-row {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   gap: 0;
   align-items: flex-start;
 }
@@ -160,6 +167,7 @@
 }
 
 .chat-bubble {
+  min-width: 0;
   max-width: 100%;
   display: grid;
   gap: 10px;
@@ -182,6 +190,8 @@
   display: grid;
   gap: 10px;
   min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .chat-bubble--user {
@@ -208,6 +218,8 @@
 
 .chat-message-attachments {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
@@ -215,6 +227,8 @@
 
 .chat-message-attachment {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
   min-height: 22px;
@@ -225,6 +239,7 @@
   color: var(--text);
   font-size: 11.5px;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .chat-message-attachment small {
@@ -238,6 +253,8 @@
 }
 
 .chat-bubble-activity {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 0 0 0 12px;
   border: 0;
@@ -311,6 +328,8 @@
 
 .subagent-body {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
 }
 
@@ -332,6 +351,8 @@
 
 .activity-json-section {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 4px;
 }
 

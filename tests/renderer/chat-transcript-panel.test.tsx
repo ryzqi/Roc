@@ -7,6 +7,8 @@ import { ChatTranscriptPanel } from '../../src/renderer/chat/chat-transcript-pan
 import type { ChatTranscriptMessage } from '../../src/renderer/chat-transcript';
 
 const virtuosoHarness = vi.hoisted(() => ({
+  mountCount: 0,
+  unmountCount: 0,
   props: null as Record<string, unknown> | null,
   scrollToIndex: vi.fn()
 }));
@@ -17,6 +19,12 @@ vi.mock('react-virtuoso', async () => {
     const elementRef = ReactModule.useRef<HTMLDivElement | null>(null);
     virtuosoHarness.props = props;
     ReactModule.useImperativeHandle(ref, () => ({ scrollToIndex: virtuosoHarness.scrollToIndex }));
+    ReactModule.useEffect(() => {
+      virtuosoHarness.mountCount += 1;
+      return () => {
+        virtuosoHarness.unmountCount += 1;
+      };
+    }, []);
     ReactModule.useEffect(() => {
       if (typeof ResizeObserver !== 'function' || elementRef.current === null) {
         return;
@@ -47,6 +55,8 @@ describe('chat transcript panel', () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
+    virtuosoHarness.mountCount = 0;
+    virtuosoHarness.unmountCount = 0;
     virtuosoHarness.props = null;
     virtuosoHarness.scrollToIndex.mockReset();
     let rafId = 0;
@@ -154,6 +164,80 @@ describe('chat transcript panel', () => {
     expect(container.textContent).toContain('新增回复');
     expect(readVirtuosoProps().followOutput).toBe('auto');
     expect(virtuosoHarness.scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it('keeps the virtual list identity stable for ordinary message updates', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [createMessage('assistant-visible', '初始内容')],
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    const initialProps = readVirtuosoProps();
+    const initialComputeItemKey = initialProps.computeItemKey;
+    expect(typeof initialComputeItemKey).toBe('function');
+    expect(initialProps.alignToBottom).toBe(true);
+    expect(virtuosoHarness.mountCount).toBe(1);
+    expect(virtuosoHarness.unmountCount).toBe(0);
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [createMessage('assistant-visible', '更新内容')],
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+
+    const updatedProps = readVirtuosoProps();
+    expect(virtuosoHarness.mountCount).toBe(1);
+    expect(virtuosoHarness.unmountCount).toBe(0);
+    expect((updatedProps.computeItemKey as (index: number, message: ChatTranscriptMessage) => string)(0, createMessage('assistant-visible', '更新内容'))).toBe('assistant-visible');
+  });
+
+  it('resets the virtual list when the selected thread changes', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [createMessage('assistant-first', '第一条线程')],
+          threadId: 'thread-first',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [createMessage('assistant-second', '第二条线程')],
+          threadId: 'thread-second',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+
+    expect(virtuosoHarness.mountCount).toBe(2);
+    expect(virtuosoHarness.unmountCount).toBe(1);
   });
 
   it('does not change position during streaming after the user leaves the bottom', async () => {

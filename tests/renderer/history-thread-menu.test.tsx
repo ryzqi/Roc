@@ -109,6 +109,31 @@ describe('HistoryThreadMenu', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull();
   });
 
+  it('keeps long history titles inside the text column next to the action button', async () => {
+    await act(async () => {
+      root.render(
+        <HistoryThreadRow
+          item={{
+            id: 'thread-long-title',
+            label: '这是一个非常长的历史会话标题，用来验证窄窗口下不会侵入更多操作按钮',
+            meta: '2026-08-20 15:20',
+            icon: 'history'
+          }}
+          selected
+          onSelect={() => {}}
+          onDelete={async () => {}}
+        />
+      );
+    });
+
+    const main = queryButton('history-thread-thread-long-title');
+    const more = queryButton('history-thread-more-thread-long-title');
+    expect(main.querySelector('.nav-copy')).not.toBeNull();
+    expect(main.querySelector('.nav-label')?.textContent).toContain('非常长');
+    expect(more.parentElement).toBe(main.parentElement);
+    expect(more.classList.contains('history-row-more')).toBe(true);
+  });
+
   async function renderRow(onDelete = vi.fn().mockResolvedValue(undefined)): Promise<void> {
     await act(async () => {
       root.render(

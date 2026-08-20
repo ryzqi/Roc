@@ -8,9 +8,12 @@ const styles = [
   'app-shell.css',
   'app-sidebar.css',
   'chat.css',
+  'chat-rich-content.css',
   'shared.css',
   'settings.css',
   'composer.css',
+  'tool-call.css',
+  'subagent.css',
   'workbench.css',
   'responsive.css'
 ]
@@ -250,12 +253,105 @@ const chatWorkspaceBaseWidth = 1032;
 function buildHistoryMenuMarkup({ left, top }) {
   return `
     <div class="history-row">
-      <button class="history-row-main" type="button">History</button>
+      <button class="history-row-main" type="button">
+        <span aria-hidden="true"></span>
+        <span class="nav-copy">
+          <span class="nav-label">History title with an intentionally very long unbroken suffix-abcdefghijklmnopqrstuvwxyz0123456789</span>
+          <span class="nav-meta">2026-08-20 15:20</span>
+        </span>
+      </button>
       <button class="history-row-more" type="button" aria-label="更多历史会话操作"></button>
       <div class="history-context-menu" role="menu" style="left:${left}px;top:${top}px">
         <button role="menuitem" type="button">删除</button>
       </div>
     </div>
+  `;
+}
+
+function buildSidebarHistoryMarkup() {
+  const rows = Array.from({ length: 12 }, (_value, index) => `
+    <div class="history-row">
+      <button class="history-row-main" type="button">
+        <span aria-hidden="true"></span>
+        <span class="nav-copy">
+          <span class="nav-label">历史会话 ${index + 1} with-a-very-long-title-that-must-not-overlap-actions</span>
+          <span class="nav-meta">2026-08-20 15:${String(index).padStart(2, '0')}</span>
+        </span>
+      </button>
+      <button class="history-row-more" type="button" aria-label="更多历史会话操作"></button>
+    </div>
+  `).join('');
+  return `
+    <div class="workspace workspace--chat" style="width:320px;height:360px;padding:0;grid-template-columns:248px minmax(0,1fr)">
+      <aside class="sidebar">
+        <div class="sidebar-head"><button class="workspace-pill" type="button"><span>F:\\Code\\Roc</span><strong>选择</strong></button></div>
+        <div class="sidebar-block sidebar-block--history sidebar-block--history-search">
+          <div class="side-title">历史会话</div>
+          <label class="history-search-field"><input type="search" value=""></label>
+          <div class="sidebar-block-scroll history-list">${rows}</div>
+        </div>
+        <div class="sidebar-block sidebar-block--tasks"><div class="side-title">任务工作台</div><div class="sidebar-block-scroll nav-list"></div></div>
+      </aside>
+      <main></main>
+    </div>
+  `;
+}
+
+function buildChatRichContentMarkup() {
+  const longToken = 'chat-content-abcdefghijklmnopqrstuvwxyz0123456789'.repeat(5);
+  return `
+    <main style="width:320px;padding:12px">
+      <div class="chat-transcript">
+        <div class="chat-transcript-header"></div>
+        <div class="chat-transcript-item">
+          <div class="chat-message-row chat-message-row--assistant">
+            <article class="chat-bubble chat-bubble--assistant">
+              <div class="chat-assistant-content">
+                <p>${longToken}</p>
+                <div class="chat-approval-card">
+                  <div class="chat-approval-head">等待审批</div>
+                  <ul class="chat-approval-actions">
+                    <li class="chat-approval-item">
+                      <span class="chat-approval-tool">${longToken}</span>
+                      <pre class="chat-approval-args">{"path":"${longToken}"}</pre>
+                    </li>
+                  </ul>
+                </div>
+                <div class="code-card">
+                  <div class="code-card-head"><span class="code-card-lang">typescript</span></div>
+                  <pre><code>${longToken}</code></pre>
+                </div>
+                <details class="tool-call-modern">
+                  <summary class="tool-call-modern__header">
+                    <span class="tool-call-modern__name">${longToken}</span>
+                    <span class="tool-call-modern__badge">running</span>
+                  </summary>
+                </details>
+              </div>
+            </article>
+          </div>
+        </div>
+        <div class="chat-transcript-item">
+          <div class="chat-message-row chat-message-row--user">
+            <article class="chat-bubble chat-bubble--user">
+              <p>${longToken}</p>
+              <div class="chat-message-attachments">
+                <span class="chat-message-attachment"><span>${longToken}.png</span><small>1 KB</small></span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="chat-bottom-stack">
+        <form class="composer composer--chat">
+          <div class="chat-attachment-strip">
+            <span class="chat-attachment-pill"><span>${longToken}.png</span><small>1 KB</small></span>
+          </div>
+          <textarea class="composer-input">${longToken}</textarea>
+          <div class="composer-bottom"><div class="composer-left"></div><div class="composer-right"></div></div>
+        </form>
+      </div>
+    </main>
   `;
 }
 
@@ -370,7 +466,11 @@ async function readBoxes(page, selectors) {
         scrollWidth: element.scrollWidth,
         flexDirection: style.flexDirection,
         flexWrap: style.flexWrap,
-        gridTemplateColumns: style.gridTemplateColumns
+        gridTemplateColumns: style.gridTemplateColumns,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+        textOverflow: style.textOverflow,
+        whiteSpace: style.whiteSpace
       };
     }
 
@@ -390,12 +490,66 @@ try {
     const left = viewport.width - 112 - 8;
     const top = viewport.height - 48 - 8;
     await page.setContent(buildDocument(buildHistoryMenuMarkup({ left, top })));
-    const menuEvidence = await readBoxes(page, [{ key: 'menu', selector: '.history-context-menu' }]);
+    const menuEvidence = await readBoxes(page, [
+      { key: 'row', selector: '.history-row' },
+      { key: 'main', selector: '.history-row-main' },
+      { key: 'title', selector: '.nav-label' },
+      { key: 'more', selector: '.history-row-more' },
+      { key: 'menu', selector: '.history-context-menu' }
+    ]);
     assertCondition(menuEvidence.menu.left >= 8, 'History menu must keep the left viewport margin', menuEvidence);
     assertCondition(menuEvidence.menu.top >= 8, 'History menu must keep the top viewport margin', menuEvidence);
     assertCondition(menuEvidence.menu.right <= viewport.width - 8, 'History menu must keep the right viewport margin', menuEvidence);
     assertCondition(menuEvidence.menu.bottom <= viewport.height - 8, 'History menu must keep the bottom viewport margin', menuEvidence);
+    assertCondition(menuEvidence.main.right <= menuEvidence.more.left, 'History title column must not overlap the More button', menuEvidence);
+    assertCondition(menuEvidence.more.width === 32, 'History More button must keep its fixed width', menuEvidence);
+    assertCondition(menuEvidence.title.overflowX === 'hidden', 'History title must clip inside its text column', menuEvidence);
+    assertCondition(menuEvidence.title.textOverflow === 'ellipsis', 'History title must expose truncation with ellipsis', menuEvidence);
+    assertCondition(menuEvidence.title.whiteSpace === 'nowrap', 'History title must keep a stable single-line height', menuEvidence);
   }
+
+  await page.setViewportSize({ width: 320, height: 480 });
+  await page.setContent(buildDocument(buildSidebarHistoryMarkup()));
+  const historyScrollEvidence = await readBoxes(page, [
+    { key: 'sidebar', selector: '.sidebar' },
+    { key: 'historyBlock', selector: '.sidebar-block--history' },
+    { key: 'historyList', selector: '.history-list' },
+    { key: 'firstRow', selector: '.history-row' }
+  ]);
+  assertCondition(historyScrollEvidence.sidebar.overflowY === 'hidden', 'Chat sidebar must not compete with history scrolling', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.historyList.overflowY === 'auto', 'History list must own vertical scrolling', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.historyList.scrollWidth <= historyScrollEvidence.historyList.clientWidth + 1, 'History list must not overflow horizontally', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.firstRow.right <= historyScrollEvidence.historyList.right, 'History rows must stay inside the history list', historyScrollEvidence);
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.setContent(buildDocument(buildChatRichContentMarkup()));
+  const richContentEvidence = await readBoxes(page, [
+    { key: 'transcript', selector: '.chat-transcript' },
+    { key: 'assistantRow', selector: '.chat-message-row--assistant' },
+    { key: 'assistantBubble', selector: '.chat-bubble--assistant' },
+    { key: 'assistantContent', selector: '.chat-assistant-content' },
+    { key: 'approval', selector: '.chat-approval-card' },
+    { key: 'approvalItem', selector: '.chat-approval-item' },
+    { key: 'approvalArgs', selector: '.chat-approval-args' },
+    { key: 'codeCard', selector: '.code-card' },
+    { key: 'codePre', selector: '.code-card pre' },
+    { key: 'toolCall', selector: '.tool-call-modern' },
+    { key: 'userBubble', selector: '.chat-bubble--user' },
+    { key: 'messageAttachment', selector: '.chat-message-attachment' },
+    { key: 'composer', selector: '.composer--chat' },
+    { key: 'composerAttachment', selector: '.chat-attachment-pill' }
+  ]);
+  const richDocumentWidth = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth
+  }));
+  for (const key of ['transcript', 'assistantRow', 'assistantBubble', 'assistantContent', 'approval', 'approvalItem', 'codeCard', 'toolCall', 'userBubble', 'messageAttachment', 'composer', 'composerAttachment']) {
+    assertCondition(richContentEvidence[key].right <= 320, `Narrow chat ${key} must stay inside the viewport`, richContentEvidence);
+  }
+  assertCondition(richContentEvidence.approvalArgs.overflowX === 'auto', 'Approval JSON must own its horizontal scrolling', richContentEvidence);
+  assertCondition(richContentEvidence.codePre.overflowX === 'auto', 'Code blocks must own their horizontal scrolling', richContentEvidence);
+  assertCondition(richDocumentWidth.document <= 320, 'Narrow chat document must not overflow horizontally', { richContentEvidence, richDocumentWidth });
+  assertCondition(richDocumentWidth.body <= 320, 'Narrow chat body must not overflow horizontally', { richContentEvidence, richDocumentWidth });
 
   const settingsResults = [];
   for (const viewport of [{ width: 320, height: 640 }, { width: 1280, height: 720 }]) {

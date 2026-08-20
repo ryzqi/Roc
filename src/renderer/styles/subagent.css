@@ -1,6 +1,7 @@
 .subagent-card {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 7px;
   margin: 3px 0;

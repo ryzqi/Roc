@@ -577,11 +577,13 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
     }
   }
 
-  return messages
+  const transcript = messages
     .map((message) => (message.role === 'assistant' ? filterRedundantSubagentTaskBlocksFromMessage(message) : message))
     .filter(
       (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.interrupts.length > 0
     );
+  assertUniqueTranscriptKeys(transcript);
+  return transcript;
 }
 
 function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActivityBlock[] {
@@ -702,47 +704,71 @@ export function appendLiveTranscriptMessages(input: {
   persistedMessages: ChatTranscriptMessage[];
   selectedThreadId: string | null;
 }): ChatTranscriptMessage[] {
+  assertUniqueTranscriptKeys(input.persistedMessages);
   const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
   if (activeThreadId === null) {
-    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
-  }
-
-  const messages = input.persistedMessages.slice();
-  if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
-    messages.push(createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId));
-  }
-
-  if (input.chatRunState.threadId !== activeThreadId) {
+    const messages = input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
+    assertUniqueTranscriptKeys(messages);
     return messages;
   }
 
-  const lastAssistantIndex = [...messages].reverse().findIndex((message) => message.role === 'assistant');
-  const assistantIndex = lastAssistantIndex === -1 ? -1 : messages.length - 1 - lastAssistantIndex;
-  if (assistantIndex !== -1) {
-    const liveBlocks = buildLiveActivityBlocks(input.chatRunState);
-    const liveContent = stripHookDisplayText(input.chatRunState.assistantMessage, liveBlocks);
-    const liveReasoning = readReasoningFromBlocks(liveBlocks);
-    const matchesPersistedAssistant =
-      messages[assistantIndex].content === liveContent &&
-      input.chatRunState.status !== 'running';
-
-    if (matchesPersistedAssistant) {
-      messages[assistantIndex] = {
-        ...messages[assistantIndex],
-        reasoning: liveReasoning.length === 0 ? null : liveReasoning,
-        blocks: liveBlocks.length === 0 ? messages[assistantIndex].blocks : liveBlocks,
-        interrupts: input.chatRunState.pendingInterrupts,
-        isStreaming: false
-      };
-      return messages;
+  const messages = input.persistedMessages.slice();
+  const pendingUserInput = input.pendingUserInput;
+  const shouldProjectPendingUser = pendingUserInput !== null &&
+    (input.selectedThreadId === null || input.chatRunState.threadId === activeThreadId);
+  if (shouldProjectPendingUser && pendingUserInput !== null) {
+    const pendingUserMessage = createPendingUserMessage(pendingUserInput, input.chatRunState.runId);
+    const existingPendingUser = messages.find((message) => message.key === pendingUserMessage.key);
+    if (existingPendingUser !== undefined && existingPendingUser.role !== 'user') {
+      throw new Error(`chat_transcript_identity_role_conflict:${pendingUserMessage.key}`);
+    }
+    if (existingPendingUser === undefined) {
+      messages.push(pendingUserMessage);
     }
   }
 
-  const liveMessage = buildLiveAssistantMessage(input.chatRunState);
-  if (liveMessage !== null) {
-    messages.push(liveMessage);
+  if (input.chatRunState.threadId !== activeThreadId) {
+    assertUniqueTranscriptKeys(messages);
+    return messages;
   }
+
+  const liveMessage = buildLiveAssistantMessage(input.chatRunState);
+  if (liveMessage === null) {
+    assertUniqueTranscriptKeys(messages);
+    return messages;
+  }
+
+  const existingIndex = messages.findIndex((message) => message.key === liveMessage.key);
+  if (existingIndex === -1) {
+    messages.push(liveMessage);
+    assertUniqueTranscriptKeys(messages);
+    return messages;
+  }
+
+  const existingMessage = messages[existingIndex];
+  if (existingMessage.role !== 'assistant') {
+    throw new Error(`chat_transcript_identity_role_conflict:${liveMessage.key}`);
+  }
+  messages[existingIndex] = {
+    ...existingMessage,
+    content: liveMessage.content.length === 0 ? existingMessage.content : liveMessage.content,
+    reasoning: liveMessage.reasoning === null ? existingMessage.reasoning : liveMessage.reasoning,
+    blocks: liveMessage.blocks.length === 0 ? existingMessage.blocks : liveMessage.blocks,
+    interrupts: liveMessage.interrupts,
+    isStreaming: liveMessage.isStreaming
+  };
+  assertUniqueTranscriptKeys(messages);
   return messages;
+}
+
+function assertUniqueTranscriptKeys(messages: readonly ChatTranscriptMessage[]): void {
+  const keys = new Set<string>();
+  for (const message of messages) {
+    if (keys.has(message.key)) {
+      throw new Error(`chat_transcript_duplicate_key:${message.key}`);
+    }
+    keys.add(message.key);
+  }
 }
 
 export function buildChatTranscript(input: {

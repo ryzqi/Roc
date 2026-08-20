@@ -12,6 +12,10 @@
   scrollbar-width: none;
 }
 
+.workspace--chat .sidebar {
+  overflow-y: hidden;
+}
+
 .sidebar::-webkit-scrollbar,
 .sidebar-block-scroll::-webkit-scrollbar,
 .canvas-stage::-webkit-scrollbar,
@@ -94,6 +98,10 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.sidebar-block--history-search {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
 .sidebar-block--history {
   flex: 0 0 184px;
 }
@@ -172,6 +180,12 @@
   gap: 8px;
 }
 
+.history-list {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .history-empty {
   padding: 10px 12px;
   color: var(--muted);
@@ -183,7 +197,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 32px;
   align-items: stretch;
-  min-height: 44px;
+  min-width: 0;
+  height: 52px;
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   overflow: visible;
   transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
@@ -201,11 +216,13 @@
 
 .history-row-main {
   min-width: 0;
+  max-width: 100%;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  padding: 10px 4px 10px 12px;
+  overflow: hidden;
+  padding: 7px 4px 7px 12px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -220,6 +237,7 @@
 .history-row-more {
   width: 32px;
   min-width: 32px;
+  max-width: 32px;
   min-height: 32px;
   align-self: center;
   display: grid;
@@ -307,8 +325,14 @@
 
 .nav-copy {
   min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 4px;
+}
+
+.history-row .nav-copy {
+  gap: 2px;
+  overflow: hidden;
 }
 
 .nav-label {
@@ -316,10 +340,27 @@
   font-weight: 500;
 }
 
+.history-row .nav-label,
+.history-row .nav-meta {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-row .nav-label {
+  line-height: 1.35;
+}
+
 .nav-meta {
   color: var(--muted);
   font-size: var(--font-meta-size);
   line-height: 1.5;
+}
+
+.history-row .nav-meta {
+  line-height: 1.35;
 }
 
 .nav-button.active .nav-meta {
