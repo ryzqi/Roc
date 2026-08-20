@@ -54,7 +54,7 @@ describe('LangChainModelFactory', () => {
     });
     expect((result.model as { temperature?: number; topP?: number }).temperature).toBe(1);
     expect((result.model as { temperature?: number; topP?: number }).topP).toBe(0.95);
-    expect(result.runtime.contextBudgetTokens).toBe(8192);
+    expect(result.runtime.contextBudgetTokens).toBe(32_768);
     expect((result.model as { clientConfig?: { baseURL?: string; maxRetries?: number } }).clientConfig).toMatchObject({
       baseURL: 'http://127.0.0.1:9090/v1',
       maxRetries: 0

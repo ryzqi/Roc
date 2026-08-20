@@ -39,6 +39,8 @@ type LangChainModelRuntime = {
   contextBudgetTokens: number;
 };
 
+const DEFAULT_CONTEXT_BUDGET_TOKENS = 32_768;
+
 export type LangChainChatModelHandle = {
   provider: ProviderConfig;
   model: BaseChatModel;
@@ -264,7 +266,8 @@ export class LangChainModelFactory {
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
-    const contextBudgetTokens = llamaCppParams?.contextBudgetTokens ?? provider.options?.contextBudgetTokens ?? 8192;
+    const contextBudgetTokens =
+      llamaCppParams?.contextBudgetTokens ?? provider.options?.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
 
     if (provider.type === 'anthropic_compatible') {
       return this.createAnthropicModel(provider, modelId, apiKey, {
