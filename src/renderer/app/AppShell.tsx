@@ -352,7 +352,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelectorAll<HTMLElement>('.sidebar, .sidebar-block-scroll, .canvas-scroll, .tool-stack, .workbench-tabs')
+        .querySelectorAll<HTMLElement>(
+          '.sidebar, .sidebar-block-scroll, .canvas:not(.canvas--chat) .canvas-scroll, .tool-stack, .workbench-tabs'
+        )
         .forEach((element) => {
           element.scrollTop = 0;
           element.scrollLeft = 0;

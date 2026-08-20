@@ -304,7 +304,6 @@ export function ChatView({
     }
   }
 
-  const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredActivityBlocks.length}`;
   const showEmptyState = chatTranscript.length === 0;
   const isAwaitingFirstByte =
     chatRun.state.status === 'running' &&
@@ -329,7 +328,6 @@ export function ChatView({
               <ChatTranscriptPanel
                 threadId={activeThreadId}
                 messages={chatTranscript}
-                liveSignal={liveSignal}
                 prependRevision={history.prependRevision}
                 hasMoreBefore={history.hasMoreBefore}
                 loadingOlder={history.loadingOlder}

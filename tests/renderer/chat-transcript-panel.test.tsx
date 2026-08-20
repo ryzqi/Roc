@@ -6,11 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatTranscriptPanel } from '../../src/renderer/chat/chat-transcript-panel';
 import type { ChatTranscriptMessage } from '../../src/renderer/chat-transcript';
 
+const virtuosoHarness = vi.hoisted(() => ({
+  props: null as Record<string, unknown> | null,
+  scrollToIndex: vi.fn()
+}));
+
 vi.mock('react-virtuoso', async () => {
   const ReactModule = await import('react');
   const Virtuoso = ReactModule.forwardRef(function TestVirtuoso(props: Record<string, unknown>, ref) {
     const elementRef = ReactModule.useRef<HTMLDivElement | null>(null);
-    ReactModule.useImperativeHandle(ref, () => ({ scrollToIndex: vi.fn() }));
+    virtuosoHarness.props = props;
+    ReactModule.useImperativeHandle(ref, () => ({ scrollToIndex: virtuosoHarness.scrollToIndex }));
     ReactModule.useEffect(() => {
       if (typeof ResizeObserver !== 'function' || elementRef.current === null) {
         return;
@@ -41,6 +47,8 @@ describe('chat transcript panel', () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
+    virtuosoHarness.props = null;
+    virtuosoHarness.scrollToIndex.mockReset();
     let rafId = 0;
     const rafTimers = new Map<number, ReturnType<typeof setTimeout>>();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -92,7 +100,6 @@ describe('chat transcript panel', () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages: createMessages(),
-          liveSignal: 'run_1|18|0',
           threadId: 'thread-test',
           prependRevision: 0,
           hasMoreBefore: false,
@@ -116,7 +123,6 @@ describe('chat transcript panel', () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages,
-          liveSignal: 'run_1|18|0',
           threadId: 'thread-test',
           prependRevision: 0,
           hasMoreBefore: false,
@@ -134,7 +140,6 @@ describe('chat transcript panel', () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages: [createMessage('assistant-visible', '流式输出可见，新增回复')],
-          liveSignal: 'run_1|22|0',
           threadId: 'thread-test',
           prependRevision: 0,
           hasMoreBefore: false,
@@ -147,6 +152,75 @@ describe('chat transcript panel', () => {
     await waitForText(container, '新增回复');
 
     expect(container.textContent).toContain('新增回复');
+    expect(readVirtuosoProps().followOutput).toBe('auto');
+    expect(virtuosoHarness.scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it('does not change position during streaming after the user leaves the bottom', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: createMessages(),
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await setVirtuosoAtBottom(false);
+    virtuosoHarness.scrollToIndex.mockClear();
+    const previousScrollTop = scrollContainer.scrollTop;
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [createMessage('assistant-visible', '流式输出可见，离底更新')],
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await waitForText(container, '离底更新');
+
+    expect(readVirtuosoProps().followOutput).toBe(false);
+    expect(scrollContainer.scrollTop).toBe(previousScrollTop);
+    expect(virtuosoHarness.scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it('scrolls to the latest message when the manual button is clicked', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: createMessages(),
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await setVirtuosoAtBottom(false);
+    virtuosoHarness.scrollToIndex.mockClear();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="chat-scroll-bottom"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(virtuosoHarness.scrollToIndex).toHaveBeenCalledWith({
+      index: 'LAST',
+      behavior: 'smooth'
+    });
   });
 
   it('does not attach a whole-transcript ResizeObserver', async () => {
@@ -167,7 +241,6 @@ describe('chat transcript panel', () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages: createMessages(),
-          liveSignal: 'run_1|18|0',
           threadId: 'thread-test',
           prependRevision: 0,
           hasMoreBefore: false,
@@ -205,7 +278,6 @@ describe('chat transcript panel', () => {
               ]
             }
           ],
-          liveSignal: 'run_1|0|0',
           threadId: 'thread-test',
           prependRevision: 0,
           hasMoreBefore: false,
@@ -266,4 +338,21 @@ async function waitForText(element: HTMLElement, text: string): Promise<void> {
     }
     await flushAnimationFrame();
   }
+}
+
+function readVirtuosoProps(): Record<string, unknown> {
+  if (virtuosoHarness.props === null) {
+    throw new Error('Virtuoso props are unavailable');
+  }
+  return virtuosoHarness.props;
+}
+
+async function setVirtuosoAtBottom(value: boolean): Promise<void> {
+  const callback = readVirtuosoProps().atBottomStateChange;
+  if (typeof callback !== 'function') {
+    throw new Error('Virtuoso atBottomStateChange callback is unavailable');
+  }
+  await act(async () => {
+    callback(value);
+  });
 }

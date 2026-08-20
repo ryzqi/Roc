@@ -10,7 +10,6 @@ import { ChatMessageRow } from './chat-message-row';
 type ChatTranscriptPanelProps = {
   threadId: string | null;
   messages: ChatTranscriptMessage[];
-  liveSignal: string;
   prependRevision: number;
   hasMoreBefore: boolean;
   loadingOlder: boolean;
@@ -40,7 +39,6 @@ function prefersReducedMotion(): boolean {
 export function ChatTranscriptPanel({
   threadId,
   messages,
-  liveSignal,
   prependRevision,
   hasMoreBefore,
   loadingOlder,
@@ -60,13 +58,6 @@ export function ChatTranscriptPanel({
   useEffect(() => {
     setScrollParent(scrollContainerRef.current);
   }, [scrollContainerRef]);
-
-  useEffect(() => {
-    if (!isAtBottom || messages.length === 0) {
-      return;
-    }
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'auto' });
-  }, [isAtBottom, liveSignal, messages.length]);
 
   function handleScrollBottomClick(): void {
     virtuosoRef.current?.scrollToIndex({

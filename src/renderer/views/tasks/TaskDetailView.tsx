@@ -95,7 +95,6 @@ export function TaskDetailView({
 
   const loadedDetail = detail;
   const waitingUser = loadedDetail.thread.status === 'waiting_user';
-  const liveSignal = `${liveTaskRun?.runId ?? ''}|${transcript.length}`;
   const actionItem = loadedDetail.backgroundTask === null ? null : createTaskActionItem(loadedDetail);
 
   async function submitFollowup(): Promise<void> {
@@ -145,7 +144,6 @@ export function TaskDetailView({
               <ChatTranscriptPanel
                 threadId={loadedDetail.threadId}
                 messages={transcript}
-                liveSignal={liveSignal}
                 prependRevision={history.prependRevision}
                 hasMoreBefore={history.hasMoreBefore}
                 loadingOlder={history.loadingOlder}

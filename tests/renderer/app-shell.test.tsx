@@ -73,6 +73,37 @@ describe('AppShell', () => {
     expect(container.textContent).toContain('任务工作台');
   });
 
+  it('resets sidebar scroll without resetting the chat canvas', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const client = createShellClient();
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+    const sidebar = container.querySelector<HTMLElement>('.sidebar');
+    const chatCanvas = container.querySelector<HTMLElement>('.canvas--chat .canvas-scroll');
+    if (sidebar === null || chatCanvas === null) {
+      throw new Error('Expected chat scroll surfaces to render');
+    }
+    const sidebarScrollTop = vi.fn();
+    const chatScrollTop = vi.fn();
+    Object.defineProperty(sidebar, 'scrollTop', { configurable: true, get: () => 120, set: sidebarScrollTop });
+    Object.defineProperty(chatCanvas, 'scrollTop', { configurable: true, get: () => 480, set: chatScrollTop });
+
+    await act(async () => {
+      frames.splice(0).forEach((callback) => callback(0));
+    });
+
+    expect(sidebarScrollTop).toHaveBeenCalledWith(0);
+    expect(chatScrollTop).not.toHaveBeenCalled();
+  });
+
   it('restores focus to the settings opener after Escape closes the modal', async () => {
     const client = createShellClient();
     window.roc = client.api;

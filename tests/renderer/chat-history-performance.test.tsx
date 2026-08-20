@@ -48,7 +48,6 @@ describe('chat history performance', () => {
         <ChatTranscriptPanel
           threadId="thread-10k"
           messages={messages}
-          liveSignal=""
           prependRevision={0}
           hasMoreBefore={false}
           loadingOlder={false}
