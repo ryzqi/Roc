@@ -36,15 +36,13 @@ import {
   taskMessageHistoryRequestSchema,
   updateBackgroundTaskRequestSchema
 } from './contracts';
+import { AgentOutboxProjector } from './agent-outbox-projector';
 import { TaskScheduler } from './scheduler';
 import { TaskRepository } from './task-repository';
 import { ThreadDeletionJournal } from './thread-deletion-journal';
 
 const pluginId = '@roc/plugin-task';
 const capabilityVersion = '1.0.0';
-const agentOutboxProjectorName = 'task_background_status';
-const agentOutboxProjectionBatchSize = 100;
-
 const idInputSchema = z.object({
   id: z.string()
 });
@@ -147,18 +145,14 @@ export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
         }
       });
       const repository = new TaskRepository(db, agentHistory, deletionJournal);
-      const projectAgentOutboxBestEffort = (): void => {
-        try {
-          projectAgentOutbox({ agentHistory, repository });
-        } catch (error) {
+      const agentOutboxProjector = new AgentOutboxProjector(agentHistory, repository, (error) => {
           context.logger.warn('Agent outbox projection failed.', {
             component: 'task.outbox.projector',
             error: error instanceof Error ? error.message : String(error)
           });
-        }
-      };
+      });
       await deletionJournal.recoverIncomplete();
-      projectAgentOutboxBestEffort();
+      agentOutboxProjector.projectBestEffort();
       scheduler = new TaskScheduler(repository, {
         startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
       });
@@ -168,7 +162,7 @@ export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
         repository,
         scheduler,
         deletionJournal,
-        () => projectAgentOutbox({ agentHistory, repository })
+        () => agentOutboxProjector.project()
       );
       unsubscribeAgentRunStarted = context.eventBus.subscribe('agent.run.started', async (event) => {
         const payload = readAgentRunStartedPayload(event.payload);
@@ -181,15 +175,15 @@ export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
         });
       });
       unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', () => {
-        projectAgentOutboxBestEffort();
+        agentOutboxProjector.projectBestEffort();
         scheduler?.reconcile();
       });
       unsubscribeAgentRunCancelled = context.eventBus.subscribe('agent.run.cancelled', () => {
-        projectAgentOutboxBestEffort();
+        agentOutboxProjector.projectBestEffort();
         scheduler?.reconcile();
       });
       unsubscribeAgentRunFailed = context.eventBus.subscribe('agent.run.failed', () => {
-        projectAgentOutboxBestEffort();
+        agentOutboxProjector.projectBestEffort();
         scheduler?.reconcile();
       });
       unsubscribeAgentRunTaskEvent = context.eventBus.subscribe('agent.run.task-event', (event) => {
@@ -231,29 +225,6 @@ export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
-}
-
-function projectAgentOutbox(input: { agentHistory: AgentTaskHistoryContract; repository: TaskRepository }): { appliedCount: number; lastSequence: number } {
-  let lastSequence = input.repository.getAgentOutboxCursor(agentOutboxProjectorName);
-  let appliedCount = 0;
-  while (true) {
-    const events = input.agentHistory.listOutboxEventsAfter({
-      afterSequence: lastSequence,
-      limit: agentOutboxProjectionBatchSize
-    });
-    if (events.length === 0) {
-      return { appliedCount, lastSequence };
-    }
-    const result = input.repository.projectAgentOutboxEvents({
-      events,
-      projectorName: agentOutboxProjectorName
-    });
-    lastSequence = result.lastSequence;
-    appliedCount += result.appliedCount;
-    if (events.length < agentOutboxProjectionBatchSize) {
-      return { appliedCount, lastSequence };
-    }
-  }
 }
 
 function registerTaskCapabilities(
