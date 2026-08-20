@@ -1,6 +1,7 @@
 import type { HITLResponse } from 'langchain';
 
 import type {
+  ActiveChatRun,
   AgentCapabilityPreview,
   AgentRuntimeStatus,
   ChatCancelRunResult,
@@ -23,13 +24,13 @@ import type {
   RunExecutionSnapshotV1,
   RunExecutionSnapshotV2
 } from '../../../shared/types';
-import type { ActiveChatRun } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { prepareChatImageAttachments } from './chat-image-attachments';
+import { AgentActiveRunLifecycle } from './active-run-lifecycle';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentDeepAgentExecution, RunOutcome } from './agent-execution';
 import { createRunInterruptedEvents, type PendingInterrupt } from './interrupt-projection';
@@ -121,23 +122,16 @@ export type AgentPluginRuntimeOptions = {
 };
 
 export class AgentPluginRuntime {
-  private readonly activeRuns = new Set<string>();
-  private readonly abortControllers = new Map<string, AbortController>();
-  private readonly activeRunMetadata = new Map<
-    string,
-    {
-      request: ChatStartRunRequest;
-      threadId: string | null;
-    }
-  >();
-  private readonly pendingInterrupts = new Map<string, PendingInterrupt[]>();
-  private readonly pendingRuns = new Map<string, Promise<void>>();
+  private readonly activeRunLifecycle: AgentActiveRunLifecycle;
   private readonly runTelemetry = new Map<string, AgentRunTelemetryAccumulator>();
-  private readonly scheduledRuns = new Set<NodeJS.Timeout>();
   private readonly pluginId: string;
 
   constructor(private readonly options: AgentPluginRuntimeOptions) {
     this.pluginId = options.pluginId === undefined ? '@roc/plugin-agent' : options.pluginId;
+    this.activeRunLifecycle = new AgentActiveRunLifecycle((error) => {
+      this.recordNotificationFailure('agent_pending_run_rejected');
+      console.error('[AgentPluginRuntime] Detached run execution rejected.', error);
+    });
   }
 
   getStatus(): AgentRuntimeStatus {
@@ -236,14 +230,14 @@ export class AgentPluginRuntime {
       status: 'dispatch_pending'
     }).run;
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
-    this.activeRuns.add(run.id);
     const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, dispatchedRun);
-    this.activeRunMetadata.set(run.id, {
+    const abortController = new AbortController();
+    this.activeRunLifecycle.activate({
+      abortController,
+      runId: run.id,
       request: normalizedRequest,
       threadId: dispatchedRun.threadId
     });
-    const abortController = new AbortController();
-    this.abortControllers.set(run.id, abortController);
     const result: ChatStartRunResult = {
       runId: run.id,
       mode: request.mode,
@@ -268,9 +262,8 @@ export class AgentPluginRuntime {
       modelId: result.modelId,
       createdAt: result.createdAt
     });
-    const timer = setTimeout(() => {
-      this.scheduledRuns.delete(timer);
-      if (!this.activeRuns.has(run.id)) {
+    this.activeRunLifecycle.schedule(() => {
+      if (!this.activeRunLifecycle.isActive(run.id)) {
         return;
       }
       const executionState = this.options.repository.getRunTransitionState(run.id);
@@ -300,14 +293,13 @@ export class AgentPluginRuntime {
         validatedAttachments: preparedAttachments.images,
         workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
       });
-      this.trackPendingRun(run.id, pendingRun);
-    }, 0);
-    this.scheduledRuns.add(timer);
+      this.activeRunLifecycle.trackPendingRun(run.id, pendingRun);
+    });
     return result;
   }
 
   async cancelRun(input: { runId: string }): Promise<ChatCancelRunResult> {
-    if (!this.activeRuns.has(input.runId)) {
+    if (!this.activeRunLifecycle.isActive(input.runId)) {
       return {
         runId: input.runId,
         cancelled: false
@@ -316,15 +308,12 @@ export class AgentPluginRuntime {
     const run = this.options.repository.getRun(input.runId);
     const snapshot = this.options.repository.getRunExecutionSnapshot(input.runId);
     const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
-    const abortController = this.abortControllers.get(input.runId);
-    if (abortController === undefined) {
-      throw new Error('agent_run_abort_controller_missing');
-    }
-    this.activeRuns.delete(input.runId);
-    abortController.abort();
-    const pendingRun = this.pendingRuns.get(input.runId);
-    if (pendingRun !== undefined) {
-      await pendingRun;
+    const cancellation = await this.activeRunLifecycle.cancel(input.runId);
+    if (cancellation === null) {
+      return {
+        runId: input.runId,
+        cancelled: false
+      };
     }
     const endedAt = new Date().toISOString();
     const terminalState = this.options.repository.getRunTransitionState(input.runId);
@@ -346,14 +335,12 @@ export class AgentPluginRuntime {
         telemetry: telemetry.snapshot()
       });
     } catch (error) {
-      this.activeRuns.add(input.runId);
+      this.runTelemetry.delete(input.runId);
+      this.activeRunLifecycle.finish(input.runId);
       throw error;
     }
     this.runTelemetry.delete(input.runId);
-    const metadata = this.activeRunMetadata.get(input.runId);
-    this.activeRunMetadata.delete(input.runId);
-    this.abortControllers.delete(input.runId);
-    this.pendingInterrupts.delete(input.runId);
+    this.activeRunLifecycle.finish(input.runId);
     void this.publish('agent.run.cancelled', {
       runId: terminal.run.id,
       threadId: terminal.run.threadId,
@@ -365,16 +352,14 @@ export class AgentPluginRuntime {
       threadId: terminal.run.threadId,
       reason: 'user_cancelled'
     }, false);
-    if (metadata !== undefined) {
-      void this.emitSessionEndBestEffort({
-        runId: input.runId,
-        threadId: metadata.threadId,
-        request: metadata.request,
-        signal: abortController.signal,
-        status: 'cancelled',
-        error: null
-      });
-    }
+    void this.emitSessionEndBestEffort({
+      runId: input.runId,
+      threadId: cancellation.metadata.threadId,
+      request: cancellation.metadata.request,
+      signal: cancellation.abortController.signal,
+      status: 'cancelled',
+      error: null
+    });
     return {
       runId: input.runId,
       cancelled: true
@@ -489,13 +474,13 @@ export class AgentPluginRuntime {
       throw error;
     }
     const resumedRun = resumed.run;
-    this.activeRuns.add(run.id);
     const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, resumedRun);
-    this.activeRunMetadata.set(run.id, {
+    this.activeRunLifecycle.activate({
+      abortController,
+      runId: run.id,
       request: resumedRequest,
       threadId: resumedRun.threadId
     });
-    this.abortControllers.set(run.id, abortController);
     const resumedAt = new Date().toISOString();
     const result: ChatResumeRunResult = {
       runId: run.id,
@@ -505,11 +490,7 @@ export class AgentPluginRuntime {
     const remainingInterrupts = pendingInterrupts.filter(
       (interrupt) => interrupt.interruptId !== request.interruptId
     );
-    if (remainingInterrupts.length === 0) {
-      this.pendingInterrupts.delete(run.id);
-    } else {
-      this.pendingInterrupts.set(run.id, remainingInterrupts);
-    }
+    this.activeRunLifecycle.replacePendingInterrupts(run.id, remainingInterrupts);
     await this.publish('agent.run.resumed', result);
     await this.publishChatRunEvent({
       type: 'run_resumed',
@@ -535,7 +516,7 @@ export class AgentPluginRuntime {
       threadId: resumedRun.threadId,
       workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
     });
-    this.trackPendingRun(run.id, pendingRun);
+    this.activeRunLifecycle.trackPendingRun(run.id, pendingRun);
     return result;
   }
 
@@ -558,31 +539,11 @@ export class AgentPluginRuntime {
   }
 
   getActiveRun(input: { threadId: string }): ActiveChatRun | null {
-    for (const runId of this.activeRuns) {
-      const metadata = this.activeRunMetadata.get(runId);
-      if (metadata === undefined) {
-        continue;
-      }
-      if (metadata.threadId !== input.threadId) {
-        continue;
-      }
-      return {
-        runId,
-        threadId: input.threadId,
-        status: this.pendingInterrupts.has(runId) ? 'waiting_user' : 'running'
-      };
-    }
-    return null;
+    return this.activeRunLifecycle.findActiveRun(input.threadId);
   }
 
   async shutdown(): Promise<void> {
-    for (const timer of this.scheduledRuns) {
-      clearTimeout(timer);
-    }
-    this.scheduledRuns.clear();
-    if (this.pendingRuns.size > 0) {
-      await Promise.allSettled([...this.pendingRuns.values()]);
-    }
+    await this.activeRunLifecycle.shutdown();
   }
 
   async completeRun(input: {
@@ -614,10 +575,7 @@ export class AgentPluginRuntime {
       workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
     const run = terminal.run;
-    this.activeRuns.delete(input.runId);
-    this.activeRunMetadata.delete(input.runId);
-    this.abortControllers.delete(input.runId);
-    this.pendingInterrupts.delete(input.runId);
+    this.activeRunLifecycle.finish(input.runId);
     const completedPayload: {
       runId: string;
       threadId: string;
@@ -708,27 +666,6 @@ export class AgentPluginRuntime {
     }
   }
 
-  private trackPendingRun(runId: string, pendingRun: Promise<void>): void {
-    if (this.pendingRuns.has(runId)) {
-      throw new Error('agent_pending_run_already_tracked');
-    }
-    this.pendingRuns.set(runId, pendingRun);
-    void pendingRun.then(
-      () => {
-        if (this.pendingRuns.get(runId) === pendingRun) {
-          this.pendingRuns.delete(runId);
-        }
-      },
-      (error: unknown) => {
-        if (this.pendingRuns.get(runId) === pendingRun) {
-          this.pendingRuns.delete(runId);
-        }
-        this.recordNotificationFailure('agent_pending_run_rejected');
-        console.error('[AgentPluginRuntime] Detached run execution rejected.', error);
-      }
-    );
-  }
-
   private async recordRunTaskEvent(input: {
     runId: string;
     threadId: string;
@@ -749,7 +686,7 @@ export class AgentPluginRuntime {
   }
 
   private async executeRun(input: ExecuteRunInput): Promise<void> {
-    if (!this.activeRuns.has(input.runId)) {
+    if (!this.activeRunLifecycle.isActive(input.runId)) {
       return;
     }
     const runStartedAtMs = parseTimestamp(input.run.startedAt, 'agent_run_telemetry_started_at_invalid');
@@ -757,7 +694,7 @@ export class AgentPluginRuntime {
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
     let executionStream = input.executionStream;
-    while (this.activeRuns.has(input.runId)) {
+    while (this.activeRunLifecycle.isActive(input.runId)) {
       try {
         if (this.options.deepAgentExecutor === undefined) {
           throw new Error('agent_deep_agent_executor_missing');
@@ -812,7 +749,7 @@ export class AgentPluginRuntime {
           }
           return;
         }
-        if (!this.activeRuns.has(input.runId)) {
+        if (!this.activeRunLifecycle.isActive(input.runId)) {
           return;
         }
         telemetry.observeModelUsage(execution.usage);
@@ -851,7 +788,7 @@ export class AgentPluginRuntime {
         });
         return;
       } catch (error) {
-        if (!this.activeRuns.has(input.runId)) {
+        if (!this.activeRunLifecycle.isActive(input.runId)) {
           return;
         }
         const failure = toRunFailure(error);
@@ -896,7 +833,7 @@ export class AgentPluginRuntime {
           try {
             await waitForRecoveryDelay(decision.delayMs, input.abortSignal);
           } catch (delayError) {
-            if (!this.activeRuns.has(input.runId)) {
+            if (!this.activeRunLifecycle.isActive(input.runId)) {
               return;
             }
             throw delayError;
@@ -946,10 +883,7 @@ export class AgentPluginRuntime {
       telemetry: input.telemetry.snapshot()
     });
     this.runTelemetry.delete(input.input.runId);
-    this.activeRuns.delete(input.input.runId);
-    this.activeRunMetadata.delete(input.input.runId);
-    this.abortControllers.delete(input.input.runId);
-    this.pendingInterrupts.delete(input.input.runId);
+    this.activeRunLifecycle.finish(input.input.runId);
     await this.emitSessionEndBestEffort({
       runId: input.input.runId,
       threadId: input.input.threadId,
@@ -1008,7 +942,7 @@ export class AgentPluginRuntime {
         : input.executionStream;
     try {
       for await (const event of execution.events) {
-        if (!this.activeRuns.has(input.run.id)) {
+        if (!this.activeRunLifecycle.isActive(input.run.id)) {
           void execution.outcome.catch(() => undefined);
           return null;
         }
@@ -1151,7 +1085,7 @@ export class AgentPluginRuntime {
   }
 
   private resolvePendingInterrupts(runId: string): PendingInterrupt[] {
-    const pendingInterrupts = this.pendingInterrupts.get(runId);
+    const pendingInterrupts = this.activeRunLifecycle.readPendingInterrupts(runId);
     if (pendingInterrupts !== undefined) {
       return pendingInterrupts;
     }
@@ -1161,7 +1095,7 @@ export class AgentPluginRuntime {
       threadId: run.threadId
     }).interrupts;
     if (persistedInterrupts.length > 0) {
-      this.pendingInterrupts.set(runId, persistedInterrupts);
+      this.activeRunLifecycle.replacePendingInterrupts(runId, persistedInterrupts);
     }
     return persistedInterrupts;
   }
@@ -1181,7 +1115,7 @@ export class AgentPluginRuntime {
       telemetry: input.telemetry,
       threadId: input.threadId
     });
-    this.pendingInterrupts.set(input.runId, [...input.interrupts]);
+    this.activeRunLifecycle.replacePendingInterrupts(input.runId, input.interrupts);
     for (const event of interrupted.events) {
       await this.publishTaskEvent(event);
     }

@@ -594,7 +594,7 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
-  it('keeps cancellation retryable when the terminal transaction fails', async () => {
+  it('clears the in-memory run when the terminal transaction fails after abort', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
@@ -622,13 +622,17 @@ describe('AgentPluginRuntime', () => {
 
     await expect(runtime.cancelRun({ runId: result.runId })).rejects.toThrow('forced_cancel_telemetry_failure');
     expect(repository.getRun(result.runId).status).toBe('running');
+    if (result.threadId === null) {
+      throw new Error('runtime_cancel_test_thread_missing');
+    }
+    expect(runtime.getActiveRun({ threadId: result.threadId })).toBeNull();
 
     db.exec('DROP TRIGGER reject_cancel_telemetry_update');
     await expect(runtime.cancelRun({ runId: result.runId })).resolves.toEqual({
-      cancelled: true,
+      cancelled: false,
       runId: result.runId
     });
-    expect(repository.getRun(result.runId).status).toBe('cancelled');
+    expect(repository.getRun(result.runId).status).toBe('running');
   });
 
 
