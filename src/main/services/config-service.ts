@@ -158,7 +158,7 @@ export class ConfigService {
   saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
     const parsed = SettingsSaveRequestSchema.parse(request);
     const normalizedProviders = normalizeProvidersConfig({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: parsed.defaultModelId,
       providers: parsed.providers
     });
@@ -180,7 +180,7 @@ export class ConfigService {
   async saveSettingsSnapshotAsync(request: SettingsSaveRequest): Promise<SettingsSaveRequest> {
     const parsed = SettingsSaveRequestSchema.parse(request);
     const normalizedProviders = normalizeProvidersConfig({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: parsed.defaultModelId,
       providers: parsed.providers
     });
@@ -208,7 +208,7 @@ export class ConfigService {
         ? [...config.providers, parsedProvider]
         : config.providers.map((item) => (item.id === parsedProvider.id ? parsedProvider : item));
     this.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: config.defaultModelId,
       providers: nextProviders
     });
@@ -224,7 +224,7 @@ export class ConfigService {
         ? [...config.providers, parsedProvider]
         : config.providers.map((item) => (item.id === parsedProvider.id ? parsedProvider : item));
     await this.saveProvidersAsync({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: config.defaultModelId,
       providers: nextProviders
     });
@@ -251,7 +251,7 @@ export class ConfigService {
     if (modelId === null) {
       const config = this.getProviders();
       this.saveProviders({
-        schemaVersion: 1,
+        schemaVersion: 2,
         defaultModelId: null,
         providers: config.providers
       });
@@ -300,7 +300,7 @@ export class ConfigService {
       });
     }
     this.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: id,
       providers: config.providers
     });

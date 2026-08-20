@@ -1,11 +1,12 @@
 import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
-import type { ProviderConfig } from '../../shared/types';
+import type { ProviderConfig, ProviderModelOptions } from '../../shared/types';
 import { RocDomainError } from './errors';
 import { buildNvidiaModelKwargs, type ModelFactoryLogService } from './langchain-provider-options';
 
 type NvidiaProbeInput = {
   provider: ProviderConfig;
   modelId: string;
+  modelOptions: ProviderModelOptions;
   prompt: string;
   apiKey: string;
   logService: ModelFactoryLogService | null;
@@ -27,7 +28,7 @@ export async function probeNvidiaTtfb(input: NvidiaProbeInput): Promise<{ latenc
   const probeOptions = input.options ?? {};
   const baseUrl = resolveNvidiaBaseUrl(input.provider).replace(/\/+$/, '');
   const url = `${baseUrl}/chat/completions`;
-  const modelKwargs = buildNvidiaModelKwargs(input.modelId, input.provider.options ?? {}, true);
+  const modelKwargs = buildNvidiaModelKwargs(input.modelId, input.modelOptions, true);
   const startedAt = Date.now();
   const internalAbort = new AbortController();
   const timeoutMs = probeOptions.timeoutMs ?? 30_000;

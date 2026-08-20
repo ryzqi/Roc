@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  agentLangSmithTraceSessionSchema,
   defaultModelStateSchema,
   runExecutionSnapshotV2Schema
 } from '../../src/shared/schemas/agent';
@@ -104,7 +103,7 @@ describe('shared agent contracts', () => {
     ).toBe(false);
   });
 
-  it('owns snapshot and LangSmith trace integrity in shared schemas', () => {
+  it('owns run snapshot integrity in shared schemas', () => {
     const snapshot = {
       schemaVersion: 2,
       runId: 'run-1',
@@ -135,27 +134,6 @@ describe('shared agent contracts', () => {
       inputMessageId: 'message-1',
       dispatchKey: null
     };
-    const traceSession = {
-      schemaVersion: 1,
-      runId: 'run-1',
-      threadId: 'thread-1',
-      runOrigin: 'chat',
-      manifestHash: 'a'.repeat(64),
-      appVersion: '1.0.0',
-      projectName: 'roc',
-      rootId: '11111111-1111-4111-8111-111111111111',
-      traceId: '11111111-1111-4111-8111-111111111111',
-      dottedOrder: '1',
-      startTime: 1
-    };
-
     expect(runExecutionSnapshotV2Schema.parse(snapshot)).toEqual(snapshot);
-    expect(agentLangSmithTraceSessionSchema.parse(traceSession)).toEqual(traceSession);
-    expect(
-      agentLangSmithTraceSessionSchema.safeParse({
-        ...traceSession,
-        traceId: '22222222-2222-4222-8222-222222222222'
-      }).success
-    ).toBe(false);
   });
 });

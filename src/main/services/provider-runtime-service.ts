@@ -54,8 +54,8 @@ export class ProviderRuntimeService {
     };
   }
 
-  async testProvider(providerId: string): Promise<ProviderTestResult> {
-    const provider = this.resolveProviderById(providerId);
+  async testProvider(request: { providerId: string; modelId: string }): Promise<ProviderTestResult> {
+    const provider = this.resolveProviderById(request.providerId);
     const defaultModelState = this.configService.getDefaultModelState();
     const defaultModelReady =
       defaultModelState.status === 'ready' && defaultModelState.providerId === provider.id;
@@ -72,15 +72,15 @@ export class ProviderRuntimeService {
         latencyMs: null
       };
     }
-    const enabledModel = provider.models.find((model) => model.enabled);
-    if (enabledModel === undefined) {
+    const targetModel = provider.models.find((model) => model.id === request.modelId);
+    if (targetModel === undefined || !targetModel.enabled) {
       return {
         providerId: provider.id,
         status: 'invalid',
         defaultModelReady,
         checked,
-        modelId: null,
-        error: 'Provider 没有已启用模型。',
+        modelId: request.modelId,
+        error: 'Provider 模型不存在或未启用。',
         latencyMs: null
       };
     }
@@ -92,7 +92,8 @@ export class ProviderRuntimeService {
           () =>
             this.langChainModelFactory.probeNvidiaTtfb(
               provider,
-              enabledModel.id,
+              targetModel.id,
+              targetModel.options ?? {},
               providerTestPromptForProvider(provider)
             ),
           {
@@ -105,7 +106,7 @@ export class ProviderRuntimeService {
           status: 'ready',
           defaultModelReady,
           checked,
-          modelId: enabledModel.id,
+          modelId: targetModel.id,
           error: null,
           latencyMs: probe.latencyMs
         };
@@ -116,7 +117,7 @@ export class ProviderRuntimeService {
           status: 'invalid',
           defaultModelReady,
           checked,
-          modelId: enabledModel.id,
+          modelId: targetModel.id,
           error: safeError.message,
           latencyMs: Date.now() - startedAt
         };
@@ -127,7 +128,7 @@ export class ProviderRuntimeService {
         async () => {
           const result = await this.executeTransportRequest({
             provider,
-            modelId: enabledModel.id,
+            modelId: targetModel.id,
             input: providerTestPromptForProvider(provider),
             capabilitySummary: this.createCapabilitySummary({
               mcpServers: [],
@@ -147,7 +148,7 @@ export class ProviderRuntimeService {
         status: 'ready',
         defaultModelReady,
         checked,
-        modelId: enabledModel.id,
+        modelId: targetModel.id,
         error: null,
         latencyMs: Date.now() - startedAt
       };
@@ -158,7 +159,7 @@ export class ProviderRuntimeService {
         status: 'invalid',
         defaultModelReady,
         checked,
-        modelId: enabledModel.id,
+        modelId: targetModel.id,
         error: safeError.message,
         latencyMs: Date.now() - startedAt
       };

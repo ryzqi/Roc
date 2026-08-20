@@ -5,8 +5,9 @@ import type {
   OpenAiServiceTier,
   OpenAiVerbosity,
   ProviderConfig,
+  ProviderConnectionOptions,
   ProviderModel,
-  ProviderOptions,
+  ProviderModelOptions,
   ProviderSamplingProfileOverrides
 } from './settings';
 
@@ -26,14 +27,20 @@ export type BaseProviderConfig = {
   models: ProviderModel[];
   endpoint: string;
   credentialRef: string | null;
+  options?: ProviderConnectionOptions;
 };
 
 export type CommonProviderParams = {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+};
+
+export type ProviderConnectionParams = {
   timeoutMs?: number;
   defaultHeaders?: Record<string, string>;
+  organization?: string;
+  endpointOverride?: string;
 };
 
 export type OpenAICompatibleParams = CommonProviderParams & {
@@ -41,7 +48,6 @@ export type OpenAICompatibleParams = CommonProviderParams & {
   presencePenalty?: number;
   seed?: number;
   stop?: string[];
-  organization?: string;
   useResponsesApi?: boolean;
   reasoning?: OpenAiReasoningOption;
   parallelToolCalls?: boolean;
@@ -49,7 +55,7 @@ export type OpenAICompatibleParams = CommonProviderParams & {
   serviceTier?: OpenAiServiceTier;
   verbosity?: OpenAiVerbosity;
   zdrEnabled?: boolean;
-  modelKwargs?: ProviderOptions['modelKwargs'];
+  modelKwargs?: ProviderModelOptions['modelKwargs'];
 };
 
 export type AnthropicCompatibleParams = CommonProviderParams & {
@@ -57,7 +63,7 @@ export type AnthropicCompatibleParams = CommonProviderParams & {
   stopSequences?: string[];
   thinking?: AnthropicThinkingOption;
   betas?: string[];
-  invocationKwargs?: ProviderOptions['invocationKwargs'];
+  invocationKwargs?: ProviderModelOptions['invocationKwargs'];
 };
 
 export type NvidiaParams = CommonProviderParams & {
@@ -73,11 +79,10 @@ export type NvidiaParams = CommonProviderParams & {
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
   toolChoice?: NvidiaToolChoice;
-  guidedJson?: ProviderOptions['guidedJson'];
+  guidedJson?: ProviderModelOptions['guidedJson'];
   guidedRegex?: string;
   guidedChoice?: string[];
   guidedGrammar?: string;
-  endpointOverride?: string;
 };
 
 export type LlamaCppParams = CommonProviderParams & {
@@ -118,21 +123,20 @@ export type ProviderConfigTyped =
       params: LlamaCppParams;
     };
 
-type LegacyProviderConfig = Pick<
-  ProviderConfig,
-  'id' | 'name' | 'type' | 'enabled' | 'models' | 'endpoint' | 'credentialRef' | 'options'
->;
-
-export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderConfigTyped {
+export function toTypedProviderConfig(
+  legacy: ProviderConfig,
+  modelOptions: ProviderModelOptions
+): ProviderConfigTyped {
   const baseConfig: BaseProviderConfig = {
     id: legacy.id,
     name: legacy.name,
     enabled: legacy.enabled,
     models: legacy.models,
     endpoint: legacy.endpoint,
-    credentialRef: legacy.credentialRef
+    credentialRef: legacy.credentialRef,
+    options: legacy.options
   };
-  const opts = legacy.options ?? {};
+  const opts = modelOptions;
 
   switch (legacy.type) {
     case 'openai_compatible':
@@ -143,13 +147,10 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          timeoutMs: opts.timeoutMs,
-          defaultHeaders: opts.defaultHeaders,
           frequencyPenalty: opts.frequencyPenalty,
           presencePenalty: opts.presencePenalty,
           seed: opts.seed,
           stop: opts.stop,
-          organization: opts.organization,
           useResponsesApi: opts.useResponsesApi,
           reasoning: opts.reasoning,
           parallelToolCalls: opts.parallelToolCalls,
@@ -169,8 +170,6 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          timeoutMs: opts.timeoutMs,
-          defaultHeaders: opts.defaultHeaders,
           topK: opts.topK,
           stopSequences: opts.stop,
           thinking: opts.anthropicThinking,
@@ -187,8 +186,6 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          timeoutMs: opts.timeoutMs,
-          defaultHeaders: opts.defaultHeaders,
           topK: opts.topK,
           minP: opts.minP,
           frequencyPenalty: opts.frequencyPenalty,
@@ -205,7 +202,6 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           guidedRegex: opts.guidedRegex,
           guidedChoice: opts.guidedChoice,
           guidedGrammar: opts.guidedGrammar,
-          endpointOverride: opts.endpointOverride
         }
       };
 
@@ -224,8 +220,6 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          timeoutMs: opts.timeoutMs,
-          defaultHeaders: opts.defaultHeaders,
           topK: opts.topK,
           minP: opts.minP,
           presencePenalty: opts.presencePenalty,
@@ -245,14 +239,18 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
 }
 
 export function fromTypedProviderConfig(typed: ProviderConfigTyped): ProviderConfig {
+  const modelOptions = providerOptionsFromTypedParams(typed);
   return {
     ...typed.config,
     type: typed.type,
-    options: providerOptionsFromTypedParams(typed)
+    models:
+      Object.keys(modelOptions).length === 0
+        ? typed.config.models
+        : typed.config.models.map((model) => ({ ...model, options: modelOptions }))
   };
 }
 
-function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderOptions {
+function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderModelOptions {
   switch (typed.type) {
     case 'openai_compatible':
     case 'nvidia':
@@ -264,8 +262,6 @@ function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderOpt
         maxTokens: typed.params.maxTokens,
         topP: typed.params.topP,
         topK: typed.params.topK,
-        timeoutMs: typed.params.timeoutMs,
-        defaultHeaders: typed.params.defaultHeaders,
         stop: typed.params.stopSequences,
         anthropicThinking: typed.params.thinking,
         anthropicBetas: typed.params.betas,

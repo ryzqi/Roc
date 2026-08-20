@@ -30,17 +30,12 @@ describe('IPC schema generation', () => {
     expect(ipcEventChannelKeys).toEqual(schema.events.map((entry) => entry.key));
   });
 
-  it('declares explicit LangSmith settings and secret request channels', () => {
+  it('does not expose removed observability settings or secret channels', () => {
     const schema = ipcRegistry;
+    const serialized = JSON.stringify(schema.requests);
 
-    expect(schema.requests).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'agentLangSmithSettingsGet', channel: 'roc:agent:langsmith:settings:get' }),
-        expect.objectContaining({ key: 'agentLangSmithSettingsSave', channel: 'roc:agent:langsmith:settings:save' }),
-        expect.objectContaining({ key: 'agentLangSmithSecretSet', channel: 'roc:agent:langsmith:secret:set' }),
-        expect.objectContaining({ key: 'agentLangSmithSecretClear', channel: 'roc:agent:langsmith:secret:clear' })
-      ])
-    );
+    expect(serialized).not.toContain('langsmith');
+    expect(serialized).not.toContain('LangSmith');
   });
 
   it('keeps preload on generated channels without raw capability or wildcard IPC', () => {

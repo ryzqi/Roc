@@ -121,9 +121,6 @@ export class AgentTaskHistoryContract {
       this.agentDb
         .prepare('DELETE FROM agent_run_telemetry WHERE run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
         .run(targetThreadId);
-      this.agentDb
-        .prepare('DELETE FROM agent_langsmith_trace_sessions WHERE run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
-        .run(targetThreadId);
       this.agentDb.prepare('DELETE FROM agent_runs WHERE thread_id = ?').run(targetThreadId);
       this.agentDb.prepare('DELETE FROM agent_threads WHERE id = ?').run(targetThreadId);
     })();

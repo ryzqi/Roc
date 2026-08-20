@@ -1,14 +1,12 @@
 import { completedTestOutcome, createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import type { BaseStore } from '@langchain/langgraph';
-import { Client } from 'langsmith';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskRun } from '../../../../src/shared/types';
 import { createAgentPlugin } from '../../../../src/main/plugins/agent';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocPluginContext } from '../../../../src/main/kernel/types';
-import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
@@ -45,10 +43,6 @@ const agentCapabilities = [
   'agent.run.active.get',
   'agent.sessions.list',
   'agent.sessions.search',
-  'agent.langsmith.settings.get',
-  'agent.langsmith.settings.save',
-  'agent.langsmith.secret.set',
-  'agent.langsmith.secret.clear'
 ];
 
 const agentCapabilitiesWithPreview = [...agentCapabilities, 'agent.capability.preview'];
@@ -79,7 +73,6 @@ describe('agent plugin manifest', () => {
   it('declares plugin dependencies when the DeepAgent executor is enabled', () => {
     const plugin = createAgentPlugin({
       deepAgentExecutor: {
-        appVersion: '0.1.0',
         memoryStore: {} as BaseStore,
         paths: new RocPaths('F:\\Code\\Roc')
       }
@@ -102,7 +95,6 @@ describe('agent plugin manifest', () => {
     try {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
-          appVersion: '0.1.0',
           memoryStore: new RocSqliteStore(memoryDb),
           paths: new RocPaths('F:\\Code\\Roc')
         }
@@ -171,23 +163,9 @@ describe('agent plugin manifest', () => {
         reconciledRun.modelId,
         JSON.stringify(reconciledRun.enabledCapabilities)
       );
-      new AgentLangSmithTraceSessionRepository(agentDb).create({
-        schemaVersion: 1,
-        runId: reconciledRun.id,
-        threadId: reconciledRun.threadId,
-        runOrigin: 'chat',
-        manifestHash: 'a'.repeat(64),
-        appVersion: '0.1.0',
-        projectName: 'roc-production',
-        rootId: '11111111-1111-4111-8111-111111111111',
-        traceId: '11111111-1111-4111-8111-111111111111',
-        dottedOrder: '20260726T000000000Z11111111-1111-4111-8111-111111111111',
-        startTime: 1_753_488_000_000
-      }, startedAt);
       reconcileStartupRuns.mockReturnValue([reconciledRun]);
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
-          appVersion: '0.1.0',
           memoryStore: new RocSqliteStore(memoryDb),
           paths: new RocPaths('F:\\Code\\Roc')
         }
@@ -200,110 +178,9 @@ describe('agent plugin manifest', () => {
       await plugin.initialize(context);
 
       expect(reconcileStartupRuns).toHaveBeenCalledTimes(1);
-      expect(
-        agentDb.prepare('SELECT COUNT(*) FROM agent_langsmith_trace_sessions WHERE run_id = ?').pluck().get(reconciledRun.id)
-      ).toBe(0);
       await plugin.shutdown();
     } finally {
       reconcileStartupRuns.mockRestore();
-      agentDb.close();
-      memoryDb.close();
-      taskDb.close();
-      coreDb.close();
-    }
-  });
-
-  it('reconciles a trace session left after the run reached a terminal state', async () => {
-    const agentDb = new Database(':memory:');
-    const memoryDb = new Database(':memory:');
-    const taskDb = new Database(':memory:');
-    const coreDb = new Database(':memory:');
-    const startedAt = '2026-07-26T00:00:00.000Z';
-    const createRun = vi.spyOn(Client.prototype, 'createRun').mockResolvedValue();
-    const updateRun = vi.spyOn(Client.prototype, 'updateRun').mockResolvedValue();
-    try {
-      applyAgentDatabaseSchema(agentDb);
-      agentDb.prepare(
-        `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
-         VALUES
-           ('thread_terminal_trace', 'chat', 'Terminal trace', 'Terminal trace', 'failed', ?, ?),
-           ('thread_waiting_trace', 'chat', 'Waiting trace', 'Waiting trace', 'waiting_user', ?, ?)`
-      ).run(startedAt, startedAt, startedAt, startedAt);
-      agentDb.prepare(
-        `INSERT INTO agent_runs
-         (id, thread_id, run_number, user_input, status, started_at, ended_at, enabled_capabilities_json)
-         VALUES
-           ('run_terminal_trace', 'thread_terminal_trace', 1, 'Terminal trace', 'failed', ?, ?, '{}'),
-           ('run_waiting_trace', 'thread_waiting_trace', 1, 'Waiting trace', 'waiting_user', ?, NULL, '{}')`
-      ).run(startedAt, '2026-07-26T00:00:01.000Z', startedAt);
-      const traceSessions = new AgentLangSmithTraceSessionRepository(agentDb);
-      traceSessions.create({
-        schemaVersion: 1,
-        runId: 'run_terminal_trace',
-        threadId: 'thread_terminal_trace',
-        runOrigin: 'chat',
-        manifestHash: 'a'.repeat(64),
-        appVersion: '0.1.0',
-        projectName: 'roc-production',
-        rootId: '11111111-1111-4111-8111-111111111111',
-        traceId: '11111111-1111-4111-8111-111111111111',
-        dottedOrder: '20260726T000000000Z11111111-1111-4111-8111-111111111111',
-        startTime: 1_753_488_000_000
-      }, startedAt);
-      traceSessions.create({
-        schemaVersion: 1,
-        runId: 'run_waiting_trace',
-        threadId: 'thread_waiting_trace',
-        runOrigin: 'chat',
-        manifestHash: 'b'.repeat(64),
-        appVersion: '0.1.0',
-        projectName: 'roc-production',
-        rootId: '22222222-2222-4222-8222-222222222222',
-        traceId: '22222222-2222-4222-8222-222222222222',
-        dottedOrder: '20260726T000000000Z22222222-2222-4222-8222-222222222222',
-        startTime: 1_753_488_000_000
-      }, startedAt);
-      const plugin = createAgentPlugin({
-        deepAgentExecutor: {
-          appVersion: '0.1.0',
-          memoryStore: new RocSqliteStore(memoryDb),
-          paths: new RocPaths('F:\\Code\\Roc')
-        }
-      });
-      const context = createContext(agentDb, memoryDb, taskDb, coreDb);
-      vi.spyOn(context.config, 'get').mockReturnValue({
-        schemaVersion: 1,
-        enabled: true,
-        projectName: 'roc-production'
-      });
-      vi.spyOn(context.secrets, 'get').mockReturnValue('lsv2_secret');
-      for (const capability of plugin.manifest.capabilities) {
-        context.capabilities.declare(plugin.manifest.id, capability);
-      }
-
-      await plugin.initialize(context);
-
-      expect(traceSessions.get('run_terminal_trace')).toBeNull();
-      expect(traceSessions.get('run_waiting_trace')).not.toBeNull();
-      expect(createRun).toHaveBeenCalledTimes(1);
-      expect(createRun.mock.calls[0]?.[0]).toMatchObject({
-        id: '11111111-1111-4111-8111-111111111111',
-        trace_id: '11111111-1111-4111-8111-111111111111'
-      });
-      expect(updateRun).toHaveBeenCalledTimes(1);
-      const update = updateRun.mock.calls[0];
-      if (update === undefined) {
-        throw new Error('expected_terminal_trace_update');
-      }
-      expect(update[0]).toBe('11111111-1111-4111-8111-111111111111');
-      expect(update[1]).toMatchObject({
-        error: 'agent_run_failed_before_trace_cleanup',
-        outputs: { status: 'failed' }
-      });
-      await plugin.shutdown();
-    } finally {
-      createRun.mockRestore();
-      updateRun.mockRestore();
       agentDb.close();
       memoryDb.close();
       taskDb.close();

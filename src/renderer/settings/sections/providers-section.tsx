@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import type {
   ProviderConfig,
+  ProviderModel,
   ProviderSecretStatus,
   ProviderTestResult
 } from '../../../shared/types';
@@ -9,10 +11,59 @@ import { isFixedProvider, isFixedProviderType } from '../../../shared/provider-d
 import {
   providerTypeMeta,
   type CreatableProviderType,
-  type ProviderDraft
+  type ProviderDraft,
+  type EditableProviderType,
+  updateProviderModelCard
 } from '../../settings-model';
-import { ProviderCustomProtocolFields } from './ProviderCustomProtocolFields';
-import { ProviderNvidiaFields } from './ProviderNvidiaFields';
+import { ProviderModelOptionsFields } from './provider-model-options-fields';
+
+function ModelCard({
+  index,
+  model,
+  providerType,
+  onChange,
+  onDelete,
+  onTest
+}: {
+  index: number;
+  model: ProviderModel;
+  providerType: EditableProviderType;
+  onChange: (model: ProviderModel) => void;
+  onDelete: () => void;
+  onTest: (() => void) | null;
+}): React.JSX.Element {
+  return (
+    <article className="provider-model-card" data-testid={`provider-model-card-${index}`}>
+      <header className="provider-model-card__header">
+        <strong>{model.displayName.trim() || model.id.trim() || `模型 ${index + 1}`}</strong>
+        <div className="provider-model-card__actions">
+          {onTest === null ? null : <button data-testid={`provider-model-test-${index}`} onClick={onTest} type="button">测试模型</button>}
+          <button data-testid={`provider-model-delete-${index}`} onClick={onDelete} type="button">删除</button>
+        </div>
+      </header>
+      <div className="form-grid provider-model-card__identity">
+        <label className="field"><span>模型 ID</span><input data-testid={`provider-model-id-${index}`} onChange={(event) => onChange({ ...model, id: event.currentTarget.value })} value={model.id} /></label>
+        <label className="field"><span>显示名</span><input data-testid={`provider-model-name-${index}`} onChange={(event) => onChange({ ...model, displayName: event.currentTarget.value })} value={model.displayName} /></label>
+      </div>
+      <div className="provider-model-capabilities">
+        {([
+          ['enabled', '启用'],
+          ['supportsStreaming', '流式'],
+          ['supportsToolCalls', '工具调用'],
+          ['supportsImages', '图片输入']
+        ] as const).map(([key, label]) => (
+          <label key={key}><input checked={model[key]} onChange={(event) => onChange({ ...model, [key]: event.currentTarget.checked })} type="checkbox" />{label}</label>
+        ))}
+      </div>
+      <ProviderModelOptionsFields
+        index={index}
+        onChange={(options) => onChange({ ...model, options })}
+        options={model.options}
+        providerType={providerType}
+      />
+    </article>
+  );
+}
 
 function providerHasReadyModel(provider: ProviderConfig): boolean {
   return provider.enabled && provider.models.some((model) => model.enabled);
@@ -29,22 +80,6 @@ function ProviderAvatar({ provider }: { provider: ProviderConfig | null }): Reac
   const fallback = '?';
   const seed = provider === null ? fallback : provider.name.trim().charAt(0).toUpperCase() || fallback;
   return <span className="provider-avatar">{seed}</span>;
-}
-
-function ProviderSecretToggleIcon(): React.JSX.Element {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path
-        d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-      />
-      <circle cx="12" cy="12" fill="none" r="3" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
 }
 
 export function ProvidersSection({
@@ -69,7 +104,7 @@ export function ProvidersSection({
   onEditProvider: (provider: ProviderConfig) => void;
   onSaveProviderDraft: () => Promise<void>;
   onStartNewProvider: (type: CreatableProviderType) => void;
-  onTestProvider: (providerId: string) => Promise<void>;
+  onTestProvider: (providerId: string, modelId: string) => Promise<void>;
   onUpdateDraft: (partial: Partial<ProviderDraft>) => void;
   providers: ProviderConfig[];
   providerSecretStatus: ProviderSecretStatus[];
@@ -100,9 +135,6 @@ export function ProvidersSection({
   const fixedProviderDraft = isFixedProviderType(draft.type);
   const fixedBaseUrlProviderDraft = draft.type === 'openrouter';
   const fixedEndpoint = draft.type === 'nvidia';
-  const openAiCompatibleDraft = draft.type === 'openai_compatible';
-  const anthropicCompatibleDraft = draft.type === 'anthropic_compatible';
-  const customProtocolDraft = openAiCompatibleDraft || anthropicCompatibleDraft;
 
   const meta = providerTypeMeta(draft.type);
   const isCreating = draft.mode === 'create';
@@ -225,18 +257,6 @@ export function ProvidersSection({
               </span>
             </div>
             <div className="provider-detail-controls">
-              {selectedProvider === null ? null : (
-                <button
-                  className="provider-detail-test"
-                  data-testid={`provider-test-${selectedProvider.id}`}
-                  onClick={() => void onTestProvider(selectedProvider.id)}
-                  title="测试 Provider"
-                  type="button"
-                  aria-label="测试 Provider"
-                >
-                  ⚡
-                </button>
-              )}
               <label className="provider-detail-toggle">
                 <input
                   checked={draft.enabled}
@@ -315,7 +335,7 @@ export function ProvidersSection({
                 onClick={() => setRevealApiKey((current) => !current)}
                 type="button"
               >
-                <ProviderSecretToggleIcon />
+                {revealApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {selectedProvider === null || !stored ? null : (
@@ -348,25 +368,48 @@ export function ProvidersSection({
               </span>
             </label>
           )}
-          <label className="field">
-            <span>模型列表</span>
-            <textarea
-              data-testid="provider-draft-models"
-              onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
-              placeholder="一行一个,格式:modelId | displayName | image"
-              rows={4}
-              value={draft.modelsText}
-            />
-            <span className="field-hint">第三列填 image 表示该模型支持图片输入；留空或填 text 表示仅文本。</span>
-          </label>
-          {customProtocolDraft ? (
-            <ProviderCustomProtocolFields
-              anthropicCompatibleDraft={anthropicCompatibleDraft}
-              draft={draft}
-              onUpdateDraft={onUpdateDraft}
-              openAiCompatibleDraft={openAiCompatibleDraft}
-            />
-          ) : null}          {draft.type === 'nvidia' ? <ProviderNvidiaFields draft={draft} onUpdateDraft={onUpdateDraft} /> : null}          <div className="provider-detail-actions">
+          <div className="provider-model-editor" data-testid="provider-model-editor">
+            <div className="provider-model-editor__heading">
+              <span>模型列表</span>
+              <button
+                data-testid="provider-model-add"
+                onClick={() => onUpdateDraft({
+                  models: [
+                    ...draft.models,
+                    {
+                      id: '',
+                      displayName: '',
+                      enabled: true,
+                      supportsStreaming: true,
+                      supportsToolCalls: true,
+                      supportsImages: false
+                    }
+                  ]
+                })}
+                type="button"
+              >
+                新增模型
+              </button>
+            </div>
+            {draft.models.map((model, index) => (
+              <ModelCard
+                index={index}
+                key={`${index}:${model.id}`}
+                model={model}
+                onChange={(next) => onUpdateDraft({ models: updateProviderModelCard(draft.models, index, next) })}
+                onDelete={() => onUpdateDraft({ models: draft.models.filter((_, cardIndex) => cardIndex !== index) })}
+                onTest={selectedProvider === null || model.id.trim().length === 0 ? null : () => void onTestProvider(selectedProvider.id, model.id)}
+                providerType={draft.type}
+              />
+            ))}
+          </div>
+          <div className="provider-detail-connection-fields">
+            <label className="field"><span>timeout_ms</span><input value={draft.timeoutMs} onChange={(event) => onUpdateDraft({ timeoutMs: event.currentTarget.value })} /></label>
+            {draft.type === 'openai_compatible' ? <label className="field"><span>organization</span><input value={draft.organization} onChange={(event) => onUpdateDraft({ organization: event.currentTarget.value })} /></label> : null}
+            <label className="field field--full"><span>default_headers</span><textarea rows={3} value={draft.defaultHeaders} onChange={(event) => onUpdateDraft({ defaultHeaders: event.currentTarget.value })} /></label>
+            {draft.type === 'nvidia' ? <label className="field"><span>endpoint_override</span><input value={draft.endpointOverride} onChange={(event) => onUpdateDraft({ endpointOverride: event.currentTarget.value })} /></label> : null}
+          </div>
+          <div className="provider-detail-actions">
             <button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} type="button">
               {fixedProviderDraft ? `保存 ${draft.name} 配置` : '保存 Provider'}
             </button>

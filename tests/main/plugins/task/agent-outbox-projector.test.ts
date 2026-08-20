@@ -332,16 +332,8 @@ describe('agent outbox projector', () => {
       workspaceHash: null
     });
     expect(agentRepository.getRunTelemetry(deletedRun.id)).not.toBeNull();
-    agentDb.prepare(
-      `INSERT INTO agent_langsmith_trace_sessions
-       (run_id, schema_version, session_json, created_at, updated_at)
-       VALUES (?, 1, '{}', ?, ?)`
-    ).run(deletedRun.id, deletedRun.startedAt, deletedRun.startedAt);
     new AgentTaskHistoryContract(agentDb).deleteThread( deletedRun.threadId);
     expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry WHERE run_id = ?').pluck().get(deletedRun.id)).toBe(0);
-    expect(
-      agentDb.prepare('SELECT COUNT(*) FROM agent_langsmith_trace_sessions WHERE run_id = ?').pluck().get(deletedRun.id)
-    ).toBe(0);
 
     const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);

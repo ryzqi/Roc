@@ -50,6 +50,7 @@ describe('probeNvidiaTtfb', () => {
     const result = await probeNvidiaTtfb({
       provider,
       modelId: 'meta/llama-3.3-70b-instruct',
+      modelOptions: {},
       prompt: 'What is 1+1?',
       apiKey: 'nvapi-test',
       logService: null
@@ -97,6 +98,7 @@ describe('probeNvidiaTtfb', () => {
     const resultPromise = probeNvidiaTtfb({
       provider,
       modelId: 'meta/llama-3.3-70b-instruct',
+      modelOptions: {},
       prompt: 'What is 1+1?',
       apiKey: 'nvapi-test',
       logService: null,
@@ -125,6 +127,7 @@ describe('probeNvidiaTtfb', () => {
       probeNvidiaTtfb({
         provider,
         modelId: 'meta/llama-3.3-70b-instruct',
+        modelOptions: {},
         prompt: 'What is 1+1?',
         apiKey: 'nvapi-test',
         logService: null,

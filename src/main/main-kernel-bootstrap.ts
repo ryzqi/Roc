@@ -189,7 +189,6 @@ function createDefaultMainKernelPlugins(input: {
         }
       },
       deepAgentExecutor: {
-        appVersion: input.version,
         getMemorySettings: () => {
           configService.reloadSettingsDocument();
           return configService.getSettings().memory;

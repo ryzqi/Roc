@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ChatOpenAICallOptions } from '@langchain/openai';
-import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderType } from '../../shared/types';
+import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import type { LlamaCppParams, NvidiaParams, OpenAICompatibleParams } from '../../shared/types/provider-config';
 import { RocDomainError } from './errors';
 import {
@@ -19,10 +19,11 @@ export type ModelFactoryLogService = Pick<LogService, 'info' | 'warn'>;
 export function resolveLlamaCppSamplingProfile(
   provider: ProviderConfig,
   modelId: string,
+  modelOptions: ProviderModelOptions,
   logService: ModelFactoryLogService | null
 ): SamplingProfile | null {
   const familyProfile = resolveSamplingProfile(modelId);
-  const overrides = provider.options?.samplingProfileOverrides ?? {};
+  const overrides = modelOptions.samplingProfileOverrides ?? {};
   if (familyProfile === null) {
     if (Object.keys(overrides).length === 0) {
       logService?.info('Provider local model family is unknown.', {
@@ -137,7 +138,7 @@ export function buildNvidiaModelKwargs(
   return kwargs;
 }
 
-export function resolveStreamUsage(provider: ProviderConfig, streaming: boolean): boolean | undefined {
+export function resolveStreamUsage(provider: ProviderConfig, modelOptions: ProviderModelOptions, streaming: boolean): boolean | undefined {
   if (!streaming) {
     return undefined;
   }
@@ -145,10 +146,10 @@ export function resolveStreamUsage(provider: ProviderConfig, streaming: boolean)
     return false;
   }
   if (provider.type === 'nvidia') {
-    return provider.options?.streamUsage ?? true;
+    return modelOptions.streamUsage ?? true;
   }
   if (provider.type === 'openai_compatible' || provider.type === 'anthropic_compatible') {
-    return provider.options?.streamUsage;
+    return modelOptions.streamUsage;
   }
   return undefined;
 }
@@ -164,7 +165,7 @@ export function resolveAnthropicBetas(betas: string[]): string[] {
 }
 
 export function resolveAnthropicThinking(
-  options: ProviderConfig['options']
+  options: ProviderModelOptions
 ): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {
   if (options?.anthropicThinking === undefined) {
     return undefined;

@@ -44,19 +44,8 @@ describe('preload contract', () => {
 
     expect(actualMethodsByDomain).toEqual(expectedMethodsByDomain);
 
-    electronMock.ipcRenderer.invoke.mockClear();
-    const config = { schemaVersion: 1 as const, enabled: false, projectName: 'roc' };
-    await api.agent.getLangSmithSettings();
-    await api.agent.saveLangSmithSettings(config);
-    await api.agent.setLangSmithApiKey({ apiKey: 'lsv2-test' });
-    await api.agent.clearLangSmithApiKey();
-
-    expect(electronMock.ipcRenderer.invoke.mock.calls).toEqual([
-      [ipcChannels.agentLangSmithSettingsGet],
-      [ipcChannels.agentLangSmithSettingsSave, config],
-      [ipcChannels.agentLangSmithSecretSet, { apiKey: 'lsv2-test' }],
-      [ipcChannels.agentLangSmithSecretClear]
-    ]);
+    expect(Object.keys(api.agent)).toEqual(['getStatus', 'getConfigPreview', 'getCapabilityPreview']);
+    expect(Object.keys(ipcChannels)).not.toContain('agentLangSmithSettingsGet');
     expect(JSON.stringify(api)).not.toContain('invokeCapability');
     expect(JSON.stringify(api)).not.toContain('*');
   });

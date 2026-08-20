@@ -180,7 +180,6 @@ function retentionResult(): RocDatabaseRetentionResult {
       agentRunEvents: 0,
       agentOutbox: 0,
       runTelemetry: 0,
-      langSmithTraceSessions: 0,
       checkpoints: 0,
       checkpointWrites: 0,
       toolEffects: 0,

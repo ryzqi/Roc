@@ -42,7 +42,6 @@ describe('runDatabaseRetention', () => {
       agentRunEvents: 1,
       agentOutbox: 1,
       runTelemetry: 1,
-      langSmithTraceSessions: 1,
       checkpoints: 2,
       checkpointWrites: 2,
       toolEffects: 1,
@@ -78,7 +77,6 @@ describe('runDatabaseRetention', () => {
       agentRunEvents: 0,
       agentOutbox: 0,
       runTelemetry: 0,
-      langSmithTraceSessions: 0,
       checkpoints: 0,
       checkpointWrites: 0,
       toolEffects: 0,
@@ -217,13 +215,6 @@ function insertRunPayloadRows(runId: string, threadId: string, createdAt: string
     )
     .run(runId, 1, '{"schemaVersion":1}', createdAt, createdAt);
   agentDb
-    .prepare(
-      `INSERT INTO agent_langsmith_trace_sessions
-       (run_id, schema_version, session_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-    .run(runId, 1, '{"schemaVersion":1}', createdAt, createdAt);
-  agentDb
     .prepare('INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(`event_${runId}`, threadId, runId, 1, 'agent_update', '{"status":"completed"}', createdAt);
   agentDb
@@ -297,7 +288,6 @@ function expectRunPayload(runId: string, expected: number): void {
   expect(agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects WHERE run_id = ?').pluck().get(runId)).toBe(expected);
   expect(agentDb.prepare('SELECT COUNT(*) FROM context_artifacts WHERE run_id = ?').pluck().get(runId)).toBe(expected);
   expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry WHERE run_id = ?').pluck().get(runId)).toBe(expected);
-  expect(agentDb.prepare('SELECT COUNT(*) FROM agent_langsmith_trace_sessions WHERE run_id = ?').pluck().get(runId)).toBe(expected);
 }
 
 function expectCheckpointCount(threadId: string, expected: number): void {

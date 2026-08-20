@@ -61,7 +61,7 @@ describe('SecretManager', () => {
         .prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'")
         .pluck()
         .get()
-    ).toBe(2);
+    ).toBe(3);
   });
 
   it('fails secret calls when safeStorage encryption is unavailable', () => {

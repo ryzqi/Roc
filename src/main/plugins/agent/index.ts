@@ -12,9 +12,6 @@ import type {
 import {
   agentCapabilityPreviewRequestSchema,
   agentCapabilityPreviewSchema,
-  agentLangSmithConfigSchema,
-  agentLangSmithSetApiKeyRequestSchema,
-  agentLangSmithSettingsSchema,
   agentRuntimeStatusSchema,
   deepAgentConfigPreviewSchema,
   sessionListInputSchema,
@@ -36,7 +33,6 @@ import {
 } from '../../../shared/schemas/chat';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
-import { AgentLangSmithRunTracingManager } from '../../services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
@@ -44,8 +40,6 @@ import type { MetricsService } from '../../services/metrics-service';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
-import { AgentLangSmithSettingsStore } from './langsmith-settings';
-import { AgentLangSmithTraceSessionRepository } from './langsmith-trace-session-repository';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
 import { AgentRunEventLog } from './run-event-log';
 import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
@@ -58,30 +52,6 @@ const capabilityVersion = '1.0.0';
 
 const emptyInputSchema = z.object({}).strict();
 
-const agentLangSmithSettingsGetDescriptor = descriptor(
-  'agent.langsmith.settings.get',
-  emptyInputSchema,
-  agentLangSmithSettingsSchema
-);
-
-const agentLangSmithSettingsSaveDescriptor = descriptor(
-  'agent.langsmith.settings.save',
-  agentLangSmithConfigSchema,
-  agentLangSmithSettingsSchema
-);
-
-const agentLangSmithSecretSetDescriptor = descriptor(
-  'agent.langsmith.secret.set',
-  agentLangSmithSetApiKeyRequestSchema,
-  agentLangSmithSettingsSchema
-);
-
-const agentLangSmithSecretClearDescriptor = descriptor(
-  'agent.langsmith.secret.clear',
-  emptyInputSchema,
-  agentLangSmithSettingsSchema
-);
-
 const baseAgentCapabilityDescriptors = [
   descriptor('agent.status.get', emptyInputSchema, agentRuntimeStatusSchema),
   descriptor('agent.config.preview', emptyInputSchema, deepAgentConfigPreviewSchema),
@@ -91,11 +61,7 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
   descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
   descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
-  descriptor('agent.sessions.search', sessionMessageSearchRequestSchema, sessionMessageSearchResultSchema),
-  agentLangSmithSettingsGetDescriptor,
-  agentLangSmithSettingsSaveDescriptor,
-  agentLangSmithSecretSetDescriptor,
-  agentLangSmithSecretClearDescriptor
+  descriptor('agent.sessions.search', sessionMessageSearchRequestSchema, sessionMessageSearchResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 const agentCapabilityPreviewDescriptor = descriptor(
@@ -115,7 +81,6 @@ export type AgentPluginOptions = {
     mcpApprovalModeProvider: () => ApprovalMode;
   };
   deepAgentExecutor?: {
-    appVersion: string;
     memoryStore: BaseStore;
     paths: RocPaths;
     getMemorySettings?: () => AppSettings['memory'];
@@ -146,61 +111,25 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       capabilities
     },
     initialize: async (context) => {
-      const langSmithSettings = new AgentLangSmithSettingsStore(context.config, context.secrets);
-      langSmithSettings.initialize();
       const db = context.database.getConnection();
-      const langSmithTraceSessions = new AgentLangSmithTraceSessionRepository(db);
-      const langSmithTracingManager = createAgentLangSmithTracingManager(
-        langSmithSettings,
-        options.deepAgentExecutor,
-        langSmithTraceSessions
-      );
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       const runEventLog = new AgentRunEventLog(db);
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
-      if (langSmithTracingManager !== null) {
-        for (const terminal of langSmithTraceSessions.listTerminalRuns()) {
-          let error: string | null = null;
-          if (terminal.status === 'failed') {
-            error = 'agent_run_failed_before_trace_cleanup';
-          } else if (terminal.status === 'interrupted') {
-            error = 'agent_run_interrupted_on_startup_reconciliation';
-          }
-          try {
-            await langSmithTracingManager.finishRun({
-              error,
-              runId: terminal.runId,
-              status: terminal.status
-            });
-          } catch {
-            try {
-              repository.recordNotificationFailure('agent_langsmith_trace_finish_failed');
-            } catch {
-              context.logger.warn('agent_langsmith_trace_finish_metric_failed');
-            }
-          }
-        }
-      }
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
-        deepAgentExecutor: resolveDeepAgentExecutor(
-          context,
-          options.deepAgentExecutor,
-          langSmithTracingManager
-        ),
+        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
         modelFactory,
         pluginId,
         repository,
         runEventLog,
-        ...(langSmithTracingManager === null ? {} : { tracingLifecycle: langSmithTracingManager }),
         status: options.status,
         statusProvider: options.statusProvider,
         workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {})
       });
-      registerAgentCapabilities(context, runtime, options, langSmithSettings);
+      registerAgentCapabilities(context, runtime, options);
     },
     shutdown: async () => {
       if (runtime !== null) {
@@ -237,17 +166,13 @@ function createCapabilityPreviewProvider(
 
 function resolveDeepAgentExecutor(
   context: RocPluginContext,
-  option: AgentPluginOptions['deepAgentExecutor'],
-  langSmithTracingManager: AgentLangSmithRunTracingManager | null
+  option: AgentPluginOptions['deepAgentExecutor']
 ): AgentDeepAgentExecutor | undefined {
   if (option === undefined) {
     return undefined;
   }
   if ('execute' in option) {
     return option;
-  }
-  if (langSmithTracingManager === null) {
-    throw new Error('agent_langsmith_tracing_manager_missing');
   }
   const agentDb = context.database.getConnection();
   return createAgentDeepAgentExecutor({
@@ -256,7 +181,6 @@ function resolveDeepAgentExecutor(
     contextArtifactStore: new ContextArtifactStore(agentDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
-    langSmithTracingProvider: (correlation) => langSmithTracingManager.getRunTracing(correlation),
     metricsService: option.metricsService,
     paths: option.paths,
     store: option.memoryStore,
@@ -330,8 +254,7 @@ function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
 function registerAgentCapabilities(
   context: RocPluginContext,
   runtime: AgentPluginRuntime,
-  options: AgentPluginOptions,
-  langSmithSettings: AgentLangSmithSettingsStore
+  options: AgentPluginOptions
 ): void {
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async () =>
@@ -362,18 +285,6 @@ function registerAgentCapabilities(
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[8], async (input) =>
     runtime.searchSessionMessages(sessionMessageSearchRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, agentLangSmithSettingsGetDescriptor, async () =>
-    langSmithSettings.getSnapshot()
-  );
-  context.capabilities.register(pluginId, agentLangSmithSettingsSaveDescriptor, async (input) =>
-    langSmithSettings.saveConfig(agentLangSmithConfigSchema.parse(input))
-  );
-  context.capabilities.register(pluginId, agentLangSmithSecretSetDescriptor, async (input) =>
-    langSmithSettings.setApiKey(agentLangSmithSetApiKeyRequestSchema.parse(input).apiKey)
-  );
-  context.capabilities.register(pluginId, agentLangSmithSecretClearDescriptor, async () =>
-    langSmithSettings.clearApiKey()
-  );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
     context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) => {
       const request = agentCapabilityPreviewRequestSchema.parse(input);
@@ -386,30 +297,6 @@ function registerAgentCapabilities(
       });
     });
   }
-}
-
-function createAgentLangSmithTracingManager(
-  settings: AgentLangSmithSettingsStore,
-  option: AgentPluginOptions['deepAgentExecutor'],
-  sessions: AgentLangSmithTraceSessionRepository
-): AgentLangSmithRunTracingManager | null {
-  if (option === undefined || 'execute' in option) {
-    return null;
-  }
-  return new AgentLangSmithRunTracingManager({
-    appVersion: option.appVersion,
-    getRuntimeSettings: () => {
-      const runtimeSettings = settings.getRuntimeSettings();
-      if (runtimeSettings === null) {
-        return null;
-      }
-      return {
-        apiKey: runtimeSettings.apiKey,
-        projectName: runtimeSettings.config.projectName
-      };
-    },
-    sessions
-  });
 }
 
 function descriptor<TInput, TOutput>(

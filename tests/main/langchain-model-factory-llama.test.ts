@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
-import type { ProviderConfig } from '../../src/shared/types';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 
 let services: ProviderTestServices;
@@ -16,7 +15,7 @@ afterEach(async () => {
 describe('LangChainModelFactory', () => {
   it('builds a fixed llama.cpp ChatOpenAI model with cache_prompt and no API key requirement', async () => {
     services.configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
@@ -65,7 +64,7 @@ describe('LangChainModelFactory', () => {
 
   it('keeps llama.cpp free of OpenAI-only reasoning, organization, service tier, and response fields', async () => {
     services.configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
@@ -82,19 +81,21 @@ describe('LangChainModelFactory', () => {
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true,
-              supportsImages: false
+              supportsImages: false,
+              options: {
+                contextBudgetTokens: 4096,
+                reasoning: { effort: 'medium' },
+                serviceTier: 'flex',
+                streamUsage: true,
+                useResponsesApi: true,
+                verbosity: 'high',
+                zdrEnabled: true
+              }
             }
           ],
           options: {
-            contextBudgetTokens: 4096,
-            organization: 'org_should_not_send',
-            reasoning: { effort: 'medium' },
-            serviceTier: 'flex',
-            streamUsage: true,
-            useResponsesApi: true,
-            verbosity: 'high',
-            zdrEnabled: true
-          } as ProviderConfig['options']
+            organization: 'org_should_not_send'
+          }
         }
       ]
     });

@@ -6,14 +6,16 @@ import {
   hostIntegrationStatusSchema,
   permissionsConfigSchema,
   providerConfigSchema,
+  providerConnectionOptionsSchema,
   providerModelSchema,
-  providerOptionsSchema,
+  providerModelOptionsSchema,
   providerSecretClearResultSchema,
   providerSecretSetRequestSchema,
   providerSecretSetResultSchema,
   providerSecretStatusSchema,
   providersConfigSchema,
   providerTestResultSchema,
+  providerTestRequestSchema,
   settingsDocumentSchema,
   settingsSaveHookConfigRequestSchema,
   settingsSaveRequestSchema,
@@ -32,22 +34,30 @@ export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type PermissionsConfig = z.infer<typeof permissionsConfigSchema>;
 export type ShortcutsConfig = z.infer<typeof shortcutsConfigSchema>;
 
-export type ProviderOptions = z.infer<typeof providerOptionsSchema>;
 export type ProviderType = z.infer<typeof providerConfigSchema>['type'];
-export type ProviderModel = z.infer<typeof providerModelSchema>;
-export type ProviderConfig = z.infer<typeof providerConfigSchema>;
+type ParsedProviderModel = z.infer<typeof providerModelSchema>;
+export type ProviderConnectionOptions = z.infer<typeof providerConnectionOptionsSchema>;
+export type ProviderModelOptions = z.infer<typeof providerModelOptionsSchema>;
+export type ProviderModel = Omit<ParsedProviderModel, 'options'> & { options?: ProviderModelOptions };
+type ParsedProviderConfig = z.infer<typeof providerConfigSchema>;
+export type ProviderConfig = ParsedProviderConfig;
 export type ProviderTestResult = z.infer<typeof providerTestResultSchema>;
-export type ProvidersConfig = z.infer<typeof providersConfigSchema>;
+export type ProviderTestRequest = z.infer<typeof providerTestRequestSchema>;
+type ParsedProvidersConfig = z.infer<typeof providersConfigSchema>;
+export type ProvidersConfig = Omit<ParsedProvidersConfig, 'schemaVersion' | 'providers'> & {
+  schemaVersion: number;
+  providers: ProviderConfig[];
+};
 export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
 
-export type NvidiaToolChoice = NonNullable<ProviderOptions['toolChoice']>;
-export type ProviderSamplingProfileOverrides = NonNullable<ProviderOptions['samplingProfileOverrides']>;
-export type AnthropicThinkingOption = NonNullable<ProviderOptions['anthropicThinking']>;
-export type OpenAiReasoningOption = NonNullable<ProviderOptions['reasoning']>;
+export type NvidiaToolChoice = NonNullable<ProviderModelOptions['toolChoice']>;
+export type ProviderSamplingProfileOverrides = NonNullable<ProviderModelOptions['samplingProfileOverrides']>;
+export type AnthropicThinkingOption = NonNullable<ProviderModelOptions['anthropicThinking']>;
+export type OpenAiReasoningOption = NonNullable<ProviderModelOptions['reasoning']>;
 export type OpenAiReasoningEffort = NonNullable<OpenAiReasoningOption['effort']>;
 export type OpenAiReasoningSummary = NonNullable<OpenAiReasoningOption['summary']>;
-export type OpenAiServiceTier = NonNullable<ProviderOptions['serviceTier']>;
-export type OpenAiVerbosity = NonNullable<ProviderOptions['verbosity']>;
+export type OpenAiServiceTier = NonNullable<ProviderModelOptions['serviceTier']>;
+export type OpenAiVerbosity = NonNullable<ProviderModelOptions['verbosity']>;
 
 export const anthropicThinkingMinBudgetTokens = 1024;
 
@@ -72,14 +82,17 @@ export type ProviderExecutionResult = {
   summary: string;
 };
 
-export type RocSettingsDocument = z.infer<typeof settingsDocumentSchema>;
+type ParsedSettingsDocument = z.infer<typeof settingsDocumentSchema>;
+export type RocSettingsDocument = Omit<ParsedSettingsDocument, 'providers'> & { providers: ProvidersConfig };
 
 export type DefaultModelState = z.infer<typeof defaultModelStateSchema>;
 
 export type ProviderSecretStatus = z.infer<typeof providerSecretStatusSchema>;
 export type HostIntegrationStatus = z.infer<typeof hostIntegrationStatusSchema>;
-export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
-export type SettingsSaveRequest = z.infer<typeof settingsSaveRequestSchema>;
+type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
+export type SettingsSnapshot = Omit<ParsedSettingsSnapshot, 'providers'> & { providers: ProviderConfig[] };
+type ParsedSettingsSaveRequest = z.infer<typeof settingsSaveRequestSchema>;
+export type SettingsSaveRequest = Omit<ParsedSettingsSaveRequest, 'providers'> & { providers: ProviderConfig[] };
 export type SettingsSaveHookConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
 export type SettingsTrustHookRequest = z.infer<typeof settingsTrustHookRequestSchema>;
 export type ProviderSecretSetRequest = z.infer<typeof providerSecretSetRequestSchema>;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LangChainModelFactory, resolveAnthropicBetas } from '../../src/main/services/langchain-model-factory';
-import type { ProviderConfig, ProviderOptions } from '../../src/shared/types';
+import type { ProviderConfig, ProviderModelOptions } from '../../src/shared/types';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 
 let services: ProviderTestServices;
@@ -111,10 +111,10 @@ describe('LangChainModelFactory', () => {
   describe('applyAnthropicSamplingParams', () => {
     it('applies all configured sampling params', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
-      const options: ProviderOptions = {
+      const options: ProviderModelOptions = {
         temperature: 0.7,
         maxTokens: 1000,
         topP: 0.9,
@@ -133,7 +133,7 @@ describe('LangChainModelFactory', () => {
 
     it('skips undefined sampling params', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -146,7 +146,7 @@ describe('LangChainModelFactory', () => {
 
     it('skips empty stop arrays', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -160,7 +160,7 @@ describe('LangChainModelFactory', () => {
   describe('applyAnthropicPhase1Features', () => {
     it('applies configured Anthropic betas', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -173,7 +173,7 @@ describe('LangChainModelFactory', () => {
 
     it('applies invocation kwargs', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -186,7 +186,7 @@ describe('LangChainModelFactory', () => {
 
     it('skips undefined phase 1 options', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -198,7 +198,7 @@ describe('LangChainModelFactory', () => {
 
     it('omits empty beta arrays', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 
@@ -209,7 +209,7 @@ describe('LangChainModelFactory', () => {
 
     it('omits betas when every configured value is empty', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderOptions): void;
+        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
       };
       const config: Record<string, unknown> = {};
 

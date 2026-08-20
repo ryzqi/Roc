@@ -192,7 +192,7 @@ describe('main kernel bootstrap integration', () => {
     expect(JSON.parse(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toMatchObject({
       schemaVersion: 4,
       settings: { schemaVersion: 2 },
-      providers: { schemaVersion: 1 },
+      providers: { schemaVersion: 2 },
       mcp: { schemaVersion: 1 },
       permissions: { schemaVersion: 3 },
       shortcuts: { schemaVersion: 1 }

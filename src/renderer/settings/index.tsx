@@ -1,9 +1,6 @@
 import { useCallback, useState } from 'react';
 import type React from 'react';
 import type {
-  AgentLangSmithConfigV1,
-  AgentLangSmithSetApiKeyRequest,
-  AgentLangSmithSettings,
   AppSettings,
   McpServerSnapshot,
   PermissionsConfig,
@@ -43,7 +40,6 @@ import { AppBasicsSection } from './sections/app-basics-section';
 import { AuthSecuritySection } from './sections/auth-security-section';
 import { HooksSection } from './sections/hooks-section';
 import { MemorySection } from './sections/memory-section';
-import { ObservabilitySection } from './sections/observability-section';
 import { TaskSettingsSection } from './sections/task-settings-section';
 
 export type SettingsViewState = {
@@ -159,7 +155,11 @@ export function SettingsView({
       ...createProviderDraft(providerDraft.type, savedProvider),
       apiKey
     };
-    updateLoadedState(applySettingsSnapshot(saved));
+    if (state.defaultModelId === saved.defaultModelId) {
+      updateLoadedState(applySettingsSnapshot(saved));
+    } else {
+      updateLoadedState(await buildSettingsStateUpdate(resolveClient(), saved));
+    }
     setProviderDraft(nextDraft);
     if (apiKey.length === 0) {
       setProviderDraftError(null);
@@ -177,7 +177,7 @@ export function SettingsView({
       setProviderDraft(nextDraft);
       setProviderDraftError(error instanceof Error ? error.message : 'API Key 保存失败。');
     }
-  }, [client, providerDraft, buildBaseSaveRequest, saveProviderSecret, state.providers, updateLoadedState]);
+  }, [client, providerDraft, buildBaseSaveRequest, saveProviderSecret, state.defaultModelId, state.providers, updateLoadedState]);
 
   const deleteProvider = useCallback(
     async (providerId: string): Promise<void> => {
@@ -187,10 +187,14 @@ export function SettingsView({
           deleteProviderFromSettingsSaveRequest(buildBaseSaveRequest(), providerId)
         )
       );
-      updateLoadedState(applySettingsSnapshot(saved));
+      if (state.defaultModelId === saved.defaultModelId) {
+        updateLoadedState(applySettingsSnapshot(saved));
+      } else {
+        updateLoadedState(await buildSettingsStateUpdate(resolveClient(), saved));
+      }
       setProviderDraft(createInitialProviderDraft(saved.providers));
     },
-    [buildBaseSaveRequest, client, updateLoadedState]
+    [buildBaseSaveRequest, client, state.defaultModelId, updateLoadedState]
   );
 
   const setDefaultModel = useCallback(
@@ -208,10 +212,10 @@ export function SettingsView({
   );
 
   const testProvider = useCallback(
-    async (providerId: string): Promise<void> => {
+    async (providerId: string, modelId: string): Promise<void> => {
       const result = unwrap<ProviderTestResult>(
         'provider test',
-        await resolveClient().api.settings.testProvider(providerId)
+        await resolveClient().api.settings.testProvider({ providerId, modelId })
       );
       updateLoadedState({ providerTestStatus: result });
     },
@@ -244,40 +248,6 @@ export function SettingsView({
     },
     [client, updateLoadedState]
   );
-
-  const loadLangSmithSettings = useCallback(async (): Promise<AgentLangSmithSettings> => {
-    return unwrap<AgentLangSmithSettings>(
-      'LangSmith settings get',
-      await resolveClient().api.agent.getLangSmithSettings()
-    );
-  }, [client]);
-
-  const saveLangSmithSettings = useCallback(
-    async (config: AgentLangSmithConfigV1): Promise<AgentLangSmithSettings> => {
-      return unwrap<AgentLangSmithSettings>(
-        'LangSmith settings save',
-        await resolveClient().api.agent.saveLangSmithSettings(config)
-      );
-    },
-    [client]
-  );
-
-  const setLangSmithApiKey = useCallback(
-    async (request: AgentLangSmithSetApiKeyRequest): Promise<AgentLangSmithSettings> => {
-      return unwrap<AgentLangSmithSettings>(
-        'LangSmith API Key save',
-        await resolveClient().api.agent.setLangSmithApiKey(request)
-      );
-    },
-    [client]
-  );
-
-  const clearLangSmithApiKey = useCallback(async (): Promise<AgentLangSmithSettings> => {
-    return unwrap<AgentLangSmithSettings>(
-      'LangSmith API Key clear',
-      await resolveClient().api.agent.clearLangSmithApiKey()
-    );
-  }, [client]);
 
   async function saveProviderSecret(providerId: string, plaintext: string): Promise<SettingsSnapshot> {
     setSecretBusyProviderId(providerId);
@@ -431,14 +401,6 @@ export function SettingsView({
                 onRefresh={refreshHooks}
                 onSave={saveHooks}
                 onTrust={trustHook}
-              />
-            ) : null}
-            {activeSection === 'observability' ? (
-              <ObservabilitySection
-                onClearApiKey={clearLangSmithApiKey}
-                onLoad={loadLangSmithSettings}
-                onSaveConfig={saveLangSmithSettings}
-                onSetApiKey={setLangSmithApiKey}
               />
             ) : null}
             {activeSection === 'memory' ? (

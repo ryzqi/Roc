@@ -50,7 +50,7 @@ describe('ConfigService unified settings document', () => {
           mcp: defaultMcpConfig,
           permissions: defaultPermissions,
           shortcuts: {
-            schemaVersion: 1,
+      schemaVersion: 1,
             shortcuts: []
           }
         },
@@ -204,7 +204,7 @@ describe('ConfigService unified settings document', () => {
           }
         },
         providers: {
-          schemaVersion: 1,
+      schemaVersion: 1,
           defaultModelId: null,
           providers: []
         },
@@ -333,7 +333,7 @@ describe('ConfigService unified settings document', () => {
     });
 
     expect(configService.getProviders()).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: null,
       providers: [
         expect.objectContaining({
@@ -358,7 +358,7 @@ describe('ConfigService unified settings document', () => {
     });
     expect(readSettingsDocument()).toMatchObject({
       providers: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         defaultModelId: null,
         providers: [
           expect.objectContaining({
@@ -390,7 +390,7 @@ describe('ConfigService unified settings document', () => {
     configService.initialize();
 
     configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
@@ -440,7 +440,7 @@ describe('ConfigService unified settings document', () => {
     configService.deleteProvider('llama_cpp');
 
     expect(configService.getProviders()).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: null,
       providers: [
         expect.objectContaining({

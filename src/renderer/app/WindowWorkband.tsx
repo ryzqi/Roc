@@ -34,11 +34,6 @@ export function WindowWorkband({
         <div className="workband-primary">
           <div className="brand">
             <div className="brand-mark">R</div>
-            <span className="brand-text">
-              <strong>Roc</strong>
-              <span className="brand-sep" aria-hidden="true">/</span>
-              <span className="brand-sub">本地工作台</span>
-            </span>
           </div>
           {activeView === 'chat' ? (
             <div className="workband-chat-actions">

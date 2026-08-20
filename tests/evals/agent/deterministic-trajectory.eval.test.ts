@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { applyAgentDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
-import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../src/main/services/forge-guardrails';
 import {
@@ -94,7 +93,6 @@ describe('deterministic agent eval dataset contract', () => {
 
 describe('deterministic Roc agent trajectory evals', () => {
   it.each(dataset.cases)('$id', async (scenario) => {
-    enableThenDisableAmbientLangSmithTracing();
     const unexpectedFetches: string[] = [];
     vi.stubGlobal(
       'fetch',
@@ -109,21 +107,19 @@ describe('deterministic Roc agent trajectory evals', () => {
     try {
       applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
-      const result = await runWithLangSmithTracing(null, async () => {
-        const agent = createEvalAgent({
-          mode: scenario.mode,
-          model: new FakeToolCallingModel({ toolCalls: scenario.modelToolCalls }),
-          checkpointer,
-          systemPrompt: 'Use tools only when the request requires them.'
-        });
-        return await agent.invoke(
-          {
-            forge_error_tracker: defaultErrorTracker(),
-            messages: [new HumanMessage(scenario.prompt)]
-          },
-          { configurable: { thread_id: threadId } }
-        );
+      const agent = createEvalAgent({
+        mode: scenario.mode,
+        model: new FakeToolCallingModel({ toolCalls: scenario.modelToolCalls }),
+        checkpointer,
+        systemPrompt: 'Use tools only when the request requires them.'
       });
+      const result = await agent.invoke(
+        {
+          forge_error_tracker: defaultErrorTracker(),
+          messages: [new HumanMessage(scenario.prompt)]
+        },
+        { configurable: { thread_id: threadId } }
+      );
 
       assertTerminalOutcome(result.messages);
       expect(readTrajectory(result.messages)).toEqual(scenario.expected.trajectory);
@@ -170,19 +166,4 @@ function parseAgentEvalDataset(input: unknown) {
     caseIds.add(scenario.id);
   }
   return parsed.data;
-}
-
-function enableThenDisableAmbientLangSmithTracing(): void {
-  vi.stubEnv('LANGSMITH_TRACING_V2', 'true');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'true');
-  vi.stubEnv('LANGSMITH_TRACING', 'true');
-  vi.stubEnv('LANGCHAIN_TRACING', 'true');
-  vi.stubEnv('LANGSMITH_API_KEY', 'ambient-langsmith-key');
-  vi.stubEnv('LANGCHAIN_API_KEY', 'ambient-langchain-key');
-  vi.stubEnv('LANGSMITH_TRACING_V2', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
-  vi.stubEnv('LANGSMITH_TRACING', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING', 'false');
-  vi.stubEnv('LANGSMITH_API_KEY', '');
-  vi.stubEnv('LANGCHAIN_API_KEY', '');
 }

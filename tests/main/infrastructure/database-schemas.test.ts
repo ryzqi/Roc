@@ -61,7 +61,6 @@ describe('target database schemas', () => {
         'agent_pending_interrupts',
         'agent_run_events',
         'agent_run_telemetry',
-        'agent_langsmith_trace_sessions',
         'langgraph_checkpoints',
         'langgraph_checkpoint_writes',
         'agent_tool_effects',
@@ -71,6 +70,7 @@ describe('target database schemas', () => {
     expect(tableNames()).not.toContain('task_threads');
     expect(tableNames()).not.toContain('task_runs');
     expect(tableNames()).not.toContain('task_events');
+    expect(tableNames()).not.toContain('agent_langsmith_trace_sessions');
     expect(indexNames('agent_events')).toContain('idx_agent_events_thread_sequence');
   });
 

@@ -154,19 +154,6 @@
     gap: 10px;
   }
 
-  .settings-observability-group-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .settings-observability-actions {
-    align-items: stretch;
-  }
-
-  .settings-observability-actions button {
-    flex: 1 1 180px;
-  }
-
   .workspace-shell--with-workbench .workbench {
     min-height: 0;
     border-left: 0;

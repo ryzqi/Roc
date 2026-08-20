@@ -1,7 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
-import type { ProviderConfig } from '../../src/shared/types';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 
 let services: ProviderTestServices;
@@ -19,7 +18,7 @@ describe('LangChainModelFactory', () => {
   it('passes OpenAI-compatible modelKwargs into ChatOpenAI runtime and requests', async () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
@@ -36,19 +35,19 @@ describe('LangChainModelFactory', () => {
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true,
-              supportsImages: false
-            }
-          ],
-          options: {
-            modelKwargs: {
-              chat_template_kwargs: {
-                enable_thinking: true
-              },
-              extra_body: {
-                trace: 'roc'
+              supportsImages: false,
+              options: {
+                modelKwargs: {
+                  chat_template_kwargs: {
+                    enable_thinking: true
+                  },
+                  extra_body: {
+                    trace: 'roc'
+                  }
+                }
               }
             }
-          } as ProviderConfig['options']
+          ]
         }
       ]
     });
@@ -94,7 +93,7 @@ describe('LangChainModelFactory', () => {
   it('passes nested OpenAI-compatible thinking settings through explicit modelKwargs', async () => {
     services.secretService.setProviderSecret('openai-thinking-local', 'sk-openai-test');
     services.configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'openai-thinking-local:thinking-local',
       providers: [
         {
@@ -111,16 +110,16 @@ describe('LangChainModelFactory', () => {
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true,
-              supportsImages: false
-            }
-          ],
-          options: {
-            modelKwargs: {
-              chat_template_kwargs: {
-                enable_thinking: true
+              supportsImages: false,
+              options: {
+                modelKwargs: {
+                  chat_template_kwargs: {
+                    enable_thinking: true
+                  }
+                }
               }
             }
-          } as ProviderConfig['options']
+          ]
         }
       ]
     });
@@ -141,7 +140,7 @@ describe('LangChainModelFactory', () => {
   it('does not map OpenAI-compatible thinking into chat template kwargs', async () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
@@ -158,12 +157,10 @@ describe('LangChainModelFactory', () => {
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true,
-              supportsImages: false
+              supportsImages: false,
+              options: { thinking: true }
             }
-          ],
-          options: {
-            thinking: true
-          } as ProviderConfig['options']
+          ]
         }
       ]
     });

@@ -92,7 +92,8 @@ describe('SettingsView provider save', () => {
     });
     setInputValue('provider-draft-name', 'Provider Without Key');
     setInputValue('provider-draft-endpoint', 'https://openai.example.test/v1');
-    setInputValue('provider-draft-models', 'gpt-x | GPT X');
+    setInputValue('provider-model-id-0', 'gpt-x');
+    setInputValue('provider-model-name-0', 'GPT X');
 
     await act(async () => {
       queryByTestId('provider-save')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -261,32 +262,148 @@ describe('SettingsView provider save', () => {
       })
     );
   });
+
+  it('clears a removed default model and refreshes the blocked agent state', async () => {
+    const provider = {
+      id: 'provider-a',
+      name: 'Provider A',
+      type: 'openai_compatible' as const,
+      endpoint: 'https://provider-a.example.test/v1',
+      credentialRef: 'secret:provider-a',
+      enabled: true,
+      models: [
+        {
+          id: 'model-a',
+          displayName: 'Model A',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: false
+        },
+        {
+          id: 'model-b',
+          displayName: 'Model B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: false
+        }
+      ]
+    };
+    const snapshot = buildSettingsSnapshot({
+      defaultModelId: 'provider-a:model-a',
+      providers: [provider]
+    });
+    const blockedAgentStatus: AgentRuntimeStatus = {
+      deepAgentsPackage: 'available',
+      deepAgentsApi: {
+        createDeepAgent: true
+      },
+      defaultModelConfigured: false,
+      defaultModelState: {
+        status: 'missing',
+        modelId: null,
+        providerId: null,
+        reason: '未配置默认模型。'
+      },
+      memoryAccess: 'store_backend',
+      execution: 'blocked_until_provider_configured'
+    };
+    const save = vi.fn(async (request: unknown) => ({
+      ok: true as const,
+      data: {
+        ...snapshot,
+        providers: (request as { providers: SettingsSnapshot['providers'] }).providers,
+        defaultModelId: (request as { defaultModelId: string | null }).defaultModelId
+      }
+    }));
+    const getStatus = vi.fn(async () => ({ ok: true as const, data: blockedAgentStatus }));
+    const updateLoadedState = vi.fn();
+    const client: RocClient = {
+      api: {
+        settings: {
+          get: vi.fn(async () => ({ ok: true as const, data: snapshot })),
+          save,
+          testProvider: vi.fn(),
+          setProviderSecret: vi.fn(),
+          clearProviderSecret: vi.fn()
+        },
+        agent: {
+          getStatus
+        }
+      }
+    } as unknown as RocClient;
+
+    await act(async () => {
+      root.render(
+        React.createElement(SettingsView, {
+          client,
+          state: {
+            settings: snapshot.settings,
+            providers: snapshot.providers,
+            defaultModelId: snapshot.defaultModelId,
+            providerSecretStatus: snapshot.providerSecretStatus,
+            permissions: snapshot.permissions,
+            mcpServers: snapshot.mcpServers,
+            skills: snapshot.skills,
+            hookSettings: snapshot.hooks,
+            hostIntegration: snapshot.hostIntegration,
+            providerTestStatus: null
+          },
+          updateLoadedState
+        })
+      );
+    });
+
+    await act(async () => {
+      queryByTestId('provider-list-item-provider-a')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setInputValue('provider-model-id-0', 'model-b');
+    setInputValue('provider-model-name-0', 'Model B');
+    await act(async () => {
+      queryByTestId('provider-save')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: null }));
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    expect(updateLoadedState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultModelId: null,
+        agent: blockedAgentStatus,
+        agentCapabilityPreview: null
+      })
+    );
+  });
 });
 
-function buildSettingsSnapshot(input: { defaultModelId?: string | null } = {}): SettingsSnapshot {
+function buildSettingsSnapshot(
+  input: { defaultModelId?: string | null; providers?: SettingsSnapshot['providers'] } = {}
+): SettingsSnapshot {
   const defaultModelId =
     input.defaultModelId === undefined ? 'llama_cpp:Qwen3.5-4B-UD-Q5_K_XL.gguf' : input.defaultModelId;
   const state = createLoadedState({
-    providers: [
-      {
-        id: 'llama_cpp',
-        name: 'llama.cpp',
-        type: 'llama_cpp',
-        endpoint: 'http://127.0.0.1:8081',
-        credentialRef: 'secret:llama_cpp',
-        enabled: true,
-        models: [
-          {
-            id: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
-            displayName: 'Qwen 3.5 4B',
-            enabled: true,
-            supportsStreaming: true,
-            supportsToolCalls: true,
-            supportsImages: false
-          }
-        ]
-      }
-    ],
+    providers:
+      input.providers ?? [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081',
+          credentialRef: 'secret:llama_cpp',
+          enabled: true,
+          models: [
+            {
+              id: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: false
+            }
+          ]
+        }
+      ],
     defaultModelId,
     providerSecretStatus: [{ providerId: 'llama_cpp', stored: true }]
   });

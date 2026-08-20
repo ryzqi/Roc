@@ -155,6 +155,35 @@ describe('config helper modules', () => {
     });
   });
 
+  it('clears stale default model ids for removed models', () => {
+    const provider = {
+      id: 'custom-provider',
+      name: 'Custom Provider',
+      type: 'openai_compatible' as const,
+      endpoint: 'https://custom.example.test/v1',
+      credentialRef: 'secret:custom-provider',
+      enabled: true,
+      models: [
+        {
+          id: 'other-model',
+          displayName: 'Other Model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: false
+        }
+      ]
+    };
+
+    expect(
+      normalizeProvidersConfig({
+        schemaVersion: 1,
+        defaultModelId: 'custom-provider:removed-model',
+        providers: [provider]
+      }).defaultModelId
+    ).toBeNull();
+  });
+
 
   it('detects legacy/current settings documents and migrates legacy MCP fields via migration helpers', () => {
     expect(isCurrentSettingsDocument({ schemaVersion: 4 })).toBe(true);

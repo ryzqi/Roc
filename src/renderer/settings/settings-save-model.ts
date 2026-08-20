@@ -76,10 +76,10 @@ export function upsertProviderInSettingsSaveRequest(
   const existingIndex = request.providers.findIndex((item) => item.id === provider.id);
   const defaultModelKey = request.defaultModelId === null ? null : parseProviderModelKey(request.defaultModelId);
   const clearsDefaultModel =
-    !provider.enabled &&
     defaultModelKey !== null &&
     defaultModelKey.providerId === provider.id &&
-    provider.models.some((model) => model.id === defaultModelKey.modelId);
+    (!provider.enabled ||
+      !provider.models.some((model) => model.id === defaultModelKey.modelId && model.enabled));
   return {
     ...request,
     defaultModelId: clearsDefaultModel ? null : request.defaultModelId,

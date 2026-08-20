@@ -3,9 +3,6 @@ import { z } from 'zod';
 import {
   agentCapabilityPreviewRequestSchema,
   agentCapabilityPreviewSchema,
-  agentLangSmithConfigSchema,
-  agentLangSmithSetApiKeyRequestSchema,
-  agentLangSmithSettingsSchema,
   agentRuntimeStatusSchema,
   deepAgentConfigPreviewSchema
 } from './schemas/agent';
@@ -69,6 +66,7 @@ import {
   providerSecretClearResultSchema,
   providerSecretSetRequestSchema,
   providerSecretSetResultSchema,
+  providerTestRequestSchema,
   providerTestResultSchema,
   rocHookConfigSnapshotSchema,
   sessionListInputSchema,
@@ -253,7 +251,7 @@ export const ipcRegistry = {
     request({ key: 'sessionMessagesSearch', channel: 'roc:session:messages-search', domain: 'sessions', method: 'search', kind: 'plugin', capabilityName: 'agent.sessions.search', inputTransform: first, contract: methodContract(oneArg(sessionMessageSearchRequestSchema), sessionMessageSearchResultSchema) }),
     request({ key: 'settingsGet', channel: 'roc:settings:get', domain: 'settings', method: 'get', kind: 'direct', contract: methodContract(noArgs, settingsSnapshotSchema) }),
     request({ key: 'settingsSave', channel: 'roc:settings:save', domain: 'settings', method: 'save', kind: 'direct', contract: methodContract(oneArg(settingsSaveRequestSchema), settingsSnapshotSchema) }),
-    request({ key: 'settingsTestProvider', channel: 'roc:settings:test-provider', domain: 'settings', method: 'testProvider', kind: 'direct', contract: methodContract(stringArg, providerTestResultSchema) }),
+    request({ key: 'settingsTestProvider', channel: 'roc:settings:test-provider', domain: 'settings', method: 'testProvider', kind: 'direct', contract: methodContract(oneArg(providerTestRequestSchema), providerTestResultSchema) }),
     request({ key: 'settingsSetProviderSecret', channel: 'roc:settings:set-provider-secret', domain: 'settings', method: 'setProviderSecret', kind: 'direct', contract: methodContract(oneArg(providerSecretSetRequestSchema), providerSecretSetResultSchema) }),
     request({ key: 'settingsClearProviderSecret', channel: 'roc:settings:clear-provider-secret', domain: 'settings', method: 'clearProviderSecret', kind: 'direct', contract: methodContract(stringArg, providerSecretClearResultSchema) }),
     request({ key: 'settingsHooksGet', channel: 'roc:settings:hooks:get', domain: 'settings', method: 'getHooks', kind: 'direct', contract: methodContract(noArgs, rocHookConfigSnapshotSchema) }),
@@ -276,10 +274,6 @@ export const ipcRegistry = {
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),
-    request({ key: 'agentLangSmithSettingsGet', channel: 'roc:agent:langsmith:settings:get', domain: 'agent', method: 'getLangSmithSettings', kind: 'plugin', capabilityName: 'agent.langsmith.settings.get', inputTransform: none, contract: methodContract(noArgs, agentLangSmithSettingsSchema) }),
-    request({ key: 'agentLangSmithSettingsSave', channel: 'roc:agent:langsmith:settings:save', domain: 'agent', method: 'saveLangSmithSettings', kind: 'plugin', capabilityName: 'agent.langsmith.settings.save', inputTransform: first, contract: methodContract(oneArg(agentLangSmithConfigSchema), agentLangSmithSettingsSchema) }),
-    request({ key: 'agentLangSmithSecretSet', channel: 'roc:agent:langsmith:secret:set', domain: 'agent', method: 'setLangSmithApiKey', kind: 'plugin', capabilityName: 'agent.langsmith.secret.set', inputTransform: first, contract: methodContract(oneArg(agentLangSmithSetApiKeyRequestSchema), agentLangSmithSettingsSchema) }),
-    request({ key: 'agentLangSmithSecretClear', channel: 'roc:agent:langsmith:secret:clear', domain: 'agent', method: 'clearLangSmithApiKey', kind: 'plugin', capabilityName: 'agent.langsmith.secret.clear', inputTransform: none, contract: methodContract(noArgs, agentLangSmithSettingsSchema) }),
     request({ key: 'chatStartRun', channel: 'roc:chat:start-run', domain: 'chat', method: 'startRun', kind: 'plugin', capabilityName: 'agent.run.start', inputTransform: first, contract: methodContract(oneArg(chatStartRunIpcRequestSchema), chatStartRunResultSchema) }),
     request({ key: 'chatCancelRun', channel: 'roc:chat:cancel-run', domain: 'chat', method: 'cancelRun', kind: 'plugin', capabilityName: 'agent.run.cancel', inputTransform: id('runId'), contract: methodContract(stringArg, chatCancelRunResultSchema) }),
     request({ key: 'chatResumeRun', channel: 'roc:chat:resume-run', domain: 'chat', method: 'resumeRun', kind: 'plugin', capabilityName: 'agent.run.resume', inputTransform: first, contract: methodContract(oneArg(chatResumeRunRequestSchema), chatResumeRunResultSchema) }),

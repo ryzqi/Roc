@@ -195,7 +195,6 @@ describe('Roc agent performance smoke', () => {
         worktreeDirty: gitSource.worktreeDirty
       });
     try {
-      disableAmbientTracing();
       vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
         unexpectedFetches.push(String(input));
         throw new Error(`agent_performance_unexpected_fetch:${String(input)}`);
@@ -1087,15 +1086,6 @@ async function readGitSource(): Promise<{
 async function writeArtifact(artifact: AgentPerformanceArtifact): Promise<void> {
   await mkdir(resolve('.artifacts/wave1'), { recursive: true });
   await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
-}
-
-function disableAmbientTracing(): void {
-  vi.stubEnv('LANGSMITH_TRACING_V2', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
-  vi.stubEnv('LANGSMITH_TRACING', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING', 'false');
-  vi.stubEnv('LANGSMITH_API_KEY', '');
-  vi.stubEnv('LANGCHAIN_API_KEY', '');
 }
 
 function errorMessage(error: unknown): string {

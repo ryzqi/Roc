@@ -25,7 +25,7 @@ import {
   type ChatOpenAICallOptions,
   type ChatOpenAIFields
 } from '@langchain/openai';
-import type { ProviderConfig } from '../../shared/types';
+import type { ProviderModelOptions } from '../../shared/types';
 import {
   nvidiaSupportsThinkingViaSystemPrompt,
   resolveNvidiaModelFamily
@@ -206,10 +206,10 @@ function isToolMessageChunk(message: BaseMessage): message is ToolMessageChunk {
 
 export class NvidiaCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
   private readonly nvidiaModelId: string;
-  private readonly nvidiaProviderOptions: NonNullable<ProviderConfig['options']>;
+  private readonly nvidiaProviderOptions: ProviderModelOptions;
   private readonly nvidiaThinkingViaSystemPrompt: 'on' | 'off' | null;
 
-  constructor(fields: ChatOpenAIFields, extra: { modelId: string; providerOptions?: ProviderConfig['options'] }) {
+  constructor(fields: ChatOpenAIFields, extra: { modelId: string; providerOptions?: ProviderModelOptions }) {
     super({
       ...fields,
       completions: new NvidiaCompatibleChatOpenAICompletions(fields, extra.providerOptions)
@@ -283,11 +283,11 @@ export class LlamaCppCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
 }
 
 class NvidiaCompatibleChatOpenAICompletions extends ChatOpenAICompletions {
-  private readonly nvidiaProviderOptions: ProviderConfig['options'];
+  private readonly nvidiaProviderOptions: ProviderModelOptions;
 
-  constructor(fields?: ChatOpenAIFields, providerOptions?: ProviderConfig['options']) {
+  constructor(fields?: ChatOpenAIFields, providerOptions?: ProviderModelOptions) {
     super(fields);
-    this.nvidiaProviderOptions = providerOptions;
+    this.nvidiaProviderOptions = providerOptions ?? {};
   }
 
   override invocationParams(
@@ -318,7 +318,7 @@ function normalizeNvidiaTextOnlyMessages(messages: BaseMessage[]): BaseMessage[]
 
 function sanitizeNvidiaToolOptions<TOptions extends ChatOpenAICallOptions>(
   options: TOptions,
-  providerOptions: ProviderConfig['options']
+  providerOptions: ProviderModelOptions
 ): TOptions {
   const next = {
     ...options,

@@ -169,6 +169,46 @@ function normalizeProviderModel(value: unknown): unknown {
   };
 }
 
+const providerConnectionOptionKeys = new Set(['timeoutMs', 'defaultHeaders', 'organization', 'endpointOverride']);
+
+function migrateProviderEntry(entry: unknown): unknown {
+  if (entry === null || typeof entry !== 'object') {
+    return entry;
+  }
+  const provider = entry as Record<string, unknown>;
+  const legacyOptions =
+    provider.options !== null && typeof provider.options === 'object' && !Array.isArray(provider.options)
+      ? (provider.options as Record<string, unknown>)
+      : {};
+  const connectionOptions: Record<string, unknown> = {};
+  const modelOptions: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(legacyOptions)) {
+    (providerConnectionOptionKeys.has(key) ? connectionOptions : modelOptions)[key] = value;
+  }
+  const models = Array.isArray(provider.models)
+    ? provider.models.map((model) => {
+        const normalized = normalizeProviderModel(model);
+        if (normalized === null || typeof normalized !== 'object') {
+          return normalized;
+        }
+        const modelRecord = normalized as Record<string, unknown>;
+        const existingOptions =
+          modelRecord.options !== null && typeof modelRecord.options === 'object' && !Array.isArray(modelRecord.options)
+            ? (modelRecord.options as Record<string, unknown>)
+            : undefined;
+        if (Object.keys(modelOptions).length === 0 && existingOptions === undefined) {
+          return modelRecord;
+        }
+        return { ...modelRecord, options: { ...modelOptions, ...(existingOptions ?? {}) } };
+      })
+    : [];
+  return {
+    ...provider,
+    options: Object.keys(connectionOptions).length === 0 ? undefined : connectionOptions,
+    models
+  };
+}
+
 function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
   if (raw === null || typeof raw !== 'object') {
     return defaultProviders;
@@ -177,18 +217,17 @@ function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
   const providersList = Array.isArray(value.providers) ? value.providers : [];
   return normalizeProvidersConfig(
     ProvidersSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: typeof value.defaultModelId === 'string' ? value.defaultModelId : null,
       providers: providersList.map((entry) => {
-        const provider = entry as ProvidersConfig['providers'][number];
-        const credentialRef = provider.credentialRef;
+        const migrated = migrateProviderEntry(entry) as Record<string, unknown>;
+        const credentialRef = migrated.credentialRef;
         return {
-          ...provider,
+          ...migrated,
           credentialRef:
             typeof credentialRef === 'string' && PROVIDER_CREDENTIAL_REF_PATTERN.test(credentialRef)
               ? credentialRef
-              : null,
-          models: Array.isArray(provider.models) ? provider.models.map(normalizeProviderModel) : []
+              : null
         };
       })
     })

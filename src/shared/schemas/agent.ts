@@ -238,51 +238,6 @@ export const agentRuntimeStatusSchema = z
   })
   .strict();
 
-export const agentLangSmithConfigSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    enabled: z.boolean(),
-    projectName: z.string().trim().min(1).max(128)
-  })
-  .strict();
-
-export const agentLangSmithSettingsSchema = z
-  .object({
-    config: agentLangSmithConfigSchema,
-    apiKeyStored: z.boolean()
-  })
-  .strict();
-
-export const agentLangSmithSetApiKeyRequestSchema = z
-  .object({
-    apiKey: identifierSchema
-  })
-  .strict();
-
-export const agentLangSmithRunCorrelationSchema = z
-  .object({
-    runId: identifierSchema,
-    threadId: identifierSchema,
-    runOrigin: runOriginSchema,
-    manifestHash: z.string().regex(/^[a-f0-9]{64}$/u)
-  })
-  .strict();
-
-export const agentLangSmithTraceCorrelationSchema = agentLangSmithRunCorrelationSchema.extend({
-  appVersion: identifierSchema
-});
-
-export const agentLangSmithTraceSessionSchema = agentLangSmithTraceCorrelationSchema
-  .extend({
-    schemaVersion: z.literal(1),
-    projectName: identifierSchema,
-    rootId: z.string().uuid(),
-    traceId: z.string().uuid(),
-    dottedOrder: identifierSchema,
-    startTime: z.number().int().nonnegative()
-  })
-  .refine((session) => session.rootId === session.traceId);
-
 export const sessionListInputSchema = z
   .object({
     threadId: z.string(),
@@ -350,9 +305,3 @@ export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
 export type RunExecutionSnapshotV1 = z.infer<typeof runExecutionSnapshotV1Schema>;
 export type RunExecutionSnapshotV2 = z.infer<typeof runExecutionSnapshotV2Schema>;
 export type AgentRuntimeStatus = z.infer<typeof agentRuntimeStatusSchema>;
-export type AgentLangSmithConfigV1 = z.infer<typeof agentLangSmithConfigSchema>;
-export type AgentLangSmithSettings = z.infer<typeof agentLangSmithSettingsSchema>;
-export type AgentLangSmithSetApiKeyRequest = z.infer<typeof agentLangSmithSetApiKeyRequestSchema>;
-export type AgentLangSmithRunCorrelation = z.infer<typeof agentLangSmithRunCorrelationSchema>;
-export type AgentLangSmithTraceCorrelation = z.infer<typeof agentLangSmithTraceCorrelationSchema>;
-export type AgentLangSmithTraceSessionV1 = z.infer<typeof agentLangSmithTraceSessionSchema>;

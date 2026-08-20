@@ -87,6 +87,19 @@ export const coreMigrations: RocDatabaseMigration[] = [
       CREATE INDEX idx_core_database_maintenance_runs_kind_finished
         ON database_maintenance_runs(kind, finished_at DESC);
     `
+  },
+  {
+    version: 3,
+    name: 'remove_legacy_langsmith_configuration',
+    sql: `
+      DELETE FROM plugin_config
+      WHERE plugin_id = '@roc/plugin-agent'
+        AND key = 'langsmith.settings';
+
+      DELETE FROM plugin_secrets
+      WHERE plugin_id = '@roc/plugin-agent'
+        AND key = 'langsmith.apiKey';
+    `
   }
 ];
 
@@ -633,6 +646,13 @@ export const agentMigrations: RocDatabaseMigration[] = [
         updated_at     TEXT NOT NULL,
         FOREIGN KEY(run_id) REFERENCES agent_runs(id)
       );
+    `
+  },
+  {
+    version: 14,
+    name: 'remove_legacy_langsmith_trace_sessions',
+    sql: `
+      DROP TABLE IF EXISTS agent_langsmith_trace_sessions;
     `
   }
 ];

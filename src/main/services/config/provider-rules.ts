@@ -9,7 +9,7 @@ import {
 import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
 import type { DefaultModelState, ProviderConfig, ProvidersConfig } from '../../../shared/types';
 
-function sanitizeDefaultModelIdForDisabledProviders(
+function sanitizeDefaultModelId(
   providers: readonly ProviderConfig[],
   defaultModelId: string | null
 ): string | null {
@@ -20,17 +20,12 @@ function sanitizeDefaultModelIdForDisabledProviders(
   if (defaultModelKey === null) {
     return defaultModelId;
   }
-  if (
-    providers.some(
-      (provider) =>
-        !provider.enabled &&
-        provider.id === defaultModelKey.providerId &&
-        provider.models.some((model) => model.id === defaultModelKey.modelId)
-    )
-  ) {
+  const provider = providers.find((candidate) => candidate.id === defaultModelKey.providerId);
+  if (provider === undefined || !provider.enabled) {
     return null;
   }
-  return defaultModelId;
+  const model = provider.models.find((candidate) => candidate.id === defaultModelKey.modelId);
+  return model === undefined || !model.enabled ? null : defaultModelId;
 }
 
 export function normalizeProvidersConfig(config: ProvidersConfig): ProvidersConfig {
@@ -54,8 +49,8 @@ export function normalizeProvidersConfig(config: ProvidersConfig): ProvidersConf
   ];
 
   return {
-    schemaVersion: 1,
-    defaultModelId: sanitizeDefaultModelIdForDisabledProviders(orderedProviders, config.defaultModelId),
+    schemaVersion: 2,
+    defaultModelId: sanitizeDefaultModelId(orderedProviders, config.defaultModelId),
     providers: orderedProviders
   };
 }
@@ -128,7 +123,7 @@ export function deleteProviderFromConfig(config: ProvidersConfig, providerId: st
   if (isFixedProvider(providerId)) {
     const defaultModelKey = config.defaultModelId === null ? null : parseProviderModelKey(config.defaultModelId);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId:
         config.defaultModelId !== null &&
         defaultModelKey !== null &&
@@ -149,7 +144,7 @@ export function deleteProviderFromConfig(config: ProvidersConfig, providerId: st
     defaultModelKey.providerId === providerId &&
     provider.models.some((model) => buildProviderModelKey(providerId, model.id) === config.defaultModelId);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     defaultModelId: clearsDefaultModel ? null : config.defaultModelId,
     providers: config.providers.filter((item) => item.id !== providerId)
   };

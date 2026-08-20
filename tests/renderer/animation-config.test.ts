@@ -73,6 +73,15 @@ describe('renderer animation configuration', () => {
     expect(preloadContract).not.toContain('setBounds: (bounds)');
   });
 
+  it('keeps empty titlebar space draggable around window controls', () => {
+    const css = readFileSync('src/renderer/styles/app-shell.css', 'utf8');
+    const workbandActionsBlock = css.match(/(^|\n)\.workband-actions\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
+    const noDragSelectorBlock = css.match(/(?<selectors>[^{}]+)\{\s*-webkit-app-region:\s*no-drag;\s*\}/u)?.groups?.selectors ?? '';
+
+    expect(workbandActionsBlock).not.toContain('-webkit-app-region: no-drag;');
+    expect(noDragSelectorBlock).toContain('.icon-button');
+  });
+
   it('uses Windows system theme and accent tokens as the renderer source of truth', () => {
     const tokensCss = readFileSync('src/renderer/styles/tokens.css', 'utf8');
     const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');

@@ -14,8 +14,7 @@ import type { RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import type { AgentDeepAgentExecution } from '../../../../src/main/plugins/agent/agent-execution';
 import { toRunExecutionMode } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import {
-  createAgentDeepAgentExecutor,
-  type AgentDeepAgentExecutorOptions
+  createAgentDeepAgentExecutor
 } from '../../../../src/main/plugins/agent/deep-agent-executor';
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
@@ -47,7 +46,6 @@ interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
-  langSmithTracingProvider?: AgentDeepAgentExecutorOptions['langSmithTracingProvider'];
   metricsService?: {
     recordPromptCacheMetrics: (usage: {
       input_tokens: number;
@@ -130,7 +128,6 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     checkpointer: new MemorySaver(),
     getMemorySettings: input.getMemorySettings,
     hookRuntime: input.hookRuntime,
-    langSmithTracingProvider: input.langSmithTracingProvider,
     metricsService: input.metricsService,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore(),

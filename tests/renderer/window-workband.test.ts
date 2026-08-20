@@ -54,8 +54,16 @@ describe('WindowWorkband', () => {
       })
     );
 
+    const brandStart = html.indexOf('<div class="brand">');
+    const chatActionsStart = html.indexOf('<div class="workband-chat-actions">', brandStart);
+    const brandMarkup = html.slice(brandStart, chatActionsStart);
+
     expect(html).toContain('data-testid="window-workband"');
-    expect(html).toContain('Roc');
+    expect(html).toContain('<span>Roc</span>');
+    expect(brandMarkup).toBe('<div class="brand"><div class="brand-mark">R</div></div>');
+    expect(brandMarkup).not.toContain('Roc');
+    expect(brandMarkup).not.toContain('本地工作台');
+    expect(brandMarkup).not.toContain('>/</span>');
     expect(html).not.toContain('条消息');
   });
 });

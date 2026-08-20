@@ -65,8 +65,6 @@ import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
 import { createAgentDeepAgentExecution, type RunOutcome } from './agent-execution';
-import type { AgentLangSmithTracingProvider } from '../../services/deep-agent/langsmith-tracing';
-import { runWithLangSmithTracing } from '../../services/deep-agent/langsmith-tracing';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import { createRunInterruptedEvents, projectDeepAgentInterrupts } from './interrupt-projection';
 
@@ -76,7 +74,6 @@ export type AgentDeepAgentExecutorOptions = {
   contextArtifactStore: ContextArtifactStore;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
-  langSmithTracingProvider?: AgentLangSmithTracingProvider;
   metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
   paths: RocPaths;
   store: BaseStore;
@@ -100,15 +97,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         throw new Error('agent_deep_agent_model_handle_missing');
       }
       const mode = input.snapshot.mode;
-      const langSmithTracing =
-        options.langSmithTracingProvider === undefined
-          ? null
-          : options.langSmithTracingProvider({
-              runId: input.run.id,
-              threadId: input.run.threadId,
-              runOrigin: input.snapshot.runOrigin,
-              manifestHash: input.snapshot.capabilityManifest.manifestHash
-            });
       const workflowHint = input.snapshot.workflowHint;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
@@ -353,17 +341,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           : new Command({
               resume: input.resumePayload
             });
-      const rawRun = await runWithLangSmithTracing(langSmithTracing, async () =>
-        await agent.streamEvents(runInput as never, {
-          version: 'v3',
-          ...(langSmithTracing === null ? {} : langSmithTracing.runnableConfig),
-          configurable: {
-            run_id: input.run.id,
-            thread_id: input.run.threadId
-          },
-          signal: executionAbortController.signal
-        })
-      );
+      const rawRun = await agent.streamEvents(runInput as never, {
+        version: 'v3',
+        configurable: {
+          run_id: input.run.id,
+          thread_id: input.run.threadId
+        },
+        signal: executionAbortController.signal
+      });
       const projectToolOutput = createToolOutputProjector({
         artifactStore: options.contextArtifactStore,
         runId: input.run.id,
@@ -380,7 +365,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         reasoningChunks,
         usageAccumulator
       });
-      const consumeRun = runWithLangSmithTracing(langSmithTracing, async () => {
+      const consumeRun = (async () => {
         try {
           await consumeDeepAgentEventStream({
             events: run.events,
@@ -450,7 +435,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             input.observeModelUsage(snapshotUsage(usageAccumulator));
           }
         }
-      });
+      })();
       try {
         for await (const event of eventQueue) {
           yield event;

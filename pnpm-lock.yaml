@@ -41,9 +41,6 @@ importers:
       langchain:
         specifier: 1.5.9
         version: 1.5.9(@langchain/core@1.2.8(openai@6.45.0(zod@4.4.3)))(openai@6.45.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      langsmith:
-        specifier: 0.8.1
-        version: 0.8.1(openai@6.45.0(zod@4.4.3))
       lucide-react:
         specifier: 1.24.0
         version: 1.24.0(react@19.2.7)

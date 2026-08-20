@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderTestServices, type ProviderTestServices } from '../provider-test-fixture';
 import { LangChainModelFactory } from '../../../src/main/services/langchain-model-factory';
 import { buildProviderModelKey } from '../../../src/shared/provider-model-key';
-import type { ProviderConfig } from '../../../src/shared/types';
+import type { ProviderConfig, ProviderModelOptions } from '../../../src/shared/types';
 
 let services: ProviderTestServices;
 
@@ -136,12 +136,12 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
 
 function saveProviders(providers: ProviderConfig[]): void {
   services.configService.saveProviders({
-    schemaVersion: 1,
+    schemaVersion: 2,
     defaultModelId: buildProviderModelKey(providers[0]!.id, providers[0]!.models[0]!.id),
     providers
   });
 }
-function llamaCppProvider(input: { modelId: string; options?: ProviderConfig['options'] }): ProviderConfig {
+function llamaCppProvider(input: { modelId: string; options?: ProviderModelOptions }): ProviderConfig {
   return {
     id: 'llama_cpp',
     name: 'llama.cpp',
@@ -156,10 +156,10 @@ function llamaCppProvider(input: { modelId: string; options?: ProviderConfig['op
         enabled: true,
         supportsStreaming: true,
         supportsToolCalls: true,
-        supportsImages: false
+        supportsImages: false,
+        options: input.options
       }
-    ],
-    options: input.options
+    ]
   };
 }
 

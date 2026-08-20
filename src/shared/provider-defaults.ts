@@ -79,7 +79,7 @@ export function normalizeFixedNvidiaProvider(provider?: ProviderConfig): Provide
     ...base,
     enabled: provider.enabled,
     models: provider.models,
-    options: provider.options
+    ...(provider.options === undefined ? {} : { options: provider.options })
   };
 }
 
@@ -112,7 +112,7 @@ export function normalizeFixedOpenRouterProvider(provider?: ProviderConfig): Pro
     ...base,
     enabled: provider.enabled,
     models: provider.models.length === 0 ? base.models : provider.models,
-    options: undefined
+    ...(provider.options === undefined ? {} : { options: provider.options })
   };
 }
 
@@ -146,7 +146,7 @@ export function normalizeFixedLlamaCppProvider(provider?: ProviderConfig): Provi
     credentialRef: provider.credentialRef,
     enabled: provider.enabled,
     models: provider.models,
-    options: provider.options
+    ...(provider.options === undefined ? {} : { options: provider.options })
   };
 }
 

@@ -3,7 +3,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
 import { ChatOpenAI, type ChatOpenAIFields } from '@langchain/openai';
 import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
-import { type ProviderConfig, type ProviderOptions, type ProviderType } from '../../shared/types';
+import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import { toTypedProviderConfig } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
@@ -154,7 +154,7 @@ export class LangChainModelFactory {
     return clientOptions;
   }
 
-  private applyAnthropicSamplingParams(config: ChatAnthropicInput, options: ProviderOptions): void {
+  private applyAnthropicSamplingParams(config: ChatAnthropicInput, options: ProviderModelOptions): void {
     if (options.temperature !== undefined) {
       config.temperature = options.temperature;
     }
@@ -172,7 +172,7 @@ export class LangChainModelFactory {
     }
   }
 
-  private applyAnthropicPhase1Features(config: ChatAnthropicInput, options: ProviderOptions): void {
+  private applyAnthropicPhase1Features(config: ChatAnthropicInput, options: ProviderModelOptions): void {
     if (options.anthropicBetas !== undefined) {
       const betas = resolveAnthropicBetas(options.anthropicBetas);
       if (betas.length > 0) {
@@ -187,6 +187,7 @@ export class LangChainModelFactory {
   private createAnthropicModel(
     provider: ProviderConfig,
     modelId: string,
+    modelOptions: ProviderModelOptions,
     apiKey: string,
     options: {
       streaming: boolean;
@@ -195,14 +196,14 @@ export class LangChainModelFactory {
     }
   ): LangChainChatModelHandle {
     const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
-    const providerOptions = provider.options === undefined ? {} : provider.options;
+    const providerOptions = modelOptions;
     const config: ChatAnthropicInput = {
       model: modelId,
       apiKey,
       anthropicApiUrl: baseUrl,
       streaming: options.streaming,
       maxRetries: 0,
-      streamUsage: resolveStreamUsage(provider, options.streaming),
+      streamUsage: resolveStreamUsage(provider, modelOptions, options.streaming),
       clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
     };
     this.applyAnthropicSamplingParams(config, providerOptions);
@@ -254,23 +255,24 @@ export class LangChainModelFactory {
     }
 
     const apiKey = this.resolveCredential(provider);
-    const typedProvider = isLangChainProviderType(provider.type) ? toTypedProviderConfig(provider) : null;
+    const modelOptions: ProviderModelOptions = targetModel.options ?? {};
+    const typedProvider = isLangChainProviderType(provider.type) ? toTypedProviderConfig(provider, modelOptions) : null;
     const llamaCppSamplingProfile =
-      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, this.logService) : null;
+      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, modelOptions, this.logService) : null;
     const llamaCppParams = typedProvider?.type === 'llama_cpp' ? typedProvider.params : null;
     const temperature =
       provider.type === 'llama_cpp'
         ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
-        : provider.options?.temperature;
-    const maxTokens = provider.options?.maxTokens;
+        : modelOptions.temperature;
+    const maxTokens = modelOptions.maxTokens;
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
     const contextBudgetTokens =
-      llamaCppParams?.contextBudgetTokens ?? provider.options?.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
+      llamaCppParams?.contextBudgetTokens ?? modelOptions.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
 
     if (provider.type === 'anthropic_compatible') {
-      return this.createAnthropicModel(provider, modelId, apiKey, {
+      return this.createAnthropicModel(provider, modelId, modelOptions, apiKey, {
         streaming,
         contextBudgetTokens,
         requestTimeoutMs
@@ -322,16 +324,16 @@ export class LangChainModelFactory {
     const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(openAiParams);
     const openAiReasoning = openAiParams?.reasoning;
     const openAiOrganization =
-      provider.type === 'openai_compatible' ? openAiParams?.organization?.trim() ?? '' : '';
+      provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
     const openAiUseResponsesApi = provider.type === 'openai_compatible' ? openAiParams?.useResponsesApi : undefined;
     const openAiServiceTier = provider.type === 'openai_compatible' ? openAiParams?.serviceTier : undefined;
     const openAiVerbosity = provider.type === 'openai_compatible' ? openAiParams?.verbosity : undefined;
     const openAiZdrEnabled = provider.type === 'openai_compatible' ? openAiParams?.zdrEnabled : undefined;
-    const openAiTopP = provider.type === 'llama_cpp' ? llamaCppParams?.topP ?? llamaCppSamplingProfile?.topP : provider.options?.topP;
+    const openAiTopP = provider.type === 'llama_cpp' ? llamaCppParams?.topP ?? llamaCppSamplingProfile?.topP : modelOptions.topP;
     const openAiPresencePenalty =
       provider.type === 'llama_cpp'
         ? llamaCppParams?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
-        : provider.options?.presencePenalty;
+        : modelOptions.presencePenalty;
     const openAiStop = provider.type === 'openai_compatible' ? openAiParams?.stop : undefined;
     const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? openAiParams?.frequencyPenalty : undefined;
     const openAiConfiguration =
@@ -355,7 +357,7 @@ export class LangChainModelFactory {
       model: modelId,
       apiKey: apiKeyForChatModel,
       streaming,
-      streamUsage: resolveStreamUsage(provider, streaming),
+      streamUsage: resolveStreamUsage(provider, modelOptions, streaming),
       maxRetries: 0,
       temperature,
       topP: openAiTopP,
@@ -374,7 +376,7 @@ export class LangChainModelFactory {
     };
     const chatModel =
       provider.type === 'nvidia'
-        ? new NvidiaCompatibleChatOpenAI(chatModelFields, { modelId, providerOptions: provider.options })
+        ? new NvidiaCompatibleChatOpenAI(chatModelFields, { modelId, providerOptions: modelOptions })
         : streaming
           ? new OpenAiChatModelClass(chatModelFields)
           : new ChatOpenAI(chatModelFields);
@@ -408,12 +410,14 @@ export class LangChainModelFactory {
   async probeNvidiaTtfb(
     provider: ProviderConfig,
     modelId: string,
+    modelOptions: ProviderModelOptions,
     prompt: string,
     options: { signal?: AbortSignal; timeoutMs?: number } = {}
   ): Promise<{ latencyMs: number }> {
     return await probeNvidiaTtfb({
       provider,
       modelId,
+      modelOptions,
       prompt,
       apiKey: this.resolveCredential(provider),
       logService: this.logService,

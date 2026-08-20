@@ -107,7 +107,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies core migrations through version 2 without changing version order', () => {
+  it('applies core migrations through version 3 without changing version order', () => {
     applyDatabaseMigrations(db, {
       dbName: 'core',
       migrations: coreMigrations,
@@ -118,15 +118,16 @@ describe('database migrations', () => {
       db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'core' ORDER BY version").all()
     ).toEqual([
       { version: 1, name: 'core_platform_tables' },
-      { version: 2, name: 'database_maintenance_runs' }
+      { version: 2, name: 'database_maintenance_runs' },
+      { version: 3, name: 'remove_legacy_langsmith_configuration' }
     ]);
     expect(readSchemaMetadata(db, 'core')).toMatchObject({
       dbName: 'core',
-      currentVersion: 2
+      currentVersion: 3
     });
   });
 
-  it('applies agent migrations through version 13 without changing earlier versions', () => {
+  it('applies agent migrations through version 14 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -148,12 +149,55 @@ describe('database migrations', () => {
       { version: 10, name: 'agent_pending_interrupt_collection' },
       { version: 11, name: 'agent_pending_interrupt_projection_minimal' },
       { version: 12, name: 'agent_run_telemetry' },
-      { version: 13, name: 'agent_langsmith_trace_sessions' }
+      { version: 13, name: 'agent_langsmith_trace_sessions' },
+      { version: 14, name: 'remove_legacy_langsmith_trace_sessions' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 13
+      currentVersion: 14
     });
+  });
+
+  it('removes legacy LangSmith configuration and trace sessions during upgrade', () => {
+    const core = new Database(':memory:');
+    const agent = new Database(':memory:');
+    try {
+      applyDatabaseMigrations(core, { dbName: 'core', migrations: coreMigrations.slice(0, 2) });
+      core.prepare('INSERT INTO plugin_config (plugin_id, key, value_json, updated_at) VALUES (?, ?, ?, ?)')
+        .run('@roc/plugin-agent', 'langsmith.settings', '{}', '2026-07-06T00:00:00.000Z');
+      core.prepare('INSERT INTO plugin_secrets (plugin_id, key, ciphertext_base64, updated_at) VALUES (?, ?, ?, ?)')
+        .run('@roc/plugin-agent', 'langsmith.apiKey', 'legacy', '2026-07-06T00:00:00.000Z');
+      core.prepare('INSERT INTO plugin_config (plugin_id, key, value_json, updated_at) VALUES (?, ?, ?, ?)')
+        .run('@roc/plugin-agent', 'other.setting', '{}', '2026-07-06T00:00:00.000Z');
+      core.prepare('INSERT INTO plugin_secrets (plugin_id, key, ciphertext_base64, updated_at) VALUES (?, ?, ?, ?)')
+        .run('@roc/plugin-agent', 'other.secret', 'current', '2026-07-06T00:00:00.000Z');
+      applyDatabaseMigrations(core, { dbName: 'core', migrations: coreMigrations });
+      expect(core.prepare('SELECT COUNT(*) FROM plugin_config WHERE key = ?').pluck().get('langsmith.settings')).toBe(0);
+      expect(core.prepare('SELECT COUNT(*) FROM plugin_secrets WHERE key = ?').pluck().get('langsmith.apiKey')).toBe(0);
+      expect(core.prepare('SELECT COUNT(*) FROM plugin_config WHERE key = ?').pluck().get('other.setting')).toBe(1);
+      expect(core.prepare('SELECT COUNT(*) FROM plugin_secrets WHERE key = ?').pluck().get('other.secret')).toBe(1);
+
+      applyDatabaseMigrations(agent, { dbName: 'agent', migrations: agentMigrations.slice(0, 13) });
+      agent.prepare(
+        `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+         VALUES ('thread-legacy', 'chat', 'Legacy', 'Legacy', 'waiting_user', '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      ).run();
+      agent.prepare(
+        `INSERT INTO agent_runs
+         (id, thread_id, run_number, user_input, status, started_at, enabled_capabilities_json)
+         VALUES ('run-legacy', 'thread-legacy', 1, 'Legacy', 'waiting_user', '2026-07-06T00:00:00.000Z', '{}')`
+      ).run();
+      agent.prepare(
+        `INSERT INTO agent_langsmith_trace_sessions
+         (run_id, schema_version, session_json, created_at, updated_at)
+         VALUES ('run-legacy', 1, '{}', '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      ).run();
+      applyDatabaseMigrations(agent, { dbName: 'agent', migrations: agentMigrations });
+      expect(agent.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_langsmith_trace_sessions'").pluck().get()).toBeUndefined();
+    } finally {
+      core.close();
+      agent.close();
+    }
   });
 
   it('backfills valid V2 runs when migrating the agent database from v11 to v12', () => {

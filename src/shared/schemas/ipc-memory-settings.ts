@@ -260,91 +260,94 @@ export const providerModelSchema = z
     enabled: z.boolean(),
     supportsStreaming: z.boolean(),
     supportsToolCalls: z.boolean(),
-    supportsImages: z.boolean()
-  })
-  .strict();
-
-export const providerOptionsSchema = z
-  .object({
-    temperature: z.number().finite().optional(),
-    maxTokens: z.number().int().positive().optional(),
-    thinking: z.boolean().optional(),
-    topP: z.number().min(0).max(1).optional(),
-    topK: z.number().int().min(-1).optional(),
-    minP: z.number().min(0).max(1).optional(),
-    frequencyPenalty: z.number().min(-2).max(2).optional(),
-    presencePenalty: z.number().min(-2).max(2).optional(),
-    repetitionPenalty: z.number().min(0).max(2).optional(),
-    seed: z.number().int().optional(),
-    stop: z.array(z.string().min(1)).max(4).optional(),
-    organization: z.string().min(1).optional(),
-    useResponsesApi: z.boolean().optional(),
-    reasoning: z
-      .object({
-        effort: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
-        summary: z.enum(['auto', 'concise', 'detailed']).optional()
-      })
-      .strict()
-      .optional(),
-    includeReasoning: z.boolean().optional(),
-    parallelToolCalls: z.boolean().optional(),
-    streamUsage: z.boolean().optional(),
-    serviceTier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).optional(),
-    timeoutMs: z.number().int().positive().optional(),
-    verbosity: z.enum(['low', 'medium', 'high']).optional(),
-    zdrEnabled: z.boolean().optional(),
-    defaultHeaders: z.record(z.string(), z.string()).optional(),
-    modelKwargs: jsonObjectSchema.optional(),
-    anthropicThinking: z.discriminatedUnion('mode', [
-      z.object({ mode: z.literal('disabled') }).strict(),
-      z.object({ mode: z.literal('adaptive') }).strict(),
-      z.object({ mode: z.literal('enabled'), budgetTokens: z.number().int().min(1024) }).strict()
-    ]).optional(),
-    toolChoice: z.union([
-      z.enum(['auto', 'required', 'none']),
-      z.object({ type: z.literal('function'), function: z.object({ name: z.string().min(1) }).strict() }).strict()
-    ]).optional(),
-    guidedJson: jsonObjectSchema.optional(),
-    guidedRegex: z.string().min(1).optional(),
-    guidedChoice: z.array(z.string().min(1)).min(1).optional(),
-    guidedGrammar: z.string().min(1).optional(),
-    endpointOverride: z.string().url().optional(),
-    contextBudgetTokens: z.number().int().positive().optional(),
-    samplingProfileOverrides: z
+    supportsImages: z.boolean(),
+    options: z
       .object({
         temperature: z.number().finite().optional(),
+        maxTokens: z.number().int().positive().optional(),
+        thinking: z.boolean().optional(),
         topP: z.number().min(0).max(1).optional(),
         topK: z.number().int().min(-1).optional(),
         minP: z.number().min(0).max(1).optional(),
+        frequencyPenalty: z.number().min(-2).max(2).optional(),
         presencePenalty: z.number().min(-2).max(2).optional(),
-        repeatPenalty: z.number().min(0).max(2).optional()
+        repetitionPenalty: z.number().min(0).max(2).optional(),
+        seed: z.number().int().optional(),
+        stop: z.array(z.string().min(1)).max(4).optional(),
+        useResponsesApi: z.boolean().optional(),
+        reasoning: z
+          .object({
+            effort: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+            summary: z.enum(['auto', 'concise', 'detailed']).optional()
+          })
+          .strict()
+          .optional(),
+        includeReasoning: z.boolean().optional(),
+        parallelToolCalls: z.boolean().optional(),
+        streamUsage: z.boolean().optional(),
+        serviceTier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).optional(),
+        verbosity: z.enum(['low', 'medium', 'high']).optional(),
+        zdrEnabled: z.boolean().optional(),
+        modelKwargs: jsonObjectSchema.optional(),
+        anthropicThinking: z
+          .discriminatedUnion('mode', [
+            z.object({ mode: z.literal('disabled') }).strict(),
+            z.object({ mode: z.literal('adaptive') }).strict(),
+            z.object({ mode: z.literal('enabled'), budgetTokens: z.number().int().min(1024) }).strict()
+          ])
+          .optional(),
+        toolChoice: z
+          .union([
+            z.enum(['auto', 'required', 'none']),
+            z.object({ type: z.literal('function'), function: z.object({ name: z.string().min(1) }).strict() }).strict()
+          ])
+          .optional(),
+        guidedJson: jsonObjectSchema.optional(),
+        guidedRegex: z.string().min(1).optional(),
+        guidedChoice: z.array(z.string().min(1)).min(1).optional(),
+        guidedGrammar: z.string().min(1).optional(),
+        contextBudgetTokens: z.number().int().positive().optional(),
+        samplingProfileOverrides: z
+          .object({
+            temperature: z.number().finite().optional(),
+            topP: z.number().min(0).max(1).optional(),
+            topK: z.number().int().min(-1).optional(),
+            minP: z.number().min(0).max(1).optional(),
+            presencePenalty: z.number().min(-2).max(2).optional(),
+            repeatPenalty: z.number().min(0).max(2).optional()
+          })
+          .strict()
+          .optional(),
+        invocationKwargs: jsonObjectSchema.optional(),
+        anthropicBetas: z.array(z.string()).optional()
       })
       .strict()
-      .optional(),
-    invocationKwargs: jsonObjectSchema.optional(),
-    anthropicBetas: z.array(z.string()).optional()
+      .superRefine((options, context) => {
+        if (options.reasoning !== undefined && options.reasoning.effort === undefined && options.reasoning.summary === undefined) {
+          context.addIssue({ code: 'custom', path: ['reasoning'], message: 'reasoning requires effort or summary' });
+        }
+        if (
+          options.anthropicThinking?.mode === 'enabled' &&
+          options.maxTokens !== undefined &&
+          options.anthropicThinking.budgetTokens >= options.maxTokens
+        ) {
+          context.addIssue({ code: 'custom', path: ['anthropicThinking', 'budgetTokens'], message: 'thinking budget must be less than max tokens' });
+        }
+      })
+      .optional()
   })
-  .strict()
-  .superRefine((options, context) => {
-    if (options.reasoning !== undefined && options.reasoning.effort === undefined && options.reasoning.summary === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['reasoning'],
-        message: 'OpenAI reasoning 至少需要 effort 或 summary。'
-      });
-    }
-    if (
-      options.anthropicThinking?.mode === 'enabled' &&
-      options.maxTokens !== undefined &&
-      options.anthropicThinking.budgetTokens >= options.maxTokens
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['anthropicThinking', 'budgetTokens'],
-        message: 'Anthropic thinking budget tokens 必须小于 Max tokens。'
-      });
-    }
-  });
+  .strict();
+
+export const providerModelOptionsSchema = providerModelSchema.shape.options.unwrap();
+
+export const providerConnectionOptionsSchema = z
+  .object({
+    timeoutMs: z.number().int().positive().optional(),
+    defaultHeaders: z.record(z.string(), z.string()).optional(),
+    organization: z.string().min(1).optional(),
+    endpointOverride: z.string().url().optional()
+  })
+  .strict();
 
 export const providerConfigSchema = z
   .object({
@@ -369,9 +372,22 @@ export const providerConfigSchema = z
       ),
     enabled: z.boolean(),
     models: z.array(providerModelSchema),
-    options: providerOptionsSchema.optional()
+    options: providerConnectionOptionsSchema.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((provider, context) => {
+    const seenModelIds = new Set<string>();
+    provider.models.forEach((model, index) => {
+      if (seenModelIds.has(model.id)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['models', index, 'id'],
+          message: `Provider model ID must be unique: ${model.id}`
+        });
+      }
+      seenModelIds.add(model.id);
+    });
+  });
 
 export const providerTestResultSchema = z
   .object({
@@ -385,9 +401,13 @@ export const providerTestResultSchema = z
   })
   .strict();
 
+export const providerTestRequestSchema = z
+  .object({ providerId: z.string().trim().min(1), modelId: z.string().trim().min(1) })
+  .strict();
+
 export const providersConfigSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     defaultModelId: z.string().nullable(),
     providers: z.array(providerConfigSchema)
   })

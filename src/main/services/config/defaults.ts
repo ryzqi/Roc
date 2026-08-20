@@ -49,7 +49,7 @@ export const defaultSettings: AppSettings = {
 };
 
 export const defaultProviders: ProvidersConfig = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   defaultModelId: null,
   providers: [createFixedNvidiaProviderConfig(), createFixedOpenRouterProviderConfig(), createFixedLlamaCppProviderConfig()]
 };

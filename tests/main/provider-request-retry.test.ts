@@ -9,7 +9,7 @@ beforeEach(() => {
   services = createProviderTestServices('roc-provider-retry-');
   services.secretService.setProviderSecret('provider-local', 'sk-local-test-secret');
   services.configService.saveProviders({
-    schemaVersion: 1,
+    schemaVersion: 2,
     defaultModelId: null,
     providers: [
       {
@@ -52,7 +52,7 @@ describe('Provider request retry behavior', () => {
     });
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -80,7 +80,7 @@ describe('Provider request retry behavior', () => {
     });
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -101,7 +101,7 @@ describe('Provider request retry behavior', () => {
     });
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -122,7 +122,7 @@ describe('Provider request retry behavior', () => {
     });
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -142,7 +142,7 @@ describe('Provider request retry behavior', () => {
     });
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const result = await services.providerRuntimeService.testProvider('provider-local');
+    const result = await services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
 
     expect(transport).toHaveBeenCalledTimes(1);
     expect(result.error).toBe('Provider 请求失败：HTTP 400 invalid request');
@@ -167,7 +167,7 @@ describe('Provider request retry behavior', () => {
       }));
     Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
 
-    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider({ providerId: 'provider-local', modelId: 'model-tools' });
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 

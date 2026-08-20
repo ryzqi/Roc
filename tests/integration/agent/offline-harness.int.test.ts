@@ -11,7 +11,6 @@ import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/ru
 import { applyAgentDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
-import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../src/main/services/forge-guardrails';
 
@@ -38,13 +37,6 @@ afterEach(() => {
 
 describe('Roc Deep Agent offline integration', () => {
   it('executes native write_todos and persists the trajectory in Roc SQLite', async () => {
-    vi.stubEnv('LANGSMITH_TRACING_V2', 'true');
-    vi.stubEnv('LANGCHAIN_TRACING_V2', 'true');
-    vi.stubEnv('LANGSMITH_TRACING', 'true');
-    vi.stubEnv('LANGCHAIN_TRACING', 'true');
-    vi.stubEnv('LANGSMITH_API_KEY', 'ambient-langsmith-key');
-    vi.stubEnv('LANGCHAIN_API_KEY', 'ambient-langchain-key');
-    disableAmbientLangSmithTracing();
     const unexpectedFetches: Array<{ url: string; stack: string }> = [];
     const fetchSpy = vi.fn(async (input: string | URL | Request) => {
       const stack = new Error('agent_integration_unexpected_fetch').stack;
@@ -60,30 +52,28 @@ describe('Roc Deep Agent offline integration', () => {
     try {
       applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
-      const result = await runWithLangSmithTracing(null, async () => {
-        const agent = createIntegrationAgent(
-          new FakeToolCallingModel({
-            toolCalls: [
-              [
-                {
-                  name: 'write_todos',
-                  args: { todos: offlineTodos },
-                  id: 'call_agent_integration_todo'
-                }
-              ],
-              []
-            ]
-          }),
-          checkpointer
-        );
-        return await agent.invoke(
-          {
-            forge_error_tracker: defaultErrorTracker(),
-            messages: [new HumanMessage('Record the completed integration verification step.')]
-          },
-          { configurable: { thread_id: offlineThreadId } }
-        );
-      });
+      const agent = createIntegrationAgent(
+        new FakeToolCallingModel({
+          toolCalls: [
+            [
+              {
+                name: 'write_todos',
+                args: { todos: offlineTodos },
+                id: 'call_agent_integration_todo'
+              }
+            ],
+            []
+          ]
+        }),
+        checkpointer
+      );
+      const result = await agent.invoke(
+        {
+          forge_error_tracker: defaultErrorTracker(),
+          messages: [new HumanMessage('Record the completed integration verification step.')]
+        },
+        { configurable: { thread_id: offlineThreadId } }
+      );
 
       expect(result.todos).toEqual(offlineTodos);
       expect(readTrajectory(result.messages)).toEqual(offlineTrajectory);
@@ -115,36 +105,33 @@ describe('Roc Deep Agent offline integration', () => {
 describe.skipIf(process.env.ROC_AGENT_INTEGRATION_LIVE !== '1')('Roc Deep Agent live provider integration', () => {
   it('runs a terminal Anthropic turn through the Roc builder and checkpointer', async () => {
     const apiKey = requireLiveAnthropicApiKey();
-    disableAmbientLangSmithTracing();
     const db = new Database(':memory:');
     const threadId = 'thread_agent_integration_live_anthropic';
 
     try {
       applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
-      const result = await runWithLangSmithTracing(null, async () => {
-        const agent = createIntegrationAgent(
-          new ChatAnthropic({
-            apiKey,
-            clientOptions: { timeout: 45_000 },
-            maxRetries: 0,
-            maxTokens: 128,
-            model: 'claude-haiku-4-5-20251001',
-            temperature: 0
-          }),
-          checkpointer
-        );
-        return await agent.invoke(
-          {
-            forge_error_tracker: defaultErrorTracker(),
-            messages: [new HumanMessage('Reply directly with a short integration acknowledgement.')]
-          },
-          {
-            configurable: { thread_id: threadId },
-            signal: AbortSignal.timeout(45_000)
-          }
-        );
-      });
+      const agent = createIntegrationAgent(
+        new ChatAnthropic({
+          apiKey,
+          clientOptions: { timeout: 45_000 },
+          maxRetries: 0,
+          maxTokens: 128,
+          model: 'claude-haiku-4-5-20251001',
+          temperature: 0
+        }),
+        checkpointer
+      );
+      const result = await agent.invoke(
+        {
+          forge_error_tracker: defaultErrorTracker(),
+          messages: [new HumanMessage('Reply directly with a short integration acknowledgement.')]
+        },
+        {
+          configurable: { thread_id: threadId },
+          signal: AbortSignal.timeout(45_000)
+        }
+      );
 
       const terminalMessage = requireTerminalAiMessage(result.messages);
       expect(readAiToolCalls(terminalMessage)).toEqual([]);
@@ -248,15 +235,6 @@ function requireLiveAnthropicApiKey(): string {
     throw new Error('agent_integration_anthropic_api_key_missing');
   }
   return apiKey;
-}
-
-function disableAmbientLangSmithTracing(): void {
-  vi.stubEnv('LANGSMITH_TRACING_V2', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
-  vi.stubEnv('LANGSMITH_TRACING', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING', 'false');
-  vi.stubEnv('LANGSMITH_API_KEY', '');
-  vi.stubEnv('LANGCHAIN_API_KEY', '');
 }
 
 function readCheckpointCount(db: Database.Database, threadId: string): number {

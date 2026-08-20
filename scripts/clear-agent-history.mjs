@@ -10,7 +10,6 @@ const agentTables = [
   'agent_threads',
   'agent_runs',
   'agent_run_telemetry',
-  'agent_langsmith_trace_sessions',
   'agent_events',
   'session_messages',
   'session_messages_fts',
@@ -144,7 +143,6 @@ function deleteAllAgentHistory(db) {
     runDeleteIfTableExists(db, 'session_messages');
     runDeleteIfTableExists(db, 'agent_events');
     runDeleteIfTableExists(db, 'agent_run_telemetry');
-    runDeleteIfTableExists(db, 'agent_langsmith_trace_sessions');
     runDeleteIfTableExists(db, 'agent_runs');
     runDeleteIfTableExists(db, 'agent_threads');
   })();

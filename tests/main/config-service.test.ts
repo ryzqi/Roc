@@ -200,7 +200,7 @@ describe('ConfigService unified settings document', () => {
       memory: defaultSettings.memory
     });
     expect(document.providers).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       defaultModelId: 'provider-openai:provider-openai-model'
     });
     expect((document.providers as { providers: unknown[] }).providers).toEqual(

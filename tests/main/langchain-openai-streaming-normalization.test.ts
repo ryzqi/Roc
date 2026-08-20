@@ -329,7 +329,7 @@ async function createConfiguredModel(): Promise<ChatOpenAI> {
 function configureOpenAiCompatibleProvider(): void {
   services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
   services.configService.saveProviders({
-    schemaVersion: 1,
+    schemaVersion: 2,
     defaultModelId: 'openai-local:qwen-local',
     providers: [
       {

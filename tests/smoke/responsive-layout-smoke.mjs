@@ -132,7 +132,7 @@ const taskWorkbenchMarkup = `
   </div>
 `;
 
-const observabilitySettingsMarkup = `
+const memorySettingsMarkup = `
   <div class="app-shell" data-testid="roc-app">
     <div class="window-workband"></div>
     <div class="workspace">
@@ -155,54 +155,31 @@ const observabilitySettingsMarkup = `
                 <button class="settings-item" type="button">任务与调度</button>
                 <button class="settings-item" type="button">授权与安全</button>
                 <button class="settings-item" type="button">Hooks</button>
-                <button class="settings-item active" type="button">可观测性</button>
-                <button class="settings-item" type="button">记忆策略</button>
+                <button class="settings-item active" type="button">记忆策略</button>
               </nav>
               <div class="settings-panel-stack settings-panel-stack--compact">
-                <section class="single-panel settings-section-panel" data-testid="settings-panel-observability">
+                <section class="single-panel settings-section-panel" data-testid="settings-panel-memory">
                   <div class="section-head">
                     <div>
-                      <h2 class="section-title">可观测性</h2>
-                      <p class="card-hint">LangSmith tracing 默认关闭，仅在明确启用后发送数据。</p>
+                      <h2 class="section-title">记忆策略</h2>
+                      <p class="card-hint">管理本地会话保留和自动记忆容量。</p>
                     </div>
                   </div>
-                  <div class="settings-observability-disclosure" data-testid="settings-observability-disclosure">
-                    <strong>数据边界</strong>
-                    <p>启用后，Roc 会将经脱敏的 trace 数据发送到 LangSmith。项目名称用于选择 LangSmith project；数据保留期限由 LangSmith workspace 的 retention policy 控制。</p>
-                  </div>
-                  <div class="settings-form settings-observability-form" data-testid="settings-observability-form">
-                    <div class="settings-section-group settings-observability-group">
-                      <div class="settings-observability-group-header">
-                        <h3 class="settings-group-title">Tracing 配置</h3>
-                        <span class="status-pill ok"><span>配置</span><strong>已同步</strong></span>
-                      </div>
-                      <label class="field checkbox-field settings-toggle-row settings-observability-toggle">
-                        <span>启用 LangSmith tracing</span>
-                        <input type="checkbox">
-                        <small class="field-hint">关闭时不会向 LangSmith 发送新的 trace。</small>
+                  <div class="settings-form" data-testid="settings-memory-form">
+                    <div class="settings-section-group">
+                      <h3 class="settings-group-title">本地保留</h3>
+                      <label class="field">
+                        <span>会话保留天数</span>
+                        <input data-testid="settings-memory-retention-days" type="number" value="90">
+                        <small class="field-hint">过期会话由本地数据库保留任务清理。</small>
                       </label>
                       <label class="field">
-                        <span>项目名称</span>
-                        <input data-testid="settings-observability-project-name" type="text" value="roc-production-observability-project">
-                        <small class="field-hint">用于在 LangSmith workspace 中归集 Roc trace。</small>
+                        <span>单次运行候选上限</span>
+                        <input data-testid="settings-memory-candidate-limit" type="number" value="20">
+                        <small class="field-hint">限制自动记忆在一次运行中写入的候选数量。</small>
                       </label>
-                      <div class="settings-actions settings-observability-actions" data-testid="settings-observability-config-actions">
-                        <button class="primary" type="button">保存配置</button>
-                      </div>
-                    </div>
-                    <div class="settings-section-group settings-observability-group">
-                      <div class="settings-observability-group-header">
-                        <h3 class="settings-group-title">API Key</h3>
-                        <span class="status-pill ok"><span>密钥</span><strong>已安全存储</strong></span>
-                      </div>
-                      <label class="field">
-                        <span>LangSmith API Key</span>
-                        <input data-testid="settings-observability-api-key" type="password" value="">
-                        <small class="field-hint">仅在本机加密存储；读取设置时只返回是否已存储。</small>
-                      </label>
-                      <div class="settings-actions settings-observability-actions" data-testid="settings-observability-key-actions">
-                        <button class="primary" type="button">保存 API Key</button>
-                        <button class="secondary" type="button">清除 API Key</button>
+                      <div class="settings-actions" data-testid="settings-memory-actions">
+                        <button class="primary" type="button">保存设置</button>
                       </div>
                     </div>
                   </div>
@@ -282,7 +259,7 @@ function buildSidebarHistoryMarkup() {
     </div>
   `).join('');
   return `
-    <div class="workspace workspace--chat" style="width:320px;height:360px;padding:0;grid-template-columns:248px minmax(0,1fr)">
+    <div class="workspace workspace--chat" style="width:320px;height:360px;padding:0;grid-template-columns:220px minmax(0,1fr)">
       <aside class="sidebar">
         <div class="sidebar-head"><button class="workspace-pill" type="button"><span>F:\\Code\\Roc</span><strong>选择</strong></button></div>
         <div class="sidebar-block sidebar-block--history sidebar-block--history-search">
@@ -356,7 +333,7 @@ function buildChatRichContentMarkup() {
 }
 
 function resolveChatScale(viewportWidth) {
-  const expandedSidebarShellWidth = viewportWidth - 248 - 40;
+  const expandedSidebarShellWidth = viewportWidth - 220 - 40;
   return Math.min(1, expandedSidebarShellWidth / chatWorkspaceBaseWidth);
 }
 
@@ -554,58 +531,40 @@ try {
   const settingsResults = [];
   for (const viewport of [{ width: 320, height: 640 }, { width: 1280, height: 720 }]) {
     await page.setViewportSize(viewport);
-    await page.setContent(buildDocument(observabilitySettingsMarkup));
+    await page.setContent(buildDocument(memorySettingsMarkup));
     const settingsEvidence = await readBoxes(page, [
       { key: 'pageActions', selector: '[data-testid="settings-page-actions"]' },
       { key: 'layout', selector: '[data-testid="settings-layout"]' },
       { key: 'sidebar', selector: '[data-testid="settings-sidebar"]' },
-      { key: 'panel', selector: '[data-testid="settings-panel-observability"]' },
-      { key: 'disclosure', selector: '[data-testid="settings-observability-disclosure"]' },
-      { key: 'form', selector: '[data-testid="settings-observability-form"]' },
-      { key: 'projectInput', selector: '[data-testid="settings-observability-project-name"]' },
-      { key: 'apiKeyInput', selector: '[data-testid="settings-observability-api-key"]' },
-      { key: 'configActions', selector: '[data-testid="settings-observability-config-actions"]' },
-      { key: 'keyActions', selector: '[data-testid="settings-observability-key-actions"]' }
+      { key: 'panel', selector: '[data-testid="settings-panel-memory"]' },
+      { key: 'form', selector: '[data-testid="settings-memory-form"]' },
+      { key: 'retentionInput', selector: '[data-testid="settings-memory-retention-days"]' },
+      { key: 'candidateInput', selector: '[data-testid="settings-memory-candidate-limit"]' },
+      { key: 'actions', selector: '[data-testid="settings-memory-actions"]' }
     ]);
     const documentWidth = await page.evaluate(() => ({
       body: document.body.scrollWidth,
       document: document.documentElement.scrollWidth
     }));
-    const keyButtonBoxes = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('[data-testid="settings-observability-key-actions"] button')).map((button) => {
-        const rect = button.getBoundingClientRect();
-        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
-      })
-    );
-    settingsResults.push({ viewport, evidence: settingsEvidence, documentWidth, keyButtonBoxes });
+    settingsResults.push({ viewport, evidence: settingsEvidence, documentWidth });
 
     const expectedColumnCount = viewport.width <= 1180 ? 1 : 2;
     assertCondition(
       settingsEvidence.layout.gridTemplateColumns.trim().split(/\s+/).length === expectedColumnCount,
-      'Observability settings layout must use the expected responsive column count',
+      'Settings layout must use the expected responsive column count',
       settingsEvidence
     );
     assertCondition(settingsEvidence.sidebar.right <= viewport.width, 'Settings navigation must stay inside the viewport', settingsEvidence);
-    assertCondition(settingsEvidence.panel.right <= viewport.width, 'Observability settings panel must stay inside the viewport', settingsEvidence);
-    assertCondition(documentWidth.document <= viewport.width, 'Observability settings document must not overflow horizontally', { settingsEvidence, documentWidth });
-    assertCondition(documentWidth.body <= viewport.width, 'Observability settings body must not overflow horizontally', { settingsEvidence, documentWidth });
-    for (const key of ['pageActions', 'disclosure', 'form', 'projectInput', 'apiKeyInput', 'configActions', 'keyActions']) {
+    assertCondition(settingsEvidence.panel.right <= viewport.width, 'Settings panel must stay inside the viewport', settingsEvidence);
+    assertCondition(documentWidth.document <= viewport.width, 'Settings document must not overflow horizontally', { settingsEvidence, documentWidth });
+    assertCondition(documentWidth.body <= viewport.width, 'Settings body must not overflow horizontally', { settingsEvidence, documentWidth });
+    for (const key of ['pageActions', 'form', 'retentionInput', 'candidateInput', 'actions']) {
       assertCondition(
         settingsEvidence[key].scrollWidth <= settingsEvidence[key].clientWidth + 1,
-        `Observability settings ${key} must not overflow horizontally`,
+        `Settings ${key} must not overflow horizontally`,
         settingsEvidence
       );
     }
-    assertCondition(keyButtonBoxes.length === 2, 'Observability key actions must render both commands', keyButtonBoxes);
-    const [firstKeyButton, secondKeyButton] = keyButtonBoxes;
-    assertCondition(
-      [
-        firstKeyButton.right <= secondKeyButton.left,
-        firstKeyButton.bottom <= secondKeyButton.top
-      ].some((separated) => separated),
-      'Observability key action buttons must not overlap',
-      keyButtonBoxes
-    );
   }
 
   await page.setViewportSize({ width: 640, height: 640 });

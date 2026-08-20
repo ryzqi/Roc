@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
-import { runWithLangSmithTracing } from '../../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../../src/main/services/forge-guardrails';
 import {
@@ -169,7 +168,6 @@ describe('live agent quality judge contract', () => {
 describe.runIf(hasLiveAnthropicApiKey())('Roc live agent quality eval', () => {
   it.each(dataset.cases)('$id', async (scenario) => {
     const apiKey = requireLiveAnthropicApiKey();
-    disableAmbientLangSmithTracing();
     const guardedFetch = createAnthropicOnlyFetch(globalThis.fetch);
     vi.stubGlobal('fetch', guardedFetch);
     const db = new Database(':memory:');
@@ -179,24 +177,22 @@ describe.runIf(hasLiveAnthropicApiKey())('Roc live agent quality eval', () => {
       applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const agentModel = createLiveAnthropicModel(dataset.agentModel, apiKey, guardedFetch);
-      const result = await runWithLangSmithTracing(null, async () => {
-        const agent = createEvalAgent({
-          mode: scenario.mode,
-          model: agentModel,
-          checkpointer,
-          systemPrompt: 'Respond directly. Use tools only when the user explicitly requires them.'
-        });
-        return await agent.invoke(
-          {
-            forge_error_tracker: defaultErrorTracker(),
-            messages: [new HumanMessage(scenario.prompt)]
-          },
-          {
-            configurable: { thread_id: threadId },
-            signal: AbortSignal.timeout(liveCallTimeoutMs)
-          }
-        );
+      const agent = createEvalAgent({
+        mode: scenario.mode,
+        model: agentModel,
+        checkpointer,
+        systemPrompt: 'Respond directly. Use tools only when the user explicitly requires them.'
       });
+      const result = await agent.invoke(
+        {
+          forge_error_tracker: defaultErrorTracker(),
+          messages: [new HumanMessage(scenario.prompt)]
+        },
+        {
+          configurable: { thread_id: threadId },
+          signal: AbortSignal.timeout(liveCallTimeoutMs)
+        }
+      );
 
       const candidateResponse = assertTerminalOutcome(result.messages);
       expect(readTrajectory(result.messages)).toEqual(scenario.expected.trajectory);
@@ -220,12 +216,10 @@ describe.runIf(hasLiveAnthropicApiKey())('Roc live agent quality eval', () => {
       const structuredJudge = judgeModel.withStructuredOutput(qualityJudgeResultSchema, {
         name: 'roc_agent_live_eval_quality_judge'
       });
-      const quality = await runWithLangSmithTracing(null, async () =>
-        await invokeQualityJudge(
-          async (messages, options) => await structuredJudge.invoke(messages, options),
-          scenario,
-          candidateResponse
-        )
+      const quality = await invokeQualityJudge(
+        async (messages, options) => await structuredJudge.invoke(messages, options),
+        scenario,
+        candidateResponse
       );
 
       expect(quality.score).toBeGreaterThanOrEqual(scenario.quality.minimumScore);
@@ -353,13 +347,4 @@ function requireLiveAnthropicApiKey(): string {
     throw new Error('agent_eval_anthropic_api_key_missing');
   }
   return apiKey;
-}
-
-function disableAmbientLangSmithTracing(): void {
-  vi.stubEnv('LANGSMITH_TRACING_V2', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
-  vi.stubEnv('LANGSMITH_TRACING', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING', 'false');
-  vi.stubEnv('LANGSMITH_API_KEY', '');
-  vi.stubEnv('LANGCHAIN_API_KEY', '');
 }

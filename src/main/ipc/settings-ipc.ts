@@ -2,6 +2,7 @@ import { ipcChannels } from '../../shared/ipc';
 import type {
   McpServerSnapshot,
   ProviderSecretSetRequest,
+  ProviderTestRequest,
   SettingsSaveHookConfigRequest,
   SettingsSaveRequest,
   SettingsSnapshot,
@@ -51,8 +52,8 @@ export function registerSettingsIpc(
       return await buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls, hooks);
     })
   );
-  timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>
-    wrapIpc(() => providerRuntimeService.testProvider(id))
+  timedHandle(ipcChannels.settingsTestProvider, (_event, request: ProviderTestRequest) =>
+    wrapIpc(() => providerRuntimeService.testProvider(request))
   );
   timedHandle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
     wrapIpc(() => {

@@ -17,12 +17,3 @@ export type AgentLifecycleHookEmitter = {
     error: string | null;
   }): Promise<void>;
 };
-
-export type AgentRunTracingLifecycle = {
-  finishRun(input: {
-    runId: string;
-    status: 'cancelled' | 'completed' | 'failed' | 'interrupted';
-    error: string | null;
-  }): Promise<void>;
-  shutdown(): Promise<void>;
-};

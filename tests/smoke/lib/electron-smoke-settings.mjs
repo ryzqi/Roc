@@ -45,7 +45,7 @@ export async function runSmokeSettingsChecks(ctx) {
   await page.waitForSelector('[data-testid="provider-list-item-nvidia"]', { timeout: 5000 });
   providerSettingsEvidence.nvidiaListed = true;
   providerSettingsEvidence.nvidiaFixedDetail = await page.evaluate(() => {
-    const models = document.querySelector('[data-testid="provider-draft-models"]');
+    const models = document.querySelector('[data-testid="provider-model-card-0"]');
     const legacyModelId = document.querySelector('[data-testid="provider-draft-model-id"]');
     const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
     const deleteButton = document.querySelector('[data-testid="provider-delete-nvidia"]');
@@ -54,7 +54,7 @@ export async function runSmokeSettingsChecks(ctx) {
       (element) => element.textContent?.trim() ?? ''
     );
     return (
-      models instanceof HTMLTextAreaElement &&
+      models instanceof HTMLElement &&
       legacyModelId === null &&
       endpoint instanceof HTMLInputElement &&
       endpoint.readOnly === true &&
@@ -63,10 +63,10 @@ export async function runSmokeSettingsChecks(ctx) {
       !statusPills.includes('Fixed')
     );
   });
-  await page.fill(
-    '[data-testid="provider-draft-models"]',
-    'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct | Llama 3.3 70B'
-  );
+  await setFirstModel(page, 'moonshotai/kimi-k2.6', 'Kimi K2.6');
+  await clickSmokeControl(page, '[data-testid="provider-model-add"]');
+  await page.fill('[data-testid="provider-model-id-1"]', 'meta/llama-3.3-70b-instruct');
+  await page.fill('[data-testid="provider-model-name-1"]', 'Llama 3.3 70B');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
     async () => {
@@ -75,30 +75,27 @@ export async function runSmokeSettingsChecks(ctx) {
         return false;
       }
       const provider = result.data.providers.find((entry) => entry.id === 'nvidia');
-      const models = document.querySelector('[data-testid="provider-draft-models"]');
       return (
         provider !== undefined &&
         provider.models.length === 2 &&
         provider.models[0]?.id === 'moonshotai/kimi-k2.6' &&
         provider.models[1]?.id === 'meta/llama-3.3-70b-instruct' &&
-        models instanceof HTMLTextAreaElement &&
-        models.value.includes('moonshotai/kimi-k2.6 | Kimi K2.6') &&
-        models.value.includes('meta/llama-3.3-70b-instruct | Llama 3.3 70B')
+        document.querySelector('[data-testid="provider-model-card-1"]') instanceof HTMLElement
       );
     },
     undefined,
     { timeout: 5000 }
   );
   await clickSmokeControl(page, '[data-testid="provider-list-item-llama_cpp"]');
-  await page.waitForSelector('[data-testid="provider-test-llama_cpp"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="provider-model-test-0"]', { timeout: 5000 });
   providerSettingsEvidence.llamaCppListed = true;
   providerSettingsEvidence.llamaCppFixedDetail = await page.evaluate(() => {
-    const models = document.querySelector('[data-testid="provider-draft-models"]');
+    const models = document.querySelector('[data-testid="provider-model-card-0"]');
     const name = document.querySelector('[data-testid="provider-draft-name"]');
     const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
     const deleteButton = document.querySelector('[data-testid="provider-delete-llama_cpp"]');
     return (
-      models instanceof HTMLTextAreaElement &&
+      models instanceof HTMLElement &&
       name === null &&
       endpoint instanceof HTMLInputElement &&
       endpoint.readOnly === false &&
@@ -106,7 +103,7 @@ export async function runSmokeSettingsChecks(ctx) {
       deleteButton === null
     );
   });
-  await page.fill('[data-testid="provider-draft-models"]', 'qwen3.5-4b | Qwen 3.5 4B');
+  await setFirstModel(page, 'qwen3.5-4b', 'Qwen 3.5 4B');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
     async () => {
@@ -116,7 +113,6 @@ export async function runSmokeSettingsChecks(ctx) {
       }
       const provider = result.data.providers.find((entry) => entry.id === 'llama_cpp');
       const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
-      const models = document.querySelector('[data-testid="provider-draft-models"]');
       return (
         provider !== undefined &&
         provider.credentialRef === null &&
@@ -125,8 +121,7 @@ export async function runSmokeSettingsChecks(ctx) {
         provider.models[0]?.id === 'qwen3.5-4b' &&
         endpoint instanceof HTMLInputElement &&
         endpoint.value === 'http://127.0.0.1:8081/v1' &&
-        models instanceof HTMLTextAreaElement &&
-        models.value.includes('qwen3.5-4b | Qwen 3.5 4B')
+        document.querySelector('[data-testid="provider-model-id-0"]')?.value === 'qwen3.5-4b'
       );
     },
     undefined,
@@ -227,7 +222,7 @@ export async function runSmokeSettingsChecks(ctx) {
   const openaiProviderName = 'Smoke UI OpenAI';
   await page.fill('[data-testid="provider-draft-name"]', openaiProviderName);
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model');
+  await setFirstModel(page, 'smoke-ui-openai-model', 'Smoke UI OpenAI Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
     async (providerName) => {
@@ -324,7 +319,7 @@ export async function runSmokeSettingsChecks(ctx) {
   const chineseProviderName = '中文模型供应商';
   await page.fill('[data-testid="provider-draft-name"]', chineseProviderName);
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-models"]', 'zh-smoke-model | 中文模型');
+  await setFirstModel(page, 'zh-smoke-model', '中文模型');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
     async (providerName) => {
@@ -458,7 +453,7 @@ export async function runSmokeSettingsChecks(ctx) {
   await page.fill('[data-testid="provider-draft-name"]', anthropicProviderName);
   await page.fill('[data-testid="provider-draft-api-key"]', 'sk-smoke-ui-anthropic');
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model');
+  await setFirstModel(page, 'smoke-ui-anthropic-model', 'Smoke UI Anthropic Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
     async (providerName) => {
@@ -573,10 +568,9 @@ export async function runSmokeSettingsChecks(ctx) {
         provider.id === providerId
           ? {
               ...provider,
-              options: {
-                ...provider.options,
-                contextBudgetTokens
-              }
+              models: provider.models.map((model, index) =>
+                index === 0 ? { ...model, options: { ...model.options, contextBudgetTokens } } : model
+              )
             }
           : provider
       ),
@@ -590,7 +584,7 @@ export async function runSmokeSettingsChecks(ctx) {
       throw new Error(refreshed.error.message);
     }
     const persisted = refreshed.data.providers.find((provider) => provider.id === providerId);
-    if (persisted?.options?.contextBudgetTokens !== contextBudgetTokens) {
+    if (persisted?.models[0]?.options?.contextBudgetTokens !== contextBudgetTokens) {
       throw new Error('smoke_provider_context_budget_not_persisted');
     }
   }, { providerId: openaiProviderId, contextBudgetTokens: 128_000 });
@@ -610,4 +604,13 @@ export async function runSmokeSettingsChecks(ctx) {
     providerSettingsEvidence,
     settingsText
   });
+}
+
+async function setFirstModel(page, id, displayName) {
+  const modelId = page.locator('[data-testid="provider-model-id-0"]');
+  if ((await modelId.count()) === 0) {
+    await clickSmokeControl(page, '[data-testid="provider-model-add"]');
+  }
+  await page.fill('[data-testid="provider-model-id-0"]', id);
+  await page.fill('[data-testid="provider-model-name-0"]', displayName);
 }
