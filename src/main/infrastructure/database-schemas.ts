@@ -379,9 +379,10 @@ export const agentMigrations: RocDatabaseMigration[] = [
       );
 
       INSERT INTO agent_thread_event_cursors (thread_id, next_sequence)
-      SELECT thread_id, MAX(sequence) + 1
-      FROM agent_events
-      GROUP BY thread_id;
+      SELECT events.thread_id, MAX(events.sequence) + 1
+      FROM agent_events AS events
+      INNER JOIN agent_threads AS threads ON threads.id = events.thread_id
+      GROUP BY events.thread_id;
 
       CREATE TABLE agent_run_event_cursors (
         run_id        TEXT PRIMARY KEY,
@@ -390,9 +391,10 @@ export const agentMigrations: RocDatabaseMigration[] = [
       );
 
       INSERT INTO agent_run_event_cursors (run_id, next_sequence)
-      SELECT run_id, MAX(sequence) + 1
-      FROM agent_run_events
-      GROUP BY run_id;
+      SELECT events.run_id, MAX(events.sequence) + 1
+      FROM agent_run_events AS events
+      INNER JOIN agent_runs AS runs ON runs.id = events.run_id
+      GROUP BY events.run_id;
     `
   },
   {

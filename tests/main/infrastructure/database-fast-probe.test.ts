@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runDatabaseFastProbe } from '../../../src/main/infrastructure/database-fast-probe';
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
-import { applyTaskDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
+import { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
+import {
+  agentMigrations,
+  applyAgentDatabaseSchema,
+  applyTaskDatabaseSchema
+} from '../../../src/main/infrastructure/database-schemas';
 
 let root: string;
 let pool: DatabasePool;
@@ -96,5 +101,32 @@ describe('runDatabaseFastProbe', () => {
         detail: 'schema_table_missing:agent_run_telemetry'
       })
     );
+  });
+
+  it('upgrades a version 2 agent database while preserving orphaned historical run events', () => {
+    const agentDb = pool.getConnection('@roc/plugin-agent');
+    applyDatabaseMigrations(agentDb, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 2),
+      now: () => '2026-07-10T00:00:00.000Z'
+    });
+    agentDb
+      .prepare(
+        `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run('deleted-run', 1, '{"type":"run_completed"}', '2026-07-10T00:00:00.000Z');
+
+    expect(() => applyAgentDatabaseSchema(agentDb, () => '2026-07-10T00:00:01.000Z')).not.toThrow();
+    expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_events WHERE run_id = ?').pluck().get('deleted-run')).toBe(1);
+
+    const report = runDatabaseFastProbe({
+      pool,
+      now: () => '2026-07-10T00:00:02.000Z'
+    });
+    expect(report.databases.find((item) => item.dbName === 'agent')).toMatchObject({
+      status: 'healthy',
+      schemaVersion: 13
+    });
   });
 });
