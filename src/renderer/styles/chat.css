@@ -188,7 +188,7 @@
 
 .chat-assistant-content {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
