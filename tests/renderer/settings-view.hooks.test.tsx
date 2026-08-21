@@ -96,16 +96,16 @@ describe('SettingsView hooks', () => {
     expect(queryByTestId('settings-panel-hooks')).not.toBeNull();
 
     setTextareaValue(JSON.stringify(editedConfig, null, 2));
-    await clickButton('Save');
+    await clickButton('保存');
     expect(saveHooks).toHaveBeenCalledWith({ config: editedConfig });
     expect(updateLoadedState).toHaveBeenCalledWith({
       hookSettings: expect.objectContaining({ config: editedConfig })
     });
 
-    await clickButton('Refresh');
+    await clickButton('刷新');
     expect(getHooks).toHaveBeenCalledTimes(1);
 
-    await clickButton('Trust current command');
+    await clickButton('信任当前命令');
     expect(trustHook).toHaveBeenCalledWith({ handlerId: 'PreToolUse:0:0', hash: 'abc123' });
   });
 

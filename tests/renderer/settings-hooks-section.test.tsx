@@ -34,7 +34,7 @@ describe('HooksSection', () => {
     expect(container.textContent).toContain('PreToolUse');
     expect(container.textContent).toContain('review_required');
 
-    await clickButton('Trust current command');
+    await clickButton('信任当前命令');
 
     expect(onTrust).toHaveBeenCalledWith({ handlerId: 'PreToolUse:0:0', hash: 'abc123' });
   });
@@ -67,7 +67,7 @@ describe('HooksSection', () => {
     };
 
     setTextareaValue(JSON.stringify(editedConfig, null, 2));
-    await clickButton('Save');
+    await clickButton('保存');
 
     expect(onSave).toHaveBeenCalledWith({ config: editedConfig });
   });
@@ -82,7 +82,7 @@ describe('HooksSection', () => {
     });
 
     setTextareaValue('{');
-    await clickButton('Refresh');
+    await clickButton('刷新');
     expect(onRefresh).toHaveBeenCalledTimes(1);
 
     const refreshed = buildSnapshot({
@@ -126,7 +126,7 @@ describe('HooksSection', () => {
     });
 
     setTextareaValue('{');
-    await clickButton('Save');
+    await clickButton('保存');
 
     expect(container.textContent).toContain('JSON');
     expect(container.textContent).toContain('handler 0 command is empty');
@@ -144,7 +144,7 @@ describe('HooksSection', () => {
       onSave
     });
 
-    await clickButton('Save');
+    await clickButton('保存');
 
     expect(container.textContent).toContain('hooks save failed');
   });

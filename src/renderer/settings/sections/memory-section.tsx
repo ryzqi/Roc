@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { AppSettings } from '../../../shared/types';
+import { CheckboxInput, TextInput } from '../../components/ui';
 import { FieldRow } from '../atoms';
 
 export function MemorySection({
@@ -54,7 +55,7 @@ export function MemorySection({
         <div className="settings-section-group">
           <h3 className="settings-group-title">会话回忆</h3>
           <FieldRow hint="会话回忆超过保留期会被自动清理；策展记忆不受影响。" label="会话回忆保留">
-            <input
+            <TextInput
               data-testid="settings-memory-session-retention-days"
               onChange={(event) => {
                 const value = parsePositiveInteger(event.currentTarget.value);
@@ -74,36 +75,36 @@ export function MemorySection({
           <details className="settings-advanced">
             <summary>高级保护</summary>
             <div className="form-grid">
-              <label className="field checkbox-field">
+              <label className="field checkbox-field ui-checkbox">
                 <span>Prompt injection 扫描</span>
-                <input
+                <CheckboxInput
                   checked={draft.memory.securityScan.promptInjection}
                   data-testid="settings-memory-security-prompt-injection"
                   onChange={(event) => patchSecurityScan('promptInjection', event.currentTarget.checked)}
                   type="checkbox"
                 />
               </label>
-              <label className="field checkbox-field">
+              <label className="field checkbox-field ui-checkbox">
                 <span>凭据扫描</span>
-                <input
+                <CheckboxInput
                   checked={draft.memory.securityScan.credential}
                   data-testid="settings-memory-security-credential"
                   onChange={(event) => patchSecurityScan('credential', event.currentTarget.checked)}
                   type="checkbox"
                 />
               </label>
-              <label className="field checkbox-field">
+              <label className="field checkbox-field ui-checkbox">
                 <span>SSH 后门扫描</span>
-                <input
+                <CheckboxInput
                   checked={draft.memory.securityScan.sshBackdoor}
                   data-testid="settings-memory-security-ssh-backdoor"
                   onChange={(event) => patchSecurityScan('sshBackdoor', event.currentTarget.checked)}
                   type="checkbox"
                 />
               </label>
-              <label className="field checkbox-field">
+              <label className="field checkbox-field ui-checkbox">
                 <span>不可见字符扫描</span>
-                <input
+                <CheckboxInput
                   checked={draft.memory.securityScan.invisibleUnicode}
                   data-testid="settings-memory-security-invisible-unicode"
                   onChange={(event) => patchSecurityScan('invisibleUnicode', event.currentTarget.checked)}
@@ -118,7 +119,7 @@ export function MemorySection({
             <summary>高级容量</summary>
             <div className="form-grid">
               <FieldRow hint="USER.md 最大字符数。" label="USER 容量">
-                <input
+                <TextInput
                   data-testid="settings-memory-char-limit-user"
                   onChange={(event) => {
                     const value = parsePositiveInteger(event.currentTarget.value);
@@ -132,7 +133,7 @@ export function MemorySection({
                 />
               </FieldRow>
               <FieldRow hint="AGENTS.md 最大字符数。" label="AGENTS 容量">
-                <input
+                <TextInput
                   data-testid="settings-memory-char-limit-agents"
                   onChange={(event) => {
                     const value = parsePositiveInteger(event.currentTarget.value);
@@ -146,7 +147,7 @@ export function MemorySection({
                 />
               </FieldRow>
               <FieldRow hint="MEMORY.md 最大字符数。" label="MEMORY 容量">
-                <input
+                <TextInput
                   data-testid="settings-memory-char-limit-memory"
                   onChange={(event) => {
                     const value = parsePositiveInteger(event.currentTarget.value);

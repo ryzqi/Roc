@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../../animations';
 import { focusDialogInitialElement, trapDialogTabFocus } from '../../dialog-focus';
+import { Button, TextArea } from '../../components/ui';
 
 export function TaskCreateDialog({
   open,
@@ -130,7 +131,7 @@ export function TaskCreateDialog({
                     <div className="task-create-form-grid">
                       <label className="task-form-field task-form-field--wide">
                         <span>自然语言描述</span>
-                        <textarea
+                        <TextArea
                           data-testid="task-create-description"
                           ref={descriptionRef}
                           rows={8}
@@ -146,12 +147,10 @@ export function TaskCreateDialog({
                   {error === null ? null : <span className="pill warn" data-testid="task-create-error">{error}</span>}
                 </div>
                 <div className="task-create-dialog-actions action-strip">
-                  <button data-testid="task-create-submit" type="button" onClick={() => void submit()} disabled={submitting}>
+                  <Button data-testid="task-create-submit" onClick={() => void submit()} disabled={submitting} variant="primary">
                     {submitting ? '提交中' : '创建任务'}
-                  </button>
-                  <button type="button" onClick={onClose}>
-                    关闭
-                  </button>
+                  </Button>
+                  <Button onClick={onClose}>关闭</Button>
                 </div>
               </div>
             </div>

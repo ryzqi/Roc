@@ -5,6 +5,7 @@ import {
 } from '../../settings-model';
 import type { ProviderConfig } from '../../../shared/types';
 import { InfoRow, StatusPill } from '../atoms';
+import { Button } from '../../components/ui';
 
 export function DefaultModelSection({
   defaultModelId,
@@ -47,20 +48,18 @@ export function DefaultModelSection({
             <span className={defaultModelId === option.modelKey ? 'pill ok' : 'pill info'}>
               {defaultModelId === option.modelKey ? '默认' : '可选'}
             </span>
-            <button
+            <Button
               data-testid={`default-model-${option.providerId}-${option.modelId}`}
               onClick={() => void onSelectDefaultModel(option.modelKey)}
-              type="button"
+              size="compact"
             >
               设为默认
-            </button>
+            </Button>
           </div>
         ))
       )}
       <div className="settings-actions">
-        <button data-testid="default-model-clear" onClick={() => void onClearDefaultModel()} type="button">
-          清除默认
-        </button>
+        <Button data-testid="default-model-clear" onClick={() => void onClearDefaultModel()}>清除默认</Button>
       </div>
       <p className="card-hint">
         默认模型必须来自已启用 Provider 下的已启用模型；当前设置无法静默 fallback。

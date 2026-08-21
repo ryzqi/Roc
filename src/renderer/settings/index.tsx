@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import type {
   AppSettings,
@@ -41,6 +41,7 @@ import { AuthSecuritySection } from './sections/auth-security-section';
 import { HooksSection } from './sections/hooks-section';
 import { MemorySection } from './sections/memory-section';
 import { TaskSettingsSection } from './sections/task-settings-section';
+import { ConfirmDialog } from '../components/ui';
 
 export type SettingsViewState = {
   settings: AppSettings;
@@ -59,15 +60,19 @@ export type SettingsViewUpdate = (partial: Partial<LoadedState>) => void;
 
 export function SettingsView({
   client,
+  onProviderDirtyChange,
   state,
   updateLoadedState
 }: {
   client?: RocClient;
+  onProviderDirtyChange?: (dirty: boolean) => void;
   state: SettingsViewState;
   updateLoadedState: SettingsViewUpdate;
 }): React.JSX.Element {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('providers');
   const [providerDraft, setProviderDraft] = useState<ProviderDraft>(() => createInitialProviderDraft(state.providers));
+  const [providerDraftBaseline, setProviderDraftBaseline] = useState<ProviderDraft>(() => createInitialProviderDraft(state.providers));
+  const [pendingProviderNavigation, setPendingProviderNavigation] = useState<{ run: () => void } | null>(null);
   const [providerDraftError, setProviderDraftError] = useState<string | null>(null);
   const [secretBusyProviderId, setSecretBusyProviderId] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState<boolean>(false);
@@ -83,6 +88,23 @@ export function SettingsView({
     baseDefaultModelId: state.defaultModelId,
     baseProviders: state.providers
   });
+  const providerDraftDirty = useMemo(
+    () => JSON.stringify(providerDraft) !== JSON.stringify(providerDraftBaseline),
+    [providerDraft, providerDraftBaseline]
+  );
+
+  useEffect(() => {
+    onProviderDirtyChange?.(providerDraftDirty);
+    return () => onProviderDirtyChange?.(false);
+  }, [onProviderDirtyChange, providerDraftDirty]);
+
+  function navigateFromProvider(run: () => void): void {
+    if (providerDraftDirty) {
+      setPendingProviderNavigation({ run });
+      return;
+    }
+    run();
+  }
 
   const buildBaseSaveRequest = useCallback(
     () =>
@@ -107,12 +129,17 @@ export function SettingsView({
   }, []);
 
   const startNewProvider = useCallback((type: CreatableProviderType): void => {
-    setProviderDraft(createProviderDraft(type));
-    setProviderDraftError(null);
-    setActiveSection('providers');
-  }, []);
+    navigateFromProvider(() => {
+      const nextDraft = createProviderDraft(type);
+      setProviderDraft(nextDraft);
+      setProviderDraftBaseline(nextDraft);
+      setProviderDraftError(null);
+      setActiveSection('providers');
+    });
+  }, [providerDraftDirty]);
 
   const editProvider = useCallback((provider: ProviderConfig): void => {
+    if (providerDraft.mode === 'edit' && providerDraft.id === provider.id) return;
     if (
       provider.type !== 'openai_compatible' &&
       provider.type !== 'anthropic_compatible' &&
@@ -123,10 +150,15 @@ export function SettingsView({
       setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible、NVIDIA、OpenRouter 和 llama.cpp provider。');
       return;
     }
-    setProviderDraft(createProviderDraft(provider.type, provider));
-    setProviderDraftError(null);
-    setActiveSection('providers');
-  }, []);
+    const editableType = provider.type;
+    navigateFromProvider(() => {
+      const nextDraft = createProviderDraft(editableType, provider);
+      setProviderDraft(nextDraft);
+      setProviderDraftBaseline(nextDraft);
+      setProviderDraftError(null);
+      setActiveSection('providers');
+    });
+  }, [providerDraft.id, providerDraft.mode, providerDraftDirty]);
 
   const saveProviderDraft = useCallback(async (): Promise<void> => {
     let provider: ProviderConfig;
@@ -162,16 +194,20 @@ export function SettingsView({
     }
     setProviderDraft(nextDraft);
     if (apiKey.length === 0) {
+      setProviderDraftBaseline(nextDraft);
       setProviderDraftError(null);
       return;
     }
+    setProviderDraftBaseline(createProviderDraft(providerDraft.type, savedProvider));
     try {
       const refreshed = await saveProviderSecret(savedProvider.id, apiKey);
       const refreshedProvider = refreshed.providers.find((entry) => entry.id === savedProvider.id) ?? savedProvider;
-      setProviderDraft({
+      const refreshedDraft = {
         ...createProviderDraft(providerDraft.type, refreshedProvider),
         apiKey: ''
-      });
+      };
+      setProviderDraft(refreshedDraft);
+      setProviderDraftBaseline(refreshedDraft);
       setProviderDraftError(null);
     } catch (error) {
       setProviderDraft(nextDraft);
@@ -192,7 +228,9 @@ export function SettingsView({
       } else {
         updateLoadedState(await buildSettingsStateUpdate(resolveClient(), saved));
       }
-      setProviderDraft(createInitialProviderDraft(saved.providers));
+      const nextDraft = createInitialProviderDraft(saved.providers);
+      setProviderDraft(nextDraft);
+      setProviderDraftBaseline(nextDraft);
     },
     [buildBaseSaveRequest, client, state.defaultModelId, updateLoadedState]
   );
@@ -339,7 +377,15 @@ export function SettingsView({
                   className={activeSection === item.id ? 'settings-item active' : 'settings-item'}
                   data-testid={`settings-section-${item.id}`}
                   key={item.id}
-                  onClick={() => setActiveSection(selectSettingsSection(activeSection, item.id))}
+                  onClick={() => {
+                    const nextSection = selectSettingsSection(activeSection, item.id);
+                    if (nextSection === activeSection) return;
+                    if (activeSection === 'providers') {
+                      navigateFromProvider(() => setActiveSection(nextSection));
+                      return;
+                    }
+                    setActiveSection(nextSection);
+                  }}
                   type="button"
                 >
                   <span>{item.label}</span>
@@ -409,6 +455,20 @@ export function SettingsView({
           </div>
         </div>
       </section>
+      <ConfirmDialog
+        confirmLabel="放弃修改"
+        description="当前 Provider 有未保存修改。继续后这些修改会丢失。"
+        onCancel={() => setPendingProviderNavigation(null)}
+        onConfirm={() => {
+          const pending = pendingProviderNavigation;
+          setPendingProviderNavigation(null);
+          setProviderDraft(providerDraftBaseline);
+          setProviderDraftError(null);
+          pending?.run();
+        }}
+        open={pendingProviderNavigation !== null}
+        title="放弃 Provider 修改？"
+      />
     </>
   );
 }

@@ -280,6 +280,16 @@
   transform: translateX(16px);
 }
 
+.provider-model-test-feedback {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.provider-model-test-feedback--ready { color: var(--st-ok); }
+.provider-model-test-feedback--invalid { color: var(--st-bad); }
+
 .provider-type-section {
   display: grid;
   gap: 8px;
@@ -460,54 +470,54 @@
     max-height: 220px;
   }
 }
-.provider-model-editor {
-  display: grid;
-  gap: 10px;
-}
-
+.provider-model-editor { display: grid; gap: 10px; }
 .provider-model-editor__heading,
-.provider-model-card__header,
-.provider-model-card__actions,
-.provider-model-capabilities {
+.provider-model-capabilities { display: flex; align-items: center; }
+.provider-model-editor__heading { justify-content: space-between; gap: 12px; }
+.provider-model-capabilities { flex-wrap: wrap; gap: 8px; }
+
+.provider-search-wrap {
+  position: relative;
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
 }
+.provider-search-wrap > svg { position: absolute; left: 11px; color: var(--muted); pointer-events: none; }
+.provider-search-wrap .provider-search,
+.provider-search-wrap .ui-input { padding-left: 34px; }
+.provider-list-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.provider-list-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provider-list-copy small { color: var(--muted); font-size: var(--font-meta-size); font-weight: 400; }
+.provider-model-editor { gap: 12px; }
+.provider-model-editor__heading > div { display: grid; gap: 3px; }
+.provider-model-editor__heading > div > span { color: var(--muted); font-size: var(--font-meta-size); }
+.provider-model-toolbar { display: flex; align-items: center; gap: 12px; }
+.provider-model-toolbar .provider-search-wrap { min-width: 180px; }
+.provider-model-table { min-height: 96px; max-height: min(420px, 42vh); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.provider-model-row { display: flex; min-height: 58px; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--surface); transition: background var(--transition-fast), border-color var(--transition-fast); }
+.provider-model-row:last-child { border-bottom: 0; }
+.provider-model-row.active { background: var(--accent-soft); }
+.provider-model-row__select { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 0; background: transparent; text-align: left; }
+.provider-model-row__select:hover { background: transparent; }
+.provider-model-state { width: 8px; height: 8px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; }
+.provider-model-state.enabled { border-color: var(--st-ok); background: var(--st-ok); }
+.provider-model-row__copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 3px; }
+.provider-model-row__copy strong { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.provider-model-row__copy code { overflow: hidden; color: var(--muted); font-size: var(--font-meta-size); text-overflow: ellipsis; white-space: nowrap; }
+.provider-model-row__capabilities { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; }
+.provider-model-capability { padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.provider-model-row__actions { display: flex; align-items: center; gap: 2px; padding: 0 8px 0 4px; }
+.provider-model-drawer-form { display: grid; gap: 16px; }
+.provider-model-advanced { border-top: 1px solid var(--line); padding-top: 14px; }
+.provider-model-advanced summary { color: var(--text); cursor: pointer; font-size: var(--font-ui-size); font-weight: 600; }
+.provider-model-advanced[open] summary { margin-bottom: 12px; }
+.provider-model-drawer-form .provider-model-capabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.provider-detail-actions .ui-button--danger { margin-left: 0; }
 
-.provider-model-editor__heading,
-.provider-model-card__header {
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.provider-model-card {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
-}
-
-.provider-model-card__actions,
-.provider-model-capabilities {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.provider-model-capabilities label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.provider-model-card__identity {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-@media (max-width: 720px) {
-  .provider-model-card__identity {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@media (max-width: 760px) {
+  .provider-model-toolbar { align-items: stretch; flex-direction: column; }
+  .provider-model-toolbar .provider-search-wrap { min-width: 0; }
+  .provider-model-row__capabilities { display: none; }
+  .provider-model-row__actions { padding-right: 5px; }
 }

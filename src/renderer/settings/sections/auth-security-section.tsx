@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { ApprovalMode, PermissionsConfig } from '../../../shared/types';
+import { Radio } from '../../components/ui';
 import { InfoRow } from '../atoms';
 
 const approvalModes: Array<{
@@ -47,18 +48,16 @@ export function AuthSecuritySection({
         </p>
         <div className="form-grid">
           {approvalModes.map((option) => (
-            <label className="field" key={option.value}>
-              <span>{option.title}</span>
-              <input
+            <div className="field" key={option.value}>
+              <Radio
                 checked={draft.mode === option.value}
                 data-testid={option.testId}
                 name="settings-approval-mode"
                 onChange={() => setApprovalMode(option.value)}
-                type="radio"
                 value={option.value}
-              />
+              >{option.title}</Radio>
               <small className="field-hint">{option.description}</small>
-            </label>
+            </div>
           ))}
         </div>
       </div>

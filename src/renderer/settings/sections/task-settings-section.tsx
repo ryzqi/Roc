@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type React from 'react';
 import type { AppSettings } from '../../../shared/types';
+import { SwitchInput, TextInput } from '../../components/ui';
 import { FieldRow } from '../atoms';
 
 type NumberFieldName =
@@ -125,7 +126,7 @@ export function TaskSettingsSection({
         <div className="form-grid">
           {thresholdRules.map((rule) => (
             <FieldRow hint={rule.hint} key={rule.field} label={rule.label}>
-              <input
+              <TextInput
                 data-testid={rule.testId}
                 inputMode="numeric"
                 min={rule.min}
@@ -143,9 +144,9 @@ export function TaskSettingsSection({
       <div className="settings-section-group">
         <h3 className="settings-group-title">后台调度</h3>
         <div className="form-grid">
-          <label className="field checkbox-field settings-toggle-row">
+          <label className="field checkbox-field settings-toggle-row ui-switch">
             <span>启动时补跑</span>
-            <input
+            <SwitchInput
               checked={draft.tasks.scheduler.catchUpOnStartup}
               data-testid="settings-task-catch-up-on-startup"
               onChange={(event) =>
@@ -165,7 +166,7 @@ export function TaskSettingsSection({
             <small className="field-hint">应用启动时补跑错过触发时间的后台任务。</small>
           </label>
           <FieldRow hint={schedulerRule.hint} label={schedulerRule.label}>
-            <input
+            <TextInput
               data-testid={schedulerRule.testId}
               inputMode="numeric"
               min={schedulerRule.min}

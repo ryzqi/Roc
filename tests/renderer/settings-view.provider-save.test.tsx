@@ -92,6 +92,7 @@ describe('SettingsView provider save', () => {
     });
     setInputValue('provider-draft-name', 'Provider Without Key');
     setInputValue('provider-draft-endpoint', 'https://openai.example.test/v1');
+    await clickByTestId('provider-model-open-0');
     setInputValue('provider-model-id-0', 'gpt-x');
     setInputValue('provider-model-name-0', 'GPT X');
 
@@ -358,6 +359,7 @@ describe('SettingsView provider save', () => {
     await act(async () => {
       queryByTestId('provider-list-item-provider-a')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await clickByTestId('provider-model-open-0');
     setInputValue('provider-model-id-0', 'model-b');
     setInputValue('provider-model-name-0', 'Model B');
     await act(async () => {
@@ -374,6 +376,44 @@ describe('SettingsView provider save', () => {
         agentCapabilityPreview: null
       })
     );
+  });
+
+  it('discards provider draft changes before navigating to another settings section', async () => {
+    const snapshot = buildSettingsSnapshot();
+    const client: RocClient = {
+      api: {
+        settings: {
+          get: vi.fn(), save: vi.fn(), testProvider: vi.fn(), setProviderSecret: vi.fn(), clearProviderSecret: vi.fn()
+        }
+      }
+    } as unknown as RocClient;
+    await act(async () => {
+      root.render(React.createElement(SettingsView, {
+        client,
+        state: {
+          settings: snapshot.settings,
+          providers: snapshot.providers,
+          defaultModelId: snapshot.defaultModelId,
+          providerSecretStatus: snapshot.providerSecretStatus,
+          permissions: snapshot.permissions,
+          mcpServers: snapshot.mcpServers,
+          skills: snapshot.skills,
+          hookSettings: snapshot.hooks,
+          hostIntegration: snapshot.hostIntegration,
+          providerTestStatus: null
+        },
+        updateLoadedState: () => {}
+      }));
+    });
+    setInputValue('provider-draft-endpoint', 'http://changed.example.test/v1');
+    await clickByTestId('settings-section-default-model');
+    expect(document.body.textContent).toContain('放弃 Provider 修改？');
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    const discard = Array.from(dialog?.querySelectorAll('button') ?? []).find((button) => button.textContent === '放弃修改');
+    await act(async () => discard?.click());
+    expect(queryByTestId('default-model-settings')).not.toBeNull();
+    await clickByTestId('settings-section-providers');
+    expect((queryByTestId('provider-draft-endpoint') as HTMLInputElement | null)?.value).toBe('http://127.0.0.1:8081/v1');
   });
 });
 
@@ -451,6 +491,14 @@ function setInputValue(testId: string, value: string): void {
   expect(setter).not.toBeUndefined();
   setter?.call(input, value);
   input?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function clickByTestId(testId: string): Promise<void> {
+  const element = queryByTestId(testId);
+  expect(element).not.toBeNull();
+  await act(async () => {
+    element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
 }
 
 function containerRef(): HTMLDivElement {

@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { AppSettings, HostIntegrationStatus } from '../../../shared/types';
+import { SwitchInput, TextInput } from '../../components/ui';
 import { FieldRow } from '../atoms';
 
 function formatOpenAtLoginHint(hostIntegration: HostIntegrationStatus): string {
@@ -46,7 +47,7 @@ export function AppBasicsSection({
         <div className="settings-section-group">
           <h3 className="settings-group-title">工作区</h3>
           <FieldRow hint="工作区切换不会自动转移已运行任务，新任务才会绑定新的工作区。" label="默认工作区">
-            <input
+            <TextInput
               data-testid="settings-default-workspace"
               onChange={(event) =>
                 onChange({
@@ -63,9 +64,9 @@ export function AppBasicsSection({
         <div className="settings-section-group">
           <h3 className="settings-group-title">窗口行为</h3>
           <div className="form-grid">
-            <label className="field checkbox-field settings-toggle-row">
+            <label className="field checkbox-field settings-toggle-row ui-switch">
               <span>开机启动</span>
-              <input
+              <SwitchInput
                 checked={draft.startup.openAtLogin}
                 data-testid="settings-startup-open-at-login"
                 onChange={(event) =>
@@ -77,13 +78,12 @@ export function AppBasicsSection({
                     }
                   })
                 }
-                type="checkbox"
               />
               <small className="field-hint">{formatOpenAtLoginHint(hostIntegration)}</small>
             </label>
-            <label className="field checkbox-field settings-toggle-row">
+            <label className="field checkbox-field settings-toggle-row ui-switch">
               <span>最小化到托盘</span>
-              <input
+              <SwitchInput
                 checked={draft.startup.minimizeToTray}
                 data-testid="settings-startup-minimize-to-tray"
                 onChange={(event) =>
@@ -95,7 +95,6 @@ export function AppBasicsSection({
                     }
                   })
                 }
-                type="checkbox"
               />
               <small className="field-hint">关闭主窗口后保持后台驻留。</small>
             </label>
@@ -107,7 +106,7 @@ export function AppBasicsSection({
             hint={formatGlobalHotkeyHint(hostIntegration)}
             label="全局快捷键"
           >
-            <input
+            <TextInput
               data-testid="settings-global-hotkey"
               onChange={(event) => {
                 const value = event.currentTarget.value.trim();

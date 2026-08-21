@@ -1,4 +1,5 @@
-import { GitBranch } from 'lucide-react';
+import { GitBranch, X } from 'lucide-react';
+import { Checkbox, IconButton, TextInput } from '../components/ui';
 
 type GitBranchPopoverProps = {
   actionBusy: boolean;
@@ -30,16 +31,14 @@ export function GitBranchPopover({
   return (
     <section className="git-branch-popover" data-testid="git-branch-controls">
       <div className="git-branch-popover-head">
-        <strong>SWITCH BRANCH</strong>
-        <button type="button" onClick={onClose}>
-          ×
-        </button>
+        <strong>切换分支</strong>
+        <IconButton label="关闭分支选择" onClick={onClose}><X size={15} /></IconButton>
       </div>
-      <input
+      <TextInput
         className="git-branch-search"
         data-testid="git-branch-select"
         disabled={actionBusy}
-        placeholder="Search branches..."
+        placeholder="搜索分支..."
         value={branchSearch}
         onChange={(event) => onBranchSearchChange(event.target.value)}
       />
@@ -60,24 +59,23 @@ export function GitBranchPopover({
         ))}
       </div>
       <div className="git-branch-create-row">
-        <input
+        <TextInput
           className="git-branch-search"
           data-testid="git-branch-create-input"
           disabled={actionBusy}
-          placeholder="new branch name"
+          placeholder="新分支名称"
           value={branchDraft}
           onChange={(event) => onBranchDraftChange(event.target.value)}
         />
-        <label className="git-branch-checkbox">
-          <input
+        <Checkbox
+          className="git-branch-checkbox"
             checked={checkoutAfterCreate}
             data-testid="git-branch-create-checkout"
             disabled={actionBusy}
-            type="checkbox"
             onChange={(event) => onCheckoutAfterCreateChange(event.target.checked)}
-          />
-          checkout
-        </label>
+        >
+          创建后切换
+        </Checkbox>
         <button
           className="git-branch-create-button"
           data-testid="git-branch-create"
@@ -87,7 +85,7 @@ export function GitBranchPopover({
             void onCreateBranch();
           }}
         >
-          Create
+          创建
         </button>
       </div>
     </section>

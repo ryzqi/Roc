@@ -6,6 +6,7 @@ import type {
   SettingsSaveHookConfigRequest,
   SettingsTrustHookRequest
 } from '../../../shared/types';
+import { Button, TextArea } from '../../components/ui';
 
 type HooksSectionProps = {
   snapshot: RocHookConfigSnapshot;
@@ -74,16 +75,14 @@ export function HooksSection({
           <p className="card-hint">{snapshot.configPath.length === 0 ? 'hooks.json' : snapshot.configPath}</p>
         </div>
         <div className="settings-actions">
-          <button className="secondary" onClick={() => void refresh()} type="button">
-            Refresh
-          </button>
+          <Button onClick={() => void refresh()}>刷新</Button>
         </div>
       </div>
       <div className="settings-form">
         <div className="settings-section-group">
           <label className="field field--full">
             <span>Hooks JSON</span>
-            <textarea
+            <TextArea
               aria-label="Hooks JSON"
               data-testid="settings-hooks-json"
               onChange={(event) => setJsonText(event.currentTarget.value)}
@@ -92,9 +91,7 @@ export function HooksSection({
             />
           </label>
           <div className="settings-actions">
-            <button className="primary" onClick={() => void save()} type="button">
-              Save
-            </button>
+            <Button onClick={() => void save()} variant="primary">保存</Button>
           </div>
           {localError === null ? null : (
             <p className="field-error settings-error" data-testid="settings-hooks-local-error">
@@ -108,10 +105,10 @@ export function HooksSection({
           ))}
         </div>
         <div className="settings-section-group">
-          <h3 className="settings-group-title">Handlers</h3>
+          <h3 className="settings-group-title">处理器</h3>
           <div className="settings-table">
             {snapshot.handlers.length === 0 ? (
-              <p className="card-hint">No hooks configured.</p>
+              <p className="card-hint">未配置 Hooks。</p>
             ) : (
               snapshot.handlers.map((handler) => (
                 <div className="tool-row settings-table-row" key={handler.id}>
@@ -124,10 +121,8 @@ export function HooksSection({
                     )}
                   </div>
                   <span>{handler.trustState}</span>
-                  <span>{handler.lastRun === null ? 'never' : handler.lastRun.status}</span>
-                  <button onClick={() => void trust(handler)} type="button">
-                    Trust current command
-                  </button>
+                  <span>{handler.lastRun === null ? '从未运行' : handler.lastRun.status}</span>
+                  <Button onClick={() => void trust(handler)} size="compact">信任当前命令</Button>
                 </div>
               ))
             )}
