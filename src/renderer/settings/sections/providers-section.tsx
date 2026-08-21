@@ -308,6 +308,7 @@ export function ProvidersSection({
               providerId={selectedProvider?.id ?? null}
               providerTestStatus={providerTestStatus}
               selectedModelIndex={selectedModelIndex}
+              singleModel={draft.models.length === 1}
             />
           </section>
           <ProviderConnectionFields draft={draft} onUpdateDraft={onUpdateDraft} />
@@ -326,6 +327,7 @@ export function ProvidersSection({
         open={selectedModel !== null}
         subtitle={selectedModel?.id || '新模型'}
         title={selectedModel?.displayName || '编辑模型'}
+        variant="modal"
       >
         {selectedModel === null || selectedModelIndex === null ? null : (
           <ModelDrawerFields
@@ -361,7 +363,7 @@ export function ProvidersSection({
   );
 }
 
-function ModelTable({ filteredModels, onDelete, onOpen, onTestProvider, providerId, providerTestStatus, selectedModelIndex }: {
+function ModelTable({ filteredModels, onDelete, onOpen, onTestProvider, providerId, providerTestStatus, selectedModelIndex, singleModel }: {
   filteredModels: Array<{ model: ProviderModel; index: number }>;
   onDelete: (index: number) => void;
   onOpen: (index: number) => void;
@@ -369,9 +371,10 @@ function ModelTable({ filteredModels, onDelete, onOpen, onTestProvider, provider
   providerId: string | null;
   providerTestStatus: ProviderTestResult | null;
   selectedModelIndex: number | null;
+  singleModel: boolean;
 }): React.JSX.Element {
   return (
-    <div className="provider-model-table" data-testid="provider-model-table">
+    <div className={singleModel ? 'provider-model-table provider-model-table--single' : 'provider-model-table'} data-testid="provider-model-table">
       {filteredModels.length === 0 ? <div className="provider-list-empty">没有匹配的模型</div> : filteredModels.map(({ model, index }) => (
         <ModelRow
           index={index}

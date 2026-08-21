@@ -495,6 +495,7 @@
 .provider-model-toolbar { display: flex; align-items: center; gap: 12px; }
 .provider-model-toolbar .provider-search-wrap { min-width: 180px; }
 .provider-model-table { min-height: 96px; max-height: min(420px, 42vh); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.provider-model-table--single { width: min(100%, 560px); margin-inline: auto; }
 .provider-model-row { display: flex; min-height: 58px; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--surface); transition: background var(--transition-fast), border-color var(--transition-fast); }
 .provider-model-row:last-child { border-bottom: 0; }
 .provider-model-row.active { background: var(--accent-soft); }

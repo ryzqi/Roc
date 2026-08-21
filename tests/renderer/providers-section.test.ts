@@ -20,6 +20,11 @@ const provider: ProviderConfig = {
   ]
 };
 
+const singleModelProvider: ProviderConfig = {
+  ...provider,
+  models: provider.models.slice(0, 1)
+};
+
 function render(providerValue: ProviderConfig = provider): string {
   return renderToStaticMarkup(React.createElement(ProvidersSection, {
     draft: createProviderDraft('openai_compatible', providerValue),
@@ -42,6 +47,7 @@ describe('providers section', () => {
   it('renders a compact searchable model table without expanding every model editor', () => {
     const html = render();
     expect(html).toContain('data-testid="provider-model-table"');
+    expect(html).not.toContain('provider-model-table--single');
     expect(html).toContain('data-testid="provider-model-row-0"');
     expect(html).toContain('data-testid="provider-model-row-1"');
     expect(html).toContain('data-testid="provider-model-search"');
@@ -49,6 +55,11 @@ describe('providers section', () => {
     expect(html).not.toContain('provider-test-provider');
     expect(html).not.toContain('provider-draft-models');
     expect(html).not.toContain('provider-draft-temperature');
+  });
+
+  it('centers the model table when the provider has one model', () => {
+    const html = render(singleModelProvider);
+    expect(html).toContain('class="provider-model-table provider-model-table--single"');
   });
 
   it('renders model test actions only on concrete model rows', () => {
@@ -98,6 +109,7 @@ describe('providers section', () => {
 
     await act(async () => container.querySelector<HTMLElement>('[data-testid="provider-model-open-0"]')?.click());
     expect(container.querySelector('[data-testid="provider-model-drawer-test-feedback"]')?.textContent).toContain('fast');
+    expect(container.querySelector('.ui-drawer--modal')).not.toBeNull();
     expect(container.querySelector<HTMLDetailsElement>('.provider-model-advanced')?.open).toBe(false);
 
     await act(async () => root.unmount());

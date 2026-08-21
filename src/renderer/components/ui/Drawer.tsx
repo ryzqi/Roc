@@ -11,7 +11,8 @@ export function Drawer({
   onClose,
   open,
   subtitle,
-  title
+  title,
+  variant = 'drawer'
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -19,18 +20,20 @@ export function Drawer({
   open: boolean;
   subtitle?: string;
   title: string;
+  variant?: 'drawer' | 'modal';
 }): React.JSX.Element | null {
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useModalFocus({ initialRef: closeRef, onDismiss: onClose, open, panelRef });
 
   if (!open) return null;
+  const isModal = variant === 'modal';
   return (
-    <div className="ui-drawer-backdrop" onMouseDown={onClose} role="presentation">
+    <div className={isModal ? 'ui-drawer-backdrop ui-drawer-backdrop--modal' : 'ui-drawer-backdrop'} onMouseDown={onClose} role="presentation">
       <aside
         aria-label={title}
         aria-modal="true"
-        className="ui-drawer"
+        className={isModal ? 'ui-drawer ui-drawer--modal' : 'ui-drawer'}
         onMouseDown={(event) => event.stopPropagation()}
         ref={panelRef}
         role="dialog"

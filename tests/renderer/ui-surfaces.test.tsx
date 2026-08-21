@@ -54,6 +54,22 @@ describe('shared modal surfaces', () => {
     opener.remove();
   });
 
+  it('keeps the default Drawer classes and exposes a separate modal variant', async () => {
+    const onClose = vi.fn();
+
+    await act(async () => {
+      root.render(<Drawer onClose={onClose} open title="Drawer">Body</Drawer>);
+    });
+    expect(container.querySelector('.ui-drawer-backdrop')?.className).toBe('ui-drawer-backdrop');
+    expect(container.querySelector('.ui-drawer')?.className).toBe('ui-drawer');
+
+    await act(async () => {
+      root.render(<Drawer onClose={onClose} open title="Modal" variant="modal">Body</Drawer>);
+    });
+    expect(container.querySelector('.ui-drawer-backdrop')?.className).toBe('ui-drawer-backdrop ui-drawer-backdrop--modal');
+    expect(container.querySelector('.ui-drawer')?.className).toBe('ui-drawer ui-drawer--modal');
+  });
+
   it('keeps ConfirmDialog focus contained, cancels from Escape and backdrop, then restores focus', async () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
