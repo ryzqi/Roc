@@ -11,15 +11,15 @@
 
 .action-strip--tray button {
   color: var(--st-info);
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--surface);
 }
 
 .file-tree,
 .terminal,
 .code-preview,
 .settings-list {
-  border-left: 2px solid rgba(214, 223, 235, 0.96);
-  border-radius: 0 18px 18px 0;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0 var(--r-xl) var(--r-xl) 0;
   overflow: hidden;
   box-shadow: none;
 }
@@ -29,13 +29,13 @@
   align-content: start;
   gap: 8px;
   padding: 8px 0;
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--surface);
 }
 
 .file-tree-surface.card {
   padding: 12px 0;
-  border-left: 2px solid rgba(214, 223, 235, 0.96);
-  border-radius: 0 18px 18px 0;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0 var(--r-xl) var(--r-xl) 0;
   box-shadow: none;
 }
 
@@ -49,34 +49,34 @@
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta-size);
   text-align: left;
 }
 
 .tree-item.selected {
   color: var(--ink);
-  background: rgba(244, 247, 251, 0.96);
+  background: var(--bg-soft);
 }
 
 .code-preview {
   margin: 0;
   padding: 16px;
   color: var(--text);
-  background: linear-gradient(90deg, rgba(247, 250, 253, 0.96), rgba(255, 255, 255, 0.62));
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 12px;
+  background: var(--code-surface);
+  font-family: var(--font-mono);
+  font-size: var(--font-code-size);
   line-height: 1.7;
   white-space: pre-wrap;
   overflow: auto;
 }
 
 .notice {
-  border: 1px solid rgba(235, 218, 177, 0.92);
+  border: 1px solid var(--st-warn-line);
   border-radius: var(--radius-sm);
-  background: rgba(255, 248, 236, 0.95);
+  background: color-mix(in srgb, var(--st-warn) 10%, transparent);
   padding: 12px 14px;
   color: var(--st-warn);
-  font-size: 13px;
+  font-size: var(--font-ui-size);
   line-height: 1.5;
 }
 
@@ -106,7 +106,7 @@
 }
 
 .empty-state--error .empty-state-icon {
-  background: rgba(192, 68, 68, 0.10);
+  background: color-mix(in srgb, var(--st-bad) 10%, transparent);
   color: var(--st-bad);
 }
 
@@ -123,18 +123,12 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   font-weight: 500;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .action-button:hover {
-  transform: none;
   background: var(--bg-soft);
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.action-button:active {
-  transform: translateY(0);
 }
 
 .action-button:focus-visible {
@@ -151,7 +145,7 @@
 
 .empty-state strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--font-lead-size);
   font-weight: 500;
   margin-top: 4px;
 }

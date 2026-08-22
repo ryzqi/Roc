@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   padding: 12px 0 4px;
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.96) 70%, rgba(255, 255, 255, 0));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
 
 .settings-gear {
@@ -39,7 +39,7 @@
   display: grid;
   place-items: center;
   padding: 32px;
-  background: rgba(20, 40, 80, 0.32);
+  background: var(--overlay-scrim);
 }
 
 .settings-modal {
@@ -62,7 +62,7 @@
 }
 
 .settings-modal-title {
-  font-size: 14px;
+  font-size: var(--font-h3-size);
   font-weight: 500;
   color: var(--ink);
 }

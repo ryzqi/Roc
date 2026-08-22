@@ -2,10 +2,10 @@
   min-height: 0;
   margin: 0;
   padding: 16px;
-  background: linear-gradient(180deg, #101726, #192235);
-  color: #dce4ef;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 12px;
+  background: linear-gradient(180deg, var(--terminal-bg), var(--terminal-bg-end));
+  color: var(--terminal-text);
+  font-family: var(--font-mono);
+  font-size: var(--font-code-size);
   line-height: 1.72;
   white-space: pre-wrap;
   overflow: auto;
@@ -51,8 +51,8 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: #7285a2;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -103,7 +103,7 @@
   gap: 6px;
   padding: 0 11px;
   letter-spacing: 0.02em;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .terminal-badge[data-role='shell'] {
@@ -113,9 +113,9 @@
 }
 
 .terminal-badge[data-role='bind'] {
-  color: #3d6cb0;
-  background: rgba(232, 240, 254, 0.85);
-  border-color: rgba(167, 195, 238, 0.95);
+  color: var(--tool-st-start-text);
+  background: var(--tool-st-start-bg);
+  border-color: var(--st-info-line);
 }
 
 .terminal-badge-dot {
@@ -123,7 +123,7 @@
   height: 8px;
   border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 2px var(--surface);
   flex: 0 0 auto;
   animation: terminal-badge-pulse 1.6s ease-in-out infinite;
 }
@@ -138,24 +138,24 @@
 }
 
 .terminal-badge[data-role='state'][data-state='running'] {
-  color: #1f7a4d;
-  background: rgba(213, 245, 226, 0.85);
-  border-color: rgba(122, 200, 158, 0.9);
+  color: var(--tool-st-end-text);
+  background: var(--tool-st-end-bg);
+  border-color: var(--st-ok-line);
 }
 
 .terminal-badge[data-role='state'][data-state='starting'],
 .terminal-badge[data-role='state'][data-state='spawning'] {
-  color: #8a5b16;
-  background: rgba(253, 240, 211, 0.92);
-  border-color: rgba(228, 192, 122, 0.96);
+  color: var(--tool-st-progress-text);
+  background: var(--tool-st-progress-bg);
+  border-color: var(--st-warn-line);
 }
 
 .terminal-badge[data-role='state'][data-state='exited'],
 .terminal-badge[data-role='state'][data-state='error'],
 .terminal-badge[data-role='state'][data-state='closed'] {
-  color: #a93434;
-  background: rgba(254, 224, 224, 0.92);
-  border-color: rgba(232, 152, 152, 0.96);
+  color: var(--tool-st-error-text);
+  background: var(--tool-st-error-bg);
+  border-color: var(--st-bad-line);
 }
 
 .terminal-badge[data-role='state'][data-state='exited'] .terminal-badge-dot,
@@ -174,12 +174,12 @@
 }
 
 .terminal-xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(122, 167, 255, 0.18);
+  background: var(--terminal-line);
   border-radius: 999px;
 }
 
 .terminal-xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: rgba(122, 167, 255, 0.36);
+  background: var(--terminal-line-strong);
 }
 
 .terminal-status-bar span[data-role='path'] {
@@ -193,12 +193,12 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #7aa7ff;
+  background: var(--accent);
   flex: 0 0 auto;
 }
 
 .terminal-status-bar span[data-role='size'] {
-  color: #768ba8;
+  color: var(--subtle);
   font-variant-numeric: tabular-nums;
 }
 
@@ -207,14 +207,14 @@
 }
 
 .terminal-status-bar span[data-role='status'][data-tone='ok'] {
-  color: #2f8a5d;
+  color: var(--st-ok);
 }
 
 .terminal-status-bar span[data-role='status'][data-tone='warn'] {
-  color: #b07a1e;
+  color: var(--st-warn);
 }
 
 .terminal-status-bar span[data-role='status'][data-tone='error'] {
-  color: #c34d4d;
+  color: var(--st-bad);
 }
 

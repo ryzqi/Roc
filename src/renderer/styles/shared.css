@@ -6,8 +6,8 @@
   gap: var(--space-md);
   padding: 8px 4px 22px;
   margin-bottom: 4px;
-  background: linear-gradient(180deg, transparent 0%, rgba(245, 248, 252, 0.55) 100%);
-  border-bottom: 1px solid rgba(226, 232, 241, 0.9);
+  background: transparent;
+  border-bottom: 1px solid var(--line);
 }
 
 .page-copy {
@@ -187,7 +187,7 @@
 
 .empty-state,
 .memory-search-box {
-  border: 1px solid rgba(220, 228, 239, 0.9);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: none;
@@ -200,9 +200,13 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
-  transition: background var(--transition-base), border-color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    transform var(--duration-base) var(--easing-spring);
 }
 
 .card::before {
@@ -211,15 +215,20 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: 3px;
+  width: var(--stripe-width);
   background: transparent;
   transition: background var(--transition-base);
 }
 
 .card:hover {
-  transform: none;
-  background: var(--surface);
-  box-shadow: none;
+  transform: var(--lift-hover);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.card:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-card);
 }
 
 .card--accent::before { background: var(--accent-stripe); }
@@ -242,7 +251,7 @@
   padding: 0 0 10px;
   border-bottom: 1px solid var(--line);
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--font-h3-size);
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -311,11 +320,17 @@
   margin: 0 -8px;
   border-bottom: 1px solid var(--line);
   border-radius: var(--radius-xs);
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    transform var(--duration-fast) var(--easing-spring);
 }
 
 .row:hover {
   background: var(--accent-soft);
+}
+
+.row:active {
+  transform: translateY(1px);
 }
 
 .row:last-child {
@@ -386,7 +401,11 @@
   font-size: var(--font-ui-size);
   font-weight: 500;
   white-space: nowrap;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--duration-fast) var(--easing-spring);
 }
 
 .action-row button:hover,
@@ -394,4 +413,12 @@
 .capability-strip button:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
+  transform: var(--lift-hover);
+}
+
+.action-row button:active,
+.action-strip button:active,
+.capability-strip button:active {
+  transform: var(--press-scale);
 }

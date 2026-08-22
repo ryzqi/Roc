@@ -42,7 +42,7 @@
   .workspace-shell--with-workbench .workbench {
     min-height: 0;
     border-left: 0;
-    border-top: 1px solid rgba(220, 227, 237, 0.94);
+    border-top: 1px solid var(--line);
   }
 
   .workspace-shell--with-workbench .workbench-resize-handle {
@@ -141,7 +141,7 @@
     max-height: 172px;
     padding: 10px 0 12px;
     border-right: 0;
-    border-bottom: 1px solid rgba(223, 230, 239, 0.92);
+    border-bottom: 1px solid var(--line);
   }
 
   .workspace:not(.workspace--chat) .canvas-scroll {
@@ -157,7 +157,7 @@
   .workspace-shell--with-workbench .workbench {
     min-height: 0;
     border-left: 0;
-    border-top: 1px solid rgba(220, 227, 237, 0.94);
+    border-top: 1px solid var(--line);
   }
 
   .workspace-shell--with-workbench .workbench-resize-handle {

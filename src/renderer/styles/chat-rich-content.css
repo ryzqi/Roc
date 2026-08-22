@@ -18,7 +18,7 @@
   top: 0;
   left: 0;
   bottom: 0;
-  width: 3px;
+  width: var(--stripe-width);
   background: var(--st-warn);
 }
 
@@ -27,7 +27,7 @@
   align-items: center;
   gap: 8px;
   color: var(--st-warn);
-  font-size: 12px;
+  font-size: var(--font-meta-size);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -85,11 +85,11 @@
   max-width: 100%;
   margin: 0;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: var(--code-surface);
   color: var(--code-text);
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
   line-height: 1.55;
   white-space: pre;
   overflow-x: auto;
@@ -129,14 +129,14 @@
 }
 
 .approval-btn--approve {
-  background: var(--ink);
-  color: #ffffff;
-  border-color: var(--ink);
+  background: var(--fill-strong);
+  color: var(--fill-strong-text);
+  border-color: var(--fill-strong);
 }
 
 .approval-btn--approve:hover {
-  background: var(--accent-deep);
-  border-color: var(--accent-deep);
+  background: var(--fill-strong-hover);
+  border-color: var(--fill-strong-hover);
 }
 
 .approval-btn--reject {
@@ -146,7 +146,7 @@
 }
 
 .approval-btn--reject:hover {
-  background: rgba(156, 58, 58, 0.08);
+  background: color-mix(in srgb, var(--st-bad) 9%, transparent);
   color: var(--st-bad);
   border-color: var(--st-bad-line);
 }
@@ -167,7 +167,7 @@
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--code-surface);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -213,8 +213,8 @@
 
 .code-card-copy.is-copied {
   color: var(--st-ok);
-  border-color: rgba(26, 138, 97, 0.32);
-  background: rgba(26, 138, 97, 0.10);
+  border-color: var(--st-ok-line);
+  background: color-mix(in srgb, var(--st-ok) 10%, transparent);
 }
 
 .code-card pre {
@@ -225,8 +225,8 @@
   border-radius: 0;
   color: var(--code-text);
   overflow-x: auto;
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 12.5px;
+  font-family: var(--font-mono);
+  font-size: var(--font-code-size);
   line-height: 1.6;
 }
 
@@ -276,18 +276,18 @@
   letter-spacing: -0.005em;
 }
 
-.chat-bubble--assistant h1 { font-size: 19px; }
-.chat-bubble--assistant h2 { font-size: 17px; }
-.chat-bubble--assistant h3 { font-size: 15px; }
+.chat-bubble--assistant h1 { font-size: var(--font-h2-size); }
+.chat-bubble--assistant h2 { font-size: var(--font-lead-size); }
+.chat-bubble--assistant h3 { font-size: var(--font-read-size); }
 .chat-bubble--assistant h4,
 .chat-bubble--assistant h5,
-.chat-bubble--assistant h6 { font-size: 14px; }
+.chat-bubble--assistant h6 { font-size: var(--font-h3-size); }
 
 .chat-bubble--assistant ul,
 .chat-bubble--assistant ol {
   margin: 0;
   padding-left: 22px;
-  font-size: 14.5px;
+  font-size: var(--font-read-size);
   line-height: 1.72;
 }
 
@@ -301,7 +301,7 @@
   border-left: 2px solid var(--line);
   background: transparent;
   color: var(--muted);
-  font-size: 14.5px;
+  font-size: var(--font-read-size);
 }
 
 .chat-bubble--assistant a {
@@ -315,10 +315,10 @@
 }
 
 .chat-bubble--assistant code {
-  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'Source Code Pro', monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--font-ui-size);
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--r-xs);
   background: var(--line-soft);
   color: var(--ink);
   border: 0;
@@ -330,14 +330,14 @@
   border: 0;
   border-radius: 0;
   color: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-code-size);
   line-height: 1.6;
 }
 
 .chat-bubble--assistant table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 13.5px;
+  font-size: var(--font-body-size);
 }
 
 .chat-bubble--assistant th,
@@ -363,7 +363,7 @@
 
 .chat-bubble--assistant img {
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 
 .chat-bubble--assistant del {

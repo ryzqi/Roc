@@ -55,8 +55,127 @@
   animation: chat-cursor-blink 1.2s ease-in-out infinite;
 }
 
+/* 统一 hover / press 微交互
+ * 三档语义：
+ *   卡片面（.card / .task-board-card，定义在各自文件）：hover 抬升 + 阴影，press 落回
+ *   列表行：hover 底色，press 下压 1px
+ *   紧凑控件：hover 抬升，press 缩放回弹
+ * 位于 main.css 之后，覆盖各页面局部覆写，保证跨页面一致。 */
+.nav-button,
+.history-row,
+.settings-item,
+.provider-list-item,
+.provider-model-row__select,
+.tree-item,
+.workbench-tab,
+.memory-record,
+.memory-file-row {
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--duration-fast) var(--easing-spring);
+}
+
+.row:active,
+.nav-button:active,
+.history-row:active,
+.settings-item:active,
+.provider-list-item:active,
+.provider-model-row__select:active,
+.tree-item:active,
+.workbench-tab:active,
+.memory-record:active,
+.memory-file-row:active {
+  transform: translateY(1px);
+}
+
+.ui-button,
+.ui-icon-button,
+.action-button,
+.icon-ghost-button,
+.rail-button,
+.provider-toolbar-actions button,
+.provider-secret-actions button,
+.provider-detail-actions button,
+.provider-detail-test,
+.provider-type-option,
+.memory-chip-button,
+.selection-chip,
+.skill-drawer-action,
+.chat-plan-action-primary,
+.chat-plan-action-secondary,
+.chat-scroll-bottom,
+.copy-answer-button,
+.code-card-copy,
+.approval-btn,
+.send-button,
+.git-commit-button,
+.task-create-dialog-actions button {
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--duration-fast) var(--easing-spring);
+}
+
+.ui-button:hover:not(:disabled),
+.ui-icon-button:hover:not(:disabled),
+.action-button:hover:not(:disabled),
+.icon-ghost-button:hover:not(:disabled),
+.rail-button:hover:not(:disabled),
+.provider-toolbar-actions button:hover:not(:disabled),
+.provider-secret-actions button:hover:not(:disabled),
+.provider-detail-actions button:hover:not(:disabled),
+.provider-detail-test:hover:not(:disabled),
+.memory-chip-button:hover:not(:disabled),
+.selection-chip:hover:not(:disabled),
+.skill-drawer-action:hover:not(:disabled),
+.chat-plan-action-primary:hover:not(:disabled),
+.chat-plan-action-secondary:hover:not(:disabled),
+.chat-scroll-bottom:hover:not(:disabled),
+.code-card-copy:hover:not(:disabled),
+.approval-btn:hover:not(:disabled),
+.send-button:hover:not(:disabled),
+.git-commit-button:hover:not(:disabled),
+.task-create-dialog-actions button:hover:not(:disabled) {
+  transform: var(--lift-hover);
+}
+
+.ui-button:active:not(:disabled),
+.ui-icon-button:active:not(:disabled),
+.action-button:active:not(:disabled),
+.icon-ghost-button:active:not(:disabled),
+.rail-button:active:not(:disabled),
+.provider-toolbar-actions button:active:not(:disabled),
+.provider-secret-actions button:active:not(:disabled),
+.provider-detail-actions button:active:not(:disabled),
+.provider-detail-test:active:not(:disabled),
+.provider-type-option:active:not(:disabled),
+.memory-chip-button:active:not(:disabled),
+.selection-chip:active:not(:disabled),
+.skill-drawer-action:active:not(:disabled),
+.chat-plan-action-primary:active:not(:disabled),
+.chat-plan-action-secondary:active:not(:disabled),
+.chat-scroll-bottom:active:not(:disabled),
+.copy-answer-button:active:not(:disabled),
+.code-card-copy:active:not(:disabled),
+.approval-btn:active:not(:disabled),
+.send-button:active:not(:disabled),
+.git-commit-button:active:not(:disabled),
+.task-create-dialog-actions button:active:not(:disabled) {
+  transform: var(--press-scale);
+}
+
 /* 系统级减弱动效兼容 */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --lift-hover: none;
+    --press-scale: none;
+  }
+
   *,
   *::before,
   *::after {

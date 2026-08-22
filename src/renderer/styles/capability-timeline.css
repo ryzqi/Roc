@@ -4,7 +4,7 @@
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta-size);
 }
 
 .timeline {
@@ -26,9 +26,9 @@
   display: grid;
   place-items: center;
   border-radius: 999px;
-  border: 1px solid rgba(212, 221, 233, 0.96);
+  border: 1px solid var(--line);
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.92);
-  font-size: 11px;
+  background: var(--surface);
+  font-size: var(--font-meta-size);
   font-weight: 500;
 }

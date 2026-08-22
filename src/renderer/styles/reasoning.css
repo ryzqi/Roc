@@ -12,7 +12,7 @@
   gap: 8px;
   padding: 2px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta-size);
   font-weight: 500;
   cursor: pointer;
   user-select: none;
@@ -39,14 +39,14 @@
 .reasoning-body {
   padding: 6px 0 4px;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: var(--font-body-size);
   line-height: 1.6;
 }
 
 .reasoning-body .reasoning-content {
   padding: 0;
   color: var(--muted);
-  font-size: 14.5px;
+  font-size: var(--font-read-size);
   line-height: 1.72;
 }
 
@@ -93,7 +93,7 @@
 }
 
 .copy-answer-button:active {
-  transform: scale(0.96);
+  transform: var(--press-scale);
 }
 
 .copy-answer-button:focus-visible {

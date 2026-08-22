@@ -55,7 +55,7 @@
   bottom: 0;
   width: 62%;
   min-width: 420px;
-  background: rgba(255, 255, 255, 0.99);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   display: grid;
@@ -70,7 +70,7 @@
   gap: 8px;
   align-items: center;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(232, 238, 246, 0.98);
+  border-bottom: 1px solid var(--line);
 }
 
 .skill-drawer-headline {
@@ -80,12 +80,12 @@
 }
 
 .skill-drawer-kicker {
-  font-size: 12px;
+  font-size: var(--font-meta-size);
   color: var(--muted);
 }
 
 .skill-drawer-name {
-  font-size: 14px;
+  font-size: var(--font-h3-size);
   font-weight: 500;
   color: var(--ink);
   overflow: hidden;
@@ -96,7 +96,7 @@
 .skill-drawer-close {
   min-width: 36px;
   padding: 0 10px;
-  font-size: 16px;
+  font-size: var(--font-lead-size);
   line-height: 1;
 }
 
@@ -133,7 +133,7 @@
 }
 
 .skill-drawer-action--danger:hover {
-  background: rgba(156, 58, 58, 0.08);
+  background: color-mix(in srgb, var(--st-bad) 9%, transparent);
   border-color: var(--st-bad);
   color: var(--st-bad);
 }
@@ -145,7 +145,7 @@
 }
 
 .skill-drawer-tree {
-  border-right: 1px solid rgba(232, 238, 246, 0.98);
+  border-right: 1px solid var(--line);
   padding: 8px 0;
   overflow: auto;
 }
@@ -158,8 +158,8 @@
 
 .skill-drawer-preview-header {
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(232, 238, 246, 0.98);
-  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-meta-size);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -169,7 +169,7 @@
 .skill-drawer-preview-body {
   overflow: auto;
   padding: 12px 14px;
-  font-size: 12.5px;
+  font-size: var(--font-code-size);
   line-height: 1.55;
   color: var(--text);
 }
@@ -178,9 +178,9 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: #2a3245;
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+  color: var(--ink);
 }
 
 .skill-row-list {
@@ -221,7 +221,7 @@
 
 .skill-row-name {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--font-ui-size);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -230,6 +230,6 @@
 
 .skill-row-error {
   color: var(--st-warn);
-  font-size: 12px;
+  font-size: var(--font-meta-size);
   line-height: 1.45;
 }

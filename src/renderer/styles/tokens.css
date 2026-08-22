@@ -24,9 +24,16 @@
   --accent: var(--system-accent);
   --accent-deep: color-mix(in srgb, var(--accent) 78%, #000000);
   --accent-hover: var(--accent-deep);
-  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --accent-soft-strong: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* 淡底用的主调：浅色下等于主调本身，深色下提亮，否则淡底叠深底不可见 */
+  --accent-tint: var(--accent);
+  --accent-soft: color-mix(in srgb, var(--accent-tint) 10%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 18%, transparent);
   --accent-stripe: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, #ffffff) 100%);
+
+  /* 实心主按钮填充：浅色深底白字，深色由 dark 块反转 */
+  --fill-strong: var(--ink);
+  --fill-strong-hover: var(--accent-deep);
+  --fill-strong-text: #ffffff;
 
   /* 状态 */
   --st-ok: #166c4a;
@@ -80,6 +87,17 @@
   --shadow-modal: 0 12px 32px rgba(20, 40, 80, 0.1);
   --shadow-popover: 0 8px 20px rgba(20, 40, 80, 0.08);
   --shadow-input: 0 1px 2px rgba(20, 40, 80, 0.04);
+  --shadow-card: 0 1px 2px rgba(20, 40, 80, 0.04);
+  --shadow-card-hover: 0 4px 14px rgba(20, 40, 80, 0.09);
+
+  /* 交互层（hover / press / 遮罩 / 强调条） */
+  --overlay-hover: rgba(15, 23, 42, 0.06);
+  --overlay-active: rgba(15, 23, 42, 0.12);
+  --overlay-backdrop: rgba(15, 23, 42, 0.28);
+  --overlay-scrim: rgba(20, 40, 80, 0.32);
+  --stripe-width: 3px;
+  --lift-hover: translateY(-1px);
+  --press-scale: scale(0.97);
 
   /* 语义别名（不引入新色，仅命名） */
   --composer-border: var(--line);
@@ -103,6 +121,10 @@
   --font-body-size: 13.5px;
   --font-ui-size: 13px;
   --font-meta-size: 11.5px;
+  --font-micro-size: 10.5px;
+  --font-nano-size: 9px;
+  --font-read-size: 14.5px;
+  --font-lead-size: 15px;
   --font-code-size: 12.5px;
   --font-h1-size: 24px;
   --font-h2-size: 18px;
@@ -135,6 +157,19 @@
   --code-header-bg: #fafbfc;
   --code-header-text: #6b7280;
 
+  /* 语法高亮 */
+  --syntax-keyword: #8b3dff;
+  --syntax-string: #087f5b;
+  --syntax-comment: #6b7280;
+  --syntax-number: #b45309;
+
+  /* 终端（两套主题下均为深色终端面板） */
+  --terminal-bg: #101726;
+  --terminal-bg-end: #192235;
+  --terminal-text: #dce4ef;
+  --terminal-line: rgba(122, 167, 255, 0.18);
+  --terminal-line-strong: rgba(122, 167, 255, 0.36);
+
   color: var(--text);
   background: var(--bg);
   font-family: var(--font-sans);
@@ -156,6 +191,11 @@
   --line-soft: rgba(190, 205, 228, 0.12);
   --line: rgba(190, 205, 228, 0.2);
   --line-strong: rgba(190, 205, 228, 0.32);
+  --accent-tint: color-mix(in srgb, var(--accent) 58%, #ffffff);
+  --accent-soft: color-mix(in srgb, var(--accent-tint) 18%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 30%, transparent);
+  --fill-strong-hover: #ffffff;
+  --fill-strong-text: var(--bg);
   --st-ok: #79d2a6;
   --st-warn: #e5bd6c;
   --st-bad: #ee9292;
@@ -176,11 +216,23 @@
   --shadow-modal: 0 18px 42px rgba(0, 0, 0, 0.34);
   --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-input: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.32);
+  --overlay-hover: rgba(231, 237, 245, 0.08);
+  --overlay-active: rgba(231, 237, 245, 0.16);
+  --overlay-backdrop: rgba(6, 11, 20, 0.56);
+  --overlay-scrim: rgba(6, 11, 20, 0.62);
   --code-surface: #111827;
   --code-surface-soft: rgba(231, 237, 245, 0.06);
   --code-text: #e7edf5;
   --code-header-bg: #172033;
   --code-header-text: #b5c0ce;
+  --syntax-keyword: #c4a2ff;
+  --syntax-string: #6bd6ae;
+  --syntax-comment: #8b9bb4;
+  --syntax-number: #e5bd6c;
+  --terminal-bg: #0c121e;
+  --terminal-bg-end: #141c2c;
   color-scheme: dark;
 }
 
@@ -204,4 +256,14 @@
   --line-soft: GrayText;
   --line: GrayText;
   --line-strong: CanvasText;
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --overlay-hover: Canvas;
+  --overlay-active: Canvas;
+  --overlay-backdrop: Canvas;
+  --overlay-scrim: Canvas;
+  --syntax-keyword: CanvasText;
+  --syntax-string: CanvasText;
+  --syntax-comment: GrayText;
+  --syntax-number: CanvasText;
 }

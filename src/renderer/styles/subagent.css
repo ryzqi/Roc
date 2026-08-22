@@ -7,8 +7,8 @@
   margin: 3px 0;
   padding: 9px 10px;
   border: 1px solid var(--line-soft);
-  border-left-width: 3px;
-  border-radius: 8px;
+  border-left-width: var(--stripe-width);
+  border-radius: var(--r-sm);
   background: var(--surface);
 }
 
@@ -55,7 +55,7 @@
 .subagent-card__icon {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--r-xs);
   border: 1px solid var(--line-soft);
   display: inline-flex;
   align-items: center;
@@ -98,7 +98,7 @@
   align-items: center;
   gap: 5px;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--font-code-size);
   font-weight: 600;
   line-height: 1.35;
 }
@@ -118,7 +118,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--font-micro-size);
   font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
@@ -178,7 +178,7 @@
   background: var(--bg-soft);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--font-micro-size);
   line-height: 1.35;
   font-feature-settings: var(--font-feature-mono);
 }
@@ -195,7 +195,7 @@
 .subagent-card__summary {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-ui-size);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -204,11 +204,11 @@
   margin: 0;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--tool-st-error-text) 28%, var(--line-soft));
-  border-radius: 7px;
+  border-radius: var(--r-xs);
   background: var(--tool-st-error-bg);
   color: var(--tool-st-error-text);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--font-meta-size);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -219,25 +219,4 @@
   min-width: 0;
   padding-left: 12px;
   border-left: 1px solid var(--line-soft);
-}
-
-:root[data-theme='dark'] .subagent-card {
-  background: var(--surface);
-}
-
-:root[data-theme='dark'] .subagent-card--nested {
-  background: var(--surface-strong);
-}
-
-:root[data-theme='dark'] .subagent-card__icon {
-  background: var(--surface-strong);
-}
-
-:root[data-theme='dark'] .subagent-card__chip {
-  background: var(--surface-strong);
-  border-color: var(--line-soft);
-}
-
-:root[data-theme='dark'] .subagent-card__body {
-  border-top-color: var(--line-soft);
 }

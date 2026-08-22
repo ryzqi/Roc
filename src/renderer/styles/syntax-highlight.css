@@ -3,7 +3,7 @@
 .hljs-literal,
 .hljs-section,
 .hljs-link {
-  color: #8b3dff;
+  color: var(--syntax-keyword);
 }
 
 .hljs-string,
@@ -11,17 +11,17 @@
 .hljs-name,
 .hljs-type,
 .hljs-attribute {
-  color: #087f5b;
+  color: var(--syntax-string);
 }
 
 .hljs-comment,
 .hljs-quote,
 .hljs-meta {
-  color: #6b7280;
+  color: var(--syntax-comment);
 }
 
 .hljs-number,
 .hljs-symbol,
 .hljs-bullet {
-  color: #b45309;
+  color: var(--syntax-number);
 }

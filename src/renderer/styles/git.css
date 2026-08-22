@@ -60,9 +60,6 @@
   font-size: var(--font-ui-size);
   font-weight: 500;
   cursor: not-allowed;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
 }
 
 .git-commit-button:disabled {
@@ -70,9 +67,9 @@
 }
 
 .git-commit-button--ready {
-  background: var(--ink);
-  color: #ffffff;
-  border-color: var(--ink);
+  background: var(--fill-strong);
+  color: var(--fill-strong-text);
+  border-color: var(--fill-strong);
 }
 
 .git-sidebar-toolbar,
@@ -175,7 +172,7 @@
   gap: 10px;
   min-height: 40px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 
 .git-change-card.selected {
@@ -198,7 +195,7 @@
   margin: 0;
   width: 14px;
   height: 14px;
-  accent-color: #2f6cf3;
+  accent-color: var(--accent);
 }
 
 .git-change-path {
@@ -372,6 +369,23 @@
 
 .git-diff-body .diff {
   border: 0;
+}
+
+/* react-diff-view 自带的 --diff-* 变量写死浅色，接到项目 token 上，深色模式自动跟随 */
+.git-diff-panel {
+  --diff-background-color: var(--surface);
+  --diff-text-color: var(--code-text);
+  --diff-font-family: var(--font-mono);
+  --diff-selection-background-color: var(--accent-soft-strong);
+  --diff-gutter-insert-background-color: color-mix(in srgb, var(--st-ok) 22%, transparent);
+  --diff-gutter-delete-background-color: color-mix(in srgb, var(--st-bad) 22%, transparent);
+  --diff-gutter-selected-background-color: color-mix(in srgb, var(--st-warn) 22%, transparent);
+  --diff-code-insert-background-color: color-mix(in srgb, var(--st-ok) 12%, transparent);
+  --diff-code-delete-background-color: color-mix(in srgb, var(--st-bad) 12%, transparent);
+  --diff-code-selected-background-color: color-mix(in srgb, var(--st-warn) 12%, transparent);
+  --diff-code-insert-edit-background-color: color-mix(in srgb, var(--st-ok) 34%, transparent);
+  --diff-code-delete-edit-background-color: color-mix(in srgb, var(--st-bad) 34%, transparent);
+  --diff-omit-gutter-line-color: var(--st-bad);
 }
 
 .git-diff-scroll {
