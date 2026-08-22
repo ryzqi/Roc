@@ -4,6 +4,8 @@ import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '
 import type { ExplicitSkillContext } from './explicit-skills';
 import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
+import type { MemoryRememberAdapter, MemorySearchAdapter } from './memory-tools';
+import { createMemorySearchTool, createRememberTool } from './memory-tools';
 import type { SessionSearchAdapter } from './session-search-tool';
 import type { RuntimeWorkspaceIdentity } from './workspace-scope';
 import { buildPromptBlocks, serializePromptBlocks } from './prompt-blocks';
@@ -28,6 +30,9 @@ export function assembleContextHarness(input: {
   baseTools: ClientTool[];
   allowedToolNames?: readonly string[];
   searchSessions: SessionSearchAdapter;
+  searchMemory: MemorySearchAdapter;
+  remember: MemoryRememberAdapter;
+  runId: string;
   threadId: string;
   explicitSkillContexts: readonly ExplicitSkillContext[];
 }): ContextHarness {
@@ -36,15 +41,26 @@ export function assembleContextHarness(input: {
     runtimeWorkspacePath: input.workspacePath,
     search: input.searchSessions
   });
+  const memorySearchTool = createMemorySearchTool({ search: input.searchMemory });
+  const rememberTool = createRememberTool({
+    remember: input.remember,
+    runId: input.runId,
+    threadId: input.threadId,
+    workspacePath: input.workspacePath
+  });
   const contextArtifactReadTool = createContextArtifactReadTool({
     artifactStore: input.artifactStore,
     threadId: input.threadId,
     workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
   });
-  const allowedToolNames = new Set(input.allowedToolNames ?? ['session_search', 'read_context_artifact']);
+  const allowedToolNames = new Set(
+    input.allowedToolNames ?? ['session_search', 'memory_search', 'remember', 'read_context_artifact']
+  );
   const tools = [
     ...input.baseTools,
     ...(allowedToolNames.has(sessionSearchTool.name) ? [sessionSearchTool] : []),
+    ...(allowedToolNames.has(memorySearchTool.name) ? [memorySearchTool] : []),
+    ...(allowedToolNames.has(rememberTool.name) ? [rememberTool] : []),
     ...(allowedToolNames.has(contextArtifactReadTool.name) ? [contextArtifactReadTool] : [])
   ];
   const promptBlocks = buildPromptBlocks({

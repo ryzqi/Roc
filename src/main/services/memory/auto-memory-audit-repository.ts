@@ -125,6 +125,16 @@ export class AutoMemoryAuditRepository {
     }));
   }
 
+  /** remember 工具的每轮写入配额依赖这个计数：只统计真正落盘的动作。 */
+  countWritesForRun(sourceRunId: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM memory_auto_audit
+      WHERE source_run_id = ? AND action IN ('accepted', 'maintenance_merged')
+    `).get(sourceRunId) as { total: number } | undefined;
+    return row === undefined ? 0 : row.total;
+  }
+
   prune(retentionDays: number, now: Date = new Date()): number {
     const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
     const result = this.db.prepare('DELETE FROM memory_auto_audit WHERE created_at < ?').run(cutoff);

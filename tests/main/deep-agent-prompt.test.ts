@@ -38,15 +38,21 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Memory files available to the agent:');
     expect(prompt).toContain('/memory/global/USER.md      — user identity, preferences, comm style');
     expect(prompt).toContain('/memory/workspaces/current/MEMORY.md   — workspace-specific facts');
-    expect(prompt).toContain('Use Edit/Write on memory paths only when the user asks you to remember something');
+    expect(prompt).toContain('/memory/global/topics/<slug>.md and /memory/workspaces/current/topics/<slug>.md');
+    expect(prompt).toContain('When the injected memory does not answer the question, call memory_search before guessing a memory path.');
     expect(prompt).toContain(
-      'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.'
+      'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.'
     );
+    expect(prompt).toContain('Use Edit/Write on memory paths for manual restructuring');
     expect(prompt).toContain('AGENTS.md changes only through explicit file edits.');
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
+    expect(prompt).toContain('Recall tools (0 token cost until called):');
     expect(prompt).toContain(
-      'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
+      '- memory_search(query) searches stored memory entries and topic files. Use it for durable facts: preferences, decisions, pitfalls, project conventions.'
+    );
+    expect(prompt).toContain(
+      '- session_search(query) searches past conversation transcripts. Use it for what was said or done in an earlier run.'
     );
     expect(prompt).toContain('<!-- BLOCK:static:static:');
     expect(prompt).toContain('<!-- BLOCK:context_recall:workspace:');
@@ -81,32 +87,39 @@ describe('deep agent prompt', () => {
     const lines = prompt.split('\n');
 
     expect(lines[0]).toMatch(/^<!-- BLOCK:static:static:[a-f0-9]{16} -->$/);
-    expect(lines.slice(1, 19)).toEqual([
+    expect(lines.slice(1, 24)).toEqual([
       'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
       'Before changing files, inspect the relevant source, tests, and configuration.',
       'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
       'For code or configuration changes, run direct verification before claiming completion.',
       '',
       'Memory files available to the agent:',
-      '  /memory/global/USER.md      — user identity, preferences, comm style',
+      '  /memory/global/USER.md      — user identity, preferences, comm style (global only; there is no workspace USER.md)',
       '  /memory/global/AGENTS.md    — global default rules',
-      '  /memory/global/MEMORY.md    — global long-term facts',
+      '  /memory/global/MEMORY.md    — global long-term facts plus the index of global topic files',
       '  /memory/workspaces/current/AGENTS.md   — workspace-specific rules',
-      '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts',
+      '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts plus the index of workspace topic files',
+      '  /memory/global/topics/<slug>.md and /memory/workspaces/current/topics/<slug>.md — topic detail files',
       '',
-      'Use Edit/Write on memory paths only when the user asks you to remember something or when a durable project fact is worth preserving.',
-      'On capacity overflow, read the file, merge or remove redundant entries via Edit, then retry after consolidation.',
-      'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.',
+      'Those five files are already injected into this prompt when non-empty; do not spend read_file calls guessing their paths.',
+      'Topic files are never injected. Read one only when an index line in MEMORY.md matches the current task.',
+      'When the injected memory does not answer the question, call memory_search before guessing a memory path.',
+      'Use the remember tool to store a durable fact; it validates the entry, drops duplicates, and reports the target file.',
+      'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.',
+      'Use Edit/Write on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
+      'On capacity overflow, read the file, then either merge redundant entries via Edit or move detail into a topic file and leave one index line behind.',
       'AGENTS.md changes only through explicit file edits.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
     ]);
-    expect(lines[19]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
+    expect(lines[24]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain(
       'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
     );
-    expect(prompt).toContain('Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).');
+    expect(prompt).toContain(
+      'When the task depends on an earlier decision or a stated preference, call memory_search first and session_search only if memory has no entry.'
+    );
     expect(prompt).toContain('Workflow: default chat run.');
   });
 

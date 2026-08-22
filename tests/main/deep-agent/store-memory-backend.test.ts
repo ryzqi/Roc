@@ -158,4 +158,68 @@ describe('RocStoreMemoryBackend', () => {
     );
     expect(backend.routePrefixes).not.toContain('/memory/');
   });
+
+  it('returns real bytes from downloadFiles so the memory middleware can load the prompt sources', async () => {
+    const { backend } = createMemoryBackend();
+    await backend.write('/USER.md', '# user prefers Python');
+
+    const [user, missing] = await backend.downloadFiles(['/USER.md', '/MEMORY.md']);
+
+    expect(user.error).toBeNull();
+    expect(Buffer.from(user.content as Uint8Array).toString('utf8')).toBe('# user prefers Python');
+    expect(missing).toEqual({ path: '/MEMORY.md', content: null, error: 'file_not_found' });
+  });
+
+  it('reports non-whitelisted download paths as file_not_found instead of permission_denied', async () => {
+    const { backend } = createMemoryBackend();
+
+    await expect(backend.downloadFiles(['/notes.md'])).resolves.toEqual([
+      { path: '/notes.md', content: null, error: 'file_not_found' }
+    ]);
+  });
+
+  it('reads and writes topic files under the memory char limit', async () => {
+    const { backend, store } = createMemoryBackend();
+
+    await expect(backend.write('/topics/api-notes.md', '# api notes')).resolves.toMatchObject({
+      path: '/topics/api-notes.md'
+    });
+    await expect(backend.read('/topics/api-notes.md')).resolves.toMatchObject({ content: '# api notes' });
+    expect(await store.get(namespace, '/topics/api-notes.md')).not.toBeNull();
+  });
+
+  it('rejects topic slugs outside the allowed slug pattern', async () => {
+    const { backend } = createMemoryBackend();
+
+    await expect(backend.write('/topics/API Notes.md', 'notes')).resolves.toEqual({
+      error: expect.stringContaining('/memory/global/USER.md')
+    });
+    await expect(backend.write('/topics/nested/notes.md', 'notes')).resolves.toEqual({
+      error: expect.stringContaining('/memory/global/USER.md')
+    });
+  });
+
+  it('blocks a new topic file at the per-scope topic limit but still allows overwriting an existing one', async () => {
+    const { backend } = createMemoryBackend();
+    for (let index = 0; index < 32; index += 1) {
+      await expect(backend.write(`/topics/topic-${index}.md`, `# topic ${index}`)).resolves.not.toHaveProperty('error');
+    }
+
+    await expect(backend.write('/topics/topic-32.md', '# one too many')).resolves.toEqual({
+      error: expect.stringContaining('topic file limit reached (32)')
+    });
+    await expect(backend.write('/topics/topic-0.md', '# updated topic')).resolves.not.toHaveProperty('error');
+    await expect(backend.read('/topics/topic-0.md')).resolves.toMatchObject({ content: '# updated topic' });
+  });
+
+  it('applies the memory security scan and char limit to topic files', async () => {
+    const { backend } = createMemoryBackend({ limits: { user: 5, agents: 5, memory: 5 } });
+
+    await expect(backend.write('/topics/api-notes.md', '123456')).resolves.toEqual({
+      error: expect.stringContaining('capacity exceeded')
+    });
+    await expect(backend.write('/topics/api-notes.md', 'k=abcdefghijklmnop')).resolves.toEqual({
+      error: expect.stringContaining('capacity exceeded')
+    });
+  });
 });

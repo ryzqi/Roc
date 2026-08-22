@@ -15,15 +15,19 @@ import type {
 import type { MemoryKind } from '../../../shared/types';
 import { CapacityService } from '../memory/capacity';
 import { SecurityScanService } from '../memory/security-scan';
-
-const whitelistError = [
-  'Path not writable. Memory file whitelist:',
-  '  /memory/global/USER.md',
-  '  /memory/global/AGENTS.md  |  /memory/workspaces/current/AGENTS.md',
-  '  /memory/global/MEMORY.md  |  /memory/workspaces/current/MEMORY.md'
-].join('\n');
+import {
+  MAX_MEMORY_TOPICS_PER_SCOPE,
+  MEMORY_TOPIC_DIRECTORY,
+  MEMORY_WHITELIST_ERROR,
+  parseMemoryTopicStoreKey
+} from '../memory/store-slots';
 
 const emptyOldStringError = 'Edit failed: oldString must not be empty.';
+
+const topicLimitError = [
+  `Write blocked: topic file limit reached (${MAX_MEMORY_TOPICS_PER_SCOPE}).`,
+  'Merge or delete an existing topic file before creating a new one.'
+].join('\n');
 
 export class RocStoreMemoryBackend {
   constructor(
@@ -40,7 +44,7 @@ export class RocStoreMemoryBackend {
       return result;
     }
     return {
-      files: result.files.filter((file) => file.is_dir || this.allowedKeys.has(file.path))
+      files: result.files.filter((file) => file.is_dir || this.isAllowedKey(file.path))
     };
   }
 
@@ -73,7 +77,7 @@ export class RocStoreMemoryBackend {
     return applyGrepMaxCount({
       result: {
         ...result,
-        matches: result.matches.filter((match) => this.allowedKeys.has(match.path))
+        matches: result.matches.filter((match) => this.isAllowedKey(match.path))
       },
       maxCount
     });
@@ -86,7 +90,7 @@ export class RocStoreMemoryBackend {
     }
     return {
       ...result,
-      files: result.files.filter((file) => file.is_dir || this.allowedKeys.has(file.path))
+      files: result.files.filter((file) => file.is_dir || this.isAllowedKey(file.path))
     };
   }
 
@@ -94,6 +98,10 @@ export class RocStoreMemoryBackend {
     const validation = this.validateWrite(filePath, content);
     if (!validation.ok) {
       return { error: validation.detail };
+    }
+    const topicLimit = await this.validateTopicLimit(filePath);
+    if (!topicLimit.ok) {
+      return { error: topicLimit.detail };
     }
     return await this.delegate.write(filePath, content);
   }
@@ -128,17 +136,41 @@ export class RocStoreMemoryBackend {
     return Promise.resolve(files.map(([path]) => ({ path, error: 'permission_denied' })));
   }
 
-  downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    return Promise.resolve(paths.map((path) => ({ path, content: null, error: 'permission_denied' })));
+  /**
+   * DeepAgents 的 memory middleware 通过 downloadFiles 加载记忆源，因此白名单路径必须返回真实字节。
+   * 非白名单路径返回 file_not_found（而不是 permission_denied）：loadMemoryFromBackend 只把
+   * file_not_found 当作“没有这个文件”，其它错误会抛异常并让整批记忆加载失败。
+   */
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const allowedPaths = paths.filter((path) => this.isAllowedKey(path));
+    const downloaded =
+      allowedPaths.length === 0 ? [] : await this.delegate.downloadFiles(allowedPaths);
+    const byPath = new Map(downloaded.map((response) => [response.path, response]));
+    return paths.map((path) => {
+      const response = byPath.get(path);
+      if (response !== undefined) {
+        return response;
+      }
+      return { path, content: null, error: 'file_not_found' };
+    });
+  }
+
+  private isAllowedKey(filePath: string): boolean {
+    return this.resolveKind(filePath) !== null;
+  }
+
+  /** 白名单固定文件返回自身 kind；主题文件统一按 memory 限额计算。 */
+  private resolveKind(filePath: string): MemoryKind | null {
+    if (this.allowedKeys.has(filePath)) {
+      return this.kindByKey.get(filePath) ?? null;
+    }
+    return parseMemoryTopicStoreKey(filePath) === null ? null : 'memory';
   }
 
   private validateKey(filePath: string): { ok: true; kind: MemoryKind } | { ok: false; detail: string } {
-    if (!this.allowedKeys.has(filePath)) {
-      return { ok: false, detail: whitelistError };
-    }
-    const kind = this.kindByKey.get(filePath);
-    if (kind === undefined) {
-      return { ok: false, detail: whitelistError };
+    const kind = this.resolveKind(filePath);
+    if (kind === null) {
+      return { ok: false, detail: MEMORY_WHITELIST_ERROR };
     }
     return { ok: true, kind };
   }
@@ -155,6 +187,25 @@ export class RocStoreMemoryBackend {
     const capacity = this.capacity.check(key.kind, content);
     if (!capacity.ok) {
       return { ok: false, detail: this.capacity.formatOverflow(key.kind, capacity.chars, capacity.limit) };
+    }
+    return { ok: true };
+  }
+
+  /** 新建主题文件时校验数量上限；覆盖已存在的主题文件不受限制。 */
+  private async validateTopicLimit(filePath: string): Promise<{ ok: true } | { ok: false; detail: string }> {
+    if (parseMemoryTopicStoreKey(filePath) === null) {
+      return { ok: true };
+    }
+    const listing = await this.delegate.ls(`/${MEMORY_TOPIC_DIRECTORY}`);
+    if (listing.error !== undefined || listing.files === undefined) {
+      return { ok: true };
+    }
+    const existing = listing.files.filter((file) => !file.is_dir && parseMemoryTopicStoreKey(file.path) !== null);
+    if (existing.some((file) => file.path === filePath)) {
+      return { ok: true };
+    }
+    if (existing.length >= MAX_MEMORY_TOPICS_PER_SCOPE) {
+      return { ok: false, detail: topicLimitError };
     }
     return { ok: true };
   }

@@ -127,7 +127,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 14 without changing earlier versions', () => {
+  it('applies agent migrations through version 15 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -150,12 +150,55 @@ describe('database migrations', () => {
       { version: 11, name: 'agent_pending_interrupt_projection_minimal' },
       { version: 12, name: 'agent_run_telemetry' },
       { version: 13, name: 'agent_langsmith_trace_sessions' },
-      { version: 14, name: 'remove_legacy_langsmith_trace_sessions' }
+      { version: 14, name: 'remove_legacy_langsmith_trace_sessions' },
+      { version: 15, name: 'session_messages_fts_trigram' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 14
+      currentVersion: 15
     });
+  });
+
+  it('rebuilds the session message index with the trigram tokenizer when upgrading from v14 to v15', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 14),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES ('thread_trigram', 'chat', 'Trigram', 'Trigram', 'running', ?, ?)`
+    ).run('2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z');
+    db.prepare(
+      `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
+       VALUES ('smsg_trigram', 'thread_trigram', 'assistant', ?, NULL, 'visible', 'workspace_hash_trigram', ?)`
+    ).run('用户偏好使用 Python 编写脚本', '2026-07-10T01:00:00.000Z');
+    expect(
+      db
+        .prepare("SELECT count(*) FROM session_messages_fts WHERE session_messages_fts MATCH '\"偏好使用\"'")
+        .pluck()
+        .get()
+    ).toBe(0);
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(
+      db.prepare("SELECT sql FROM sqlite_master WHERE name = 'session_messages_fts'").pluck().get()
+    ).toContain("tokenize='trigram'");
+    expect(
+      db
+        .prepare(
+          `SELECT sm.id FROM session_messages_fts
+             JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
+             WHERE session_messages_fts MATCH '"偏好使用"'`
+        )
+        .pluck()
+        .all()
+    ).toEqual(['smsg_trigram']);
   });
 
   it('removes legacy LangSmith configuration and trace sessions during upgrade', () => {

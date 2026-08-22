@@ -654,6 +654,40 @@ export const agentMigrations: RocDatabaseMigration[] = [
     sql: `
       DROP TABLE IF EXISTS agent_langsmith_trace_sessions;
     `
+  },
+  {
+    version: 15,
+    name: 'session_messages_fts_trigram',
+    sql: `
+      DROP TRIGGER IF EXISTS session_messages_ai;
+      DROP TRIGGER IF EXISTS session_messages_ad;
+      DROP TRIGGER IF EXISTS session_messages_au;
+      DROP TABLE IF EXISTS session_messages_fts;
+
+      CREATE VIRTUAL TABLE session_messages_fts USING fts5(
+        content,
+        content='session_messages',
+        content_rowid='rowid',
+        tokenize='trigram'
+      );
+
+      CREATE TRIGGER session_messages_ai AFTER INSERT ON session_messages BEGIN
+        INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      END;
+
+      CREATE TRIGGER session_messages_ad AFTER DELETE ON session_messages BEGIN
+        INSERT INTO session_messages_fts(session_messages_fts, rowid, content)
+          VALUES('delete', old.rowid, old.content);
+      END;
+
+      CREATE TRIGGER session_messages_au AFTER UPDATE ON session_messages BEGIN
+        INSERT INTO session_messages_fts(session_messages_fts, rowid, content)
+          VALUES('delete', old.rowid, old.content);
+        INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      END;
+
+      INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild');
+    `
   }
 ];
 

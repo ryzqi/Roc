@@ -1597,6 +1597,104 @@ describe('AgentSessionRepository', () => {
       'payment-service evidence lives under F:\\Code\\Roc\\src\\payments'
     ]);
   });
+
+  it('finds Chinese session content through the trigram index', () => {
+    applyAgentDatabaseSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: '记录语言偏好'
+    });
+
+    repository.recordSessionMessage({
+      content: '用户偏好使用 Python 编写脚本',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_cjk'
+    });
+    repository.recordSessionMessage({
+      content: '构建脚本使用 PowerShell',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_cjk'
+    });
+
+    const result = repository.searchSessionMessages({
+      query: '偏好使用',
+      workspaceHash: 'workspace_hash_cjk',
+      workspaceScope: 'current'
+    });
+
+    expect(result.items.map((item) => item.content)).toEqual(['用户偏好使用 Python 编写脚本']);
+    expect(result.items[0].snippet).toContain('**');
+  });
+
+  it('falls back to a LIKE scan for two-character Chinese queries the trigram index cannot match', () => {
+    applyAgentDatabaseSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: '记录语言偏好'
+    });
+
+    repository.recordSessionMessage({
+      content: '用户偏好使用 Python 编写脚本',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_short'
+    });
+    repository.recordSessionMessage({
+      content: '构建脚本使用 PowerShell',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_short'
+    });
+
+    const result = repository.searchSessionMessages({
+      query: '偏好',
+      workspaceHash: 'workspace_hash_short',
+      workspaceScope: 'current'
+    });
+
+    expect(result.items.map((item) => item.content)).toEqual(['用户偏好使用 Python 编写脚本']);
+    expect(result.items[0].snippet).toContain('**偏好**');
+  });
+
+  it('requires both the indexed term and the short Chinese term in a mixed query', () => {
+    applyAgentDatabaseSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: '记录语言偏好'
+    });
+
+    repository.recordSessionMessage({
+      content: '用户偏好使用 Python 编写脚本',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_mixed'
+    });
+    repository.recordSessionMessage({
+      content: 'Python 脚本已经通过验证',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_mixed'
+    });
+
+    const result = repository.searchSessionMessages({
+      query: '偏好 Python',
+      workspaceHash: 'workspace_hash_mixed',
+      workspaceScope: 'current'
+    });
+
+    expect(result.items.map((item) => item.content)).toEqual(['用户偏好使用 Python 编写脚本']);
+  });
 });
 
 function columnNames(tableName: string): string[] {

@@ -189,7 +189,10 @@ describe('prompt blocks', () => {
     expect(staticBlock?.content).toContain('/memory/global/USER.md');
     expect(staticBlock?.content).toContain('/memory/workspaces/current/MEMORY.md');
     expect(staticBlock?.content).toContain(
-      'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.'
+      'When the injected memory does not answer the question, call memory_search before guessing a memory path.'
+    );
+    expect(staticBlock?.content).toContain(
+      'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.'
     );
     expect(staticBlock?.content).toContain('AGENTS.md changes only through explicit file edits.');
     expect(staticBlock?.content).not.toContain('Roc SQLite');

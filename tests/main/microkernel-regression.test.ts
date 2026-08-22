@@ -223,10 +223,8 @@ describe('microkernel regression', () => {
     expect(scheduledRuns).toEqual([]);
     expect(runNow).toMatchObject({ taskId: task.id });
     expect(runOutputEvents).toContainEqual(expect.objectContaining({ runId: runNow.runId, type: 'message', role: 'assistant' }));
-    expect(memorySnapshot.text).toContain('# DeepAgents Memory Preview');
-    expect(memorySnapshot.text).toContain('type: workspace_fact');
-    expect(memorySnapshot.text).toContain('key: roc.microkernel.static_response');
-    expect(memorySnapshot.text).toContain('summary: Static DeepAgent response.');
+    // 记忆写入只发生在 remember 工具调用时，因此运行结束后快照只有标题，没有条目。
+    expect(memorySnapshot.text).toBe('# DeepAgents Memory Preview');
     expect(mcpServers).toContainEqual(expect.objectContaining({ id: 'exa-hosted' }));
     expect(rtkStatus).toMatchObject({ resourceState: 'ready' });
     expect(fileTree.entries).toContainEqual(expect.objectContaining({ name: 'README.md' }));
@@ -290,11 +288,11 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           kind: 'text',
           blockId: `text-${input.run.id}`,
           phase: 'delta',
-          text: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
+          text: 'Static DeepAgent response.'
         }
       } satisfies ChatRunEvent;
     })(), completedTestOutcome({
-      finalMessage: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
+      finalMessage: 'Static DeepAgent response.'
     }));
 }
   };

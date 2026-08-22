@@ -7,13 +7,21 @@ import type {
   MemoryFileWriteRequest,
   MemoryKind,
   MemoryScope,
+  MemorySearchRequest,
+  MemorySearchResult,
   MemoryStatus
 } from '../../../shared/types';
 import { defaultSettings } from '../../services/config/defaults';
 import type { AutoMemoryAuditRepository } from '../../services/memory/auto-memory-audit-repository';
 import { CapacityService } from '../../services/memory/capacity';
+import { searchMemoryDocuments } from '../../services/memory/memory-entry-search';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import {
+  MAX_MEMORY_TOPICS_PER_SCOPE,
+  memoryTopicStoreKey,
+  memoryTopicVirtualPath,
+  parseMemoryTopicStoreKey,
+  resolveMemoryNamespace,
   resolveMemorySlotByScopeKind,
   type MemorySlot,
   type MemorySlotResolveResult
@@ -104,6 +112,161 @@ export class MemoryStoreRepository {
       ok: true,
       meta: this.buildMeta(resolved.slot, written)
     };
+  }
+
+  /** 读取主题文件；主题文件是 MEMORY.md 索引指向的按需明细，不参与自动注入。 */
+  async readTopicFile(
+    input: { scope: MemoryScope; slug: string },
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<string | null> {
+    const context = this.resolveContext(workspaceOverride);
+    const namespace = resolveMemoryNamespace(input.scope, context.workspaceHash);
+    if (!namespace.ok) {
+      return null;
+    }
+    const storeKey = memoryTopicStoreKey(input.slug);
+    if (parseMemoryTopicStoreKey(storeKey) === null) {
+      return null;
+    }
+    const item = await this.options.store.get(namespace.namespace, storeKey);
+    return readMarkdownContent(item);
+  }
+
+  async writeTopicFile(
+    input: { scope: MemoryScope; slug: string; content: string },
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<MemoryFileWriteOutcome> {
+    const context = this.resolveContext(workspaceOverride);
+    const namespace = resolveMemoryNamespace(input.scope, context.workspaceHash);
+    if (!namespace.ok) {
+      return { ok: false, reason: namespace.reason, detail: namespace.detail };
+    }
+    const storeKey = memoryTopicStoreKey(input.slug);
+    if (parseMemoryTopicStoreKey(storeKey) === null) {
+      return {
+        ok: false,
+        reason: 'invalid_path',
+        detail: 'Topic slug must use lowercase letters, digits, and hyphens, at most 48 characters.'
+      };
+    }
+    const settings = this.getMemorySettings();
+    const securityScan = new SecurityScanService(settings.securityScan);
+    const issues = securityScan.scan(input.content);
+    if (issues.length > 0) {
+      return { ok: false, reason: 'security_scan', detail: securityScan.formatIssues(issues), issues };
+    }
+    const capacity = new CapacityService(settings.charLimits);
+    const capacityResult = capacity.check('memory', input.content);
+    if (!capacityResult.ok) {
+      return {
+        ok: false,
+        reason: 'capacity_exceeded',
+        detail: capacity.formatOverflow('memory', capacityResult.chars, capacityResult.limit),
+        chars: capacityResult.chars,
+        limit: capacityResult.limit
+      };
+    }
+    const existing = await this.options.store.get(namespace.namespace, storeKey);
+    if (existing === null) {
+      const topics = await this.listTopicFiles(input.scope, workspaceOverride);
+      if (topics.length >= MAX_MEMORY_TOPICS_PER_SCOPE) {
+        return {
+          ok: false,
+          reason: 'capacity_exceeded',
+          detail: `Topic file limit reached (${MAX_MEMORY_TOPICS_PER_SCOPE}). Merge or delete an existing topic file first.`,
+          chars: topics.length,
+          limit: MAX_MEMORY_TOPICS_PER_SCOPE
+        };
+      }
+    }
+    await this.options.store.put(
+      namespace.namespace,
+      storeKey,
+      createMarkdownFileValue(input.content, existing)
+    );
+    const written = await this.options.store.get(namespace.namespace, storeKey);
+    return {
+      ok: true,
+      meta: {
+        scope: input.scope,
+        kind: 'memory',
+        exists: true,
+        charCount: [...input.content].length,
+        charLimit: settings.charLimits.memory,
+        absolutePath: memoryTopicVirtualPath(input.scope, input.slug),
+        effective: true,
+        updatedAt: readModifiedAt(written)
+      }
+    };
+  }
+
+  async listTopicFiles(
+    scope: MemoryScope,
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<Array<{ slug: string; virtualPath: string; content: string }>> {
+    const context = this.resolveContext(workspaceOverride);
+    const namespace = resolveMemoryNamespace(scope, context.workspaceHash);
+    if (!namespace.ok) {
+      return [];
+    }
+    const items = await this.options.store.search(namespace.namespace, {
+      limit: MAX_MEMORY_TOPICS_PER_SCOPE + slotRequests.length
+    });
+    const topics: Array<{ slug: string; virtualPath: string; content: string }> = [];
+    for (const item of items) {
+      const slug = parseMemoryTopicStoreKey(item.key);
+      if (slug === null) {
+        continue;
+      }
+      const content = readMarkdownContent(item);
+      if (content === null) {
+        continue;
+      }
+      topics.push({ slug, virtualPath: memoryTopicVirtualPath(scope, slug), content });
+    }
+    return topics.sort((left, right) => left.slug.localeCompare(right.slug));
+  }
+
+  /** memory_search 的检索面：五个固定文件加上两个作用域下的所有主题文件。 */
+  async collectSearchDocuments(
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<Array<{ path: string; scope: MemoryScope; kind: MemoryKind | 'topic'; content: string }>> {
+    const documents: Array<{ path: string; scope: MemoryScope; kind: MemoryKind | 'topic'; content: string }> = [];
+    const context = this.resolveContext(workspaceOverride);
+    for (const request of slotRequests) {
+      const resolved = resolveMemorySlotByScopeKind(request, context.workspaceHash);
+      if (!resolved.ok) {
+        continue;
+      }
+      const item = await this.options.store.get(resolved.slot.namespace, resolved.slot.storeKey);
+      const content = readMarkdownContent(item);
+      if (content === null || content.trim().length === 0) {
+        continue;
+      }
+      documents.push({
+        path: resolved.slot.virtualPath,
+        scope: resolved.slot.scope,
+        kind: resolved.slot.kind,
+        content
+      });
+    }
+    const scopes: MemoryScope[] = context.workspaceHash === null ? ['global'] : ['global', 'workspace'];
+    for (const scope of scopes) {
+      const topics = await this.listTopicFiles(scope, workspaceOverride);
+      for (const topic of topics) {
+        documents.push({ path: topic.virtualPath, scope, kind: 'topic', content: topic.content });
+      }
+    }
+    return documents;
+  }
+
+  /** memory_search 的检索入口：解析记忆条目后按查询词打分，返回条目而不是整个文件。 */
+  async searchEntries(
+    request: MemorySearchRequest,
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<MemorySearchResult> {
+    const documents = await this.collectSearchDocuments(workspaceOverride);
+    return searchMemoryDocuments(documents, request.query, request.limit === undefined ? 5 : request.limit);
   }
 
   async status(): Promise<MemoryStatus> {

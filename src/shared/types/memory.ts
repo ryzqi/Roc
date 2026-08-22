@@ -9,7 +9,11 @@ import {
   memoryFileWriteOutcomeSchema,
   memoryFileWriteRequestSchema,
   memoryKindSchema,
+  memoryRememberOutcomeSchema,
+  memoryRememberRequestSchema,
   memoryScopeSchema,
+  memorySearchRequestSchema,
+  memorySearchResultSchema,
   memoryStatusSchema
 } from '../schemas/ipc-memory-settings';
 
@@ -25,6 +29,12 @@ export type MemoryFileWriteRequest = z.infer<typeof memoryFileWriteRequestSchema
 export type MemoryFileWriteOutcome = z.infer<typeof memoryFileWriteOutcomeSchema>;
 type FailedMemoryFileWrite = Extract<MemoryFileWriteOutcome, { ok: false }>;
 export type SecurityScanIssue = NonNullable<FailedMemoryFileWrite['issues']>[number];
+
+export type MemorySearchRequest = z.infer<typeof memorySearchRequestSchema>;
+export type MemorySearchResult = z.infer<typeof memorySearchResultSchema>;
+export type MemorySearchHit = MemorySearchResult['hits'][number];
+export type MemoryRememberRequest = z.infer<typeof memoryRememberRequestSchema>;
+export type MemoryRememberOutcome = z.infer<typeof memoryRememberOutcomeSchema>;
 
 export type SessionMessageEntry = z.infer<typeof sessionMessageSchema>;
 export type SessionMessagePhase = SessionMessageEntry['phase'];

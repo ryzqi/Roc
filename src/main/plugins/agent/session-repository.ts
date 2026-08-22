@@ -80,6 +80,11 @@ type SessionMessageSearchRow = SessionMessageRow & {
   snippet: string;
 };
 
+/** session_messages_fts 使用 trigram 分词，少于 3 个字符的词无法命中索引。 */
+const TRIGRAM_MIN_TERM_CHARS = 3;
+const SCAN_SNIPPET_CHARS = 160;
+const SCAN_SNIPPET_LEAD_CHARS = 40;
+
 type RunStateRow = {
   id: string;
   status: TaskStatus;
@@ -1051,26 +1056,83 @@ export class AgentSessionRepository {
       return { query, total: 0, items: [] };
     }
     const limit = input.limit === undefined ? 10 : input.limit;
-    const primaryQuery = canUseRawFtsQuery(query) ? query : buildPlainPrefixFtsQuery(query);
-    if (primaryQuery === null) {
+    const terms = extractSearchTerms(query);
+    if (terms.length === 0) {
       return { query, total: 0, items: [] };
     }
-    const rows = this.searchRows(primaryQuery, input, limit);
-    const fallbackQuery = primaryQuery === query && rows.length === 0 ? buildPlainPrefixFtsQuery(query) : null;
-    const finalRows = fallbackQuery === null ? rows : this.searchRows(fallbackQuery, input, limit);
+    // trigram 索引最短匹配单位是 3 个字符，更短的词只能靠 LIKE 扫描。
+    const indexedTerms = terms.filter((term) => [...term].length >= TRIGRAM_MIN_TERM_CHARS);
+    const scanTerms = terms.filter((term) => [...term].length < TRIGRAM_MIN_TERM_CHARS);
+    const rows =
+      indexedTerms.length === 0
+        ? this.scanRows(scanTerms, input, limit)
+        : this.searchRows(indexedTerms, scanTerms, input, limit);
     return {
       query,
-      total: finalRows.length,
-      items: finalRows.map((row) => ({
+      total: rows.length,
+      items: rows.map((row) => ({
         ...mapSessionMessage(row),
         snippet: row.snippet
       }))
     };
   }
 
-  private searchRows(query: string, input: SessionMessageSearchRequest, limit: number): SessionMessageSearchRow[] {
+  private searchRows(
+    indexedTerms: readonly string[],
+    scanTerms: readonly string[],
+    input: SessionMessageSearchRequest,
+    limit: number
+  ): SessionMessageSearchRow[] {
+    const params: unknown[] = [indexedTerms.map((term) => `"${term}"`).join(' ')];
+    const filters = this.buildSearchFilters(input, scanTerms, params);
+    const whereClause = filters.length === 0 ? '' : `AND ${filters.join(' AND ')}`;
+    params.push(limit);
+    return this.db
+      .prepare(
+        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
+                tt.title AS thread_title,
+                snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet
+         FROM session_messages_fts
+         JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
+         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
+         WHERE session_messages_fts MATCH ?
+           ${whereClause}
+         ORDER BY session_messages_fts.rank, sm.created_at DESC
+         LIMIT ?`
+      )
+      .all(...params) as SessionMessageSearchRow[];
+  }
+
+  /** 查询词全部短于 3 个字符时 trigram 无法命中，退回 LIKE 扫描并在内存里生成摘要。 */
+  private scanRows(
+    scanTerms: readonly string[],
+    input: SessionMessageSearchRequest,
+    limit: number
+  ): SessionMessageSearchRow[] {
+    const params: unknown[] = [];
+    const filters = this.buildSearchFilters(input, scanTerms, params);
+    const whereClause = filters.length === 0 ? '' : `WHERE ${filters.join(' AND ')}`;
+    params.push(limit);
+    const rows = this.db
+      .prepare(
+        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
+                tt.title AS thread_title
+         FROM session_messages sm
+         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
+         ${whereClause}
+         ORDER BY sm.created_at DESC
+         LIMIT ?`
+      )
+      .all(...params) as Array<Omit<SessionMessageSearchRow, 'snippet'>>;
+    return rows.map((row) => ({ ...row, snippet: buildScanSnippet(row.content, scanTerms) }));
+  }
+
+  private buildSearchFilters(
+    input: SessionMessageSearchRequest,
+    scanTerms: readonly string[],
+    params: unknown[]
+  ): string[] {
     const filters: string[] = [];
-    const params: unknown[] = [query];
     if (input.workspaceScope === 'current') {
       if (input.workspaceHash === undefined || input.workspaceHash === null || input.workspaceHash.trim().length === 0) {
         throw new Error('session_search_workspace_required');
@@ -1086,22 +1148,11 @@ export class AgentSessionRepository {
       filters.push("sm.created_at >= datetime('now', '-' || ? || ' days')");
       params.push(input.sinceDays);
     }
-    const whereClause = filters.length === 0 ? '' : `AND ${filters.join(' AND ')}`;
-    params.push(limit);
-    return this.db
-      .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
-                tt.title AS thread_title,
-                snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet
-         FROM session_messages_fts
-         JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
-         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
-         WHERE session_messages_fts MATCH ?
-           ${whereClause}
-         ORDER BY sm.created_at DESC
-         LIMIT ?`
-      )
-      .all(...params) as SessionMessageSearchRow[];
+    for (const term of scanTerms) {
+      filters.push("sm.content LIKE ? ESCAPE '\\'");
+      params.push(`%${escapeLikeTerm(term)}%`);
+    }
+    return filters;
   }
 
   private nextRunNumber(threadId: string): number {
@@ -1549,15 +1600,44 @@ function requireNonEmpty(value: string | null, code: string): string {
   return normalized;
 }
 
-function buildPlainPrefixFtsQuery(query: string): string | null {
-  const tokens = Array.from(query.matchAll(/[\p{L}\p{N}_]+/gu), (match) => match[0])
-    .filter((token) => !/^(?:OR|AND|NOT|NEAR)$/iu.test(token));
-  if (tokens.length === 0) {
-    return null;
+/** 拆出查询词：标点和空白只作分隔符，词内部原样保留，交给 trigram 或 LIKE 做子串匹配。 */
+function extractSearchTerms(query: string): string[] {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const match of query.matchAll(/[\p{L}\p{N}_]+/gu)) {
+    const term = match[0];
+    if (seen.has(term)) {
+      continue;
+    }
+    seen.add(term);
+    terms.push(term);
   }
-  return tokens.map((token) => `${token}*`).join(' ');
+  return terms;
 }
 
-function canUseRawFtsQuery(query: string): boolean {
-  return /^[\p{L}\p{N}_\s]+$/u.test(query) && !/\b(?:OR|AND|NOT|NEAR)\b/iu.test(query);
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/gu, (character) => `\\${character}`);
+}
+
+/** LIKE 扫描分支没有 FTS 的 snippet()，这里按第一个命中词就地截取一段上下文。 */
+function buildScanSnippet(content: string, scanTerms: readonly string[]): string {
+  const lowerContent = content.toLowerCase();
+  let matchIndex = -1;
+  let matchLength = 0;
+  for (const term of scanTerms) {
+    const index = lowerContent.indexOf(term.toLowerCase());
+    if (index >= 0 && (matchIndex < 0 || index < matchIndex)) {
+      matchIndex = index;
+      matchLength = term.length;
+    }
+  }
+  if (matchIndex < 0) {
+    return content.length <= SCAN_SNIPPET_CHARS ? content : `${content.slice(0, SCAN_SNIPPET_CHARS)}...`;
+  }
+  const start = Math.max(0, matchIndex - SCAN_SNIPPET_LEAD_CHARS);
+  const end = Math.min(content.length, matchIndex + matchLength + SCAN_SNIPPET_CHARS - SCAN_SNIPPET_LEAD_CHARS);
+  const prefix = start > 0 ? '...' : '';
+  const suffix = end < content.length ? '...' : '';
+  const highlighted = `${content.slice(start, matchIndex)}**${content.slice(matchIndex, matchIndex + matchLength)}**${content.slice(matchIndex + matchLength, end)}`;
+  return `${prefix}${highlighted}${suffix}`;
 }

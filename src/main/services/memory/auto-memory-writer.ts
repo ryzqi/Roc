@@ -1,23 +1,50 @@
 import type { RocPluginContext } from '../../kernel/types';
-import type { AppSettings, MemoryScope } from '../../../shared/types';
+import type {
+  AppSettings,
+  AutoMemoryCandidateType,
+  AutoMemoryConfidence,
+  MemoryScope
+} from '../../../shared/types';
 import type { MemoryStoreRepository, MemoryWorkspaceContext } from '../../plugins/memory/memory-store-repository';
 import { defaultSettings } from '../config/defaults';
 import type { AutoMemoryAuditRepository } from './auto-memory-audit-repository';
 import {
   type AutoMemoryCandidate,
+  type ParsedAutoMemoryEntry,
+  appendArchiveIndexLine,
   appendAutoMemoryEntry,
+  appendTopicArchiveSection,
   appendUserPreferenceEntry,
+  archiveTopicSlug,
   autoMemoryEntryExists,
-  extractAutoMemoryCandidates,
+  buildAutoMemoryCandidate,
+  extractOldestAutoMemorySection,
   formatAutoMemoryEntry,
   formatUserPreferenceEntry,
-  userPreferenceEntryStatus,
-  shouldRejectCandidate
+  pruneExpiredAutoMemoryEntries,
+  replaceUserPreferenceEntry,
+  shouldRejectCandidate,
+  userPreferenceEntryStatus
 } from './auto-memory-candidates';
+import { memoryTopicVirtualPath } from './store-slots';
 
 const GLOBAL_USER_TARGET_PATH = '/memory/global/USER.md';
 const GLOBAL_MEMORY_TARGET_PATH = '/memory/global/MEMORY.md';
 const WORKSPACE_MEMORY_TARGET_PATH = '/memory/workspaces/current/MEMORY.md';
+
+/** 单次写入最多搬走多少个日期小节，避免容量始终不够时无限循环。 */
+const MAX_ARCHIVE_STEPS = 6;
+
+const candidateTypes = new Set<AutoMemoryCandidateType>([
+  'user_preference',
+  'workspace_fact',
+  'decision',
+  'pitfall',
+  'verification',
+  'transient_task_result'
+]);
+
+const confidences = new Set<AutoMemoryConfidence>(['high', 'medium', 'low']);
 
 export type AgentRunCompletedPayload = {
   runId: string;
@@ -25,6 +52,32 @@ export type AgentRunCompletedPayload = {
   workspacePath?: string | null;
   summary: string;
   assistantMessage: string;
+};
+
+export type AutoMemoryRecordRequest = {
+  type: AutoMemoryCandidateType;
+  confidence: AutoMemoryConfidence;
+  key: string;
+  summary: string;
+  evidence: readonly string[];
+  sourceRunId: string;
+  sourceThreadId?: string | null;
+  workspacePath?: string | null;
+  ttlDays?: number | null;
+  revalidate?: string | null;
+};
+
+export type AutoMemoryRecordOutcome = {
+  status: 'accepted' | 'superseded' | 'duplicate' | 'rejected' | 'write_failed' | 'disabled' | 'quota_exceeded';
+  reason: string;
+  scope: MemoryScope;
+  targetPath: string | null;
+  archivedTo: string[];
+};
+
+export type AutoMemoryMaintenanceResult = {
+  removed: number;
+  files: Array<{ targetPath: string; removedKeys: string[] }>;
 };
 
 type AutoMemoryWriterOptions = {
@@ -43,123 +96,379 @@ type AutoMemoryTarget = {
 export class AutoMemoryWriter {
   constructor(private readonly options: AutoMemoryWriterOptions) {}
 
-  async handleAgentRunCompleted(payload: AgentRunCompletedPayload, createdAt?: string): Promise<void> {
-    const settings = this.resolveMemorySettings().autoMemory;
-    if (!settings.enabled) {
-      return;
-    }
-    const workspaceOverride = resolveWorkspaceOverride(payload);
-    const date = resolveDate(createdAt);
+  /**
+   * remember 工具的唯一入口：校验候选、去重、合并冲突，并把接受或拒绝的原因回给模型。
+   */
+  async recordCandidate(request: AutoMemoryRecordRequest, createdAt?: string): Promise<AutoMemoryRecordOutcome> {
+    const memorySettings = this.resolveMemorySettings();
+    const settings = memorySettings.autoMemory;
     const eventCreatedAt = createdAt === undefined ? new Date().toISOString() : createdAt;
-    const candidates = extractAutoMemoryCandidates(payload, settings, eventCreatedAt);
-    if (candidates.length === 0) {
-      this.recordAudit({
-        action: 'rejected',
-        type: 'transient_task_result',
-        scope: this.options.repository.hasWorkspace(workspaceOverride) ? 'workspace' : 'global',
-        confidence: 'low',
-        key: 'no_candidates',
-        summary: payload.summary.trim(),
-        sourceRunId: payload.runId,
-        reason: 'no_candidates',
-        workspacePath: readWorkspacePath(payload),
+    const candidate = buildAutoMemoryCandidate(
+      {
+        type: request.type,
+        confidence: request.confidence,
+        key: request.key,
+        summary: request.summary,
+        evidence: request.evidence,
+        sourceRunId: request.sourceRunId,
+        sourceThreadId: request.sourceThreadId === undefined ? null : request.sourceThreadId,
+        workspacePath: request.workspacePath,
+        ttlDays: request.ttlDays === undefined ? null : request.ttlDays,
+        revalidate: request.revalidate === undefined ? null : request.revalidate
+      },
+      settings,
+      eventCreatedAt
+    );
+    const workspaceOverride = resolveWorkspaceOverride(request.workspacePath);
+    const target = resolveCandidateTarget(candidate, workspaceOverride, this.options.repository);
+
+    if (!settings.enabled) {
+      return {
+        status: 'disabled',
+        reason: 'auto_memory_disabled',
+        scope: target.scope,
         targetPath: null,
-        createdAt: eventCreatedAt
-      });
-      return;
+        archivedTo: []
+      };
     }
 
-    for (const candidate of candidates) {
-      const target = resolveCandidateTarget(candidate, workspaceOverride, this.options.repository);
-      const rejection = shouldRejectCandidate(candidate);
-      if (rejection !== null) {
-        this.recordCandidateAudit(candidate, 'rejected', rejection, target.targetPath);
+    const rejection = shouldRejectCandidate(candidate);
+    if (rejection !== null) {
+      this.recordCandidateAudit(candidate, 'rejected', rejection, target.targetPath);
+      return {
+        status: 'rejected',
+        reason: rejection,
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
+    }
+
+    if (this.isRunQuotaExceeded(candidate.sourceRunId, settings.maxCandidatesPerRun)) {
+      this.recordCandidateAudit(candidate, 'rejected', 'max_candidates_per_run', target.targetPath);
+      return {
+        status: 'quota_exceeded',
+        reason: `max_candidates_per_run=${settings.maxCandidatesPerRun}`,
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
+    }
+
+    if (target.kind === 'user') {
+      return await this.writeUserPreference(candidate, target, workspaceOverride);
+    }
+    return await this.writeStructuredEntry(candidate, target, workspaceOverride, resolveDate(createdAt));
+  }
+
+  /**
+   * 运行结束后的记忆维护：清掉 ttlDays 已过期的条目。
+   * 事件回调是进程边界，异常在这里收敛为审计与日志，不向事件总线抛出。
+   */
+  async handleAgentRunCompleted(payload: AgentRunCompletedPayload, createdAt?: string): Promise<void> {
+    try {
+      await this.runMaintenance({ workspacePath: payload.workspacePath, sourceRunId: payload.runId }, createdAt);
+    } catch (error) {
+      this.options.logger.warn('memory_auto_maintenance_failed', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  async runMaintenance(
+    input: { workspacePath?: string | null; sourceRunId: string },
+    createdAt?: string
+  ): Promise<AutoMemoryMaintenanceResult> {
+    const settings = this.resolveMemorySettings().autoMemory;
+    if (!settings.enabled) {
+      return { removed: 0, files: [] };
+    }
+    const workspaceOverride = resolveWorkspaceOverride(input.workspacePath);
+    const today = resolveDate(createdAt);
+    const eventCreatedAt = createdAt === undefined ? new Date().toISOString() : createdAt;
+    const targets: AutoMemoryTarget[] = [
+      { scope: 'global', kind: 'memory', targetPath: GLOBAL_MEMORY_TARGET_PATH }
+    ];
+    if (this.options.repository.hasWorkspace(workspaceOverride)) {
+      targets.push({ scope: 'workspace', kind: 'memory', targetPath: WORKSPACE_MEMORY_TARGET_PATH });
+    }
+    const files: AutoMemoryMaintenanceResult['files'] = [];
+    let removed = 0;
+    for (const target of targets) {
+      const current = await this.options.repository.readFile(
+        { scope: target.scope, kind: target.kind },
+        workspaceOverride
+      );
+      if (current === null || current.length === 0) {
         continue;
       }
-      try {
-        if (target.kind === 'user') {
-          await this.writeUserPreference(candidate, target, workspaceOverride);
-          continue;
-        }
-        const current = await this.options.repository.readFile({ scope: target.scope, kind: target.kind }, workspaceOverride);
-        const existing = current === null ? '' : current;
-        if (autoMemoryEntryExists(existing, candidate)) {
-          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', target.targetPath);
-          continue;
-        }
-        const entry = formatAutoMemoryEntry(candidate);
-        const next = appendAutoMemoryEntry(existing, date, entry);
-        const result = await this.options.repository.writeFile({
-          scope: target.scope,
-          kind: target.kind,
-          content: next
-        }, workspaceOverride);
-        if (!result.ok && result.reason === 'capacity_exceeded') {
-          const compacted = removeExactDuplicateStructuredEntries(existing);
-          const retryContent = appendAutoMemoryEntry(compacted, date, entry);
-          const retryResult = await this.options.repository.writeFile({
-            scope: target.scope,
-            kind: target.kind,
-            content: retryContent
-          }, workspaceOverride);
-          if (retryResult.ok) {
-            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry', target.targetPath);
-            continue;
-          }
-          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason, target.targetPath);
-          this.options.logger.warn('memory_auto_write_skipped', {
-            reason: retryResult.reason
-          });
-          continue;
-        }
-        if (!result.ok) {
-          this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
-          this.options.logger.warn('memory_auto_write_skipped', {
-            reason: result.reason
-          });
-          continue;
-        }
-        this.recordCandidateAudit(candidate, 'accepted', 'accepted', target.targetPath);
-      } catch (error) {
-        this.recordCandidateAudit(candidate, 'write_failed', 'exception', target.targetPath);
-        this.options.logger.warn('memory_auto_write_failed', {
-          error: error instanceof Error ? error.message : String(error)
-        });
+      const pruned = pruneExpiredAutoMemoryEntries(current, today);
+      if (pruned.removed.length === 0) {
+        continue;
       }
+      const result = await this.options.repository.writeFile(
+        { scope: target.scope, kind: target.kind, content: pruned.content },
+        workspaceOverride
+      );
+      if (!result.ok) {
+        this.options.logger.warn('memory_auto_maintenance_write_skipped', { reason: result.reason });
+        continue;
+      }
+      for (const entry of pruned.removed) {
+        this.recordEntryAudit(entry, target, input, eventCreatedAt);
+      }
+      removed += pruned.removed.length;
+      files.push({ targetPath: target.targetPath, removedKeys: pruned.removed.map((entry) => entry.key) });
     }
+    return { removed, files };
   }
 
   private async writeUserPreference(
     candidate: AutoMemoryCandidate,
     target: AutoMemoryTarget,
     workspaceOverride: MemoryWorkspaceContext | null | undefined
-  ): Promise<void> {
+  ): Promise<AutoMemoryRecordOutcome> {
     const current = await this.options.repository.readFile({ scope: target.scope, kind: target.kind }, workspaceOverride);
     const existing = current === null ? '' : current;
     const status = userPreferenceEntryStatus(existing, candidate);
     if (status === 'duplicate') {
       this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', target.targetPath);
-      return;
+      return {
+        status: 'duplicate',
+        reason: 'duplicate',
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
     }
+    // 冲突走 supersede：同一个 key 只保留最新值，旧值进审计表。
     if (status === 'conflict') {
-      this.recordCandidateAudit(candidate, 'conflict_rejected', 'conflict', target.targetPath);
-      return;
+      const superseded = replaceUserPreferenceEntry(existing, candidate);
+      if (superseded === null) {
+        throw new Error('user_preference_conflict_without_entry');
+      }
+      const result = await this.options.repository.writeFile(
+        { scope: target.scope, kind: target.kind, content: superseded.content },
+        workspaceOverride
+      );
+      if (!result.ok) {
+        this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
+        return {
+          status: 'write_failed',
+          reason: result.reason,
+          scope: target.scope,
+          targetPath: target.targetPath,
+          archivedTo: []
+        };
+      }
+      this.recordCandidateAudit(
+        candidate,
+        'maintenance_merged',
+        `superseded: ${superseded.previousSummary}`,
+        target.targetPath
+      );
+      return {
+        status: 'superseded',
+        reason: `superseded: ${superseded.previousSummary}`,
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
     }
-    const entry = formatUserPreferenceEntry(candidate);
-    const next = appendUserPreferenceEntry(existing, entry);
-    const result = await this.options.repository.writeFile({
-      scope: target.scope,
-      kind: target.kind,
-      content: next
-    }, workspaceOverride);
+    const next = appendUserPreferenceEntry(existing, formatUserPreferenceEntry(candidate));
+    const result = await this.options.repository.writeFile(
+      { scope: target.scope, kind: target.kind, content: next },
+      workspaceOverride
+    );
     if (!result.ok) {
       this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
-      this.options.logger.warn('memory_auto_write_skipped', {
-        reason: result.reason
-      });
-      return;
+      this.options.logger.warn('memory_auto_write_skipped', { reason: result.reason });
+      return {
+        status: 'write_failed',
+        reason: result.reason,
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
     }
     this.recordCandidateAudit(candidate, 'accepted', 'accepted', target.targetPath);
+    return {
+      status: 'accepted',
+      reason: 'accepted',
+      scope: target.scope,
+      targetPath: target.targetPath,
+      archivedTo: []
+    };
+  }
+
+  private async writeStructuredEntry(
+    candidate: AutoMemoryCandidate,
+    target: AutoMemoryTarget,
+    workspaceOverride: MemoryWorkspaceContext | null | undefined,
+    date: string
+  ): Promise<AutoMemoryRecordOutcome> {
+    const current = await this.options.repository.readFile({ scope: target.scope, kind: target.kind }, workspaceOverride);
+    const existing = current === null ? '' : current;
+    if (autoMemoryEntryExists(existing, candidate)) {
+      this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', target.targetPath);
+      return {
+        status: 'duplicate',
+        reason: 'duplicate',
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
+    }
+    const entry = formatAutoMemoryEntry(candidate);
+    const first = await this.options.repository.writeFile(
+      { scope: target.scope, kind: target.kind, content: appendAutoMemoryEntry(existing, date, entry) },
+      workspaceOverride
+    );
+    if (first.ok) {
+      this.recordCandidateAudit(candidate, 'accepted', 'accepted', target.targetPath);
+      return {
+        status: 'accepted',
+        reason: 'accepted',
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
+    }
+    if (first.reason !== 'capacity_exceeded') {
+      this.recordCandidateAudit(candidate, 'write_failed', first.reason, target.targetPath);
+      this.options.logger.warn('memory_auto_write_skipped', { reason: first.reason });
+      return {
+        status: 'write_failed',
+        reason: first.reason,
+        scope: target.scope,
+        targetPath: target.targetPath,
+        archivedTo: []
+      };
+    }
+
+    // 容量不足：先压缩重复条目并清理过期条目，再按需把最旧的日期小节搬进归档主题文件。
+    const compacted = pruneExpiredAutoMemoryEntries(removeExactDuplicateStructuredEntries(existing), date).content;
+    let attempt = appendAutoMemoryEntry(compacted, date, entry);
+    const archivedTo: string[] = [];
+    for (let step = 0; step <= MAX_ARCHIVE_STEPS; step += 1) {
+      const result = await this.options.repository.writeFile(
+        { scope: target.scope, kind: target.kind, content: attempt },
+        workspaceOverride
+      );
+      if (result.ok) {
+        const reason =
+          archivedTo.length === 0 ? 'accepted_after_capacity_retry' : `accepted_after_archive:${archivedTo.join(',')}`;
+        this.recordCandidateAudit(candidate, 'accepted', reason, target.targetPath);
+        return {
+          status: 'accepted',
+          reason,
+          scope: target.scope,
+          targetPath: target.targetPath,
+          archivedTo
+        };
+      }
+      if (result.reason !== 'capacity_exceeded' || step === MAX_ARCHIVE_STEPS) {
+        this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
+        this.options.logger.warn('memory_auto_write_skipped', { reason: result.reason });
+        return {
+          status: 'write_failed',
+          reason: result.reason,
+          scope: target.scope,
+          targetPath: target.targetPath,
+          archivedTo
+        };
+      }
+      const archived = await this.archiveOldestSection(attempt, target, workspaceOverride);
+      if (archived === null) {
+        this.recordCandidateAudit(candidate, 'write_failed', 'capacity_exceeded_no_archivable_section', target.targetPath);
+        return {
+          status: 'write_failed',
+          reason: 'capacity_exceeded_no_archivable_section',
+          scope: target.scope,
+          targetPath: target.targetPath,
+          archivedTo
+        };
+      }
+      if (!archived.ok) {
+        this.recordCandidateAudit(candidate, 'write_failed', `archive_failed:${archived.reason}`, target.targetPath);
+        return {
+          status: 'write_failed',
+          reason: `archive_failed:${archived.reason}`,
+          scope: target.scope,
+          targetPath: target.targetPath,
+          archivedTo
+        };
+      }
+      archivedTo.push(archived.topicPath);
+      attempt = archived.content;
+    }
+    throw new Error('auto_memory_archive_loop_not_terminated');
+  }
+
+  /**
+   * 把最旧的日期小节搬进 topics/archive-YYYY-MM.md，并在 MEMORY.md 留下一行索引。
+   * 先写归档文件再返回精简后的 MEMORY.md 内容，保证任何一步失败都不会丢内容。
+   */
+  private async archiveOldestSection(
+    content: string,
+    target: AutoMemoryTarget,
+    workspaceOverride: MemoryWorkspaceContext | null | undefined
+  ): Promise<{ ok: true; content: string; topicPath: string } | { ok: false; reason: string } | null> {
+    const oldest = extractOldestAutoMemorySection(content);
+    if (oldest === null) {
+      return null;
+    }
+    const slug = archiveTopicSlug(oldest.sectionDate);
+    const topicPath = memoryTopicVirtualPath(target.scope, slug);
+    const existingTopic = await this.options.repository.readTopicFile(
+      { scope: target.scope, slug },
+      workspaceOverride
+    );
+    const topicContent = appendTopicArchiveSection(existingTopic === null ? '' : existingTopic, oldest.section);
+    const topicResult = await this.options.repository.writeTopicFile(
+      { scope: target.scope, slug, content: topicContent },
+      workspaceOverride
+    );
+    if (!topicResult.ok) {
+      return { ok: false, reason: topicResult.reason };
+    }
+    return {
+      ok: true,
+      content: appendArchiveIndexLine(oldest.remaining, { sectionDate: oldest.sectionDate, topicPath }),
+      topicPath
+    };
+  }
+
+  private isRunQuotaExceeded(sourceRunId: string, maxCandidatesPerRun: number): boolean {
+    if (this.options.auditRepository === undefined) {
+      return false;
+    }
+    return this.options.auditRepository.countWritesForRun(sourceRunId) >= maxCandidatesPerRun;
+  }
+
+  private recordEntryAudit(
+    entry: ParsedAutoMemoryEntry,
+    target: AutoMemoryTarget,
+    input: { workspacePath?: string | null; sourceRunId: string },
+    createdAt: string
+  ): void {
+    if (!isCandidateType(entry.type) || !isConfidence(entry.confidence)) {
+      this.options.logger.warn('memory_auto_maintenance_audit_skipped', { key: entry.key, type: entry.type });
+      return;
+    }
+    this.recordAudit({
+      action: 'maintenance_deleted',
+      type: entry.type,
+      scope: target.scope,
+      confidence: entry.confidence,
+      key: entry.key,
+      summary: entry.summary,
+      sourceRunId: input.sourceRunId,
+      reason: `ttl_expired:${entry.sectionDate ?? 'unknown'}+${entry.ttlDays ?? 0}d`,
+      workspacePath: input.workspacePath === undefined ? null : input.workspacePath,
+      targetPath: target.targetPath,
+      createdAt
+    });
   }
 
   private recordCandidateAudit(
@@ -218,28 +527,31 @@ export function isAgentRunCompletedPayload(value: unknown): value is AgentRunCom
   );
 }
 
-function resolveWorkspaceOverride(payload: AgentRunCompletedPayload): MemoryWorkspaceContext | null | undefined {
-  if (payload.workspacePath === undefined) {
+function isCandidateType(value: string): value is AutoMemoryCandidateType {
+  return candidateTypes.has(value as AutoMemoryCandidateType);
+}
+
+function isConfidence(value: string): value is AutoMemoryConfidence {
+  return confidences.has(value as AutoMemoryConfidence);
+}
+
+function resolveWorkspaceOverride(
+  workspacePath: string | null | undefined
+): MemoryWorkspaceContext | null | undefined {
+  if (workspacePath === undefined) {
     return undefined;
   }
-  if (payload.workspacePath === null) {
+  if (workspacePath === null) {
     return null;
   }
-  const workspacePath = payload.workspacePath.trim();
-  if (workspacePath.length === 0) {
+  const trimmed = workspacePath.trim();
+  if (trimmed.length === 0) {
     throw new Error('agent_run_completed_workspace_path_empty');
   }
   return {
-    path: workspacePath,
-    label: workspacePath
+    path: trimmed,
+    label: trimmed
   };
-}
-
-function readWorkspacePath(payload: AgentRunCompletedPayload): string | null {
-  if (payload.workspacePath === undefined) {
-    return null;
-  }
-  return payload.workspacePath;
 }
 
 function resolveDate(createdAt: string | undefined): string {

@@ -33,21 +33,19 @@ describe('buildRunSummary', () => {
     expect(summary).toHaveLength(240);
   });
 
-  it('preserves typed automatic memory candidate lines without visible completion text', () => {
+  it('keeps candidate-looking lines as plain summary text now that remember owns memory writes', () => {
     const summary = buildRunSummary({
       assistantMessage: [
         'Completed the implementation.',
-        'workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.',
-        'decision: roc.memory.default | high | user confirmed automatic pipeline | Keep automatic memory writes enabled by default.'
+        'workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.'
       ].join('\n'),
       successfulToolNames: ['read_file'],
       workflowHint: null
     });
 
-    expect(summary).toBe([
-      'workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.',
-      'decision: roc.memory.default | high | user confirmed automatic pipeline | Keep automatic memory writes enabled by default.'
-    ].join('\n'));
+    expect(summary).toBe(
+      'Completed the implementation. workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.'
+    );
   });
 
   it('keeps malformed candidate-looking text as a normal summary', () => {

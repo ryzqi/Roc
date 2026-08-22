@@ -112,16 +112,21 @@ describe('core plugins integration', () => {
       text: '# DeepAgents Memory Preview'
     });
 
-    await runtime.publishEvent({
-      type: 'agent.run.completed',
-      source: '@roc/plugin-agent',
-      payload: {
-        runId: run.runId,
-        threadId: run.threadId,
-        summary: 'workspace_fact: roc.integration.memory | high | tests/main/plugins/core-plugins.integration.test.ts | Integration completion reached memory.',
-        assistantMessage: 'Memory saw the agent completion.'
-      },
-      createdAt: new Date().toISOString()
+    await expect(
+      runtime.invokeCapability('memory.entry.remember', {
+        type: 'workspace_fact',
+        confidence: 'high',
+        key: 'roc.integration.memory',
+        summary: 'Integration completion reached memory.',
+        evidence: ['tests/main/plugins/core-plugins.integration.test.ts'],
+        sourceRunId: run.runId,
+        sourceThreadId: run.threadId,
+        workspacePath: root
+      })
+    ).resolves.toMatchObject({
+      status: 'accepted',
+      scope: 'workspace',
+      targetPath: '/memory/workspaces/current/MEMORY.md'
     });
 
     await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toMatchObject({

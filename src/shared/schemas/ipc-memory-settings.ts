@@ -36,6 +36,17 @@ const memoryFileMetaSchema = z
   })
   .strict();
 
+const autoMemoryCandidateTypeSchema = z.enum([
+  'user_preference',
+  'workspace_fact',
+  'decision',
+  'pitfall',
+  'verification',
+  'transient_task_result'
+]);
+
+const autoMemoryConfidenceSchema = z.enum(['high', 'medium', 'low']);
+
 const autoMemoryAuditRecordSchema = z
   .object({
     id: z.string(),
@@ -49,22 +60,76 @@ const autoMemoryAuditRecordSchema = z
       'maintenance_deleted',
       'write_failed'
     ]),
-    type: z.enum([
-      'user_preference',
-      'workspace_fact',
-      'decision',
-      'pitfall',
-      'verification',
-      'transient_task_result'
-    ]),
+    type: autoMemoryCandidateTypeSchema,
     scope: memoryScopeSchema,
-    confidence: z.enum(['high', 'medium', 'low']),
+    confidence: autoMemoryConfidenceSchema,
     key: z.string(),
     summary: z.string(),
     sourceRunId: z.string(),
     reason: z.string(),
     workspacePath: z.string().nullable(),
     targetPath: z.string().nullable()
+  })
+  .strict();
+
+export const memorySearchRequestSchema = z
+  .object({
+    query: z.string().trim().min(1),
+    limit: z.number().int().positive().max(20).optional()
+  })
+  .strict();
+
+export const memorySearchResultSchema = z
+  .object({
+    query: z.string(),
+    hits: z.array(
+      z
+        .object({
+          path: z.string(),
+          scope: memoryScopeSchema,
+          kind: z.union([memoryKindSchema, z.literal('topic')]),
+          entryType: z.string(),
+          key: z.string().nullable(),
+          text: z.string(),
+          score: z.number()
+        })
+        .strict()
+    ),
+    scannedDocuments: z.number().int(),
+    scannedEntries: z.number().int()
+  })
+  .strict();
+
+export const memoryRememberRequestSchema = z
+  .object({
+    type: autoMemoryCandidateTypeSchema,
+    confidence: autoMemoryConfidenceSchema,
+    key: z.string(),
+    summary: z.string(),
+    evidence: z.array(z.string()),
+    sourceRunId: z.string(),
+    sourceThreadId: z.string().nullable().optional(),
+    workspacePath: z.string().nullable().optional(),
+    ttlDays: z.number().int().positive().nullable().optional(),
+    revalidate: z.string().nullable().optional()
+  })
+  .strict();
+
+export const memoryRememberOutcomeSchema = z
+  .object({
+    status: z.enum([
+      'accepted',
+      'superseded',
+      'duplicate',
+      'rejected',
+      'write_failed',
+      'disabled',
+      'quota_exceeded'
+    ]),
+    reason: z.string(),
+    scope: memoryScopeSchema,
+    targetPath: z.string().nullable(),
+    archivedTo: z.array(z.string())
   })
   .strict();
 

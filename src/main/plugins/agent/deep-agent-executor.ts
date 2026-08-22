@@ -185,6 +185,9 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         baseTools: tools.runTools,
         allowedToolNames: mainManifestToolNames,
         searchSessions: request => options.capabilities.invoke('agent.sessions.search', request),
+        searchMemory: request => options.capabilities.invoke('memory.entries.search', request),
+        remember: request => options.capabilities.invoke('memory.entry.remember', request),
+        runId: input.run.id,
         threadId: input.run.threadId,
         explicitSkillContexts
       });

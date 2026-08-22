@@ -46,7 +46,7 @@ describe('runDatabaseFastProbe', () => {
     expect(report.databases.every((item) => item.writeLockProbe === 'ok')).toBe(true);
     expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
       core: 3,
-      agent: 14,
+      agent: 15,
       memory: 1,
       task: 4,
       'plugin:@roc/plugin-workspace': 1,
@@ -126,7 +126,7 @@ describe('runDatabaseFastProbe', () => {
     });
     expect(report.databases.find((item) => item.dbName === 'agent')).toMatchObject({
       status: 'healthy',
-      schemaVersion: 14
+      schemaVersion: 15
     });
   });
 });

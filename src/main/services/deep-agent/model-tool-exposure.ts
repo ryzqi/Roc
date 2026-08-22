@@ -5,6 +5,7 @@ export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'write_file',
   'edit_file',
   'delete_file',
+  'remember',
   'run_shell_command',
   'execute',
   'propose_background_task',

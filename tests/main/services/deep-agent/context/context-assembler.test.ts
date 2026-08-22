@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { assembleContextHarness } from '../../../../../src/main/services/deep-agent/context/context-assembler';
 
 describe('assembleContextHarness', () => {
-  it('adds session_search and serializes prompt markers', () => {
+  it('adds recall and remember tools and serializes prompt markers', () => {
     const harness = assembleContextHarness({
       artifactStore: {} as never,
       mode: 'run',
@@ -13,11 +13,25 @@ describe('assembleContextHarness', () => {
       memorySources: ['/memory/global/AGENTS.md'],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      searchMemory: () => ({ query: 'x', hits: [], scannedDocuments: 0, scannedEntries: 0 }),
+      remember: () => ({
+        status: 'accepted' as const,
+        reason: 'accepted',
+        scope: 'global' as const,
+        targetPath: '/memory/global/USER.md',
+        archivedTo: []
+      }),
+      runId: 'run_context_assembler',
       threadId: 'thread_context_assembler',
       explicitSkillContexts: []
     });
 
-    expect(harness.tools.map(tool => tool.name)).toEqual(['session_search', 'read_context_artifact']);
+    expect(harness.tools.map(tool => tool.name)).toEqual([
+      'session_search',
+      'memory_search',
+      'remember',
+      'read_context_artifact'
+    ]);
     expect(harness.systemPrompt).toContain('<!-- BLOCK:static:static:');
     expect(harness.systemPrompt).toContain('<!-- BLOCK:context_recall:workspace:');
     expect(harness.skillSources).toEqual([]);
@@ -37,6 +51,15 @@ describe('assembleContextHarness', () => {
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      searchMemory: () => ({ query: 'x', hits: [], scannedDocuments: 0, scannedEntries: 0 }),
+      remember: () => ({
+        status: 'accepted' as const,
+        reason: 'accepted',
+        scope: 'global' as const,
+        targetPath: '/memory/global/USER.md',
+        archivedTo: []
+      }),
+      runId: 'run_context_assembler',
       threadId: 'thread_context_assembler_skills',
       explicitSkillContexts: []
     });
@@ -54,6 +77,15 @@ describe('assembleContextHarness', () => {
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      searchMemory: () => ({ query: 'x', hits: [], scannedDocuments: 0, scannedEntries: 0 }),
+      remember: () => ({
+        status: 'accepted' as const,
+        reason: 'accepted',
+        scope: 'global' as const,
+        targetPath: '/memory/global/USER.md',
+        archivedTo: []
+      }),
+      runId: 'run_context_assembler',
       threadId: 'thread_context_assembler_explicit',
       explicitSkillContexts: [
         {

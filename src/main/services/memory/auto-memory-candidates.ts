@@ -4,7 +4,11 @@ import type {
   AutoMemoryConfidence,
   MemoryScope
 } from '../../../shared/types';
-import type { AgentRunCompletedPayload } from './auto-memory-writer';
+
+/** 单条记忆的字段上限,保证一条条目远小于记忆文件的字符上限,不会靠归档腾地方也写不进去。 */
+const MAX_KEY_CHARS = 120;
+const MAX_SUMMARY_CHARS = 400;
+const MAX_EVIDENCE_CHARS = 400;
 
 export type AutoMemoryCandidate = {
   type: AutoMemoryCandidateType;
@@ -21,34 +25,54 @@ export type AutoMemoryCandidate = {
   revalidate: string | null;
 };
 
-const candidateTypes = new Set<AutoMemoryCandidateType>([
-  'user_preference',
-  'workspace_fact',
-  'decision',
-  'pitfall',
-  'verification',
-  'transient_task_result'
-]);
+export type AutoMemoryCandidateInput = {
+  type: AutoMemoryCandidateType;
+  confidence: AutoMemoryConfidence;
+  key: string;
+  summary: string;
+  evidence: readonly string[];
+  sourceRunId: string;
+  sourceThreadId: string | null;
+  workspacePath: string | null | undefined;
+  ttlDays: number | null;
+  revalidate: string | null;
+};
 
-const confidences = new Set<AutoMemoryConfidence>(['high', 'medium', 'low']);
+/** 已经落盘的结构化条目，用于 TTL 清理、归档搬迁和 memory_search。 */
+export type ParsedAutoMemoryEntry = {
+  type: string;
+  key: string;
+  confidence: string;
+  source: string;
+  evidence: string[];
+  summary: string;
+  ttlDays: number | null;
+  revalidate: string | null;
+  sectionDate: string | null;
+  startLine: number;
+  endLine: number;
+};
 
-export function extractAutoMemoryCandidates(
-  payload: AgentRunCompletedPayload,
+export function buildAutoMemoryCandidate(
+  input: AutoMemoryCandidateInput,
   settings: AppSettings['memory']['autoMemory'],
   createdAt: string
-): AutoMemoryCandidate[] {
-  const candidates: AutoMemoryCandidate[] = [];
-  const lines = payload.summary.split('\n');
-  for (const line of lines) {
-    if (candidates.length >= settings.maxCandidatesPerRun) {
-      break;
-    }
-    const candidate = parseCandidateLine(line, payload, settings, createdAt);
-    if (candidate !== null) {
-      candidates.push(candidate);
-    }
-  }
-  return candidates;
+): AutoMemoryCandidate {
+  const metadata = normalizeCandidateMetadata(input, settings);
+  return {
+    type: input.type,
+    scope: resolveCandidateScope(input.type, input.workspacePath),
+    confidence: input.confidence,
+    key: collapseWhitespace(input.key),
+    summary: collapseWhitespace(input.summary),
+    evidence: input.evidence.map((item) => collapseWhitespace(item)).filter((item) => item.length > 0),
+    sourceRunId: input.sourceRunId,
+    sourceThreadId: input.sourceThreadId,
+    workspacePath: input.workspacePath === undefined ? null : input.workspacePath,
+    createdAt,
+    ttlDays: metadata.ttlDays,
+    revalidate: metadata.revalidate
+  };
 }
 
 export function shouldRejectCandidate(candidate: AutoMemoryCandidate): string | null {
@@ -60,6 +84,15 @@ export function shouldRejectCandidate(candidate: AutoMemoryCandidate): string | 
   }
   if (candidate.sourceRunId.length === 0) {
     return 'source_run_id_empty';
+  }
+  if ([...candidate.summary].length > MAX_SUMMARY_CHARS) {
+    return 'summary_too_long';
+  }
+  if ([...candidate.key].length > MAX_KEY_CHARS) {
+    return 'key_too_long';
+  }
+  if ([...candidate.evidence.join(', ')].length > MAX_EVIDENCE_CHARS) {
+    return 'evidence_too_long';
   }
   if (candidate.type === 'transient_task_result') {
     return 'transient_task_result';
@@ -183,78 +216,244 @@ export function appendAutoMemoryEntry(existing: string, date: string, entry: str
   if (headingIndex === -1) {
     return [trimmed, '', heading, '', entry].join('\n');
   }
-  const nextHeadingIndex = findNextDateHeading(lines, headingIndex + 1);
+  const nextHeadingIndex = findNextSecondLevelHeading(lines, headingIndex + 1);
   const insertIndex = nextHeadingIndex === -1 ? lines.length : nextHeadingIndex;
   const before = lines.slice(0, insertIndex);
+  while (before.length > 0 && before[before.length - 1].trim().length === 0) {
+    before.pop();
+  }
   const after = lines.slice(insertIndex);
   before.push(entry);
+  if (after.length > 0) {
+    before.push('');
+  }
   return [...before, ...after].join('\n');
 }
 
-function parseCandidateLine(
-  line: string,
-  payload: AgentRunCompletedPayload,
-  settings: AppSettings['memory']['autoMemory'],
-  createdAt: string
-): AutoMemoryCandidate | null {
-  const match = /^([a-z_]+):\s*(.*)$/u.exec(line.trim());
-  if (match === null) {
-    return null;
-  }
-  const rawType = match[1];
-  if (!isCandidateType(rawType)) {
-    return null;
-  }
-  const body = match[2];
-  if (body === undefined) {
-    return null;
-  }
-  const parts = body.split('|').map((part) => part.trim());
-  if (parts.length < 4) {
-    return null;
-  }
-  const key = parts[0];
-  const rawConfidence = parts[1];
-  const evidence = parts[2] === undefined ? [] : parts[2].split(',').map((item) => item.trim()).filter((item) => item.length > 0);
-  const summary = parts[3];
-  if (key === undefined || rawConfidence === undefined || summary === undefined || !isConfidence(rawConfidence)) {
-    return null;
-  }
-  const metadata = parseMetadata(parts.slice(4), settings);
-  return {
-    type: rawType,
-    scope: resolveCandidateScope(rawType, payload.workspacePath),
-    confidence: rawConfidence,
-    key,
-    summary,
-    evidence,
-    sourceRunId: payload.runId,
-    sourceThreadId: payload.threadId,
-    workspacePath: payload.workspacePath === undefined ? null : payload.workspacePath,
-    createdAt,
-    ttlDays: metadata.ttlDays,
-    revalidate: metadata.revalidate
-  };
-}
-
-function parseMetadata(parts: string[], settings: AppSettings['memory']['autoMemory']): { ttlDays: number | null; revalidate: string | null } {
-  let ttlDays: number | null = null;
-  let revalidate: string | null = null;
-  for (const part of parts) {
-    const revalidatePrefix = 'revalidate=';
-    const ttlPrefix = 'ttlDays=';
-    if (part.startsWith(revalidatePrefix)) {
-      const value = part.slice(revalidatePrefix.length).trim();
-      revalidate = value.length === 0 ? null : value;
+/**
+ * 用新的 summary 覆盖同一个 key 的偏好条目（supersede）。
+ * 旧值不会丢失：调用方把 previousSummary 写进 memory_auto_audit。
+ */
+export function replaceUserPreferenceEntry(
+  existing: string,
+  candidate: AutoMemoryCandidate
+): { content: string; previousSummary: string } | null {
+  const lines = existing.split('\n');
+  let pendingKey: string | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    const keyMatch = /^<!--\s*key:\s*([a-z0-9._:-]+)\s*-->$/u.exec(trimmed);
+    if (keyMatch !== null) {
+      pendingKey = keyMatch[1];
       continue;
     }
-    if (part.startsWith(ttlPrefix)) {
-      const parsed = Number.parseInt(part.slice(ttlPrefix.length).trim(), 10);
-      if (Number.isInteger(parsed) && parsed > 0) {
-        ttlDays = parsed;
+    if (pendingKey === null || !trimmed.startsWith('- ')) {
+      continue;
+    }
+    if (pendingKey === candidate.key) {
+      const previousSummary = trimmed.slice(2).trim();
+      const next = [...lines];
+      next[index] = `- ${candidate.summary}`;
+      return { content: next.join('\n'), previousSummary };
+    }
+    pendingKey = null;
+  }
+  return null;
+}
+
+export function parseAutoMemoryEntries(content: string): ParsedAutoMemoryEntry[] {
+  const lines = content.split('\n');
+  const entries: ParsedAutoMemoryEntry[] = [];
+  let sectionDate: string | null = null;
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const dateMatch = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/u.exec(line);
+    if (dateMatch !== null) {
+      sectionDate = dateMatch[1];
+      index += 1;
+      continue;
+    }
+    if (/^##\s+\S/u.test(line)) {
+      sectionDate = null;
+      index += 1;
+      continue;
+    }
+    const typeMatch = /^-\s+type:\s*(\S+)\s*$/u.exec(line);
+    if (typeMatch === null) {
+      index += 1;
+      continue;
+    }
+    const startLine = index;
+    const fields = new Map<string, string>();
+    index += 1;
+    while (index < lines.length && /^\s+\S/u.test(lines[index])) {
+      const fieldMatch = /^\s+([A-Za-z]+):\s*(.*)$/u.exec(lines[index]);
+      if (fieldMatch !== null) {
+        fields.set(fieldMatch[1], fieldMatch[2].trim());
       }
+      index += 1;
+    }
+    const ttlRaw = fields.get('ttlDays');
+    const parsedTtl = ttlRaw === undefined ? Number.NaN : Number.parseInt(ttlRaw, 10);
+    const evidenceRaw = fields.get('evidence') ?? '';
+    entries.push({
+      type: typeMatch[1],
+      key: fields.get('key') ?? '',
+      confidence: fields.get('confidence') ?? '',
+      source: fields.get('source') ?? '',
+      evidence: evidenceRaw
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+      summary: fields.get('summary') ?? '',
+      ttlDays: Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : null,
+      revalidate: fields.get('revalidate') ?? null,
+      sectionDate,
+      startLine,
+      endLine: index
+    });
+  }
+  return entries;
+}
+
+/** 删除 ttlDays 已过期的结构化条目，并清掉因此变空的日期小节。 */
+export function pruneExpiredAutoMemoryEntries(
+  content: string,
+  today: string
+): { content: string; removed: ParsedAutoMemoryEntry[] } {
+  const expired = parseAutoMemoryEntries(content).filter((entry) => isEntryExpired(entry, today));
+  if (expired.length === 0) {
+    return { content, removed: [] };
+  }
+  const dropped = new Set<number>();
+  for (const entry of expired) {
+    for (let line = entry.startLine; line < entry.endLine; line += 1) {
+      dropped.add(line);
     }
   }
+  const kept = content.split('\n').filter((_line, index) => !dropped.has(index));
+  return { content: dropEmptyDateSections(kept).join('\n').trimEnd(), removed: expired };
+}
+
+/**
+ * 取出最旧的日期小节用于归档。只剩一个日期小节时返回 null：
+ * 最近一次的记忆必须留在 MEMORY.md 里，否则索引层会被搬空。
+ */
+export function extractOldestAutoMemorySection(
+  content: string
+): { sectionDate: string; section: string; remaining: string } | null {
+  const lines = content.split('\n');
+  const sections: Array<{ date: string; start: number; end: number }> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const dateMatch = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/u.exec(lines[index]);
+    if (dateMatch === null) {
+      continue;
+    }
+    sections.push({ date: dateMatch[1], start: index, end: findNextSecondLevelHeading(lines, index + 1) });
+  }
+  if (sections.length < 2) {
+    return null;
+  }
+  const oldest = sections.reduce((left, right) => (right.date < left.date ? right : left));
+  const end = oldest.end === -1 ? lines.length : oldest.end;
+  const section = lines.slice(oldest.start, end).join('\n').trimEnd();
+  const remaining = [...lines.slice(0, oldest.start), ...lines.slice(end)].join('\n').trimEnd();
+  return { sectionDate: oldest.date, section, remaining };
+}
+
+export function archiveTopicSlug(sectionDate: string): string {
+  return `archive-${sectionDate.slice(0, 7)}`;
+}
+
+/** 在 MEMORY.md 保留一行索引，指向搬走的归档主题文件。 */
+export function appendArchiveIndexLine(
+  content: string,
+  input: { sectionDate: string; topicPath: string }
+): string {
+  const line = `- ${input.sectionDate.slice(0, 7)}: ${input.topicPath}`;
+  const heading = '## Archive';
+  const trimmed = content.trimEnd();
+  if (trimmed.split('\n').some((existing) => existing.trim() === line)) {
+    return trimmed;
+  }
+  const lines = trimmed.split('\n');
+  const headingIndex = lines.findIndex((existing) => existing.trim() === heading);
+  if (headingIndex === -1) {
+    if (trimmed.length === 0) {
+      return [heading, '', line].join('\n');
+    }
+    return [trimmed, '', heading, '', line].join('\n');
+  }
+  const nextHeadingIndex = findNextSecondLevelHeading(lines, headingIndex + 1);
+  const insertIndex = nextHeadingIndex === -1 ? lines.length : nextHeadingIndex;
+  const before = lines.slice(0, insertIndex);
+  while (before.length > 0 && before[before.length - 1].trim().length === 0) {
+    before.pop();
+  }
+  const after = lines.slice(insertIndex);
+  if (after.length === 0) {
+    return [...before, line].join('\n');
+  }
+  return [...before, line, '', ...after].join('\n');
+}
+
+export function appendTopicArchiveSection(topicContent: string, section: string): string {
+  const trimmedTopic = topicContent.trimEnd();
+  if (trimmedTopic.length === 0) {
+    return ['# Archived memory entries', '', section].join('\n');
+  }
+  if (trimmedTopic.includes(section)) {
+    return trimmedTopic;
+  }
+  return [trimmedTopic, '', section].join('\n');
+}
+
+function isEntryExpired(entry: ParsedAutoMemoryEntry, today: string): boolean {
+  if (entry.ttlDays === null || entry.sectionDate === null) {
+    return false;
+  }
+  const created = new Date(`${entry.sectionDate}T00:00:00.000Z`);
+  if (Number.isNaN(created.getTime())) {
+    return false;
+  }
+  created.setUTCDate(created.getUTCDate() + entry.ttlDays);
+  return created.toISOString().slice(0, 10) < today;
+}
+
+function dropEmptyDateSections(lines: string[]): string[] {
+  const result: string[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const dateMatch = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/u.exec(lines[index]);
+    if (dateMatch === null) {
+      result.push(lines[index]);
+      index += 1;
+      continue;
+    }
+    const end = findNextSecondLevelHeading(lines, index + 1);
+    const sectionEnd = end === -1 ? lines.length : end;
+    const body = lines.slice(index + 1, sectionEnd);
+    if (body.every((line) => line.trim().length === 0)) {
+      index = sectionEnd;
+      continue;
+    }
+    result.push(...lines.slice(index, sectionEnd));
+    index = sectionEnd;
+  }
+  return result;
+}
+
+function normalizeCandidateMetadata(
+  input: AutoMemoryCandidateInput,
+  settings: AppSettings['memory']['autoMemory']
+): { ttlDays: number | null; revalidate: string | null } {
+  const revalidate =
+    input.revalidate === null || collapseWhitespace(input.revalidate).length === 0
+      ? null
+      : collapseWhitespace(input.revalidate);
+  let ttlDays =
+    input.ttlDays !== null && Number.isInteger(input.ttlDays) && input.ttlDays > 0 ? input.ttlDays : null;
   if (ttlDays === null && revalidate !== null) {
     ttlDays = settings.lowConfidenceTtlDays;
   }
@@ -271,14 +470,6 @@ function resolveCandidateScope(type: AutoMemoryCandidateType, workspacePath: str
   return 'global';
 }
 
-function isCandidateType(value: string): value is AutoMemoryCandidateType {
-  return candidateTypes.has(value as AutoMemoryCandidateType);
-}
-
-function isConfidence(value: string): value is AutoMemoryConfidence {
-  return confidences.has(value as AutoMemoryConfidence);
-}
-
 function hasDirectUserEvidence(evidence: string[]): boolean {
   return evidence.some((item) => {
     const normalized = normalizeMemoryText(item);
@@ -293,7 +484,7 @@ function hasDirectUserEvidence(evidence: string[]): boolean {
   });
 }
 
-function parseUserPreferenceEntries(existing: string): Array<{ key: string; summary: string }> {
+export function parseUserPreferenceEntries(existing: string): Array<{ key: string; summary: string }> {
   const entries: Array<{ key: string; summary: string }> = [];
   const lines = existing.split('\n');
   let pendingKey: string | null = null;
@@ -316,16 +507,15 @@ function isSafeUserPreferenceKey(key: string): boolean {
 }
 
 function normalizeMemoryText(value: string): string {
-  return value.replace(/\s+/gu, ' ').trim().toLocaleLowerCase();
+  return collapseWhitespace(value).toLocaleLowerCase();
 }
 
-function findNextDateHeading(lines: string[], start: number): number {
-  for (let index = start; index < lines.length; index += 1) {
-    if (/^## \d{4}-\d{2}-\d{2}$/u.test(lines[index])) {
-      return index;
-    }
-  }
-  return -1;
+/**
+ * 记忆文件是按行解析的,所以模型给的字段必须压成单行,
+ * 否则一个带换行的 summary 就能在 MEMORY.md 里伪造出额外条目或日期小节。
+ */
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
 }
 
 function findNextSecondLevelHeading(lines: string[], start: number): number {
