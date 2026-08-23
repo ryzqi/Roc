@@ -62,10 +62,7 @@ export function createEvalAgent(input: {
       capabilityManifest,
       mode: toRunExecutionMode(input.mode),
       budget: {
-        modelCallLimit: 6,
-        modelThreadCallLimit: 6,
-        toolCallLimit: 4,
-        toolThreadCallLimit: 4
+        contextBudgetTokens: null
       }
     }),
     model: input.model,

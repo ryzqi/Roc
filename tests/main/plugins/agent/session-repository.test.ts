@@ -63,7 +63,7 @@ describe('AgentSessionRepository', () => {
     expect(() => repository.getRecordedResumePayload(run.id)).toThrow('agent_resume_audit_payload_invalid');
   });
 
-  it('migrates a persisted V1 execution snapshot to the frozen V2 call budget', () => {
+  it('migrates a persisted V1 execution snapshot to the V2 snapshot schema', () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -86,11 +86,7 @@ describe('AgentSessionRepository', () => {
     expect(repository.getRunExecutionSnapshot(run.id)).toMatchObject({
       schemaVersion: 2,
       budget: {
-        contextBudgetTokens: null,
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
+        contextBudgetTokens: null
       }
     });
   });
@@ -1770,11 +1766,7 @@ function createRun(
       workspace: null,
       capabilityManifest: capabilityPreview.manifest,
       budget: {
-        contextBudgetTokens: null,
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
+        contextBudgetTokens: null
       },
       workflowHint: null,
       explicitSkillIds: [],

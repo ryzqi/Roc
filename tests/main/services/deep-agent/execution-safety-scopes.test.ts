@@ -85,8 +85,6 @@ describe('execution safety middleware scopes', () => {
       'RocShellPolicyMiddleware',
       'RTKMiddleware',
       'RocToolProtocolMiddleware',
-      'ModelCallLimitMiddleware',
-      'ToolCallLimitMiddleware',
       'RocContextCompactionPipeline',
       'RocToolEffectIdempotencyMiddleware',
       'ForgeErrorBudgetMiddleware',
@@ -101,8 +99,6 @@ describe('execution safety middleware scopes', () => {
     ) ?? [];
 
     expect(mainMiddlewareNames).toEqual(expect.arrayContaining(expectedSafetyMiddleware));
-    expect(mainMiddlewareNames).toContain('RocSubagentStateIsolationMiddleware');
-    expect(mainMiddlewareNames).not.toContain('RocSubagentBudgetStateInitializationMiddleware');
     for (const subagentName of ['general-purpose', 'research']) {
       const subagent = createDeepAgentInput.subagents?.find((candidate) => candidate.name === subagentName);
       if (!isBuiltSubagent(subagent)) {
@@ -114,8 +110,6 @@ describe('execution safety middleware scopes', () => {
 
       expect(middlewareNames).toContain('HumanInTheLoopMiddleware');
       expect(middlewareNames).toEqual(expect.arrayContaining(expectedSafetyMiddleware));
-      expect(middlewareNames).toContain('RocSubagentBudgetStateInitializationMiddleware');
-      expect(middlewareNames).toContain('RocSubagentStateIsolationMiddleware');
       expect(middlewareNames).not.toContain('SummarizationMiddleware');
       expect(middlewareNames.indexOf('RocToolProtocolMiddleware')).toBeLessThan(
         middlewareNames.indexOf('ForgeErrorBudgetMiddleware')

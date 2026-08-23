@@ -36,6 +36,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     expect(readStreamEventsCall().config).toEqual({
       version: 'v3',
+      recursionLimit: 10000,
       configurable: {
         run_id: 'run-1',
         thread_id: 'thread-1'

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GraphRecursionError } from '@langchain/langgraph';
 import { RocDomainError } from '../../src/main/services/errors';
 import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
 import { TOOL_ERROR_FIXTURES } from '../_fixtures/langchain-tool-errors';
@@ -17,15 +18,27 @@ describe('deep agent error mapping', () => {
     });
   });
 
-  it('maps native model and tool call limit errors to a non-retryable budget failure', () => {
-    expect(toRunFailure(new Error('Model call limits exceeded: run level call limit reached with 8 model calls'))).toEqual({
-      code: 'run_budget_exhausted',
-      message: '模型调用次数已达到本轮预算上限。',
+  it('maps LangGraph recursion exhaustion to a non-retryable terminal failure', () => {
+    const error = new GraphRecursionError(
+      'Recursion limit of 10000 reached without hitting a stop condition.',
+      { lc_error_code: 'GRAPH_RECURSION_LIMIT' }
+    );
+
+    expect(toRunFailure(error)).toEqual({
+      code: 'graph_recursion_limit_reached',
+      message: '本轮执行图步数已达到 LangGraph 递归上限，已停止本轮执行。',
       retryable: false
     });
-    expect(toRunFailure(new Error("'run_shell_command' tool call limit reached: run limit exceeded (12/11 calls)."))).toEqual({
-      code: 'run_budget_exhausted',
-      message: '工具调用次数已达到本轮预算上限。',
+  });
+
+  it('maps recursion exhaustion by lc_error_code when the error name is not preserved', () => {
+    const error = new Error('Recursion limit of 10000 reached without hitting a stop condition.');
+    Reflect.set(error, 'lc_error_code', 'GRAPH_RECURSION_LIMIT');
+
+    expect(error.name).toBe('Error');
+    expect(toRunFailure(error)).toEqual({
+      code: 'graph_recursion_limit_reached',
+      message: '本轮执行图步数已达到 LangGraph 递归上限，已停止本轮执行。',
       retryable: false
     });
   });

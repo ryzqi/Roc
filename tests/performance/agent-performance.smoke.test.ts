@@ -519,8 +519,6 @@ async function measureIterations(
       const agent = createPerformanceAgent({
         checkpointer: new RocSqliteCheckpointer(db),
         model,
-        modelCallLimit: iterationCount + 2,
-        toolCallLimit: iterationCount + 1,
         tools: [createPerformanceStepTool(() => {
           toolExecutionCount += 1;
         })],
@@ -598,9 +596,7 @@ async function measureSubagentFanOut(workspacePath: string): Promise<MetricMeasu
       const agent = createPerformanceAgent({
         checkpointer: new RocSqliteCheckpointer(db),
         model: mainModel,
-        modelCallLimit: 8,
         subagents,
-        toolCallLimit: 6,
         workspacePath
       });
       const startedAt = performance.now();
@@ -739,9 +735,7 @@ async function measureOutboxProjection(): Promise<MetricMeasurement> {
 function createPerformanceAgent(input: {
   checkpointer: RocSqliteCheckpointer;
   model: BaseChatModel;
-  modelCallLimit?: number;
   subagents?: DeepAgentBuildInput['subagents'];
-  toolCallLimit?: number;
   tools?: DeepAgentBuildInput['tools'];
   workspacePath: string;
 }) {
@@ -750,8 +744,6 @@ function createPerformanceAgent(input: {
   const capabilityManifest = createPerformanceCapabilityManifest(
     tools.some((candidate) => candidate.name === performanceToolName)
   );
-  const modelCallLimit = input.modelCallLimit === undefined ? 8 : input.modelCallLimit;
-  const toolCallLimit = input.toolCallLimit === undefined ? 4 : input.toolCallLimit;
   return buildDeepAgent({
     backend,
     checkpointer: input.checkpointer,
@@ -760,10 +752,7 @@ function createPerformanceAgent(input: {
       capabilityManifest,
       workspacePath: input.workspacePath,
       budget: {
-        modelCallLimit,
-        modelThreadCallLimit: modelCallLimit,
-        toolCallLimit,
-        toolThreadCallLimit: toolCallLimit
+        contextBudgetTokens: null
       }
     }),
     model: input.model,

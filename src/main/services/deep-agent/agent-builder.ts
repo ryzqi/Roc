@@ -14,9 +14,7 @@ import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import {
   anthropicPromptCachingMiddleware,
   createMiddleware,
-  modelCallLimitMiddleware,
   todoListMiddleware,
-  toolCallLimitMiddleware,
   toolRetryMiddleware
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
@@ -59,10 +57,6 @@ import {
 import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
 import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPolicyMiddleware } from './shell-policy';
-import {
-  createRocSubagentBudgetStateInitializationMiddleware,
-  createRocSubagentStateIsolationMiddleware
-} from './subagent-state-isolation';
 import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import { createToolProtocolMiddleware } from './tool-protocol';
@@ -106,10 +100,6 @@ type DeepAgentBuildPolicy = {
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   workspacePath: string | null;
   contextBudgetTokens: number | undefined;
-  modelCallLimit: number;
-  modelThreadCallLimit: number;
-  toolCallLimit: number;
-  toolThreadCallLimit: number;
 };
 
 function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuildPolicy {
@@ -126,11 +116,7 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
     workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
     contextBudgetTokens: snapshot.budget.contextBudgetTokens === null
       ? undefined
-      : snapshot.budget.contextBudgetTokens,
-    modelCallLimit: snapshot.budget.modelCallLimit,
-    modelThreadCallLimit: snapshot.budget.modelThreadCallLimit,
-    toolCallLimit: snapshot.budget.toolCallLimit,
-    toolThreadCallLimit: snapshot.budget.toolThreadCallLimit
+      : snapshot.budget.contextBudgetTokens
   };
 }
 
@@ -453,7 +439,6 @@ function createExecutionSafetyMiddleware(
   policy: DeepAgentBuildPolicy,
   executionScope: RunCapabilityExecutionScopeV1
 ) {
-  const budgetMiddleware = createNativeBudgetMiddleware(policy);
   return [
     createRocShellPolicyMiddleware({ workspacePath: policy.workspacePath }),
     createRTKMiddleware(new RTKBinaryManager()),
@@ -461,30 +446,10 @@ function createExecutionSafetyMiddleware(
       capabilityManifest: policy.capabilityManifest,
       executionScope
     }),
-    ...(executionScope === 'subagent'
-      ? [createRocSubagentBudgetStateInitializationMiddleware()]
-      : []),
-    createRocSubagentStateIsolationMiddleware(),
-    ...budgetMiddleware,
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
     createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware()
-  ];
-}
-
-function createNativeBudgetMiddleware(policy: DeepAgentBuildPolicy) {
-  return [
-    modelCallLimitMiddleware({
-      runLimit: policy.modelCallLimit,
-      threadLimit: policy.modelThreadCallLimit,
-      exitBehavior: 'error'
-    }),
-    toolCallLimitMiddleware({
-      runLimit: policy.toolCallLimit,
-      threadLimit: policy.toolThreadCallLimit,
-      exitBehavior: 'error'
-    })
   ];
 }
 

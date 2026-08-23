@@ -163,11 +163,7 @@ export const runBudgetV1Schema = z
 
 export const runBudgetV2Schema = z
   .object({
-    contextBudgetTokens: z.number().int().positive().nullable(),
-    modelCallLimit: z.number().int().positive(),
-    modelThreadCallLimit: z.number().int().positive(),
-    toolCallLimit: z.number().int().positive(),
-    toolThreadCallLimit: z.number().int().positive()
+    contextBudgetTokens: z.number().int().positive().nullable()
   })
   .strict();
 

@@ -123,11 +123,7 @@ describe('shared agent contracts', () => {
         untrustedContextPolicy: 'external_content_reference_only'
       },
       budget: {
-        contextBudgetTokens: null,
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
+        contextBudgetTokens: null
       },
       workflowHint: null,
       explicitSkillIds: [],

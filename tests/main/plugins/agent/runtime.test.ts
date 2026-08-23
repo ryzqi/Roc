@@ -145,12 +145,7 @@ describe('AgentPluginRuntime', () => {
         type: 'agent.run.started'
       })
     );
-    expect(repository.getRunExecutionSnapshot(result.runId).budget).toMatchObject({
-      modelCallLimit: 12,
-      modelThreadCallLimit: 60,
-      toolCallLimit: 24,
-      toolThreadCallLimit: 120
-    });
+    expect(repository.getRunExecutionSnapshot(result.runId).mode).toBe('plan');
     await waitForEvent(() =>
       events.some(
         (event) =>
@@ -245,12 +240,6 @@ describe('AgentPluginRuntime', () => {
     const snapshot = repository.getRunExecutionSnapshot(result.runId);
 
     expect(snapshot.runOrigin).toBe('background_schedule');
-    expect(snapshot.budget).toMatchObject({
-      modelCallLimit: 8,
-      modelThreadCallLimit: 40,
-      toolCallLimit: 16,
-      toolThreadCallLimit: 80
-    });
     expect(createChatStartRunRequestFromSnapshot(snapshot, run).taskSource).toBe('background_schedule');
     expect(db.prepare('SELECT kind FROM agent_threads WHERE id = ?').get(result.threadId)).toEqual({ kind: 'background' });
     await waitForEvent(() =>
@@ -685,7 +674,7 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
-  it('terminates budget exhaustion without entering provider recovery', async () => {
+  it('terminates non-retryable failures without entering provider recovery', async () => {
     const repository = new AgentSessionRepository(db);
     let calls = 0;
     const runtime = new AgentPluginRuntime({
@@ -693,8 +682,8 @@ describe('AgentPluginRuntime', () => {
         execute() {
   return createTestAgentExecution(() => (async function* () {
           calls += 1;
-          throw new Error('Model call limits exceeded: run level call limit reached with 20 model calls');
-        })(), failedTestOutcome('Model call limits exceeded: run level call limit reached with 20 model calls'));
+          throw new Error('context_budget_exhausted');
+        })(), failedTestOutcome('context_budget_exhausted'));
 }
       },
       eventBus,
@@ -715,15 +704,15 @@ describe('AgentPluginRuntime', () => {
     expect(repository.getRun(result.runId).status).toBe('failed');
     expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
       status: 'failed',
-      errorCode: 'run_budget_exhausted',
+      errorCode: 'context_budget_exhausted',
       retryable: false,
       cancelSource: null
     });
     expect(chatEvents).toContainEqual(expect.objectContaining({
       type: 'run_failed',
       runId: result.runId,
-      code: 'run_budget_exhausted',
-      message: '模型调用次数已达到本轮预算上限。',
+      code: 'context_budget_exhausted',
+      message: '上下文压缩后仍超过模型输入预算，已停止本轮执行。',
       retryable: false
     }));
     expect(chatEvents.map((event) => event?.type)).not.toContain('run_recovering');
@@ -1012,11 +1001,7 @@ function runSnapshot(preview: AgentCapabilityPreview, modelId: string) {
     workspace: null,
     capabilityManifest: preview.manifest,
     budget: {
-      contextBudgetTokens: null,
-      modelCallLimit: 20,
-      modelThreadCallLimit: 100,
-      toolCallLimit: 40,
-      toolThreadCallLimit: 200
+      contextBudgetTokens: null
     },
     workflowHint: null,
     explicitSkillIds: [],

@@ -26,9 +26,9 @@ export function toRunFailure(error: unknown): RunFailure {
     if (contextBudgetFailure !== null) {
       return contextBudgetFailure;
     }
-    const budgetFailure = readBudgetFailure(error);
-    if (budgetFailure !== null) {
-      return budgetFailure;
+    const recursionFailure = readGraphRecursionFailure(error);
+    if (recursionFailure !== null) {
+      return recursionFailure;
     }
     const toolFailure = readToolFailure(error);
     if (toolFailure !== null) {
@@ -103,22 +103,15 @@ function readContextBudgetFailure(error: Error): RunFailure | null {
   return null;
 }
 
-function readBudgetFailure(error: Error): RunFailure | null {
-  if (error.name === 'ModelCallLimitMiddlewareError' || error.message.startsWith('Model call limits exceeded')) {
-    return {
-      code: 'run_budget_exhausted',
-      message: '模型调用次数已达到本轮预算上限。',
-      retryable: false
-    };
+function readGraphRecursionFailure(error: Error): RunFailure | null {
+  if (error.name !== 'GraphRecursionError' && Reflect.get(error, 'lc_error_code') !== 'GRAPH_RECURSION_LIMIT') {
+    return null;
   }
-  if (error.name === 'ToolCallLimitExceededError' || error.message.includes('tool call limit reached')) {
-    return {
-      code: 'run_budget_exhausted',
-      message: '工具调用次数已达到本轮预算上限。',
-      retryable: false
-    };
-  }
-  return null;
+  return {
+    code: 'graph_recursion_limit_reached',
+    message: '本轮执行图步数已达到 LangGraph 递归上限，已停止本轮执行。',
+    retryable: false
+  };
 }
 
 function readToolFailure(error: Error): RunFailure | null {

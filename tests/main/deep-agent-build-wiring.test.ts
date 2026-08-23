@@ -100,7 +100,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     });
   });
 
-  it('installs native model and tool call limit middleware from the frozen budget', () => {
+  it('does not install native model or tool call limit middleware', () => {
     const input = {
       snapshot: createFixtureSnapshot({
       mode: 'run',
@@ -108,10 +108,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       budget: {
         contextBudgetTokens: 4096,
-        modelCallLimit: 7,
-        modelThreadCallLimit: 35,
-        toolCallLimit: 11,
-        toolThreadCallLimit: 55,
       },
     }),
       model: {} as unknown,
@@ -132,8 +128,8 @@ describe('buildDeepAgent harness profile wiring', () => {
       Reflect.get(middleware as object, 'name')
     ) ?? [];
 
-    expect(middlewareNames).toContain('ModelCallLimitMiddleware');
-    expect(middlewareNames).toContain('ToolCallLimitMiddleware');
+    expect(middlewareNames).not.toContain('ModelCallLimitMiddleware');
+    expect(middlewareNames).not.toContain('ToolCallLimitMiddleware');
   });
 
   it('adds plan model tool exposure middleware only for plan mode', () => {

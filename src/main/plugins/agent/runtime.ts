@@ -1162,9 +1162,7 @@ function createRunExecutionSnapshotSeed(input: {
         contextBudgetTokens:
           input.modelHandle.langChainHandle === undefined
             ? null
-            : input.modelHandle.langChainHandle.runtime.contextBudgetTokens,
-        mode,
-        runOrigin: resolveRunOrigin(input.request)
+            : input.modelHandle.langChainHandle.runtime.contextBudgetTokens
       }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,

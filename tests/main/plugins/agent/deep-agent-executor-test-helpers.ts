@@ -256,11 +256,7 @@ function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWork
           },
     capabilityManifest,
     budget: {
-      contextBudgetTokens: 128_000,
-      modelCallLimit: 20,
-      modelThreadCallLimit: 100,
-      toolCallLimit: 40,
-      toolThreadCallLimit: 200
+      contextBudgetTokens: 128_000
     },
     workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
     explicitSkillIds,

@@ -480,11 +480,7 @@ function createRun(repository: AgentSessionRepository, userInput: string): TaskR
       workspace: null,
       capabilityManifest: capabilityPreview.manifest,
       budget: {
-        contextBudgetTokens: null,
-        modelCallLimit: 20,
-        modelThreadCallLimit: 100,
-        toolCallLimit: 40,
-        toolThreadCallLimit: 200
+        contextBudgetTokens: null
       },
       workflowHint: null,
       explicitSkillIds: [],

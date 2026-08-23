@@ -70,11 +70,7 @@ export function createDeepAgentTestSnapshot(input: {
     inputMessageId: 'message-test',
     dispatchKey: null,
     budget: {
-      contextBudgetTokens: input.budget?.contextBudgetTokens ?? null,
-      modelCallLimit: input.budget?.modelCallLimit ?? 20,
-      modelThreadCallLimit: input.budget?.modelThreadCallLimit ?? 100,
-      toolCallLimit: input.budget?.toolCallLimit ?? 40,
-      toolThreadCallLimit: input.budget?.toolThreadCallLimit ?? 200
+      contextBudgetTokens: input.budget?.contextBudgetTokens ?? null
     }
   };
 }

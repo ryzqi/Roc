@@ -758,11 +758,7 @@ function createTestAgent(input: {
       threadId: input.threadId,
       workspacePath: 'F:\\Code\\Roc',
       budget: {
-        contextBudgetTokens: null,
-        modelCallLimit: 6,
-        modelThreadCallLimit: 6,
-        toolCallLimit: 6,
-        toolThreadCallLimit: 6
+        contextBudgetTokens: null
       }
     }),
     model: input.model,

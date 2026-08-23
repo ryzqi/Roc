@@ -328,6 +328,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             });
       const rawRun = await agent.streamEvents(runInput as never, {
         version: 'v3',
+        recursionLimit: 10000,
         configurable: {
           run_id: input.run.id,
           thread_id: input.run.threadId

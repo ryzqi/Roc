@@ -47,16 +47,11 @@ function migrateRunExecutionSnapshotV1(snapshot: RunExecutionSnapshotV1): RunExe
   if (!isRunCapabilityManifestIntegrityValid(snapshot.capabilityManifest)) {
     throw new Error('run_execution_snapshot_manifest_hash_invalid');
   }
-  const limits = resolveRunCallLimits(snapshot.runOrigin, snapshot.mode);
   return {
     ...snapshot,
     schemaVersion: 2,
     budget: {
-      contextBudgetTokens: snapshot.budget.contextBudgetTokens,
-      modelCallLimit: limits.model,
-      modelThreadCallLimit: limits.modelThread,
-      toolCallLimit: limits.tool,
-      toolThreadCallLimit: limits.toolThread
+      contextBudgetTokens: snapshot.budget.contextBudgetTokens
     },
     shellAllowedCommands: snapshot.runOrigin === 'background_schedule' ? [] : undefined
   };
@@ -64,30 +59,10 @@ function migrateRunExecutionSnapshotV1(snapshot: RunExecutionSnapshotV1): RunExe
 
 export function createRunBudget(input: {
   contextBudgetTokens: number | null;
-  mode: RunExecutionSnapshotV2['mode'];
-  runOrigin: RunExecutionSnapshotV2['runOrigin'];
 }): RunExecutionSnapshotV2['budget'] {
-  const limits = resolveRunCallLimits(input.runOrigin, input.mode);
   return {
-    contextBudgetTokens: input.contextBudgetTokens,
-    modelCallLimit: limits.model,
-    modelThreadCallLimit: limits.modelThread,
-    toolCallLimit: limits.tool,
-    toolThreadCallLimit: limits.toolThread
+    contextBudgetTokens: input.contextBudgetTokens
   };
-}
-
-function resolveRunCallLimits(
-  runOrigin: RunExecutionSnapshotV1['runOrigin'],
-  mode: RunExecutionSnapshotV1['mode']
-): { model: number; modelThread: number; tool: number; toolThread: number } {
-  if (runOrigin === 'background_schedule') {
-    return { model: 8, modelThread: 40, tool: 16, toolThread: 80 };
-  }
-  if (mode === 'plan') {
-    return { model: 12, modelThread: 60, tool: 24, toolThread: 120 };
-  }
-  return { model: 20, modelThread: 100, tool: 40, toolThread: 200 };
 }
 
 export function createChatStartRunRequestFromSnapshot(
