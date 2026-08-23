@@ -407,7 +407,7 @@ describe('SettingsView provider save', () => {
     });
     setInputValue('provider-draft-endpoint', 'http://changed.example.test/v1');
     await clickByTestId('settings-section-default-model');
-    expect(document.body.textContent).toContain('放弃 Provider 修改？');
+    expect(document.body.textContent).toContain('放弃提供商修改？');
     const dialog = document.body.querySelector('[role="alertdialog"]');
     const discard = Array.from(dialog?.querySelectorAll('button') ?? []).find((button) => button.textContent === '放弃修改');
     await act(async () => discard?.click());

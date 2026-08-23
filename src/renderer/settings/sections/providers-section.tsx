@@ -11,6 +11,7 @@ import {
   type ProviderDraft,
   updateProviderModelCard
 } from '../../settings-model';
+import { FieldLabel } from './provider-field-label';
 import { ProviderModelOptionsFields } from './provider-model-options-fields';
 
 function emptyModel(): ProviderModel {
@@ -149,8 +150,8 @@ export function ProvidersSection({
   const [deleteModelIndex, setDeleteModelIndex] = useState<number | null>(null);
   const [deleteProviderId, setDeleteProviderId] = useState<string | null>(null);
   const providerTypeOptions: Array<{ type: CreatableProviderType; label: string }> = [
-    { type: 'openai_compatible', label: 'OpenAI-compatible' },
-    { type: 'anthropic_compatible', label: 'Anthropic-compatible' }
+    { type: 'openai_compatible', label: 'OpenAI 兼容' },
+    { type: 'anthropic_compatible', label: 'Anthropic 兼容' }
   ];
   const filteredProviders = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -257,17 +258,17 @@ export function ProvidersSection({
             </label>
           )}
           <label className="field">
-            <span>API Key</span>
+            <FieldLabel apiName="API Key" text="API 密钥" />
             <div className="provider-secret-input">
               <TextInput
                 autoComplete="off"
                 data-testid="provider-draft-api-key"
                 onChange={(event) => onUpdateDraft({ apiKey: event.currentTarget.value })}
-                placeholder={stored ? '已有凭据，输入新值以替换' : '输入 API Key'}
+                placeholder={stored ? '已有凭据，输入新值以替换' : '输入 API 密钥'}
                 type={revealApiKey ? 'text' : 'password'}
                 value={draft.apiKey}
               />
-              <IconButton aria-pressed={revealApiKey} className="provider-secret-toggle" label={revealApiKey ? '隐藏 API Key' : '显示 API Key'} onClick={() => setRevealApiKey((current) => !current)}>
+              <IconButton aria-pressed={revealApiKey} className="provider-secret-toggle" label={revealApiKey ? '隐藏密钥' : '显示密钥'} onClick={() => setRevealApiKey((current) => !current)}>
                 {revealApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </IconButton>
             </div>
@@ -275,7 +276,7 @@ export function ProvidersSection({
           </label>
           {fixedBaseUrlProviderDraft ? null : (
             <label className="field">
-              <span>{fixedEndpoint ? '固定端点' : 'Base URL'}</span>
+              {fixedEndpoint ? <span>固定端点</span> : <FieldLabel apiName="Base URL" text="接口地址" />}
               <TextInput
                 data-testid="provider-draft-endpoint"
                 onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
@@ -284,7 +285,7 @@ export function ProvidersSection({
                 value={draft.endpoint}
               />
               <span className="field-hint">
-                {draft.type === 'nvidia' ? '留空使用 NVIDIA 官方 OpenAI-compatible 端点；自托管 NIM 可在高级参数中覆盖。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
+                {draft.type === 'nvidia' ? '留空使用 NVIDIA 官方 OpenAI 兼容端点；自托管 NIM 可在高级参数中覆盖。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
               </span>
             </label>
           )}
@@ -313,7 +314,7 @@ export function ProvidersSection({
           </section>
           <ProviderConnectionFields draft={draft} onUpdateDraft={onUpdateDraft} />
           <div className="provider-detail-actions">
-            <Button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} variant="primary">{fixedProviderDraft ? `保存 ${draft.name} 配置` : '保存 Provider'}</Button>
+            <Button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} variant="primary">{fixedProviderDraft ? `保存 ${draft.name} 配置` : '保存提供商'}</Button>
             {selectedProvider === null || fixedProviderSelected ? null : (
               <Button data-testid={`provider-delete-${selectedProvider.id}`} onClick={() => setDeleteProviderId(selectedProvider.id)} variant="danger">删除提供商</Button>
             )}
@@ -341,7 +342,7 @@ export function ProvidersSection({
       </Drawer>
       <ConfirmDialog
         confirmLabel="删除模型"
-        description="删除后模型会从 Provider 草稿中移除，点击“保存 Provider”后才会持久化。"
+        description="删除后模型会从提供商草稿中移除，点击“保存提供商”后才会持久化。"
         onCancel={() => setDeleteModelIndex(null)}
         onConfirm={deleteSelectedModel}
         open={deleteModelIndex !== null}
@@ -349,7 +350,7 @@ export function ProvidersSection({
       />
       <ConfirmDialog
         confirmLabel="删除提供商"
-        description="该 Provider 及其模型配置会被删除。若它包含默认模型，默认模型也会被清除。"
+        description="该提供商及其模型配置会被删除。若它包含默认模型，默认模型也会被清除。"
         onCancel={() => setDeleteProviderId(null)}
         onConfirm={() => {
           const providerId = deleteProviderId;
@@ -398,23 +399,26 @@ function ProviderConnectionFields({ draft, onUpdateDraft }: {
   return (
     <section className="provider-detail-connection-fields">
       <label className="field">
-        <span>timeout_ms</span>
+        <FieldLabel apiName="timeout_ms" text="请求超时" />
         <TextInput value={draft.timeoutMs} onChange={(event) => onUpdateDraft({ timeoutMs: event.currentTarget.value })} />
+        <span className="field-hint">单位毫秒，留空用默认值</span>
       </label>
       {draft.type === 'openai_compatible' ? (
         <label className="field">
-          <span>organization</span>
+          <FieldLabel apiName="organization" text="组织 ID" />
           <TextInput value={draft.organization} onChange={(event) => onUpdateDraft({ organization: event.currentTarget.value })} />
         </label>
       ) : null}
       <label className="field field--full">
-        <span>default_headers</span>
+        <FieldLabel apiName="default_headers" text="默认请求头" />
         <TextArea rows={3} value={draft.defaultHeaders} onChange={(event) => onUpdateDraft({ defaultHeaders: event.currentTarget.value })} />
+        <span className="field-hint">JSON 对象，键和值都必须是字符串</span>
       </label>
       {draft.type === 'nvidia' ? (
         <label className="field">
-          <span>endpoint_override</span>
+          <FieldLabel apiName="endpoint_override" text="端点覆盖" />
           <TextInput value={draft.endpointOverride} onChange={(event) => onUpdateDraft({ endpointOverride: event.currentTarget.value })} />
+          <span className="field-hint">自托管 NIM 填这里</span>
         </label>
       ) : null}
     </section>

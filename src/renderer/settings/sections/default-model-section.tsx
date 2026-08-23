@@ -31,8 +31,8 @@ export function DefaultModelSection({
       </div>
       {options.length === 0 ? (
         <InfoRow
-          sub="请先在模型 Provider 标签下配置 provider 并启用至少一个模型。"
-          tag="blocked"
+          sub="请先在「模型供应商」中配置提供商并启用至少一个模型。"
+          tag="未就绪"
           title="默认模型"
           tone="warn"
         />
@@ -62,7 +62,7 @@ export function DefaultModelSection({
         <Button data-testid="default-model-clear" onClick={() => void onClearDefaultModel()}>清除默认</Button>
       </div>
       <p className="card-hint">
-        默认模型必须来自已启用 Provider 下的已启用模型；当前设置无法静默 fallback。
+        默认模型必须来自已启用提供商下的已启用模型；当前设置不会静默回退到其他模型。
       </p>
     </section>
   );

@@ -147,7 +147,7 @@ export function SettingsView({
       provider.type !== 'openrouter' &&
       provider.type !== 'llama_cpp'
     ) {
-      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible、NVIDIA、OpenRouter 和 llama.cpp provider。');
+      setProviderDraftError('当前设置页只能编辑 OpenAI 兼容、Anthropic 兼容、NVIDIA、OpenRouter 和 llama.cpp 提供商。');
       return;
     }
     const editableType = provider.type;
@@ -169,7 +169,7 @@ export function SettingsView({
         assertProviderCreateIdAvailable(state.providers, provider.id);
       }
     } catch (error) {
-      setProviderDraftError(error instanceof Error ? error.message : 'Provider 草稿无效。');
+      setProviderDraftError(error instanceof Error ? error.message : '提供商草稿无效。');
       return;
     }
     let saved: SettingsSnapshot;
@@ -179,7 +179,7 @@ export function SettingsView({
         await resolveClient().api.settings.save(upsertProviderInSettingsSaveRequest(buildBaseSaveRequest(), provider))
       );
     } catch (error) {
-      setProviderDraftError(error instanceof Error ? error.message : 'Provider 保存失败。');
+      setProviderDraftError(error instanceof Error ? error.message : '提供商保存失败。');
       return;
     }
     const savedProvider = saved.providers.find((entry) => entry.id === provider.id) ?? provider;
@@ -457,7 +457,7 @@ export function SettingsView({
       </section>
       <ConfirmDialog
         confirmLabel="放弃修改"
-        description="当前 Provider 有未保存修改。继续后这些修改会丢失。"
+        description="当前提供商有未保存修改。继续后这些修改会丢失。"
         onCancel={() => setPendingProviderNavigation(null)}
         onConfirm={() => {
           const pending = pendingProviderNavigation;
@@ -467,7 +467,7 @@ export function SettingsView({
           pending?.run();
         }}
         open={pendingProviderNavigation !== null}
-        title="放弃 Provider 修改？"
+        title="放弃提供商修改？"
       />
     </>
   );

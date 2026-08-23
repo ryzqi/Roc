@@ -111,12 +111,12 @@ export function updateProviderModelCard(
 
 export function buildProviderIdFromName(name: string): string {
   const normalizedName = name.trim();
-  if (normalizedName.length === 0) throw new Error('Provider 名称不能为空。');
+  if (normalizedName.length === 0) throw new Error('提供商名称不能为空。');
   const id = normalizedName.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (id.length > 0) return id;
   if (!PROVIDER_NAME_MEANINGFUL_PATTERN.test(normalizedName)) {
-    throw new Error('Provider 名称无法生成合法 ID，请使用字母或数字。');
+    throw new Error('提供商名称无法生成合法 ID，请使用字母或数字。');
   }
   let hash = 0x811c9dc5;
   for (let index = 0; index < normalizedName.length; index += 1) {
@@ -128,14 +128,14 @@ export function buildProviderIdFromName(name: string): string {
 
 function resolveProviderDraftId(draft: ProviderDraft): string {
   const id = draft.mode === 'create' ? buildProviderIdFromName(draft.name) : draft.id.trim();
-  if (!PROVIDER_ID_PATTERN.test(id)) throw new Error('Provider ID 只允许字母、数字、下划线和短横线。');
+  if (!PROVIDER_ID_PATTERN.test(id)) throw new Error('提供商 ID 只允许字母、数字、下划线和短横线。');
   return id;
 }
 
 export function assertProviderCreateIdAvailable(providers: readonly ProviderConfig[], providerId: string): void {
   const normalizedProviderId = providerId.trim().toLowerCase();
   if (providers.some((provider) => provider.id.trim().toLowerCase() === normalizedProviderId)) {
-    throw new Error('Provider 名称生成的 ID 已存在，请调整名称后重试。');
+    throw new Error('提供商名称生成的 ID 已存在，请调整名称后重试。');
   }
 }
 
@@ -143,14 +143,14 @@ function buildConnectionOptions(draft: ProviderDraft): ProviderConfig['options']
   const options: NonNullable<ProviderConfig['options']> = {};
   if (draft.timeoutMs.trim().length > 0) {
     const timeoutMs = Number(draft.timeoutMs);
-    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs 必须是正整数。');
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new Error('请求超时（timeout_ms）必须是正整数。');
     options.timeoutMs = timeoutMs;
   }
   if (draft.defaultHeaders.trim().length > 0) {
     try {
       options.defaultHeaders = stringRecordSchema.parse(JSON.parse(draft.defaultHeaders) as unknown);
     } catch {
-      throw new Error('defaultHeaders 必须是 string -> string 的 JSON 对象。');
+      throw new Error('默认请求头（default_headers）必须是键和值都为字符串的 JSON 对象。');
     }
   }
   if (draft.organization.trim().length > 0) options.organization = draft.organization.trim();
@@ -183,9 +183,9 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
   const id = resolveProviderDraftId(draft);
   const name = draft.name.trim();
   const endpoint = draft.endpoint.trim();
-  if (name.length === 0) throw new Error('Provider 名称不能为空。');
-  if (endpoint.length === 0) throw new Error('Provider endpoint 不能为空。');
-  if (models.length === 0) throw new Error('Provider 至少需要一个模型。');
+  if (name.length === 0) throw new Error('提供商名称不能为空。');
+  if (endpoint.length === 0) throw new Error('提供商接口地址不能为空。');
+  if (models.length === 0) throw new Error('提供商至少需要一个模型。');
   return { id, name, type: draft.type, endpoint, credentialRef: `secret:${id}`,
     enabled: draft.enabled, models, ...(options === undefined ? {} : { options }) };
 }

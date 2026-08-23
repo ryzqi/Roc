@@ -374,6 +374,21 @@
   font-weight: 500;
 }
 
+/* 中文主标签 + 英文 API 原名副标签 */
+.field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.field-api-name {
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-meta-size) - 1px);
+  font-weight: 400;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
 .field--full {
   grid-column: 1 / -1;
 }
