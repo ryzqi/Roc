@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 import { sanitizeTestId } from '../utils/sanitize-test-id';
 
 export type ComposerSuggestOption = {
@@ -25,6 +27,14 @@ export function ComposerSuggestPopover({
   onSelect,
   onActiveIndexChange
 }: ComposerSuggestPopoverProps): React.JSX.Element {
+  const activeOptionRef = useRef<HTMLButtonElement | null>(null);
+
+  // 列表有 max-height + overflow:auto，键盘上下移动高亮时必须同步滚动，否则高亮项会移出可视区。
+  // block: 'nearest' 让已可见的项不产生滚动，鼠标 hover 改变 activeIndex 时不会抖动。
+  useEffect(() => {
+    activeOptionRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, options]);
+
   return (
     <div className="composer-popover composer-suggest" data-testid="chat-suggest-popover">
       {/* role=listbox 直接挂在选项容器上：option 必须是 listbox 的直接子元素，中间不能夹无角色的 div。
@@ -37,6 +47,7 @@ export function ComposerSuggestPopover({
             data-testid={`chat-suggest-option-${sanitizeTestId(option.id)}`}
             id={composerSuggestOptionDomId(listboxId, option.id)}
             key={option.id}
+            ref={index === activeIndex ? activeOptionRef : null}
             role="option"
             type="button"
             onMouseDown={(event) => {

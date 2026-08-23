@@ -11,6 +11,18 @@ import { createLoadedState } from './view-test-helpers';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// jsdom 不实现 scrollIntoView，这里补桩并记录调用，供“高亮同步滚动”的断言使用。
+const scrollIntoViewCalls: { testId: string | undefined; block: string | undefined }[] = [];
+Element.prototype.scrollIntoView = function scrollIntoViewStub(
+  this: Element,
+  arg?: boolean | ScrollIntoViewOptions
+): void {
+  scrollIntoViewCalls.push({
+    testId: this.getAttribute('data-testid') ?? undefined,
+    block: typeof arg === 'object' && arg !== null ? arg.block : undefined
+  });
+};
+
 const workspaceState: Partial<LoadedState> = {
   workspace: {
     id: 'workspace_1',
@@ -59,6 +71,7 @@ describe('chat composer suggest popover', () => {
     chatInput = '';
     submitCount = 0;
     searchCalls = [];
+    scrollIntoViewCalls.length = 0;
     vi.useFakeTimers();
     window.roc = {
       files: {
@@ -248,6 +261,21 @@ describe('chat composer suggest popover', () => {
     await pressKey(input, 'Escape');
     expect(input.getAttribute('aria-controls')).toBeNull();
     expect(input.getAttribute('aria-activedescendant')).toBeNull();
+  });
+
+  it('scrolls the active option into view while navigating with the keyboard', async () => {
+    await renderComposer();
+    const input = requireInput();
+
+    await typeInto(input, '解释 @ch');
+    scrollIntoViewCalls.length = 0;
+
+    // 列表可滚动，键盘下移必须把新高亮项滚进可视区，否则高亮会停在视口外。
+    await pressKey(input, 'ArrowDown');
+    expect(scrollIntoViewCalls).toEqual([{ testId: popoverOptions()[1]?.dataset.testid, block: 'nearest' }]);
+
+    await pressKey(input, 'ArrowUp');
+    expect(scrollIntoViewCalls[1]).toEqual({ testId: popoverOptions()[0]?.dataset.testid, block: 'nearest' });
   });
 
   it('reopens the popover after editing away from the dismissed token', async () => {
