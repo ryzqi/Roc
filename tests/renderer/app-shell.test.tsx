@@ -14,6 +14,7 @@ import {
   queryButton,
   setTextareaValue
 } from './app-shell-test-helpers';
+import { waitUntil } from './view-test-helpers';
 
 describe('AppShell', () => {
   let container: HTMLDivElement;
@@ -121,10 +122,8 @@ describe('AppShell', () => {
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-    await flushPromises();
+    // 焦点在模态退出动画结束后才归还，必须等真正卸载而不是等固定时长。
+    await waitUntil(() => container.querySelector('[data-testid="settings-modal"]') === null);
 
     expect(document.activeElement).toBe(opener);
   });
@@ -210,10 +209,7 @@ describe('AppShell', () => {
       queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushPromises();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    });
-    await flushPromises();
+    await waitUntil(() => container.querySelector('[data-testid="task-detail-view"]') !== null);
 
     expect(client.api.chat.startRun).toHaveBeenCalledWith(expect.objectContaining({
       input: '每天晚上总结新闻',

@@ -1,4 +1,4 @@
-import { lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AppStatus,
   ChatStartRunRequest,
@@ -31,6 +31,7 @@ import {
 } from './nav-items';
 import type {
   MainViewId,
+  NavItem,
   ViewId,
   WorkbenchTool,
   WorkspaceData
@@ -55,6 +56,11 @@ const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
 );
 
+function resetScrollPosition(element: HTMLElement): void {
+  element.scrollTop = 0;
+  element.scrollLeft = 0;
+}
+
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
   const { error, setError, setState, setWindowState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
@@ -63,6 +69,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const selectedThreadIdRef = useRef<string | null>(selectedThreadId);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
   const selectedTaskSurfaceTaskIdRef = useRef<string | null | undefined>(selectedTaskSurfaceTaskId);
   const [activeTaskDetailId, setActiveTaskDetailId] = useState<string | null>(null);
@@ -240,6 +247,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     selectedTaskSurfaceTaskIdRef.current = selectedTaskSurfaceTaskId;
   }, [selectedTaskSurfaceTaskId]);
 
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+  }, [selectedThreadId]);
+
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
     setSelectedThreadId(null);
@@ -332,12 +343,24 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         setError(result.error.message);
         return;
       }
-      if (selectedThreadId === threadId) {
+      // 走 ref 读取当前选中会话，避免 selectedThreadId 变化让回调引用失效、击穿侧栏 memo。
+      if (selectedThreadIdRef.current === threadId) {
         startNewConversation();
       }
       await refreshTaskState();
     },
-    [refreshTaskState, selectedThreadId, startNewConversation]
+    [refreshTaskState, startNewConversation]
+  );
+
+  const selectNavItem = useCallback(
+    (item: NavItem): void => {
+      if (item.id === 'chat') {
+        startNewConversation();
+        return;
+      }
+      setActiveView(item.id);
+    },
+    [startNewConversation]
   );
 
   useAgentCapabilityPreview({
@@ -349,28 +372,36 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     state
   });
 
+  // 视图切换只重置侧栏容器自身与非 chat 内容区；不碰 .sidebar-block-scroll，
+  // 侧栏内部（历史列表、各导航列表）的滚动位置跨视图保留。
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelectorAll<HTMLElement>(
-          '.sidebar, .sidebar-block-scroll, .canvas:not(.canvas--chat) .canvas-scroll, .tool-stack, .workbench-tabs'
-        )
-        .forEach((element) => {
-          element.scrollTop = 0;
-          element.scrollLeft = 0;
-        });
+        .querySelectorAll<HTMLElement>('.sidebar, .canvas:not(.canvas--chat) .canvas-scroll')
+        .forEach(resetScrollPosition);
     });
 
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeView, activeWorkbenchTool]);
+  }, [activeView]);
+
+  // 工作台工具切换只重置工作台内部滚动面。
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelectorAll<HTMLElement>('.tool-stack, .workbench-tabs').forEach(resetScrollPosition);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [activeWorkbenchTool]);
 
   useEffect(() => {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
-  async function selectWorkspaceFromDialog(): Promise<void> {
+  const selectWorkspaceFromDialog = useCallback(async (): Promise<void> => {
     setWorkspaceSelectError(null);
     const selected = await client.api.workspace.selectFromDialog();
     if (!selected.ok) {
@@ -402,11 +433,29 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             ...workspaceData
           }
     );
-  }
+  }, [client, setState, setWorkspaceLoadState]);
 
   const updateWorkspaceData = useCallback((partial: Partial<WorkspaceData>): void => {
     setState((current) => (current === null ? current : { ...current, ...partial }));
   }, []);
+
+  // 侧栏数据全部 memo 化：state 引用在 setTaskLiveRunState 这类高频 render 中不变，
+  // 因此任务流流式运行期间侧栏子树不会被重渲。
+  const topMeta = useMemo(
+    () => (state === null ? '' : buildTopMeta(activeView as MainViewId, state)),
+    [activeView, state]
+  );
+  const historyNavItems = useMemo(
+    () => buildHistoryNavItems(selectedThreadId, activeView),
+    [activeView, selectedThreadId]
+  );
+  const historyItems = useMemo(() => (state === null ? [] : buildHistoryItems(state)), [state]);
+  const visibleHistoryItems = useMemo(
+    () => (activeView === 'chat' ? filterHistoryItems(historyItems, historySearchQuery) : historyItems),
+    [activeView, historyItems, historySearchQuery]
+  );
+  const workspaceNavItems = useMemo(() => (state === null ? [] : buildWorkspaceNavItems(state)), [state]);
+  const controlNavItems = useMemo(() => (state === null ? [] : buildControlNavItems(state)), [state]);
 
   if (error !== null) {
     return <div className="fatal">Roc 启动失败：{error}</div>;
@@ -416,15 +465,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     return <div className="boot">Roc 正在加载本地工作台</div>;
   }
 
-  const topMeta = buildTopMeta(activeView as MainViewId, state);
-  const historyNavItems = buildHistoryNavItems(selectedThreadId, activeView);
-  const historyItems = buildHistoryItems(state);
-  const visibleHistoryItems = activeView === 'chat' ? filterHistoryItems(historyItems, historySearchQuery) : historyItems;
   const showHistorySearch = activeView === 'chat' && historySearchVisible;
   const showHistorySearchEmpty = showHistorySearch && historyItems.length > 0 && visibleHistoryItems.length === 0;
   const showChatSidebar = activeView !== 'chat' || !chatSidebarCollapsed;
-  const workspaceNavItems = buildWorkspaceNavItems(state);
-  const controlNavItems = buildControlNavItems(state);
   const workspaceShellNode = (
     <AppWorkspaceShell
       activeTaskDetailId={activeTaskDetailId}
@@ -499,30 +542,25 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             selectHistoryThread={selectHistoryThread}
             selectWorkspaceFromDialog={selectWorkspaceFromDialog}
             selectedThreadId={selectedThreadId}
-            setActiveView={setActiveView}
             setHistorySearchQuery={setHistorySearchQuery}
             onOpenSettings={openSettings}
+            onSelectNavItem={selectNavItem}
             showHistorySearch={showHistorySearch}
             showHistorySearchEmpty={showHistorySearchEmpty}
-            startNewConversation={startNewConversation}
             state={state}
             visibleHistoryItems={visibleHistoryItems}
             workspaceNavItems={workspaceNavItems}
             workspaceSelectError={workspaceSelectError}
           />
         ) : null}
-        {activeView === 'chat' ? (
-          <div
-            className="chat-workspace-scale-host"
-            data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
-            ref={chatWorkspaceScaleHostRef}
-            style={chatWorkspaceScale.style}
-          >
-            <div className="chat-workspace-scale-frame">{workspaceShellNode}</div>
-          </div>
-        ) : (
-          workspaceShellNode
-        )}
+        <div
+          className="chat-workspace-scale-host"
+          data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
+          ref={chatWorkspaceScaleHostRef}
+          style={chatWorkspaceScale.style}
+        >
+          <div className="chat-workspace-scale-frame">{workspaceShellNode}</div>
+        </div>
       </div>
       <AppSettingsLayer
         client={client}

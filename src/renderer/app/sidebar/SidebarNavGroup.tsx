@@ -1,7 +1,10 @@
+import { memo } from 'react';
+
 import type { ViewId, NavItem } from '../types';
 import { NavButton } from './NavButton';
+import { SidebarBlock } from './SidebarBlock';
 
-export function SidebarNavGroup({
+export const SidebarNavGroup = memo(function SidebarNavGroup({
   activeView,
   className,
   items,
@@ -15,13 +18,10 @@ export function SidebarNavGroup({
   title: string;
 }): React.JSX.Element {
   return (
-    <div className={className === undefined ? 'sidebar-block' : className}>
-      <div className="side-title">{title}</div>
-      <nav className="sidebar-block-scroll nav-list" aria-label={title}>
-        {items.map((item) => (
-          <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onClick={() => onSelect(item)} />
-        ))}
-      </nav>
-    </div>
+    <SidebarBlock ariaLabel={title} className={className} scrollClassName="nav-list" title={title}>
+      {items.map((item) => (
+        <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onSelect={onSelect} />
+      ))}
+    </SidebarBlock>
   );
-}
+});

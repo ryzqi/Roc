@@ -57,9 +57,6 @@ export async function seedSmokeRuntimeData(
               endpoint,
               credentialRef: 'secret:smoke-provider',
               enabled: true,
-              options: {
-                contextBudgetTokens: 128_000
-              },
               models: [
                 {
                   id: 'smoke-model',
@@ -67,7 +64,10 @@ export async function seedSmokeRuntimeData(
                   enabled: true,
                   supportsStreaming: true,
                   supportsToolCalls: true,
-                  supportsImages: false
+                  supportsImages: false,
+                  options: {
+                    contextBudgetTokens: 128_000
+                  }
                 }
               ]
             }

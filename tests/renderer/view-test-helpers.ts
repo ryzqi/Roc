@@ -1,5 +1,23 @@
+import { act } from 'react';
 import type { LoadedState } from '../../src/renderer/loaded-state';
 import { emptyRocHookConfigSnapshot } from '../../src/shared/types';
+
+/**
+ * 等待条件成立，而不是睡固定时长。
+ * 退出动画（AnimatePresence）与异步 IPC 的完成时刻依赖 rAF/宏任务调度，
+ * 整套测试并发跑时固定 sleep 会随机不够长，制造假失败。
+ */
+export async function waitUntil(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitUntil timed out after ${timeoutMs}ms`);
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    });
+  }
+}
 
 export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
   return {

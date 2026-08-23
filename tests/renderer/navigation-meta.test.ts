@@ -39,23 +39,29 @@ describe('renderer navigation meta', () => {
 
   it('uses the current memory label instead of the Phase 1 placeholder', () => {
     const state = createLoadedState({
-      memoryStatus: {
-        ...createLoadedState({}).memoryStatus,
-        workspaceLabel: 'Roc'
+      appStatus: {
+        ...createLoadedState({}).appStatus,
+        workspace: {
+          selectedPath: 'F:\\Code\\Roc',
+          label: 'F:\\Code\\Roc'
+        }
       }
     });
 
     const memoryNav = buildControlNavItems(state).find((item) => item.id === 'memory');
 
-    expect(memoryNav?.meta).toBe('Roc');
-    expect(buildTopMeta('memory', state)).toBe('Roc');
+    expect(memoryNav?.meta).toBe('F:\\Code\\Roc');
+    expect(buildTopMeta('memory', state)).toBe('F:\\Code\\Roc');
   });
 
-  it('uses global memory copy when no workspace memory label is available', () => {
+  it('uses global memory copy when no workspace is selected', () => {
     const state = createLoadedState({
-      memoryStatus: {
-        ...createLoadedState({}).memoryStatus,
-        workspaceLabel: null
+      appStatus: {
+        ...createLoadedState({}).appStatus,
+        workspace: {
+          selectedPath: null,
+          label: '未选择工作区'
+        }
       }
     });
 

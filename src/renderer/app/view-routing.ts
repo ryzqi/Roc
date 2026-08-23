@@ -64,10 +64,12 @@ export function visibleWorkspaceLabel(state: LoadedState): string {
 }
 
 export function visibleMemoryLabel(state: LoadedState): string {
-  if (state.memoryStatus.workspaceLabel !== null) {
-    return state.memoryStatus.workspaceLabel;
+  // 与 main 侧 memory-store-repository 的 workspaceLabel 同源（都来自 settings.defaultWorkspace），
+  // 但 appStatus 在 bootstrap 阶段即可用，不像 memoryStatus 要等 memory 视图懒加载。
+  if (state.appStatus.workspace.selectedPath === null) {
+    return '全局记忆';
   }
-  return '全局记忆';
+  return state.appStatus.workspace.label;
 }
 
 export function visibleWorkspaceCwd(state: LoadedState): string {

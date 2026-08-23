@@ -201,17 +201,10 @@
   height: 52px;
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   overflow: visible;
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .history-row:hover {
   background: var(--bg-soft);
-}
-
-.history-row.active {
-  position: relative;
-  background: var(--accent-soft);
-  box-shadow: inset var(--stripe-width) 0 0 var(--accent);
 }
 
 .history-row-main {
@@ -307,7 +300,6 @@
   background: transparent;
   color: var(--muted);
   text-align: left;
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .nav-button:hover {
@@ -315,11 +307,16 @@
   color: var(--text);
 }
 
-.nav-button.active {
+/* active 态的共同项只在这里定义；必须排在两个 :hover 规则之后才能压过同特异度的 hover。 */
+.nav-button.active,
+.history-row.active {
   position: relative;
   background: var(--accent-soft);
-  color: var(--ink);
   box-shadow: inset var(--stripe-width) 0 0 var(--accent);
+}
+
+.nav-button.active {
+  color: var(--ink);
   font-weight: 500;
 }
 

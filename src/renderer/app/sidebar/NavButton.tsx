@@ -1,13 +1,23 @@
+import { memo } from 'react';
+
 import { PreviewIcon } from '../../components/PreviewIcon';
 import type { NavItem } from '../types';
 
-export function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; onClick: () => void }): React.JSX.Element {
+export const NavButton = memo(function NavButton({
+  active,
+  item,
+  onSelect
+}: {
+  active: boolean;
+  item: NavItem;
+  onSelect: (item: NavItem) => void;
+}): React.JSX.Element {
   return (
     <button
       className={active ? 'nav-button active' : 'nav-button'}
       data-testid={`nav-${item.id}`}
       type="button"
-      onClick={onClick}
+      onClick={() => onSelect(item)}
     >
       <PreviewIcon name={item.icon} />
       <span className="nav-copy">
@@ -16,4 +26,4 @@ export function NavButton({ active, item, onClick }: { active: boolean; item: Na
       </span>
     </button>
   );
-}
+});

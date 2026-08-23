@@ -55,8 +55,8 @@ describe('HistoryThreadMenu', () => {
     opener.focus();
     await act(async () => opener.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
-    const menu = container.querySelector<HTMLElement>('[role="menu"]');
-    const item = container.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    const item = document.querySelector<HTMLButtonElement>('[role="menuitem"]');
     expect(menu).not.toBeNull();
     expect(item).not.toBeNull();
     expect(document.activeElement).toBe(item);
@@ -65,7 +65,7 @@ describe('HistoryThreadMenu', () => {
     expect(menu?.style.top).toBe('432px');
 
     await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(opener);
   });
 
@@ -76,12 +76,12 @@ describe('HistoryThreadMenu', () => {
     await act(async () => {
       main.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
     });
-    expect(container.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
 
     await act(async () => {
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     });
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(main);
   });
 
@@ -92,21 +92,31 @@ describe('HistoryThreadMenu', () => {
     await act(async () => {
       row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 310, clientY: 470 }));
     });
-    expect(container.querySelector<HTMLElement>('[role="menu"]')?.style.left).toBe('200px');
-    expect(container.querySelector<HTMLElement>('[role="menu"]')?.style.top).toBe('432px');
+    expect(document.querySelector<HTMLElement>('[role="menu"]')?.style.left).toBe('200px');
+    expect(document.querySelector<HTMLElement>('[role="menu"]')?.style.top).toBe('432px');
+  });
+
+  it('renders the menu outside the row so row press transforms cannot reposition it', async () => {
+    await renderRow();
+    await act(async () => queryButton('history-thread-more-thread-1').click());
+
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.parentElement).toBe(document.body);
+    expect(container.querySelector('.history-row [role="menu"]')).toBeNull();
   });
 
   it('deletes through the existing callback', async () => {
     const onDelete = vi.fn().mockResolvedValue(undefined);
     await renderRow(onDelete);
     await act(async () => queryButton('history-thread-more-thread-1').click());
-    const item = container.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    const item = document.querySelector<HTMLButtonElement>('[role="menuitem"]');
     expect(item).not.toBeNull();
     await act(async () => item?.click());
 
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledWith('thread-1');
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 
   it('keeps long history titles inside the text column next to the action button', async () => {

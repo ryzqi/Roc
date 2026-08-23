@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocPreloadApi } from '../../src/shared/ipc';
 import type { ActiveTaskItem } from '../../src/shared/types';
 import { TasksView } from '../../src/renderer/views/tasks/TasksView';
-import { createLoadedState } from './view-test-helpers';
+import { createLoadedState, waitUntil } from './view-test-helpers';
 
 describe('TasksView interactions', () => {
   let container: HTMLDivElement;
@@ -95,7 +95,8 @@ describe('TasksView interactions', () => {
     await act(async () => {
       queryButton('task-create-dialog-close').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    await flushPromises();
+    // 对话框走 AnimatePresence 退出动画，焦点由 onExitComplete 归还；必须等真正卸载而不是等固定时长。
+    await waitUntil(() => container.querySelector('[data-testid="task-create-dialog-backdrop"]') === null);
 
     expect(document.activeElement).toBe(opener);
   });

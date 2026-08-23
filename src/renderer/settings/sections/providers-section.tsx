@@ -115,7 +115,7 @@ function ModelRow({ index, model, onDelete, onOpen, onTest, selected, testFeedba
         </span>
       </button>
       <div className="provider-model-row__actions">
-        {onTest === null ? null : <IconButton label="测试模型" onClick={onTest}><FlaskConical size={15} /></IconButton>}
+        {onTest === null ? null : <IconButton data-testid={`provider-model-test-${index}`} label="测试模型" onClick={onTest}><FlaskConical size={15} /></IconButton>}
         <IconButton label="编辑模型" onClick={onOpen}><Settings2 size={15} /></IconButton>
         <IconButton label="删除模型" onClick={onDelete} tone="danger"><Trash2 size={15} /></IconButton>
       </div>
@@ -271,7 +271,7 @@ export function ProvidersSection({
                 {revealApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </IconButton>
             </div>
-            {selectedProvider === null || !stored ? null : <Button disabled={busy} onClick={() => void onClearProviderSecret(selectedProvider.id)} size="compact">清除凭据</Button>}
+            {selectedProvider === null || !stored ? null : <Button data-testid={`provider-secret-clear-${selectedProvider.id}`} disabled={busy} onClick={() => void onClearProviderSecret(selectedProvider.id)} size="compact">清除凭据</Button>}
           </label>
           {fixedBaseUrlProviderDraft ? null : (
             <label className="field">

@@ -1,20 +1,17 @@
 import { buildHistoryItems as buildHistorySidebarItems } from '../history-sidebar';
 import type { LoadedState } from '../loaded-state';
-import { countTaskNavMeta } from '../views/tasks/task-view-model';
 import type { HistorySidebarItem, NavItem, ViewId } from './types';
 import { visibleMemoryLabel } from './view-routing';
 
+// 「对话」分组常驻侧栏：条目数恒定，视图切换时不产生布局位移。
 export function buildHistoryNavItems(selectedThreadId: string | null, activeView: ViewId): NavItem[] {
-  if (activeView === 'chat') {
-    return [];
-  }
   return [
     {
       id: 'chat',
       label: '新建对话',
       meta: '发送首条消息后创建新会话',
       icon: 'history',
-      active: selectedThreadId === null
+      active: activeView === 'chat' && selectedThreadId === null
     }
   ];
 }
@@ -27,12 +24,13 @@ export function buildHistoryItems(state: LoadedState): HistorySidebarItem[] {
 }
 
 export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
-  const taskCounts = countTaskNavMeta(state.activeTasks);
+  // 用 taskSnapshot.counts（bootstrap 即有）而非懒加载的 activeTasks，避免点击后文案跳变。
+  const taskCounts = state.taskSnapshot.counts;
   return [
     {
       id: 'tasks-board',
       label: '任务工作台',
-      meta: `${taskCounts.activeCount} 活跃 · ${taskCounts.pendingApprovalCount} 待确认 · ${taskCounts.scheduledCount} 定时`,
+      meta: `${taskCounts.running} 运行中 · ${taskCounts.pendingConfirmation} 待确认 · ${taskCounts.total} 共计`,
       icon: 'clipboard'
     },
     {

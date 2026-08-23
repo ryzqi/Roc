@@ -1,5 +1,6 @@
 import { MoreHorizontal } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { HistorySidebarItem } from '../../history-sidebar';
 import { restoreDialogFocus } from '../../dialog-focus';
@@ -29,7 +30,7 @@ export function clampHistoryMenuPosition(input: {
   };
 }
 
-export function HistoryThreadRow(props: {
+export const HistoryThreadRow = memo(function HistoryThreadRow(props: {
   item: HistorySidebarItem;
   selected: boolean;
   onSelect(threadId: string): void;
@@ -146,25 +147,30 @@ export function HistoryThreadRow(props: {
       >
         <MoreHorizontal aria-hidden="true" size={16} />
       </button>
-      {menuState === null ? null : (
-        <div
-          className="history-context-menu"
-          ref={menuRef}
-          role="menu"
-          style={{ left: position.x, top: position.y }}
-        >
-          <button
-            data-testid="history-thread-delete"
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              void props.onDelete(props.item.id).finally(closeMenu);
-            }}
-          >
-            删除
-          </button>
-        </div>
-      )}
+      {menuState === null
+        ? null
+        : createPortal(
+            // 挂到 body：菜单是 position: fixed，留在行内会被 .history-row:active 的
+            // transform 变成包含块，按下瞬间整体偏移，click 落不到菜单项上。
+            <div
+              className="history-context-menu"
+              ref={menuRef}
+              role="menu"
+              style={{ left: position.x, top: position.y }}
+            >
+              <button
+                data-testid="history-thread-delete"
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  void props.onDelete(props.item.id).finally(closeMenu);
+                }}
+              >
+                删除
+              </button>
+            </div>,
+            document.body
+          )}
     </div>
   );
-}
+});

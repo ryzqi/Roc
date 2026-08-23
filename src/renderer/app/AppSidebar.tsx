@@ -1,9 +1,10 @@
 import { Search } from 'lucide-react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { memo, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import type { HistorySidebarItem } from '../history-sidebar';
 import { PreviewIcon } from '../components/PreviewIcon';
 import { HistoryThreadRow } from './sidebar/HistoryThreadMenu';
+import { SidebarBlock } from './sidebar/SidebarBlock';
 import { SidebarNavGroup } from './sidebar/SidebarNavGroup';
 import type { NavItem, ViewId } from './types';
 import { visibleWorkspaceLabel } from './view-routing';
@@ -18,21 +19,20 @@ interface AppSidebarProps {
   historySearchInputRef: RefObject<HTMLInputElement | null>;
   historySearchQuery: string;
   onOpenSettings: (opener: HTMLElement) => void;
+  onSelectNavItem: (item: NavItem) => void;
   selectHistoryThread: (threadId: string) => void;
   selectWorkspaceFromDialog: () => Promise<void>;
   selectedThreadId: string | null;
-  setActiveView: Dispatch<SetStateAction<ViewId>>;
   setHistorySearchQuery: Dispatch<SetStateAction<string>>;
   showHistorySearch: boolean;
   showHistorySearchEmpty: boolean;
-  startNewConversation: () => void;
   state: NonNullable<AppBootstrap['state']>;
   visibleHistoryItems: HistorySidebarItem[];
   workspaceNavItems: NavItem[];
   workspaceSelectError: string | null;
 }
 
-export function AppSidebar({
+export const AppSidebar = memo(function AppSidebar({
   activeView,
   controlNavItems,
   deleteHistoryThread,
@@ -41,14 +41,13 @@ export function AppSidebar({
   historySearchInputRef,
   historySearchQuery,
   onOpenSettings,
+  onSelectNavItem,
   selectHistoryThread,
   selectWorkspaceFromDialog,
   selectedThreadId,
-  setActiveView,
   setHistorySearchQuery,
   showHistorySearch,
   showHistorySearchEmpty,
-  startNewConversation,
   state,
   visibleHistoryItems,
   workspaceNavItems,
@@ -70,69 +69,59 @@ export function AppSidebar({
         </button>
         {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
       </div>
-      {historyNavItems.length === 0 ? null : (
-        <SidebarNavGroup
-          activeView={activeView}
-          items={historyNavItems}
-          title="对话"
-          onSelect={(item) => {
-            if (item.id === 'chat') {
-              startNewConversation();
-              return;
-            }
-            setActiveView(item.id);
-          }}
-        />
-      )}
-      <div className={showHistorySearch ? 'sidebar-block sidebar-block--history sidebar-block--history-search' : 'sidebar-block sidebar-block--history'}>
-        <div className="side-title">历史会话</div>
-        {showHistorySearch ? (
-          <label className="history-search-field">
-            <Search aria-hidden="true" className="icon-svg" size={15} strokeWidth={1.8} />
-            <input
-              aria-label="搜索历史会话"
-              data-testid="chat-history-search-input"
-              placeholder="搜索历史会话"
-              ref={historySearchInputRef}
-              type="search"
-              value={historySearchQuery}
-              onChange={(event) => {
-                setHistorySearchQuery(event.target.value);
-              }}
-            />
-          </label>
-        ) : null}
-        <div className="sidebar-block-scroll history-list">
-          {historyItems.length === 0 ? (
-            <div className="history-empty">暂无历史会话</div>
-          ) : showHistorySearchEmpty ? (
-            <div className="history-empty" data-testid="chat-history-search-empty">未找到匹配的历史会话</div>
-          ) : (
-            visibleHistoryItems.map((item) => (
-              <HistoryThreadRow
-                item={item}
-                key={item.id}
-                selected={item.id === selectedThreadId}
-                onDelete={deleteHistoryThread}
-                onSelect={selectHistoryThread}
+      <SidebarNavGroup activeView={activeView} items={historyNavItems} title="对话" onSelect={onSelectNavItem} />
+      <SidebarBlock
+        className={showHistorySearch ? 'sidebar-block sidebar-block--history sidebar-block--history-search' : 'sidebar-block sidebar-block--history'}
+        head={
+          showHistorySearch ? (
+            <label className="history-search-field">
+              <Search aria-hidden="true" className="icon-svg" size={15} strokeWidth={1.8} />
+              <input
+                aria-label="搜索历史会话"
+                data-testid="chat-history-search-input"
+                placeholder="搜索历史会话"
+                ref={historySearchInputRef}
+                type="search"
+                value={historySearchQuery}
+                onChange={(event) => {
+                  setHistorySearchQuery(event.target.value);
+                }}
               />
-            ))
-          )}
-        </div>
-      </div>
+            </label>
+          ) : undefined
+        }
+        scrollClassName="history-list"
+        title="历史会话"
+      >
+        {historyItems.length === 0 ? (
+          <div className="history-empty">暂无历史会话</div>
+        ) : showHistorySearchEmpty ? (
+          <div className="history-empty" data-testid="chat-history-search-empty">未找到匹配的历史会话</div>
+        ) : (
+          visibleHistoryItems.map((item) => (
+            <HistoryThreadRow
+              item={item}
+              key={item.id}
+              selected={item.id === selectedThreadId}
+              onDelete={deleteHistoryThread}
+              onSelect={selectHistoryThread}
+            />
+          ))
+        )}
+      </SidebarBlock>
       <SidebarNavGroup
         className="sidebar-block sidebar-block--tasks"
         activeView={activeView}
         items={workspaceNavItems}
         title="任务工作台"
-        onSelect={(item) => setActiveView(item.id)}
+        onSelect={onSelectNavItem}
       />
       <SidebarNavGroup
         className="sidebar-block sidebar-block--control"
         activeView={activeView}
         items={controlNavItems}
         title="控制区"
-        onSelect={(item) => setActiveView(item.id)}
+        onSelect={onSelectNavItem}
       />
       <div className="sidebar-footer">
         <button
@@ -148,4 +137,4 @@ export function AppSidebar({
       </div>
     </aside>
   );
-}
+});

@@ -45,7 +45,7 @@ export async function runSmokeSettingsChecks(ctx) {
   await page.waitForSelector('[data-testid="provider-list-item-nvidia"]', { timeout: 5000 });
   providerSettingsEvidence.nvidiaListed = true;
   providerSettingsEvidence.nvidiaFixedDetail = await page.evaluate(() => {
-    const models = document.querySelector('[data-testid="provider-model-card-0"]');
+    const models = document.querySelector('[data-testid="provider-model-editor"]');
     const legacyModelId = document.querySelector('[data-testid="provider-draft-model-id"]');
     const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
     const deleteButton = document.querySelector('[data-testid="provider-delete-nvidia"]');
@@ -80,17 +80,17 @@ export async function runSmokeSettingsChecks(ctx) {
         provider.models.length === 2 &&
         provider.models[0]?.id === 'moonshotai/kimi-k2.6' &&
         provider.models[1]?.id === 'meta/llama-3.3-70b-instruct' &&
-        document.querySelector('[data-testid="provider-model-card-1"]') instanceof HTMLElement
+        document.querySelector('[data-testid="provider-model-row-1"]') instanceof HTMLElement
       );
     },
     undefined,
     { timeout: 5000 }
   );
   await clickSmokeControl(page, '[data-testid="provider-list-item-llama_cpp"]');
-  await page.waitForSelector('[data-testid="provider-model-test-0"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="provider-model-editor"]', { timeout: 5000 });
   providerSettingsEvidence.llamaCppListed = true;
   providerSettingsEvidence.llamaCppFixedDetail = await page.evaluate(() => {
-    const models = document.querySelector('[data-testid="provider-model-card-0"]');
+    const models = document.querySelector('[data-testid="provider-model-editor"]');
     const name = document.querySelector('[data-testid="provider-draft-name"]');
     const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
     const deleteButton = document.querySelector('[data-testid="provider-delete-llama_cpp"]');
@@ -142,7 +142,7 @@ export async function runSmokeSettingsChecks(ctx) {
     );
   });
   await clickSmokeControl(page, '[data-testid="provider-list-item-smoke-provider"]');
-  await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="provider-model-test-0"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-delete-smoke-provider"]', { timeout: 5000 });
   providerSettingsEvidence.smokeProviderListed = true;
   providerSettingsEvidence.providerActionsVisible = true;
@@ -520,8 +520,8 @@ export async function runSmokeSettingsChecks(ctx) {
   await page.fill('[data-testid="provider-search"]', '');
   providerSettingsEvidence.searchMatchesNameAndId = true;
   await clickSmokeControl(page, `[data-testid="provider-list-item-${openaiProviderId}"]`);
-  await clickSmokeControl(page, `[data-testid="provider-test-${openaiProviderId}"]`);
-  await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
+  await clickSmokeControl(page, '[data-testid="provider-model-test-0"]');
+  await waitForTextContent(page, '[data-testid="provider-detail-status"]', '已就绪');
   await waitForTextContent(page, '[data-testid="provider-test-feedback"]', '已测试 smoke-ui-openai-model 可用。');
   providerSettingsEvidence.openaiReady = true;
   providerSettingsEvidence.providerTestFeedbackVisible =
@@ -592,7 +592,7 @@ export async function runSmokeSettingsChecks(ctx) {
   providerSettingsEvidence.hostIntegrationStatusVisible =
     appBasicsText !== null && appBasicsText.includes('系统实际状态');
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
-  await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
+  await waitForTextContent(page, '[data-testid="provider-detail-status"]', '已就绪');
   const settingsText = await page.textContent('[data-testid="settings-view"]');
   if (settingsText === null) {
     throw new Error('Smoke could not read settings view text.');
@@ -609,7 +609,14 @@ export async function runSmokeSettingsChecks(ctx) {
 async function setFirstModel(page, id, displayName) {
   const modelId = page.locator('[data-testid="provider-model-id-0"]');
   if ((await modelId.count()) === 0) {
-    await clickSmokeControl(page, '[data-testid="provider-model-add"]');
+    // 模型字段在模型抽屉里：已有模型就打开第 0 行；没有模型就新增（addModel 会直接打开新模型抽屉）。
+    const firstRow = page.locator('[data-testid="provider-model-row-0"]');
+    if ((await firstRow.count()) === 0) {
+      await clickSmokeControl(page, '[data-testid="provider-model-add"]');
+    } else {
+      await clickSmokeControl(page, '[data-testid="provider-model-open-0"]');
+    }
+    await page.waitForSelector('[data-testid="provider-model-id-0"]', { timeout: 5000 });
   }
   await page.fill('[data-testid="provider-model-id-0"]', id);
   await page.fill('[data-testid="provider-model-name-0"]', displayName);

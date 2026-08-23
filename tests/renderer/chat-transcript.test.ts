@@ -343,8 +343,8 @@ describe('chat transcript helpers', () => {
     expect(messages.map((message) => message.key)).toEqual(['assistant-run-history']);
   });
 
-  it('rejects persisted events that produce duplicate transcript keys', () => {
-    expect(() => projectPersistedTranscript([
+  it('keys multiple user messages inside one run by occurrence', () => {
+    const messages = projectPersistedTranscript([
       {
         id: 'user-duplicate-1',
         threadId: 'thread-current',
@@ -363,7 +363,10 @@ describe('chat transcript helpers', () => {
         createdAt: '2026-08-20T00:00:01.000Z',
         sequence: 2
       }
-    ], 'thread-current')).toThrow('chat_transcript_duplicate_key:user-run-duplicate');
+    ], 'thread-current');
+
+    expect(messages.map((message) => message.key)).toEqual(['user-run-duplicate', 'user-run-duplicate#2']);
+    expect(messages.map((message) => message.content)).toEqual(['第一次', '第二次']);
   });
 
 

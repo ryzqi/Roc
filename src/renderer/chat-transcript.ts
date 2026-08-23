@@ -126,10 +126,14 @@ function compareTaskEventsAscending(left: TaskEvent, right: TaskEvent): number {
 
 function createUserMessage(
   runId: string,
+  occurrence: number,
   payload: Extract<MessageTaskEvent['payload'], { role: 'user' }>
 ): ChatTranscriptMessage {
   return {
-    key: `user-${runId}`,
+    // 首条沿用 user-${runId}，与 createPendingUserMessage 的 live key 对齐，流式转持久化时不重挂载。
+    // 同一 run 可以有多条用户消息（commitResumeDispatch 在 human_question_answered 时会往同 run 追加），
+    // 后续条目加序号后缀保证 key 唯一。
+    key: occurrence === 1 ? `user-${runId}` : `user-${runId}#${occurrence}`,
     source: 'persisted',
     role: 'user',
     content: payload.content,
@@ -528,6 +532,7 @@ function appendGuardrailBlock(draft: AssistantDraft, payload: GuardrailPayload, 
 function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
   const messages: ChatTranscriptMessage[] = [];
   const drafts = new Map<string, AssistantDraft>();
+  const userOccurrences = new Map<string, number>();
 
   for (const candidate of recentEvents
     .filter((candidate) => candidate.threadId === threadId)
@@ -540,7 +545,9 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
     const event = parsedEvent.data;
     if (event.type === 'message') {
       if (event.payload.role === 'user') {
-        messages.push(createUserMessage(event.runId, event.payload));
+        const occurrence = (userOccurrences.get(event.runId) ?? 0) + 1;
+        userOccurrences.set(event.runId, occurrence);
+        messages.push(createUserMessage(event.runId, occurrence, event.payload));
         continue;
       }
 
