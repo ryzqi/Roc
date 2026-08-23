@@ -1,14 +1,21 @@
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ClipboardEvent, Dispatch, DragEvent, FocusEvent, SetStateAction } from 'react';
-import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
+import type { FileNameSearchMatch, McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
+import { applyComposerCompletion, detectComposerTrigger } from './composer-trigger';
+import type { ComposerSuggestOption } from './ComposerSuggestPopover';
+import { ComposerSuggestPopover, composerSuggestOptionDomId } from './ComposerSuggestPopover';
 import type { RendererImageAttachment } from './image-attachments';
 import { createFileImageAttachment, validateImageAttachmentSelection } from './image-attachments';
+
+const suggestListboxId = 'chat-composer-suggest-listbox';
+const fileSuggestLimit = 12;
+const fileSuggestDebounceMs = 120;
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 type ComposerMode = 'chat' | 'plan';
@@ -35,6 +42,18 @@ function toggleSelection(current: string[], id: string): string[] {
     return current.filter((item) => item !== id);
   }
   return [...current, id];
+}
+
+function filterSkillSuggestions(skills: readonly SkillSnapshot[], query: string): ComposerSuggestOption[] {
+  const normalizedQuery = query.toLowerCase();
+  return skills
+    .filter(
+      (skill) =>
+        normalizedQuery.length === 0 ||
+        skill.id.toLowerCase().includes(normalizedQuery) ||
+        skill.name.toLowerCase().includes(normalizedQuery)
+    )
+    .map((skill) => ({ id: skill.id, label: skill.name, description: skill.description }));
 }
 
 async function applyTurnSelection(
@@ -110,6 +129,13 @@ export function ChatComposer({
   onSubmit
 }: ChatComposerProps): React.JSX.Element {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingCaretRef = useRef<number | null>(null);
+  const fileSuggestRequestRef = useRef(0);
+  const [caret, setCaret] = useState(0);
+  const [fileSuggestMatches, setFileSuggestMatches] = useState<FileNameSearchMatch[]>([]);
+  const [activeSuggestIndex, setActiveSuggestIndex] = useState(0);
+  const [dismissedSuggestKey, setDismissedSuggestKey] = useState<string | null>(null);
   const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
   const visibleCapabilitySkills = state.skills.filter(
     (skill) => skill.enabled && skill.status === 'ready'
@@ -143,6 +169,109 @@ export function ChatComposer({
     trimmedInput.length === 0 ||
     state.agent.execution !== 'ready' ||
     (selectedAttachments.length > 0 && !imageInputSupported);
+
+  const suggestTrigger = detectComposerTrigger(chatInput, caret);
+  const suggestKey = suggestTrigger === null ? null : `${suggestTrigger.kind}:${suggestTrigger.start}:${suggestTrigger.query}`;
+  const fileSuggestQuery = suggestTrigger?.kind === 'file' && state.workspace !== null ? suggestTrigger.query : null;
+  const fileSuggestTokenStart = suggestTrigger?.kind === 'file' && state.workspace !== null ? suggestTrigger.start : null;
+  const suggestOptions: ComposerSuggestOption[] =
+    suggestTrigger === null || suggestKey === dismissedSuggestKey
+      ? []
+      : suggestTrigger.kind === 'file'
+        ? fileSuggestMatches.map((match) => ({
+            id: match.relativePath,
+            label: match.name,
+            description: match.relativePath
+          }))
+        : filterSkillSuggestions(visibleCapabilitySkills, suggestTrigger.query);
+  const boundedSuggestIndex = suggestOptions.length === 0 ? 0 : Math.min(activeSuggestIndex, suggestOptions.length - 1);
+  const activeSuggestOption = suggestOptions[boundedSuggestIndex];
+
+  useEffect(() => {
+    // 换到另一个 @ token 就先清空旧结果，避免防抖窗口内把上一个 token 的候选插到新位置。
+    setFileSuggestMatches([]);
+  }, [fileSuggestTokenStart]);
+
+  useEffect(() => {
+    if (fileSuggestQuery === null) {
+      setFileSuggestMatches([]);
+      return;
+    }
+    const requestId = fileSuggestRequestRef.current + 1;
+    fileSuggestRequestRef.current = requestId;
+    const timer = setTimeout(() => {
+      void client.api.files
+        .searchByName({ query: fileSuggestQuery, maxResults: fileSuggestLimit })
+        .then((result) => {
+          if (requestId !== fileSuggestRequestRef.current) {
+            return;
+          }
+          if (!result.ok || result.data === null) {
+            setFileSuggestMatches([]);
+            console.error('Composer file name search rejected.', result);
+            return;
+          }
+          setFileSuggestMatches(result.data.matches);
+        })
+        .catch((error: unknown) => {
+          if (requestId === fileSuggestRequestRef.current) {
+            setFileSuggestMatches([]);
+          }
+          console.error('Composer file name search failed.', error);
+        });
+    }, fileSuggestDebounceMs);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [client, fileSuggestQuery]);
+
+  useEffect(() => {
+    setActiveSuggestIndex(0);
+    // 离开被 Escape 抑制的那个 token 后清除抑制，否则改一次再改回同一个 token 时弹层不会再出现。
+    setDismissedSuggestKey((current) => (current === suggestKey ? current : null));
+  }, [suggestKey]);
+
+  useEffect(() => {
+    const pendingCaret = pendingCaretRef.current;
+    if (pendingCaret === null) {
+      return;
+    }
+    pendingCaretRef.current = null;
+    const textarea = textareaRef.current;
+    if (textarea === null) {
+      return;
+    }
+    textarea.focus();
+    textarea.setSelectionRange(pendingCaret, pendingCaret);
+  }, [chatInput]);
+
+  useEffect(() => {
+    if (suggestOptions.length === 0 || activeComposerPopover === null) {
+      return;
+    }
+    onActiveComposerPopoverChange(null);
+  }, [activeComposerPopover, onActiveComposerPopoverChange, suggestOptions.length]);
+
+  function acceptSuggestion(option: ComposerSuggestOption): void {
+    if (suggestTrigger === null) {
+      return;
+    }
+    const replacement = suggestTrigger.kind === 'file' ? `@${option.id}` : `/${option.id}`;
+    const completion = applyComposerCompletion(chatInput, suggestTrigger, replacement);
+    pendingCaretRef.current = completion.caret;
+    setCaret(completion.caret);
+    setDismissedSuggestKey(null);
+    setActiveSuggestIndex(0);
+    onChatInputChange(completion.value);
+  }
+
+  function syncCaretFromEvent(target: HTMLTextAreaElement): void {
+    const selectionStart = target.selectionStart;
+    if (selectionStart === null) {
+      return;
+    }
+    setCaret(selectionStart);
+  }
 
   function refreshCapabilityOptions(): void {
     const currentSelectedMcpServers = state.selectedMcpServers;
@@ -284,33 +413,77 @@ export function ChatComposer({
           {attachmentError}
         </div>
       )}
-      <textarea
-        aria-label="输入消息"
-        className="composer-input"
-        data-testid="chat-input"
-        placeholder="输入消息..."
-        rows={3}
-        value={chatInput}
-        onChange={(event) => onChatInputChange(event.target.value)}
-        onPaste={(event: ClipboardEvent<HTMLTextAreaElement>) => {
-          if (event.clipboardData.files.length === 0) {
-            return;
+      <div className="composer-suggest-anchor">
+        {suggestOptions.length === 0 ? null : (
+          <ComposerSuggestPopover
+            activeIndex={boundedSuggestIndex}
+            listboxId={suggestListboxId}
+            options={suggestOptions}
+            onActiveIndexChange={setActiveSuggestIndex}
+            onSelect={acceptSuggestion}
+          />
+        )}
+        <textarea
+          aria-activedescendant={
+            activeSuggestOption === undefined ? undefined : composerSuggestOptionDomId(suggestListboxId, activeSuggestOption.id)
           }
-          void addFileAttachments(event.clipboardData.files, 'clipboard');
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Tab' && event.shiftKey && !event.nativeEvent.isComposing) {
+          aria-controls={suggestOptions.length === 0 ? undefined : suggestListboxId}
+          aria-label="输入消息"
+          className="composer-input"
+          data-testid="chat-input"
+          placeholder="输入消息..."
+          ref={textareaRef}
+          rows={3}
+          value={chatInput}
+          onChange={(event) => {
+            syncCaretFromEvent(event.currentTarget);
+            onChatInputChange(event.target.value);
+          }}
+          onClick={(event) => syncCaretFromEvent(event.currentTarget)}
+          onKeyUp={(event) => syncCaretFromEvent(event.currentTarget)}
+          onPaste={(event: ClipboardEvent<HTMLTextAreaElement>) => {
+            if (event.clipboardData.files.length === 0) {
+              return;
+            }
+            void addFileAttachments(event.clipboardData.files, 'clipboard');
+          }}
+          onKeyDown={(event) => {
+            // 补全弹层可见时先吃掉导航键；关闭时下面的 Shift+Tab / Enter 行为完全不变。
+            if (suggestOptions.length > 0 && !event.nativeEvent.isComposing) {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setActiveSuggestIndex((boundedSuggestIndex + 1) % suggestOptions.length);
+                return;
+              }
+              if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActiveSuggestIndex((boundedSuggestIndex - 1 + suggestOptions.length) % suggestOptions.length);
+                return;
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setDismissedSuggestKey(suggestKey);
+                return;
+              }
+              if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && activeSuggestOption !== undefined) {
+                event.preventDefault();
+                acceptSuggestion(activeSuggestOption);
+                return;
+              }
+            }
+            if (event.key === 'Tab' && event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              onComposerModeChange(composerMode === 'chat' ? 'plan' : 'chat');
+              return;
+            }
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+              return;
+            }
             event.preventDefault();
-            onComposerModeChange(composerMode === 'chat' ? 'plan' : 'chat');
-            return;
-          }
-          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
-            return;
-          }
-          event.preventDefault();
-          void submitComposer();
-        }}
-      />
+            void submitComposer();
+          }}
+        />
+      </div>
       <div className="composer-bottom">
         <div className="composer-left">
           <div className="composer-mode-toggle" data-testid="chat-composer-mode" aria-label="发送模式">

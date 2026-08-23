@@ -5,7 +5,7 @@ import { buildRendererBoundaryWorkbench } from './electron-smoke-boundary-workbe
 import { nativeFeelScorecard } from './native-feel.mjs';
 
 export function writeElectronSmokeResult(ctx) {
-  const { artifactDir, releaseReadiness, dataRoot, smokeTarget, packagedExe, phase6ApiEvidence, ipcSummary, nativeFeel, nativeModuleProbe, processMetricsSummary, smokeProvider, chatInputEvidence, workspaceSelectButtonEvidence, sidebarScrollEvidenceBefore, sidebarScrollEvidenceAfter, buttonInteractionEvidence, historySidebarEvidence, memoryStatusApiEvidence, terminalText, terminalLiveOutput, terminalWorkbenchStyleEvidence, gitText, filePreviewLayoutEvidence, filePreviewStatsEvidence, workbenchGitText, workbenchGitAfterBatchStage, gitDiffScrollEvidenceBefore, gitDiffScrollEvidenceAfter, workbenchWidthBefore, workbenchWidthAfter, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatResultTextEvidence, chatResultLayoutEvidence, skillLayoutEvidence, manualRunNowEvidence, manualRunDetailText, manualRunTranscriptText, createdTaskDetailText, taskProposalEvidence, providerSettingsEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, confirmMessages, nativeConfirmIpcSamples, previewText } = ctx;
+  const { artifactDir, releaseReadiness, dataRoot, smokeTarget, packagedExe, phase6ApiEvidence, ipcSummary, nativeFeel, nativeModuleProbe, processMetricsSummary, smokeProvider, chatInputEvidence, workspaceSelectButtonEvidence, sidebarDockEvidenceBefore, sidebarDockEvidenceAfter, buttonInteractionEvidence, historySidebarEvidence, memoryStatusApiEvidence, terminalText, terminalLiveOutput, terminalWorkbenchStyleEvidence, gitText, filePreviewLayoutEvidence, filePreviewStatsEvidence, workbenchGitText, workbenchGitAfterBatchStage, gitDiffScrollEvidenceBefore, gitDiffScrollEvidenceAfter, workbenchWidthBefore, workbenchWidthAfter, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatResultTextEvidence, chatResultLayoutEvidence, skillLayoutEvidence, manualRunNowEvidence, manualRunDetailText, manualRunTranscriptText, createdTaskDetailText, taskProposalEvidence, providerSettingsEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, confirmMessages, nativeConfirmIpcSamples, previewText } = ctx;
   const rendererBoundary = {
     ...buildRendererBoundaryWorkbench(ctx),
     ...buildRendererBoundaryCapabilities(ctx)
@@ -78,7 +78,7 @@ export function writeElectronSmokeResult(ctx) {
     capabilityActionsVisible: rendererBoundary.capabilityActionsVisible,
     floatingEntryApiRemoved: rendererBoundary.floatingEntryApiRemoved,
     workspaceSelectButtonVisible: rendererBoundary.workspaceSelectButtonVisible,
-    sidebarScrollableToSettings: rendererBoundary.sidebarScrollableToSettings,
+    sidebarSettingsDockPinned: rendererBoundary.sidebarSettingsDockPinned,
     workspaceDialogApiExposed: rendererBoundary.workspaceDialogApiExposed,
     chatCapabilitySelectionVisible: rendererBoundary.chatCapabilitySelectionVisible,
     chatCollapsedRailLayoutVisible: rendererBoundary.chatCollapsedRailLayoutVisible,
@@ -135,8 +135,8 @@ export function writeElectronSmokeResult(ctx) {
     evidence: {
       chatInputEvidence,
       workspaceSelectButtonEvidence,
-      sidebarScrollEvidenceBefore,
-      sidebarScrollEvidenceAfter,
+      sidebarDockEvidenceBefore,
+      sidebarDockEvidenceAfter,
       buttonInteractionEvidence,
       historySidebarEvidence,
       memoryStatusApiEvidence,

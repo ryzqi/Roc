@@ -2,6 +2,7 @@ import type { ClientTool } from '@langchain/core/tools';
 
 import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '../../../../shared/types';
 import type { ExplicitSkillContext } from './explicit-skills';
+import type { ReferencedFileContext } from './referenced-files';
 import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
 import type { MemoryRememberAdapter, MemorySearchAdapter } from './memory-tools';
@@ -35,6 +36,7 @@ export function assembleContextHarness(input: {
   runId: string;
   threadId: string;
   explicitSkillContexts: readonly ExplicitSkillContext[];
+  referencedFileContexts: readonly ReferencedFileContext[];
 }): ContextHarness {
   const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath);
   const sessionSearchTool = createSessionSearchTool({
@@ -69,6 +71,7 @@ export function assembleContextHarness(input: {
     workspacePath: input.workspacePath,
     workflowHint: input.workflowHint,
     explicitSkillContexts: input.explicitSkillContexts,
+    referencedFileContexts: input.referencedFileContexts,
     tools: tools.map(tool => ({
       name: tool.name,
       description: tool.description
@@ -78,7 +81,8 @@ export function assembleContextHarness(input: {
     systemPrompt: serializePromptBlocks(promptBlocks),
     tools,
     memorySources: input.memorySources,
-    skillSources: input.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'],
+    skillSources:
+      input.enabledCapabilities.skills.length === 0 && input.explicitSkillContexts.length === 0 ? [] : ['/skills/'],
     workspaceIdentity
   };
 }

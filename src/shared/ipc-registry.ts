@@ -95,6 +95,8 @@ import {
 } from './schemas/ipc-mcp-skills';
 import {
   fileDialogSelectionSchema,
+  fileNameSearchRequestSchema,
+  fileNameSearchResultSchema,
   filePdfPreviewRequestSchema,
   filePdfPreviewResultSchema,
   filePreviewRequestSchema,
@@ -285,6 +287,7 @@ export const ipcRegistry = {
     request({ key: 'filesSelectFromDialog', channel: 'roc:files:select-from-dialog', domain: 'files', method: 'selectFromDialog', kind: 'direct', contract: methodContract(noArgs, fileDialogSelectionSchema.nullable()) }),
     request({ key: 'filesListTree', channel: 'roc:files:list-tree', domain: 'files', method: 'listTree', kind: 'plugin', capabilityName: 'files.listTree', inputTransform: first, contract: methodContract(oneArg(fileTreeRequestSchema), fileTreeResultSchema) }),
     request({ key: 'filesSearch', channel: 'roc:files:search', domain: 'files', method: 'search', kind: 'plugin', capabilityName: 'files.search', inputTransform: first, contract: methodContract(oneArg(fileSearchRequestSchema), fileSearchResultSchema) }),
+    request({ key: 'filesSearchByName', channel: 'roc:files:search-by-name', domain: 'files', method: 'searchByName', kind: 'plugin', capabilityName: 'files.searchByName', inputTransform: first, contract: methodContract(oneArg(fileNameSearchRequestSchema), fileNameSearchResultSchema) }),
     request({ key: 'filesPreview', channel: 'roc:files:preview', domain: 'files', method: 'preview', kind: 'plugin', capabilityName: 'files.preview', inputTransform: first, contract: methodContract(oneArg(filePreviewRequestSchema), filePreviewResultSchema) }),
     request({ key: 'filesPreviewPdf', channel: 'roc:files:preview-pdf', domain: 'files', method: 'previewPdf', kind: 'plugin', capabilityName: 'files.previewPdf', inputTransform: first, contract: methodContract(oneArg(filePdfPreviewRequestSchema), filePdfPreviewResultSchema) }),
     request({ key: 'filesWriteText', channel: 'roc:files:write-text', domain: 'files', method: 'writeText', kind: 'plugin', capabilityName: 'files.writeText', inputTransform: first, contract: methodContract(oneArg(fileWriteTextRequestSchema), fileWriteResultSchema) }),

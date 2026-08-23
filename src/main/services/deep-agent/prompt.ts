@@ -29,7 +29,8 @@ export function buildSystemPrompt(input: {
       workspacePath: input.workspacePath,
       workflowHint: input.workflowHint,
       tools: [],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     })
   );
 }

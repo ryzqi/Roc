@@ -1,19 +1,15 @@
 .sidebar {
   min-width: 0;
   min-height: 0;
-  padding: 18px 20px 14px 0;
+  padding: 18px 20px 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   border-right: 1px solid var(--line);
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* 侧栏自身不滚动：历史列表是唯一滚动面，底部 dock 常驻固定。 */
+  overflow: hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
-}
-
-.workspace--chat .sidebar {
-  overflow-y: hidden;
 }
 
 .sidebar::-webkit-scrollbar,
@@ -89,12 +85,7 @@
   overflow: visible;
 }
 
-.sidebar-block + .sidebar-block {
-  border-top: 1px solid var(--line);
-}
-
-.sidebar-block--history,
-.sidebar-block--tasks {
+.sidebar-block--history {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -102,18 +93,10 @@
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
+/* 历史列表独占全部弹性空间：dock 与顶部工作区吃掉固定预算后剩下的都归它。 */
 .sidebar-block--history {
-  flex: 0 0 184px;
-}
-
-.sidebar-block--tasks {
-  flex: 0 0 116px;
-}
-
-.sidebar-block--control {
-  grid-template-rows: auto minmax(0, 1fr);
-  flex: 0 0 auto;
-  padding-bottom: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .sidebar-block-scroll {
@@ -126,9 +109,22 @@
   scrollbar-width: none;
 }
 
-.sidebar-block--control .sidebar-block-scroll {
-  overflow: visible;
-  padding-right: 0;
+.sidebar-dock {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.sidebar-dock-group {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-dock-group + .sidebar-dock-group {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .side-title {
@@ -174,13 +170,9 @@
   color: var(--subtle);
 }
 
-.history-list,
-.nav-list {
+.history-list {
   display: grid;
   gap: 8px;
-}
-
-.history-list {
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -320,6 +312,33 @@
   font-weight: 500;
 }
 
+/* dock 单行紧凑行：图标 · 标签 · 短徽标，行高固定 32px 以锁死垂直预算。 */
+.nav-button--dock {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px 0 12px;
+}
+
+.nav-button--dock .nav-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-badge {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+  font-feature-settings: var(--font-feature-mono);
+}
+
+.nav-badge--alert {
+  color: var(--st-warn);
+}
+
 .nav-copy {
   min-width: 0;
   max-width: 100%;
@@ -358,10 +377,6 @@
 
 .history-row .nav-meta {
   line-height: 1.35;
-}
-
-.nav-button.active .nav-meta {
-  color: var(--subtle);
 }
 
 .sidebar-stats {

@@ -21,7 +21,8 @@ describe('prompt blocks', () => {
           description: 'Search prior conversations'
         }
       ],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     expect(blocks.map((block) => block.type)).toEqual([
@@ -41,7 +42,8 @@ describe('prompt blocks', () => {
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,
       tools: [{ name: 'session_search', description: 'Search prior conversations' }],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     expect(blocks.map((block) => block.type)).toEqual([
@@ -68,7 +70,8 @@ describe('prompt blocks', () => {
           description: 'Search prior conversations'
         }
       ],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
       })
     );
 
@@ -93,7 +96,8 @@ describe('prompt blocks', () => {
           name: 'runtime_tool'
         }
       ],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     })
     );
 
@@ -111,7 +115,8 @@ describe('prompt blocks', () => {
       workflowHint: null,
       workspacePath: 'F:\\Code\\Roc',
       tools: [],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     const prompt = blocks.map((block) => block.content).join('\n');
@@ -143,7 +148,8 @@ describe('prompt blocks', () => {
       workflowHint: null,
       workspacePath: 'F:\\Code\\Roc',
       tools: [],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     const prompt = blocks.map((block) => block.content).join('\n');
@@ -164,7 +170,8 @@ describe('prompt blocks', () => {
           name: 'typescript',
           path: '/skills/typescript/SKILL.md'
         }
-      ]
+      ],
+      referencedFileContexts: []
     });
 
     const skillBlock = blocks.find((block) => block.type === 'explicit_skills');
@@ -182,7 +189,8 @@ describe('prompt blocks', () => {
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,
       tools: [],
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
     const staticBlock = blocks.find((block) => block.type === 'static');
 

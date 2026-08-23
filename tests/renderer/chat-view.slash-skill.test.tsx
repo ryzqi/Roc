@@ -59,7 +59,17 @@ describe('chat view slash skill command', () => {
           client: createChatClient(),
           selectedThreadId: null,
           state: createLoadedState({
-            selectedSkills: ['existing-skill']
+            selectedSkills: ['existing-skill'],
+            skills: [
+              {
+                id: 'python-expert',
+                name: 'Python 专家',
+                enabled: true,
+                path: 'F:\\Code\\Roc\\skills\\python-expert',
+                description: 'Python 代码审查与优化',
+                status: 'ready'
+              }
+            ]
           }),
           updateLoadedState: () => {},
           onSubmitChatTask: async (payload) => {
@@ -79,7 +89,7 @@ describe('chat view slash skill command', () => {
       if (setter === undefined) {
         throw new Error('textarea_value_setter_missing');
       }
-      setter.call(input, '/skill python-expert 优化这段代码');
+      setter.call(input, '/python-expert 优化这段代码');
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
 

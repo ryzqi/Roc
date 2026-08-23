@@ -18,6 +18,7 @@ type PromptBlockType =
   | 'tools'
   | 'capability'
   | 'explicit_skills'
+  | 'referenced_files'
   | 'context_recall'
   | 'plan_mode'
   | 'workflow';
@@ -30,6 +31,10 @@ export type PromptToolDescriptor = {
 export type ExplicitSkillPromptContext = {
   id: string;
   name: string;
+  path: string;
+};
+
+export type ReferencedFilePromptContext = {
   path: string;
 };
 
@@ -51,6 +56,7 @@ export function buildPromptBlocks(input: {
   workflowHint: WorkflowHint;
   tools: readonly PromptToolDescriptor[];
   explicitSkillContexts: readonly ExplicitSkillPromptContext[];
+  referencedFileContexts: readonly ReferencedFilePromptContext[];
 }): PromptBlock[] {
   return [
     createBlock('static', BlockStability.STATIC, buildStaticPrompt()),
@@ -61,6 +67,11 @@ export function buildPromptBlocks(input: {
       input.explicitSkillContexts.length === 0
         ? []
         : [createBlock('explicit_skills', BlockStability.REQUEST, buildExplicitSkillsPrompt(input.explicitSkillContexts))]
+    ),
+    ...(
+      input.referencedFileContexts.length === 0
+        ? []
+        : [createBlock('referenced_files', BlockStability.REQUEST, buildReferencedFilesPrompt(input.referencedFileContexts))]
     ),
     createBlock('context_recall', BlockStability.WORKSPACE, buildContextRecallPrompt(input.workspacePath)),
     ...(
@@ -202,6 +213,16 @@ function buildExplicitSkillsPrompt(skills: readonly ExplicitSkillPromptContext[]
     ),
     '</skill_index>'
   ].join('\n\n');
+}
+
+function buildReferencedFilesPrompt(files: readonly ReferencedFilePromptContext[]): string {
+  return [
+    'Files the user referenced with @ in this request:',
+    '<referenced_files>',
+    ...files.map((file) => `<path>${file.path}</path>`),
+    '</referenced_files>',
+    'Read them through the /workspace/ route before answering; the user pointed at them deliberately.'
+  ].join('\n');
 }
 
 function buildWorkflowPrompt(workflowHint: WorkflowHint): string {

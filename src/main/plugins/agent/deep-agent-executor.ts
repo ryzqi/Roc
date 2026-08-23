@@ -52,6 +52,7 @@ import {
 } from '../../services/deep-agent/context/context-token-budget';
 import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
+import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
@@ -160,6 +161,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         explicitSkillIds: input.snapshot.explicitSkillIds,
         manifestSkills: input.snapshot.capabilityManifest.skills
       });
+      const referencedFileContexts = loadReferencedFileContexts({
+        userInput: input.run.userInput,
+        workspacePath: runtimeWorkspace?.path ?? null
+      });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
         getMemorySettings: options.getMemorySettings,
@@ -189,7 +194,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         remember: request => options.capabilities.invoke('memory.entry.remember', request),
         runId: input.run.id,
         threadId: input.run.threadId,
-        explicitSkillContexts
+        explicitSkillContexts,
+        referencedFileContexts
       });
       const contextWindowTokens = input.snapshot.budget.contextBudgetTokens;
       if (contextWindowTokens === null) {

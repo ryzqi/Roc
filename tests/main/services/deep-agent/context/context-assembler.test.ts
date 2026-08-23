@@ -23,7 +23,8 @@ describe('assembleContextHarness', () => {
       }),
       runId: 'run_context_assembler',
       threadId: 'thread_context_assembler',
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     expect(harness.tools.map(tool => tool.name)).toEqual([
@@ -61,7 +62,8 @@ describe('assembleContextHarness', () => {
       }),
       runId: 'run_context_assembler',
       threadId: 'thread_context_assembler_skills',
-      explicitSkillContexts: []
+      explicitSkillContexts: [],
+      referencedFileContexts: []
     });
 
     expect(harness.skillSources).toEqual(['/skills/']);
@@ -93,12 +95,74 @@ describe('assembleContextHarness', () => {
           name: 'typescript',
           path: '/skills/typescript/SKILL.md'
         }
-      ]
+      ],
+      referencedFileContexts: []
     });
 
     expect(harness.skillSources).toEqual(['/skills/']);
     expect(harness.systemPrompt).toContain('<skill_index>');
     expect(harness.systemPrompt).toContain('/skills/typescript/SKILL.md');
     expect(harness.systemPrompt).not.toContain('# TypeScript Skill');
+  });
+
+  it('exposes /skills/ for explicit skills even when no capability skill is selected', () => {
+    const harness = assembleContextHarness({
+      artifactStore: {} as never,
+      mode: 'run',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      memorySources: [],
+      baseTools: [],
+      searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      searchMemory: () => ({ query: 'x', hits: [], scannedDocuments: 0, scannedEntries: 0 }),
+      remember: () => ({
+        status: 'accepted' as const,
+        reason: 'accepted',
+        scope: 'global' as const,
+        targetPath: '/memory/global/USER.md',
+        archivedTo: []
+      }),
+      runId: 'run_context_assembler',
+      threadId: 'thread_context_assembler_explicit_only',
+      explicitSkillContexts: [
+        {
+          id: 'tdd',
+          name: 'tdd',
+          path: '/skills/tdd/SKILL.md'
+        }
+      ],
+      referencedFileContexts: []
+    });
+
+    expect(harness.skillSources).toEqual(['/skills/']);
+  });
+
+  it('injects a referenced files block only when the request carries @ references', () => {
+    const withReferences = assembleContextHarness({
+      artifactStore: {} as never,
+      mode: 'run',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      memorySources: [],
+      baseTools: [],
+      searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      searchMemory: () => ({ query: 'x', hits: [], scannedDocuments: 0, scannedEntries: 0 }),
+      remember: () => ({
+        status: 'accepted' as const,
+        reason: 'accepted',
+        scope: 'global' as const,
+        targetPath: '/memory/global/USER.md',
+        archivedTo: []
+      }),
+      runId: 'run_context_assembler',
+      threadId: 'thread_context_assembler_referenced',
+      explicitSkillContexts: [],
+      referencedFileContexts: [{ path: 'src/renderer/chat/chat-composer.tsx' }]
+    });
+
+    expect(withReferences.systemPrompt).toContain('<!-- BLOCK:referenced_files:request:');
+    expect(withReferences.systemPrompt).toContain('<path>src/renderer/chat/chat-composer.tsx</path>');
   });
 });

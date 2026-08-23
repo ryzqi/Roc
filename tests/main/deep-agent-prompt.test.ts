@@ -1,11 +1,52 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPromptBlocks,
+  serializePromptBlocks
+} from '../../src/main/services/deep-agent/context/prompt-blocks';
+import {
   BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW,
   buildSystemPrompt,
   createCapabilitySummary
 } from '../../src/main/services/deep-agent/prompt';
 
 describe('deep agent prompt', () => {
+  it('injects a request-scoped referenced files block for @ references', () => {
+    const prompt = serializePromptBlocks(
+      buildPromptBlocks({
+        mode: 'run',
+        enabledCapabilities: { mcpServers: [], skills: [] },
+        workspacePath: 'F:\\Code\\Roc',
+        workflowHint: null,
+        tools: [],
+        explicitSkillContexts: [],
+        referencedFileContexts: [
+          { path: 'src/renderer/chat/chat-composer.tsx' },
+          { path: 'src/renderer/chat/composer-trigger.ts' }
+        ]
+      })
+    );
+
+    expect(prompt).toMatch(/<!-- BLOCK:referenced_files:request:[a-f0-9]{16} -->/);
+    expect(prompt).toContain('Files the user referenced with @ in this request:');
+    expect(prompt).toContain('<referenced_files>');
+    expect(prompt).toContain('<path>src/renderer/chat/chat-composer.tsx</path>');
+    expect(prompt).toContain('<path>src/renderer/chat/composer-trigger.ts</path>');
+    expect(prompt).toContain(
+      'Read them through the /workspace/ route before answering; the user pointed at them deliberately.'
+    );
+  });
+
+  it('omits the referenced files block when the request has no @ references', () => {
+    const prompt = buildSystemPrompt({
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null
+    });
+
+    expect(prompt).not.toContain('BLOCK:referenced_files');
+    expect(prompt).not.toContain('<referenced_files>');
+  });
+
   it('forbids echoing SKILL.md contents after read_file', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: {

@@ -57,99 +57,88 @@ export async function runSmokeBoundaryProbes(ctx) {
         rect.right <= window.innerWidth
     };
   });
-  const sidebarScrollEvidenceBefore = await page.evaluate(() => {
+  // 侧栏底部 dock 常驻：设置入口必须在不滚动的前提下完整落在侧栏内，
+  // 并且在侧栏上滚轮后仍然可见（证明它是固定行，而不是被滚出视野的普通内容）。
+  const sidebarDockEvidenceBefore = await page.evaluate(() => {
     const sidebar = document.querySelector('.sidebar');
-    const controlBlock = document.querySelector('.sidebar-block--control');
+    const dock = document.querySelector('.sidebar-dock');
     const settingsButton = document.querySelector('[data-testid="settings-gear"]');
-    if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
+    if (!(sidebar instanceof HTMLElement) || !(dock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
       return {
         sidebarExists: sidebar !== null,
-        controlBlockExists: controlBlock !== null,
-        settingsExists: settingsButton !== undefined,
+        dockExists: dock !== null,
+        settingsExists: settingsButton !== null,
         clientHeight: null,
         scrollHeight: null,
-        scrollTop: null,
-        settingsVisible: false,
-        probeApplied: false
+        dockInsideSidebar: false,
+        settingsVisible: false
       };
     }
-    controlBlock.style.marginTop = '520px';
     const sidebarRect = sidebar.getBoundingClientRect();
+    const dockRect = dock.getBoundingClientRect();
     const settingsRect = settingsButton.getBoundingClientRect();
     return {
       sidebarExists: true,
-      controlBlockExists: true,
+      dockExists: true,
       settingsExists: true,
       clientHeight: sidebar.clientHeight,
       scrollHeight: sidebar.scrollHeight,
-      scrollTop: sidebar.scrollTop,
+      dockInsideSidebar: dockRect.top >= sidebarRect.top - 1 && dockRect.bottom <= sidebarRect.bottom + 1,
       settingsVisible:
         settingsRect.top >= sidebarRect.top &&
         settingsRect.bottom <= sidebarRect.bottom &&
         settingsRect.height > 0 &&
-        settingsRect.width > 0,
-      probeApplied: true
+        settingsRect.width > 0
     };
   });
   await page.hover('.sidebar');
   await page.mouse.wheel(0, 640);
   await page.waitForTimeout(150);
-  const sidebarScrollEvidenceAfter = await page.evaluate(() => {
+  const sidebarDockEvidenceAfter = await page.evaluate(() => {
     const sidebar = document.querySelector('.sidebar');
-    const controlBlock = document.querySelector('.sidebar-block--control');
+    const dock = document.querySelector('.sidebar-dock');
     const settingsButton = document.querySelector('[data-testid="settings-gear"]');
-    if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
+    if (!(sidebar instanceof HTMLElement) || !(dock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
       return {
         sidebarExists: sidebar !== null,
-        controlBlockExists: controlBlock !== null,
-        settingsExists: settingsButton !== undefined,
-        clientHeight: null,
-        scrollHeight: null,
+        dockExists: dock !== null,
+        settingsExists: settingsButton !== null,
         scrollTop: null,
-        settingsVisible: false,
-        probeApplied: false
+        dockInsideSidebar: false,
+        settingsVisible: false
       };
     }
     const sidebarRect = sidebar.getBoundingClientRect();
+    const dockRect = dock.getBoundingClientRect();
     const settingsRect = settingsButton.getBoundingClientRect();
-    const result = {
+    return {
       sidebarExists: true,
-      controlBlockExists: true,
+      dockExists: true,
       settingsExists: true,
-      clientHeight: sidebar.clientHeight,
-      scrollHeight: sidebar.scrollHeight,
       scrollTop: sidebar.scrollTop,
+      dockInsideSidebar: dockRect.top >= sidebarRect.top - 1 && dockRect.bottom <= sidebarRect.bottom + 1,
       settingsVisible:
         settingsRect.top >= sidebarRect.top &&
         settingsRect.bottom <= sidebarRect.bottom &&
         settingsRect.height > 0 &&
-        settingsRect.width > 0,
-      probeApplied: true
+        settingsRect.width > 0
     };
-    controlBlock.style.marginTop = '';
-    return result;
   });
-  const sidebarSettingsReachable =
-    sidebarScrollEvidenceBefore.sidebarExists &&
-    sidebarScrollEvidenceBefore.controlBlockExists &&
-    sidebarScrollEvidenceBefore.settingsExists &&
-    sidebarScrollEvidenceBefore.probeApplied &&
-    sidebarScrollEvidenceAfter.probeApplied &&
-    (sidebarScrollEvidenceBefore.settingsVisible ||
-      (typeof sidebarScrollEvidenceBefore.clientHeight === 'number' &&
-        typeof sidebarScrollEvidenceBefore.scrollHeight === 'number' &&
-        sidebarScrollEvidenceBefore.scrollHeight > sidebarScrollEvidenceBefore.clientHeight &&
-        typeof sidebarScrollEvidenceBefore.scrollTop === 'number' &&
-        typeof sidebarScrollEvidenceAfter.scrollTop === 'number' &&
-        sidebarScrollEvidenceAfter.scrollTop > sidebarScrollEvidenceBefore.scrollTop &&
-        sidebarScrollEvidenceAfter.settingsVisible));
+  const sidebarSettingsPinned =
+    sidebarDockEvidenceBefore.sidebarExists &&
+    sidebarDockEvidenceBefore.dockExists &&
+    sidebarDockEvidenceBefore.settingsExists &&
+    sidebarDockEvidenceBefore.dockInsideSidebar &&
+    sidebarDockEvidenceBefore.settingsVisible &&
+    sidebarDockEvidenceAfter.dockInsideSidebar &&
+    sidebarDockEvidenceAfter.settingsVisible;
 
   Object.assign(ctx, {
     materialEvidence,
     boundary,
     workspaceSelectButtonEvidence,
-    sidebarScrollEvidenceBefore,
-    sidebarScrollEvidenceAfter,
-    sidebarSettingsReachable
+    sidebarDockEvidenceBefore,
+    sidebarDockEvidenceAfter,
+    sidebarSettingsPinned
   });
 }

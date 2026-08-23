@@ -13,27 +13,37 @@ export type SlashSkillCommandParseResult =
       message: string;
     };
 
-export function parseSlashSkillCommand(value: string): SlashSkillCommandParseResult {
-  if (!startsWithSkillCommand(value)) {
+export function parseSlashSkillCommand(
+  value: string,
+  availableSkillIds: readonly string[]
+): SlashSkillCommandParseResult {
+  const knownSkillIds = new Set(availableSkillIds);
+  const explicitSkillIds: string[] = [];
+  let rest = value.trimStart();
+
+  while (rest.startsWith('/')) {
+    const tokenEnd = findFirstWhitespaceIndex(rest);
+    const token = tokenEnd === -1 ? rest : rest.slice(0, tokenEnd);
+    const skillId = token.slice(1);
+    if (!knownSkillIds.has(skillId)) {
+      break;
+    }
+    if (!explicitSkillIds.includes(skillId)) {
+      explicitSkillIds.push(skillId);
+    }
+    rest = tokenEnd === -1 ? '' : rest.slice(tokenEnd).trimStart();
+  }
+
+  // 首个 token 不是已知技能 id 时按普通文本发送，`/usr/bin/env ...` 这类消息不能被命令解析卡住。
+  if (explicitSkillIds.length === 0) {
     return {
       kind: 'none',
       input: value
     };
   }
 
-  const commandBody = value.slice('/skill'.length).trimStart();
-  if (commandBody.length === 0) {
-    return {
-      kind: 'error',
-      message: '请输入 Skill ID。'
-    };
-  }
-
-  const skillIdEnd = findFirstWhitespaceIndex(commandBody);
-  const skillId = skillIdEnd === -1 ? commandBody : commandBody.slice(0, skillIdEnd);
-  const prompt = skillIdEnd === -1 ? '' : commandBody.slice(skillIdEnd).trimStart();
-
-  if (prompt.trim().length === 0) {
+  const input = rest.trim();
+  if (input.length === 0) {
     return {
       kind: 'error',
       message: '请输入要发送的内容。'
@@ -42,17 +52,9 @@ export function parseSlashSkillCommand(value: string): SlashSkillCommandParseRes
 
   return {
     kind: 'ok',
-    input: prompt.trim(),
-    explicitSkillIds: [skillId]
+    input,
+    explicitSkillIds
   };
-}
-
-function startsWithSkillCommand(value: string): boolean {
-  if (value === '/skill') {
-    return true;
-  }
-  const next = value.at('/skill'.length);
-  return value.startsWith('/skill') && next !== undefined && /\s/.test(next);
 }
 
 function findFirstWhitespaceIndex(value: string): number {

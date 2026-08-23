@@ -245,6 +245,19 @@ function buildHistoryMenuMarkup({ left, top }) {
   `;
 }
 
+function buildDockRowMarkup(testId, label, badge) {
+  const badgeMarkup = badge === null ? '' : `<span class="nav-badge">${badge}</span>`;
+  return `
+    <button class="nav-button nav-button--dock" data-testid="${testId}" type="button">
+      <span aria-hidden="true"></span>
+      <span class="nav-label">${label}</span>
+      ${badgeMarkup}
+    </button>
+  `;
+}
+
+// 侧栏高度取真实最小窗口预算：640px 窗口 - 40px workband - 4px padding ≈ 596px。
+// 这个 fixture 复刻三段式结构：顶部工作区固定、历史列表独占弹性区、底部 dock 常驻。
 function buildSidebarHistoryMarkup() {
   const rows = Array.from({ length: 12 }, (_value, index) => `
     <div class="history-row">
@@ -259,15 +272,29 @@ function buildSidebarHistoryMarkup() {
     </div>
   `).join('');
   return `
-    <div class="workspace workspace--chat" style="width:320px;height:360px;padding:0;grid-template-columns:220px minmax(0,1fr)">
+    <div class="workspace workspace--chat" style="width:320px;height:596px;padding:0;grid-template-columns:220px minmax(0,1fr)">
       <aside class="sidebar">
         <div class="sidebar-head"><button class="workspace-pill" type="button"><span>F:\\Code\\Roc</span><strong>选择</strong></button></div>
+        ${buildDockRowMarkup('nav-chat', '新建对话', null)}
         <div class="sidebar-block sidebar-block--history sidebar-block--history-search">
           <div class="side-title">历史会话</div>
           <label class="history-search-field"><input type="search" value=""></label>
           <div class="sidebar-block-scroll history-list">${rows}</div>
         </div>
-        <div class="sidebar-block sidebar-block--tasks"><div class="side-title">任务工作台</div><div class="sidebar-block-scroll nav-list"></div></div>
+        <nav class="sidebar-dock" aria-label="工作台与控制">
+          <div class="sidebar-dock-group">
+            ${buildDockRowMarkup('nav-tasks-board', '任务工作台', '1/0/3')}
+            ${buildDockRowMarkup('nav-diagnostics', '任务诊断包', '0')}
+          </div>
+          <div class="sidebar-dock-group">
+            ${buildDockRowMarkup('nav-memory', '记忆中心', null)}
+            ${buildDockRowMarkup('nav-mcp', 'MCP', '2')}
+            ${buildDockRowMarkup('nav-skills', 'Skill', '4')}
+          </div>
+          <div class="sidebar-dock-group">
+            ${buildDockRowMarkup('settings-gear', '设置', null)}
+          </div>
+        </nav>
       </aside>
       <main></main>
     </div>
@@ -485,18 +512,25 @@ try {
     assertCondition(menuEvidence.title.whiteSpace === 'nowrap', 'History title must keep a stable single-line height', menuEvidence);
   }
 
-  await page.setViewportSize({ width: 320, height: 480 });
+  await page.setViewportSize({ width: 320, height: 640 });
   await page.setContent(buildDocument(buildSidebarHistoryMarkup()));
   const historyScrollEvidence = await readBoxes(page, [
     { key: 'sidebar', selector: '.sidebar' },
     { key: 'historyBlock', selector: '.sidebar-block--history' },
     { key: 'historyList', selector: '.history-list' },
-    { key: 'firstRow', selector: '.history-row' }
+    { key: 'firstRow', selector: '.history-row' },
+    { key: 'dock', selector: '.sidebar-dock' },
+    { key: 'navSkills', selector: '[data-testid="nav-skills"]' },
+    { key: 'settingsRow', selector: '[data-testid="settings-gear"]' }
   ]);
   assertCondition(historyScrollEvidence.sidebar.overflowY === 'hidden', 'Chat sidebar must not compete with history scrolling', historyScrollEvidence);
   assertCondition(historyScrollEvidence.historyList.overflowY === 'auto', 'History list must own vertical scrolling', historyScrollEvidence);
   assertCondition(historyScrollEvidence.historyList.scrollWidth <= historyScrollEvidence.historyList.clientWidth + 1, 'History list must not overflow horizontally', historyScrollEvidence);
   assertCondition(historyScrollEvidence.firstRow.right <= historyScrollEvidence.historyList.right, 'History rows must stay inside the history list', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.dock.bottom <= historyScrollEvidence.sidebar.bottom, 'Sidebar dock must stay inside the sidebar at the minimum window height', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.dock.top >= historyScrollEvidence.historyBlock.bottom - 1, 'Sidebar dock must sit below the history block without overlap', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.navSkills.bottom <= historyScrollEvidence.sidebar.bottom, 'Skill entry must not be clipped by the sidebar', historyScrollEvidence);
+  assertCondition(historyScrollEvidence.settingsRow.bottom <= historyScrollEvidence.sidebar.bottom, 'Settings entry must not be clipped by the sidebar', historyScrollEvidence);
 
   await page.setViewportSize({ width: 320, height: 720 });
   await page.setContent(buildDocument(buildChatRichContentMarkup()));

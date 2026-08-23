@@ -18,6 +18,8 @@ import { Readable } from 'node:stream';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
   FileDeleteResult,
+  FileNameSearchRequest,
+  FileNameSearchResult,
   FilePreviewRequest,
   FilePreviewResult,
   FileSearchRequest,
@@ -40,6 +42,8 @@ const defaultSearchLimit = 100;
 const binaryProbeBytes = 4096;
 const defaultSearchMaxVisitedFiles = 2000;
 const defaultSearchMaxBytes = 4 * 1024 * 1024;
+const defaultNameSearchLimit = 20;
+const defaultNameSearchMaxVisitedFiles = 20000;
 const imageMediaTypes = new Map<string, string>([
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],
@@ -175,6 +179,56 @@ export class FileService {
     return {
       query,
       matches,
+      truncated
+    };
+  }
+
+  searchByName(request: FileNameSearchRequest): FileNameSearchResult {
+    const query = request.query.trim();
+    const workspace = this.workspaceService.requireWorkspace();
+    const maxResults = this.positiveLimit(request.maxResults, defaultNameSearchLimit);
+    const normalizedQuery = query.toLowerCase();
+    const candidates: FileNameSearchCandidate[] = [];
+    let truncated = false;
+    let visitedFiles = 0;
+    this.visitFiles(workspace.path, (absolutePath) => {
+      if (visitedFiles >= defaultNameSearchMaxVisitedFiles) {
+        truncated = true;
+        return true;
+      }
+      visitedFiles += 1;
+      const relativePath = this.toWorkspaceRelativePath(workspace.path, absolutePath);
+      const name = this.fileNameFromRelativePath(relativePath);
+      // 与 search 的有意差异：query 为空时不报错，按遍历序给出候选，供刚敲下 @ 的输入框使用。
+      if (normalizedQuery.length === 0) {
+        if (candidates.length >= maxResults) {
+          truncated = true;
+          return true;
+        }
+        candidates.push({ name, relativePath, basenameHit: true });
+        return false;
+      }
+      const basenameHit = this.isSubsequenceMatch(normalizedQuery, name.toLowerCase());
+      if (!basenameHit && !this.isSubsequenceMatch(normalizedQuery, relativePath.toLowerCase())) {
+        return false;
+      }
+      candidates.push({ name, relativePath, basenameHit });
+      return false;
+    });
+
+    if (normalizedQuery.length > 0) {
+      candidates.sort(compareFileNameSearchCandidates);
+    }
+    if (candidates.length > maxResults) {
+      truncated = true;
+    }
+
+    return {
+      query,
+      matches: candidates.slice(0, maxResults).map((candidate) => ({
+        name: candidate.name,
+        relativePath: candidate.relativePath
+      })),
       truncated
     };
   }
@@ -485,4 +539,35 @@ export class FileService {
   private isPdfPath(relativePath: string): boolean {
     return relativePath.toLowerCase().endsWith('.pdf');
   }
+
+  private fileNameFromRelativePath(relativePath: string): string {
+    const separatorIndex = relativePath.lastIndexOf('/');
+    return separatorIndex === -1 ? relativePath : relativePath.slice(separatorIndex + 1);
+  }
+
+  private isSubsequenceMatch(query: string, target: string): boolean {
+    let queryIndex = 0;
+    for (let targetIndex = 0; targetIndex < target.length && queryIndex < query.length; targetIndex += 1) {
+      if (target[targetIndex] === query[queryIndex]) {
+        queryIndex += 1;
+      }
+    }
+    return queryIndex === query.length;
+  }
+}
+
+type FileNameSearchCandidate = {
+  name: string;
+  relativePath: string;
+  basenameHit: boolean;
+};
+
+function compareFileNameSearchCandidates(left: FileNameSearchCandidate, right: FileNameSearchCandidate): number {
+  if (left.basenameHit !== right.basenameHit) {
+    return left.basenameHit ? -1 : 1;
+  }
+  if (left.relativePath.length !== right.relativePath.length) {
+    return left.relativePath.length - right.relativePath.length;
+  }
+  return left.relativePath.localeCompare(right.relativePath);
 }

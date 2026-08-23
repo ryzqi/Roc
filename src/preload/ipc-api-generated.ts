@@ -132,6 +132,7 @@ export const rocApi: RocPreloadApi = {
     selectFromDialog: (...args) => ipcRenderer.invoke(ipcChannels.filesSelectFromDialog, ...args),
     listTree: (...args) => ipcRenderer.invoke(ipcChannels.filesListTree, ...args),
     search: (...args) => ipcRenderer.invoke(ipcChannels.filesSearch, ...args),
+    searchByName: (...args) => ipcRenderer.invoke(ipcChannels.filesSearchByName, ...args),
     preview: (...args) => ipcRenderer.invoke(ipcChannels.filesPreview, ...args),
     previewPdf: (...args) => ipcRenderer.invoke(ipcChannels.filesPreviewPdf, ...args),
     writeText: (...args) => ipcRenderer.invoke(ipcChannels.filesWriteText, ...args)

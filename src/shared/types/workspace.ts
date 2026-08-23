@@ -2,6 +2,8 @@ import type { z } from 'zod';
 
 import {
   fileDialogSelectionSchema,
+  fileNameSearchRequestSchema,
+  fileNameSearchResultSchema,
   filePdfPreviewRequestSchema,
   filePdfPreviewResultSchema,
   filePreviewRequestSchema,
@@ -29,6 +31,9 @@ export type FileEntryShape = Pick<FileEntry, 'name' | 'relativePath' | 'type'>;
 export type FileSearchRequest = z.infer<typeof fileSearchRequestSchema>;
 export type FileSearchResult = z.infer<typeof fileSearchResultSchema>;
 export type FileSearchMatch = FileSearchResult['matches'][number];
+export type FileNameSearchRequest = z.infer<typeof fileNameSearchRequestSchema>;
+export type FileNameSearchResult = z.infer<typeof fileNameSearchResultSchema>;
+export type FileNameSearchMatch = FileNameSearchResult['matches'][number];
 export type FilePreviewRequest = z.infer<typeof filePreviewRequestSchema>;
 export type FilePreviewResult = z.infer<typeof filePreviewResultSchema>;
 

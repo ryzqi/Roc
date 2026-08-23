@@ -31,12 +31,16 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
       id: 'tasks-board',
       label: '任务工作台',
       meta: `${taskCounts.running} 运行中 · ${taskCounts.pendingConfirmation} 待确认 · ${taskCounts.total} 共计`,
+      badge: `${taskCounts.running}/${taskCounts.pendingConfirmation}/${taskCounts.total}`,
+      ...(taskCounts.pendingConfirmation > 0 ? { badgeTone: 'alert' as const } : {}),
       icon: 'clipboard'
     },
     {
       id: 'diagnostics',
       label: '任务诊断包',
       meta: `${state.taskSnapshot.counts.failed} 失败任务`,
+      badge: `${state.taskSnapshot.counts.failed}`,
+      ...(state.taskSnapshot.counts.failed > 0 ? { badgeTone: 'alert' as const } : {}),
       icon: 'stethoscope'
     }
   ];
@@ -48,18 +52,22 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
       id: 'memory',
       label: '记忆中心',
       meta: visibleMemoryLabel(state),
+      // 工作区路径已在 workspace-pill 与顶栏显示，dock 只在全局记忆时给出区分标记。
+      ...(state.appStatus.workspace.selectedPath === null ? { badge: '全局' } : {}),
       icon: 'globe'
     },
     {
       id: 'mcp',
       label: 'MCP',
       meta: `${state.mcpServers.filter((server) => server.enabled).length} 已启用`,
+      badge: `${state.mcpServers.filter((server) => server.enabled).length}`,
       icon: 'nodes'
     },
     {
       id: 'skills',
       label: 'Skill',
       meta: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 可用`,
+      badge: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length}`,
       icon: 'sparkles'
     }
   ];

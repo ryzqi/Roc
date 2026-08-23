@@ -5,6 +5,8 @@ import {
   deliveredResultSchema
 } from '../../../shared/schemas/ipc-core';
 import {
+  fileNameSearchRequestSchema,
+  fileNameSearchResultSchema,
   filePdfPreviewRequestSchema,
   filePdfPreviewResultSchema,
   filePreviewRequestSchema,
@@ -37,6 +39,7 @@ import {
 } from '../../../shared/schemas/ipc-workspace';
 import type {
   FileDeleteResult,
+  FileNameSearchRequest,
   RocSettingsDocument,
   WorkspaceSelectRequest
 } from '../../../shared/types';
@@ -91,7 +94,9 @@ const workspaceCapabilityDescriptors = [
   descriptor('terminal.writeInput', terminalSessionInputRequestSchema, deliveredResultSchema),
   descriptor('terminal.resize', terminalSessionResizeRequestSchema, terminalSessionSnapshotSchema),
   descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, closedResultSchema),
-  descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>())
+  descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>()),
+  // 追加到末尾：registerFileCapabilities / git / terminal 都按位置下标切分，插在中间会静默错位。
+  descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type WorkspacePluginOptions = {
@@ -173,6 +178,9 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
         fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
+      );
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[25], async (input) =>
+        fileService.searchByName(input as FileNameSearchRequest)
       );
     },
     shutdown: async () => {

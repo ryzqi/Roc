@@ -74,6 +74,23 @@ describe('AppShell', () => {
     expect(container.textContent).toContain('任务工作台');
   });
 
+  it('keeps every workbench and control entry inside the pinned sidebar dock', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    const dock = container.querySelector('.sidebar-dock');
+    if (dock === null) {
+      throw new Error('Expected the sidebar dock to render');
+    }
+    for (const testId of ['nav-tasks-board', 'nav-diagnostics', 'nav-memory', 'nav-mcp', 'nav-skills', 'settings-gear']) {
+      expect(dock.querySelector(`[data-testid="${testId}"]`)).not.toBeNull();
+    }
+  });
+
   it('resets sidebar scroll without resetting the chat canvas', async () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {

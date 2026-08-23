@@ -184,7 +184,10 @@ export function ChatView({
   }, [chatSelectionVersion]);
 
   async function submitCurrentInput(): Promise<void> {
-    const parsedSkillCommand = parseSlashSkillCommand(chatInput);
+    const parsedSkillCommand = parseSlashSkillCommand(
+      chatInput,
+      state.skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.id)
+    );
     if (parsedSkillCommand.kind === 'error') {
       chatRun.setError(parsedSkillCommand.message);
       return;

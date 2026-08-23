@@ -1,5 +1,5 @@
 export function buildRendererBoundaryCapabilities(ctx) {
-  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsReachable, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultTextEvidence, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
+  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsPinned, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultTextEvidence, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
   return {
     memoryFileEditorVisible:
       memoryText.includes('USER.md') &&
@@ -71,7 +71,7 @@ export function buildRendererBoundaryCapabilities(ctx) {
       workspaceSelectButtonEvidence.clickable &&
       workspaceSelectButtonEvidence.visibleInViewport &&
       workspaceSelectButtonEvidence.text.includes('选择'),
-    sidebarScrollableToSettings: sidebarSettingsReachable,
+    sidebarSettingsDockPinned: sidebarSettingsPinned,
     workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
       chatCapabilityEvidence.toolTriggerClass.includes('active') &&

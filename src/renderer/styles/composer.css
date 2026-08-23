@@ -329,6 +329,31 @@
   width: 452px;
 }
 
+/* grid 而非默认 block：textarea 是 inline-block，块级包裹层会在它下面留出基线间隙。 */
+.composer-suggest-anchor {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+/* 补全弹层贴在 textarea 上沿，不复用 .composer-popover 的鼠标悬停桥（::after）。 */
+.composer-suggest {
+  bottom: calc(100% + 8px);
+  width: 420px;
+  max-width: 100%;
+  max-height: 288px;
+  padding: 8px;
+  gap: 0;
+}
+
+.composer-suggest::after {
+  content: none;
+}
+
+.composer-suggest .composer-popover-list {
+  max-height: 272px;
+}
+
 .composer-popover-head {
   display: flex;
   align-items: center;

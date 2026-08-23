@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocPreloadApi } from '../../src/shared/ipc';
 import { ChatComposer } from '../../src/renderer/chat/chat-composer';
 import type { LoadedState } from '../../src/renderer/loaded-state';
-import { parseSlashSkillCommand } from '../../src/renderer/chat/slash-skill-command';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { ProviderConfig } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
@@ -453,43 +452,3 @@ function createProvider(): ProviderConfig {
     ]
   };
 }
-
-describe('slash skill command parser', () => {
-  it('parses slash skill command into explicit skill id and cleaned input', () => {
-    expect(parseSlashSkillCommand('/skill python-expert 优化这段代码')).toEqual({
-      kind: 'ok',
-      input: '优化这段代码',
-      explicitSkillIds: ['python-expert']
-    });
-  });
-
-  it('keeps multiline prompt after the skill id', () => {
-    expect(parseSlashSkillCommand('/skill python-expert\n优化这段代码')).toEqual({
-      kind: 'ok',
-      input: '优化这段代码',
-      explicitSkillIds: ['python-expert']
-    });
-  });
-
-  it('does not treat other slash text or inline slash skill text as a command', () => {
-    expect(parseSlashSkillCommand('/skills python-expert')).toEqual({
-      kind: 'none',
-      input: '/skills python-expert'
-    });
-    expect(parseSlashSkillCommand('请使用 /skill python-expert')).toEqual({
-      kind: 'none',
-      input: '请使用 /skill python-expert'
-    });
-  });
-
-  it('returns concrete errors for missing id and missing prompt', () => {
-    expect(parseSlashSkillCommand('/skill')).toEqual({
-      kind: 'error',
-      message: '请输入 Skill ID。'
-    });
-    expect(parseSlashSkillCommand('/skill python-expert')).toEqual({
-      kind: 'error',
-      message: '请输入要发送的内容。'
-    });
-  });
-});

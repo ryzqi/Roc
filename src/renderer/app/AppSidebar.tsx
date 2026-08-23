@@ -4,8 +4,8 @@ import { memo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { HistorySidebarItem } from '../history-sidebar';
 import { PreviewIcon } from '../components/PreviewIcon';
 import { HistoryThreadRow } from './sidebar/HistoryThreadMenu';
+import { NavButton } from './sidebar/NavButton';
 import { SidebarBlock } from './sidebar/SidebarBlock';
-import { SidebarNavGroup } from './sidebar/SidebarNavGroup';
 import type { NavItem, ViewId } from './types';
 import { visibleWorkspaceLabel } from './view-routing';
 import type { AppBootstrap } from './use-app-bootstrap';
@@ -69,7 +69,9 @@ export const AppSidebar = memo(function AppSidebar({
         </button>
         {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
       </div>
-      <SidebarNavGroup activeView={activeView} items={historyNavItems} title="对话" onSelect={onSelectNavItem} />
+      {historyNavItems.map((item) => (
+        <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onSelect={onSelectNavItem} />
+      ))}
       <SidebarBlock
         className={showHistorySearch ? 'sidebar-block sidebar-block--history sidebar-block--history-search' : 'sidebar-block sidebar-block--history'}
         head={
@@ -109,32 +111,31 @@ export const AppSidebar = memo(function AppSidebar({
           ))
         )}
       </SidebarBlock>
-      <SidebarNavGroup
-        className="sidebar-block sidebar-block--tasks"
-        activeView={activeView}
-        items={workspaceNavItems}
-        title="任务工作台"
-        onSelect={onSelectNavItem}
-      />
-      <SidebarNavGroup
-        className="sidebar-block sidebar-block--control"
-        activeView={activeView}
-        items={controlNavItems}
-        title="控制区"
-        onSelect={onSelectNavItem}
-      />
-      <div className="sidebar-footer">
-        <button
-          className="settings-gear"
-          data-testid="settings-gear"
-          type="button"
-          onClick={(event) => onOpenSettings(event.currentTarget)}
-          title="打开设置"
-          aria-label="打开设置"
-        >
-          <PreviewIcon name="wrench" />
-        </button>
-      </div>
+      {/* 底部 dock：常驻固定行，永不参与弹性收缩，最小窗口高度下也完整可见。 */}
+      <nav aria-label="工作台与控制" className="sidebar-dock">
+        <div className="sidebar-dock-group">
+          {workspaceNavItems.map((item) => (
+            <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onSelect={onSelectNavItem} />
+          ))}
+        </div>
+        <div className="sidebar-dock-group">
+          {controlNavItems.map((item) => (
+            <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onSelect={onSelectNavItem} />
+          ))}
+        </div>
+        <div className="sidebar-dock-group">
+          <button
+            className="nav-button nav-button--dock"
+            data-testid="settings-gear"
+            type="button"
+            onClick={(event) => onOpenSettings(event.currentTarget)}
+            title="打开设置"
+          >
+            <PreviewIcon name="wrench" />
+            <span className="nav-label">设置</span>
+          </button>
+        </div>
+      </nav>
     </aside>
   );
 });

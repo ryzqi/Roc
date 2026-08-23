@@ -67,6 +67,18 @@ export const fileSearchResultSchema = z
   })
   .strict();
 
+export const fileNameSearchRequestSchema = z
+  .object({ query: z.string(), maxResults: z.number().int().optional() })
+  .strict();
+
+export const fileNameSearchResultSchema = z
+  .object({
+    query: z.string(),
+    matches: z.array(z.object({ name: z.string(), relativePath: z.string() }).strict()),
+    truncated: z.boolean()
+  })
+  .strict();
+
 export const filePreviewRequestSchema = z
   .object({ relativePath: z.string(), maxBytes: z.number().int().optional() })
   .strict();
