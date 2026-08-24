@@ -140,11 +140,14 @@
 
 .skill-drawer-body {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 168px minmax(0, 1fr);
   min-height: 0;
 }
 
 .skill-drawer-tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   border-right: 1px solid var(--line);
   padding: 8px 0;
   overflow: auto;
