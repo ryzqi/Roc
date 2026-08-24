@@ -257,9 +257,10 @@ function resolveDependencies(options: AgentPluginOptions): string[] {
   return [...dependencies];
 }
 
+// memory 插件反向依赖 agent，不能放进 dependencies（会成环），只能声明为运行时能力依赖。
 function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
   if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
-    return ['@roc/plugin-task'];
+    return ['@roc/plugin-task', '@roc/plugin-memory'];
   }
   return [];
 }

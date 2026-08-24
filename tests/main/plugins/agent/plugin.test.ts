@@ -2,11 +2,20 @@ import { completedTestOutcome, createTestAgentExecution } from './test-execution
 import Database from 'better-sqlite3';
 import type { BaseStore } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import type { TaskRun } from '../../../../src/shared/types';
 import { createAgentPlugin } from '../../../../src/main/plugins/agent';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
-import type { RocPluginContext } from '../../../../src/main/kernel/types';
+import { EventBus } from '../../../../src/main/kernel/event-bus';
+import { PluginLoader } from '../../../../src/main/kernel/plugin-loader';
+import type {
+  CapabilityDescriptor,
+  RocCapabilityRegistry,
+  RocPlugin,
+  RocPluginContext,
+  RocPluginManifest
+} from '../../../../src/main/kernel/types';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
@@ -84,7 +93,10 @@ describe('agent plugin manifest', () => {
       '@roc/plugin-skills',
       '@roc/plugin-runtime-tools'
     ]);
-    expect(Reflect.get(plugin.manifest, 'capabilityDependencies')).toEqual(['@roc/plugin-task']);
+    expect(Reflect.get(plugin.manifest, 'capabilityDependencies')).toEqual([
+      '@roc/plugin-task',
+      '@roc/plugin-memory'
+    ]);
   });
 
   it('creates the DeepAgent executor with runtime stores outside core.db', async () => {
@@ -123,6 +135,54 @@ describe('agent plugin manifest', () => {
       memoryDb.close();
       taskDb.close();
       coreDb.close();
+    }
+  });
+
+  it('authorizes the memory capabilities behind the memory_search and remember tools', async () => {
+    const agentDb = new Database(':memory:');
+    try {
+      applyAgentDatabaseSchema(agentDb);
+      const agentPlugin = createAgentPlugin({
+        deepAgentExecutor: {
+          memoryStore: {} as BaseStore,
+          paths: new RocPaths('F:\\Code\\Roc')
+        }
+      });
+      const loader = new PluginLoader({
+        eventBus: new EventBus({ error: () => {} }),
+        capabilities: new CapabilityRegistry(),
+        createContext: (plugin, capabilities) => loaderContext(plugin.manifest.id, capabilities, agentDb)
+      });
+
+      await loader.load([
+        agentPlugin,
+        // memory 反向依赖 agent，因此只能靠 agent 的 capabilityDependencies 授权。
+        stubPlugin({
+          id: '@roc/plugin-memory',
+          dependencies: ['@roc/plugin-agent'],
+          capabilities: [capabilityDescriptor('memory.entries.search'), capabilityDescriptor('memory.entry.remember')]
+        }),
+        stubPlugin({ id: '@roc/plugin-workspace' }),
+        stubPlugin({ id: '@roc/plugin-mcp' }),
+        stubPlugin({ id: '@roc/plugin-skills' }),
+        stubPlugin({ id: '@roc/plugin-runtime-tools' })
+      ]);
+
+      const executorOptions = mocked.createAgentDeepAgentExecutor.mock.calls.at(-1)?.[0] as
+        | { capabilities: RocCapabilityRegistry }
+        | undefined;
+      if (executorOptions === undefined) {
+        throw new Error('expected_deep_agent_executor_options');
+      }
+
+      await expect(
+        executorOptions.capabilities.invoke('memory.entries.search', { value: 'roc' })
+      ).resolves.toEqual({ echoed: 'roc' });
+      await expect(
+        executorOptions.capabilities.invoke('memory.entry.remember', { value: 'roc' })
+      ).resolves.toEqual({ echoed: 'roc' });
+    } finally {
+      agentDb.close();
     }
   });
 
@@ -380,6 +440,67 @@ function createContext(
       subscribe: () => () => {}
     },
     capabilities: new CapabilityRegistry(),
+    database: {
+      getConnection: () => agentDb,
+    },
+    config: { get: () => null, set: () => {} },
+    secrets: { get: () => null, set: () => {}, clear: () => {} },
+    logger: { info: () => {}, warn: () => {}, error: () => {} }
+  };
+}
+
+function capabilityDescriptor(name: string): CapabilityDescriptor {
+  return {
+    name,
+    version: '1.0.0',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ echoed: z.string() })
+  };
+}
+
+function stubPlugin(input: {
+  id: string;
+  dependencies?: readonly string[];
+  capabilities?: readonly CapabilityDescriptor[];
+}): RocPlugin {
+  const capabilities = input.capabilities ?? [];
+  const manifest: RocPluginManifest = {
+    id: input.id,
+    version: '1.0.0',
+    displayName: input.id,
+    description: `${input.id} test stub`,
+    loadPhase: 'critical',
+    required: true,
+    order: 100,
+    dependencies: input.dependencies ?? [],
+    capabilities
+  };
+  return {
+    manifest,
+    initialize: async (context) => {
+      for (const capability of capabilities) {
+        context.capabilities.register(input.id, capability, async (payload) => ({
+          echoed: (payload as { value: string }).value
+        }));
+      }
+    },
+    shutdown: async () => {},
+    healthCheck: async () => ({ status: 'healthy' })
+  };
+}
+
+function loaderContext(
+  pluginId: string,
+  capabilities: RocCapabilityRegistry,
+  agentDb: Database.Database
+): RocPluginContext {
+  return {
+    pluginId,
+    eventBus: {
+      publish: async () => {},
+      subscribe: () => () => {}
+    },
+    capabilities,
     database: {
       getConnection: () => agentDb,
     },
