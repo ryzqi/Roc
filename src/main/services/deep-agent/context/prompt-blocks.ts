@@ -17,6 +17,7 @@ type PromptBlockType =
   | 'workspace'
   | 'tools'
   | 'capability'
+  | 'self_config'
   | 'explicit_skills'
   | 'referenced_files'
   | 'context_recall'
@@ -63,6 +64,11 @@ export function buildPromptBlocks(input: {
     createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath, input.mode)),
     createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools)),
     createBlock('capability', BlockStability.CAPABILITY, `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`),
+    ...(
+      input.tools.some((tool) => tool.name === 'roc_self_config')
+        ? [createBlock('self_config', BlockStability.CAPABILITY, buildSelfConfigPrompt())]
+        : []
+    ),
     ...(
       input.explicitSkillContexts.length === 0
         ? []
@@ -168,6 +174,17 @@ function buildHumanClarificationPrompt(): string {
     '- Ask one clear question at a time.',
     '- Avoid fragmented repeated questions; gather enough context first when possible.',
     '- Do not use ask_user for approval of tool calls.'
+  ].join('\n');
+}
+
+function buildSelfConfigPrompt(): string {
+  return [
+    "Roc's own configuration lives on the real filesystem under %USERPROFILE%\\.roc: hooks.json, config\\settings.json, config\\hooks-trust.json, skills\\.",
+    'The /workspace/, /memory/, and /skills/ virtual routes cannot reach that directory, and file tools reject Windows absolute paths.',
+    'For any question about Roc hooks or settings, call roc_self_config instead of reading Roc source code to infer the schema: describe for paths, hooks JSON Schema, event/action matrix, and the hook runtime contract; read for the current hooks.json snapshot (including trustState) and redacted settings; validate for a candidate hooks config; dry_run(handlerId) to re-run one existing handler and see its stdout, stderr, and exit code.',
+    'Hook commands are launched through cmd.exe on Windows, not bash; a bash or python script needs its interpreter spelled out in the command.',
+    'Claude Code / Codex hook files are not compatible: timeout is timeoutSeconds, loop_limit is unsupported, only 6 events exist, stdout must be empty or one {"action":...} object, and the exit code must be 0.',
+    'roc_self_config never writes configuration. Hand the finished JSON to the user; saving it and trusting each handler happens in the settings page, and an untrusted handler is silently skipped at run time.'
   ].join('\n');
 }
 

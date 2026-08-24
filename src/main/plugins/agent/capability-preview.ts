@@ -18,6 +18,7 @@ export function buildAgentCapabilityPreview(input: {
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   requestedCapabilities: EnabledCapabilities;
+  selfConfigAvailable?: boolean;
   shellAllowedCommands?: readonly string[];
   runtimeStatus: AgentRuntimeStatus;
   skills: SkillSnapshot[];
@@ -58,6 +59,8 @@ export function buildDeepAgentConfigPreview(input: {
     mcpServers: [],
     mode: input.mode,
     workflowHint: null,
+    // 该预览只反映默认内置工具的审批参数，不宣称 roc_self_config。
+    selfConfigAvailable: false,
     requestedCapabilities: {
       mcpServers: [],
       skills: []

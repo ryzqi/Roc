@@ -38,6 +38,7 @@ import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-stor
 import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
 import type { RocPaths } from '../../services/paths';
+import type { SelfConfigService } from '../../services/self-config';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
@@ -86,6 +87,7 @@ export type AgentPluginOptions = {
     getMemorySettings?: () => AppSettings['memory'];
     hookRuntime?: Pick<HookRuntime, 'runEvent'>;
     metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
+    selfConfigService?: SelfConfigService;
   } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
@@ -149,6 +151,7 @@ function createCapabilityPreviewProvider(
     return undefined;
   }
   const capabilityPreviewOptions = options.capabilityPreview;
+  const selfConfigAvailable = isSelfConfigAvailable(options.deepAgentExecutor);
   return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, workflowHint }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
@@ -157,11 +160,20 @@ function createCapabilityPreviewProvider(
       mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
       mode,
       requestedCapabilities,
+      selfConfigAvailable,
       shellAllowedCommands,
       runtimeStatus,
       skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
       workflowHint
     });
+}
+
+// manifest 只能宣称执行器真的会绑定的工具：roc_self_config 依赖注入的 SelfConfigService。
+function isSelfConfigAvailable(option: AgentPluginOptions['deepAgentExecutor']): boolean {
+  if (option === undefined || 'execute' in option) {
+    return false;
+  }
+  return option.selfConfigService !== undefined;
 }
 
 function resolveDeepAgentExecutor(
@@ -184,6 +196,7 @@ function resolveDeepAgentExecutor(
     metricsService: option.metricsService,
     paths: option.paths,
     store: option.memoryStore,
+    selfConfigService: option.selfConfigService,
     toolEffectStore: new AgentToolEffectStore(agentDb)
   });
 }

@@ -206,4 +206,43 @@ describe('prompt blocks', () => {
     expect(staticBlock?.content).not.toContain('Roc SQLite');
     expect(staticBlock?.content).not.toContain('DeepAgents memory');
   });
+
+  it('adds the self config block only when roc_self_config is bound', () => {
+    const withTool = buildPromptBlocks({
+      mode: 'run',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null,
+      tools: [{ name: 'roc_self_config', description: 'Inspect Roc own configuration' }],
+      explicitSkillContexts: [],
+      referencedFileContexts: []
+    });
+    const withoutTool = buildPromptBlocks({
+      mode: 'run',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null,
+      tools: [{ name: 'session_search', description: 'Search prior conversations' }],
+      explicitSkillContexts: [],
+      referencedFileContexts: []
+    });
+
+    expect(withTool.map((block) => block.type)).toEqual([
+      'static',
+      'workspace',
+      'tools',
+      'capability',
+      'self_config',
+      'context_recall',
+      'workflow'
+    ]);
+    const selfConfigBlock = withTool.find((block) => block.type === 'self_config');
+    expect(selfConfigBlock?.stability).toBe('capability');
+    expect(selfConfigBlock?.content).toContain('%USERPROFILE%\\.roc');
+    expect(selfConfigBlock?.content).toContain('hooks.json');
+    expect(selfConfigBlock?.content).toContain('timeoutSeconds');
+    expect(selfConfigBlock?.content).toContain('cmd.exe');
+    expect(selfConfigBlock?.content).toContain('roc_self_config never writes configuration.');
+    expect(withoutTool.some((block) => block.type === 'self_config')).toBe(false);
+  });
 });

@@ -411,6 +411,50 @@ describe('run capability manifest', () => {
     expect(blocked.manifest.tools.map((tool) => tool.modelVisibleName)).not.toContain('run_shell_command');
     expect(authorized.manifest.tools.map((tool) => tool.modelVisibleName)).toContain('run_shell_command');
   });
+
+  it('only advertises roc_self_config when the executor can bind it', () => {
+    const unavailable = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      mode: 'chat',
+      workflowHint: null
+    });
+    const available = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      selfConfigAvailable: true,
+      skills: [],
+      mode: 'chat',
+      workflowHint: null
+    });
+    const planned = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      selfConfigAvailable: true,
+      skills: [],
+      mode: 'plan',
+      workflowHint: null
+    });
+
+    expect(unavailable.manifest.tools.map((tool) => tool.modelVisibleName)).not.toContain('roc_self_config');
+    expect(planned.manifest.tools.map((tool) => tool.modelVisibleName)).not.toContain('roc_self_config');
+    expect(available.manifest.tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        canonicalIdentity: 'builtin:roc_self_config',
+        modelVisibleName: 'roc_self_config',
+        executionScopes: ['main'],
+        effectClass: 'host_execution'
+      })
+    ]));
+    expect(available.subagents.find((subagent) => subagent.id === 'general-purpose')?.tools).not.toContain('roc_self_config');
+  });
 });
 
 function mcpServer(input: {

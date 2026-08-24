@@ -22,6 +22,7 @@ import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
 
 const deleteFileAllowedDecisions: InterruptDecisionType[] = ['approve', 'edit', 'reject'];
+const selfConfigCardId = 'builtin:roc_self_config';
 const mcpAllowedDecisions: InterruptDecisionType[] = ['approve', 'reject'];
 const runtimeManifestToolNames = [
   'ask_user',
@@ -50,6 +51,7 @@ const reservedMcpModelVisibleToolNames = new Set<string>([
   'ask_user',
   'delete_file',
   'execute',
+  'roc_self_config',
   'run_shell_command',
   'web_read'
 ]);
@@ -68,6 +70,8 @@ export function compileRunCapabilityManifest(input: {
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   mode: ChatRunMode;
+  // 缺省视为不可用：manifest 只宣称执行器确实会绑定的工具。
+  selfConfigAvailable?: boolean;
   shellAllowedCommands?: readonly string[];
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
@@ -138,6 +142,7 @@ export function compileRunCapabilityManifest(input: {
       : []),
     createWebReadCard(),
     createDeleteFileCard(input.deleteFileApprovalMode),
+    ...(input.mode === 'plan' || input.selfConfigAvailable !== true ? [] : [createSelfConfigCard()]),
     ...selectedMcpCards
   ];
   const toolCards = input.mode === 'plan' ? allToolCards.filter((card) => isPlanModeModelVisibleToolName(card.name)) : allToolCards;
@@ -247,7 +252,7 @@ function compileManifestTools(
       canonicalIdentity: card.id,
       modelVisibleName: card.name,
       provenance: resolveProvenance(card),
-      executionScopes: ['main', 'subagent'],
+      executionScopes: resolveExecutionScopes(card),
       riskLevel: card.riskLevel,
       effectClass,
       approvalPolicy: resolveApprovalPolicy(card.name, interruptOn),
@@ -353,8 +358,15 @@ function resolveProvenance(card: AgentCapabilityCard): RunCapabilityManifestTool
   return { kind: 'mcp', serverId };
 }
 
+function resolveExecutionScopes(card: AgentCapabilityCard): RunCapabilityManifestToolV1['executionScopes'] {
+  if (card.id === selfConfigCardId) {
+    return ['main'];
+  }
+  return ['main', 'subagent'];
+}
+
 function resolveEffectClass(card: AgentCapabilityCard): RunCapabilityEffectClassV1 {
-  if (card.id === 'builtin:run_shell_command') {
+  if (card.id === 'builtin:run_shell_command' || card.id === selfConfigCardId) {
     return 'host_execution';
   }
   if (card.id === 'builtin:delete_file') {
@@ -492,6 +504,26 @@ function createWebReadCard(): AgentCapabilityCard {
     riskLevel: 'medium',
     auditCategory: 'web_read',
     untrustedContext: true
+  };
+}
+
+function createSelfConfigCard(): AgentCapabilityCard {
+  return {
+    id: selfConfigCardId,
+    name: 'roc_self_config',
+    capabilityType: 'terminal_tool',
+    description:
+      '只读自省 Roc 自身配置：返回 ~/.roc 路径表、hooks.json schema 与运行契约、当前 hooks 快照与脱敏 settings，校验待保存的 hooks 配置，并可试跑 hooks.json 里已存在的某条 handler（试跑前单独弹宿主确认）。不写任何配置文件。',
+    requiredInput: "action: describe | read | validate | dry_run（validate 需 config，dry_run 需 handlerId）",
+    scope: 'app',
+    dependencies: ['SelfConfigService', 'HookConfigService', 'HookCommandRunner'],
+    sideEffects: ['host_code_execution'],
+    requiresApproval: false,
+    supportsLongTermGrant: false,
+    revokeGrantHint: 'roc_self_config 由 Roc 内置服务提供，不创建长期授权；dry_run 每次都单独确认。',
+    riskLevel: 'high',
+    auditCategory: 'agent_self_config',
+    untrustedContext: false
   };
 }
 

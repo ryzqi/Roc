@@ -1067,6 +1067,8 @@ export class AgentPluginRuntime {
       mcpServers: [],
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
+      // 该回退路径只装配内置工具，不宣称 roc_self_config。
+      selfConfigAvailable: false,
       shellAllowedCommands: input.shellAllowedCommands,
       skills: [],
       workflowHint: input.workflowHint

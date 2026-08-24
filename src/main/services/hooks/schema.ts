@@ -21,7 +21,7 @@ export const HookCommandOutputSchema: z.ZodType<RocHookCommandOutput> = z.object
   additionalContext: z.string().min(1).optional()
 });
 
-const supportedActionsByEvent: Record<RocHookEventName, ReadonlySet<RocHookCommandOutputAction>> = {
+export const supportedActionsByEvent: Record<RocHookEventName, ReadonlySet<RocHookCommandOutputAction>> = {
   SessionStart: new Set(['continue', 'block', 'add_context']),
   UserPromptSubmit: new Set(['continue', 'block', 'add_context']),
   PreToolUse: new Set(['continue', 'block', 'replace_input']),

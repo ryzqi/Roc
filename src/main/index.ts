@@ -15,8 +15,9 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
-import type { ChatRunEvent, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
+import type { ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
+import { confirmShellRequestWithDialog } from './ipc/shell-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
 import { agentChatRunEventType } from './plugins/agent/runtime';
 import { workspaceChangedEventType } from './plugins/workspace';
@@ -234,6 +235,12 @@ async function createWindow(): Promise<void> {
   const safeStorageBackend = createElectronSafeStorageBackend();
   const runtimeMetricsProvider = createElectronRuntimeMetricsProvider();
   const kernel = createMainKernelBootstrap({
+    confirmShellRequest: async (request: ShellConfirmationRequest) => {
+      if (mainWindow === null) {
+        throw new Error('shell_confirm_main_window_missing');
+      }
+      return await confirmShellRequestWithDialog(request, mainWindow, requireActiveKernel().logService);
+    },
     dataRoot: process.env.ROC_DATA_ROOT,
     getAppearance: getSystemAppearanceSnapshot,
     isPackaged: app.isPackaged,

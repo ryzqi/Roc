@@ -16,6 +16,8 @@ import type {
   FileDeleteResult,
   RunCapabilityManifestV1,
   RunExecutionSnapshotV2,
+  ShellConfirmationRequest,
+  ShellConfirmationResult,
   TaskDetail,
   TaskRun,
   UpdateBackgroundTaskRequest,
@@ -61,6 +63,10 @@ import type { LangChainChatModelHandle } from '../../services/langchain-model-fa
 import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { MetricsService } from '../../services/metrics-service';
+import type {
+  SelfConfigDryRunConfirmRequest,
+  SelfConfigService
+} from '../../services/self-config';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
 import { createAgentDeepAgentExecution, type RunOutcome } from './agent-execution';
@@ -75,6 +81,7 @@ export type AgentDeepAgentExecutorOptions = {
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
   paths: RocPaths;
+  selfConfigService?: SelfConfigService;
   store: BaseStore;
   toolEffectStore: AgentToolEffectStore;
 };
@@ -153,6 +160,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         capabilityManifest: input.snapshot.capabilityManifest,
         enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
         runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
+        selfConfigService: options.selfConfigService,
         shellExecutionService,
         shellAllowedCommands,
         mode
@@ -617,6 +625,7 @@ async function createExecutorTools(input: {
   capabilityManifest: RunCapabilityManifestV1;
   enabledCapabilities: TaskRun['enabledCapabilities'];
   runtimeWorkspacePath: string | null;
+  selfConfigService?: SelfConfigService;
   shellExecutionService: AgentExecuteAdapter;
   shellAllowedCommands?: readonly string[];
   mode: RunExecutionSnapshotV2['mode'];
@@ -642,6 +651,17 @@ async function createExecutorTools(input: {
   const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
   if (manifestToolNames.has('run_shell_command') && (input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0)) {
     runTools.splice(3, 0, createRocWindowsCommandTool(input.shellExecutionService));
+  }
+  if (manifestToolNames.has('roc_self_config')) {
+    const selfConfigService = input.selfConfigService;
+    if (selfConfigService === undefined) {
+      throw new Error('run_capability_self_config_service_missing');
+    }
+    runTools.splice(3, 0, createSelfConfigTool({
+      capabilities: input.capabilities,
+      selfConfigService,
+      runtimeWorkspacePath: input.runtimeWorkspacePath
+    }));
   }
   const backgroundTaskTools = createManifestAuthorizedBackgroundTaskTools(input);
   if (backgroundTaskTools.length > 0) {
@@ -784,6 +804,85 @@ function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicSt
       return JSON.stringify(result, null, 2);
     }
   });
+}
+
+const selfConfigToolSchema = z.object({
+  action: z.enum(['describe', 'read', 'validate', 'dry_run']),
+  config: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  handlerId: z.string().trim().min(1).optional(),
+  payload: z.record(z.string(), z.unknown()).optional()
+});
+
+type SelfConfigToolRequest = z.infer<typeof selfConfigToolSchema>;
+
+function createSelfConfigTool(input: {
+  capabilities: RocCapabilityRegistry;
+  selfConfigService: SelfConfigService;
+  runtimeWorkspacePath: string | null;
+}): StringDynamicStructuredTool {
+  const schema = selfConfigToolSchema;
+  return new DynamicStructuredTool<typeof schema, SelfConfigToolRequest, SelfConfigToolRequest, string>({
+    name: 'roc_self_config',
+    description:
+      '只读自省 Roc 自身配置：describe 返回 ~/.roc 路径表、hooks.json JSON Schema、事件与 action 矩阵、hook 运行契约；read 返回当前 hooks.json 快照（含 trustState）与脱敏后的 settings；validate 校验一份 hooks 配置并给出格式修正提示（不落盘）；dry_run 试跑 hooks.json 里已存在的某条 handler（需 handlerId，会先弹宿主确认）并返回 stdout / stderr / 退出码。配置落盘与信任必须由用户在设置页完成。',
+    schema,
+    func: async (request) => {
+      const result = await executeSelfConfigAction({ ...input, request });
+      return JSON.stringify(result, null, 2);
+    }
+  });
+}
+
+async function executeSelfConfigAction(input: {
+  capabilities: RocCapabilityRegistry;
+  selfConfigService: SelfConfigService;
+  runtimeWorkspacePath: string | null;
+  request: SelfConfigToolRequest;
+}): Promise<unknown> {
+  if (input.request.action === 'describe') {
+    return input.selfConfigService.describe();
+  }
+  if (input.request.action === 'read') {
+    return await input.selfConfigService.read();
+  }
+  if (input.request.action === 'validate') {
+    if (input.request.config === undefined) {
+      throw new Error('roc_self_config_validate_config_required');
+    }
+    return input.selfConfigService.validate(input.request.config);
+  }
+  const handlerId = input.request.handlerId;
+  if (handlerId === undefined) {
+    throw new Error('roc_self_config_dry_run_handler_id_required');
+  }
+  return await input.selfConfigService.dryRun({
+    handlerId,
+    payload: input.request.payload,
+    ...(input.runtimeWorkspacePath === null ? {} : { cwd: input.runtimeWorkspacePath }),
+    confirm: async (confirmRequest) => await confirmSelfConfigDryRun(input.capabilities, confirmRequest)
+  });
+}
+
+async function confirmSelfConfigDryRun(
+  capabilities: RocCapabilityRegistry,
+  request: SelfConfigDryRunConfirmRequest
+): Promise<boolean> {
+  const result = await capabilities.invoke<ShellConfirmationRequest, ShellConfirmationResult>('shell.confirm', {
+    title: 'Roc hook 试跑确认',
+    message: [
+      `即将在宿主机试跑 hook handler ${request.handlerId}（${request.event}）：`,
+      request.command,
+      `cwd: ${request.cwd}`,
+      `超时: ${request.timeoutSeconds}s`,
+      `handler 状态: ${request.enabled ? '已启用' : '已禁用'} / 信任 ${request.trustState}`,
+      ...(request.enabled && request.trustState === 'trusted'
+        ? []
+        : ['注意：该 handler 在真实运行中会被跳过，试跑只是手动执行这条命令。'])
+    ].join('\n'),
+    confirmLabel: '试跑',
+    cancelLabel: '取消'
+  });
+  return result.confirmed;
 }
 
 function createDeleteFileTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {

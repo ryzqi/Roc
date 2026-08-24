@@ -1,6 +1,13 @@
 import { join } from 'node:path';
 
-import type { AgentRuntimeStatus, AppStatus, SettingsSaveRequest, SystemAppearanceSnapshot } from '../shared/types';
+import type {
+  AgentRuntimeStatus,
+  AppStatus,
+  SettingsSaveRequest,
+  ShellConfirmationRequest,
+  ShellConfirmationResult,
+  SystemAppearanceSnapshot
+} from '../shared/types';
 import { setLogService } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
 import { deleteLegacyMonolithData } from './infrastructure/legacy-data-cleanup';
@@ -29,10 +36,12 @@ import { PerformanceObserverService } from './services/performance-observer-serv
 import { RocPaths } from './services/paths';
 import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
+import { SelfConfigService } from './services/self-config';
 
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
   safeStorage: SafeStorageBackend;
+  confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
   plugins?: readonly RocPlugin[];
   performanceObserverService?: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
@@ -71,10 +80,18 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   configService.initialize();
   const hookTrustService = new HookTrustService(paths);
   const hookConfigService = new HookConfigService(paths, hookTrustService);
+  const hookCommandRunner = new HookCommandRunner();
   const hookRuntime = new HookRuntime({
     configService: hookConfigService,
     trustService: hookTrustService,
-    commandRunner: new HookCommandRunner()
+    commandRunner: hookCommandRunner
+  });
+  const selfConfigService = new SelfConfigService({
+    paths,
+    hookConfigService,
+    hookTrustService,
+    commandRunner: hookCommandRunner,
+    configService
   });
   const logService = new LogService(paths);
   logService.initialize();
@@ -92,6 +109,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       options.plugins ??
       createDefaultMainKernelPlugins({
         configService,
+        confirmShellRequest: options.confirmShellRequest,
         databasePool,
         hookRuntime,
         metricsService,
@@ -99,6 +117,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
         paths,
         performanceObserverService,
         runtimeMetricsProvider: options.runtimeMetricsProvider,
+        selfConfigService,
         version: requireMainKernelVersion(options.version),
         isPackaged: options.isPackaged,
         getAppearance: options.getAppearance
@@ -151,11 +170,13 @@ function createDefaultMainKernelPlugins(input: {
   databasePool: DatabasePool;
   paths: RocPaths;
   configService: ConfigService;
+  confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
   hookRuntime: HookRuntime;
   metricsService: MetricsService;
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
+  selfConfigService: SelfConfigService;
   version: string;
   isPackaged?: boolean;
   getAppearance?: () => SystemAppearanceSnapshot;
@@ -196,7 +217,8 @@ function createDefaultMainKernelPlugins(input: {
         hookRuntime: input.hookRuntime,
         metricsService: input.metricsService,
         memoryStore: new RocSqliteStore(input.databasePool.getConnection('@roc/plugin-memory')),
-        paths: input.paths
+        paths: input.paths,
+        selfConfigService: input.selfConfigService
       },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
         beforeCreate: () => {
@@ -226,6 +248,7 @@ function createDefaultMainKernelPlugins(input: {
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({
+      confirmShellRequest: input.confirmShellRequest,
       rootDir: input.paths.root,
       workspaceConfigService: configService,
       workspacePath: defaultWorkspace === null ? undefined : defaultWorkspace
