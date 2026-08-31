@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { getElectronVersion, packageJsonPath, projectRoot } from './electron-version.mjs';
+import { packageJsonPath, projectRoot } from './electron-version.mjs';
 
 export const betterSqlite3ModuleName = 'better-sqlite3';
 export const betterSqlite3ModuleRoot = resolve(projectRoot, 'node_modules', betterSqlite3ModuleName);
@@ -397,49 +397,6 @@ export function terminateRunningPackagedApp({
   throw new Error(`Timed out waiting for packaged Roc.exe processes to exit: ${terminatedPids.join(', ')}.`);
 }
 
-export function prepareBetterSqlite3ForElectron({
-  electronVersion = getElectronVersion(),
-  projectRoot: targetProjectRoot = projectRoot,
-  run = runCommand
-} = {}) {
-  const rebuildStatus = run('pnpm', [
-    'exec',
-    'electron-rebuild',
-    '--force',
-    '--only',
-    betterSqlite3ModuleName,
-    '--version',
-    electronVersion,
-    '--module-dir',
-    targetProjectRoot
-  ]);
-  if (rebuildStatus === 0) {
-    return { strategy: 'electron-rebuild' };
-  }
-
-  const fallbackStatus = run(
-    'pnpm',
-    [
-      'exec',
-      'prebuild-install',
-      `--runtime=electron`,
-      `--target=${electronVersion}`,
-      '--arch=x64',
-      '--platform=win32'
-    ],
-    { cwd: resolve(targetProjectRoot, 'node_modules', betterSqlite3ModuleName) }
-  );
-  if (fallbackStatus !== 0) {
-    throw new Error(
-      `Failed to prepare ${betterSqlite3ModuleName} for Electron ${electronVersion}: electron-rebuild exited ${rebuildStatus}, prebuild-install exited ${fallbackStatus}. ` +
-        `No local compiler toolchain and no published prebuild for this Electron ABI. ` +
-        `Install Visual Studio Build Tools with Desktop development with C++, or pin electron to a version that publishes better-sqlite3 prebuilds for this platform.`
-    );
-  }
-
-  return { strategy: 'prebuild-install' };
-}
-
 export function verifyBetterSqlite3WithElectron({
   label,
   moduleSpecifier = betterSqlite3ModuleName,
@@ -463,25 +420,13 @@ export function verifyBetterSqlite3WithElectron({
   }
 }
 
-export function prepareAndVerifyWorkspaceBetterSqlite3(options = {}) {
-  const result = prepareBetterSqlite3ForElectron(options);
+// better-sqlite3 13 与 node-pty 1.1 均为 N-API 模块,包内自带各平台 prebuilds,
+// 同一份二进制在 Node 与 Electron 的不同 ABI 下都能加载,因此无需再按 ABI 重建/还原,只需验证 Electron 侧真实可加载。
+export function verifyWorkspaceBetterSqlite3(options = {}) {
   verifyBetterSqlite3WithElectron({
     label: 'workspace-better-sqlite3',
     ...options
   });
-  return result;
-}
-
-export function restoreBetterSqlite3ForNode({
-  projectRoot: targetProjectRoot = projectRoot,
-  run = runCommand
-} = {}) {
-  const restoreStatus = run('pnpm', ['rebuild', betterSqlite3ModuleName, '--pending=false'], {
-    cwd: targetProjectRoot
-  });
-  if (restoreStatus !== 0) {
-    throw new Error(`Failed to restore ${betterSqlite3ModuleName} for Node with exit code ${restoreStatus}.`);
-  }
 }
 
 export function resolvePackagedBetterSqlite3Root(appOutDir) {

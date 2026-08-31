@@ -29,17 +29,16 @@ describe('package scripts', () => {
     expect(smokeScript).toContain('window.roc.diagnostics.samplePerformance');
   });
 
-  it('wraps pnpm dev with native module prepare and restore for Electron runtime', () => {
+  it('wraps pnpm dev with native module verification for Electron runtime', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     const devScriptUrl = new URL('../../scripts/dev-electron.mjs', import.meta.url);
     const devScript = existsSync(devScriptUrl) ? readFileSync(devScriptUrl, 'utf8') : '';
 
     expect(packageJson.scripts.dev).toBe('node scripts/dev-electron.mjs');
     expect(existsSync(devScriptUrl)).toBe(true);
-    expect(devScript).toContain('prepareAndVerifyWorkspaceBetterSqlite3');
-    expect(devScript).toContain('restoreBetterSqlite3ForNode');
+    expect(devScript).toContain('verifyWorkspaceBetterSqlite3');
+    expect(devScript).not.toContain('restoreBetterSqlite3ForNode');
     expect(devScript).toContain('electron-vite');
-    expect(devScript).toContain('finally');
     expect(devScript).toContain('runCommand(command, args, {');
     expect(devScript).toContain('cwd: options?.cwd ?? projectRoot');
     expect(devScript).toContain('env: createPackagingEnvironment(options?.env)');

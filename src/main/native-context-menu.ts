@@ -12,7 +12,7 @@ export type NativeContextMenuParams = {
 
 type NativeContextMenuDependencies = {
   buildFromTemplate: (template: MenuItemConstructorOptions[]) => { popup: (options: { x: number; y: number }) => void };
-  writeText: (text: string) => void;
+  writeText: (text: string) => Promise<void>;
 };
 
 type NativeContextMenuEvent = {
@@ -42,7 +42,10 @@ export function buildNativeContextMenuTemplate(
     {
       label: '复制所选内容',
       click: () => {
-        clipboardApi.writeText(selectedText);
+        // Electron 44 起 clipboard.writeText 返回 Promise;菜单点击是事件入口边界,在此上报拒绝,避免未处理的 rejection。
+        clipboardApi.writeText(selectedText).catch((error: unknown) => {
+          console.error('[NativeContextMenu] Clipboard write rejected.', error);
+        });
       }
     }
   ];

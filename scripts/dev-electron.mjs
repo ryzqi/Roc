@@ -1,8 +1,7 @@
 import {
   createPackagingEnvironment,
-  prepareAndVerifyWorkspaceBetterSqlite3,
-  restoreBetterSqlite3ForNode,
-  runCommand
+  runCommand,
+  verifyWorkspaceBetterSqlite3
 } from './lib/native-packaging.mjs';
 
 const projectRoot = process.cwd();
@@ -23,26 +22,10 @@ function run(command, args, options = { exitOnFailure: true }) {
   return 0;
 }
 
-try {
-  prepareAndVerifyWorkspaceBetterSqlite3({
-    projectRoot,
-    run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
-  });
-  exitCode = run('pnpm', ['exec', 'electron-vite', 'dev'], { exitOnFailure: false });
-} finally {
-  let restoreExitCode = 0;
-  try {
-    restoreBetterSqlite3ForNode({
-      projectRoot,
-      run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
-    });
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    restoreExitCode = 1;
-  }
-  if (exitCode === 0 && restoreExitCode !== 0) {
-    exitCode = restoreExitCode;
-  }
-}
+verifyWorkspaceBetterSqlite3({
+  projectRoot,
+  run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
+});
+exitCode = run('pnpm', ['exec', 'electron-vite', 'dev'], { exitOnFailure: false });
 
 process.exit(exitCode);

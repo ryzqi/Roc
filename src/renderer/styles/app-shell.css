@@ -148,8 +148,6 @@
   align-self: stretch;
   justify-content: flex-end;
   gap: 0;
-  /* 父级 .window-workband 是 native drag 区；窗口控制按钮必须退出 drag，否则 Windows 上点击被 native 拖拽吞掉。 */
-  -webkit-app-region: no-drag;
 }
 
 .icon-button {

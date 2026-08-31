@@ -1,9 +1,9 @@
 import {
   createPackagingEnvironment,
-  prepareAndVerifyWorkspaceBetterSqlite3,
   runCommand,
   sanitizeLanggraphSdkForPackaging,
-  terminateRunningPackagedApp
+  terminateRunningPackagedApp,
+  verifyWorkspaceBetterSqlite3
 } from '../lib/native-packaging.mjs';
 
 export default async function beforePack() {
@@ -14,7 +14,7 @@ export default async function beforePack() {
       `Sanitized @langchain/langgraph-sdk bundled pnpm imports in ${langgraphSdkSanitize.rewrittenFiles.length} file(s) for packaging.`
     );
   }
-  prepareAndVerifyWorkspaceBetterSqlite3({
+  verifyWorkspaceBetterSqlite3({
     run: (command, args, options) =>
       runCommand(command, args, {
         ...options,

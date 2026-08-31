@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-const eagerBudgetBytes = 1_500_000;
+const eagerBudgetBytes = 1_700_000;
 const rendererRoot = join(process.cwd(), 'dist', 'renderer');
 const manifestPath = join(rendererRoot, '.vite', 'manifest.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));

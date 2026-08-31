@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   buildWindowsShellCommand,
-  prepareAndVerifyWorkspaceBetterSqlite3,
-  restoreBetterSqlite3ForNode
+  verifyWorkspaceBetterSqlite3
 } from './lib/native-packaging.mjs';
 
 let exitCode = 0;
@@ -52,24 +51,12 @@ try {
     if (process.env.ROC_SMOKE_TARGET === undefined) {
       process.env.ROC_SMOKE_TARGET = 'dist';
     }
-    prepareAndVerifyWorkspaceBetterSqlite3({
+    verifyWorkspaceBetterSqlite3({
       run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
     });
     exitCode = run('node', ['tests/smoke/performance-smoke.mjs'], { exitOnFailure: false });
   }
 } finally {
-  let restoreExitCode = 0;
-  try {
-    restoreBetterSqlite3ForNode({
-      run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
-    });
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    restoreExitCode = 1;
-  }
-  if (exitCode === 0 && restoreExitCode !== 0) {
-    exitCode = restoreExitCode;
-  }
   rmSync(profileRoot, { recursive: true, force: true });
 }
 

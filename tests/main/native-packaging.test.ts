@@ -40,9 +40,8 @@ describe('native packaging contract', () => {
     expect(afterExtractHook).toContain("rm(join(context.appOutDir, 'version')");
   });
 
-  it('restores workspace better-sqlite3 after the package-dir command exits', () => {
-    expect(packageDirScript).toContain('finally');
-    expect(packageDirScript).toContain('restoreBetterSqlite3ForNode({');
+  it('no longer restores better-sqlite3 after the package-dir command exits', () => {
+    expect(packageDirScript).not.toContain('restoreBetterSqlite3ForNode');
   });
 
   it('terminates running packaged app processes before direct electron-builder output cleanup', () => {
@@ -190,74 +189,47 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/conpty/**/win10-arm64/**');
   });
 
-  it('uses electron-rebuild first and skips prebuild-install when rebuild succeeds', async () => {
+  it('verifies workspace better-sqlite3 under Electron without rebuilding it', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
-    const { prepareBetterSqlite3ForElectron } = await loadNativePackagingModule();
+    const { verifyWorkspaceBetterSqlite3 } = await loadNativePackagingModule();
 
-    const result = prepareBetterSqlite3ForElectron({
-      electronVersion: '41.3.0',
-      projectRoot: 'F:/Code/Roc',
-      run
-    });
+    verifyWorkspaceBetterSqlite3({ projectRoot: 'F:/Code/Roc', run });
 
-    expect(result).toEqual({ strategy: 'electron-rebuild' });
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith('pnpm', [
-      'exec',
-      'electron-rebuild',
-      '--force',
-      '--only',
-      'better-sqlite3',
-      '--version',
-      '41.3.0',
-      '--module-dir',
-      'F:/Code/Roc'
-    ]);
-  });
-
-  it('falls back to prebuild-install when electron-rebuild fails', async () => {
-    const run = vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0);
-    const { prepareBetterSqlite3ForElectron } = await loadNativePackagingModule();
-
-    const result = prepareBetterSqlite3ForElectron({
-      electronVersion: '41.3.0',
-      projectRoot: 'F:/Code/Roc',
-      run
-    });
-
-    expect(result).toEqual({ strategy: 'prebuild-install' });
-    expect(run).toHaveBeenNthCalledWith(1, 'pnpm', [
-      'exec',
-      'electron-rebuild',
-      '--force',
-      '--only',
-      'better-sqlite3',
-      '--version',
-      '41.3.0',
-      '--module-dir',
-      'F:/Code/Roc'
-    ]);
-    expect(run).toHaveBeenNthCalledWith(
-      2,
+    expect(run).toHaveBeenCalledWith(
       'pnpm',
       [
         'exec',
-        'prebuild-install',
-        '--runtime=electron',
-        '--target=41.3.0',
-        '--arch=x64',
-        '--platform=win32'
+        'electron',
+        expect.stringContaining('scripts'),
+        expect.stringContaining('package.json'),
+        'better-sqlite3',
+        'workspace-better-sqlite3'
       ],
-      { cwd: resolve('F:/Code/Roc/node_modules/better-sqlite3') }
+      { cwd: 'F:/Code/Roc' }
     );
   });
 
-  it('prepares workspace better-sqlite3 for Electron before standalone native packaging verification', () => {
-    expect(verifyNativePackagingScript).toContain('prepareAndVerifyWorkspaceBetterSqlite3');
-    expect(verifyNativePackagingScript).toContain('restoreBetterSqlite3ForNode');
-    expect(verifyNativePackagingScript.indexOf('prepareAndVerifyWorkspaceBetterSqlite3')).toBeLessThan(
-      verifyNativePackagingScript.indexOf('restoreBetterSqlite3ForNode')
+  it('fails loudly when better-sqlite3 cannot load under Electron', async () => {
+    const run = vi.fn().mockReturnValueOnce(1);
+    const { verifyWorkspaceBetterSqlite3 } = await loadNativePackagingModule();
+
+    expect(() => verifyWorkspaceBetterSqlite3({ projectRoot: 'F:/Code/Roc', run })).toThrow(
+      /Electron verify failed for workspace-better-sqlite3/
     );
+  });
+
+  it('no longer ships ABI rebuild or restore helpers now that better-sqlite3 is N-API', async () => {
+    const nativePackaging = await loadNativePackagingModule();
+
+    expect(nativePackaging).not.toHaveProperty('prepareBetterSqlite3ForElectron');
+    expect(nativePackaging).not.toHaveProperty('prepareAndVerifyWorkspaceBetterSqlite3');
+    expect(nativePackaging).not.toHaveProperty('restoreBetterSqlite3ForNode');
+  });
+
+  it('verifies workspace better-sqlite3 in the standalone native packaging script', () => {
+    expect(verifyNativePackagingScript).toContain('verifyWorkspaceBetterSqlite3');
+    expect(verifyNativePackagingScript).not.toContain('restoreBetterSqlite3ForNode');
   });
 
   it('verifies packaged better-sqlite3 from the app.asar package boundary', async () => {

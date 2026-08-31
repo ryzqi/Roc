@@ -29,7 +29,7 @@ describe('native context menu', () => {
   });
 
   it('offers copy selection for selected non-editable text', () => {
-    const writeText = vi.fn();
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
     const template = buildNativeContextMenuTemplate(
       {
         ...baseContextMenuParams(),
@@ -60,7 +60,7 @@ describe('native context menu', () => {
     };
     const handler = createNativeContextMenuHandler({
       buildFromTemplate,
-      writeText: vi.fn()
+      writeText: vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined)
     });
 
     handler(event, {
