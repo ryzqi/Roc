@@ -1,3 +1,4 @@
+import { ToolMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -156,7 +157,8 @@ describe('deep agent tool protocol', () => {
       capabilityManifest: createCapabilityManifest([
         createManifestTool('propose_background_task', ['main'])
       ]),
-      executionScope: 'main'
+      executionScope: 'main',
+      boundToolNames: ['propose_background_task']
     });
     if (typeof middleware.wrapToolCall !== 'function') {
       throw new Error('Expected tool protocol middleware to expose wrapToolCall.');
@@ -203,19 +205,23 @@ describe('deep agent tool protocol', () => {
     const mainManifest = createCapabilityManifest([
       createManifestTool('web_read', ['main'])
     ]);
+    const boundToolNames = ['web_read', 'run_shell_command', 'schedule_background_task'];
     const mainMiddleware = createToolProtocolMiddleware({
       capabilityManifest: mainManifest,
-      executionScope: 'main'
+      executionScope: 'main',
+      boundToolNames
     });
     const subagentMiddleware = createToolProtocolMiddleware({
       capabilityManifest: mainManifest,
-      executionScope: 'subagent'
+      executionScope: 'subagent',
+      boundToolNames
     });
     const backgroundSubagentMiddleware = createToolProtocolMiddleware({
       capabilityManifest: createCapabilityManifest([
         createManifestTool('schedule_background_task', ['main'])
       ]),
-      executionScope: 'subagent'
+      executionScope: 'subagent',
+      boundToolNames
     });
 
     await expect(mainMiddleware.wrapToolCall?.({
@@ -238,6 +244,40 @@ describe('deep agent tool protocol', () => {
       tool: scheduleTool,
       toolCall: { name: 'schedule_background_task', args: {}, id: 'call-background-scope' }
     } as never, handler as never)).rejects.toThrow('agent_capability_manifest_scope_denied:schedule_background_task:subagent');
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('softens an unbound tool name but keeps a bound one fatal when the request omits the tool field', async () => {
+    const handler = vi.fn(async () => 'unexpected_handler_call');
+    const middleware = createToolProtocolMiddleware({
+      capabilityManifest: createCapabilityManifest([createManifestTool('write_file', ['main'])]),
+      executionScope: 'main',
+      boundToolNames: ['write_file', 'delete_file']
+    });
+    if (typeof middleware.wrapToolCall !== 'function') {
+      throw new Error('Expected tool protocol middleware to expose wrapToolCall.');
+    }
+
+    // 名字既无 tool 字段又不在绑定集合里：模型幻觉，软化为可自纠的 error ToolMessage。
+    const hallucinated = await middleware.wrapToolCall(
+      { toolCall: { name: 'write', args: {}, id: 'call-hallucinated' } } as never,
+      handler as never
+    );
+
+    expect(ToolMessage.isInstance(hallucinated)).toBe(true);
+    if (!ToolMessage.isInstance(hallucinated)) {
+      throw new Error('Expected a ToolMessage for the hallucinated tool name.');
+    }
+    expect(hallucinated.status).toBe('error');
+    expect(hallucinated.tool_call_id).toBe('call-hallucinated');
+    expect(hallucinated.content).toBe('write is not an available tool. Available tools: write_file.');
+
+    // 已绑定但未授权：即使 tool 字段被上游中间件丢掉，仍必须硬失败。
+    await expect(middleware.wrapToolCall(
+      { toolCall: { name: 'delete_file', args: {}, id: 'call-bound-unauthorized' } } as never,
+      handler as never
+    )).rejects.toThrow('agent_capability_manifest_tool_not_authorized:delete_file');
 
     expect(handler).not.toHaveBeenCalled();
   });

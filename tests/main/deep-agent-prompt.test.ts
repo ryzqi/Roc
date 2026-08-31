@@ -84,7 +84,8 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain(
       'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.'
     );
-    expect(prompt).toContain('Use Edit/Write on memory paths for manual restructuring');
+    expect(prompt).toContain('Use edit_file/write_file on memory paths for manual restructuring');
+    expect(prompt).not.toContain('Use Edit/Write on memory paths');
     expect(prompt).toContain('AGENTS.md changes only through explicit file edits.');
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
@@ -147,8 +148,8 @@ describe('deep agent prompt', () => {
       'When the injected memory does not answer the question, call memory_search before guessing a memory path.',
       'Use the remember tool to store a durable fact; it validates the entry, drops duplicates, and reports the target file.',
       'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.',
-      'Use Edit/Write on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
-      'On capacity overflow, read the file, then either merge redundant entries via Edit or move detail into a topic file and leave one index line behind.',
+      'Use edit_file/write_file on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
+      'On capacity overflow, read the file, then either merge redundant entries via edit_file or move detail into a topic file and leave one index line behind.',
       'AGENTS.md changes only through explicit file edits.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.'

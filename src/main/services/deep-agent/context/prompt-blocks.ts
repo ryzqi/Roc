@@ -60,7 +60,7 @@ export function buildPromptBlocks(input: {
   referencedFileContexts: readonly ReferencedFilePromptContext[];
 }): PromptBlock[] {
   return [
-    createBlock('static', BlockStability.STATIC, buildStaticPrompt()),
+    createBlock('static', BlockStability.STATIC, buildStaticPrompt(input.mode)),
     createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath, input.mode)),
     createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools)),
     createBlock('capability', BlockStability.CAPABILITY, `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`),
@@ -89,7 +89,7 @@ export function buildPromptBlocks(input: {
   ];
 }
 
-function buildStaticPrompt(): string {
+function buildStaticPrompt(mode: RunExecutionSnapshotV2['mode']): string {
   return [
     'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
     'Before changing files, inspect the relevant source, tests, and configuration.',
@@ -107,14 +107,22 @@ function buildStaticPrompt(): string {
     'Those five files are already injected into this prompt when non-empty; do not spend read_file calls guessing their paths.',
     'Topic files are never injected. Read one only when an index line in MEMORY.md matches the current task.',
     'When the injected memory does not answer the question, call memory_search before guessing a memory path.',
-    'Use the remember tool to store a durable fact; it validates the entry, drops duplicates, and reports the target file.',
-    'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.',
-    'Use Edit/Write on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
-    'On capacity overflow, read the file, then either merge redundant entries via Edit or move detail into a topic file and leave one index line behind.',
-    'AGENTS.md changes only through explicit file edits.',
+    // Plan Mode 不绑定 remember / write_file / edit_file，因此不给出记忆写入指令：
+    // 提示模型使用未绑定的工具会诱发工具名幻觉，而未知工具名要多消耗一轮才能自纠。
+    ...(mode === 'plan' ? [] : buildMemoryWritePromptLines()),
     '',
     'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
   ].join('\n');
+}
+
+function buildMemoryWritePromptLines(): string[] {
+  return [
+    'Use the remember tool to store a durable fact; it validates the entry, drops duplicates, and reports the target file.',
+    'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.',
+    'Use edit_file/write_file on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
+    'On capacity overflow, read the file, then either merge redundant entries via edit_file or move detail into a topic file and leave one index line behind.',
+    'AGENTS.md changes only through explicit file edits.'
+  ];
 }
 
 function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSnapshotV2['mode']): string {

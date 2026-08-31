@@ -5,6 +5,7 @@ import type { ExplicitSkillContext } from './explicit-skills';
 import type { ReferencedFileContext } from './referenced-files';
 import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
+import { filterPlanModeModelTools } from '../model-tool-exposure';
 import type { MemoryRememberAdapter, MemorySearchAdapter } from './memory-tools';
 import { createMemorySearchTool, createRememberTool } from './memory-tools';
 import type { SessionSearchAdapter } from './session-search-tool';
@@ -58,13 +59,16 @@ export function assembleContextHarness(input: {
   const allowedToolNames = new Set(
     input.allowedToolNames ?? ['session_search', 'memory_search', 'remember', 'read_context_artifact']
   );
-  const tools = [
+  const manifestAuthorizedTools = [
     ...input.baseTools,
     ...(allowedToolNames.has(sessionSearchTool.name) ? [sessionSearchTool] : []),
     ...(allowedToolNames.has(memorySearchTool.name) ? [memorySearchTool] : []),
     ...(allowedToolNames.has(rememberTool.name) ? [rememberTool] : []),
     ...(allowedToolNames.has(contextArtifactReadTool.name) ? [contextArtifactReadTool] : [])
   ];
+  // Plan Mode 的 manifest 仍授权 remember 等写入工具，但 buildDeepAgent 不会把它们绑定给模型。
+  // 在此收口，使提示词的 Available Tools、上下文预算估算与实际绑定集合三者一致。
+  const tools = input.mode === 'plan' ? filterPlanModeModelTools(manifestAuthorizedTools) : manifestAuthorizedTools;
   const promptBlocks = buildPromptBlocks({
     mode: input.mode,
     enabledCapabilities: input.enabledCapabilities,

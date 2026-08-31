@@ -227,7 +227,7 @@ describe('Deep Agents middleware overlap conformance', () => {
     }
   });
 
-  it('rejects an unknown tool at the protocol boundary in a real agent trajectory', async () => {
+  it('softens an unbound tool name at the protocol boundary so the model can self-correct', async () => {
     const db = createAgentDatabase();
     try {
       const model = structuredToolModel('missing_tool', 'call-unknown-tool', { value: 'fixture' });
@@ -240,15 +240,46 @@ describe('Deep Agents middleware overlap conformance', () => {
         manifestTools: []
       });
 
+      const result = await agent.invoke(
+        initialState('call the unknown tool'),
+        { configurable: { thread_id: 'thread-unknown-tool' } }
+      );
+      const message = requireToolMessage(result.messages, 'call-unknown-tool');
+
+      expect(message.status).toBe('error');
+      expect(message.content).toBe('missing_tool is not an available tool. Available tools: .');
+      expect(model.responseIndex).toBe(2);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('keeps a bound but unauthorized tool call fatal at the protocol boundary', async () => {
+    const db = createAgentDatabase();
+    const leakedTool = tool(async () => 'unexpected_handler_call', {
+      name: 'leaked_tool',
+      description: 'A tool bound to the model without manifest authorization.',
+      schema: z.object({ value: z.string() })
+    });
+
+    try {
+      const agent = createTestAgent({
+        db,
+        model: structuredToolModel('leaked_tool', 'call-leaked-tool', { value: 'fixture' }),
+        runId: 'run-leaked-tool',
+        threadId: 'thread-leaked-tool',
+        tools: [leakedTool],
+        manifestTools: []
+      });
+
       await expect(
         agent.invoke(
-          initialState('call the unknown tool'),
-          { configurable: { thread_id: 'thread-unknown-tool' } }
+          initialState('call the leaked tool'),
+          { configurable: { thread_id: 'thread-leaked-tool' } }
         )
       ).rejects.toThrow(
-        'agent_capability_manifest_tool_not_authorized:missing_tool'
+        'agent_capability_manifest_tool_not_authorized:leaked_tool'
       );
-      expect(model.responseIndex).toBe(1);
     } finally {
       db.close();
     }

@@ -96,6 +96,12 @@ type DeepAgentBuildPolicy = {
   threadId: string;
   mode: RunExecutionSnapshotV2['mode'];
   capabilityManifest: RunCapabilityManifestV1;
+  /**
+   * 运行时注册进 ToolNode 的工具名全集：自定义工具 ∪ deepagents 内置工具。
+   * Plan Mode 的工具过滤只作用于模型可见性（wrapModelCall），不影响 ToolNode 注册，
+   * 因此内置工具在两种模式下都属于绑定集合。
+   */
+  boundToolNames: readonly string[];
   filesystemPermissions: ReturnType<typeof createRocFilesystemPermissions>;
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   workspacePath: string | null;
@@ -109,6 +115,9 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
     threadId: snapshot.threadId,
     mode: snapshot.mode,
     capabilityManifest: snapshot.capabilityManifest,
+    boundToolNames: [
+      ...new Set([...input.tools.map((tool) => tool.name), ...DEEP_AGENT_BUILT_IN_TOOLS])
+    ],
     filesystemPermissions: snapshot.mode === 'plan'
       ? createRocReadOnlyFilesystemPermissions()
       : createRocFilesystemPermissions(),
@@ -444,7 +453,8 @@ function createExecutionSafetyMiddleware(
     createRTKMiddleware(new RTKBinaryManager()),
     createToolProtocolMiddleware({
       capabilityManifest: policy.capabilityManifest,
-      executionScope
+      executionScope,
+      boundToolNames: policy.boundToolNames
     }),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),

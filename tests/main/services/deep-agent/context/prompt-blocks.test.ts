@@ -136,6 +136,44 @@ describe('prompt blocks', () => {
     expect(prompt).not.toContain('Do not call run_shell_command');
     expect(prompt).not.toContain('write_file creates new files or fully replaces existing files.');
     expect(prompt).not.toContain('After write_file or edit_file');
+    // Plan Mode 不绑定 remember / write_file / edit_file：提示模型使用未绑定工具会诱发工具名幻觉。
+    expect(prompt).not.toContain('Use the remember tool to store a durable fact');
+    expect(prompt).not.toContain('remember routes high-confidence direct user preferences to USER.md');
+    expect(prompt).not.toContain('Use edit_file/write_file on memory paths for manual restructuring');
+    expect(prompt).not.toContain('On capacity overflow, read the file');
+    expect(prompt).not.toContain('AGENTS.md changes only through explicit file edits.');
+    // 只读的记忆检索指令必须保留：Plan Mode 仍绑定 memory_search。
+    expect(prompt).toContain('When the injected memory does not answer the question, call memory_search before guessing a memory path.');
+    expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
+  });
+
+  it('keeps memory write instructions in run mode where the write tools are actually bound', () => {
+    const blocks = buildPromptBlocks({
+      mode: 'run',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      tools: [],
+      explicitSkillContexts: [],
+      referencedFileContexts: []
+    });
+
+    const prompt = blocks.map((block) => block.content).join('\n');
+
+    expect(prompt).toContain('Use the remember tool to store a durable fact');
+    expect(prompt).toContain(
+      'Use edit_file/write_file on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.'
+    );
+    expect(prompt).toContain(
+      'On capacity overflow, read the file, then either merge redundant entries via edit_file or move detail into a topic file and leave one index line behind.'
+    );
+    expect(prompt).toContain('AGENTS.md changes only through explicit file edits.');
+    // Roc 里不存在名为 Edit / Write 的工具，提示词不得再出现这些名字。
+    expect(prompt).not.toContain('Use Edit/Write on memory paths');
+    expect(prompt).not.toContain('merge redundant entries via Edit ');
   });
 
   it('does not add plan mode instructions for normal chat', () => {

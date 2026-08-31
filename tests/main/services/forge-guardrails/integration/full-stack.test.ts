@@ -203,6 +203,9 @@ describe('forge guardrails full stack', () => {
     const result = await runToolThroughMiddleware(
       middleware,
       {
+        // 真实 ToolNode 会为已注册工具填入 tool；夹具必须一致，
+        // 否则 RocToolProtocolMiddleware 会把它判为模型幻觉的未绑定工具名。
+        tool: fakeTool('delete_file'),
         toolCall: {
           name: 'delete_file',
           args: { file_path: '/workspace/docs' },

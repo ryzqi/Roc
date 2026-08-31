@@ -92,6 +92,8 @@ export function ChatView({
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>('chat');
+  // 记录已被用户处置（执行或继续规划）的 plan 运行，避免计划操作区停留在屏幕上
+  const [dismissedPlanRunId, setDismissedPlanRunId] = useState<string | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const selectedAttachmentsRef = useRef<RendererImageAttachment[]>([]);
 
@@ -148,8 +150,11 @@ export function ChatView({
     if (chatRun.state.status !== 'completed' || chatRun.state.mode !== 'plan') {
       return null;
     }
+    if (chatRun.state.runId !== null && chatRun.state.runId === dismissedPlanRunId) {
+      return null;
+    }
     return extractLastProposedPlan(chatRun.state.assistantMessage);
-  }, [chatRun.state.assistantMessage, chatRun.state.mode, chatRun.state.status]);
+  }, [chatRun.state.assistantMessage, chatRun.state.mode, chatRun.state.runId, chatRun.state.status, dismissedPlanRunId]);
 
   useEffect(() => {
     if (pendingUserInput === null || selectedThreadId === null) {
@@ -178,6 +183,7 @@ export function ChatView({
     setSubmitting(false);
     setActiveComposerPopover(null);
     setComposerMode('chat');
+    setDismissedPlanRunId(null);
     chatRun.reset();
     // chatRun.reset 引用每次渲染都会变；只依赖版本号触发重置
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -278,8 +284,11 @@ export function ChatView({
     if (submitting) {
       return;
     }
+    const planRunId = chatRun.state.runId;
     setSubmitting(true);
     setComposerMode('chat');
+    // 先隐藏计划操作区，避免已完成的 plan 运行继续占据界面
+    setDismissedPlanRunId(planRunId);
     try {
       const result = await onSubmitChatTask({
         input: planText,
@@ -289,11 +298,19 @@ export function ChatView({
       if (result.ok) {
         setPendingUserInput(planText);
       } else {
+        // 提交失败时恢复计划操作区，让用户可以重试
+        setDismissedPlanRunId(null);
+        setComposerMode('plan');
         chatRun.setError(result.error);
       }
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function continuePlanning(): void {
+    setDismissedPlanRunId(chatRun.state.runId);
+    setComposerMode('plan');
   }
 
   const showEmptyState = chatTranscript.length === 0;
@@ -343,7 +360,7 @@ export function ChatView({
                     className="chat-plan-action-secondary"
                     data-testid="chat-plan-continue"
                     type="button"
-                    onClick={() => setComposerMode('plan')}
+                    onClick={continuePlanning}
                   >
                     继续规划
                   </button>
