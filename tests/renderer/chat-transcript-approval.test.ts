@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
-import { buildChatTranscript } from '../../src/renderer/chat-transcript';
+import { projectChatTranscript } from '../../src/renderer/chat-transcript';
 import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -53,7 +53,7 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
-function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
+function stripAttachments(messages: ReturnType<typeof projectChatTranscript>) {
   return messages.map((message) => {
     const { attachments, source, ...withoutAttachments } = message;
     void attachments;
@@ -90,9 +90,8 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: {
+    const messages = projectChatTranscript({
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -107,8 +106,8 @@ describe('chat transcript helpers', () => {
         ]
       },
       pendingUserInput: null,
-      selectedThreadId: 'thread-older',
-      taskSnapshot: snapshot
+      threadId: 'thread-older',
+      events: snapshot.recentEvents
     });
 
     expect(stripAttachments(messages)).toEqual([
@@ -149,13 +148,11 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot,
-      persistedMessages: [
+      threadId: 'thread-current',
+      events: [
         {
           id: 'user-current-1',
           threadId: 'thread-current',
@@ -230,9 +227,8 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: {
+    const messages = projectChatTranscript({
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -268,8 +264,8 @@ describe('chat transcript helpers', () => {
         resumeBusy: false
       },
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot
+      threadId: 'thread-current',
+      events: snapshot.recentEvents
     });
 
     expect(stripAttachments(messages)).toEqual([
@@ -357,12 +353,11 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot
+      threadId: 'thread-current',
+      events: snapshot.recentEvents
     });
 
     expect(stripAttachments(messages)).toEqual([

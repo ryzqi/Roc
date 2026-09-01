@@ -20,6 +20,7 @@ import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../src/main/services/deep-agent/context/context-artifact-store';
+import { createFakePreCompactionFlushRecorder } from '../../services/deep-agent/context/pre-compaction-flush-test-helpers';
 import type { ContextMaintenanceEvent } from '../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../../../src/main/services/hooks';
@@ -130,6 +131,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     hookRuntime: input.hookRuntime,
     metricsService: input.metricsService,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
+    sessionHistory: createFakePreCompactionFlushRecorder(),
     store: new InMemoryStore(),
     contextArtifactStore: new ContextArtifactStore(toolEffectDb),
     toolEffectStore: new AgentToolEffectStore(toolEffectDb)

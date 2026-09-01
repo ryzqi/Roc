@@ -142,11 +142,13 @@ function createRuntime(connection: Database.Database, modelIndex: number): {
   const paths = new RocPaths(join(tempDir, 'paths'));
   paths.ensureTree();
   const capabilities = createCapabilities();
+  const repository = new AgentSessionRepository(connection);
   const executor = createAgentDeepAgentExecutor({
     capabilities,
     checkpointer: new RocSqliteCheckpointer(connection),
     contextArtifactStore: new ContextArtifactStore(connection),
     paths,
+    sessionHistory: repository,
     store: new InMemoryStore(),
     toolEffectStore: new AgentToolEffectStore(connection)
   });
@@ -154,7 +156,6 @@ function createRuntime(connection: Database.Database, modelIndex: number): {
     createDefaultModelHandle: async () => createModelHandle(modelIndex),
     createModelHandleByProviderAndModel: async () => createModelHandle(modelIndex)
   };
-  const repository = new AgentSessionRepository(connection);
   return {
     repository,
     runtime: new AgentPluginRuntime({

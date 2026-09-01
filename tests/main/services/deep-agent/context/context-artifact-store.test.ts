@@ -128,55 +128,6 @@ describe('ContextArtifactStore', () => {
     })).toBeNull();
   });
 
-  it('records a searchable pre-compaction flush row scoped to the workspace', () => {
-    const store = new ContextArtifactStore(db);
-    db.prepare(
-      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      'thread_ctx_4',
-      'chat',
-      'Context flush',
-      'Context flush',
-      'running',
-      '2026-06-24T00:00:00.000Z',
-      '2026-06-24T00:00:00.000Z'
-    );
-
-    store.recordPreCompactionFlush({
-      content: 'Context summary mentions deterministic compaction and payment service evidence.',
-      runId: 'run_ctx_4',
-      threadId: 'thread_ctx_4',
-      tokenCount: 42,
-      workspaceHash: 'workspace_hash_c'
-    });
-
-    const row = db
-      .prepare('SELECT thread_id, role, content, phase, token_count, workspace_hash FROM session_messages WHERE thread_id = ?')
-      .get('thread_ctx_4') as Record<string, unknown>;
-
-    expect(row).toEqual({
-      thread_id: 'thread_ctx_4',
-      role: 'system',
-      content: 'Context summary mentions deterministic compaction and payment service evidence.',
-      phase: 'pre_compaction_flush',
-      token_count: 42,
-      workspace_hash: 'workspace_hash_c'
-    });
-
-    const found = db
-      .prepare(
-        `SELECT sm.content
-         FROM session_messages_fts
-         JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
-         WHERE session_messages_fts MATCH ?`
-      )
-      .all('payment') as Array<{ content: string }>;
-
-    expect(found.map((item) => item.content)).toEqual([
-      'Context summary mentions deterministic compaction and payment service evidence.'
-    ]);
-  });
 });
 
 function tableExists(connection: Database.Database, tableName: string): boolean {

@@ -1,89 +1,29 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { Command } from '@langchain/langgraph';
-import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import type { ClientTool } from '@langchain/core/tools';
-import { DynamicStructuredTool } from '@langchain/core/tools';
-import { GENERAL_PURPOSE_SUBAGENT } from 'deepagents';
-import { z } from 'zod';
 
 import type {
-  AppSettings,
-  BackgroundTask,
-  BackgroundTaskPreview,
-  BackgroundTaskPreviewRequest,
   ChatRunEvent,
   ChatValidatedImageAttachment,
-  FileDeleteResult,
-  RunCapabilityManifestV1,
-  RunExecutionSnapshotV2,
-  ShellConfirmationRequest,
-  ShellConfirmationResult,
-  TaskDetail,
-  TaskRun,
-  UpdateBackgroundTaskRequest,
-  Workspace
+  RunExecutionSnapshotV2
 } from '../../../shared/types';
-import type { RocCapabilityRegistry } from '../../kernel/types';
-import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
 import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agent-stream-adapter';
 import {
   consumeDeepAgentEventStream,
   createStreamConsumerState,
   createUsageAccumulator
 } from '../../services/deep-agent/stream-consumers';
-import { createRunSubagents } from '../../services/deep-agent/subagents';
-import { defaultErrorTracker, PreviewStore } from '../../services/forge-guardrails';
-import { defaultSettings } from '../../services/config/defaults';
-import type { WebReadExecutionRequest, WebReadRequest, WebReadResult } from '../../services/web-read-service';
-import { webReadToolSchema } from '../../services/web-read-request-schema';
-import type { RocPaths } from '../../services/paths';
-import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
-import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
-import { createBackend } from '../../services/deep-agent/backend';
-import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
-import {
-  toWorkspaceRelativePath
-} from '../../services/deep-agent/filesystem-tool-contract';
-import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
-import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
-import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
-import type { ContextMaintenanceEvent } from '../../services/deep-agent/context/context-compaction-pipeline';
-import {
-  createContextTokenCounter,
-  deriveContextBudgetProfile
-} from '../../services/deep-agent/context/context-token-budget';
-import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
-import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
-import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
-import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import { defaultErrorTracker } from '../../services/forge-guardrails';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
-import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
-import type { HookRuntime } from '../../services/hooks';
-import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
-import { CapacityService } from '../../services/memory/capacity';
-import { SecurityScanService } from '../../services/memory/security-scan';
 import type { MetricsService } from '../../services/metrics-service';
-import type {
-  SelfConfigDryRunConfirmRequest,
-  SelfConfigService
-} from '../../services/self-config';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
 import { createAgentDeepAgentExecution, type RunOutcome } from './agent-execution';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import { createRunInterruptedEvents, projectDeepAgentInterrupts } from './interrupt-projection';
+import { buildRunHarness, type RunHarnessServices } from './run-harness';
 
-export type AgentDeepAgentExecutorOptions = {
-  capabilities: RocCapabilityRegistry;
-  checkpointer: BaseCheckpointSaver;
-  contextArtifactStore: ContextArtifactStore;
-  getMemorySettings?: () => AppSettings['memory'];
-  hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+export type AgentDeepAgentExecutorOptions = RunHarnessServices & {
   metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
-  paths: RocPaths;
-  selfConfigService?: SelfConfigService;
-  store: BaseStore;
-  toolEffectStore: AgentToolEffectStore;
 };
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
@@ -98,12 +38,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       });
       const events = (async function* () {
         try {
-      const handle = input.modelHandle.langChainHandle;
-      if (handle === undefined) {
-        throw new Error('agent_deep_agent_model_handle_missing');
-      }
       const mode = input.snapshot.mode;
-      const workflowHint = input.snapshot.workflowHint;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
       const hookDisplayTexts: string[] = [];
@@ -135,199 +70,25 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         throw overflow;
       };
 
-      const runtimeWorkspace = createWorkspaceFromSnapshot(input.snapshot);
-      requireWorkbenchSourceForBackgroundTaskWorkflow(input.snapshot);
-      const hookRunContext = {
-        runId: input.run.id,
-        threadId: input.run.threadId,
-        workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        cwd: runtimeWorkspace === null ? options.paths.root : runtimeWorkspace.path,
-        source: isBackgroundTaskWorkflow(input.snapshot) ? ('background_task' as const) : ('chat' as const),
-        modelId: input.modelHandle.modelId,
-        workflowHint
-      };
-      const shellAllowedCommands = input.snapshot.shellAllowedCommands;
-      const shellExecutionService = createShellExecutionAdapter({
-        capabilities: options.capabilities,
-        defaultCwd: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        allowedCommands: shellAllowedCommands,
+      const harness = await buildRunHarness(options, {
         abortSignal: executionAbortController.signal,
-        runId: input.run.id,
-        threadId: input.run.threadId
+        emitRuntimeEvent,
+        modelHandle: input.modelHandle,
+        run: input.run,
+        snapshot: input.snapshot
       });
-      const tools = await createExecutorTools({
-        capabilities: options.capabilities,
-        capabilityManifest: input.snapshot.capabilityManifest,
-        enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
-        runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        selfConfigService: options.selfConfigService,
-        shellExecutionService,
-        shellAllowedCommands,
-        mode
-      });
-      const explicitSkillContexts = loadExplicitSkillContexts({
-        explicitSkillIds: input.snapshot.explicitSkillIds,
-        manifestSkills: input.snapshot.capabilityManifest.skills
-      });
-      const referencedFileContexts = loadReferencedFileContexts({
-        userInput: input.run.userInput,
-        workspacePath: runtimeWorkspace?.path ?? null
-      });
-      const runtimeBackend = createRuntimeBackend({
-        capabilities: options.capabilities,
-        getMemorySettings: options.getMemorySettings,
-        handle,
-        paths: options.paths,
-        selectedSkillIds: [
-          ...input.snapshot.capabilityManifest.resolvedCapabilities.skills,
-          ...explicitSkillContexts.map((skill) => skill.id)
-        ],
-        store: options.store,
-        workspace: runtimeWorkspace
-      });
-      const mainManifestToolNames = input.snapshot.capabilityManifest.tools
-        .filter((tool) => tool.executionScopes.includes('main'))
-        .map((tool) => tool.modelVisibleName);
-      const contextHarness = assembleContextHarness({
-        artifactStore: options.contextArtifactStore,
-        mode,
-        enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
-        workflowHint,
-        workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        memorySources: runtimeBackend.memorySources,
-        baseTools: tools.runTools,
-        allowedToolNames: mainManifestToolNames,
-        searchSessions: request => options.capabilities.invoke('agent.sessions.search', request),
-        searchMemory: request => options.capabilities.invoke('memory.entries.search', request),
-        remember: request => options.capabilities.invoke('memory.entry.remember', request),
-        runId: input.run.id,
-        threadId: input.run.threadId,
-        explicitSkillContexts,
-        referencedFileContexts
-      });
-      const contextWindowTokens = input.snapshot.budget.contextBudgetTokens;
-      if (contextWindowTokens === null) {
-        throw new Error('agent_context_budget_missing');
+      if (harness.kind === 'blocked') {
+        eventQueue.fail(new Error(harness.reason));
+        try {
+          for await (const event of eventQueue) {
+            yield event;
+          }
+        } finally {
+          input.abortSignal.removeEventListener('abort', abortFromParent);
+        }
+        return;
       }
-      const contextTokenCounter = createContextTokenCounter(handle.model);
-      const contextTools = contextHarness.tools.map((tool): ContextToolDefinition => {
-        if (typeof tool.description !== 'string') {
-          throw new Error(`agent_tool_description_missing:${tool.name}`);
-        }
-        return {
-          name: tool.name,
-          description: tool.description,
-          schema: Reflect.get(tool, 'schema')
-        };
-      });
-      const runSubagents = createRunSubagents({
-        webReadTool: tools.webReadTool
-      });
-      const contextBudgetProfiles = await Promise.all([
-        deriveContextBudgetProfile({
-          contextWindowTokens,
-          counter: contextTokenCounter,
-          systemPrompt: contextHarness.systemPrompt,
-          tools: contextTools
-        }),
-        deriveContextBudgetProfile({
-          contextWindowTokens,
-          counter: contextTokenCounter,
-          systemPrompt: GENERAL_PURPOSE_SUBAGENT.systemPrompt,
-          tools: contextTools
-        }),
-        ...runSubagents.map((subagent) => {
-          if (!('systemPrompt' in subagent) || typeof subagent.systemPrompt !== 'string') {
-            throw new Error(`agent_subagent_system_prompt_missing:${subagent.name}`);
-          }
-          return deriveContextBudgetProfile({
-            contextWindowTokens,
-            counter: contextTokenCounter,
-            systemPrompt: subagent.systemPrompt,
-            tools: contextTools
-          });
-        })
-      ]);
-      const contextBudgetProfile = selectConservativeContextBudgetProfile(contextBudgetProfiles);
-      const emitContextMaintenanceEvent = (event: ContextMaintenanceEvent) => {
-        emitRuntimeEvent({
-          type: 'context_maintenance',
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          event: event.type,
-          mode,
-          stage: event.stage,
-          ...(event.persistedChars === undefined ? {} : { persistedChars: event.persistedChars }),
-          ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars }),
-          ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
-          ...(event.budgetTokens === undefined ? {} : { budgetTokens: event.budgetTokens }),
-          ...(event.estimated === undefined ? {} : { estimated: event.estimated })
-        });
-      };
-      const initialHookContexts: string[] = [];
-      if (options.hookRuntime !== undefined) {
-        const sessionStart = await options.hookRuntime.runEvent({
-          schemaVersion: 1,
-          event: 'SessionStart',
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          workspacePath: hookRunContext.workspacePath,
-          cwd: hookRunContext.cwd,
-          triggeredAt: new Date().toISOString(),
-          payload: {
-            source: hookRunContext.source,
-            modelId: input.modelHandle.modelId,
-            workflowHint: hookRunContext.workflowHint
-          }
-        }, {
-          signal: executionAbortController.signal
-        });
-        for (const event of sessionStart.events) {
-          emitRuntimeEvent(event);
-        }
-        if (sessionStart.blocked) {
-          eventQueue.fail(new Error(sessionStart.blockReason === null ? 'Blocked by SessionStart hook.' : sessionStart.blockReason));
-          try {
-            for await (const event of eventQueue) {
-              yield event;
-            }
-          } finally {
-            input.abortSignal.removeEventListener('abort', abortFromParent);
-          }
-          return;
-        }
-        initialHookContexts.push(...sessionStart.additionalContexts);
-      }
-      const agent = buildDeepAgent({
-        snapshot: input.snapshot,
-        model: handle.model,
-        systemPrompt: contextHarness.systemPrompt,
-        backend: runtimeBackend.backend,
-        store: options.store,
-        memorySources: contextHarness.memorySources,
-        skillSources: contextHarness.skillSources,
-        subagents: runSubagents,
-        tools: contextHarness.tools,
-        checkpointer: options.checkpointer,
-        contextCompaction: {
-          artifactStore: options.contextArtifactStore,
-          artifactRecoveryEnabled: mainManifestToolNames.includes('read_context_artifact'),
-          budgetProfile: contextBudgetProfile,
-          emitEvent: emitContextMaintenanceEvent,
-          tokenCounter: contextTokenCounter
-        },
-        toolEffectStore: options.toolEffectStore,
-        hookMiddleware:
-          options.hookRuntime === undefined
-            ? undefined
-            : {
-                hookRuntime: options.hookRuntime,
-                runContext: hookRunContext,
-                emitHookEvent: emitRuntimeEvent,
-                initialContexts: initialHookContexts,
-                signal: executionAbortController.signal
-              }
-      });
+      const agent = harness.agent;
       const runInput =
         input.resumePayload === undefined
           ? createInitialState(input.run.userInput, input.validatedAttachments)
@@ -347,13 +108,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         artifactStore: options.contextArtifactStore,
         runId: input.run.id,
         threadId: input.run.threadId,
-        workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
+        workspaceHash: harness.workspaceHash
       });
       const run = adaptDeepAgentRun(rawRun, { projectToolOutput });
       const runOutputSettlement = Promise.allSettled([run.output] as const);
-      const callbacks = createExecutorCallbacks({
-        emitRuntimeEvent
-      });
       const streamState = createStreamConsumerState({
         assistantChunks,
         reasoningChunks,
@@ -365,14 +123,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             events: run.events,
             runId: input.run.id,
             state: streamState,
-            callbacks
+            callbacks: { emitRuntimeEvent }
           });
           recordPromptCacheMetrics({
             metricsService: options.metricsService,
             modelId: input.modelHandle.modelId,
             mode,
             providerId: input.modelHandle.providerId,
-            source: hookRunContext.source,
+            source: harness.source,
             usageAccumulator
           });
           const domainInterrupts = streamState.interrupted;
@@ -450,17 +208,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       return createAgentDeepAgentExecution({ events, outcome });
     }
   };
-}
-
-function selectConservativeContextBudgetProfile(profiles: readonly ContextBudgetProfile[]): ContextBudgetProfile {
-  const first = profiles[0];
-  if (first === undefined) {
-    throw new Error('agent_context_budget_profile_missing');
-  }
-  return profiles.slice(1).reduce(
-    (selected, candidate) => candidate.modelInputTokens < selected.modelInputTokens ? candidate : selected,
-    first
-  );
 }
 
 function snapshotUsage(usage: ReturnType<typeof createUsageAccumulator>): AgentModelUsageTelemetry {
@@ -597,390 +344,3 @@ function createInitialState(input: string, attachments: readonly ChatValidatedIm
   };
 }
 
-function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV2): Workspace | null {
-  if (snapshot.workspace === null) {
-    return null;
-  }
-  return {
-    id: 'snapshot-workspace',
-    path: snapshot.workspace.path,
-    displayName: snapshot.workspace.path,
-    lastOpenedAt: new Date().toISOString(),
-    trustState: 'trusted'
-  };
-}
-
-function createExecutorCallbacks(input: {
-  emitRuntimeEvent: (event: ChatRunEvent) => void;
-}): Parameters<typeof consumeDeepAgentEventStream>[0]['callbacks'] {
-  return {
-    emitRuntimeEvent: (event) => {
-      input.emitRuntimeEvent(event);
-    }
-  };
-}
-
-async function createExecutorTools(input: {
-  capabilities: RocCapabilityRegistry;
-  capabilityManifest: RunCapabilityManifestV1;
-  enabledCapabilities: TaskRun['enabledCapabilities'];
-  runtimeWorkspacePath: string | null;
-  selfConfigService?: SelfConfigService;
-  shellExecutionService: AgentExecuteAdapter;
-  shellAllowedCommands?: readonly string[];
-  mode: RunExecutionSnapshotV2['mode'];
-}): Promise<{
-  runTools: ClientTool[];
-  webReadTool: StringDynamicStructuredTool;
-}> {
-  const webReadTool = createWebReadTool(input.capabilities);
-  const askUserTool = createAskUserTool();
-  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.capabilityManifest);
-  if (input.mode === 'plan') {
-    return {
-      runTools: [webReadTool, askUserTool, ...mcpTools],
-      webReadTool
-    };
-  }
-  const runTools: ClientTool[] = [
-    webReadTool,
-    askUserTool,
-    createDeleteFileTool(input.capabilities),
-    ...mcpTools
-  ];
-  const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
-  if (manifestToolNames.has('run_shell_command') && (input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0)) {
-    runTools.splice(3, 0, createRocWindowsCommandTool(input.shellExecutionService));
-  }
-  if (manifestToolNames.has('roc_self_config')) {
-    const selfConfigService = input.selfConfigService;
-    if (selfConfigService === undefined) {
-      throw new Error('run_capability_self_config_service_missing');
-    }
-    runTools.splice(3, 0, createSelfConfigTool({
-      capabilities: input.capabilities,
-      selfConfigService,
-      runtimeWorkspacePath: input.runtimeWorkspacePath
-    }));
-  }
-  const backgroundTaskTools = createManifestAuthorizedBackgroundTaskTools(input);
-  if (backgroundTaskTools.length > 0) {
-    runTools.splice(2, 0, ...backgroundTaskTools);
-  }
-  return {
-    runTools,
-    webReadTool
-  };
-}
-
-function createManifestAuthorizedBackgroundTaskTools(input: {
-  capabilities: RocCapabilityRegistry;
-  capabilityManifest: RunCapabilityManifestV1;
-  enabledCapabilities: TaskRun['enabledCapabilities'];
-  runtimeWorkspacePath: string | null;
-}): ClientTool[] {
-  const previewStore = new PreviewStore();
-  const taskAdapter = {
-    createBackgroundTaskPreview: async (request: BackgroundTaskPreviewRequest) =>
-      await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
-    createBackgroundTask: async (request: BackgroundTaskPreviewRequest) =>
-      await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', request),
-    readBackgroundTask: async (taskId: string) =>
-      await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
-    updateBackgroundTask: async (request: UpdateBackgroundTaskRequest) =>
-      await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
-    cancelBackgroundTask: async (taskId: string) =>
-      await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
-  };
-  const schedulerAdapter = {
-    refreshTask: () => {},
-    registerTask: () => {},
-    unregisterTask: () => {}
-  };
-  const toolDependencies = {
-    enabledCapabilities: input.enabledCapabilities,
-    previewStore,
-    runtimeWorkspacePath: input.runtimeWorkspacePath,
-    taskAdapter,
-    schedulerAdapter
-  };
-  const candidates: ClientTool[] = [
-    createResolveBackgroundTaskTimeTool(),
-    ...createBackgroundTaskTools({ ...toolDependencies, toolMode: 'all' }),
-    ...createBackgroundTaskTools({ ...toolDependencies, toolMode: 'change' })
-  ];
-  const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
-  const seenToolNames = new Set<string>();
-  return candidates.filter((tool) => {
-    if (!manifestToolNames.has(tool.name)) {
-      return false;
-    }
-    if (seenToolNames.has(tool.name)) {
-      return false;
-    }
-    seenToolNames.add(tool.name);
-    return true;
-  });
-}
-
-async function loadSelectedMcpTools(
-  capabilities: RocCapabilityRegistry,
-  capabilityManifest: RunCapabilityManifestV1
-): Promise<ClientTool[]> {
-  const selectedTools = capabilityManifest.tools.filter((tool) => tool.provenance.kind === 'mcp');
-  if (selectedTools.length === 0) {
-    return [];
-  }
-  const tools = await capabilities.invoke<{}, unknown[]>('mcp.tools.get', {});
-  return tools.flatMap((tool): ClientTool[] => {
-    if (!isClientTool(tool)) {
-      return [];
-    }
-    const modelVisibleName = resolveManifestMcpToolName(tool.name, selectedTools);
-    if (modelVisibleName === null) {
-      return [];
-    }
-    tool.name = modelVisibleName;
-    return [tool];
-  });
-}
-
-function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): boolean {
-  return snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change';
-}
-
-function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): void {
-  if (!isBackgroundTaskWorkflow(snapshot)) {
-    return;
-  }
-  if (snapshot.runOrigin !== 'workbench_creation') {
-    throw new Error('background_task_workbench_source_required');
-  }
-}
-
-function isClientTool(value: unknown): value is ClientTool {
-  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'name') === 'string';
-}
-
-function resolveManifestMcpToolName(
-  runtimeName: string,
-  selectedTools: RunCapabilityManifestV1['tools']
-): string | null {
-  for (const tool of selectedTools) {
-    if (tool.provenance.kind !== 'mcp') {
-      continue;
-    }
-    if (tool.provenance.serverId === 'exa-hosted' && isExaHostedWebSearchName(runtimeName)) {
-      return tool.modelVisibleName === 'web_search' ? tool.modelVisibleName : null;
-    }
-    if (runtimeName === `${tool.provenance.serverId}__${tool.modelVisibleName}`) {
-      return tool.modelVisibleName;
-    }
-  }
-  return null;
-}
-
-function isExaHostedWebSearchName(name: string): boolean {
-  return (
-    name === 'web_search' ||
-    name === 'web_search_exa' ||
-    name === 'web_search_advanced_exa' ||
-    name === 'exa-hosted__web_search_exa' ||
-    name === 'exa-hosted__web_search_advanced_exa'
-  );
-}
-
-function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {
-  const schema = webReadToolSchema;
-  return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
-    name: 'web_read',
-    description: '读取公开网页正文，返回来源、Jina 代理、抓取时间、内容哈希、不可信标记与正文。',
-    schema,
-    func: async (request, _runManager, config) => {
-      const result = await capabilities.invoke<WebReadExecutionRequest, WebReadResult>('web.read', {
-        ...request,
-        signal: config?.signal
-      });
-      return JSON.stringify(result, null, 2);
-    }
-  });
-}
-
-const selfConfigToolSchema = z.object({
-  action: z.enum(['describe', 'read', 'validate', 'dry_run']),
-  config: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
-  handlerId: z.string().trim().min(1).optional(),
-  payload: z.record(z.string(), z.unknown()).optional()
-});
-
-type SelfConfigToolRequest = z.infer<typeof selfConfigToolSchema>;
-
-function createSelfConfigTool(input: {
-  capabilities: RocCapabilityRegistry;
-  selfConfigService: SelfConfigService;
-  runtimeWorkspacePath: string | null;
-}): StringDynamicStructuredTool {
-  const schema = selfConfigToolSchema;
-  return new DynamicStructuredTool<typeof schema, SelfConfigToolRequest, SelfConfigToolRequest, string>({
-    name: 'roc_self_config',
-    description:
-      '只读自省 Roc 自身配置：describe 返回 ~/.roc 路径表、hooks.json JSON Schema、事件与 action 矩阵、hook 运行契约；read 返回当前 hooks.json 快照（含 trustState）与脱敏后的 settings；validate 校验一份 hooks 配置并给出格式修正提示（不落盘）；dry_run 试跑 hooks.json 里已存在的某条 handler（需 handlerId，会先弹宿主确认）并返回 stdout / stderr / 退出码。配置落盘与信任必须由用户在设置页完成。',
-    schema,
-    func: async (request) => {
-      const result = await executeSelfConfigAction({ ...input, request });
-      return JSON.stringify(result, null, 2);
-    }
-  });
-}
-
-async function executeSelfConfigAction(input: {
-  capabilities: RocCapabilityRegistry;
-  selfConfigService: SelfConfigService;
-  runtimeWorkspacePath: string | null;
-  request: SelfConfigToolRequest;
-}): Promise<unknown> {
-  if (input.request.action === 'describe') {
-    return input.selfConfigService.describe();
-  }
-  if (input.request.action === 'read') {
-    return await input.selfConfigService.read();
-  }
-  if (input.request.action === 'validate') {
-    if (input.request.config === undefined) {
-      throw new Error('roc_self_config_validate_config_required');
-    }
-    return input.selfConfigService.validate(input.request.config);
-  }
-  const handlerId = input.request.handlerId;
-  if (handlerId === undefined) {
-    throw new Error('roc_self_config_dry_run_handler_id_required');
-  }
-  return await input.selfConfigService.dryRun({
-    handlerId,
-    payload: input.request.payload,
-    ...(input.runtimeWorkspacePath === null ? {} : { cwd: input.runtimeWorkspacePath }),
-    confirm: async (confirmRequest) => await confirmSelfConfigDryRun(input.capabilities, confirmRequest)
-  });
-}
-
-async function confirmSelfConfigDryRun(
-  capabilities: RocCapabilityRegistry,
-  request: SelfConfigDryRunConfirmRequest
-): Promise<boolean> {
-  const result = await capabilities.invoke<ShellConfirmationRequest, ShellConfirmationResult>('shell.confirm', {
-    title: 'Roc hook 试跑确认',
-    message: [
-      `即将在宿主机试跑 hook handler ${request.handlerId}（${request.event}）：`,
-      request.command,
-      `cwd: ${request.cwd}`,
-      `超时: ${request.timeoutSeconds}s`,
-      `handler 状态: ${request.enabled ? '已启用' : '已禁用'} / 信任 ${request.trustState}`,
-      ...(request.enabled && request.trustState === 'trusted'
-        ? []
-        : ['注意：该 handler 在真实运行中会被跳过，试跑只是手动执行这条命令。'])
-    ].join('\n'),
-    confirmLabel: '试跑',
-    cancelLabel: '取消'
-  });
-  return result.confirmed;
-}
-
-function createDeleteFileTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {
-  const schema = z.object({
-    file_path: z.string().trim().min(1)
-  });
-  return new DynamicStructuredTool<typeof schema, { file_path: string }, { file_path: string }, string>({
-    name: 'delete_file',
-    description: '删除 /workspace/... 下的文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
-    schema,
-    func: async (request) => {
-      const relativePath = toWorkspaceRelativePath(request.file_path);
-      if (!relativePath.ok) {
-        throw new Error(relativePath.error);
-      }
-      return JSON.stringify(
-        await capabilities.invoke<{ relativePath: string }, FileDeleteResult>('files.delete', {
-          relativePath: relativePath.relativePath
-        }),
-        null,
-        2
-      );
-    }
-  });
-}
-
-function createRuntimeBackend(input: {
-  capabilities: RocCapabilityRegistry;
-  getMemorySettings?: () => AppSettings['memory'];
-  handle: LangChainChatModelHandle;
-  paths: RocPaths;
-  selectedSkillIds: readonly string[];
-  store: BaseStore;
-  workspace: Workspace | null;
-}): ReturnType<typeof createBackend> {
-  const workspaceService = {
-    getCurrentWorkspace: () =>
-      input.workspace === null
-        ? null
-        : {
-            path: input.workspace.path,
-            label: input.workspace.displayName
-          }
-  };
-  const memorySettings = input.getMemorySettings === undefined ? defaultSettings.memory : input.getMemorySettings();
-  return createBackend({
-    workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
-    paths: input.paths,
-    store: input.store,
-    securityScan: new SecurityScanService(memorySettings.securityScan),
-    capacity: new CapacityService(memorySettings.charLimits),
-    selectedSkillIds: input.selectedSkillIds
-  });
-}
-
-function createShellExecutionAdapter(input: {
-  capabilities: RocCapabilityRegistry;
-  defaultCwd: string | null;
-  allowedCommands?: readonly string[];
-  abortSignal: AbortSignal;
-  runId: string;
-  threadId: string;
-}): AgentExecuteAdapter {
-  return {
-    executeAgentCommand: async ({ command, cwd }) => {
-      const requestCwd = cwd === undefined ? input.defaultCwd : cwd;
-      if (requestCwd === null) {
-        throw new Error('agent_workspace_required_for_shell');
-      }
-      const result = await input.capabilities.invoke<
-        import('../../../shared/types').ShellExecutionRequest,
-        import('../../../shared/types').ShellExecutionResult
-      >('shell.execute', {
-        command,
-        cwd: requestCwd,
-        source: 'agent',
-        signal: input.abortSignal,
-        runId: input.runId,
-        threadId: input.threadId,
-        allowedCommands: input.allowedCommands === undefined ? undefined : [...input.allowedCommands]
-      });
-      return {
-        command: result.command,
-        cwd: result.cwd,
-        exitCode: result.exitCode,
-        output: formatShellOutput(result),
-        truncated: result.truncated === true,
-        usedRtk: result.usedRtk,
-        bypassReason: result.bypassReason
-      };
-    }
-  };
-}
-
-function formatShellOutput(result: import('../../../shared/types').ShellExecutionResult): string {
-  const output = [result.stdout, result.stderr].filter((value) => value.length > 0).join('\n');
-  if (output.length === 0) {
-    return `<no output>\n\nExit code: ${result.exitCode}`;
-  }
-  return result.exitCode === 0 ? output : `${output.trimEnd()}\n\nExit code: ${result.exitCode}`;
-}

@@ -10,6 +10,7 @@ import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import { createRocContextCompactionMiddleware } from '../../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { RocSqliteCheckpointer } from '../../../../../src/main/services/deep-agent/sqlite-checkpointer';
+import { createFakePreCompactionFlushRecorder } from './pre-compaction-flush-test-helpers';
 
 let db: Database.Database;
 let databasePath: string;
@@ -56,6 +57,7 @@ describe('Roc context compaction checkpoint integration', () => {
 function createCompactionGraph(connection: Database.Database) {
   const middleware = createRocContextCompactionMiddleware({
     artifactStore: new ContextArtifactStore(connection),
+    sessionHistory: createFakePreCompactionFlushRecorder(),
     budgetProfile: {
       contextWindowTokens: 1000,
       modelInputTokens: 1000,

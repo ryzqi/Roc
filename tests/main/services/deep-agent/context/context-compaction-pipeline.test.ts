@@ -14,11 +14,12 @@ import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import {
   createRocContextCompactionMiddleware,
-  runContextCompactionForTest,
+  runContextCompaction,
   type ContextMaintenanceEvent
 } from '../../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { toRunFailure } from '../../../../../src/main/services/deep-agent/error-mapping';
 import type { ContextBudgetProfile } from '../../../../../src/main/services/deep-agent/context/context-token-budget';
+import { createFakePreCompactionFlushRecorder } from './pre-compaction-flush-test-helpers';
 import { isContextDigestMessage } from '../../../../../src/main/services/forge-guardrails/context-digest';
 import { markIterationOnMessage } from '../../../../../src/main/services/forge-guardrails';
 
@@ -69,6 +70,7 @@ describe('RocContextCompactionPipeline', () => {
     seedAgentThread('thread_ctx_state_update', 'chat');
     const middleware = createRocContextCompactionMiddleware({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(1000),
       emitEvent: () => {},
       mode: 'run',
@@ -131,8 +133,10 @@ describe('RocContextCompactionPipeline', () => {
     ];
 
     seedAgentThread('thread_ctx_pipeline_1', 'chat');
-    await runContextCompactionForTest({
+    const originalIds = messages.map((message) => message.id);
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: (event) => events.push(event),
       mode: 'run',
@@ -159,7 +163,9 @@ describe('RocContextCompactionPipeline', () => {
       'context_summary_completed'
     ]));
     expect(summarize).toHaveBeenCalledTimes(1);
-    expect(messages.some(isContextDigestMessage)).toBe(true);
+    expect(compacted.some(isContextDigestMessage)).toBe(true);
+    // 压缩结果只从返回值取；调用方传进来的数组一个元素都不动。
+    expect(messages.map((message) => message.id)).toEqual(originalIds);
   });
 
   it('does not call the summarizer when deterministic stages bring context below threshold', async () => {
@@ -182,8 +188,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
 
     seedAgentThread('thread_ctx_pipeline_2', 'background');
-    await runContextCompactionForTest({
+    await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(1000),
       emitEvent: () => {},
       mode: 'task',
@@ -227,8 +234,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
 
     seedAgentThread('thread_ctx_pipeline_3', 'plan');
-    await runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: () => {},
       mode: 'plan',
@@ -252,8 +260,8 @@ describe('RocContextCompactionPipeline', () => {
       countTokens: countBeforeAndAfterSummary
     });
 
-    expect(messages.some((message) => message.id === 'ai-tool-call')).toBe(true);
-    expect(messages.some((message) => message.id === 'tool-result')).toBe(true);
+    expect(compacted.some((message) => message.id === 'ai-tool-call')).toBe(true);
+    expect(compacted.some((message) => message.id === 'tool-result')).toBe(true);
   });
 
   it('does not duplicate a paired tool result when deterministic compaction truncates it', async () => {
@@ -282,8 +290,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
 
     seedAgentThread('thread_ctx_pipeline_4', 'chat');
-    await runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(1000),
       emitEvent: () => {},
       mode: 'run',
@@ -298,7 +307,7 @@ describe('RocContextCompactionPipeline', () => {
       countTokens: async () => 700
     });
 
-    const toolResults = messages.filter(
+    const toolResults = compacted.filter(
       (message): message is ToolMessage => ToolMessage.isInstance(message) && message.tool_call_id === 'call-1'
     );
     expect(toolResults).toHaveLength(1);
@@ -333,8 +342,9 @@ describe('RocContextCompactionPipeline', () => {
       openQuestions: [],
       nextActions: ['Continue from recent tail.']
     }));
-    await runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: () => {},
       mode: 'run',
@@ -356,12 +366,12 @@ describe('RocContextCompactionPipeline', () => {
     expect(summaryInput?.userConstraints).not.toEqual(
       expect.arrayContaining([expect.stringContaining('Recent constraint')])
     );
-    expect(messages.some(isContextDigestMessage)).toBe(true);
-    expect(messages[2] === undefined ? false : isContextDigestMessage(messages[2])).toBe(true);
-    expect(messages.map((message) => message.id)).toEqual(['system', 'user', 'roc-context-digest', 'recent-user', 'recent-ai']);
-    expect(messages.some((message) => message.id === 'old-ai-1')).toBe(false);
-    expect(messages.some((message) => message.id === 'old-user-2')).toBe(false);
-    expect(messages.some((message) => message.id === 'old-ai-3')).toBe(false);
+    expect(compacted.some(isContextDigestMessage)).toBe(true);
+    expect(compacted[2] === undefined ? false : isContextDigestMessage(compacted[2])).toBe(true);
+    expect(compacted.map((message) => message.id)).toEqual(['system', 'user', 'roc-context-digest', 'recent-user', 'recent-ai']);
+    expect(compacted.some((message) => message.id === 'old-ai-1')).toBe(false);
+    expect(compacted.some((message) => message.id === 'old-user-2')).toBe(false);
+    expect(compacted.some((message) => message.id === 'old-ai-3')).toBe(false);
   });
 
   it('keeps the run alive when only the summary stage cannot produce a valid schema', async () => {
@@ -376,8 +386,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
 
     seedAgentThread('thread_ctx_pipeline_summary_failure', 'chat');
-    await expect(runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(10),
       emitEvent: (event) => events.push(event),
       mode: 'run',
@@ -391,7 +402,7 @@ describe('RocContextCompactionPipeline', () => {
       workspacePath: 'F:\\Code\\Roc',
       messages,
       countTokens: countApproximateTokens
-    })).resolves.toBe(messages);
+    });
 
     expect(events.map((event) => event.type)).toEqual([
       'context_compaction_started',
@@ -399,9 +410,9 @@ describe('RocContextCompactionPipeline', () => {
       'context_summary_started',
       'context_compaction_failed'
     ]);
-    expect(messages.some(isContextDigestMessage)).toBe(false);
-    expect(await countApproximateTokens(messages)).toBeLessThanOrEqual(10);
-    expect(messages.map((message) => message.id)).toEqual(['system', 'user', 'recent-user']);
+    expect(compacted.some(isContextDigestMessage)).toBe(false);
+    expect(await countApproximateTokens(compacted)).toBeLessThanOrEqual(10);
+    expect(compacted.map((message) => message.id)).toEqual(['system', 'user', 'recent-user']);
   });
 
   it('propagates unknown summary implementation errors', async () => {
@@ -414,8 +425,9 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'current next step' }), 8)
     ];
 
-    await expect(runContextCompactionForTest({
+    await expect(runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: (event) => events.push(event),
       mode: 'run',
@@ -447,8 +459,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
     seedAgentThread('thread_ctx_budget_exhausted', 'chat');
 
-    const execution = runContextCompactionForTest({
+    const execution = runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(10),
       emitEvent: (event) => events.push(event),
       mode: 'run',
@@ -482,8 +495,9 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'old', content: 'old work' }), 1)
     ];
 
-    await runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: (event) => events.push(event),
       mode: 'run',
@@ -509,7 +523,7 @@ describe('RocContextCompactionPipeline', () => {
       'context_summary_started',
       'context_compaction_failed'
     ]);
-    expect(messages.map((message) => message.id)).toEqual(['system', 'user']);
+    expect(compacted.map((message) => message.id)).toEqual(['system', 'user']);
   });
 
   it('removes a paired tool call and result together during hard trim', async () => {
@@ -533,8 +547,9 @@ describe('RocContextCompactionPipeline', () => {
     ];
     seedAgentThread('thread_ctx_pair_hard_trim', 'chat');
 
-    await runContextCompactionForTest({
+    const compacted = await runContextCompaction({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(100),
       emitEvent: () => {},
       mode: 'run',
@@ -565,14 +580,15 @@ describe('RocContextCompactionPipeline', () => {
       }
     });
 
-    expect(messages.some((message) => message.id === 'ai-tool-call-hard-trim')).toBe(false);
-    expect(messages.some((message) => message.id === 'tool-hard-trim')).toBe(false);
+    expect(compacted.some((message) => message.id === 'ai-tool-call-hard-trim')).toBe(false);
+    expect(compacted.some((message) => message.id === 'tool-hard-trim')).toBe(false);
   });
 
   it('rejects an over-budget model request before invoking the provider', async () => {
     const store = new ContextArtifactStore(db);
     const middleware = createRocContextCompactionMiddleware({
       artifactStore: store,
+      sessionHistory: createFakePreCompactionFlushRecorder(),
       budgetProfile: createTestBudgetProfile(1000),
       emitEvent: () => {},
       mode: 'run',
@@ -602,14 +618,14 @@ describe('RocContextCompactionPipeline', () => {
   });
 });
 
-async function countBeforeAndAfterSummary(messages: BaseMessage[]): Promise<number> {
+async function countBeforeAndAfterSummary(messages: readonly BaseMessage[]): Promise<number> {
   if (messages.some((message) => String(message.content).includes('You summarize old runtime context for Roc.'))) {
     return 50;
   }
   return messages.some(isContextDigestMessage) ? 50 : 1200;
 }
 
-async function countApproximateTokens(messages: BaseMessage[]): Promise<number> {
+async function countApproximateTokens(messages: readonly BaseMessage[]): Promise<number> {
   const chars = messages.reduce((total, message) => {
     const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
     return total + content.length;

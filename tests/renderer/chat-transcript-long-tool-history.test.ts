@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
-import { buildChatTranscript } from '../../src/renderer/chat-transcript';
+import { projectChatTranscript } from '../../src/renderer/chat-transcript';
 import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -53,7 +53,7 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
-function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
+function stripAttachments(messages: ReturnType<typeof projectChatTranscript>) {
   return messages.map((message) => {
     const { attachments, source, ...withoutAttachments } = message;
     void attachments;
@@ -84,13 +84,11 @@ describe('chat transcript helpers', () => {
       sequence: 4 + index
     }));
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot,
-      persistedMessages: [
+      threadId: 'thread-current',
+      events: [
         {
           id: 'user-current',
           threadId: 'thread-current',

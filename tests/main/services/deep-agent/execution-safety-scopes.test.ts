@@ -4,6 +4,7 @@ import { createDeepAgent } from 'deepagents';
 import { z } from 'zod';
 
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
+import { createFakePreCompactionFlushRecorder } from './context/pre-compaction-flush-test-helpers';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../../../src/main/services/deep-agent/harness-profiles';
 import {
@@ -56,6 +57,7 @@ describe('execution safety middleware scopes', () => {
       checkpointer: {} as never,
       contextCompaction: {
         artifactStore: {} as never,
+        sessionHistory: createFakePreCompactionFlushRecorder(),
         budgetProfile: {
           contextWindowTokens: 4096,
           modelInputTokens: 3000,

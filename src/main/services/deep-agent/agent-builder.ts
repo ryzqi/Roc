@@ -14,52 +14,27 @@ import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import {
   anthropicPromptCachingMiddleware,
   createMiddleware,
-  todoListMiddleware,
-  toolRetryMiddleware
+  todoListMiddleware
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshotV2 } from '../../../shared/types';
-import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
-import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
-import {
-  createForgeTieredCompactionMiddleware,
-  createForgeCleanupMiddleware,
-  createErrorBudgetMiddleware,
-  createForgeIterationTrackingMiddleware,
-  createRescueParsingMiddleware,
-  createFilesystemToolErrorMiddleware,
-  createToolResolutionMiddleware,
-  createToolRuntimeErrorMiddleware,
-  handleNetworkToolRetryFailure,
-  shouldRetryNetworkToolError
-} from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
-import type { ContextArtifactStore } from './context/context-artifact-store';
-import type { ContextBudgetProfile, ContextTokenCounter } from './context/context-token-budget';
-import {
-  createRocContextCompactionMiddleware,
-  type RocContextCompactionOptions
-} from './context/context-compaction-pipeline';
-import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import {
   createRocFilesystemPermissions,
   createRocReadOnlyFilesystemPermissions
 } from './filesystem-tool-contract';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import {
-  createRocPlanRuntimeToolGuardMiddleware,
-  createRocPlanToolExposureMiddleware,
-  isPlanModeModelVisibleToolName
-} from './model-tool-exposure';
-import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
-import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
-import { createRocShellPolicyMiddleware } from './shell-policy';
-import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
+  type ContextCompactionWiring,
+  type DeepAgentMiddleware,
+  type MiddlewareStackContext,
+  resolveMiddlewareStack
+} from './middleware-stack';
+import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
 import type { AgentToolEffectStore } from './tool-effect-store';
-import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
@@ -75,16 +50,9 @@ export type DeepAgentBuildInput = {
   checkpointer: BaseCheckpointSaver | undefined;
   hookMiddleware?: RocHookMiddlewareOptions;
   toolEffectStore?: AgentToolEffectStore;
-  contextCompaction?: {
-    artifactStore: ContextArtifactStore;
-    artifactRecoveryEnabled?: boolean;
-    budgetProfile: ContextBudgetProfile;
-    emitEvent: RocContextCompactionOptions['emitEvent'];
-    tokenCounter: ContextTokenCounter;
-  };
+  contextCompaction?: ContextCompactionWiring;
 };
 
-const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
 const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
   ...DEEP_AGENT_BUILT_IN_TOOLS,
   'execute'
@@ -104,6 +72,7 @@ type DeepAgentBuildPolicy = {
   boundToolNames: readonly string[];
   filesystemPermissions: ReturnType<typeof createRocFilesystemPermissions>;
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
+  workspaceHash: string | null;
   workspacePath: string | null;
   contextBudgetTokens: number | undefined;
 };
@@ -122,6 +91,7 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
       ? createRocReadOnlyFilesystemPermissions()
       : createRocFilesystemPermissions(),
     interruptOn: compileInterruptPolicy(snapshot),
+    workspaceHash: snapshot.workspace === null ? null : snapshot.workspace.hash,
     workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
     contextBudgetTokens: snapshot.budget.contextBudgetTokens === null
       ? undefined
@@ -168,28 +138,6 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   };
   const tools = policy.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
   const subagents = createDeepAgentSubagents(input, policy, tools);
-  const hookMiddleware = createRunHookMiddleware(input);
-  const planModeMiddleware =
-    policy.mode === 'plan'
-      ? [
-          createRocPlanReadOnlyMemoryMiddleware({
-            backend: input.backend,
-            memorySources: input.memorySources
-          }),
-          createRocPlanToolExposureMiddleware(),
-          createRocPlanRuntimeToolGuardMiddleware(),
-          createRocPlanFilesystemDefaultPathMiddleware()
-        ]
-      : [];
-  const guardrails = [
-    todoListMiddleware(),
-    ...hookMiddleware,
-    ...planModeMiddleware,
-    ...createExecutionSafetyMiddleware(policy, 'main'),
-    ...createContextCompactionMiddleware(input, policy),
-    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore, knownToolCandidates),
-    createForgeCleanupMiddleware()
-  ];
 
   return createDeepAgent({
     model: input.model,
@@ -203,8 +151,37 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     permissions: policy.filesystemPermissions,
     interruptOn: policy.interruptOn,
     checkpointer: input.checkpointer,
-    middleware: guardrails
+    middleware: resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates))
   });
+}
+
+function createMiddlewareStackContext(
+  input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
+  executionScope: RunCapabilityExecutionScopeV1,
+  knownToolCandidates: () => RescueToolCandidate[]
+): MiddlewareStackContext {
+  return {
+    backend: input.backend,
+    contextCompaction: input.contextCompaction,
+    executionScope,
+    hookMiddleware: input.hookMiddleware,
+    knownToolCandidates,
+    memorySources: input.memorySources,
+    model: input.model,
+    policy,
+    toolEffectStore: input.toolEffectStore
+  };
+}
+
+/**
+ * 子代理拿不到主 agent 的工具全集，所以 rescue 不装在 subagent scope；spec 已经按 scope 把它挡掉，
+ * 这里只需给出一个永不被调用的候选集来源，用抛错替代空数组，免得将来 spec 改了却静默拿到空候选。
+ */
+function subagentToolCandidates(): () => RescueToolCandidate[] {
+  return () => {
+    throw new Error('agent_subagent_rescue_candidates_unavailable');
+  };
 }
 
 function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
@@ -218,10 +195,24 @@ function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
 
 function createDeepAgentSubagents(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, tools: ClientTool[]): RuntimeSubagent[] {
   const declarativeSubagents = requireDeclarativeSubagents(input.subagents);
-  if (policy.mode === 'plan') {
-    return createPlanModeSubagents(input, policy, tools, declarativeSubagents);
-  }
-  return createRunModeSubagents(input, policy, tools, declarativeSubagents);
+  const scopedTools = filterToolsForExecutionScope(tools, policy.capabilityManifest, 'subagent');
+  // 每个子代理各解一份栈实例：hook middleware 持有排队上下文等可变闭包状态，共享实例会跨子代理泄漏。
+  const resolveSubagentGuardrails = (): DeepAgentMiddleware[] => resolveMiddlewareStack(
+    createMiddlewareStackContext(input, policy, 'subagent', subagentToolCandidates())
+  );
+  const generalPurposeSubagent: SubAgent = {
+    ...GENERAL_PURPOSE_SUBAGENT,
+    tools: scopedTools as unknown as SubagentTools,
+    skills: [...input.skillSources],
+    middleware: resolveSubagentGuardrails(),
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
+  };
+  return [
+    compileRocSubagent(input, policy, generalPurposeSubagent),
+    ...declarativeSubagents.map((subagent) =>
+      compileRocSubagent(input, policy, applySubagentMiddleware(policy, subagent, scopedTools, resolveSubagentGuardrails()))
+    )
+  ];
 }
 
 function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
@@ -233,49 +224,6 @@ function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
     declarativeSubagents.push(subagent);
   }
   return declarativeSubagents;
-}
-
-function createRunModeSubagents(
-  input: DeepAgentBuildInput,
-  policy: DeepAgentBuildPolicy,
-  tools: ClientTool[],
-  subagents: SubAgent[]
-): RuntimeSubagent[] {
-  const scopedTools = filterToolsForExecutionScope(tools, policy.capabilityManifest, 'subagent');
-  const generalPurposeSubagent: SubAgent = {
-    ...GENERAL_PURPOSE_SUBAGENT,
-    tools: scopedTools as unknown as SubagentTools,
-    skills: [...input.skillSources],
-    middleware: createRunModeSubagentMiddleware(input, policy),
-    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
-  };
-  return [
-    compileRocSubagent(input, policy, generalPurposeSubagent),
-    ...subagents.map((subagent) =>
-      compileRocSubagent(input, policy, applyRunModeSubagentMiddleware(input, policy, subagent, scopedTools))
-    )
-  ];
-}
-
-function createPlanModeSubagents(
-  input: DeepAgentBuildInput,
-  policy: DeepAgentBuildPolicy,
-  planTools: ClientTool[],
-  subagents: SubAgent[]
-): RuntimeSubagent[] {
-  const scopedTools = filterToolsForExecutionScope(planTools, policy.capabilityManifest, 'subagent');
-  const generalPurposeSubagent: SubAgent = {
-    ...GENERAL_PURPOSE_SUBAGENT,
-    tools: scopedTools as unknown as SubagentTools,
-    skills: [...input.skillSources],
-    middleware: createPlanModeSubagentMiddleware(input, policy),
-    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
-  };
-  return [
-    compileRocSubagent(input, policy, generalPurposeSubagent),
-    ...subagents
-      .map((subagent) => compileRocSubagent(input, policy, applyPlanModeSubagentMiddleware(input, policy, subagent, scopedTools)))
-  ];
 }
 
 function compileRocSubagent(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, spec: SubAgent): CompiledSubAgent {
@@ -370,13 +318,14 @@ function isAnthropicModel(model: unknown): boolean {
   return modelName === 'ChatAnthropic';
 }
 
-function applyPlanModeSubagentMiddleware(
-  input: DeepAgentBuildInput,
+/** 声明式子代理自带的 middleware 排在 Roc guardrail 栈之前：它先声明，Roc 的安全契约后追加。 */
+function applySubagentMiddleware(
   policy: DeepAgentBuildPolicy,
   subagent: SubAgent,
-  defaultTools: ClientTool[]
+  defaultTools: ClientTool[],
+  guardrails: readonly DeepAgentMiddleware[]
 ): SubAgent {
-  const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
+  const declared = subagent.middleware === undefined ? [] : [...subagent.middleware];
   const tools = subagent.tools === undefined
     ? defaultTools
     : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
@@ -384,25 +333,7 @@ function applyPlanModeSubagentMiddleware(
     ...subagent,
     tools: tools as unknown as SubagentTools,
     ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
-    middleware: [...middleware, ...createPlanModeSubagentMiddleware(input, policy)]
-  };
-}
-
-function applyRunModeSubagentMiddleware(
-  input: DeepAgentBuildInput,
-  policy: DeepAgentBuildPolicy,
-  subagent: SubAgent,
-  defaultTools: ClientTool[]
-): SubAgent {
-  const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
-  const tools = subagent.tools === undefined
-    ? defaultTools
-    : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
-  return {
-    ...subagent,
-    tools: tools as unknown as SubagentTools,
-    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
-    middleware: [...middleware, ...createRunModeSubagentMiddleware(input, policy)]
+    middleware: [...declared, ...guardrails]
   };
 }
 
@@ -417,136 +348,6 @@ function filterToolsForExecutionScope<T extends { name: string }>(
       .map((tool) => tool.modelVisibleName)
   );
   return tools.filter((tool) => allowedToolNames.has(tool.name));
-}
-
-function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
-  return [
-    ...createHookToolScopeMiddleware(input),
-    createRocPlanReadOnlyMemoryMiddleware({
-      backend: input.backend,
-      memorySources: input.memorySources
-    }),
-    createRocPlanToolExposureMiddleware(),
-    createRocPlanRuntimeToolGuardMiddleware(),
-    createRocPlanFilesystemDefaultPathMiddleware(),
-    ...createExecutionSafetyMiddleware(policy, 'subagent'),
-    ...createContextCompactionMiddleware(input, policy),
-    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore)
-  ];
-}
-
-function createRunModeSubagentMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
-  return [
-    ...createHookToolScopeMiddleware(input),
-    ...createExecutionSafetyMiddleware(policy, 'subagent'),
-    ...createContextCompactionMiddleware(input, policy),
-    ...createExecutionErrorEnvelopeMiddleware(policy, input.toolEffectStore)
-  ];
-}
-
-function createExecutionSafetyMiddleware(
-  policy: DeepAgentBuildPolicy,
-  executionScope: RunCapabilityExecutionScopeV1
-) {
-  return [
-    createRocShellPolicyMiddleware({ workspacePath: policy.workspacePath }),
-    createRTKMiddleware(new RTKBinaryManager()),
-    createToolProtocolMiddleware({
-      capabilityManifest: policy.capabilityManifest,
-      executionScope,
-      boundToolNames: policy.boundToolNames
-    }),
-    createErrorBudgetMiddleware(),
-    createForgeIterationTrackingMiddleware(),
-    createRocFilesystemPathPolicyMiddleware(),
-    createFilesystemToolErrorMiddleware()
-  ];
-}
-
-function createExecutionErrorEnvelopeMiddleware(
-  policy: DeepAgentBuildPolicy,
-  toolEffectStore: AgentToolEffectStore | undefined,
-  knownToolCandidates?: () => RescueToolCandidate[]
-) {
-  const rescueMiddleware = knownToolCandidates === undefined
-    ? []
-    : [createRescueParsingMiddleware({ availableTools: knownToolCandidates })];
-  return [
-    ...rescueMiddleware,
-    toolRetryMiddleware({
-      maxRetries: 2,
-      tools: [...NETWORK_SENSITIVE_TOOLS],
-      onFailure: handleNetworkToolRetryFailure,
-      retryOn: shouldRetryNetworkToolError,
-      backoffFactor: 1.5
-    }),
-    createToolRuntimeErrorMiddleware(),
-    createToolResolutionMiddleware(),
-    ...createToolEffectMiddleware(policy, toolEffectStore)
-  ];
-}
-
-function createRunHookMiddleware(input: DeepAgentBuildInput) {
-  if (input.hookMiddleware === undefined) {
-    return [];
-  }
-  return [
-    createRocHookMiddleware({
-      ...input.hookMiddleware,
-      scope: 'run'
-    })
-  ];
-}
-
-function createHookToolScopeMiddleware(input: DeepAgentBuildInput) {
-  if (input.hookMiddleware === undefined) {
-    return [];
-  }
-  return [
-    createRocHookMiddleware({
-      ...input.hookMiddleware,
-      scope: 'tool'
-    })
-  ];
-}
-
-function createToolEffectMiddleware(policy: DeepAgentBuildPolicy, toolEffectStore: AgentToolEffectStore | undefined) {
-  if (toolEffectStore === undefined) {
-    return [];
-  }
-  return [
-    createToolEffectIdempotencyMiddleware({
-      runId: policy.runId,
-      threadId: policy.threadId,
-      store: toolEffectStore,
-      capabilityManifest: policy.capabilityManifest
-    })
-  ];
-}
-
-function createContextCompactionMiddleware(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy) {
-  if (input.contextCompaction === undefined) {
-    return [
-      createForgeTieredCompactionMiddleware({
-        budgetTokens: policy.contextBudgetTokens
-      })
-    ];
-  }
-  return [
-    createRocContextCompactionMiddleware({
-      artifactStore: input.contextCompaction.artifactStore,
-      artifactRecoveryEnabled: input.contextCompaction.artifactRecoveryEnabled,
-      budgetProfile: input.contextCompaction.budgetProfile,
-      emitEvent: input.contextCompaction.emitEvent,
-      mode: input.snapshot.mode,
-      model: input.model,
-      runId: input.snapshot.runId,
-      threadId: input.snapshot.threadId,
-      tokenCounter: input.contextCompaction.tokenCounter,
-      workspaceHash: input.snapshot.workspace === null ? null : input.snapshot.workspace.hash,
-      workspacePath: policy.workspacePath
-    })
-  ];
 }
 
 function isSubAgentSpec(subagent: RuntimeSubagent): subagent is SubAgent {

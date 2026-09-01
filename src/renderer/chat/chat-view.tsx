@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import type { LoadedState } from '../loaded-state';
-import { projectChatTranscript } from '../chat-transcript';
+import { projectChatTranscript, readChatTranscriptMemoKey } from '../chat-transcript';
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
@@ -110,41 +110,19 @@ export function ChatView({
     latestPersistedThreadEventId
   });
 
+  const transcriptInput = {
+    events: history.events,
+    liveRun: {
+      ...chatRun.state,
+      assistantMessage: deferredAssistantMessage,
+      activityBlocks: deferredActivityBlocks
+    },
+    pendingUserInput,
+    threadId: selectedThreadId
+  };
   const chatTranscript = useMemo(
-    () =>
-      projectChatTranscript({
-        events: history.events,
-        liveRun: {
-          ...chatRun.state,
-          assistantMessage: deferredAssistantMessage,
-          activityBlocks: deferredActivityBlocks
-        },
-        pendingUserInput,
-        threadId: selectedThreadId
-      }),
-    [
-      chatRun.state.runId,
-      chatRun.state.mode,
-      chatRun.state.threadId,
-      chatRun.state.providerId,
-      chatRun.state.modelId,
-      chatRun.state.createdAt,
-      chatRun.state.status,
-      chatRun.state.durationMs,
-      chatRun.state.summary,
-      chatRun.state.errorCode,
-      chatRun.state.errorMessage,
-      chatRun.state.retryable,
-      chatRun.state.pendingInterrupts,
-      chatRun.state.resumeBusy,
-      chatRun.state.todos,
-      chatRun.state.subagents,
-      deferredAssistantMessage,
-      deferredActivityBlocks,
-      history.events,
-      pendingUserInput,
-      selectedThreadId
-    ]
+    () => projectChatTranscript(transcriptInput),
+    readChatTranscriptMemoKey(transcriptInput)
   );
   const executablePlanText = useMemo(() => {
     if (chatRun.state.status !== 'completed' || chatRun.state.mode !== 'plan') {

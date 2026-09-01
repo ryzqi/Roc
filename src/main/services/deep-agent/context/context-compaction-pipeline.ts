@@ -62,6 +62,19 @@ export type ContextMaintenanceEvent = {
   estimated?: boolean;
 };
 
+/**
+ * 压缩摘要要作为一条会话消息落进历史。这里只声明"记一次压缩前 flush"这个意图，
+ * 由 session 历史的拥有者（AgentSessionRepository）决定它落在哪个 phase、是否对渲染层可见。
+ */
+export type PreCompactionFlushRecorder = {
+  recordPreCompactionFlush(input: {
+    content: string;
+    threadId: string;
+    tokenCount: number;
+    workspaceHash: string | null;
+  }): void;
+};
+
 export type RocContextCompactionOptions = {
   artifactStore: ContextArtifactStore;
   artifactRecoveryEnabled?: boolean;
@@ -70,6 +83,7 @@ export type RocContextCompactionOptions = {
   mode: ContextCompactionMode;
   model: Pick<BaseChatModel, 'invoke'> & Partial<Pick<BaseChatModel, 'getNumTokens'>>;
   runId: string;
+  sessionHistory: PreCompactionFlushRecorder;
   threadId: string;
   tokenCounter?: ContextTokenCounter;
   toolResultPersistChars?: number;
@@ -77,10 +91,14 @@ export type RocContextCompactionOptions = {
   workspacePath: string | null;
 };
 
+/**
+ * 压缩过程不改调用方的数组：每个阶段收 readonly 消息、返回新数组，由 runContextCompaction 串起来。
+ * 唯一的例外圈在 runDeterministicCompaction 内部 —— langchain 的 ContextEdit.apply 契约是原地改。
+ */
 type RunCompactionInput = RocContextCompactionOptions & {
-  countTokens: (messages: BaseMessage[]) => Promise<number>;
+  countTokens: (messages: readonly BaseMessage[]) => Promise<number>;
   countTokensEstimated?: () => boolean;
-  messages: BaseMessage[];
+  messages: readonly BaseMessage[];
   summarize?: (input: ContextSummaryInput) => Promise<ContextSummary>;
 };
 
@@ -98,10 +116,10 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
     beforeModel: async (state) => {
       const originalMessages = state.messages;
       let estimated = false;
-      const compactedMessages = await runContextCompactionForTest({
+      const compactedMessages = await runContextCompaction({
         ...options,
         tokenCounter,
-        messages: [...originalMessages],
+        messages: originalMessages,
         countTokens: async (messages) => {
           const count = await tokenCounter.countMessages(messages);
           estimated ||= count.estimated;
@@ -148,20 +166,23 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
   });
 }
 
-export async function runContextCompactionForTest(input: RunCompactionInput): Promise<BaseMessage[]> {
+export async function runContextCompaction(input: RunCompactionInput): Promise<BaseMessage[]> {
   let stage: ContextMaintenanceStage = 'persist';
   try {
     input.emitEvent(createEvent(input, 'context_compaction_started', stage));
-    const artifacts = persistLargeToolResults(input);
-    const beforeDeterministicMessages = [...input.messages];
-    const toolPairs = snapshotToolPairs(input.messages);
-    const beforeDeterministicChars = measureMessages(input.messages);
+    const persisted = persistLargeToolResults(input);
+    const artifacts = persisted.artifacts;
+    const beforeDeterministicMessages = persisted.messages;
+    const toolPairs = snapshotToolPairs(beforeDeterministicMessages);
+    const beforeDeterministicChars = measureMessages(beforeDeterministicMessages);
 
     stage = 'deterministic';
-    await runDeterministicCompaction(input);
-    restoreIncompleteToolPairs(input.messages, toolPairs);
-    const afterDeterministicChars = measureMessages(input.messages);
-    const deterministicTokens = await input.countTokens(input.messages);
+    let messages = restoreIncompleteToolPairs(
+      await runDeterministicCompaction(input, beforeDeterministicMessages),
+      toolPairs
+    );
+    const afterDeterministicChars = measureMessages(messages);
+    const deterministicTokens = await input.countTokens(messages);
     input.emitEvent({
       ...createEvent(input, 'context_deterministic_compacted', stage),
       removedChars: Math.max(0, beforeDeterministicChars - afterDeterministicChars),
@@ -173,7 +194,7 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
     const tokensAfterDeterministic = deterministicTokens;
     if (tokensAfterDeterministic < input.budgetProfile.modelInputTokens * SUMMARY_THRESHOLD) {
       input.emitEvent(createEvent(input, 'context_summary_skipped', 'summary'));
-      return input.messages;
+      return messages;
     }
 
     stage = 'summary';
@@ -181,42 +202,41 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
     const preparedSummary = await prepareSummaryInput(
       input,
       artifacts,
-      selectMessagesToSummarize(input.messages),
+      selectMessagesToSummarize(messages),
       beforeDeterministicMessages
     );
     if (preparedSummary.summaryInput === null) {
-      compactToArtifactReferenceTail(input, preparedSummary.artifactLocators);
-      await enforceHardContextLimit(input);
+      messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
+      messages = await enforceHardContextLimit(input, messages);
       input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
-      return input.messages;
+      return messages;
     }
     const summary = await summarizeContextOrSkip(input, preparedSummary.summaryInput);
     if (summary === null) {
-      compactToArtifactReferenceTail(input, preparedSummary.artifactLocators);
-      await enforceHardContextLimit(input);
+      messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
+      messages = await enforceHardContextLimit(input, messages);
       input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
-      return input.messages;
+      return messages;
     }
     const digestMessage = contextSummaryToDigestMessage({
       ...summary,
       toolEvidence: [...new Set([...summary.toolEvidence, ...preparedSummary.artifactLocators])]
     });
-    compactToSummaryTail(input.messages, digestMessage);
-    input.artifactStore.recordPreCompactionFlush({
+    messages = compactToSummaryTail(messages, digestMessage);
+    input.sessionHistory.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
-      runId: input.runId,
       threadId: input.threadId,
       tokenCount: await input.countTokens([digestMessage]),
       workspaceHash: input.workspaceHash
     });
-    await enforceHardContextLimit(input);
+    messages = await enforceHardContextLimit(input, messages);
     input.emitEvent({
       ...createEvent(input, 'context_summary_completed', stage),
-      inputTokens: await input.countTokens(input.messages),
+      inputTokens: await input.countTokens(messages),
       budgetTokens: input.budgetProfile.modelInputTokens,
       estimated: input.countTokensEstimated?.() === true
     });
-    return input.messages;
+    return messages;
   } catch (error) {
     input.emitEvent(createEvent(input, 'context_compaction_failed', stage));
     throw error;
@@ -237,15 +257,18 @@ async function summarizeContextOrSkip(
   }
 }
 
-function persistLargeToolResults(input: RunCompactionInput): PersistedContextArtifact[] {
+function persistLargeToolResults(
+  input: RunCompactionInput
+): { artifacts: PersistedContextArtifact[]; messages: BaseMessage[] } {
   const artifacts: PersistedContextArtifact[] = [];
+  const messages = [...input.messages];
   if (input.artifactRecoveryEnabled === false) {
-    return artifacts;
+    return { artifacts, messages };
   }
   const threshold =
     input.toolResultPersistChars === undefined ? DEFAULT_TOOL_RESULT_PERSIST_CHARS : input.toolResultPersistChars;
-  for (let index = 0; index < input.messages.length; index += 1) {
-    const message = input.messages[index]!;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
     if (!ToolMessage.isInstance(message)) {
       continue;
     }
@@ -264,7 +287,7 @@ function persistLargeToolResults(input: RunCompactionInput): PersistedContextArt
     });
     const reference = formatContextArtifactReference(artifact);
     artifacts.push(artifact);
-    input.messages[index] = new ToolMessage({
+    messages[index] = new ToolMessage({
       id: message.id,
       tool_call_id: message.tool_call_id,
       name: message.name,
@@ -286,20 +309,26 @@ function persistLargeToolResults(input: RunCompactionInput): PersistedContextArt
       persistedChars: artifact.originalChars
     });
   }
-  return artifacts;
+  return { artifacts, messages };
 }
 
-async function runDeterministicCompaction(input: RunCompactionInput): Promise<void> {
+// langchain 的 ContextEdit.apply 原地改数组，可变性只圈在这里：收 readonly，内部拷贝，返回新数组。
+async function runDeterministicCompaction(
+  input: RunCompactionInput,
+  messages: readonly BaseMessage[]
+): Promise<BaseMessage[]> {
   const options: ForgeTieredCompactionOptions = {
     budgetTokens: input.budgetProfile.modelInputTokens
   };
+  const working = [...messages];
   const edits = createForgeTieredCompactionEdits(options);
   for (const edit of edits) {
     await edit.apply({
-      messages: input.messages,
+      messages: working,
       countTokens: input.countTokens
     });
   }
+  return working;
 }
 
 function snapshotToolPairs(messages: readonly BaseMessage[]): ToolPairSnapshot[] {
@@ -332,23 +361,28 @@ function snapshotToolPairs(messages: readonly BaseMessage[]): ToolPairSnapshot[]
   return pairs;
 }
 
-function restoreIncompleteToolPairs(messages: BaseMessage[], pairs: readonly ToolPairSnapshot[]): void {
+function restoreIncompleteToolPairs(
+  messages: readonly BaseMessage[],
+  pairs: readonly ToolPairSnapshot[]
+): BaseMessage[] {
+  const restored = [...messages];
   for (const pair of pairs) {
-    const aiIndex = messages.findIndex((message) => message === pair.aiMessage);
-    const toolIndex = messages.findIndex(
+    const aiIndex = restored.findIndex((message) => message === pair.aiMessage);
+    const toolIndex = restored.findIndex(
       (message) => ToolMessage.isInstance(message) && message.tool_call_id === pair.toolMessage.tool_call_id
     );
     if (aiIndex >= 0 && toolIndex === -1) {
-      messages.splice(aiIndex + 1, 0, pair.toolMessage);
+      restored.splice(aiIndex + 1, 0, pair.toolMessage);
       continue;
     }
-    if (toolIndex >= 0 && messages[toolIndex] !== pair.toolMessage) {
-      messages[toolIndex] = pair.toolMessage;
+    if (toolIndex >= 0 && restored[toolIndex] !== pair.toolMessage) {
+      restored[toolIndex] = pair.toolMessage;
     }
     if (aiIndex === -1 && toolIndex >= 0) {
-      messages.splice(toolIndex, 0, pair.aiMessage);
+      restored.splice(toolIndex, 0, pair.aiMessage);
     }
   }
+  return restored;
 }
 
 async function summarizeContext(
@@ -450,19 +484,22 @@ function selectMessagesToSummarize(messages: readonly BaseMessage[]): BaseMessag
   return messages.filter((message) => !protectedMessages.has(message) && !isContextDigestMessage(message));
 }
 
-async function enforceHardContextLimit(input: RunCompactionInput): Promise<void> {
-  const initialTokens = await input.countTokens(input.messages);
+async function enforceHardContextLimit(
+  input: RunCompactionInput,
+  messages: readonly BaseMessage[]
+): Promise<BaseMessage[]> {
+  const initialTokens = await input.countTokens(messages);
   if (initialTokens <= input.budgetProfile.modelInputTokens) {
-    return;
+    return [...messages];
   }
 
-  const protectedMessages = selectProtectedHead(input.messages);
-  const latestDigest = [...input.messages].reverse().find(isContextDigestMessage);
+  const protectedMessages = selectProtectedHead(messages);
+  const latestDigest = [...messages].reverse().find(isContextDigestMessage);
   if (latestDigest !== undefined && !protectedMessages.includes(latestDigest)) {
     protectedMessages.push(latestDigest);
   }
   const protectedSet = new Set(protectedMessages);
-  const compacted = input.messages.filter(
+  const compacted = messages.filter(
     (message) => protectedSet.has(message) || !isContextDigestMessage(message)
   );
   let tokens = await input.countTokens(compacted);
@@ -478,7 +515,7 @@ async function enforceHardContextLimit(input: RunCompactionInput): Promise<void>
   if (tokens > input.budgetProfile.modelInputTokens) {
     throw new Error('context_budget_exhausted');
   }
-  input.messages.splice(0, input.messages.length, ...compacted);
+  return compacted;
 }
 
 function removeMessageGroup(messages: BaseMessage[], index: number): void {
@@ -519,26 +556,25 @@ function sameMessageSequence(left: readonly BaseMessage[], right: readonly BaseM
   return left.length === right.length && left.every((message, index) => message === right[index]);
 }
 
-function compactToSummaryTail(messages: BaseMessage[], digestMessage: AIMessage): void {
+function compactToSummaryTail(messages: readonly BaseMessage[], digestMessage: AIMessage): BaseMessage[] {
   const head = selectProtectedPrefix(messages);
   const tail = selectRecentSummaryTail(messages);
-  const compacted = [
+  return [
     ...head,
     digestMessage,
     ...tail.filter((message) => !head.includes(message) && !isContextDigestMessage(message))
   ];
-  messages.splice(0, messages.length, ...compacted);
 }
 
 function compactToArtifactReferenceTail(
-  input: RunCompactionInput,
+  messages: readonly BaseMessage[],
   artifactLocators: readonly string[]
-): void {
+): BaseMessage[] {
   if (artifactLocators.length === 0) {
-    return;
+    return [...messages];
   }
-  compactToSummaryTail(input.messages, contextSummaryToDigestMessage({
-    goal: inferGoal(input.messages),
+  return compactToSummaryTail(messages, contextSummaryToDigestMessage({
+    goal: inferGoal(messages),
     facts: [],
     decisions: [],
     filesTouched: [],

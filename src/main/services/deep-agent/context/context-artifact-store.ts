@@ -126,30 +126,6 @@ export class ContextArtifactStore {
     };
   }
 
-  recordPreCompactionFlush(input: {
-    content: string;
-    runId: string;
-    threadId: string;
-    tokenCount?: number | null;
-    workspaceHash: string | null;
-  }): void {
-    const content = requireNonEmpty(input.content, 'context_flush_content_empty');
-    this.db
-      .prepare(
-        `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        `smsg_${randomUUID()}`,
-        requireNonEmpty(input.threadId, 'context_flush_thread_id_empty'),
-        'system',
-        content,
-        input.tokenCount === undefined ? null : input.tokenCount,
-        'pre_compaction_flush',
-        input.workspaceHash,
-        new Date().toISOString()
-      );
-  }
 }
 
 export function formatContextArtifactReference(artifact: PersistedContextArtifact): string {

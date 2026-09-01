@@ -120,7 +120,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       repository.reconcileStartupRuns();
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
-        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
+        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository),
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
         modelFactory,
@@ -178,7 +178,8 @@ function isSelfConfigAvailable(option: AgentPluginOptions['deepAgentExecutor']):
 
 function resolveDeepAgentExecutor(
   context: RocPluginContext,
-  option: AgentPluginOptions['deepAgentExecutor']
+  option: AgentPluginOptions['deepAgentExecutor'],
+  repository: AgentSessionRepository
 ): AgentDeepAgentExecutor | undefined {
   if (option === undefined) {
     return undefined;
@@ -195,6 +196,8 @@ function resolveDeepAgentExecutor(
     hookRuntime: option.hookRuntime,
     metricsService: option.metricsService,
     paths: option.paths,
+    // session_messages 只由 repository 写：压缩 flush 走它的 interface，而不是第二个直连 SQL 的写入者。
+    sessionHistory: repository,
     store: option.memoryStore,
     selfConfigService: option.selfConfigService,
     toolEffectStore: new AgentToolEffectStore(agentDb)
@@ -270,33 +273,33 @@ function registerAgentCapabilities(
   runtime: AgentPluginRuntime,
   options: AgentPluginOptions
 ): void {
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async () =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.status.get'), async () => runtime.getStatus());
+  context.capabilities.register(pluginId, baseDescriptor('agent.config.preview'), async () =>
     buildDeepAgentConfigPreview({
       deleteFileApprovalMode: options.capabilityPreview?.deleteFileApprovalModeProvider() ?? 'default',
       runtimeStatus: runtime.getStatus(),
       mode: 'chat'
     })
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.start'), async (input) =>
     runtime.startRun(chatStartRunRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[3], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.cancel'), async (input) =>
     runtime.cancelRun(chatCancelRunRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[4], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.resume'), async (input) =>
     runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[5], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.events.list'), async (input) =>
     runtime.listRunEvents(chatRunEventsReplayRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[6], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.active.get'), async (input) =>
     runtime.getActiveRun(chatActiveRunRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[7], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.sessions.list'), async (input) =>
     runtime.listSessionMessages(sessionListInputSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[8], async (input) =>
+  context.capabilities.register(pluginId, baseDescriptor('agent.sessions.search'), async (input) =>
     runtime.searchSessionMessages(sessionMessageSearchRequestSchema.parse(input))
   );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
@@ -313,11 +316,22 @@ function registerAgentCapabilities(
   }
 }
 
-function descriptor<TInput, TOutput>(
-  name: string,
+type BaseAgentCapabilityName = (typeof baseAgentCapabilityDescriptors)[number]['name'];
+
+// 按名字取 descriptor，而不是按数组下标：插入或重排 baseAgentCapabilityDescriptors 不会静默错位。
+function baseDescriptor(name: BaseAgentCapabilityName): CapabilityDescriptor {
+  const found = baseAgentCapabilityDescriptors.find((candidate) => candidate.name === name);
+  if (found === undefined) {
+    throw new Error(`agent_capability_descriptor_missing:${name}`);
+  }
+  return found;
+}
+
+function descriptor<TName extends string, TInput, TOutput>(
+  name: TName,
   inputSchema: z.ZodType<TInput>,
   outputSchema: z.ZodType<TOutput>
-): CapabilityDescriptor<TInput, TOutput> {
+): CapabilityDescriptor<TInput, TOutput> & { readonly name: TName } {
   return {
     name,
     version: capabilityVersion,

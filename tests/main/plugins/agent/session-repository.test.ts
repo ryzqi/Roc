@@ -6,6 +6,7 @@ import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachmen
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import type { ResumeDispatchAudit } from '../../../../src/main/plugins/agent/session-repository';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
@@ -228,7 +229,8 @@ describe('AgentSessionRepository', () => {
         })
       }
     ]);
-    expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
+    expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([]);
+    expect(repository.listSessionMessages({ threadId: run.threadId, phases: ['pre_compaction_flush'] })).toEqual([message]);
     expect(rawRow('agent_runs', run.id)).toMatchObject({
       enabled_capabilities_json: JSON.stringify(enabledCapabilities),
       model_id: 'openai:gpt-4.1',
@@ -253,6 +255,46 @@ describe('AgentSessionRepository', () => {
     });
   });
 
+  it('keeps a pre-compaction flush searchable but out of the visible session history', () => {
+    applyAgentDatabaseSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Flush context before compacting'
+    });
+    const visible = repository.recordSessionMessage({
+      content: 'Visible answer',
+      role: 'assistant',
+      threadId: run.threadId
+    });
+
+    repository.recordPreCompactionFlush({
+      content: 'Context summary mentions deterministic compaction and payment service evidence.',
+      threadId: run.threadId,
+      tokenCount: 42,
+      workspaceHash: 'workspace_hash_c'
+    });
+
+    expect(repository.listSessionMessages({ threadId: run.threadId }).map((message) => message.id)).toEqual([visible.id]);
+    // 两条消息同毫秒写入，次级排序键是随机 id，故按 phase 排序后再断言。
+    expect(
+      repository
+        .listSessionMessages({ threadId: run.threadId, phases: ['visible', 'pre_compaction_flush'] })
+        .map((message) => ({ phase: message.phase, role: message.role, tokenCount: message.tokenCount }))
+        .sort((left, right) => left.phase.localeCompare(right.phase))
+    ).toEqual([
+      { phase: 'pre_compaction_flush', role: 'system', tokenCount: 42 },
+      { phase: 'visible', role: 'assistant', tokenCount: null }
+    ]);
+    expect(
+      repository
+        .searchSessionMessages({ query: 'payment', threadId: run.threadId, workspaceScope: 'all' })
+        .items.map((item) => item.phase)
+    ).toEqual(['pre_compaction_flush']);
+  });
+
   it('fails explicitly when a persisted task event payload violates the shared contract', () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
@@ -274,7 +316,7 @@ describe('AgentSessionRepository', () => {
     expect(() => repository.listThreadEvents(run.threadId)).toThrow(ZodError);
   });
 
-  it('marks interrupted runs waiting for the user while persisting only interrupt UI data', () => {
+  it('marks interrupted runs waiting for the user while persisting only interrupt UI data', async () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -285,8 +327,6 @@ describe('AgentSessionRepository', () => {
     });
 
     const interruptedRun = repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -365,42 +405,34 @@ describe('AgentSessionRepository', () => {
       ]
     });
 
-    const firstDispatch = repository.beginResumeDispatch({
-      expectedStateVersion: 2,
-      expectedStatus: 'waiting_user',
-      interruptId: 'interrupt_repository_1',
-      runId: run.id
-    });
+    const audit: ResumeDispatchAudit = {
+      type: 'approval_decision',
+      payload: {
+        interruptId: 'interrupt_repository_1',
+        decisions: [{ type: 'approve' }]
+      }
+    };
 
-    expect(firstDispatch.run).toMatchObject({ status: 'dispatch_pending' });
+    // openStream 抛错 → 退回 waiting_user 且两个中断都不消耗。
+    await expect(
+      repository.dispatchResume({
+        audit,
+        interruptId: 'interrupt_repository_1',
+        openStream: async (dispatchedRun) => {
+          expect(dispatchedRun).toMatchObject({ status: 'dispatch_pending' });
+          throw new Error('execution_stream_unavailable');
+        },
+        runId: run.id
+      })
+    ).rejects.toThrow('execution_stream_unavailable');
+
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 4, status: 'waiting_user' });
     expect(readPendingInterrupts(repository, run).interrupts).toHaveLength(2);
 
-    const rolledBack = repository.rollbackResumeDispatch({
-      expectedStateVersion: firstDispatch.stateVersion,
-      expectedStatus: 'dispatch_pending',
-      runId: run.id
-    });
-
-    expect(rolledBack.run).toMatchObject({ status: 'waiting_user' });
-    expect(readPendingInterrupts(repository, run).interrupts).toHaveLength(2);
-
-    const secondDispatch = repository.beginResumeDispatch({
-      expectedStateVersion: rolledBack.stateVersion,
-      expectedStatus: 'waiting_user',
+    const resumed = await repository.dispatchResume({
+      audit,
       interruptId: 'interrupt_repository_1',
-      runId: run.id
-    });
-    const resumed = repository.commitResumeDispatch({
-      audit: {
-        type: 'approval_decision',
-        payload: {
-          interruptId: 'interrupt_repository_1',
-          decisions: [{ type: 'approve' }]
-        }
-      },
-      expectedStateVersion: secondDispatch.stateVersion,
-      expectedStatus: 'dispatch_pending',
-      interruptId: 'interrupt_repository_1',
+      openStream: async () => null,
       runId: run.id
     });
 
@@ -436,8 +468,6 @@ describe('AgentSessionRepository', () => {
 
     expect(() =>
       repository.markRunInterrupted({
-        expectedStateVersion: 1,
-        expectedStatus: 'waiting_next_turn',
         interrupts: [
           {
             interruptId: 'interrupt_atomic_telemetry',
@@ -469,8 +499,6 @@ describe('AgentSessionRepository', () => {
       userInput: 'Recover the remaining question'
     });
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -491,13 +519,7 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    const dispatch = repository.beginResumeDispatch({
-      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
-      expectedStatus: 'waiting_user',
-      interruptId: 'interrupt_partial_first',
-      runId: run.id
-    });
-    repository.commitResumeDispatch({
+    await dispatchResumeSuccessfully(repository, {
       audit: {
         type: 'human_question_answered',
         payload: {
@@ -509,8 +531,6 @@ describe('AgentSessionRepository', () => {
           workspaceHash: null
         }
       },
-      expectedStateVersion: dispatch.stateVersion,
-      expectedStatus: 'dispatch_pending',
       interruptId: 'interrupt_partial_first',
       runId: run.id
     });
@@ -557,8 +577,6 @@ describe('AgentSessionRepository', () => {
       { interruptId: 'interrupt-incomplete-second', payload: { kind: 'question' as const, question: 'Second answer?' } }
     ];
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -583,8 +601,6 @@ describe('AgentSessionRepository', () => {
       userInput: 'Validate stored interrupt payload'
     });
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -605,7 +621,7 @@ describe('AgentSessionRepository', () => {
     expect(() => readPendingInterrupts(repository, run)).toThrow('agent_pending_interrupt_payload_invalid');
   });
 
-  it('rolls back question audit and session message writes as one resume transaction', () => {
+  it('rolls back question audit and session message writes as one resume transaction', async () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -615,8 +631,6 @@ describe('AgentSessionRepository', () => {
       userInput: 'Answer transactionally'
     });
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -630,22 +644,8 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    const dispatch = repository.beginResumeDispatch({
-      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
-      expectedStatus: 'waiting_user',
-      interruptId: 'interrupt_question_transaction',
-      runId: run.id
-    });
-    db.exec(`
-      CREATE TRIGGER fail_resume_question_session_message
-      BEFORE INSERT ON session_messages
-      BEGIN
-        SELECT RAISE(ABORT, 'resume_question_session_message_failed');
-      END;
-    `);
-
-    expect(() =>
-      repository.commitResumeDispatch({
+    await expect(
+      repository.dispatchResume({
         audit: {
           type: 'human_question_answered',
           payload: {
@@ -657,17 +657,23 @@ describe('AgentSessionRepository', () => {
             workspaceHash: null
           }
         },
-        expectedStateVersion: dispatch.stateVersion,
-        expectedStatus: 'dispatch_pending',
         interruptId: 'interrupt_question_transaction',
+        // 在流已开起来、提交尚未发生的这一刻让 session_messages 写入失败：提交必须整体回滚。
+        openStream: async () => {
+          db.exec(`
+            CREATE TRIGGER fail_resume_question_session_message
+            BEFORE INSERT ON session_messages
+            BEGIN
+              SELECT RAISE(ABORT, 'resume_question_session_message_failed');
+            END;
+          `);
+          return null;
+        },
         runId: run.id
       })
-    ).toThrow('resume_question_session_message_failed');
+    ).rejects.toThrow('resume_question_session_message_failed');
 
-    expect(repository.getRunTransitionState(run.id)).toEqual({
-      stateVersion: dispatch.stateVersion,
-      status: 'dispatch_pending'
-    });
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 4, status: 'waiting_user' });
     expect(readPendingInterrupts(repository, run).interrupts).toEqual([
       {
         interruptId: 'interrupt_question_transaction',
@@ -701,8 +707,6 @@ describe('AgentSessionRepository', () => {
       userInput: 'Do not restore stale projection'
     });
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -724,7 +728,7 @@ describe('AgentSessionRepository', () => {
     expect(repository.getRun(run.id).status).toBe('interrupted');
   });
 
-  it('orders question resume message and audit events after the requested event', () => {
+  it('orders question resume message and audit events after the requested event', async () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -734,8 +738,6 @@ describe('AgentSessionRepository', () => {
       userInput: 'Record question order'
     });
     repository.markRunInterrupted({
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
@@ -749,13 +751,7 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    const dispatch = repository.beginResumeDispatch({
-      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
-      expectedStatus: 'waiting_user',
-      interruptId: 'interrupt_question_order',
-      runId: run.id
-    });
-    repository.commitResumeDispatch({
+    await dispatchResumeSuccessfully(repository, {
       audit: {
         type: 'human_question_answered',
         payload: {
@@ -767,8 +763,6 @@ describe('AgentSessionRepository', () => {
           workspaceHash: null
         }
       },
-      expectedStateVersion: dispatch.stateVersion,
-      expectedStatus: 'dispatch_pending',
       interruptId: 'interrupt_question_order',
       runId: run.id
     });
@@ -784,7 +778,7 @@ describe('AgentSessionRepository', () => {
     ]);
   });
 
-  it('applies run status transitions with status and state-version CAS', () => {
+  it('advances the state version on a legal transition and rejects an illegal one', () => {
     applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -794,34 +788,40 @@ describe('AgentSessionRepository', () => {
       userInput: 'Transition this run'
     });
 
-    const transitioned = repository.transitionRun({
-      endedAt: null,
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
-      runId: run.id,
-      status: 'running'
+    expect(repository.transitionRun({ endedAt: null, runId: run.id, status: 'running' }).status).toBe('running');
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 2, status: 'running' });
+    expect(() =>
+      repository.transitionRun({ endedAt: null, runId: run.id, status: 'waiting_next_turn' })
+    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_invalid' }));
+    repository.transitionRun({ endedAt: '2026-07-17T00:00:00.000Z', runId: run.id, status: 'completed' });
+    expect(() =>
+      repository.transitionRun({ endedAt: null, runId: run.id, status: 'running' })
+    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_invalid' }));
+  });
+
+  it('begins execution only while the run still sits in dispatch_pending', () => {
+    applyAgentDatabaseSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Begin executing this run'
     });
 
-    expect(transitioned.run.status).toBe('running');
-    expect(transitioned.stateVersion).toBe(2);
-    expect(() =>
-      repository.transitionRun({
-        endedAt: '2026-07-17T00:00:00.000Z',
-        expectedStateVersion: 1,
-        expectedStatus: 'waiting_next_turn',
-        runId: run.id,
-        status: 'completed'
-      })
-    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_conflict' }));
-    expect(() =>
-      repository.transitionRun({
-        endedAt: null,
-        expectedStateVersion: 2,
-        expectedStatus: 'running',
-        runId: run.id,
-        status: 'waiting_next_turn'
-      })
-    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_invalid' }));
+    repository.transitionRun({ endedAt: null, runId: run.id, status: 'dispatch_pending' });
+    expect(repository.beginRunExecution(run.id)?.status).toBe('running');
+
+    // waiting_user → running 是状态表允许的转移，所以"已离开 dispatch_pending"这条不变量只能靠 beginRunExecution 自己挡。
+    const superseded = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Supersede this dispatch'
+    });
+    repository.transitionRun({ endedAt: null, runId: superseded.id, status: 'waiting_user' });
+    expect(repository.beginRunExecution(superseded.id)).toBeNull();
+    expect(repository.getRunTransitionState(superseded.id)).toEqual({ stateVersion: 2, status: 'waiting_user' });
   });
 
   it('atomically records a completed run, its terminal timeline, and its task outbox event', () => {
@@ -838,8 +838,6 @@ describe('AgentSessionRepository', () => {
       assistantMessage: 'Completed answer',
       durationMs: 42,
       endedAt: '2026-07-17T01:00:00.000Z',
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       modelId: 'openai:gpt-4.1',
       providerId: 'test-provider',
       runId: run.id,
@@ -860,7 +858,7 @@ describe('AgentSessionRepository', () => {
     });
 
     expect(terminal.run.status).toBe('completed');
-    expect(terminal.stateVersion).toBe(2);
+    expect(repository.getRunTransitionState(terminal.run.id)).toEqual({ stateVersion: 2, status: 'completed' });
     expect(terminal.message).toMatchObject({
       content: 'Completed answer',
       role: 'assistant',
@@ -929,8 +927,6 @@ describe('AgentSessionRepository', () => {
         assistantMessage: 'Must not persist',
         durationMs: 42,
         endedAt: '2026-07-17T01:00:00.000Z',
-        expectedStateVersion: 1,
-        expectedStatus: 'waiting_next_turn',
         modelId: 'openai:gpt-4.1',
         providerId: 'test-provider',
         runId: run.id,
@@ -1010,8 +1006,6 @@ describe('AgentSessionRepository', () => {
         assistantMessage: 'Must not persist',
         durationMs: 42,
         endedAt: '2026-07-17T01:00:00.000Z',
-        expectedStateVersion: 1,
-        expectedStatus: 'waiting_next_turn',
         modelId: 'openai:gpt-4.1',
         providerId: 'test-provider',
         runId: run.id,
@@ -1065,8 +1059,6 @@ describe('AgentSessionRepository', () => {
       assistantMessage: 'Terminal answer',
       durationMs: 42,
       endedAt: '2026-07-17T01:00:00.000Z',
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       modelId: 'openai:gpt-4.1',
       providerId: 'test-provider',
       runId: run.id,
@@ -1114,8 +1106,6 @@ describe('AgentSessionRepository', () => {
       },
       endedAt: '2026-07-17T01:00:00.000Z',
       error: 'Provider is unavailable',
-      expectedStateVersion: 1,
-      expectedStatus: 'waiting_next_turn',
       modelId: 'openai:gpt-4.1',
       providerId: 'test-provider',
       retryable: true,
@@ -1135,7 +1125,7 @@ describe('AgentSessionRepository', () => {
     });
 
     expect(terminal.run.status).toBe('failed');
-    expect(terminal.stateVersion).toBe(2);
+    expect(repository.getRunTransitionState(terminal.run.id)).toEqual({ stateVersion: 2, status: 'failed' });
     expect(terminal.event).toMatchObject({
       runId: run.id,
       threadId: run.threadId,
@@ -1240,10 +1230,7 @@ describe('AgentSessionRepository', () => {
     transitionRun(repository, dispatchPending.id, 'dispatch_pending');
     transitionRun(repository, running.id, 'running');
     transitionRun(repository, recovering.id, 'recovering');
-    const waitingUserState = repository.getRunTransitionState(waitingUser.id);
     repository.markRunInterrupted({
-      expectedStateVersion: waitingUserState.stateVersion,
-      expectedStatus: waitingUserState.status,
       runId: waitingUser.id,
       telemetry: requireRunTelemetry(repository, waitingUser),
       threadId: waitingUser.threadId,
@@ -1260,10 +1247,7 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    const resumeWaitingState = repository.getRunTransitionState(resumeDispatchPending.id);
     repository.markRunInterrupted({
-      expectedStateVersion: resumeWaitingState.stateVersion,
-      expectedStatus: resumeWaitingState.status,
       runId: resumeDispatchPending.id,
       telemetry: requireRunTelemetry(repository, resumeDispatchPending),
       threadId: resumeDispatchPending.threadId,
@@ -1277,13 +1261,8 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    const resumeDispatchState = repository.getRunTransitionState(resumeDispatchPending.id);
-    repository.beginResumeDispatch({
-      expectedStateVersion: resumeDispatchState.stateVersion,
-      expectedStatus: resumeDispatchState.status,
-      interruptId: 'interrupt_resume_dispatch_restart',
-      runId: resumeDispatchPending.id
-    });
+    // 模拟"派发到一半就崩了"：run 停在 dispatch_pending，中断仍挂着。
+    transitionRun(repository, resumeDispatchPending.id, 'dispatch_pending');
     for (const run of [waitingNextTurn, dispatchPending, running, recovering]) {
       await seedCheckpoint(run.threadId);
     }
@@ -1702,13 +1681,19 @@ function rawRow(tableName: string, id: string): Record<string, unknown> {
 }
 
 function transitionRun(repository: AgentSessionRepository, runId: string, status: TaskStatus): void {
-  const state = repository.getRunTransitionState(runId);
-  repository.transitionRun({
-    endedAt: null,
-    expectedStateVersion: state.stateVersion,
-    expectedStatus: state.status,
-    runId,
-    status
+  repository.transitionRun({ endedAt: null, runId, status });
+}
+
+// 成功 resume：openStream 什么都不做即代表执行流开起来了，dispatchResume 随后提交 running。
+async function dispatchResumeSuccessfully(
+  repository: AgentSessionRepository,
+  input: { audit: ResumeDispatchAudit; interruptId: string; runId: string }
+): Promise<void> {
+  await repository.dispatchResume({
+    audit: input.audit,
+    interruptId: input.interruptId,
+    openStream: async () => null,
+    runId: input.runId
   });
 }
 

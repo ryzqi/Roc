@@ -221,14 +221,11 @@ export class AgentPluginRuntime {
       }
       return toExistingRunStartResult(this.options.repository, existingRun);
     }
-    const dispatchState = this.options.repository.getRunTransitionState(run.id);
     const dispatchedRun = this.options.repository.transitionRun({
       endedAt: null,
-      expectedStateVersion: dispatchState.stateVersion,
-      expectedStatus: dispatchState.status,
       runId: run.id,
       status: 'dispatch_pending'
-    }).run;
+    });
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, dispatchedRun);
     const abortController = new AbortController();
@@ -266,17 +263,10 @@ export class AgentPluginRuntime {
       if (!this.activeRunLifecycle.isActive(run.id)) {
         return;
       }
-      const executionState = this.options.repository.getRunTransitionState(run.id);
-      if (executionState.status !== 'dispatch_pending') {
+      const executingRun = this.options.repository.beginRunExecution(run.id);
+      if (executingRun === null) {
         return;
       }
-      const executingRun = this.options.repository.transitionRun({
-        endedAt: null,
-        expectedStateVersion: executionState.stateVersion,
-        expectedStatus: executionState.status,
-        runId: run.id,
-        status: 'running'
-      }).run;
       const pendingRun = this.executeRun({
         enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
         input,
@@ -316,7 +306,6 @@ export class AgentPluginRuntime {
       };
     }
     const endedAt = new Date().toISOString();
-    const terminalState = this.options.repository.getRunTransitionState(input.runId);
     const durationMs = calculateAgentRunTelemetryDurationMs(run.startedAt, endedAt);
     telemetry.markTerminal({
       status: 'cancelled',
@@ -329,8 +318,6 @@ export class AgentPluginRuntime {
     try {
       terminal = this.options.repository.cancelRunAtomically({
         endedAt,
-        expectedStateVersion: terminalState.stateVersion,
-        expectedStatus: terminalState.status,
         runId: input.runId,
         telemetry: telemetry.snapshot()
       });
@@ -427,52 +414,30 @@ export class AgentPluginRuntime {
               workspaceHash: null
             }
           };
-    const resumeState = this.options.repository.getRunTransitionState(run.id);
-    const dispatch = this.options.repository.beginResumeDispatch({
-      expectedStateVersion: resumeState.stateVersion,
-      expectedStatus: resumeState.status,
-      interruptId: request.interruptId,
-      runId: run.id
-    });
     const abortController = new AbortController();
-    let executionStream: AgentDeepAgentExecution;
+    let resumed: { event: TaskEvent; run: TaskRun; stream: AgentDeepAgentExecution };
     try {
-      executionStream = requireAgentExecution(
-        await deepAgentExecutor.execute({
-          abortSignal: abortController.signal,
-          modelHandle,
-          observeModelUsage: usage => telemetry.observeModelUsage(usage),
-          resumePayload,
-          run: dispatch.run,
-          snapshot
-        })
-      );
-    } catch (error) {
-      this.options.repository.rollbackResumeDispatch({
-        expectedStateVersion: dispatch.stateVersion,
-        expectedStatus: 'dispatch_pending',
-        runId: run.id
-      });
-      throw error;
-    }
-    let resumed: ReturnType<AgentSessionRepository['commitResumeDispatch']>;
-    try {
-      resumed = this.options.repository.commitResumeDispatch({
+      resumed = await this.options.repository.dispatchResume({
         audit: resumeAudit,
-        expectedStateVersion: dispatch.stateVersion,
-        expectedStatus: 'dispatch_pending',
         interruptId: request.interruptId,
+        openStream: async (dispatchedRun) =>
+          requireAgentExecution(
+            await deepAgentExecutor.execute({
+              abortSignal: abortController.signal,
+              modelHandle,
+              observeModelUsage: usage => telemetry.observeModelUsage(usage),
+              resumePayload,
+              run: dispatchedRun,
+              snapshot
+            })
+          ),
         runId: run.id
       });
     } catch (error) {
       abortController.abort();
-      this.options.repository.rollbackResumeDispatch({
-        expectedStateVersion: dispatch.stateVersion,
-        expectedStatus: 'dispatch_pending',
-        runId: run.id
-      });
       throw error;
     }
+    const executionStream = resumed.stream;
     const resumedRun = resumed.run;
     const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, resumedRun);
     this.activeRunLifecycle.activate({
@@ -559,13 +524,10 @@ export class AgentPluginRuntime {
   }): Promise<{ run: TaskRun; message: SessionMessageEntry; event: TaskEvent }> {
     const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
     const currentRun = this.options.repository.getRun(input.runId);
-    const terminalState = this.options.repository.getRunTransitionState(input.runId);
     const terminal = this.options.repository.completeRunAtomically({
       assistantMessage: input.assistantMessage,
       durationMs: input.durationMs,
       endedAt: input.endedAt,
-      expectedStateVersion: terminalState.stateVersion,
-      expectedStatus: terminalState.status,
       modelId: input.modelId,
       providerId: input.providerId,
       runId: input.runId,
@@ -805,11 +767,8 @@ export class AgentPluginRuntime {
         });
         if (decision.action === 'recover') {
           const nextRetryAt = new Date(nowMs + decision.delayMs).toISOString();
-          const recoveryState = this.options.repository.getRunTransitionState(input.runId);
           this.options.repository.transitionRun({
             endedAt: null,
-            expectedStateVersion: recoveryState.stateVersion,
-            expectedStatus: recoveryState.status,
             runId: input.runId,
             status: 'recovering'
           });
@@ -838,11 +797,8 @@ export class AgentPluginRuntime {
             }
             throw delayError;
           }
-          const resumedRecoveryState = this.options.repository.getRunTransitionState(input.runId);
           this.options.repository.transitionRun({
             endedAt: null,
-            expectedStateVersion: resumedRecoveryState.stateVersion,
-            expectedStatus: resumedRecoveryState.status,
             runId: input.runId,
             status: 'running'
           });
@@ -859,7 +815,6 @@ export class AgentPluginRuntime {
     failure: RunFailure;
     telemetry: AgentRunTelemetryAccumulator;
   }): Promise<void> {
-    const terminalState = this.options.repository.getRunTransitionState(input.input.runId);
     const endedAt = new Date().toISOString();
     input.telemetry.markTerminal({
       status: 'failed',
@@ -873,8 +828,6 @@ export class AgentPluginRuntime {
       diagnostic: input.failure.diagnostic,
       endedAt,
       error: input.failure.message,
-      expectedStateVersion: terminalState.stateVersion,
-      expectedStatus: terminalState.status,
       modelId: input.input.modelId,
       providerId: input.input.providerId,
       retryable: input.failure.retryable,
@@ -1108,10 +1061,7 @@ export class AgentPluginRuntime {
     telemetry: AgentRunTelemetryV1;
     threadId: string;
   }): Promise<void> {
-    const interruptState = this.options.repository.getRunTransitionState(input.runId);
     const interrupted = this.options.repository.markRunInterrupted({
-      expectedStateVersion: interruptState.stateVersion,
-      expectedStatus: interruptState.status,
       interrupts: input.interrupts,
       runId: input.runId,
       telemetry: input.telemetry,

@@ -2,7 +2,7 @@ import { ArrowLeft, Pause, Play, RotateCw, Trash2, XCircle } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react';
 import type { ActiveTaskItem, BackgroundTask, ChatResumeDecision } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
-import { projectChatTranscript } from '../../chat-transcript';
+import { projectChatTranscript, readChatTranscriptMemoKey } from '../../chat-transcript';
 import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
 import { usePersistedThreadHistory } from '../../chat/use-persisted-thread-history';
 import type { LoadedState } from '../../loaded-state';
@@ -60,17 +60,16 @@ export function TaskDetailView({
     threadId: detail === null ? null : detail.threadId,
     latestPersistedThreadEventId
   });
-  const transcript = useMemo(() => {
-    if (detail === null) {
-      return [];
-    }
-    return projectChatTranscript({
-      events: history.events,
-      liveRun: liveTaskRun,
-      pendingUserInput: null,
-      threadId: detail.threadId
-    });
-  }, [detail, history.events, liveTaskRun]);
+  const transcriptInput = {
+    events: history.events,
+    liveRun: liveTaskRun,
+    pendingUserInput: null,
+    threadId: detail === null ? null : detail.threadId
+  };
+  const transcript = useMemo(
+    () => (detail === null ? [] : projectChatTranscript(transcriptInput)),
+    readChatTranscriptMemoKey(transcriptInput)
+  );
 
   if (detail === null || detail.taskId !== taskId) {
     return (

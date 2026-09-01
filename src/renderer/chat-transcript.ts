@@ -109,13 +109,6 @@ type AssistantDraft = {
   subagentBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }>>;
 };
 
-function resolveActiveThreadId(selectedThreadId: string | null, chatRunState: ChatRunState): string | null {
-  if (selectedThreadId !== null) {
-    return selectedThreadId;
-  }
-  return chatRunState.threadId;
-}
-
 function compareTaskEventsAscending(left: TaskEvent, right: TaskEvent): number {
   const createdAtOrder = left.createdAt.localeCompare(right.createdAt);
   if (createdAtOrder !== 0) {
@@ -706,19 +699,14 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
 }
 
 function appendLiveTranscriptMessages(input: {
+  activeThreadId: string;
   chatRunState: ChatRunState;
   pendingUserInput: string | null;
   persistedMessages: ChatTranscriptMessage[];
   selectedThreadId: string | null;
 }): ChatTranscriptMessage[] {
   assertUniqueTranscriptKeys(input.persistedMessages);
-  const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
-  if (activeThreadId === null) {
-    const messages = input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
-    assertUniqueTranscriptKeys(messages);
-    return messages;
-  }
-
+  const activeThreadId = input.activeThreadId;
   const messages = input.persistedMessages.slice();
   const pendingUserInput = input.pendingUserInput;
   const shouldProjectPendingUser = pendingUserInput !== null &&
@@ -799,6 +787,7 @@ export function projectChatTranscript(input: {
   }
 
   return appendLiveTranscriptMessages({
+    activeThreadId,
     chatRunState: input.liveRun,
     pendingUserInput: input.pendingUserInput,
     persistedMessages,
@@ -806,33 +795,28 @@ export function projectChatTranscript(input: {
   });
 }
 
-export function buildChatTranscript(input: {
-  promotedThreadIds: Set<string>;
-  chatRunState: ChatRunState;
+/**
+ * 投影只读 run 状态的这几个字段，所以 memo 键由本模块给出，而不是让调用方手列。
+ * 新增字段忘列会静默不更新，故这份清单必须与 `appendLiveTranscriptMessages` 实际读取保持一致。
+ */
+export function readChatTranscriptMemoKey(input: {
+  events: TaskEvent[];
+  liveRun: ChatRunState | null;
   pendingUserInput: string | null;
-  persistedMessages?: TaskEvent[];
-  selectedThreadId: string | null;
-  taskSnapshot: TaskSnapshot;
-}): ChatTranscriptMessage[] {
-  const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
-  if (activeThreadId === null) {
-    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
-  }
-
-  const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;
-  if (input.promotedThreadIds.has(activeThreadId) && input.chatRunState.threadId !== activeThreadId) {
-    return projectChatTranscript({
-      events: persistedMessageEvents,
-      liveRun: null,
-      pendingUserInput: null,
-      threadId: activeThreadId
-    });
-  }
-
-  return projectChatTranscript({
-    events: persistedMessageEvents,
-    liveRun: input.chatRunState,
-    pendingUserInput: input.pendingUserInput,
-    threadId: input.selectedThreadId
-  });
+  threadId: string | null;
+}): readonly unknown[] {
+  const liveRun = input.liveRun;
+  return [
+    input.events,
+    liveRun === null ? null : liveRun.activityBlocks,
+    liveRun === null ? null : liveRun.assistantMessage,
+    liveRun === null ? null : liveRun.pendingInterrupts,
+    liveRun === null ? null : liveRun.runId,
+    liveRun === null ? null : liveRun.status,
+    liveRun === null ? null : liveRun.subagents,
+    liveRun === null ? null : liveRun.threadId,
+    input.pendingUserInput,
+    input.threadId
+  ];
 }
+

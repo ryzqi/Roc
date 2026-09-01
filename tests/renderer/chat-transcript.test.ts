@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskEvent, TaskSnapshot, TaskThread } from '../../src/shared/types';
-import { buildChatTranscript, projectChatTranscript } from '../../src/renderer/chat-transcript';
+import { projectChatTranscript, readChatTranscriptMemoKey } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -385,12 +385,11 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      events: snapshot.recentEvents,
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: null,
-      taskSnapshot: snapshot
+      threadId: null
     });
 
     expect(messages).toEqual([]);
@@ -423,9 +422,9 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: {
+    const messages = projectChatTranscript({
+      events: snapshot.recentEvents,
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -440,8 +439,7 @@ describe('chat transcript helpers', () => {
         ]
       },
       pendingUserInput: null,
-      selectedThreadId: null,
-      taskSnapshot: snapshot
+      threadId: null
     });
 
     expect(messages).toEqual([
@@ -540,12 +538,11 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      events: snapshot.recentEvents,
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: 'thread-subagent',
-      taskSnapshot: snapshot
+      threadId: 'thread-subagent'
     });
 
     expect(messages[1]?.blocks[0]).toMatchObject({
@@ -836,9 +833,9 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: {
+    const messages = projectChatTranscript({
+      events: snapshot.recentEvents,
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -853,8 +850,7 @@ describe('chat transcript helpers', () => {
         ]
       },
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot
+      threadId: 'thread-current'
     });
 
     expect(messages).toEqual([
@@ -897,13 +893,11 @@ describe('chat transcript helpers', () => {
       recentEvents: []
     });
 
-    const messages = buildChatTranscript({
-      promotedThreadIds: new Set(),
-      chatRunState: createIdleRunState(),
+    const messages = projectChatTranscript({
+      liveRun: createIdleRunState(),
       pendingUserInput: null,
-      selectedThreadId: 'thread-current',
-      taskSnapshot: snapshot,
-      persistedMessages: [
+      threadId: 'thread-current',
+      events: [
         {
           id: 'user-current',
           threadId: 'thread-current',
@@ -1266,4 +1260,64 @@ describe('chat transcript helpers', () => {
     });
   });
 
+  it('memo 键只含投影真正读取的字段，不含 mode/summary 等无关字段', () => {
+    const events: TaskEvent[] = [];
+    const liveRun = createIdleRunState();
+    const baseline = readChatTranscriptMemoKey({
+      events,
+      liveRun,
+      pendingUserInput: null,
+      threadId: 'thread-current'
+    });
+
+    // 投影不读这些字段，改它们不该让 memo 失效。
+    const unrelated = readChatTranscriptMemoKey({
+      events,
+      liveRun: {
+        ...liveRun,
+        mode: 'plan',
+        summary: '换了摘要',
+        durationMs: 42,
+        retryable: true,
+        resumeBusy: true,
+        todos: [{ content: '写测试', status: 'pending' }]
+      },
+      pendingUserInput: null,
+      threadId: 'thread-current'
+    });
+
+    expect(unrelated).toEqual(baseline);
+  });
+
+  it('投影读取的字段一变，memo 键就变', () => {
+    const events: TaskEvent[] = [];
+    const liveRun = createIdleRunState();
+    const readKey = (state: ChatRunState): readonly unknown[] =>
+      readChatTranscriptMemoKey({ events, liveRun: state, pendingUserInput: null, threadId: 'thread-current' });
+    const baseline = readKey(liveRun);
+
+    expect(readKey({ ...liveRun, assistantMessage: '新增输出' })).not.toEqual(baseline);
+    expect(readKey({ ...liveRun, status: 'running' })).not.toEqual(baseline);
+    expect(readKey({ ...liveRun, runId: 'run-1' })).not.toEqual(baseline);
+    expect(readKey({ ...liveRun, threadId: 'thread-other' })).not.toEqual(baseline);
+    expect(readKey({ ...liveRun, activityBlocks: [{ id: 'r-1', kind: 'reasoning', content: '推理' }] })).not.toEqual(baseline);
+  });
+
+  it('没有实时运行时 memo 键长度不变，否则 React 依赖数组长度会跨渲染变化', () => {
+    const events: TaskEvent[] = [];
+    const withLiveRun = readChatTranscriptMemoKey({
+      events,
+      liveRun: createIdleRunState(),
+      pendingUserInput: null,
+      threadId: 'thread-current'
+    });
+    const withoutLiveRun = readChatTranscriptMemoKey({
+      events,
+      liveRun: null,
+      pendingUserInput: null,
+      threadId: 'thread-current'
+    });
+
+    expect(withoutLiveRun).toHaveLength(withLiveRun.length);
+  });
 });

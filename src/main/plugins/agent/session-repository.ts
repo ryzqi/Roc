@@ -107,8 +107,6 @@ type TerminalFailureInput = {
   diagnostic?: RunFailure['diagnostic'];
   endedAt: string;
   error: string;
-  expectedStateVersion: number;
-  expectedStatus: TaskStatus;
   modelId: string;
   providerId: string;
   retryable: boolean;
@@ -445,27 +443,39 @@ export class AgentSessionRepository {
     }
   }
 
-  transitionRun(input: {
-    endedAt: string | null;
-    expectedStateVersion: number;
-    expectedStatus: TaskStatus;
-    runId: string;
-    status: TaskStatus;
-  }): { run: TaskRun; stateVersion: number } {
+  transitionRun(input: { endedAt: string | null; runId: string; status: TaskStatus }): TaskRun {
     return this.db.transaction(() =>
       this.transitionRunInTransaction({
-        ...input,
+        endedAt: input.endedAt,
+        expected: null,
+        runId: input.runId,
+        status: input.status,
         updatedAt: new Date().toISOString()
-      })
+      }).run
     )();
+  }
+
+  // 只有仍停在 dispatch_pending 的 run 才允许开跑：调度回调触发时 run 可能已被取消或已进入
+  // waiting_user（状态表允许 waiting_user → running，光靠转移表挡不住），此时返回 null 表示这次调度作废。
+  beginRunExecution(runId: string): TaskRun | null {
+    return this.db.transaction(() => {
+      if (this.readRunStatus(runId) !== 'dispatch_pending') {
+        return null;
+      }
+      return this.transitionRunInTransaction({
+        endedAt: null,
+        expected: null,
+        runId,
+        status: 'running',
+        updatedAt: new Date().toISOString()
+      }).run;
+    })();
   }
 
   completeRunAtomically(input: {
     assistantMessage: string;
     durationMs: number;
     endedAt: string;
-    expectedStateVersion: number;
-    expectedStatus: TaskStatus;
     modelId: string;
     providerId: string;
     runId: string;
@@ -473,12 +483,11 @@ export class AgentSessionRepository {
     summary: string;
     telemetry: AgentRunTelemetryV1;
     workspaceHash: string | null;
-  }): { event: TaskEvent; message: SessionMessageEntry; run: TaskRun; stateVersion: number } {
+  }): { event: TaskEvent; message: SessionMessageEntry; run: TaskRun } {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: input.endedAt,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: null,
         runId: input.runId,
         status: 'completed',
         updatedAt: input.endedAt
@@ -583,8 +592,7 @@ export class AgentSessionRepository {
       return {
         event,
         message,
-        run: transition.run,
-        stateVersion: transition.stateVersion
+        run: transition.run
       };
     })();
   }
@@ -592,7 +600,6 @@ export class AgentSessionRepository {
   failRunAtomically(input: Omit<TerminalFailureInput, 'status'> & { telemetry: AgentRunTelemetryV1 }): {
     event: TaskEvent;
     run: TaskRun;
-    stateVersion: number;
   } {
     return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'failed' }, input.telemetry))();
   }
@@ -600,7 +607,6 @@ export class AgentSessionRepository {
   interruptRunAtomically(input: Omit<TerminalFailureInput, 'status'> & { telemetry: AgentRunTelemetryV1 }): {
     event: TaskEvent;
     run: TaskRun;
-    stateVersion: number;
   } {
     return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'interrupted' }, input.telemetry))();
   }
@@ -658,8 +664,6 @@ export class AgentSessionRepository {
       ) {
         this.transitionRun({
           endedAt: null,
-          expectedStateVersion: candidate.state_version,
-          expectedStatus: candidate.status,
           runId: candidate.id,
           status: 'waiting_user'
         });
@@ -691,8 +695,6 @@ export class AgentSessionRepository {
         code: restartFailure.code,
         endedAt,
         error: restartFailure.message,
-        expectedStateVersion: candidate.state_version,
-        expectedStatus: candidate.status,
         modelId,
         providerId,
         retryable: restartFailure.retryable,
@@ -706,8 +708,6 @@ export class AgentSessionRepository {
   }
 
   markRunInterrupted(input: {
-    expectedStateVersion: number;
-    expectedStatus: TaskStatus;
     interrupts: readonly PendingInterrupt[];
     runId: string;
     telemetry: AgentRunTelemetryV1;
@@ -718,8 +718,7 @@ export class AgentSessionRepository {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: null,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: null,
         runId: input.runId,
         status: 'waiting_user',
         updatedAt: now
@@ -763,7 +762,54 @@ export class AgentSessionRepository {
     })();
   }
 
-  beginResumeDispatch(input: {
+  // resume 派发是两阶段的：先把 run 移出 waiting_user 占位，再等调用方把执行流真正开起来，
+  // 成功才提交 running 并消耗中断，失败必须退回 waiting_user 且保留中断。两阶段之间跨 await，
+  // 所以这里持有 stateVersion 作 CAS —— await 期间 run 若被别处推进（cancel 等），
+  // 提交与回滚都必须失败，光靠状态转移表挡不住（running → waiting_user 本身是合法转移）。
+  async dispatchResume<TStream>(input: {
+    audit: ResumeDispatchAudit;
+    interruptId: string;
+    openStream: (run: TaskRun) => Promise<TStream>;
+    runId: string;
+  }): Promise<{ event: TaskEvent; run: TaskRun; stream: TStream }> {
+    const dispatch = this.beginResumeDispatch({
+      expectedStateVersion: this.getRunTransitionState(input.runId).stateVersion,
+      expectedStatus: 'waiting_user',
+      interruptId: input.interruptId,
+      runId: input.runId
+    });
+    let stream: TStream;
+    try {
+      stream = await input.openStream(dispatch.run);
+    } catch (error) {
+      this.rollbackResumeDispatch({
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        runId: input.runId
+      });
+      throw error;
+    }
+    let resumed: { event: TaskEvent; run: TaskRun };
+    try {
+      resumed = this.commitResumeDispatch({
+        audit: input.audit,
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        interruptId: input.interruptId,
+        runId: input.runId
+      });
+    } catch (error) {
+      this.rollbackResumeDispatch({
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        runId: input.runId
+      });
+      throw error;
+    }
+    return { event: resumed.event, run: resumed.run, stream };
+  }
+
+  private beginResumeDispatch(input: {
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
     interruptId: string;
@@ -772,8 +818,7 @@ export class AgentSessionRepository {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: null,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: { stateVersion: input.expectedStateVersion, status: input.expectedStatus },
         runId: input.runId,
         status: 'dispatch_pending',
         updatedAt: new Date().toISOString()
@@ -789,19 +834,18 @@ export class AgentSessionRepository {
     })();
   }
 
-  commitResumeDispatch(input: {
+  private commitResumeDispatch(input: {
     audit: ResumeDispatchAudit;
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
     interruptId: string;
     runId: string;
-  }): { event: TaskEvent; run: TaskRun; stateVersion: number } {
+  }): { event: TaskEvent; run: TaskRun } {
     return this.db.transaction(() => {
       const createdAt = new Date().toISOString();
       const transition = this.transitionRunInTransaction({
         endedAt: null,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: { stateVersion: input.expectedStateVersion, status: input.expectedStatus },
         runId: input.runId,
         status: 'running',
         updatedAt: createdAt
@@ -846,13 +890,12 @@ export class AgentSessionRepository {
       this.insertEvent(event);
       return {
         event,
-        run: transition.run,
-        stateVersion: transition.stateVersion
+        run: transition.run
       };
     })();
   }
 
-  rollbackResumeDispatch(input: {
+  private rollbackResumeDispatch(input: {
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
     runId: string;
@@ -860,8 +903,7 @@ export class AgentSessionRepository {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: null,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: { stateVersion: input.expectedStateVersion, status: input.expectedStatus },
         runId: input.runId,
         status: 'waiting_user',
         updatedAt: new Date().toISOString()
@@ -875,16 +917,13 @@ export class AgentSessionRepository {
 
   cancelRunAtomically(input: {
     endedAt: string;
-    expectedStateVersion: number;
-    expectedStatus: TaskStatus;
     runId: string;
     telemetry: AgentRunTelemetryV1;
-  }): { event: TaskEvent; run: TaskRun; stateVersion: number } {
+  }): { event: TaskEvent; run: TaskRun } {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: input.endedAt,
-        expectedStateVersion: input.expectedStateVersion,
-        expectedStatus: input.expectedStatus,
+        expected: null,
         runId: input.runId,
         status: 'cancelled',
         updatedAt: input.endedAt
@@ -930,8 +969,7 @@ export class AgentSessionRepository {
         );
       return {
         event,
-        run: transition.run,
-        stateVersion: transition.stateVersion
+        run: transition.run
       };
     })();
   }
@@ -1034,19 +1072,41 @@ export class AgentSessionRepository {
     };
   }
 
-  listSessionMessages(input: { threadId: string; limit?: number }): SessionMessageEntry[] {
+  // 压缩摘要落库时归到 pre_compaction_flush，与用户可见消息分开：它是给下一轮模型读的上下文，
+  // 不是会话记录的一部分。listSessionMessages 按 phase 显式筛，所以"flush 是否进历史"是一个可测的决定。
+  recordPreCompactionFlush(input: {
+    content: string;
+    threadId: string;
+    tokenCount: number;
+    workspaceHash: string | null;
+  }): void {
+    this.recordSessionMessage({
+      content: requireNonEmpty(input.content, 'context_flush_content_empty'),
+      phase: 'pre_compaction_flush',
+      role: 'system',
+      threadId: requireNonEmpty(input.threadId, 'context_flush_thread_id_empty'),
+      tokenCount: input.tokenCount,
+      workspaceHash: input.workspaceHash
+    });
+  }
+
+  listSessionMessages(input: { threadId: string; limit?: number; phases?: readonly SessionMessagePhase[] }): SessionMessageEntry[] {
     const limit = input.limit === undefined ? 200 : input.limit;
+    const phases = input.phases === undefined ? (['visible'] as const satisfies readonly SessionMessagePhase[]) : input.phases;
+    if (phases.length === 0) {
+      throw new Error('session_message_phases_empty');
+    }
     const rows = this.db
       .prepare(
         `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
                 tt.title AS thread_title
          FROM session_messages sm
          LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
-         WHERE sm.thread_id = ?
+         WHERE sm.thread_id = ? AND sm.phase IN (${phases.map(() => '?').join(', ')})
          ORDER BY sm.created_at ASC, sm.id ASC
          LIMIT ?`
       )
-      .all(input.threadId, limit) as SessionMessageRow[];
+      .all(input.threadId, ...phases, limit) as SessionMessageRow[];
     return rows.map(mapSessionMessage);
   }
 
@@ -1186,10 +1246,19 @@ export class AgentSessionRepository {
     return row.next_sequence;
   }
 
+  private readRunStatus(runId: string): TaskStatus {
+    const row = this.db.prepare('SELECT status FROM agent_runs WHERE id = ?').get(runId) as { status: TaskStatus } | undefined;
+    if (row === undefined) {
+      throw new Error('task_run_not_found');
+    }
+    return row.status;
+  }
+
+  // expected 为 null 时在同一事务内自读当前状态作为 CAS 基线；只有跨 await 持有版本的调用方
+  // （resume 两阶段派发）才需要显式传入，用来拒绝"await 期间 run 已被别处推进"。
   private transitionRunInTransaction(input: {
     endedAt: string | null;
-    expectedStateVersion: number;
-    expectedStatus: TaskStatus;
+    expected: { stateVersion: number; status: TaskStatus } | null;
     runId: string;
     status: TaskStatus;
     updatedAt: string;
@@ -1200,7 +1269,7 @@ export class AgentSessionRepository {
     if (current === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (current.status !== input.expectedStatus || current.state_version !== input.expectedStateVersion) {
+    if (input.expected !== null && (current.status !== input.expected.status || current.state_version !== input.expected.stateVersion)) {
       throw createRunTransitionConflictError(input.runId);
     }
     if (!allowedRunTransitions[current.status].includes(input.status)) {
@@ -1213,7 +1282,7 @@ export class AgentSessionRepository {
          SET status = ?, ended_at = ?, state_version = ?
          WHERE id = ? AND status = ? AND state_version = ?`
       )
-      .run(input.status, input.endedAt, nextStateVersion, input.runId, input.expectedStatus, input.expectedStateVersion);
+      .run(input.status, input.endedAt, nextStateVersion, input.runId, current.status, current.state_version);
     if (update.changes !== 1) {
       throw createRunTransitionConflictError(input.runId);
     }
@@ -1235,12 +1304,10 @@ export class AgentSessionRepository {
   ): {
     event: TaskEvent;
     run: TaskRun;
-    stateVersion: number;
   } {
     const transition = this.transitionRunInTransaction({
       endedAt: input.endedAt,
-      expectedStateVersion: input.expectedStateVersion,
-      expectedStatus: input.expectedStatus,
+      expected: null,
       runId: input.runId,
       status: input.status,
       updatedAt: input.endedAt
@@ -1306,8 +1373,7 @@ export class AgentSessionRepository {
 
     return {
       event,
-      run: transition.run,
-      stateVersion: transition.stateVersion
+      run: transition.run
     };
   }
 
@@ -1373,8 +1439,6 @@ export class AgentSessionRepository {
           code,
           endedAt: now,
           error: `Run execution snapshot is unavailable: ${code}.`,
-          expectedStateVersion: row.state_version,
-          expectedStatus: row.status,
           modelId: requireNonEmpty(row.model_id, 'agent_run_model_missing'),
           providerId: requireNonEmpty(row.provider_id, 'agent_run_provider_missing'),
           retryable: false,

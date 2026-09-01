@@ -8,10 +8,11 @@ import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent } from '../../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
-import { runContextCompactionForTest } from '../../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
+import { runContextCompaction } from '../../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { ensureRocHarnessProfilesRegistered } from '../../../../../src/main/services/deep-agent/harness-profiles';
 import { markIterationOnMessage } from '../../../../../src/main/services/forge-guardrails';
 import { RocSqliteCheckpointer } from '../../../../../src/main/services/deep-agent/sqlite-checkpointer';
+import { createFakePreCompactionFlushRecorder } from './pre-compaction-flush-test-helpers';
 import {
   createDeepAgentTestSnapshot,
   getSubagentMiddleware,
@@ -94,8 +95,9 @@ describe('Deep Agents native summarization conformance', () => {
       const rocMessages = createFixedCorpus();
       const rocSummaryInputs: BaseMessage[][] = [];
       const rocSummaryOutputs: string[] = [];
-      await runContextCompactionForTest({
+      const rocCompacted = await runContextCompaction({
         artifactStore,
+        sessionHistory: createFakePreCompactionFlushRecorder(),
         budgetProfile: {
           contextWindowTokens: 1200,
           modelInputTokens: 500,
@@ -104,7 +106,7 @@ describe('Deep Agents native summarization conformance', () => {
           summaryInputTokens: 2000,
           safetyMarginTokens: 200
         },
-        countTokens: async (messages) => countTokensApproximately(messages),
+        countTokens: async (messages) => countTokensApproximately([...messages]),
         emitEvent: (event) => rocEvents.push(event.type),
         messages: rocMessages,
         mode: 'run',
@@ -133,7 +135,7 @@ describe('Deep Agents native summarization conformance', () => {
       });
 
       const nativeText = messageText(deliveredByNative);
-      const rocText = messageText(rocMessages);
+      const rocText = messageText(rocCompacted);
       expect(nativeAuditEvents).toEqual(['context_summary_started', 'context_summary_completed']);
       const completionOutcomes = [nativeDelivered.length === 1, rocEvents.includes('context_summary_completed')];
       expect(completionOutcomes.filter((completed) => completed)).toHaveLength(completionOutcomes.length);
@@ -153,7 +155,7 @@ describe('Deep Agents native summarization conformance', () => {
       expect(tokenComparison.rocInputTokens).toBeLessThan(tokenComparison.nativeInputTokens);
       expect(tokenComparison.nativeOutputTokens).toBeLessThan(tokenComparison.rocOutputTokens);
       expect(countTokensApproximately(deliveredByNative)).toBeLessThan(countTokensApproximately(nativeMessages));
-      expect(countTokensApproximately(rocMessages)).toBeLessThanOrEqual(500);
+      expect(countTokensApproximately(rocCompacted)).toBeLessThanOrEqual(500);
 
       const nativeArtifact = [...nativeWrites.values()].join('\n');
       expect(nativeArtifact).toContain('EVIDENCE=schema-v2');
@@ -192,7 +194,7 @@ describe('Deep Agents native summarization conformance', () => {
           v: 4,
           id: 'checkpoint_roc_conformance',
           ts: '2026-07-23T00:00:00.000Z',
-          channel_values: { messages: rocMessages },
+          channel_values: { messages: rocCompacted },
           channel_versions: { messages: 1 },
           versions_seen: {}
         },
@@ -261,6 +263,7 @@ describe('Deep Agents native summarization conformance', () => {
         checkpointer: undefined,
         contextCompaction: {
           artifactStore,
+          sessionHistory: createFakePreCompactionFlushRecorder(),
           budgetProfile: {
             contextWindowTokens: 1200,
             modelInputTokens: 500,

@@ -13,6 +13,7 @@ import { ContextArtifactStore } from '../../../../../src/main/services/deep-agen
 import { defaultErrorTracker } from '../../../../../src/main/services/forge-guardrails';
 import { RocSqliteCheckpointer } from '../../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { createDeepAgentTestSnapshot } from '../../../deep-agent-test-helpers';
+import { createFakePreCompactionFlushRecorder } from './pre-compaction-flush-test-helpers';
 
 class AnthropicFakeToolCallingModel extends FakeToolCallingModel {
   override getName(): string {
@@ -110,6 +111,7 @@ describe('Deep Agents native summarization route integration', () => {
         checkpointer: new RocSqliteCheckpointer(db),
         contextCompaction: {
           artifactStore: new ContextArtifactStore(db),
+          sessionHistory: createFakePreCompactionFlushRecorder(),
           budgetProfile: {
             contextWindowTokens: 1200,
             modelInputTokens: 500,
