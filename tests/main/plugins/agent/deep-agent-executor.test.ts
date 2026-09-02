@@ -80,7 +80,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).toEqual(expect.arrayContaining(['web_search', 'run_shell_command', 'propose_background_task']));
     expect(buildInput.skillSources).toEqual(['/skills/']);
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=exa-hosted;skills=deep-review;');
-    expect(buildInput.systemPrompt).toContain('本轮后台任务继承当前主聊天已启用的 MCP 和 skills');
+    expect(buildInput.systemPrompt).toContain('任务继承当前聊天已启用的 MCP/skills');
     expect(capabilityCalls.map((call) => call.name)).toEqual(['mcp.tools.get']);
   });
 
@@ -126,7 +126,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('<id>python-expert</id>');
     expect(buildInput.systemPrompt).toContain('<name>python-expert</name>');
     expect(buildInput.systemPrompt).toContain('/skills/python-expert/SKILL.md');
-    expect(buildInput.systemPrompt).toContain('Read the SKILL.md file through the /skills/ route before applying it.');
+    expect(buildInput.systemPrompt).toContain('Read SKILL.md through /skills/ before applying it.');
     expect(buildInput.systemPrompt).not.toContain('# Python Expert');
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=none;skills=typescript;');
     expect(buildInput.systemPrompt).not.toContain('<name>typescript</name>');

@@ -36,15 +36,12 @@ export const BACKGROUND_TASK_PROPOSE_EXAMPLE = {
 } as const satisfies Omit<BackgroundTaskPreviewRequest, 'failurePolicy' | 'enabledCapabilities'>;
 
 export const PROPOSE_TOOL_DESCRIPTION = [
-  '为后台或定时任务生成 preview（草稿），但不实际创建。',
-  '模型只填写 goal 和 trigger；workspacePath 由 runtime 注入。',
-  '不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy。',
-  'trigger.type 只能是 manual、once 或 cron。',
-  'trigger.description 可省略；runtime 会补齐展示说明。',
-  'cron trigger 使用五段 cronExpression 和 UTC ISO nextRunAt。',
-  '缺少明确时间时不要改用 manual；应请求澄清。',
-  '只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。',
-  '本工具返回 previewId 与 preview 内容；要实际创建任务，必须随后调用 schedule_background_task(previewId)。'
+  '生成后台任务 preview，不实际创建。',
+  '只填写 goal 和 trigger；workspacePath 与策略字段由 runtime 注入。',
+  'trigger.type 为 manual、once 或 cron；description 可省略。',
+  'cron 使用五段 cronExpression 和 UTC ISO nextRunAt。',
+  '时间不明确时请求澄清，不要改用 manual；manual 仅用于用户明确要求手动执行。',
+  '返回 previewId；要创建任务，随后调用 schedule_background_task(previewId)。'
 ].join('\n');
 
 const exampleKeys = Object.keys(BACKGROUND_TASK_PROPOSE_EXAMPLE).sort();

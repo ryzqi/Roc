@@ -33,7 +33,7 @@ export function createContextArtifactReadTool(input: {
   >({
     name: 'read_context_artifact',
     description:
-      'Read one bounded slice of a Roc context artifact from the current thread and workspace. Requires the artifactId and sha256 from the artifact reference.',
+      'Read a bounded slice of a context artifact in the current thread/workspace. Requires artifactId and sha256 from its reference.',
     schema: contextArtifactReadSchema,
     func: async (request) => {
       const artifact = input.artifactStore.readArtifact({

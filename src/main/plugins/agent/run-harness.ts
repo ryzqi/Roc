@@ -543,7 +543,7 @@ function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicSt
   const schema = webReadToolSchema;
   return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
     name: 'web_read',
-    description: '读取公开网页正文，返回来源、Jina 代理、抓取时间、内容哈希、不可信标记与正文。',
+    description: '读取公开网页正文，返回来源、抓取时间、哈希、不可信标记和正文。',
     schema,
     func: async (request, _runManager, config) => {
       const result = await capabilities.invoke<WebReadExecutionRequest, WebReadResult>('web.read', {
@@ -573,7 +573,7 @@ function createSelfConfigTool(input: {
   return new DynamicStructuredTool<typeof schema, SelfConfigToolRequest, SelfConfigToolRequest, string>({
     name: 'roc_self_config',
     description:
-      '只读自省 Roc 自身配置：describe 返回 ~/.roc 路径表、hooks.json JSON Schema、事件与 action 矩阵、hook 运行契约；read 返回当前 hooks.json 快照（含 trustState）与脱敏后的 settings；validate 校验一份 hooks 配置并给出格式修正提示（不落盘）；dry_run 试跑 hooks.json 里已存在的某条 handler（需 handlerId，会先弹宿主确认）并返回 stdout / stderr / 退出码。配置落盘与信任必须由用户在设置页完成。',
+      '只读检查 Roc 配置：describe 返回路径、schema、事件和契约；read 返回 hooks 快照与脱敏 settings；validate 校验配置但不落盘；dry_run 试跑现有 handler（需确认）。配置保存与信任在设置页完成。',
     schema,
     func: async (request) => {
       const result = await executeSelfConfigAction({ ...input, request });
@@ -640,7 +640,7 @@ function createDeleteFileTool(capabilities: RocCapabilityRegistry): StringDynami
   });
   return new DynamicStructuredTool<typeof schema, { file_path: string }, { file_path: string }, string>({
     name: 'delete_file',
-    description: '删除 /workspace/... 下的文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
+    description: '删除 /workspace/... 下的文件或空目录；先写恢复点，仅在确需删除时使用。',
     schema,
     func: async (request) => {
       const relativePath = toWorkspaceRelativePath(request.file_path);

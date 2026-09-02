@@ -41,7 +41,7 @@ export function createMemorySearchTool(input: {
   return new DynamicStructuredTool<typeof memorySearchSchema, MemorySearchToolInput, MemorySearchToolInput, string>({
     name: 'memory_search',
     description:
-      'Search stored memory entries (USER.md, AGENTS.md, MEMORY.md, and topic files) for a fact, preference, or decision. Use this before guessing a memory file path.',
+      'Search USER.md, AGENTS.md, MEMORY.md, and topic files for durable facts, preferences, or decisions. Use before guessing a path.',
     schema: memorySearchSchema,
     func: async (args) => {
       const normalizedQuery = args.query.trim();
@@ -76,10 +76,10 @@ export function createRememberTool(input: {
   return new DynamicStructuredTool<typeof rememberSchema, RememberToolInput, RememberToolInput, string>({
     name: 'remember',
     description: [
-      'Store one durable fact in memory. Roc validates the entry, drops duplicates, supersedes an older value for the same key, and reports the target file.',
-      'type=user_preference requires confidence=high and evidence quoting the user (for example "user stated: I prefer Python"); it lands in /memory/global/USER.md.',
-      'Every other type lands in the scoped MEMORY.md. Do not store transient task results.',
-      'key is a stable slug (lowercase letters, digits, dots, colons, hyphens) so a later value can supersede this one.'
+      'Store one durable fact. Roc validates, deduplicates, supersedes by key, and reports the target file.',
+      'user_preference requires confidence=high plus quoted user evidence; it goes to /memory/global/USER.md.',
+      'Other types go to scoped MEMORY.md. Do not store transient results.',
+      'key is a stable lowercase slug using letters, digits, dots, colons, or hyphens.'
     ].join('\n'),
     schema: rememberSchema,
     func: async (args) => {

@@ -24,7 +24,7 @@ export function createSessionSearchTool(input: {
   return new DynamicStructuredTool<typeof sessionSearchSchema, SessionSearchToolInput, SessionSearchToolInput, string>({
     name: 'session_search',
     description:
-      'Search compact snippets from past Roc conversations. Use scope=current for this workspace, or scope=all for all visible history.',
+      'Search snippets from past Roc conversations. Use scope=current for this workspace or scope=all for visible history.',
     schema: sessionSearchSchema,
     func: async (args) => {
       const normalizedQuery = args.query.trim();

@@ -20,9 +20,9 @@ export function createAskUserTool(): DynamicStructuredTool<typeof askUserSchema,
   return new DynamicStructuredTool<typeof askUserSchema, AskUserInput, AskUserInput, string>({
     name: 'ask_user',
     description: [
-      'Pause the current run and ask the user one concise clarification question.',
-      'Use when a user preference, scope decision, path choice, or other clarification would improve the result.',
-      'Do not use for tool approval; approval is handled by HITL interruptOn.'
+      'Pause and ask one concise clarification question.',
+      'Use for a missing preference, scope, path, or other decision.',
+      'Do not use for tool approval; HITL handles approval.'
     ].join('\n'),
     schema: askUserSchema,
     func: async (request) => {

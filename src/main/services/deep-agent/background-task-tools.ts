@@ -102,9 +102,9 @@ const scheduleInputSchema = z.strictObject({
 });
 
 const SCHEDULE_TOOL_DESCRIPTION = [
-  '把 propose_background_task 返回的 preview 实际落地为后台任务并加入调度。',
-  '必须先调用过 propose_background_task 拿到 previewId。',
-  '本工具会创建任务、注册调度器，并返回真实 taskId。'
+  '将 propose_background_task 的 preview 落地并加入调度。',
+  '必须先取得 previewId。',
+  '返回真实 taskId。'
 ].join('\n');
 
 type BackgroundTaskToolDependencies = {
@@ -158,7 +158,7 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
     }),
     new DynamicStructuredTool<typeof readInputSchema, z.infer<typeof readInputSchema>, z.infer<typeof readInputSchema>, string>({
       name: 'read_background_task',
-      description: '读取已有后台任务定义、状态和最近运行信息。',
+      description: '读取后台任务定义、状态和最近运行信息。',
       schema: readInputSchema,
       func: async (rawInput) => JSON.stringify(await readBackgroundTask(input, rawInput), null, 2)
     })
@@ -167,13 +167,13 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
     creationTools[2],
     new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
       name: 'update_background_task',
-      description: '修改已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
+      description: '修改后台任务；执行前由 HITL 审批。',
       schema: updateInputSchema,
       func: async (rawInput) => JSON.stringify(await updateBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
       name: 'cancel_background_task',
-      description: '取消已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
+      description: '取消后台任务；执行前由 HITL 审批。',
       schema: cancelInputSchema,
       func: async (rawInput) => JSON.stringify(await cancelBackgroundTask(input, rawInput), null, 2)
     })

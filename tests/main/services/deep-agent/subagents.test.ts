@@ -19,8 +19,8 @@ describe('deep agent runtime subagents', () => {
     const research = subagents.find((subagent) => subagent.name === 'research');
 
     expect(subagents.map((subagent) => subagent.name)).toEqual(['research']);
-    expect(readSystemPrompt(research)).toContain('优先使用 web_read 读取来源原文');
-    expect(readSystemPrompt(research)).toContain('区分外部事实和你的判断');
+    expect(readSystemPrompt(research)).toContain('优先用 web_read 读取原文');
+    expect(readSystemPrompt(research)).toContain('区分外部事实与判断');
   });
 
   it('accepts DeepAgents AsyncSubAgent definitions', () => {

@@ -94,10 +94,10 @@ describe('Roc DeepAgents file-tool contract', () => {
 
   it('keeps prompt guidance aligned with the runtime contract', () => {
     expect(ROC_FILE_TOOL_PROMPT_LINES).toEqual([
-      'DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.',
-      'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
-      'write_file creates new files or fully replaces existing files. Use edit_file for targeted changes to existing files.',
-      'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.'
+      'File tools accept only Roc routes: /workspace/, /memory/, /skills/.',
+      'Memory files use /memory/.../AGENTS.md and related routes.',
+      'write_file creates or replaces a file; use edit_file for targeted changes.',
+      'Do not pass Windows absolute or Linux paths to file tools.'
     ]);
   });
 });

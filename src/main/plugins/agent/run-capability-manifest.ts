@@ -407,7 +407,7 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
         id: 'mcp:exa-hosted:web_search',
         name: 'web_search',
         capabilityType: 'mcp_tool',
-        description: '搜索公开网络信息，返回可继续阅读和核实的结果列表。',
+        description: '搜索公开网络，返回可阅读和核实的结果。',
         requiredInput: 'query',
         scope: 'external',
         dependencies: [server.id],
@@ -432,7 +432,7 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
       id: `mcp:${server.id}:${toolName}`,
       name: toolName,
       capabilityType: 'mcp_tool',
-      description: `${server.name} 提供的 ${toolName} 调用入口。`,
+      description: `${server.name} 的 ${toolName} 调用入口。`,
       requiredInput: 'tool-specific structured input',
       scope: 'external',
       dependencies: [server.id],
@@ -472,7 +472,7 @@ function createSubagents(manifest: RunCapabilityManifestV1): AgentSubagentPrevie
     {
       id: 'general-purpose',
       name: 'general-purpose',
-      purpose: '处理可委派的通用子任务，并继承本轮允许的工具和 Skill。',
+      purpose: '处理可委派子任务，继承本轮允许的工具和 Skill。',
       skills: manifest.skills.map((skill) => skill.canonicalIdentity),
       tools: manifest.tools
         .filter((tool) => tool.executionScopes.includes('subagent'))
@@ -481,7 +481,7 @@ function createSubagents(manifest: RunCapabilityManifestV1): AgentSubagentPrevie
     {
       id: 'research',
       name: '资料检索子任务',
-      purpose: '围绕网页阅读整理外部资料结论，并明确来源边界。',
+      purpose: '阅读网页并整理带来源的外部结论。',
       skills: [],
       tools: ['web_read']
     }
@@ -493,7 +493,7 @@ function createWebReadCard(): AgentCapabilityCard {
     id: 'web:web_read',
     name: 'web_read',
     capabilityType: 'web_read',
-    description: '读取公开网页正文；目标 URL 会发送给 Jina Reader 代理，结果带来源、抓取时间、SHA-256 和不可信标记。',
+    description: '读取公开网页正文；返回来源、抓取时间、SHA-256 和不可信标记。',
     requiredInput: 'url',
     scope: 'network',
     dependencies: ['explicit_url'],
@@ -513,7 +513,7 @@ function createSelfConfigCard(): AgentCapabilityCard {
     name: 'roc_self_config',
     capabilityType: 'terminal_tool',
     description:
-      '只读自省 Roc 自身配置：返回 ~/.roc 路径表、hooks.json schema 与运行契约、当前 hooks 快照与脱敏 settings，校验待保存的 hooks 配置，并可试跑 hooks.json 里已存在的某条 handler（试跑前单独弹宿主确认）。不写任何配置文件。',
+      '只读检查 Roc 配置：返回路径、hooks schema/契约、当前快照与脱敏 settings；可校验配置或在确认后试跑现有 handler。不写配置。',
     requiredInput: "action: describe | read | validate | dry_run（validate 需 config，dry_run 需 handlerId）",
     scope: 'app',
     dependencies: ['SelfConfigService', 'HookConfigService', 'HookCommandRunner'],
@@ -532,7 +532,7 @@ function createRunShellCommandCard(): AgentCapabilityCard {
     id: 'builtin:run_shell_command',
     name: 'run_shell_command',
     capabilityType: 'terminal_tool',
-    description: '以当前 Windows 用户权限执行宿主机 PowerShell 命令，由 Roc 的 RTK、审计、取消与输出限制统一包裹。',
+    description: '以当前 Windows 用户权限执行 PowerShell；由 Roc 统一处理 RTK、审计、取消和输出限制。',
     requiredInput: 'PowerShell command',
     scope: 'external',
     dependencies: ['ShellExecutionService', 'RtkService'],
@@ -551,7 +551,7 @@ function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
     id: 'builtin:delete_file',
     name: 'delete_file',
     capabilityType: 'terminal_tool',
-    description: '删除当前工作区内的文件或空目录，并在删除前写入恢复点。',
+    description: '删除当前工作区文件或空目录；删除前写入恢复点。',
     requiredInput: 'file_path: /workspace/...',
     scope: 'workspace',
     dependencies: ['FileService'],

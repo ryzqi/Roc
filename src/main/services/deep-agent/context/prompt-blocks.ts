@@ -91,10 +91,9 @@ export function buildPromptBlocks(input: {
 
 function buildStaticPrompt(mode: RunExecutionSnapshotV2['mode']): string {
   return [
-    'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
-    'Before changing files, inspect the relevant source, tests, and configuration.',
-    'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
-    'For code or configuration changes, run direct verification before claiming completion.',
+    'You are Roc, a Windows coding agent. Be concise; claim only inspected evidence.',
+    'Inspect relevant source, tests, and config before edits. Keep changes scoped to the request.',
+    'Run direct verification after code or config changes. Report results and blockers plainly.',
     '',
     'Memory files available to the agent:',
     '  /memory/global/USER.md      — user identity, preferences, comm style (global only; there is no workspace USER.md)',
@@ -104,24 +103,23 @@ function buildStaticPrompt(mode: RunExecutionSnapshotV2['mode']): string {
     '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts plus the index of workspace topic files',
     '  /memory/global/topics/<slug>.md and /memory/workspaces/current/topics/<slug>.md — topic detail files',
     '',
-    'Those five files are already injected into this prompt when non-empty; do not spend read_file calls guessing their paths.',
-    'Topic files are never injected. Read one only when an index line in MEMORY.md matches the current task.',
-    'When the injected memory does not answer the question, call memory_search before guessing a memory path.',
+    'The five files above are injected when non-empty; do not probe their paths with read_file.',
+    'Topic files are not injected. Read one only when its MEMORY.md index matches this task.',
+    'If injected memory is insufficient, call memory_search before guessing a path.',
     // Plan Mode 不绑定 remember / write_file / edit_file，因此不给出记忆写入指令：
     // 提示模型使用未绑定的工具会诱发工具名幻觉，而未知工具名要多消耗一轮才能自纠。
     ...(mode === 'plan' ? [] : buildMemoryWritePromptLines()),
     '',
-    'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
+    'Read SKILL.md silently; never quote, paraphrase, or summarize it.'
   ].join('\n');
 }
 
 function buildMemoryWritePromptLines(): string[] {
   return [
-    'Use the remember tool to store a durable fact; it validates the entry, drops duplicates, and reports the target file.',
-    'remember routes high-confidence direct user preferences to USER.md and every other accepted fact to the scoped MEMORY.md.',
-    'Use edit_file/write_file on memory paths for manual restructuring: consolidating entries, moving detail into a topic file, or correcting wrong content.',
-    'On capacity overflow, read the file, then either merge redundant entries via edit_file or move detail into a topic file and leave one index line behind.',
-    'AGENTS.md changes only through explicit file edits.'
+    'Use remember for one durable fact. It validates, deduplicates, and reports the target file.',
+    'High-confidence user preferences go to USER.md; other accepted facts go to scoped MEMORY.md.',
+    'Use edit_file/write_file for memory restructuring or corrections. On capacity overflow, merge entries or move detail to a topic file and keep one index line.',
+    'Change AGENTS.md only through explicit file edits.'
   ];
 }
 
@@ -130,37 +128,35 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSn
     if (mode === 'plan') {
       return [
         'Workspace: not selected.',
-        'Plan Mode file inspection is unavailable until the user selects a workspace.'
+        'File inspection is unavailable until the user selects a workspace.'
       ].join('\n');
     }
     return [
       'Workspace: not selected.',
-      'Default command cwd: unavailable; ask user to select workspace before local command operations.'
+      'Command cwd unavailable. Ask the user to select a workspace before local commands.'
     ].join('\n');
   }
   if (mode === 'plan') {
     return [
       `Workspace: ${workspacePath}`,
-      'Plan Mode blocks local mutation, execution, and task-commit tools while keeping read, search, and selected MCP tools available under MCP authorization policy.',
-      'Local file inspection uses Roc virtual routes: /workspace/, /memory/, and /skills/.',
-      'Use ls, read_file, glob, and grep for local inspection in Plan Mode.',
-      'Use web_read for public web pages and web_search for current public search.',
-      'Use selected MCP tools when the enabled MCP configuration provides relevant context or search capabilities.',
-      'Use ask_user only for concise clarifying questions when needed.'
+      'Plan Mode is read-only: no local mutation, execution, or task commits. Read/search and authorized MCP remain available.',
+      'Use Roc virtual routes /workspace/, /memory/, and /skills/ for local inspection.',
+      'Use ls, read_file, glob, grep, web_read, web_search, and authorized MCP tools as applicable.',
+      'Use ask_user only for a concise clarification.'
     ].join('\n');
   }
   return [
     `Workspace: ${workspacePath}`,
     ...ROC_FILE_TOOL_PROMPT_LINES,
     ...ROC_SHELL_TOOL_DESCRIPTION_LINES,
-    'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
+    'After write_file/edit_file, verify with read_file or ls before reporting the change.'
   ].join('\n');
 }
 
 function buildToolsPrompt(tools: readonly PromptToolDescriptor[]): string {
   if (tools.length === 0) {
     return [
-      'Available Tools: provided by runtime tool schema.',
+      'Available tools are defined by the runtime schema.',
       '',
       buildHumanClarificationPrompt()
     ].join('\n');
@@ -177,11 +173,9 @@ function formatToolDescriptor(tool: PromptToolDescriptor): string {
 
 function buildHumanClarificationPrompt(): string {
   return [
-    'Human clarification:',
-    '- You may call ask_user when a user preference, scope decision, path choice, or clarification would improve the result.',
-    '- Ask one clear question at a time.',
-    '- Avoid fragmented repeated questions; gather enough context first when possible.',
-    '- Do not use ask_user for approval of tool calls.'
+    'Clarification:',
+    '- Call ask_user for a missing preference, scope, path, or other decision.',
+    '- Ask one clear question; do not use it for tool approval.'
   ].join('\n');
 }
 
@@ -199,21 +193,20 @@ function buildSelfConfigPrompt(): string {
 function buildContextRecallPrompt(workspacePath: string | null): string {
   const defaultScope = workspacePath === null ? 'all' : 'current';
   return [
-    'Recall tools (0 token cost until called):',
-    '- memory_search(query) searches stored memory entries and topic files. Use it for durable facts: preferences, decisions, pitfalls, project conventions.',
-    '- session_search(query) searches past conversation transcripts. Use it for what was said or done in an earlier run.',
-    'When the task depends on an earlier decision or a stated preference, call memory_search first and session_search only if memory has no entry.',
+    'Recall tools (no cost until called):',
+    '- memory_search(query) finds durable facts, preferences, decisions, pitfalls, and project conventions.',
+    '- session_search(query) finds prior conversation snippets.',
+    'For earlier decisions or preferences, call memory_search first; use session_search only if it has no entry.',
     `Default session_search scope: ${defaultScope}.`,
-    'Use scope=all only when the user asks for cross-workspace history or current scoped recall is insufficient.',
-    'Session search returns snippets, not full transcript content.'
+    'Use scope=all only for cross-workspace history or insufficient current scope.',
+    'Results are snippets, not full transcripts.'
   ].join('\n');
 }
 
 function buildPlanModePrompt(): string {
   return [
-    'Plan Mode: research, ask concise clarifying questions when needed, and do not implement changes.',
-    'When the plan is complete, output exactly one final proposed plan block.',
-    'Use this exact wrapper:',
+    'Plan Mode: research and clarify; do not implement changes.',
+    'When complete, output exactly one block using this wrapper:',
     '<proposed_plan>',
     '# Title',
     '- Implementation steps',
@@ -232,7 +225,7 @@ function buildExplicitSkillsPrompt(skills: readonly ExplicitSkillPromptContext[]
         `<id>${skill.id}</id>`,
         `<name>${skill.name}</name>`,
         `<path>${skill.path}</path>`,
-        'Read the SKILL.md file through the /skills/ route before applying it.',
+        'Read SKILL.md through /skills/ before applying it.',
         '</skill>'
       ].join('\n')
     ),
@@ -246,7 +239,7 @@ function buildReferencedFilesPrompt(files: readonly ReferencedFilePromptContext[
     '<referenced_files>',
     ...files.map((file) => `<path>${file.path}</path>`),
     '</referenced_files>',
-    'Read them through the /workspace/ route before answering; the user pointed at them deliberately.'
+    'Read them through /workspace/ before answering.'
   ].join('\n');
 }
 

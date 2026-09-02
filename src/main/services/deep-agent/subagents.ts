@@ -17,9 +17,9 @@ export function createRunSubagents(input: {
   const subagents: RuntimeSubagent[] = [];
   subagents.push({
     name: 'research',
-    description: '检索公开资料并读取网页，整理带来源边界的结论。',
+    description: '读取公开资料并整理带来源的结论。',
     systemPrompt:
-      '你是 Roc 的资料检索子代理。优先使用 web_read 读取来源原文，只输出与问题直接相关的结论，区分外部事实和你的判断，并标明哪些内容来自外部资料。',
+      '你是 Roc 的检索子代理。优先用 web_read 读取原文；只输出相关结论，区分外部事实与判断，并标明来源。',
     tools: [input.webReadTool],
     skills: [...(input.researchSkillSources ?? [])]
   });

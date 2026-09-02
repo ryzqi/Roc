@@ -73,7 +73,7 @@ export function createResolveBackgroundTaskTimeTool(
     description: [
       '解析后台任务的自然语言触发时间。',
       '先调用本工具，再用返回的 trigger 调用 propose_background_task。',
-      '本工具不创建任务，只返回 manual / once / cron trigger 候选或澄清问题。'
+      '不创建任务；仅返回 manual/once/cron trigger 或澄清问题。'
     ].join('\n'),
     schema: timeToolInputSchema,
     func: async (rawInput) => {
