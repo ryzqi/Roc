@@ -3,7 +3,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatTranscriptPanel } from '../../src/renderer/chat/chat-transcript-panel';
+import { buildTranscriptVirtuosoWindow, ChatTranscriptPanel } from '../../src/renderer/chat/chat-transcript-panel';
 import type { ChatTranscriptMessage } from '../../src/renderer/chat-transcript';
 
 const virtuosoHarness = vi.hoisted(() => ({
@@ -35,6 +35,8 @@ vi.mock('react-virtuoso', async () => {
     }, []);
     const data = props.data as ChatTranscriptMessage[];
     const itemContent = props.itemContent as (index: number, message: ChatTranscriptMessage) => React.ReactNode;
+    const initialItemCount = typeof props.initialItemCount === 'number' ? props.initialItemCount : data.length;
+    const visible = data.slice(Math.max(0, data.length - initialItemCount));
     return ReactModule.createElement(
       'div',
       {
@@ -43,7 +45,7 @@ vi.mock('react-virtuoso', async () => {
         'data-testid': props['data-testid'],
         'data-message-count': props['data-message-count']
       },
-      data.map((message, index) => ReactModule.createElement(ReactModule.Fragment, { key: message.key }, itemContent(index, message)))
+      visible.map((message, index) => ReactModule.createElement(ReactModule.Fragment, { key: message.key }, itemContent(index, message)))
     );
   });
   return { Virtuoso };
@@ -205,6 +207,65 @@ describe('chat transcript panel', () => {
     expect(virtuosoHarness.mountCount).toBe(1);
     expect(virtuosoHarness.unmountCount).toBe(0);
     expect((updatedProps.computeItemKey as (index: number, message: ChatTranscriptMessage) => string)(0, createMessage('assistant-visible', '更新内容'))).toBe('assistant-visible');
+  });
+
+  it('starts a short history at the latest message instead of freezing the painted row count', () => {
+    expect(buildTranscriptVirtuosoWindow({ firstItemIndex: 1_000_000, messageCount: 6 })).toEqual({
+      firstItemIndex: 1_000_000,
+      initialTopMostItemIndex: 1_000_005
+    });
+    expect(buildTranscriptVirtuosoWindow({ firstItemIndex: 1_000_000, messageCount: 0 })).toEqual({
+      firstItemIndex: 1_000_000
+    });
+  });
+
+  it('keeps every persisted message when switching to a short history thread', async () => {
+    const firstThread = [
+      createMessage('assistant-live', '当前会话')
+    ];
+    const historyThread = [
+      createUserMessage('user-history-1', '历史问题一'),
+      createMessage('assistant-history-1', '历史回答一'),
+      createUserMessage('user-history-2', '历史问题二'),
+      createMessage('assistant-history-2', '历史回答二'),
+      createUserMessage('user-history-3', '历史问题三'),
+      createMessage('assistant-history-3', '历史回答三')
+    ];
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: firstThread,
+          threadId: 'thread-live',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: historyThread,
+          threadId: 'thread-history',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await waitForText(container, '历史回答三');
+
+    expect(container.querySelectorAll('[data-testid^="chat-message-"]').length).toBe(6);
+    expect(container.textContent).toContain('历史问题一');
+    expect(container.textContent).toContain('历史回答一');
+    expect(readVirtuosoProps().initialItemCount).toBeUndefined();
+    expect(readVirtuosoProps().initialTopMostItemIndex).toBe(1_000_005);
   });
 
   it('resets the virtual list when the selected thread changes', async () => {
@@ -394,6 +455,14 @@ function createMessage(key: string, content: string): ChatTranscriptMessage {
     blocks: [],
     interrupts: [],
     isStreaming: true
+  };
+}
+
+function createUserMessage(key: string, content: string): ChatTranscriptMessage {
+  return {
+    ...createMessage(key, content),
+    role: 'user',
+    isStreaming: false
   };
 }
 

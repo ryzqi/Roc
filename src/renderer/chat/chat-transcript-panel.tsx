@@ -36,6 +36,24 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+export type TranscriptVirtuosoWindow = {
+  firstItemIndex: number;
+  initialTopMostItemIndex?: number;
+};
+
+export function buildTranscriptVirtuosoWindow(input: {
+  firstItemIndex: number;
+  messageCount: number;
+}): TranscriptVirtuosoWindow {
+  if (input.messageCount === 0) {
+    return { firstItemIndex: input.firstItemIndex };
+  }
+  return {
+    firstItemIndex: input.firstItemIndex,
+    initialTopMostItemIndex: input.firstItemIndex + input.messageCount - 1
+  };
+}
+
 export function ChatTranscriptPanel({
   threadId,
   messages,
@@ -78,10 +96,10 @@ export function ChatTranscriptPanel({
         customScrollParent={scrollParent === null ? undefined : scrollParent}
         alignToBottom
         data={messages}
-        {...(messages.length > 20
-          ? { initialTopMostItemIndex: virtualIndex + messages.length - 1 }
-          : { initialItemCount: messages.length })}
-        firstItemIndex={virtualIndex}
+        {...buildTranscriptVirtuosoWindow({
+          firstItemIndex: virtualIndex,
+          messageCount: messages.length
+        })}
         computeItemKey={(_index, message) => message.key}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
