@@ -40,7 +40,7 @@ export function toRunFailure(error: unknown): RunFailure {
     return {
       code: 'chat_run_cancelled',
       message: '当前运行已取消。',
-      retryable: true
+      retryable: false
     };
   }
   if (classification.kind === 'http') {
@@ -65,16 +65,30 @@ export function toRunFailure(error: unknown): RunFailure {
         retryable: true
       };
     }
+    if (classification.kind === 'stream_idle') {
+      return {
+        code: 'provider_stream_idle',
+        message: 'Provider 流在限定时间内没有返回新数据，已中止当前模型请求。',
+        retryable: true
+      };
+    }
+    if (classification.kind === 'stream_terminated') {
+      return {
+        code: 'provider_stream_terminated',
+        message: 'Provider 在模型流完成前终止了请求。',
+        retryable: true
+      };
+    }
     return {
       code: 'provider_execution_failed',
       message: redact(error.message),
-      retryable: true
+      retryable: false
     };
   }
   return {
     code: 'provider_execution_failed',
     message: 'Provider 执行失败。',
-    retryable: true
+    retryable: false
   };
 }
 

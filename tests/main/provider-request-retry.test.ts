@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 import { RocDomainError } from '../../src/main/services/errors';
-import { executeWithProviderRequestRetry } from '../../src/main/services/provider-request-retry';
+import {
+  classifyProviderRequestFailure,
+  executeWithProviderRequestRetry,
+  ProviderStreamIdleError,
+  ProviderStreamTerminatedError
+} from '../../src/main/services/provider-request-retry';
 
 let services: ProviderTestServices;
 
@@ -39,6 +44,14 @@ afterEach(async () => {
 });
 
 describe('Provider request retry behavior', () => {
+  it('classifies terminated and idle stream failures separately from unknown errors', () => {
+    expect(classifyProviderRequestFailure(new ProviderStreamTerminatedError())).toEqual({ kind: 'stream_terminated' });
+    expect(classifyProviderRequestFailure(new ProviderStreamIdleError())).toEqual({ kind: 'stream_idle' });
+    expect(classifyProviderRequestFailure(new Error('terminated'))).toEqual({ kind: 'other' });
+    expect(classifyProviderRequestFailure(new Error('provider_stream_terminated'))).toEqual({ kind: 'other' });
+    expect(classifyProviderRequestFailure(new Error('provider_unavailable'))).toEqual({ kind: 'other' });
+  });
+
   it('retries timeout failures up to three times before returning the final error', async () => {
     vi.useFakeTimers();
     const transport = vi.fn(() => {

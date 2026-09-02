@@ -94,6 +94,18 @@ describe('shared agent contracts', () => {
     };
 
     expect(chatRunEventSchema.parse(event)).toEqual(event);
+    expect(
+      chatRunEventSchema.parse({
+        type: 'run_recovering',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        code: 'provider_stream_terminated',
+        message: 'Provider 在模型流完成前终止了请求。',
+        attempt: 1,
+        nextRetryAt: '2026-08-18T00:00:01.000Z',
+        resetOutput: true
+      })
+    ).toMatchObject({ resetOutput: true });
     expect(chatRunEventsReplayResultSchema.parse(replay)).toEqual(replay);
     expect(
       chatRunEventsReplayResultSchema.safeParse({

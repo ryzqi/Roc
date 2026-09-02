@@ -888,11 +888,6 @@ describe('chat transcript helpers', () => {
 
 
   it('rebuilds persisted assistant activity blocks from delta and tool events in event order', () => {
-    const snapshot = createSnapshot({
-      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
-      recentEvents: []
-    });
-
     const messages = projectChatTranscript({
       liveRun: createIdleRunState(),
       pendingUserInput: null,

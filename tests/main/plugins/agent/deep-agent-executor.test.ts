@@ -45,6 +45,16 @@ describe('createAgentDeepAgentExecutor', () => {
     });
   });
 
+  it('starts a recovery execution from the latest checkpoint without replaying user input', async () => {
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      resumeFromCheckpoint: true,
+      output: { messages: [{ content: 'recovered', type: 'ai' }] }
+    });
+
+    expect(readStreamEventsCall().input).toBeNull();
+  });
+
   it('wires background task creation tools during workbench proposal runs', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {

@@ -9,6 +9,7 @@ import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plug
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { ProviderStreamTerminatedError } from '../../../../src/main/services/provider-request-retry';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 import { createTestCapabilityPreviewProvider } from './runtime-capability-preview-test-helpers';
 
@@ -355,7 +356,7 @@ describe('AgentPluginRuntime', () => {
           threadId: result.threadId,
           code: 'provider_execution_failed',
           message: 'agent_deep_agent_executor_missing',
-          retryable: true
+          retryable: false
         }
       })
     );
@@ -764,6 +765,78 @@ describe('AgentPluginRuntime', () => {
     });
   });
 
+  it('consumes a resume payload once before checkpoint recovery retries', async () => {
+    const repository = new AgentSessionRepository(db);
+    const resumePayloads: unknown[] = [];
+    const checkpointFlags: boolean[] = [];
+    let calls = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute(input) {
+          const attempt = ++calls;
+          resumePayloads.push(input.resumePayload);
+          checkpointFlags.push(input.resumeFromCheckpoint === true);
+          if (attempt === 1) {
+            return createTestAgentExecution(() => (async function* () {
+              yield {
+                type: 'run_interrupted',
+                runId: input.run.id,
+                threadId: input.run.threadId,
+                interruptId: 'interrupt-resume-recovery',
+                payload: {
+                  kind: 'question',
+                  question: 'Continue after stream failure?'
+                }
+              } satisfies ChatRunEvent;
+            })(), interruptedTestOutcome({
+              interrupts: [{
+                interruptId: 'interrupt-resume-recovery',
+                payload: { kind: 'question', question: 'Continue after stream failure?' }
+              }]
+            }));
+          }
+          if (attempt === 2) {
+            const failure = new ProviderStreamTerminatedError();
+            return createTestAgentExecution(() => (async function* () {
+              yield createTextBlock(input.run.id, 'partial response');
+              throw failure;
+            })(), Promise.reject(failure));
+          }
+          return createTestAgentExecution(() => (async function* () {
+            yield createTextBlock(input.run.id, 'recovered response');
+          })(), completedTestOutcome({ finalMessage: 'recovered response' }));
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const start = await runtime.startRun(startRequest);
+    await waitForEvent(
+      () => events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+
+    await runtime.resumeRun({
+      kind: 'question',
+      runId: start.runId,
+      threadId: start.threadId!,
+      interruptId: 'interrupt-resume-recovery',
+      answer: 'Continue.'
+    });
+    await waitForEvent(
+      () => events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed'),
+      1500
+    );
+
+    expect(resumePayloads).toHaveLength(3);
+    expect(resumePayloads[1]).toEqual({
+      'interrupt-resume-recovery': { answer: 'Continue.' }
+    });
+    expect(resumePayloads[2]).toBeUndefined();
+    expect(checkpointFlags).toEqual([false, false, true]);
+  });
+
 });
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
@@ -819,8 +892,8 @@ function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['
   };
 }
 
-async function waitForEvent(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 250;
+async function waitForEvent(predicate: () => boolean, timeoutMs = 250): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error('expected_event_not_published');

@@ -6,8 +6,7 @@ import type {
   SubagentEventPayload,
   SubagentIdentity,
   SubagentStatus,
-  TaskEvent,
-  TaskSnapshot
+  TaskEvent
 } from '../shared/types';
 import {
   taskEventSchema,
@@ -819,4 +818,3 @@ export function readChatTranscriptMemoKey(input: {
     input.threadId
   ];
 }
-

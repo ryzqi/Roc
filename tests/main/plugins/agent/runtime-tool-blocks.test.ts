@@ -83,7 +83,7 @@ describe('AgentPluginRuntime', () => {
           threadId: result.threadId,
           code: 'provider_execution_failed',
           message: 'agent_model_response_empty',
-          retryable: true
+          retryable: false
         }
       })
     );

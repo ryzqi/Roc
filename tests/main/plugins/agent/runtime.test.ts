@@ -11,6 +11,7 @@ import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/mai
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { buildWorkspaceHash } from '../../../../src/main/services/paths';
+import { ProviderStreamTerminatedError } from '../../../../src/main/services/provider-request-retry';
 import type { AgentCapabilityPreview, ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 import { createTerminalRunTelemetry } from './run-telemetry-test-helpers';
 
@@ -656,7 +657,7 @@ describe('AgentPluginRuntime', () => {
     expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
       status: 'failed',
       errorCode: 'provider_execution_failed',
-      retryable: true,
+      retryable: false,
       cancelSource: null
     });
     expect(events).toContainEqual(
@@ -668,7 +669,7 @@ describe('AgentPluginRuntime', () => {
           threadId: result.threadId,
           code: 'provider_execution_failed',
           message: 'provider_unavailable',
-          retryable: true
+          retryable: false
         }
       })
     );
@@ -800,6 +801,103 @@ describe('AgentPluginRuntime', () => {
     expect(repository.getRun(result.runId).status).toBe('completed');
     expect(repository.getRunTransitionState(result.runId).stateVersion).toBe(6);
     expect(calls).toBe(2);
+  });
+
+  it('retries a terminated provider stream from the latest checkpoint exactly once', async () => {
+    const repository = new AgentSessionRepository(db);
+    let calls = 0;
+    let resumedFromCheckpoint = false;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute(input) {
+          const attempt = ++calls;
+          resumedFromCheckpoint = input.resumeFromCheckpoint === true;
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (attempt === 1) {
+                throw new ProviderStreamTerminatedError();
+              }
+              yield createTextBlock(input.run.id, 'recovered');
+            })(),
+            attempt === 1
+              ? Promise.reject(new ProviderStreamTerminatedError())
+              : completedTestOutcome({ finalMessage: 'recovered' })
+          );
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(
+      () => events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed'),
+      5000
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(calls).toBe(2);
+    expect(resumedFromCheckpoint).toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_recovering',
+          code: 'provider_stream_terminated',
+          resetOutput: true
+        })
+      })
+    );
+  });
+
+  it('keeps checkpoint recovery enabled across a later transient provider failure', async () => {
+    const repository = new AgentSessionRepository(db);
+    const calls: Array<{ resumePayload: unknown; resumeFromCheckpoint: boolean }> = [];
+    let attempt = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute(input) {
+          const currentAttempt = ++attempt;
+          calls.push({
+            resumePayload: input.resumePayload,
+            resumeFromCheckpoint: input.resumeFromCheckpoint === true
+          });
+          const failure = currentAttempt === 1
+            ? new ProviderStreamTerminatedError()
+            : new Error('Connection error.');
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (currentAttempt < 3) {
+                throw failure;
+              }
+              yield createTextBlock(input.run.id, 'recovered after transient failure');
+            })(),
+            currentAttempt < 3
+              ? Promise.reject(failure)
+              : completedTestOutcome({ finalMessage: 'recovered after transient failure' })
+          );
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(
+      () => events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed'),
+      5000
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(calls).toEqual([
+      { resumePayload: undefined, resumeFromCheckpoint: false },
+      { resumePayload: undefined, resumeFromCheckpoint: true },
+      { resumePayload: undefined, resumeFromCheckpoint: true }
+    ]);
   });
 
   it('retains completed outcome usage when event projection fails before provider recovery', async () => {

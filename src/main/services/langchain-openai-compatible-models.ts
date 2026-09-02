@@ -36,6 +36,11 @@ import {
   readProviderReasoningFromMessage,
   stripProviderReasoningDelta
 } from './openai-stream-normalization';
+import {
+  providerRequestTimeoutMs,
+  ProviderStreamIdleError,
+  ProviderStreamTerminatedError
+} from './provider-request-retry';
 
 type JsonObject = Record<string, unknown>;
 const EMPTY_TOOL_CONTENT_PLACEHOLDER = 'Task completed';
@@ -67,7 +72,38 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatGenerationChunk> {
-    yield* normalizeOpenAiStreamingChunks(super._streamResponseChunks(stripRawReasoningContentBlocks(messages), options, runManager));
+    const streamAbortController = new AbortController();
+    const abortFromParent = () => streamAbortController.abort(options.signal?.reason);
+    if (options.signal?.aborted === true) {
+      abortFromParent();
+    } else {
+      options.signal?.addEventListener('abort', abortFromParent, { once: true });
+    }
+    const source = normalizeOpenAiStreamingChunks(
+      super._streamResponseChunks(
+        stripRawReasoningContentBlocks(messages),
+        { ...options, signal: streamAbortController.signal },
+        runManager
+      )
+    );
+    try {
+      for await (const chunk of withProviderStreamIdleTimeout(
+        source,
+        streamAbortController.signal,
+        resolveProviderStreamIdleTimeoutMs(this.fields?.timeout),
+        () => streamAbortController.abort(new ProviderStreamIdleError())
+      )) {
+        yield chunk;
+      }
+    } catch (error) {
+      if (!streamAbortController.signal.aborted && isRawProviderStreamTerminationError(error)) {
+        throw new ProviderStreamTerminatedError();
+      }
+      throw error;
+    } finally {
+      options.signal?.removeEventListener('abort', abortFromParent);
+      streamAbortController.abort();
+    }
   }
 
   protected cloneWithFields(): ReasoningAwareChatOpenAI {
@@ -81,6 +117,72 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
       ...config
     };
     return newModel;
+  }
+}
+
+function resolveProviderStreamIdleTimeoutMs(timeoutMs: number | undefined): number {
+  return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : providerRequestTimeoutMs;
+}
+
+function isRawProviderStreamTerminationError(error: unknown): error is Error {
+  return error instanceof Error && /^(?:terminated|stream terminated)$/iu.test(error.message.trim());
+}
+
+async function* withProviderStreamIdleTimeout<T>(
+  source: AsyncIterable<T>,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+  onIdle: () => void
+): AsyncGenerator<T> {
+  const iterator = source[Symbol.asyncIterator]();
+  let nextPromise = iterator.next();
+  try {
+    while (true) {
+      const next = await raceWithTimeout(nextPromise, timeoutMs, signal, onIdle);
+      if (next.done) {
+        return;
+      }
+      yield next.value;
+      nextPromise = iterator.next();
+    }
+  } finally {
+    const cleanup = iterator.return?.();
+    if (cleanup !== undefined) {
+      void cleanup.catch(() => undefined);
+    }
+  }
+}
+
+async function raceWithTimeout<T>(
+  promise: Promise<IteratorResult<T>>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onTimeout: () => void
+): Promise<IteratorResult<T>> {
+  if (signal?.aborted === true) {
+    throw signal.reason ?? new Error('The operation was aborted.');
+  }
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let abortHandler: (() => void) | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      onTimeout();
+      reject(new ProviderStreamIdleError());
+    }, timeoutMs);
+    abortHandler = () => reject(signal?.reason ?? new Error('The operation was aborted.'));
+    signal?.addEventListener('abort', abortHandler, { once: true });
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+    if (abortHandler !== undefined) {
+      signal?.removeEventListener('abort', abortHandler);
+    }
   }
 }
 

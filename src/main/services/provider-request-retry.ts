@@ -5,6 +5,24 @@ export const providerRequestTimeoutMs = 120_000;
 const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
 export const providerRequestTimeoutMessage = 'Provider 请求超时，请稍后重试或检查 Provider endpoint。';
 
+export class ProviderStreamIdleError extends Error {
+  readonly code = 'provider_stream_idle';
+
+  constructor() {
+    super('provider_stream_idle');
+    this.name = 'ProviderStreamIdleError';
+  }
+}
+
+export class ProviderStreamTerminatedError extends Error {
+  readonly code = 'provider_stream_terminated';
+
+  constructor() {
+    super('provider_stream_terminated');
+    this.name = 'ProviderStreamTerminatedError';
+  }
+}
+
 type RetryOptions = {
   labels?: Record<string, string>;
   metricsService?: MetricsService;
@@ -28,6 +46,12 @@ export type ProviderRequestFailureClassification =
     }
   | {
       kind: 'empty_response';
+    }
+  | {
+      kind: 'stream_terminated';
+    }
+  | {
+      kind: 'stream_idle';
     }
   | {
       kind: 'other';
@@ -134,6 +158,12 @@ export function classifyProviderRequestFailure(error: unknown): ProviderRequestF
   if (isTimeoutError(error)) {
     return { kind: 'timeout' };
   }
+  if (isStreamIdleError(error)) {
+    return { kind: 'stream_idle' };
+  }
+  if (isStreamTerminatedError(error)) {
+    return { kind: 'stream_terminated' };
+  }
   if (isNetworkError(error)) {
     return { kind: 'network' };
   }
@@ -184,6 +214,14 @@ function isNetworkError(error: Error): boolean {
     /fetch failed|network|socket|econn|enotfound|eai_again/i.test(error.message) ||
     isNetworkCause(error.cause)
   );
+}
+
+function isStreamIdleError(error: Error): boolean {
+  return error.name === 'ProviderStreamIdleError' || Reflect.get(error, 'code') === 'provider_stream_idle';
+}
+
+function isStreamTerminatedError(error: Error): boolean {
+  return error.name === 'ProviderStreamTerminatedError' || Reflect.get(error, 'code') === 'provider_stream_terminated';
 }
 
 function isNetworkCause(cause: unknown): boolean {

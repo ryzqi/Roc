@@ -113,6 +113,28 @@ describe('chat run state', () => {
     expect(state.recoveryAttempt).toBe(null);
   });
 
+  it('clears streamed assistant output at a checkpoint recovery boundary', () => {
+    let state = createEmptyChatRunState();
+
+    state = applyChatRunEvent(state, runStarted('chat_checkpoint_recovery', 'run'));
+    state = applyChatRunEvent(state, textBlock('chat_checkpoint_recovery', 'partial response'));
+    state = applyChatRunEvent(state, reasoningBlock('chat_checkpoint_recovery', 'partial reasoning'));
+    state = applyChatRunEvent(state, {
+      type: 'run_recovering',
+      runId: 'chat_checkpoint_recovery',
+      threadId: 'thread_chat_checkpoint_recovery',
+      code: 'provider_stream_terminated',
+      message: 'Provider 在模型流完成前终止了请求。',
+      attempt: 1,
+      nextRetryAt: '2026-07-03T00:00:01.000Z',
+      resetOutput: true
+    });
+    state = applyChatRunEvent(state, textBlock('chat_checkpoint_recovery', 'recovered response'));
+
+    expect(state.assistantMessage).toBe('recovered response');
+    expect(state.activityBlocks).toEqual([]);
+  });
+
   it('enters waiting_user on interrupt and keeps reasoning updates through resume completion', () => {
     let state = createEmptyChatRunState();
 

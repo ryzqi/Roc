@@ -11,7 +11,26 @@ describe('toRecoveryDecision', () => {
         firstFailureAtMs: 1000,
         nowMs: 1100
       })
-    ).toMatchObject({ action: 'recover', attempt: 1 });
+    ).toMatchObject({ action: 'recover', attempt: 1, resumeFromCheckpoint: false });
+  });
+
+  it('recovers a terminated model stream once from the latest checkpoint', () => {
+    expect(
+      toRecoveryDecision({
+        failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
+        attempt: 1,
+        firstFailureAtMs: 1000,
+        nowMs: 1100
+      })
+    ).toMatchObject({ action: 'recover', attempt: 1, resumeFromCheckpoint: true });
+    expect(
+      toRecoveryDecision({
+        failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
+        attempt: 2,
+        firstFailureAtMs: 1000,
+        nowMs: 1100
+      })
+    ).toEqual({ action: 'fail', reason: 'attempts_exhausted' });
   });
 
   it('recovers retryable provider HTTP 5xx errors', () => {

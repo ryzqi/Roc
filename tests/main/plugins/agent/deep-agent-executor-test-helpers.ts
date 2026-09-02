@@ -58,6 +58,7 @@ interface ExecutorEventsInput {
   messages?: AsyncIterable<unknown>;
   observeStreamEventsConfig?: (config: unknown) => void | Promise<void>;
   output?: unknown;
+  resumeFromCheckpoint?: boolean;
   requestOverride?: Partial<ChatStartRunRequest>;
   snapshotWorkspacePath?: string | null;
   subagents?: AsyncIterable<unknown>;
@@ -177,6 +178,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     },
     snapshot: createSnapshot(request, run, input.snapshotWorkspacePath === undefined ? workspacePath : input.snapshotWorkspacePath),
     run,
+    resumeFromCheckpoint: input.resumeFromCheckpoint,
     validatedAttachments: input.validatedAttachments
   });
   return execution;
@@ -513,4 +515,3 @@ export function isChatRunEventBuffer(value: readonly unknown[]): boolean {
   }
   return first.type === 'assistant_block';
 }
-

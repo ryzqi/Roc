@@ -1,33 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 import { projectChatTranscript } from '../../src/renderer/chat-transcript';
-import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
-
-function createThread(id: string, title: string, updatedAt: string): TaskThread {
-  return {
-    id,
-    kind: 'chat',
-    title,
-    goal: title,
-    status: 'completed',
-    createdAt: '2026-05-09T08:00:00.000Z',
-    updatedAt
-  };
-}
-
-function createSnapshot(input: { threads: TaskThread[]; recentEvents: TaskSnapshot['recentEvents'] }): TaskSnapshot {
-  return {
-    generatedAt: '2026-05-09T08:30:00.000Z',
-    counts: {
-      total: input.threads.length,
-      running: 0,
-      failed: 0,
-      pendingConfirmation: 0
-    },
-    threads: input.threads,
-    recentEvents: input.recentEvents
-  };
-}
+import type { TaskSnapshot } from '../../src/shared/types';
 
 function createIdleRunState(): ChatRunState {
   return {
@@ -65,10 +39,6 @@ function stripAttachments(messages: ReturnType<typeof projectChatTranscript>) {
 
 describe('chat transcript helpers', () => {
   it('rebuilds complete persisted history after a long streamed tool run', () => {
-    const snapshot = createSnapshot({
-      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
-      recentEvents: []
-    });
     const streamedDeltas: TaskSnapshot['recentEvents'] = Array.from({ length: 110 }, (_, index) => ({
       id: `assistant-delta-${index}`,
       threadId: 'thread-current',

@@ -80,6 +80,7 @@ export type AgentDeepAgentExecutor = {
   execute(input: {
     snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
+    resumeFromCheckpoint?: boolean;
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
@@ -97,6 +98,7 @@ type ExecuteRunInput = {
   input: string;
   request: ChatStartRunRequest;
   resumePayload?: AgentResumePayload;
+  resumeFromCheckpoint?: boolean;
   run: TaskRun;
   modelHandle: AgentModelHandle;
   abortSignal: AbortSignal;
@@ -656,6 +658,8 @@ export class AgentPluginRuntime {
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
     let executionStream = input.executionStream;
+    let resumePayload = input.resumePayload;
+    let resumeFromCheckpoint = input.resumeFromCheckpoint === true;
     while (this.activeRunLifecycle.isActive(input.runId)) {
       try {
         if (this.options.deepAgentExecutor === undefined) {
@@ -663,11 +667,14 @@ export class AgentPluginRuntime {
         }
         const currentExecutionStream = executionStream;
         executionStream = undefined;
+        const currentResumePayload = resumePayload;
+        resumePayload = undefined;
         const execution = await this.executeDeepAgentRun({
           abortSignal: input.abortSignal,
           executionStream: currentExecutionStream,
           modelHandle: input.modelHandle,
-          resumePayload: input.resumePayload,
+          resumePayload: currentResumePayload,
+          resumeFromCheckpoint,
           run: input.run,
           runStartedAtMs,
           snapshot: input.snapshot,
@@ -766,6 +773,7 @@ export class AgentPluginRuntime {
           nowMs
         });
         if (decision.action === 'recover') {
+          resumeFromCheckpoint = resumeFromCheckpoint || decision.resumeFromCheckpoint;
           const nextRetryAt = new Date(nowMs + decision.delayMs).toISOString();
           this.options.repository.transitionRun({
             endedAt: null,
@@ -787,7 +795,8 @@ export class AgentPluginRuntime {
             code: failure.code,
             message: failure.message,
             attempt,
-            nextRetryAt
+            nextRetryAt,
+            ...(resumeFromCheckpoint ? { resetOutput: true } : {})
           });
           try {
             await waitForRecoveryDelay(decision.delayMs, input.abortSignal);
@@ -869,6 +878,7 @@ export class AgentPluginRuntime {
   private async executeDeepAgentRun(input: {
     snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
+    resumeFromCheckpoint: boolean;
     executionStream?: AgentDeepAgentExecution;
     run: TaskRun;
     runStartedAtMs: number;
@@ -887,6 +897,7 @@ export class AgentPluginRuntime {
               run: input.run,
               snapshot: input.snapshot,
               ...(input.resumePayload === undefined ? {} : { resumePayload: input.resumePayload }),
+              ...(input.resumeFromCheckpoint ? { resumeFromCheckpoint: true } : {}),
               ...(input.validatedAttachments === undefined
                 ? {}
                 : { validatedAttachments: input.validatedAttachments })

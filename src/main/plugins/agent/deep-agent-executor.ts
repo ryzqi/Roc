@@ -90,11 +90,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       }
       const agent = harness.agent;
       const runInput =
-        input.resumePayload === undefined
-          ? createInitialState(input.run.userInput, input.validatedAttachments)
-          : new Command({
-              resume: input.resumePayload
-            });
+        input.resumePayload !== undefined
+          ? new Command({ resume: input.resumePayload })
+          : input.resumeFromCheckpoint === true
+            ? null
+            : createInitialState(input.run.userInput, input.validatedAttachments);
       const rawRun = await agent.streamEvents(runInput as never, {
         version: 'v3',
         recursionLimit: 10000,

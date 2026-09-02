@@ -5,7 +5,7 @@ const maxRecoveryMs = 10 * 60 * 1000;
 const recoverableHttpStatuses = new Set([408, 425, 429]);
 
 export type RecoveryDecision =
-  | { action: 'recover'; attempt: number; delayMs: number }
+  | { action: 'recover'; attempt: number; delayMs: number; resumeFromCheckpoint: boolean }
   | { action: 'fail'; reason: 'non_transient' | 'attempts_exhausted' | 'time_exhausted' };
 
 export function toRecoveryDecision(input: {
@@ -17,7 +17,8 @@ export function toRecoveryDecision(input: {
   if (!isRecoverableFailure(input.failure)) {
     return { action: 'fail', reason: 'non_transient' };
   }
-  if (input.attempt > maxAttempts) {
+  const allowedAttempts = isCheckpointRecoveryFailure(input.failure) ? 1 : maxAttempts;
+  if (input.attempt > allowedAttempts) {
     return { action: 'fail', reason: 'attempts_exhausted' };
   }
   if (input.nowMs - input.firstFailureAtMs > maxRecoveryMs) {
@@ -26,7 +27,8 @@ export function toRecoveryDecision(input: {
   return {
     action: 'recover',
     attempt: input.attempt,
-    delayMs: calculateBackoffMs(input.attempt)
+    delayMs: calculateBackoffMs(input.attempt),
+    resumeFromCheckpoint: isCheckpointRecoveryFailure(input.failure)
   };
 }
 
@@ -40,6 +42,9 @@ export function isRecoverableFailure(failure: RunFailure): boolean {
   if (failure.code === 'provider_request_timeout') {
     return true;
   }
+  if (isCheckpointRecoveryFailure(failure)) {
+    return true;
+  }
   if (failure.code !== 'provider_http_error') {
     return false;
   }
@@ -51,6 +56,10 @@ export function isRecoverableFailure(failure: RunFailure): boolean {
     return true;
   }
   return status >= 500;
+}
+
+function isCheckpointRecoveryFailure(failure: RunFailure): boolean {
+  return failure.code === 'provider_stream_terminated' || failure.code === 'provider_stream_idle';
 }
 
 function calculateBackoffMs(attempt: number): number {

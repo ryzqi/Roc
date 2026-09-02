@@ -134,20 +134,6 @@ describe('chat transcript helpers', () => {
 
 
   it('prefers thread persisted messages over the truncated recentEvents window', () => {
-    const snapshot = createSnapshot({
-      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:30:00.000Z')],
-      recentEvents: [
-        {
-          id: 'user-current-2',
-          threadId: 'thread-current',
-          runId: 'run-current-2',
-          type: 'message',
-          payload: { role: 'user', content: '第二轮输入' },
-          createdAt: '2026-05-09T08:30:10.000Z'
-        }
-      ]
-    });
-
     const messages = projectChatTranscript({
       liveRun: createIdleRunState(),
       pendingUserInput: null,

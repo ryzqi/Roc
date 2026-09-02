@@ -207,8 +207,9 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   if (event.type === 'run_recovering') {
+    const nextState = event.resetOutput === true ? resetStreamingAssistantOutput(state) : state;
     return {
-      ...state,
+      ...nextState,
       threadId: event.threadId,
       status: 'recovering',
       errorCode: event.code,
@@ -255,6 +256,23 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   return state;
+}
+
+function resetStreamingAssistantOutput(state: ChatRunState): ChatRunState {
+  return {
+    ...state,
+    assistantMessage: '',
+    activityBlocks: state.activityBlocks.filter((block) => block.kind !== 'reasoning'),
+    subagents: state.subagents.map((node) => resetSubagentStreamingOutput(node))
+  };
+}
+
+function resetSubagentStreamingOutput(node: ChatRunSubagentNode): ChatRunSubagentNode {
+  return {
+    ...node,
+    blocks: node.blocks.filter((block) => block.kind !== 'text' && block.kind !== 'reasoning'),
+    children: node.children.map((child) => resetSubagentStreamingOutput(child))
+  };
 }
 
 function applyAssistantBlock(state: ChatRunState, block: ChatAssistantBlock): ChatRunState {

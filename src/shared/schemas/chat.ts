@@ -165,7 +165,8 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       code: z.string(),
       message: z.string(),
       attempt: z.number().int().nonnegative(),
-      nextRetryAt: z.string()
+      nextRetryAt: z.string(),
+      resetOutput: z.boolean().optional()
     })
     .strict(),
   z

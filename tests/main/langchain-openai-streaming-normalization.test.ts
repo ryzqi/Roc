@@ -1,4 +1,4 @@
-import { AIMessage, AIMessageChunk, ChatMessage, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, ChatMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
@@ -16,11 +16,86 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await services.cleanup();
 });
 
 describe('OpenAI-compatible streaming normalization', () => {
+  it('uses the configured provider timeout for stream idle recovery', async () => {
+    vi.useFakeTimers();
+    configureOpenAiCompatibleProvider({ timeoutMs: 5 });
+
+    const configuredModel = await createConfiguredModel();
+    const completionModel = configuredModel as unknown as {
+      completions: {
+        _streamResponseChunks: () => AsyncGenerator<ChatGenerationChunk>;
+      };
+    };
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    completionModel.completions._streamResponseChunks = async function* () {
+      await gate;
+    };
+
+    const stream = (configuredModel as unknown as {
+      _streamResponseChunks: (messages: HumanMessage[], options: Record<string, never>) => AsyncGenerator<ChatGenerationChunk>;
+    })._streamResponseChunks([new HumanMessage('wait for the provider')], {});
+    const consume = (async () => {
+      for await (const _chunk of stream) {
+        // The source intentionally never yields before the idle timeout.
+      }
+    })();
+    const result = Promise.race([
+      consume.then(
+        () => ({ kind: 'completed' as const }),
+        (error: unknown) => ({ kind: 'error' as const, error })
+      ),
+      new Promise<{ kind: 'timeout' }>((resolve) => {
+        setTimeout(() => resolve({ kind: 'timeout' }), 10);
+      })
+    ]);
+
+    await vi.advanceTimersByTimeAsync(5);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(result).resolves.toMatchObject({
+      kind: 'error',
+      error: { name: 'ProviderStreamIdleError' }
+    });
+    release?.();
+    await consume.catch(() => undefined);
+  });
+
+  it('normalizes a provider raw stream termination into a structured error', async () => {
+    configureOpenAiCompatibleProvider();
+    const configuredModel = await createConfiguredModel();
+    const completionModel = configuredModel as unknown as {
+      completions: {
+        _streamResponseChunks: () => AsyncGenerator<ChatGenerationChunk>;
+      };
+    };
+    completionModel.completions._streamResponseChunks = async function* () {
+      throw new Error('terminated');
+    };
+
+    const stream = (configuredModel as unknown as {
+      _streamResponseChunks: (messages: HumanMessage[], options: Record<string, never>) => AsyncGenerator<ChatGenerationChunk>;
+    })._streamResponseChunks([new HumanMessage('terminate')], {});
+
+    await expect(
+      (async () => {
+        for await (const _chunk of stream) {
+          // The provider terminates before yielding a chunk.
+        }
+      })()
+    ).rejects.toMatchObject({
+      name: 'ProviderStreamTerminatedError',
+      code: 'provider_stream_terminated'
+    });
+  });
+
   it('preserves provider reasoning and tool calls in streamV2 events', async () => {
     configureOpenAiCompatibleProvider();
 
@@ -326,7 +401,7 @@ async function createConfiguredModel(): Promise<ChatOpenAI> {
   }) as unknown as ChatOpenAI;
 }
 
-function configureOpenAiCompatibleProvider(): void {
+function configureOpenAiCompatibleProvider(input: { timeoutMs?: number } = {}): void {
   services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
   services.configService.saveProviders({
     schemaVersion: 2,
@@ -348,7 +423,8 @@ function configureOpenAiCompatibleProvider(): void {
             supportsToolCalls: true,
             supportsImages: false
           }
-        ]
+        ],
+        ...(input.timeoutMs === undefined ? {} : { options: { timeoutMs: input.timeoutMs } })
       }
     ]
   });

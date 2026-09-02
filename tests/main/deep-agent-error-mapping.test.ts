@@ -2,9 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { GraphRecursionError } from '@langchain/langgraph';
 import { RocDomainError } from '../../src/main/services/errors';
 import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
+import { ProviderStreamTerminatedError } from '../../src/main/services/provider-request-retry';
 import { TOOL_ERROR_FIXTURES } from '../_fixtures/langchain-tool-errors';
 
 describe('deep agent error mapping', () => {
+  it('maps provider stream termination to a bounded recovery failure', () => {
+    expect(toRunFailure(new ProviderStreamTerminatedError())).toEqual({
+      code: 'provider_stream_terminated',
+      message: 'Provider 在模型流完成前终止了请求。',
+      retryable: true
+    });
+    expect(toRunFailure(new Error('terminated'))).toEqual({
+      code: 'provider_execution_failed',
+      message: 'terminated',
+      retryable: false
+    });
+  });
+
   it('maps context budget contract failures to explicit non-retryable results', () => {
     expect(toRunFailure(new Error('context_budget_profile_invalid'))).toEqual({
       code: 'context_budget_profile_invalid',
@@ -14,6 +28,17 @@ describe('deep agent error mapping', () => {
     expect(toRunFailure(new Error('agent_context_budget_missing'))).toEqual({
       code: 'agent_context_budget_missing',
       message: '运行快照缺少模型上下文预算，已停止本轮执行。',
+      retryable: false
+    });
+  });
+
+  it('keeps cancellation terminal instead of retryable', () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    expect(toRunFailure(controller.signal.reason)).toEqual({
+      code: 'chat_run_cancelled',
+      message: '当前运行已取消。',
       retryable: false
     });
   });
