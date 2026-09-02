@@ -33,6 +33,25 @@ describe('context-summary', () => {
     }))).toThrow('context_summary_invalid');
   });
 
+  it('parses fenced JSON context summaries', () => {
+    const summary = parseContextSummary([
+      '```json',
+      JSON.stringify({
+        goal: 'Optimize context management.',
+        facts: ['DeepAgents remains the harness.'],
+        decisions: ['Use current run model for active summaries.'],
+        filesTouched: ['src/main/services/deep-agent/context/context-summary.ts'],
+        toolEvidence: ['read_file returned existing compaction middleware.'],
+        verification: ['pnpm test target passed.'],
+        openQuestions: ['None.'],
+        nextActions: ['Wire middleware.']
+      }),
+      '```'
+    ].join('\n'));
+
+    expect(summary.goal).toBe('Optimize context management.');
+  });
+
   it('builds a summarization prompt without mutating system prompt blocks', () => {
     const prompt = buildContextSummaryPrompt({
       artifactReferences: ['artifactId: ctx_artifact_1'],
@@ -62,7 +81,7 @@ describe('context-summary', () => {
       workspacePath: 'F:\\Code\\Roc'
     });
 
-    expect(prompt).toContain('Summarize old Roc DeepAgents runtime context.');
+    expect(prompt).toContain('Summarize old Roc runtime context.');
     expect(prompt).toContain('Use DeepAgents native features first.');
     expect(prompt).toContain('artifactId: ctx_artifact_1');
     expect(prompt).toContain('"file_path": "/workspace/a.ts"');
@@ -163,7 +182,8 @@ describe('context-summary', () => {
       expect.objectContaining({
         metadata: {
           lcSource: 'summarization'
-        }
+        },
+        tags: expect.arrayContaining(['nostream', 'roc-context-summary'])
       })
     );
   });

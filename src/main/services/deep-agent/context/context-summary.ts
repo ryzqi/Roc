@@ -38,7 +38,7 @@ const contextSummaryInvokeConfig = {
   metadata: {
     lcSource: 'summarization'
   },
-  tags: ['roc-context-summary']
+  tags: ['nostream', 'roc-context-summary']
 };
 
 export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModelInput): Promise<ContextSummary> {
@@ -94,9 +94,9 @@ async function summarizeWithStructuredOutput(
 
 export function buildContextSummaryPrompt(input: ContextSummaryInput): string {
   return [
-    'Summarize old Roc DeepAgents runtime context.',
+    'Summarize old Roc runtime context.',
     'Return only JSON with keys: goal, facts, decisions, filesTouched, toolEvidence, verification, openQuestions, nextActions.',
-    'Do not invent facts. Keep summaries compact and evidence-linked.',
+    'Do not invent facts. Keep each item compact and evidence-linked.',
     `Current goal: ${input.goal}`,
     `Workspace: ${input.workspacePath === null ? 'not selected' : input.workspacePath}`,
     'User constraints:',
@@ -112,18 +112,45 @@ export function buildContextSummaryPrompt(input: ContextSummaryInput): string {
 
 export function buildContextSummaryModelMessages(input: ContextSummaryInput): BaseMessage[] {
   return [
-    new SystemMessage('You summarize old runtime context for Roc.'),
+    new SystemMessage('Summarize Roc runtime context.'),
     new HumanMessage(buildContextSummaryPrompt(input))
   ];
 }
 
 export function parseContextSummary(text: string): ContextSummary {
-  try {
-    const parsed = JSON.parse(text);
-    return contextSummarySchema.parse(parsed);
-  } catch {
-    throw new Error('context_summary_invalid');
+  const candidates = [text, unwrapJsonFence(text)];
+  for (const candidate of candidates) {
+    try {
+      return contextSummarySchema.parse(JSON.parse(candidate));
+    } catch {
+      continue;
+    }
   }
+  throw new Error('context_summary_invalid');
+}
+
+function unwrapJsonFence(text: string): string {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized.startsWith('```')) {
+    return text;
+  }
+  const rest = normalized.slice(3);
+  const newlineIndex = rest.indexOf('\n');
+  if (newlineIndex === -1) {
+    return text;
+  }
+  const language = rest.slice(0, newlineIndex).trim();
+  if (language.length > 0 && language !== 'json') {
+    return text;
+  }
+  let body = rest.slice(newlineIndex + 1);
+  if (body.endsWith('```')) {
+    body = body.slice(0, -3);
+    if (body.endsWith('\n')) {
+      body = body.slice(0, -1);
+    }
+  }
+  return body.trim();
 }
 
 export function contextSummaryToDigestMessage(summary: ContextSummary): AIMessage {

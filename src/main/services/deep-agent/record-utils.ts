@@ -50,6 +50,21 @@ const NON_ASSISTANT_CONTENT_BLOCK_TYPES = new Set([
   'mcp_tool_result'
 ]);
 
+const CONTEXT_SUMMARY_KEYS = [
+  'goal',
+  'facts',
+  'decisions',
+  'filesTouched',
+  'toolEvidence',
+  'verification',
+  'openQuestions',
+  'nextActions'
+] as const;
+
+const SUMMARIZATION_TAGS = new Set([
+  'roc-context-summary'
+]);
+
 export type StreamedAssistantTextClassification = 'assistant' | 'non_assistant' | 'pending';
 
 export function isNonAssistantTextMessage(value: unknown): boolean {
@@ -82,7 +97,13 @@ export function isSummarizationMessage(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
-  return hasSummarizationSource(value) || hasSummarizationSource(readRecordValue(value, 'metadata'));
+  const layers = [
+    value,
+    readRecordValue(value, 'metadata'),
+    readRecordValue(value, 'additional_kwargs'),
+    readRecordValue(value, 'response_metadata')
+  ];
+  return layers.some((layer) => hasSummarizationSource(layer) || hasSummarizationTags(layer));
 }
 
 export function classifyStreamedAssistantText(text: string): StreamedAssistantTextClassification {
@@ -96,6 +117,11 @@ export function classifyStreamedAssistantText(text: string): StreamedAssistantTe
 
   if (isPotentialHostedSearchResultTextPrefix(text)) {
     return 'pending';
+  }
+
+  const contextSummaryClassification = classifyContextSummaryStreamText(text);
+  if (contextSummaryClassification !== null) {
+    return contextSummaryClassification;
   }
 
   return 'assistant';
@@ -240,7 +266,146 @@ function hasSummarizationSource(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
-  return readNonEmptyString(readRecordValue(value, 'lcSource')) === 'summarization';
+  return (
+    readNonEmptyString(readRecordValue(value, 'lcSource')) === 'summarization' ||
+    readNonEmptyString(readRecordValue(value, 'lc_source')) === 'summarization'
+  );
+}
+
+function hasSummarizationTags(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const tags = readRecordValue(value, 'tags');
+  return Array.isArray(tags) && tags.some((tag) => typeof tag === 'string' && SUMMARIZATION_TAGS.has(tag));
+}
+
+function classifyContextSummaryStreamText(text: string): StreamedAssistantTextClassification | null {
+  const payload = extractPossibleJsonPayload(text);
+  if (payload === null) {
+    return null;
+  }
+
+  const trimmed = payload.body.trim();
+  if (trimmed.length === 0) {
+    return payload.closed ? null : 'pending';
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return isContextSummaryRecord(parsed) ? 'non_assistant' : null;
+  } catch {
+    return classifyIncompleteContextSummaryJson(trimmed);
+  }
+}
+
+function extractPossibleJsonPayload(text: string): { body: string; closed: boolean } | null {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (normalized.startsWith('```')) {
+    const rest = normalized.slice(3);
+    const newlineIndex = rest.indexOf('\n');
+    if (newlineIndex === -1) {
+      const language = rest.trim();
+      if (language.length === 0 || language === 'json') {
+        return { body: '', closed: false };
+      }
+      return null;
+    }
+
+    const language = rest.slice(0, newlineIndex).trim();
+    if (language.length > 0 && language !== 'json') {
+      return null;
+    }
+
+    let body = rest.slice(newlineIndex + 1);
+    let closed = false;
+    if (body.endsWith('```')) {
+      closed = true;
+      body = body.slice(0, -3);
+      if (body.endsWith('\n')) {
+        body = body.slice(0, -1);
+      }
+    }
+    return { body, closed };
+  }
+
+  if (normalized.startsWith('{')) {
+    return { body: normalized, closed: false };
+  }
+  return null;
+}
+
+function classifyIncompleteContextSummaryJson(text: string): StreamedAssistantTextClassification | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) {
+    return null;
+  }
+
+  const firstKey = readFirstJsonObjectKey(trimmed);
+  if (firstKey === null) {
+    return 'pending';
+  }
+  if (firstKey.closed) {
+    return isContextSummaryKey(firstKey.value) ? 'pending' : null;
+  }
+  return CONTEXT_SUMMARY_KEYS.some((key) => key.startsWith(firstKey.value)) ? 'pending' : null;
+}
+
+function readFirstJsonObjectKey(text: string): { value: string; closed: boolean } | null {
+  let index = 1;
+  while (index < text.length && isJsonWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index >= text.length) {
+    return null;
+  }
+  if (text[index] !== '"') {
+    return { value: '', closed: true };
+  }
+
+  index += 1;
+  let value = '';
+  while (index < text.length) {
+    const character = text[index];
+    if (character === '\\') {
+      if (index + 1 >= text.length) {
+        return { value, closed: false };
+      }
+      value += text[index + 1] ?? '';
+      index += 2;
+      continue;
+    }
+    if (character === '"') {
+      return { value, closed: true };
+    }
+    value += character;
+    index += 1;
+  }
+  return { value, closed: false };
+}
+
+function isJsonWhitespace(value: string | undefined): boolean {
+  return value === ' ' || value === '\n' || value === '\r' || value === '\t';
+}
+
+function isContextSummaryKey(value: string): boolean {
+  return (CONTEXT_SUMMARY_KEYS as readonly string[]).includes(value);
+}
+
+function isContextSummaryRecord(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value.goal !== 'string') {
+    return false;
+  }
+  return CONTEXT_SUMMARY_KEYS.every((key) => {
+    if (key === 'goal') {
+      return true;
+    }
+    const items = value[key];
+    return Array.isArray(items) && items.every((item) => typeof item === 'string');
+  });
 }
 
 function isHostedSearchResultText(text: string): boolean {

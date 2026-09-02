@@ -277,4 +277,103 @@ describe('record-utils assistant text boundaries', () => {
       })
     ).toBe(false);
   });
+
+  it('identifies summarization markers on additional_kwargs, response_metadata, and tags', () => {
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        additional_kwargs: {
+          lc_source: 'summarization'
+        }
+      })
+    ).toBe(true);
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        additional_kwargs: {
+          lcSource: 'summarization'
+        }
+      })
+    ).toBe(true);
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        response_metadata: {
+          lc_source: 'summarization'
+        }
+      })
+    ).toBe(true);
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        tags: ['roc-context-summary']
+      })
+    ).toBe(true);
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        metadata: {
+          tags: ['nostream']
+        }
+      })
+    ).toBe(false);
+  });
+
+  it('classifies a complete context summary JSON payload as non-assistant streamed text', () => {
+    expect(classifyStreamedAssistantText(CONTEXT_SUMMARY_JSON)).toBe('non_assistant');
+    expect(classifyStreamedAssistantText('```json\n' + CONTEXT_SUMMARY_JSON + '\n```')).toBe('non_assistant');
+  });
+
+  it('keeps a context summary JSON prefix pending until the schema is confirmed', () => {
+    expect(classifyStreamedAssistantText('{')).toBe('pending');
+    expect(classifyStreamedAssistantText('{\n  "goal": "create svg"')).toBe('pending');
+    expect(classifyStreamedAssistantText('```json')).toBe('pending');
+  });
+
+  it('releases ordinary JSON as soon as the first key is not a context summary field', () => {
+    expect(classifyStreamedAssistantText('{"status"')).toBe('assistant');
+    expect(classifyStreamedAssistantText('{"status":"ok","message":"done"}')).toBe('assistant');
+  });
+
+  it('still hides a context summary JSON object that includes extra keys', () => {
+    expect(classifyStreamedAssistantText(CONTEXT_SUMMARY_JSON_WITH_EXTRA_KEY)).toBe('non_assistant');
+  });
+
+  it('does not treat a truncated non-json fence as a context summary payload', () => {
+    expect(classifyStreamedAssistantText('```j')).toBe('assistant');
+  });
+
+  it('does not hide ordinary assistant JSON or context digest XML', () => {
+    expect(classifyStreamedAssistantText('{"status":"ok","message":"done"}')).toBe('assistant');
+    expect(
+      classifyStreamedAssistantText([
+        '<roc_context_digest>',
+        '<facts>',
+        '- Workspace is F:\\Code\\Roc.',
+        '</facts>',
+        '<decisions />',
+        '<filesTouched />',
+        '<verifications />',
+        '<openQuestions />',
+        '<nextActions />',
+        '</roc_context_digest>'
+      ].join('\n'))
+    ).toBe('assistant');
+  });
+});
+
+const CONTEXT_SUMMARY_JSON = JSON.stringify({
+  decisions: ['The SVG was created with the filename pelican_bike.svg and is complete, 118 lines.'],
+  facts: ['Workspace directory is G:\\test.'],
+  filesTouched: ['G:\\test\\pelican_bike.svg'],
+  goal: 'create a pelican riding a bicycle svg in the current directory',
+  nextActions: ['Report completion of the SVG file.'],
+  openQuestions: ['Whether the user wants any visual adjustments after previewing the SVG in a browser.'],
+  toolEvidence: ['Command: Get-Content produced the final SVG block and closed with </svg>.'],
+  verification: ['File ends with </svg> and is not truncated.']
+});
+
+const CONTEXT_SUMMARY_JSON_WITH_EXTRA_KEY = JSON.stringify({
+  ...JSON.parse(CONTEXT_SUMMARY_JSON),
+  extra: 'ignored'
 });

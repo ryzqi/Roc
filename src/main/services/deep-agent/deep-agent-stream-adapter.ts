@@ -263,6 +263,9 @@ async function* translateVisibleText(
   }
 
   if (!released && !suppressMessage && pending.length > 0) {
+    if (recordUtils.classifyStreamedAssistantText(pending) !== 'assistant') {
+      return;
+    }
     yield { type: 'assistant_delta', scope, kind, text: pending };
   }
 }

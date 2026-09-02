@@ -509,7 +509,7 @@ describe('RocContextCompactionPipeline', () => {
       workspacePath: null,
       messages,
       countTokens: async (candidate) => {
-        if (candidate.some((message) => String(message.content).includes('You summarize old runtime context for Roc.'))) {
+        if (candidate.some((message) => String(message.content).includes('Summarize Roc runtime context.'))) {
           return 150;
         }
         return candidate.length <= 2 ? 80 : 200;
@@ -570,7 +570,7 @@ describe('RocContextCompactionPipeline', () => {
       workspacePath: null,
       messages,
       countTokens: async (candidate) => {
-        if (candidate.some((message) => String(message.content).includes('You summarize old runtime context for Roc.'))) {
+        if (candidate.some((message) => String(message.content).includes('Summarize Roc runtime context.'))) {
           return 50;
         }
         if (candidate.some((message) => isContextDigestMessage(message))) {
@@ -619,7 +619,7 @@ describe('RocContextCompactionPipeline', () => {
 });
 
 async function countBeforeAndAfterSummary(messages: readonly BaseMessage[]): Promise<number> {
-  if (messages.some((message) => String(message.content).includes('You summarize old runtime context for Roc.'))) {
+  if (messages.some((message) => String(message.content).includes('Summarize Roc runtime context.'))) {
     return 50;
   }
   return messages.some(isContextDigestMessage) ? 50 : 1200;

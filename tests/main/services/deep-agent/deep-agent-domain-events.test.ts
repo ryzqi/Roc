@@ -142,6 +142,102 @@ describe('adaptDeepAgentRun domain translation', () => {
       interrupts: [{ interruptId: 'interrupt-terminal', payload: { kind: 'terminal' } }]
     });
   });
+
+  it('does not stream context summary JSON as visible assistant text', async () => {
+    const summaryJson = JSON.stringify({
+      decisions: ['Keep the generated SVG.'],
+      facts: ['Workspace directory is G:\\test.'],
+      filesTouched: ['G:\\test\\pelican_bike.svg'],
+      goal: 'create a pelican riding a bicycle svg in the current directory',
+      nextActions: ['Report completion of the SVG file.'],
+      openQuestions: ['Whether the user wants any visual adjustments.'],
+      toolEvidence: ['Get-Content returned a closed SVG document.'],
+      verification: ['File ends with </svg> and is not truncated.']
+    });
+    const run = adaptDeepAgentRun(createRawRun({
+      messages: single(createRawMessage({
+        text: strings(summaryJson)
+      })),
+      output: Promise.resolve({
+        messages: [{ role: 'assistant', content: summaryJson }]
+      })
+    }), {
+      projectToolOutput: ({ output }) => output
+    });
+
+    const events = await collect(run.events);
+    expect(events.filter((event) => event.type === 'assistant_delta')).toEqual([]);
+    await expect(run.output).resolves.toBeNull();
+  });
+
+  it('does not stream chunked context summary JSON as visible assistant text', async () => {
+    const summaryJson = JSON.stringify({
+      decisions: ['Keep the generated SVG.'],
+      facts: ['Workspace directory is G:\\test.'],
+      filesTouched: ['G:\\test\\pelican_bike.svg'],
+      goal: 'create a pelican riding a bicycle svg in the current directory',
+      nextActions: ['Report completion of the SVG file.'],
+      openQuestions: ['Whether the user wants any visual adjustments.'],
+      toolEvidence: ['Get-Content returned a closed SVG document.'],
+      verification: ['File ends with </svg> and is not truncated.']
+    });
+    const run = adaptDeepAgentRun(createRawRun({
+      messages: single(createRawMessage({
+        text: strings('{', summaryJson.slice(1))
+      })),
+      output: Promise.resolve({
+        messages: [{ role: 'assistant', content: summaryJson }]
+      })
+    }), {
+      projectToolOutput: ({ output }) => output
+    });
+
+    const events = await collect(run.events);
+    expect(events.filter((event) => event.type === 'assistant_delta')).toEqual([]);
+    await expect(run.output).resolves.toBeNull();
+  });
+
+  it('does not flush an incomplete context summary JSON prefix at stream end', async () => {
+    const run = adaptDeepAgentRun(createRawRun({
+      messages: single(createRawMessage({
+        text: strings('{\n  "goal": "create svg"')
+      })),
+      output: Promise.resolve({
+        messages: [{ role: 'assistant', content: '{\n  "goal": "create svg"' }]
+      })
+    }), {
+      projectToolOutput: ({ output }) => output
+    });
+
+    const events = await collect(run.events);
+    expect(events.filter((event) => event.type === 'assistant_delta')).toEqual([]);
+    await expect(run.output).resolves.toBeNull();
+  });
+
+  it('streams ordinary JSON once the first key is not a context summary field', async () => {
+    const payload = '{"status":"ok","message":"done"}';
+    const run = adaptDeepAgentRun(createRawRun({
+      messages: single(createRawMessage({
+        text: strings('{', payload.slice(1))
+      })),
+      output: Promise.resolve({
+        messages: [{ role: 'assistant', content: payload }]
+      })
+    }), {
+      projectToolOutput: ({ output }) => output
+    });
+
+    const events = await collect(run.events);
+    expect(events.filter((event) => event.type === 'assistant_delta')).toEqual([
+      {
+        type: 'assistant_delta',
+        scope: null,
+        kind: 'text',
+        text: payload
+      }
+    ]);
+    await expect(run.output).resolves.toBe(payload);
+  });
 });
 
 function createRawRun(overrides: Record<string, unknown> = {}): Record<string, unknown> {
