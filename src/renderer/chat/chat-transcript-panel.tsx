@@ -72,10 +72,26 @@ export function ChatTranscriptPanel({
     messageCount: messages.length,
     prependRevision
   });
+  const previousThreadIdRef = useRef<string | null>(threadId);
+  const initialWindowRef = useRef<TranscriptVirtuosoWindow>(
+    buildTranscriptVirtuosoWindow({
+      firstItemIndex: virtualIndex,
+      messageCount: messages.length
+    })
+  );
 
   useEffect(() => {
     setScrollParent(scrollContainerRef.current);
   }, [scrollContainerRef]);
+
+  // threadId 变化时重新计算初始窗口
+  if (previousThreadIdRef.current !== threadId) {
+    previousThreadIdRef.current = threadId;
+    initialWindowRef.current = buildTranscriptVirtuosoWindow({
+      firstItemIndex: virtualIndex,
+      messageCount: messages.length
+    });
+  }
 
   function handleScrollBottomClick(): void {
     virtuosoRef.current?.scrollToIndex({
@@ -96,10 +112,8 @@ export function ChatTranscriptPanel({
         customScrollParent={scrollParent === null ? undefined : scrollParent}
         alignToBottom
         data={messages}
-        {...buildTranscriptVirtuosoWindow({
-          firstItemIndex: virtualIndex,
-          messageCount: messages.length
-        })}
+        firstItemIndex={initialWindowRef.current.firstItemIndex}
+        initialTopMostItemIndex={initialWindowRef.current.initialTopMostItemIndex}
         computeItemKey={(_index, message) => message.key}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
