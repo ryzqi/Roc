@@ -5,11 +5,11 @@
 
 ## Next Step
 
-Phase 1: 深化 Run Capability Manifest 编译器 (Builder pattern + 策略对象)
+Phase 2: 深化 Agent Outbox 投影 (策略对象封装状态转换规则)
 
 ## Current Phase
 
-Phase 1
+Phase 2
 
 ## Phases
 
@@ -30,7 +30,7 @@ Phase 1
 - [x] 更新 `capability-preview.ts` 调用点
 - [x] 编写单元测试 (策略对象可独立测试)
 - [x] Review + 修复问题
-- [ ] 提交
+- [x] 提交 (commit 3bf9f3f)
 
 **Acceptance Criteria:**
 - ✓ 调用方从 10 参数降为 2-3 个链式调用
@@ -42,7 +42,7 @@ Phase 1
 ---
 
 ### Phase 2: 深化 Agent Outbox 投影
-**Status:** not_started
+**Status:** in_progress
 **Files:**
 - `src/main/plugins/task/agent-outbox-projector.ts`
 - `src/main/plugins/task/task-repository.ts`

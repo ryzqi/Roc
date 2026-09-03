@@ -29,6 +29,10 @@ import {
   type ClaimedScheduledOccurrence
 } from './scheduled-occurrence-repository';
 import { ThreadDeletionJournal } from './thread-deletion-journal';
+import {
+  DefaultTaskOutboxProjectionStrategy,
+  type TaskOutboxProjectionStrategy
+} from './task-outbox-projection-strategy';
 
 export type { ClaimedScheduledOccurrence } from './scheduled-occurrence-repository';
 
@@ -38,13 +42,16 @@ const taskDetailRecentEventLimit = 20;
 export class TaskRepository {
   private readonly backgroundTasks: BackgroundTaskRepository;
   private readonly occurrences: ScheduledOccurrenceRepository;
+  private readonly projectionStrategy: TaskOutboxProjectionStrategy;
 
   constructor(
     private readonly db: DatabaseConnection,
     private readonly agentHistory: AgentTaskHistoryContract,
-    private readonly deletionJournal: ThreadDeletionJournal = new ThreadDeletionJournal({ agentHistory, db })
+    private readonly deletionJournal: ThreadDeletionJournal = new ThreadDeletionJournal({ agentHistory, db }),
+    projectionStrategy?: TaskOutboxProjectionStrategy
   ) {
     this.backgroundTasks = new BackgroundTaskRepository(db);
+    this.projectionStrategy = projectionStrategy ?? new DefaultTaskOutboxProjectionStrategy();
     this.occurrences = new ScheduledOccurrenceRepository(db, this.backgroundTasks, {
       findRunStatus: (runId) => {
         const run = this.agentHistory.findRun(runId);
@@ -403,24 +410,13 @@ export class TaskRepository {
         }
         const occurrenceTask = this.occurrences.projectOutboxTerminal(event);
         const task = occurrenceTask === null ? this.findBackgroundTaskByRunId(event.runId) : occurrenceTask;
-        if (task !== null) {
-          const isLatestRun = task.runId === event.runId;
-          if (event.eventType === 'run_completed' && isLatestRun) {
-            this.backgroundTasks.updateLastRunStatus(task.id, 'success', event.createdAt);
-          } else if (event.eventType === 'run_failed' && isLatestRun) {
-            this.backgroundTasks.pauseAfterRunFailure(task.id, event.createdAt);
-            const updatedTask = this.requireBackgroundTask(task.id);
-            this.agentHistory.updateBackgroundTaskThread(updatedTask);
-            if (!this.hasBackgroundTaskPausedEvent(updatedTask)) {
-              this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
-                taskId: updatedTask.id,
-                status: updatedTask.status
-              });
-            }
-          } else if (event.eventType === 'run_cancelled' && isLatestRun) {
-            this.backgroundTasks.updateLastRunStatus(task.id, 'cancelled', event.createdAt);
-          }
-        }
+
+        // 使用策略对象计算状态转换
+        const transition = this.projectionStrategy.applyEvent(task, event);
+
+        // 应用状态转换
+        this.applyTransition(transition);
+
         lastSequence = event.sequence;
         updatedAt = event.createdAt;
         appliedCount += 1;
@@ -464,6 +460,39 @@ export class TaskRepository {
 
   private requireBackgroundTask(id: string): BackgroundTask {
     return this.backgroundTasks.require(id);
+  }
+
+  /**
+   * 应用状态转换动作
+   */
+  private applyTransition(transition: import('./task-outbox-projection-strategy').TaskStateTransition): void {
+    switch (transition.type) {
+      case 'no_op':
+        // 无操作
+        break;
+
+      case 'update_status':
+        this.backgroundTasks.updateLastRunStatus(transition.taskId, transition.status, transition.timestamp);
+        break;
+
+      case 'pause_after_failure': {
+        this.backgroundTasks.pauseAfterRunFailure(transition.taskId, transition.timestamp);
+        const updatedTask = this.requireBackgroundTask(transition.taskId);
+        this.agentHistory.updateBackgroundTaskThread(updatedTask);
+        if (!this.hasBackgroundTaskPausedEvent(updatedTask)) {
+          this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
+            taskId: updatedTask.id,
+            status: updatedTask.status
+          });
+        }
+        break;
+      }
+
+      default: {
+        const exhaustive: never = transition;
+        throw new Error(`未处理的转换类型: ${JSON.stringify(exhaustive)}`);
+      }
+    }
   }
 
   private hasBackgroundTaskPausedEvent(task: BackgroundTask): boolean {
