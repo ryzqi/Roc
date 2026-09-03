@@ -10,7 +10,8 @@ import type { MetricsService } from './metrics-service';
 import {
   executeWithProviderRequestRetry,
   isRetryableProviderHttpStatus,
-  providerRequestTimeoutMessage
+  providerRequestTimeoutMessage,
+  providerRequestTimeoutMs
 } from './provider-request-retry';
 
 type ProviderTransportRequest = {
@@ -352,7 +353,7 @@ export class ProviderRuntimeService {
       if (this.isLangChainTimeoutError(error)) {
         return new RocDomainError({
           code: 'provider_request_timeout',
-          message: providerRequestTimeoutMessage,
+          message: this.createTimeoutErrorMessage(error),
           category: 'external',
           retryable: true,
           userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
@@ -448,6 +449,18 @@ export class ProviderRuntimeService {
 
   private isLangChainNetworkError(error: Error): boolean {
     return /connection error/i.test(error.message) || this.isRecord(error.cause) || /fetch failed/i.test(error.message);
+  }
+
+  private createTimeoutErrorMessage(error: Error): string {
+    const timeoutMinutes = Math.round(providerRequestTimeoutMs / 60_000);
+    const isStreamIdle = error instanceof Error &&
+      (error.name === 'ProviderStreamIdleError' || /stream.*idle/i.test(error.message));
+
+    if (isStreamIdle) {
+      return `Provider 流在 ${timeoutMinutes} 分钟内没有返回新数据。长推理模型可能需要更长时间，建议重试或检查网络连接。`;
+    }
+
+    return `Provider 请求超时（${timeoutMinutes} 分钟）。若使用长推理模型，请稍后重试或检查 Provider endpoint 是否可访问。`;
   }
 
   private createMalformedResponseError(): RocDomainError {

@@ -17,7 +17,7 @@ export function toRecoveryDecision(input: {
   if (!isRecoverableFailure(input.failure)) {
     return { action: 'fail', reason: 'non_transient' };
   }
-  const allowedAttempts = isCheckpointRecoveryFailure(input.failure) ? 1 : maxAttempts;
+  const allowedAttempts = isCheckpointRecoveryFailure(input.failure) ? 3 : maxAttempts;
   if (input.attempt > allowedAttempts) {
     return { action: 'fail', reason: 'attempts_exhausted' };
   }

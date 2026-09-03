@@ -1,9 +1,9 @@
 import { RocDomainError } from './errors';
 import type { MetricsService } from './metrics-service';
 
-export const providerRequestTimeoutMs = 120_000;
+export const providerRequestTimeoutMs = 300_000;
 const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
-export const providerRequestTimeoutMessage = 'Provider 请求超时，请稍后重试或检查 Provider endpoint。';
+export const providerRequestTimeoutMessage = 'Provider 流在限定时间内没有返回新数据。若使用长推理模型，这是正常现象，可稍后重试或检查网络连接。';
 
 export class ProviderStreamIdleError extends Error {
   readonly code = 'provider_stream_idle';

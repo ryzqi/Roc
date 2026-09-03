@@ -14,7 +14,7 @@ describe('toRecoveryDecision', () => {
     ).toMatchObject({ action: 'recover', attempt: 1, resumeFromCheckpoint: false });
   });
 
-  it('recovers a terminated model stream once from the latest checkpoint', () => {
+  it('recovers a terminated model stream up to 3 times from checkpoint', () => {
     expect(
       toRecoveryDecision({
         failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
@@ -27,6 +27,22 @@ describe('toRecoveryDecision', () => {
       toRecoveryDecision({
         failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
         attempt: 2,
+        firstFailureAtMs: 1000,
+        nowMs: 1100
+      })
+    ).toMatchObject({ action: 'recover', attempt: 2, resumeFromCheckpoint: true });
+    expect(
+      toRecoveryDecision({
+        failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
+        attempt: 3,
+        firstFailureAtMs: 1000,
+        nowMs: 1100
+      })
+    ).toMatchObject({ action: 'recover', attempt: 3, resumeFromCheckpoint: true });
+    expect(
+      toRecoveryDecision({
+        failure: { code: 'provider_stream_terminated', message: 'terminated', retryable: true },
+        attempt: 4,
         firstFailureAtMs: 1000,
         nowMs: 1100
       })
