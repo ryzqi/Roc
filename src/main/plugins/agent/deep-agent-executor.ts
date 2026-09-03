@@ -165,8 +165,26 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               });
             }
             const finalMessage = outcomeText.finish().trim();
-            if (finalMessage.length === 0 && successfulToolNamesByBlockId.size === 0 && hookDisplayTexts.length === 0) {
-              throw new Error('agent_model_response_empty');
+            const hasAnyModelOutput =
+              finalMessage.length > 0 ||
+              assistantChunks.some(chunk => chunk.trim().length > 0) ||
+              reasoningChunks.some(chunk => chunk.trim().length > 0) ||
+              successfulToolNamesByBlockId.size > 0 ||
+              hookDisplayTexts.length > 0;
+            if (!hasAnyModelOutput) {
+              const diagnostics = {
+                finalMessageLength: finalMessage.length,
+                assistantChunksCount: assistantChunks.length,
+                assistantTotalChars: assistantChunks.join('').length,
+                reasoningChunksCount: reasoningChunks.length,
+                reasoningTotalChars: reasoningChunks.join('').length,
+                successfulToolCount: successfulToolNamesByBlockId.size,
+                hookTextsCount: hookDisplayTexts.length,
+                finalAssistantText: finalAssistantText
+              };
+              const error = new Error('agent_model_response_empty');
+              (error as Error & { diagnostics: unknown }).diagnostics = diagnostics;
+              throw error;
             }
             outcomePublished = true;
             resolveOutcome({
