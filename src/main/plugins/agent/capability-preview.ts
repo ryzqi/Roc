@@ -10,7 +10,7 @@ import type {
   WorkflowHint
 } from '../../../shared/types';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
-import { compileRunCapabilityManifest } from './run-capability-manifest';
+import { ManifestBuilder } from './manifest-builder';
 
 export function buildAgentCapabilityPreview(input: {
   deleteFileApprovalMode: ApprovalMode;
@@ -29,7 +29,19 @@ export function buildAgentCapabilityPreview(input: {
   if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
     throw new Error('default_model_missing');
   }
-  const compiled = compileRunCapabilityManifest(input);
+
+  // 使用 ManifestBuilder 替代直接调用 compileRunCapabilityManifest
+  const compiled = ManifestBuilder
+    .forMode(input.mode)
+    .withMcp(input.mcpServers, input.mcpApprovalMode)
+    .withSkills(input.skills)
+    .withExplicitSkills(input.explicitSkillIds ?? [])
+    .withDeleteFileApproval(input.deleteFileApprovalMode)
+    .withShellCommands(input.shellAllowedCommands)
+    .withSelfConfig(input.selfConfigAvailable ?? false)
+    .withWorkflowHint(input.workflowHint)
+    .withRequestedCapabilities(input.requestedCapabilities)
+    .build();
 
   return {
     runnable: false,
@@ -53,20 +65,14 @@ export function buildDeepAgentConfigPreview(input: {
   if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
     throw new Error('default_model_missing');
   }
-  const compiled = compileRunCapabilityManifest({
-    deleteFileApprovalMode: input.deleteFileApprovalMode,
-    mcpApprovalMode: 'fully_automatic',
-    mcpServers: [],
-    mode: input.mode,
-    workflowHint: null,
-    // 该预览只反映默认内置工具的审批参数，不宣称 roc_self_config。
-    selfConfigAvailable: false,
-    requestedCapabilities: {
-      mcpServers: [],
-      skills: []
-    },
-    skills: []
-  });
+
+  // 使用 ManifestBuilder
+  const compiled = ManifestBuilder
+    .forMode(input.mode)
+    .withDeleteFileApproval(input.deleteFileApprovalMode)
+    .withSelfConfig(false)
+    .withRequestedCapabilities({ mcpServers: [], skills: [] })
+    .build();
 
   return {
     runnable: false,

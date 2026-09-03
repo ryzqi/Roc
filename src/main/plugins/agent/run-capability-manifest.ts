@@ -20,6 +20,8 @@ import type {
 import type { WorkflowHint } from '../../../shared/types';
 import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-tool-exposure';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
+import type { ToolSelectionPolicy } from './tool-selection-policy';
+import { DefaultToolSelectionPolicy } from './tool-selection-policy';
 
 const deleteFileAllowedDecisions: InterruptDecisionType[] = ['approve', 'edit', 'reject'];
 const selfConfigCardId = 'builtin:roc_self_config';
@@ -64,26 +66,31 @@ export type CompiledRunCapabilityManifest = {
   interruptOn: AgentInterruptPolicy;
 };
 
-export function compileRunCapabilityManifest(input: {
+/**
+ * 新接口：使用策略对象构建 manifest
+ *
+ * 这是深化后的入口，策略对象封装了工具选择逻辑
+ */
+export function buildManifestFromPolicy(input: {
+  mode: ChatRunMode;
   deleteFileApprovalMode: ApprovalMode;
-  explicitSkillIds?: readonly string[];
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
-  mode: ChatRunMode;
-  // 缺省视为不可用：manifest 只宣称执行器确实会绑定的工具。
-  selfConfigAvailable?: boolean;
+  skills: SkillSnapshot[];
+  explicitSkillIds?: readonly string[];
+  selfConfigAvailable: boolean;
   shellAllowedCommands?: readonly string[];
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
-  skills: SkillSnapshot[];
+  toolSelectionPolicy: ToolSelectionPolicy;
 }): CompiledRunCapabilityManifest {
   const requestedCapabilities = normalizeRequestedCapabilities(input.requestedCapabilities);
   const skippedCapabilities: SkippedCapability[] = [];
   const resolvedMcpServers: string[] = [];
   const resolvedSkills: string[] = [];
-  const selectedMcpCards: AgentCapabilityCard[] = [];
   const selectedSkills: SkillSnapshot[] = [];
 
+  // 解析请求的 MCP 服务器
   for (const serverId of requestedCapabilities.mcpServers) {
     const server = input.mcpServers.find((item) => item.id === serverId);
     if (server === undefined) {
@@ -95,9 +102,9 @@ export function compileRunCapabilityManifest(input: {
       continue;
     }
     resolvedMcpServers.push(server.id);
-    selectedMcpCards.push(...createMcpToolCards(server, input.mcpApprovalMode));
   }
 
+  // 解析请求的技能
   for (const skillId of requestedCapabilities.skills) {
     const skill = input.skills.find((item) => item.id === skillId);
     if (skill === undefined) {
@@ -116,6 +123,7 @@ export function compileRunCapabilityManifest(input: {
     selectedSkills.push(skill);
   }
 
+  // 添加显式技能
   const manifestSkills = [...selectedSkills];
   const manifestSkillIds = new Set(selectedSkills.map((skill) => skill.id));
   for (const skillId of normalizeExplicitSkillIds(input.explicitSkillIds)) {
@@ -136,22 +144,23 @@ export function compileRunCapabilityManifest(input: {
     manifestSkills.push(skill);
   }
 
-  const allToolCards = [
-    ...(input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0
-      ? [createRunShellCommandCard()]
-      : []),
-    createWebReadCard(),
-    createDeleteFileCard(input.deleteFileApprovalMode),
-    ...(input.mode === 'plan' || input.selfConfigAvailable !== true ? [] : [createSelfConfigCard()]),
-    ...selectedMcpCards
-  ];
-  const toolCards = input.mode === 'plan' ? allToolCards.filter((card) => isPlanModeModelVisibleToolName(card.name)) : allToolCards;
+  // 使用策略对象选择工具
+  const toolCards = input.toolSelectionPolicy.selectToolCards({
+    mode: input.mode,
+    deleteFileApprovalMode: input.deleteFileApprovalMode,
+    mcpApprovalMode: input.mcpApprovalMode,
+    mcpServers: input.mcpServers.filter((s) => s.enabled),
+    selfConfigAvailable: input.selfConfigAvailable,
+    shellAllowedCommands: input.shellAllowedCommands
+  });
+
   const interruptOn = createInterruptPolicy({
     deleteFileApprovalMode: input.deleteFileApprovalMode,
     mcpApprovalMode: input.mcpApprovalMode,
     mcpToolNames: toolCards.filter((card) => card.capabilityType === 'mcp_tool').map((card) => card.name),
     modelVisibleToolNames: new Set(toolCards.map((card) => card.name))
   });
+
   const manifestWithoutHash = {
     schemaVersion: 1 as const,
     requestedCapabilities,
@@ -170,6 +179,7 @@ export function compileRunCapabilityManifest(input: {
     skills: compileManifestSkills(manifestSkills),
     untrustedContextPolicy: 'external_content_reference_only' as const
   };
+
   const manifest: RunCapabilityManifestV1 = {
     ...manifestWithoutHash,
     manifestHash: createRunCapabilityManifestHash(manifestWithoutHash)
@@ -182,6 +192,37 @@ export function compileRunCapabilityManifest(input: {
     subagents: createSubagents(manifest),
     interruptOn
   };
+}
+
+/**
+ * 旧接口：保持向后兼容
+ * 内部调用新接口，使用默认策略
+ */
+export function compileRunCapabilityManifest(input: {
+  deleteFileApprovalMode: ApprovalMode;
+  explicitSkillIds?: readonly string[];
+  mcpApprovalMode: ApprovalMode;
+  mcpServers: McpServerSnapshot[];
+  mode: ChatRunMode;
+  selfConfigAvailable?: boolean;
+  shellAllowedCommands?: readonly string[];
+  workflowHint: WorkflowHint;
+  requestedCapabilities: EnabledCapabilities;
+  skills: SkillSnapshot[];
+}): CompiledRunCapabilityManifest {
+  return buildManifestFromPolicy({
+    mode: input.mode,
+    deleteFileApprovalMode: input.deleteFileApprovalMode,
+    mcpApprovalMode: input.mcpApprovalMode,
+    mcpServers: input.mcpServers,
+    skills: input.skills,
+    explicitSkillIds: input.explicitSkillIds,
+    selfConfigAvailable: input.selfConfigAvailable ?? false,
+    shellAllowedCommands: input.shellAllowedCommands,
+    workflowHint: input.workflowHint,
+    requestedCapabilities: input.requestedCapabilities,
+    toolSelectionPolicy: new DefaultToolSelectionPolicy()
+  });
 }
 
 export function isRunCapabilityManifestIntegrityValid(manifest: RunCapabilityManifestV1): boolean {
@@ -395,58 +436,6 @@ function resolveApprovalPolicy(name: string, interruptOn: AgentInterruptPolicy):
   };
 }
 
-function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMode): AgentCapabilityCard[] {
-  const requiresApproval = approvalMode === 'default';
-  const approvalHint =
-    approvalMode === 'default'
-      ? '当前全局策略会在 MCP 调用时弹出审批卡。'
-      : '当前全局策略会直接执行 MCP 调用。';
-  if (server.id === 'exa-hosted') {
-    return [
-      {
-        id: 'mcp:exa-hosted:web_search',
-        name: 'web_search',
-        capabilityType: 'mcp_tool',
-        description: '搜索公开网络，返回可阅读和核实的结果。',
-        requiredInput: 'query',
-        scope: 'external',
-        dependencies: [server.id],
-        sideEffects: ['external_tool_call'],
-        requiresApproval,
-        supportsLongTermGrant: true,
-        revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
-        riskLevel: server.riskLevel === undefined ? 'medium' : server.riskLevel,
-        auditCategory: 'mcp_call',
-        untrustedContext: true
-      }
-    ];
-  }
-  if (server.allowedTools === undefined) {
-    return [];
-  }
-  return server.allowedTools.map((toolName) => {
-    if (reservedMcpModelVisibleToolNames.has(toolName)) {
-      throw new Error(`run_capability_model_visible_name_reserved:${toolName}`);
-    }
-    return {
-      id: `mcp:${server.id}:${toolName}`,
-      name: toolName,
-      capabilityType: 'mcp_tool',
-      description: `${server.name} 的 ${toolName} 调用入口。`,
-      requiredInput: 'tool-specific structured input',
-      scope: 'external',
-      dependencies: [server.id],
-      sideEffects: ['external_tool_call'],
-      requiresApproval,
-      supportsLongTermGrant: true,
-      revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
-      riskLevel: server.riskLevel === undefined ? 'medium' : server.riskLevel,
-      auditCategory: 'mcp_call',
-      untrustedContext: true
-    };
-  });
-}
-
 function createSkillCard(skill: SkillSnapshot): AgentCapabilityCard {
   return {
     id: `skill:${skill.id}`,
@@ -486,83 +475,6 @@ function createSubagents(manifest: RunCapabilityManifestV1): AgentSubagentPrevie
       tools: ['web_read']
     }
   ];
-}
-
-function createWebReadCard(): AgentCapabilityCard {
-  return {
-    id: 'web:web_read',
-    name: 'web_read',
-    capabilityType: 'web_read',
-    description: '读取公开网页正文；返回来源、抓取时间、SHA-256 和不可信标记。',
-    requiredInput: 'url',
-    scope: 'network',
-    dependencies: ['explicit_url'],
-    sideEffects: ['network_read'],
-    requiresApproval: false,
-    supportsLongTermGrant: true,
-    revokeGrantHint: '在设置页网页与搜索授权中撤销。',
-    riskLevel: 'medium',
-    auditCategory: 'web_read',
-    untrustedContext: true
-  };
-}
-
-function createSelfConfigCard(): AgentCapabilityCard {
-  return {
-    id: selfConfigCardId,
-    name: 'roc_self_config',
-    capabilityType: 'terminal_tool',
-    description:
-      '只读检查 Roc 配置：返回路径、hooks schema/契约、当前快照与脱敏 settings；可校验配置或在确认后试跑现有 handler。不写配置。',
-    requiredInput: "action: describe | read | validate | dry_run（validate 需 config，dry_run 需 handlerId）",
-    scope: 'app',
-    dependencies: ['SelfConfigService', 'HookConfigService', 'HookCommandRunner'],
-    sideEffects: ['host_code_execution'],
-    requiresApproval: false,
-    supportsLongTermGrant: false,
-    revokeGrantHint: 'roc_self_config 由 Roc 内置服务提供，不创建长期授权；dry_run 每次都单独确认。',
-    riskLevel: 'high',
-    auditCategory: 'agent_self_config',
-    untrustedContext: false
-  };
-}
-
-function createRunShellCommandCard(): AgentCapabilityCard {
-  return {
-    id: 'builtin:run_shell_command',
-    name: 'run_shell_command',
-    capabilityType: 'terminal_tool',
-    description: '以当前 Windows 用户权限执行 PowerShell；由 Roc 统一处理 RTK、审计、取消和输出限制。',
-    requiredInput: 'PowerShell command',
-    scope: 'external',
-    dependencies: ['ShellExecutionService', 'RtkService'],
-    sideEffects: ['host_code_execution', 'task_trace_audit'],
-    requiresApproval: false,
-    supportsLongTermGrant: false,
-    revokeGrantHint: 'run_shell_command 由 Roc 内置工具提供，不创建长期授权。',
-    riskLevel: 'critical',
-    auditCategory: 'agent_execute',
-    untrustedContext: false
-  };
-}
-
-function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
-  return {
-    id: 'builtin:delete_file',
-    name: 'delete_file',
-    capabilityType: 'terminal_tool',
-    description: '删除当前工作区文件或空目录；删除前写入恢复点。',
-    requiredInput: 'file_path: /workspace/...',
-    scope: 'workspace',
-    dependencies: ['FileService'],
-    sideEffects: ['workspace_delete', 'recovery_point_write'],
-    requiresApproval: approvalMode === 'default',
-    supportsLongTermGrant: false,
-    revokeGrantHint: 'delete_file 由 Roc 内置文件服务提供，不创建长期授权。',
-    riskLevel: 'high',
-    auditCategory: 'workspace_delete',
-    untrustedContext: false
-  };
 }
 
 function createInterruptPolicy(input: {
