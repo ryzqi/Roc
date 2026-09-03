@@ -14,6 +14,9 @@ import {
 } from '../../services/deep-agent/stream-consumers';
 import { defaultErrorTracker } from '../../services/forge-guardrails';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
+import { validateOutcomeConsistency } from '../../services/deep-agent/outcome-validator';
+import { recoverOrphanedOperation } from '../../services/deep-agent/operation-recovery';
+import { validateTokenBudget, ToolCallLoopDetector } from '../../services/deep-agent/runtime-state-validator';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
@@ -38,6 +41,47 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       });
       const events = (async function* () {
         try {
+      const eventQueue = createChatRunEventQueue();
+
+      // 在构建 harness 前检查是否需要恢复
+      if (input.resumeFromCheckpoint === true && 'validateCheckpointIntegrity' in options.checkpointer) {
+        const checkpointer = options.checkpointer as import('../../services/deep-agent/sqlite-checkpointer').RocSqliteCheckpointer;
+        const recovery = await recoverOrphanedOperation(
+          {
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            lastCheckpointId: null
+          },
+          checkpointer
+        );
+
+        switch (recovery.action) {
+          case 'restart':
+            // 记录遥测后重新开始
+            if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
+              void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
+                name: 'agent.recovery.restart',
+                value: 1,
+                tags: { reason: 'no_checkpoint', run_id: input.run.id }
+              });
+            }
+            break;
+
+          case 'fail':
+            eventQueue.fail(new Error(`checkpoint_recovery_failed: ${recovery.reason}`));
+            yield* eventQueue;
+            return;
+
+          case 'resume_with_interrupt':
+            // LangGraph 会处理 interrupt payload
+            break;
+
+          case 'resume_from_checkpoint':
+            // 标准 checkpoint 恢复,无需额外处理
+            break;
+        }
+      }
+
       const mode = input.snapshot.mode;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
@@ -45,7 +89,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const outcomeText = createOutcomeTextCollector(hookDisplayTexts);
       const successfulToolNamesByBlockId = new Map<string, string>();
       const usageAccumulator = createUsageAccumulator();
-      const eventQueue = createChatRunEventQueue();
+      const toolCallLoopDetector = new ToolCallLoopDetector();
       const executionAbortController = new AbortController();
       const abortFromParent = () => executionAbortController.abort(input.abortSignal.reason);
       if (input.abortSignal.aborted) {
@@ -62,6 +106,29 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         if (event.type === 'assistant_block' && event.block.kind === 'text' && event.block.text !== undefined) {
           outcomeText.push(event.block.text);
         }
+
+        // 工具调用循环检测
+        if (event.type === 'assistant_block' && event.block.kind === 'tool_call' && event.block.phase === 'end') {
+          const loopError = toolCallLoopDetector.recordToolCall(event.block.name, event.block.blockId);
+          if (loopError !== null) {
+            // 记录遥测
+            if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
+              void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
+                name: 'agent.runtime_validation.tool_call_loop',
+                value: 1,
+                tags: {
+                  run_id: input.run.id,
+                  tool_name: loopError.diagnostics.toolName as string,
+                  diagnostics: JSON.stringify(loopError.diagnostics)
+                }
+              });
+            }
+
+            // 不中断运行,仅记录警告(让 Agent 自行纠正)
+            console.warn(`[ToolCallLoopDetector] ${loopError.message}`);
+          }
+        }
+
         if (eventQueue.push(event)) {
           return;
         }
@@ -165,6 +232,55 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               });
             }
             const finalMessage = outcomeText.finish().trim();
+
+            // Token budget 校验 (从 provider options 读取)
+            const providerOptions = input.modelHandle.langChainHandle?.provider.options;
+            const contextBudgetTokens = providerOptions && 'contextBudgetTokens' in providerOptions
+              ? (providerOptions as { contextBudgetTokens?: number }).contextBudgetTokens
+              : undefined;
+            const budgetError = validateTokenBudget(usageAccumulator, contextBudgetTokens);
+            if (budgetError !== null) {
+              // 记录遥测
+              if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
+                void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
+                  name: 'agent.runtime_validation.token_budget_exceeded',
+                  value: 1,
+                  tags: {
+                    run_id: input.run.id,
+                    diagnostics: JSON.stringify(budgetError.diagnostics)
+                  }
+                });
+              }
+
+              throw new Error(budgetError.code);
+            }
+
+            // Outcome 一致性校验
+            const validationError = validateOutcomeConsistency({
+              assistantChunks,
+              reasoningChunks,
+              toolCallsByBlockId: successfulToolNamesByBlockId,
+              hookDisplayTexts,
+              usageAccumulated: usageAccumulator.inputTokens !== null && usageAccumulator.inputTokens > 0
+            });
+
+            if (validationError !== null) {
+              // 记录详细诊断到遥测
+              if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
+                void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
+                  name: 'agent.outcome.validation_failed',
+                  value: 1,
+                  tags: {
+                    run_id: input.run.id,
+                    error_code: validationError.code,
+                    diagnostics: JSON.stringify(validationError.diagnostics)
+                  }
+                });
+              }
+
+              throw new Error(validationError.code);
+            }
+
             const hasAnyModelOutput =
               finalMessage.length > 0 ||
               assistantChunks.some(chunk => chunk.trim().length > 0) ||

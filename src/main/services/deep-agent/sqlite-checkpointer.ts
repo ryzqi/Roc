@@ -422,6 +422,71 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     return row !== undefined;
   }
 
+  validateCheckpointIntegrity(threadId: string): {
+    valid: boolean;
+    issues: string[];
+  } {
+    const issues: string[] = [];
+
+    // 1. 检查 checkpoint 链完整性
+    const checkpoints = this.db
+      .prepare(
+        `SELECT checkpoint_id, parent_checkpoint_id, created_at
+         FROM langgraph_checkpoints
+         WHERE thread_id = ?
+         ORDER BY created_at ASC`
+      )
+      .all(threadId) as Array<{
+      checkpoint_id: string;
+      parent_checkpoint_id: string | null;
+      created_at: string;
+    }>;
+
+    if (checkpoints.length === 0) {
+      return { valid: true, issues: [] };
+    }
+
+    const idSet = new Set(checkpoints.map((c) => c.checkpoint_id));
+    for (const cp of checkpoints) {
+      if (cp.parent_checkpoint_id !== null && !idSet.has(cp.parent_checkpoint_id)) {
+        issues.push(
+          `Checkpoint ${cp.checkpoint_id} 引用缺失的父节点 ${cp.parent_checkpoint_id}`
+        );
+      }
+    }
+
+    // 2. 检查孤立的 writes
+    const orphanedWrites = this.db
+      .prepare(
+        `SELECT DISTINCT w.checkpoint_id
+         FROM langgraph_checkpoint_writes w
+         LEFT JOIN langgraph_checkpoints c
+           ON w.thread_id = c.thread_id
+           AND w.checkpoint_id = c.checkpoint_id
+         WHERE w.thread_id = ? AND c.checkpoint_id IS NULL`
+      )
+      .all(threadId) as Array<{ checkpoint_id: string }>;
+
+    if (orphanedWrites.length > 0) {
+      issues.push(
+        `发现 ${orphanedWrites.length} 个孤立的 write 批次: ${orphanedWrites.map((w) => w.checkpoint_id).join(', ')}`
+      );
+    }
+
+    // 3. 检查时间戳单调性
+    for (let i = 1; i < checkpoints.length; i++) {
+      const prev = new Date(checkpoints[i - 1].created_at).getTime();
+      const curr = new Date(checkpoints[i].created_at).getTime();
+      if (curr < prev) {
+        issues.push(
+          `Checkpoint 时间戳非单调递增: ${checkpoints[i - 1].checkpoint_id} (${prev}) -> ${checkpoints[i].checkpoint_id} (${curr})`
+        );
+      }
+    }
+
+    return { valid: issues.length === 0, issues };
+  }
+
   private readLatestCheckpointId(threadId: string, checkpointNs: string): string | null {
     const row = this.db
       .prepare(

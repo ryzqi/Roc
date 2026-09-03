@@ -149,7 +149,17 @@ export function resolveStreamUsage(provider: ProviderConfig, modelOptions: Provi
     return modelOptions.streamUsage ?? true;
   }
   if (provider.type === 'openai_compatible' || provider.type === 'anthropic_compatible') {
-    return modelOptions.streamUsage;
+    if (modelOptions.streamUsage !== undefined) {
+      return modelOptions.streamUsage;
+    }
+    // Default false for openai_compatible to maximize compatibility.
+    // Official OpenAI supports stream_options, but many compatible providers don't.
+    // Users can explicitly set streamUsage: true if their provider supports it.
+    if (provider.type === 'openai_compatible') {
+      return false;
+    }
+    // anthropic_compatible defaults to undefined (let LangChain decide)
+    return undefined;
   }
   return undefined;
 }

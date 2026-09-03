@@ -1,9 +1,10 @@
 import { RocDomainError } from './errors';
 import type { MetricsService } from './metrics-service';
 
-export const providerRequestTimeoutMs = 300_000;
+// 增加到 10 分钟以支持长推理模型（如 DeepSeek extended thinking）
+export const providerRequestTimeoutMs = 600_000;
 const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
-export const providerRequestTimeoutMessage = 'Provider 流在限定时间内没有返回新数据。若使用长推理模型，这是正常现象，可稍后重试或检查网络连接。';
+export const providerRequestTimeoutMessage = 'Provider 流在限定时间内没有返回新数据。这通常发生在模型进行长时间推理时（如复杂任务的思考阶段）。建议：1) 重试任务 2) 简化提示词 3) 分解为多个小任务。';
 
 export class ProviderStreamIdleError extends Error {
   readonly code = 'provider_stream_idle';

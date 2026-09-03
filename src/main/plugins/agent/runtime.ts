@@ -29,6 +29,7 @@ import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import type { RunFailure } from '../../services/deep-agent/types';
+import { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import { AgentActiveRunLifecycle } from './active-run-lifecycle';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
@@ -655,6 +656,7 @@ export class AgentPluginRuntime {
     }
     const runStartedAtMs = parseTimestamp(input.run.startedAt, 'agent_run_telemetry_started_at_invalid');
     const telemetry = this.getOrCreateRunTelemetry(input.run, input.snapshot);
+    const retryTelemetry = new RetryTelemetry(input.runId);
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
     let executionStream = input.executionStream;
@@ -731,6 +733,19 @@ export class AgentPluginRuntime {
           retryable: null,
           cancelSource: null
         });
+
+        // 输出重试统计
+        const retrySummary = retryTelemetry.summarize();
+        if (retrySummary.totalRetries > 0) {
+          console.log(`[Run ${input.runId}] 重试统计:`, {
+            总次数: retrySummary.totalRetries,
+            按层级: retrySummary.byLayer,
+            按错误码: retrySummary.byErrorCode,
+            平均延迟: `${retrySummary.avgDelayMs.toFixed(0)}ms`,
+            Checkpoint恢复: retrySummary.checkpointResumes
+          });
+        }
+
         await this.completeRun({
           runId: input.runId,
           assistantMessage: execution.finalMessage,
@@ -770,7 +785,8 @@ export class AgentPluginRuntime {
           failure,
           attempt,
           firstFailureAtMs,
-          nowMs
+          nowMs,
+          telemetry: retryTelemetry
         });
         if (decision.action === 'recover') {
           resumeFromCheckpoint = resumeFromCheckpoint || decision.resumeFromCheckpoint;
