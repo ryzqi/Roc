@@ -16,14 +16,16 @@ export const ROC_SHELL_TOOL_DESCRIPTION_LINES = [
   '默认 cwd 是用户选择的真实 Windows 工作区。',
   '禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。',
   '禁止使用 /home/user、/tmp 等 Linux 本地路径。',
+  '禁止用 shell 做文件操作(cat/type/Get-Content/echo/Out-File/Set-Content/New-Item/mkdir/ls/dir/rm/del/重定向)；文件读写用专用文件工具。',
   '引用工作区文件时用相对路径，或用真实 Windows 路径，例如 F:\\Code\\Roc\\script.ps1。',
-  '适合运行测试、构建、脚本和本地命令。'
+  '适合运行测试、构建、编译、脚本执行和进程类命令。'
 ] as const;
 export const ROC_SHELL_TOOL_DESCRIPTION = ROC_SHELL_TOOL_DESCRIPTION_LINES.join('\n');
 
 export type ShellPolicyReason =
   | 'virtual_workspace_path'
   | 'linux_local_path'
+  | 'shell_file_operation_forbidden'
   | 'shell_run_not_authorized'
   | 'background_shell_command_not_pre_authorized';
 
@@ -67,6 +69,10 @@ export function evaluateShellPolicy(input: ShellPolicyInput): ShellPolicyVerdict
     if (cwdPathVerdict.verdict === 'deny') {
       return cwdPathVerdict;
     }
+  }
+  const fileOpVerdict = evaluateFileOperationCommand(input.command);
+  if (fileOpVerdict.verdict === 'deny') {
+    return fileOpVerdict;
   }
   if (input.allowedCommands === undefined) {
     return { verdict: 'allow' };
@@ -218,4 +224,29 @@ function isWindowsDrivePrefix(value: string, workspaceRouteIndex: number): boole
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function evaluateFileOperationCommand(command: string): ShellPolicyVerdict {
+  const FILE_OPERATION_PATTERNS = [
+    /\b(cat|type|Get-Content)\b/i,
+    /\b(echo|Out-File|Set-Content|Add-Content)\b/i,
+    /\s+[>&]+\s*[\w\.\-\/\\]/,
+    /\b(New-Item|ni)\b/i,
+    /\b(ls|dir|Get-ChildItem|gci)\b/i,
+    /\b(rm|del|Remove-Item|ri)\b/i,
+    /\b(mkdir|md)\b/i,
+    /\b(copy|cp|Copy-Item)\b/i,
+    /\b(move|mv|Move-Item)\b/i,
+    /\b(ren|rename|Rename-Item)\b/i
+  ];
+
+  if (FILE_OPERATION_PATTERNS.some(pattern => pattern.test(command))) {
+    return {
+      verdict: 'deny',
+      reason: 'shell_file_operation_forbidden',
+      message: 'run_shell_command 禁止文件操作。文件读写使用 read_file / write_file / edit_file / delete_file；目录列表使用 ls 工具。'
+    };
+  }
+
+  return { verdict: 'allow' };
 }

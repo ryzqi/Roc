@@ -148,8 +148,11 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSn
   return [
     `Workspace: ${workspacePath}`,
     ...ROC_FILE_TOOL_PROMPT_LINES,
+    '',
+    'Tool routing: file operations (read/write/list/delete) use file tools; execution tasks (test/build/compile/script) use run_shell_command.',
+    '',
     ...ROC_SHELL_TOOL_DESCRIPTION_LINES,
-    'After write_file/edit_file, verify with read_file or ls before reporting the change.'
+    'After write_file/edit_file, verify with read_file before reporting the change.'
   ].join('\n');
 }
 

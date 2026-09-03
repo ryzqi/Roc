@@ -15,8 +15,9 @@ describe('shell policy', () => {
       '默认 cwd 是用户选择的真实 Windows 工作区。',
       '禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。',
       '禁止使用 /home/user、/tmp 等 Linux 本地路径。',
+      '禁止用 shell 做文件操作(cat/type/Get-Content/echo/Out-File/Set-Content/New-Item/mkdir/ls/dir/rm/del/重定向)；文件读写用专用文件工具。',
       '引用工作区文件时用相对路径，或用真实 Windows 路径，例如 F:\\Code\\Roc\\script.ps1。',
-      '适合运行测试、构建、脚本和本地命令。'
+      '适合运行测试、构建、编译、脚本执行和进程类命令。'
     ]);
   });
 
@@ -132,6 +133,52 @@ describe('shell policy', () => {
       status: 'error',
       content:
         'run_shell_command 使用真实 Windows cwd，不接受 DeepAgents 文件工具路由 /workspace/...。请改用默认 cwd 下的相对路径，或真实 Windows 路径。默认 cwd: F:\\Code\\Roc'
+    });
+  });
+
+  describe('file operation command blocking', () => {
+    it.each([
+      'cat file.txt',
+      'type config.json',
+      'Get-Content ./data.csv',
+      'echo "test" > output.txt',
+      'Out-File -Path result.log',
+      'ls .',
+      'dir',
+      'Get-ChildItem',
+      'New-Item -Path test.txt',
+      'rm old.txt',
+      'del temp.json',
+      'mkdir newdir',
+      'copy src.txt dst.txt',
+      'cp old.json new.json',
+      'Copy-Item file.txt backup.txt',
+      'move old.txt new.txt',
+      'mv file.json target.json',
+      'Move-Item src.txt dst.txt',
+      'ren old.txt new.txt',
+      'rename file.json renamed.json',
+      'Rename-Item old.txt new.txt'
+    ])('denies file operation commands: %s', (command) => {
+      expect(evaluateShellPolicy({ command, defaultCwd: 'F:\\Code\\Roc' })).toMatchObject({
+        verdict: 'deny',
+        reason: 'shell_file_operation_forbidden'
+      });
+    });
+
+    it.each([
+      'pnpm test',
+      'git status',
+      'python script.py',
+      'node index.js',
+      'cargo build',
+      'dotnet run',
+      'pnpm test --filter="version>1.0"',
+      'cargo test -- --test-threads>1'
+    ])('allows execution commands: %s', (command) => {
+      expect(evaluateShellPolicy({ command, defaultCwd: 'F:\\Code\\Roc' })).toEqual({
+        verdict: 'allow'
+      });
     });
   });
 });
