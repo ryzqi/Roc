@@ -35,3 +35,27 @@
 ### Next Actions
 - 开始 Phase 3: Chat Transcript 投影
 
+### Phase 3 探索结果
+- 定位到 `chat-transcript.ts` 中的递归逻辑
+- 主要涉及函数:
+  - `filterSubagentTaskToolBlocks` (行 289-292)
+  - `normalizeSubagentActivityBlock` (行 294-306) - 递归调用自身
+  - `filterRedundantSubagentTaskBlocks` (行 308-325)
+  - `upsertTranscriptSubagentBlock` (行 363-400) - 递归调用自身
+- 调用栈层次: `filterRedundantSubagentTaskBlocksFromMessage` → `filterRedundantSubagentTaskBlocks` → `normalizeSubagentActivityBlock` (递归) → `filterSubagentTaskToolBlocks`
+- 过滤规则: 移除 subagent 块中 `kind === 'tool_call' && name === 'task'` 的工具调用
+
+### Phase 3 完成内容
+- ✓ 创建 `TaskToolFilterPolicy` 接口和 `DefaultTaskToolFilterPolicy` 实现
+- ✓ 创建 `SubagentBlockTree` 类封装递归逻辑
+- ✓ 实现 `filterTaskToolsFromActivityBlocks` 静态方法
+- ✓ 重构 `chat-transcript.ts` 中的 `filterRedundantSubagentTaskBlocks` 使用树
+- ✓ 移除 `filterSubagentTaskToolBlocks` 和 `normalizeSubagentActivityBlock` 两个辅助函数
+- ✓ 编写 11 个单元测试,全部通过
+- ✓ 类型检查通过
+- ✓ 调用栈从 5 层降为 2 层 (filterRedundantSubagentTaskBlocks → SubagentBlockTree.filterTaskToolsFromActivityBlocks)
+
+### Next Actions
+- 提交 Phase 3
+- 开始 Phase 4: Run Harness 装配器
+

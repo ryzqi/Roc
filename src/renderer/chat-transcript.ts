@@ -16,6 +16,7 @@ import {
 } from '../shared/schemas/task-event';
 import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentBlock, ChatRunSubagentNode } from './chat-run-state';
 import { applyPendingInterruptProjection, readPersistedInterruptProjection } from './chat/interrupt-projection';
+import { SubagentBlockTree } from './subagent-block-tree';
 
 export type ChatTranscriptSubagentBlock =
   | {
@@ -286,42 +287,8 @@ function syncDraftSubagentBlocks(draft: AssistantDraft): void {
   }
 }
 
-function filterSubagentTaskToolBlocks(blocks: ChatTranscriptSubagentBlock[]): ChatTranscriptSubagentBlock[] {
-  const nextBlocks = blocks.filter((block) => block.kind !== 'tool_call' || block.name !== 'task');
-  return nextBlocks.length === blocks.length ? blocks : nextBlocks;
-}
-
-function normalizeSubagentActivityBlock(block: ChatTranscriptSubagentActivityBlock): ChatTranscriptSubagentActivityBlock {
-  const children = block.children.map((child) => normalizeSubagentActivityBlock(child));
-  const hasChildChange = children.some((child, index) => child !== block.children[index]);
-  const blocks = block.children.length === 0 ? block.blocks : filterSubagentTaskToolBlocks(block.blocks);
-  if (!hasChildChange && blocks === block.blocks) {
-    return block;
-  }
-  return {
-    ...block,
-    blocks,
-    children
-  };
-}
-
 function filterRedundantSubagentTaskBlocks(blocks: ChatTranscriptActivityBlock[]): ChatTranscriptActivityBlock[] {
-  let changed = false;
-  const normalizedBlocks = blocks.map((block) => {
-    if (block.kind !== 'subagent') {
-      return block;
-    }
-    const nextBlock = normalizeSubagentActivityBlock(block);
-    if (nextBlock !== block) {
-      changed = true;
-    }
-    return nextBlock;
-  });
-  if (!normalizedBlocks.some((block) => block.kind === 'subagent')) {
-    return changed ? normalizedBlocks : blocks;
-  }
-  const nextBlocks = normalizedBlocks.filter((block) => block.kind !== 'tool_call' || block.name !== 'task');
-  return changed || nextBlocks.length !== blocks.length ? nextBlocks : blocks;
+  return SubagentBlockTree.filterTaskToolsFromActivityBlocks(blocks) as ChatTranscriptActivityBlock[];
 }
 
 function filterRedundantSubagentTaskBlocksFromMessage(message: ChatTranscriptMessage): ChatTranscriptMessage {

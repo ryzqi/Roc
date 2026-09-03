@@ -5,11 +5,11 @@
 
 ## Next Step
 
-Phase 2: 深化 Agent Outbox 投影 (策略对象封装状态转换规则)
+Phase 3: 深化 Chat Transcript 投影 (SubagentBlockTree 封装递归逻辑)
 
 ## Current Phase
 
-Phase 2
+Phase 3
 
 ## Phases
 
@@ -42,30 +42,30 @@ Phase 2
 ---
 
 ### Phase 2: 深化 Agent Outbox 投影
-**Status:** in_progress
+**Status:** complete
 **Files:**
-- `src/main/plugins/task/agent-outbox-projector.ts`
+- `src/main/plugins/task/task-outbox-projection-strategy.ts` (新增)
 - `src/main/plugins/task/task-repository.ts`
-- `src/main/plugins/agent/agent-task-history-contract.ts`
+- `tests/unit/plugins/task/task-outbox-projection-strategy.test.ts` (新增)
 
 **Tasks:**
-- [ ] 创建 `TaskOutboxProjectionStrategy` 接口
-- [ ] 实现纯函数 `applyEvent(task, event): TaskStateTransition`
-- [ ] 重构 `task-repository.ts` 投影逻辑使用策略
-- [ ] 移除 41 行 transaction 中的 if-else 分支
-- [ ] 编写策略单元测试 (plain objects)
-- [ ] Review + 修复问题
-- [ ] 提交
+- [x] 创建 `TaskOutboxProjectionStrategy` 接口
+- [x] 实现纯函数 `applyEvent(task, event): TaskStateTransition`
+- [x] 重构 `task-repository.ts` 投影逻辑使用策略
+- [x] 移除 41 行 transaction 中的 if-else 分支
+- [x] 编写策略单元测试 (plain objects)
+- [x] Review + 修复问题
+- [x] 提交 (commit 85302b1)
 
 **Acceptance Criteria:**
-- 状态转换规则集中在策略对象
-- Repository 只负责持久化,无业务逻辑
-- 可用 plain objects 测试策略
+- ✓ 状态转换规则集中在策略对象
+- ✓ Repository 只负责持久化,无业务逻辑
+- ✓ 可用 plain objects 测试策略
 
 ---
 
 ### Phase 3: 深化 Chat Transcript 投影
-**Status:** not_started
+**Status:** in_progress
 **Files:**
 - `src/renderer/chat-transcript.ts`
 - `src/renderer/chat/chat-transcript-panel.tsx`
