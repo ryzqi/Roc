@@ -51,46 +51,74 @@ export function MemoryView({
       <section className="canvas-stage memory-center-stage" data-testid="memory-view">
         <div className="memory-tabs" role="tablist" aria-label="记忆中心">
           <button
-            aria-pressed={tab === 'files'}
+            aria-controls="memory-panel-files"
+            aria-selected={tab === 'files'}
             className={tab === 'files' ? 'tab active' : 'tab'}
             data-testid="memory-tab-files"
+            id="memory-tab-files"
             onClick={() => setTab('files')}
+            role="tab"
             type="button"
           >
             文件
           </button>
           <button
-            aria-pressed={tab === 'sessions'}
+            aria-controls="memory-panel-sessions"
+            aria-selected={tab === 'sessions'}
             className={tab === 'sessions' ? 'tab active' : 'tab'}
             data-testid="memory-tab-sessions"
+            id="memory-tab-sessions"
             onClick={() => setTab('sessions')}
+            role="tab"
             type="button"
           >
             会话回顾
           </button>
           <button
-            aria-pressed={tab === 'snapshot'}
+            aria-controls="memory-panel-snapshot"
+            aria-selected={tab === 'snapshot'}
             className={tab === 'snapshot' ? 'tab active' : 'tab'}
             data-testid="memory-tab-snapshot"
+            id="memory-tab-snapshot"
             onClick={() => setTab('snapshot')}
+            role="tab"
             type="button"
           >
             系统快照
           </button>
           <button
-            aria-pressed={tab === 'auto'}
+            aria-controls="memory-panel-auto"
+            aria-selected={tab === 'auto'}
             className={tab === 'auto' ? 'tab active' : 'tab'}
             data-testid="memory-tab-auto"
+            id="memory-tab-auto"
             onClick={() => setTab('auto')}
+            role="tab"
             type="button"
           >
             自动写入
           </button>
         </div>
-        {tab === 'files' ? <FilesTab client={client} initialStatus={state.memoryStatus} /> : null}
-        {tab === 'sessions' ? <SessionsTab client={client} workspaceHash={state.memoryStatus.workspaceHash} /> : null}
-        {tab === 'snapshot' ? <SnapshotTab client={client} /> : null}
-        {tab === 'auto' ? <AutoTab status={state.memoryStatus} /> : null}
+        {tab === 'files' ? (
+          <div aria-labelledby="memory-tab-files" id="memory-panel-files" role="tabpanel">
+            <FilesTab client={client} initialStatus={state.memoryStatus} />
+          </div>
+        ) : null}
+        {tab === 'sessions' ? (
+          <div aria-labelledby="memory-tab-sessions" id="memory-panel-sessions" role="tabpanel">
+            <SessionsTab client={client} workspaceHash={state.memoryStatus.workspaceHash} />
+          </div>
+        ) : null}
+        {tab === 'snapshot' ? (
+          <div aria-labelledby="memory-tab-snapshot" id="memory-panel-snapshot" role="tabpanel">
+            <SnapshotTab client={client} />
+          </div>
+        ) : null}
+        {tab === 'auto' ? (
+          <div aria-labelledby="memory-tab-auto" id="memory-panel-auto" role="tabpanel">
+            <AutoTab status={state.memoryStatus} />
+          </div>
+        ) : null}
       </section>
     </>
   );

@@ -250,6 +250,13 @@
   min-height: 0;
 }
 
+@media (max-width: 900px) {
+  .memory-files-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
 .memory-files-list,
 .memory-file-editor-shell {
   min-width: 0;
@@ -298,6 +305,15 @@
 .memory-file-row-sub {
   color: var(--muted);
   font-size: var(--font-meta-size);
+}
+
+.memory-file-row.over-limit {
+  border-color: var(--st-warn-line);
+  background: color-mix(in srgb, var(--st-warn) 5%, transparent);
+}
+
+.memory-file-row.over-limit .memory-file-row-sub {
+  color: var(--st-warn);
 }
 
 .memory-file-editor-shell {
@@ -360,6 +376,28 @@
   white-space: pre-wrap;
 }
 
+.memory-warn-banner {
+  padding: 12px 14px;
+  border: 1px solid var(--st-warn-line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--st-warn) 9%, transparent);
+  color: var(--st-warn);
+  font-size: var(--font-meta-size);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.memory-info-banner {
+  padding: 12px 14px;
+  border: 1px solid var(--st-info-line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--st-info) 9%, transparent);
+  color: var(--st-info);
+  font-size: var(--font-meta-size);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .memory-snapshot-shell {
   display: grid;
   align-content: start;
@@ -378,9 +416,16 @@
 
 .memory-session-searchbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 120px 92px auto;
+  grid-template-columns: minmax(280px, 1fr) 120px 92px auto;
   align-items: end;
   gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .memory-session-searchbar {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
 }
 
 .memory-session-field {
@@ -500,4 +545,44 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   line-height: 1.6;
+}
+
+.memory-auto-action {
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--font-meta-size);
+  font-weight: 500;
+}
+
+.memory-auto-action.action-accepted {
+  background: color-mix(in srgb, var(--st-ok) 15%, transparent);
+  color: var(--st-ok);
+}
+
+.memory-auto-action.action-rejected,
+.memory-auto-action.action-failed {
+  background: color-mix(in srgb, var(--st-bad) 15%, transparent);
+  color: var(--st-bad);
+}
+
+.memory-auto-action.action-skipped,
+.memory-auto-action.action-deleted {
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+  color: var(--muted);
+}
+
+.memory-auto-action.action-conflict {
+  background: color-mix(in srgb, var(--st-warn) 15%, transparent);
+  color: var(--st-warn);
+}
+
+.memory-auto-action.action-merged {
+  background: color-mix(in srgb, var(--st-info) 15%, transparent);
+  color: var(--st-info);
+}
+
+.search-highlight {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RocError, SessionMessageSearchRequest, SessionMessageSearchResult } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
+import { highlightMatch } from './formatters';
 
 type WorkspaceScope = 'current' | 'all';
 
@@ -60,8 +61,8 @@ export function SessionsTab({ client, workspaceHash }: { client?: RocClient; wor
             onChange={(event) => setWorkspaceScope(readWorkspaceScope(event.currentTarget.value))}
             value={workspaceScope}
           >
-            <option value="current">current</option>
-            <option value="all">all</option>
+            <option value="current">当前工作区</option>
+            <option value="all">全部工作区</option>
           </select>
         </label>
         <label className="memory-session-field compact">
@@ -95,24 +96,28 @@ export function SessionsTab({ client, workspaceHash }: { client?: RocClient; wor
       {result === null ? (
         <div className="section-empty-state" data-testid="memory-session-empty">
           <strong>输入关键词后搜索</strong>
+          <p>可搜索当前工作区或全部历史会话消息。</p>
         </div>
       ) : (
         <div className="memory-session-results" data-testid="memory-session-results">
           <div className="memory-session-summary">
-            Found {result.total} for "{result.query}"
+            找到 {result.total} 条结果 "{result.query}"
           </div>
-          {result.items.map((item) => (
-            <article className="memory-session-result" key={item.id}>
-              <div className="memory-session-result-meta">
-                <span>{item.createdAt}</span>
-                <span>{item.threadTitle === null ? item.threadId : item.threadTitle}</span>
-              </div>
-              <div className="memory-session-result-body">
-                <strong>{item.role}</strong>
-                <span>{item.snippet}</span>
-              </div>
-            </article>
-          ))}
+          {result.items.map((item) => {
+            const truncatedSnippet = item.snippet.length > 200 ? `${item.snippet.slice(0, 200)}...` : item.snippet;
+            return (
+              <article className="memory-session-result" key={item.id}>
+                <div className="memory-session-result-meta">
+                  <span>{item.createdAt}</span>
+                  <span>{item.threadTitle === null ? item.threadId : item.threadTitle}</span>
+                </div>
+                <div className="memory-session-result-body">
+                  <strong>{item.role}</strong>
+                  <span>{highlightMatch(truncatedSnippet, result.query)}</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

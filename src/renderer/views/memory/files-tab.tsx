@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { MemoryFileMeta, MemoryFileWriteOutcome, MemoryStatus, RocError } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
+import { formatKind, formatScope } from './formatters';
 
 type FileTabError =
   | MemoryFileWriteOutcome
@@ -75,45 +76,52 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
   const files = status.files;
   const charCount = useMemo(() => [...buffer].length, [buffer]);
   const overLimit = selected !== null && charCount > selected.charLimit;
+  const charDiff = selected !== null && overLimit ? charCount - selected.charLimit : 0;
 
   return (
     <div className="memory-files-layout">
       <aside className="memory-files-list" aria-label="记忆文件">
-        {files.map((file) => (
-          <button
-            aria-pressed={selected !== null && selected.scope === file.scope && selected.kind === file.kind}
-            className={selected !== null && selected.scope === file.scope && selected.kind === file.kind ? 'memory-file-row active' : 'memory-file-row'}
-            data-testid={`memory-file-row-${file.scope}-${file.kind}`}
-            key={`${file.scope}-${file.kind}`}
-            onClick={() => void loadFile(file)}
-            type="button"
-          >
-            <span className="memory-file-row-main">
-              <strong>{formatKind(file.kind)}</strong>
-              <span>{file.scope}</span>
-            </span>
-            <span className="memory-file-row-sub">
-              {file.charCount} / {file.charLimit}
-              {file.effective ? ' · effective' : ''}
-            </span>
-          </button>
-        ))}
+        {files.map((file) => {
+          const isSelected = selected !== null && selected.scope === file.scope && selected.kind === file.kind;
+          const isOverLimit = file.charCount > file.charLimit;
+          const rowClass = isSelected ? 'memory-file-row active' : isOverLimit ? 'memory-file-row over-limit' : 'memory-file-row';
+          return (
+            <button
+              aria-pressed={isSelected}
+              className={rowClass}
+              data-testid={`memory-file-row-${file.scope}-${file.kind}`}
+              key={`${file.scope}-${file.kind}`}
+              onClick={() => void loadFile(file)}
+              type="button"
+            >
+              <span className="memory-file-row-main">
+                <strong>{formatKind(file.kind)}</strong>
+                <span>{formatScope(file.scope)}</span>
+              </span>
+              <span className="memory-file-row-sub">
+                {file.charCount} / {file.charLimit}
+                {file.effective ? ' · ✓ 生效中' : ''}
+              </span>
+            </button>
+          );
+        })}
       </aside>
       <main className="memory-file-editor-shell">
         {selected === null ? (
           <div className="section-empty-state" data-testid="memory-file-empty">
             <strong>选择一个记忆文件</strong>
-            <p>全局与当前工作区文件会写入 DeepAgents 记忆 Store；安全扫描和容量限制会在保存时执行。</p>
+            <p>全局文件对所有工作区生效，工作区文件仅在当前项目生效。</p>
           </div>
         ) : (
           <>
             <div className="memory-file-editor-head">
               <div>
-                <h2 className="section-title">{formatKind(selected.kind)} · {selected.scope}</h2>
+                <h2 className="section-title">{formatKind(selected.kind)} · {formatScope(selected.scope)}</h2>
                 <p className="muted">{selected.absolutePath}</p>
               </div>
               <span className={overLimit ? 'memory-count memory-count--bad' : 'memory-count'}>
                 {charCount} / {selected.charLimit}
+                {overLimit ? ` (+${charDiff})` : ''}
               </span>
             </div>
             <textarea
@@ -127,14 +135,23 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
               <button
                 className="memory-chip-button primary"
                 data-testid="memory-file-save"
-                disabled={saving}
+                disabled={saving || overLimit}
                 onClick={() => void save()}
                 type="button"
               >
                 {saving ? '保存中' : '保存'}
               </button>
-              {selected.effective ? <span className="muted">改动会在下个 session 生效</span> : null}
             </div>
+            {overLimit ? (
+              <div className="memory-warn-banner">
+                请删减 {charDiff} 字符后保存
+              </div>
+            ) : null}
+            {!overLimit && selected.effective ? (
+              <div className="memory-info-banner">
+                改动会在下个 session 生效
+              </div>
+            ) : null}
             {error !== null && !error.ok ? (
               <div className="memory-error-banner" data-testid="memory-write-error">
                 {error.detail}
@@ -145,16 +162,6 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
       </main>
     </div>
   );
-}
-
-function formatKind(kind: MemoryFileMeta['kind']): string {
-  if (kind === 'user') {
-    return 'USER.md';
-  }
-  if (kind === 'agents') {
-    return 'AGENTS.md';
-  }
-  return 'MEMORY.md';
 }
 
 function syncSelectedMeta(current: MemoryFileMeta | null, files: MemoryFileMeta[]): MemoryFileMeta | null {
