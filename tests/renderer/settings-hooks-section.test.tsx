@@ -194,7 +194,7 @@ function buildSnapshot(input: Partial<RocHookConfigSnapshot> = {}): RocHookConfi
         event: 'PreToolUse',
         matcher: '^run_shell_command$',
         command: 'node hook.js',
-        commandWindows: null,
+
         timeoutSeconds: 30,
         statusMessage: 'Checking command',
         enabled: true,

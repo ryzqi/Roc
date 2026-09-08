@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildSystemAppearanceSnapshot, normalizeRgbaHexColor } from '../../src/main/system-appearance';
 
 describe('system appearance', () => {
-  it('normalizes Windows RGBA system colors to renderer-safe RGB hex', () => {
+  it('normalizes macOS accent RGBA colors to renderer-safe RGB hex', () => {
+    expect(normalizeRgbaHexColor('007AFFFF')).toBe('#007AFF');
     expect(normalizeRgbaHexColor('#0078D4FF')).toBe('#0078D4');
     expect(normalizeRgbaHexColor('#2d477a')).toBe('#2d477a');
     expect(normalizeRgbaHexColor('not-a-color')).toBe('#2d477a');
@@ -20,7 +21,7 @@ describe('system appearance', () => {
           themeSource: 'system'
         },
         systemPreferences: {
-          getColor: () => '#0078D4FF'
+          getAccentColor: () => '0078D4FF'
         }
       })
     ).toEqual({

@@ -22,15 +22,11 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('File tools accept only Roc routes: /workspace/, /memory/, /skills/.');
     expect(buildInput.systemPrompt).toContain('Memory files use /memory/.../AGENTS.md and related routes.');
     expect(buildInput.systemPrompt).toContain('write_file creates or replaces a file; use edit_file for targeted changes.');
-    expect(buildInput.systemPrompt).toContain(process.platform === 'win32' ? '在当前 Roc Windows 工作区执行 PowerShell 命令。' : '在当前 Roc 工作区执行系统 POSIX Shell 命令。');
+    expect(buildInput.systemPrompt).toContain('在当前 Roc macOS 工作区执行 zsh 命令。');
     expect(buildInput.systemPrompt).toContain('默认 cwd 是用户选择的真实本机工作区。');
     expect(buildInput.systemPrompt).toContain('禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。');
-    if (process.platform === 'win32') {
-      expect(buildInput.systemPrompt).toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
-    } else {
-      expect(buildInput.systemPrompt).not.toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
-    }
-    expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute or Linux paths to file tools.');
+    expect(buildInput.systemPrompt).not.toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
+    expect(buildInput.systemPrompt).toContain('Do not pass real host paths to file tools; use the virtual routes above.');
     expect(buildInput.systemPrompt).not.toContain('current directory means /workspace/.');
     expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');
   });
@@ -152,7 +148,7 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('exposes Roc Windows command tool instead of DeepAgents built-in execute', async () => {
+  it('exposes Roc command tool instead of DeepAgents built-in execute', async () => {
     await buildExecutorOnce(createCapabilities([]), {
       mode: 'chat',
       workflowHint: null,
@@ -166,7 +162,7 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('runs Roc Windows command tool through shell.execute capability', async () => {
+  it('runs Roc command tool through shell.execute capability', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
       mode: 'chat',

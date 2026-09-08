@@ -15,7 +15,7 @@ describe('deep agent prompt', () => {
       buildPromptBlocks({
         mode: 'run',
         enabledCapabilities: { mcpServers: [], skills: [] },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Projects/Roc',
         workflowHint: null,
         tools: [],
         explicitSkillContexts: [],
@@ -39,7 +39,7 @@ describe('deep agent prompt', () => {
   it('omits the referenced files block when the request has no @ references', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: null
     });
 
@@ -53,7 +53,7 @@ describe('deep agent prompt', () => {
         mcpServers: [],
         skills: ['project-review']
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: null
     });
 
@@ -66,12 +66,12 @@ describe('deep agent prompt', () => {
         mcpServers: ['exa-hosted', 'docs-http'],
         skills: ['project-review']
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: null
     });
 
     expect(prompt).toContain(
-      'You are Roc, a Windows coding agent. Be concise; claim only inspected evidence.'
+      'You are Roc, a macOS coding agent. Be concise; claim only inspected evidence.'
     );
     expect(prompt).toContain('Inspect relevant source, tests, and config before edits. Keep changes scoped to the request.');
     expect(prompt).toContain('Run direct verification after code or config changes. Report results and blockers plainly.');
@@ -98,18 +98,14 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('<!-- BLOCK:static:static:');
     expect(prompt).toContain('<!-- BLOCK:context_recall:workspace:');
     expect(prompt).toContain('Available tools are defined by the runtime schema.');
-    expect(prompt).toContain('Workspace: F:\\Code\\Roc');
+    expect(prompt).toContain('Workspace: /Users/test/Projects/Roc');
     expect(prompt).toContain('File tools accept only Roc routes: /workspace/, /memory/, /skills/.');
     expect(prompt).toContain('Memory files use /memory/.../AGENTS.md and related routes.');
-    expect(prompt).toContain(process.platform === 'win32' ? '在当前 Roc Windows 工作区执行 PowerShell 命令。' : '在当前 Roc 工作区执行系统 POSIX Shell 命令。');
+    expect(prompt).toContain('在当前 Roc macOS 工作区执行 zsh 命令。');
     expect(prompt).toContain('默认 cwd 是用户选择的真实本机工作区。');
     expect(prompt).toContain('禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。');
-    if (process.platform === 'win32') {
-      expect(prompt).toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
-    } else {
-      expect(prompt).not.toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
-    }
-    expect(prompt).toContain('Do not pass Windows absolute or Linux paths to file tools.');
+    expect(prompt).not.toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
+    expect(prompt).toContain('Do not pass real host paths to file tools; use the virtual routes above.');
     expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(
       'After write_file/edit_file, verify with read_file or ls before reporting the change.'
@@ -125,7 +121,7 @@ describe('deep agent prompt', () => {
         mcpServers: ['docs-http', 'exa-hosted'],
         skills: ['zeta-review', 'alpha-review']
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: null
     });
 
@@ -135,11 +131,11 @@ describe('deep agent prompt', () => {
     const staticEnd = lines.findIndex((line, index) => index > 0 && line.startsWith('<!-- BLOCK:workspace:'));
     expect(staticEnd).toBeGreaterThan(0);
     const staticContent = lines.slice(1, staticEnd).join('\n');
-    expect(staticContent).toContain('You are Roc, a Windows coding agent.');
+    expect(staticContent).toContain('You are Roc, a macOS coding agent.');
     expect(staticContent).toContain('Inspect relevant source, tests, and config before edits.');
     expect(staticContent).toContain('Read SKILL.md silently; never quote, paraphrase, or summarize it.');
     expect(lines[staticEnd]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
-    expect(prompt).toContain('Workspace: F:\\Code\\Roc');
+    expect(prompt).toContain('Workspace: /Users/test/Projects/Roc');
     expect(prompt).toContain(
       'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
     );
@@ -186,7 +182,7 @@ describe('deep agent prompt', () => {
   it('adds a propose-background-task workflow overview for DeepAgents creation', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: 'propose_background_task'
     });
 
@@ -219,7 +215,7 @@ describe('deep agent prompt', () => {
   it('adds a background-task-change workflow overview without unconditional read ordering', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Projects/Roc',
       workflowHint: 'background_task_change'
     });
 

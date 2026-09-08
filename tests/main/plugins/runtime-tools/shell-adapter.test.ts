@@ -14,7 +14,7 @@ import type { ShellExecutionResult } from '../../../../src/shared/types';
 let root: string;
 let workspaceRoot: string;
 let db: Database.Database;
-const systemShell = process.platform === 'win32' ? 'powershell.exe' : process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh';
+const systemShell = '/bin/zsh';
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-runtime-tools-shell-'));
@@ -34,7 +34,7 @@ describe('runtime tools shell adapter', () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke('shell.execute', {
-      command: 'dir',
+      command: 'ls',
       cwd: workspaceRoot,
       source: 'terminal'
     });
@@ -46,7 +46,7 @@ describe('runtime tools shell adapter', () => {
     });
 
     expect(result).toMatchObject({
-      command: 'dir',
+      command: 'ls',
       cwd: workspaceRoot,
       stdout: 'notes.txt\n',
       stderr: '',
@@ -56,14 +56,14 @@ describe('runtime tools shell adapter', () => {
     });
     expect(confirmation).toEqual({ confirmed: true, response: 0 });
     const highRiskResult = await capabilities.invoke('shell.execute', {
-      command: 'Remove-Item notes.txt',
+      command: 'rm notes.txt',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(highRiskResult).toMatchObject({
-      command: 'Remove-Item notes.txt',
-      normalizedCommand: 'remove-item notes.txt',
+      command: 'rm notes.txt',
+      normalizedCommand: 'rm notes.txt',
       cwd: workspaceRoot,
       stdout: '',
       exitCode: 1,
@@ -77,14 +77,14 @@ describe('runtime tools shell adapter', () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke('shell.execute', {
-      command: 'Write-Output unknown',
+      command: 'printf unknown',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'Write-Output unknown',
-      normalizedCommand: 'write-output unknown',
+      command: 'printf unknown',
+      normalizedCommand: 'printf unknown',
       cwd: workspaceRoot,
       stdout: 'notes.txt\n',
       stderr: '',
@@ -97,21 +97,21 @@ describe('runtime tools shell adapter', () => {
       file: systemShell,
       cwd: workspaceRoot
     });
-    expect(commandCalls[0].args.join(' ')).toContain('Write-Output unknown');
+    expect(commandCalls[0].args.join(' ')).toContain('printf unknown');
   });
 
   it('rejects agent shell commands that mention the Deep Agents /workspace route', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py',
+      command: 'cp /workspace/gold_price_scheduler/main.py /Users/test/gold_price.py',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py',
-      normalizedCommand: 'copy /workspace/gold_price_scheduler/main.py g:\\杂\\test\\gold_price.py',
+      command: 'cp /workspace/gold_price_scheduler/main.py /Users/test/gold_price.py',
+      normalizedCommand: 'cp /workspace/gold_price_scheduler/main.py /Users/test/gold_price.py',
       cwd: workspaceRoot,
       stdout: '',
       exitCode: 1,
@@ -131,8 +131,8 @@ describe('runtime tools shell adapter', () => {
       source: 'agent'
     });
 
-    expect(result.exitCode).toBe(process.platform === 'win32' ? 1 : 0);
-    expect(commandCalls).toHaveLength(process.platform === 'win32' ? 0 : 1);
+    expect(result.exitCode).toBe(0);
+    expect(commandCalls).toHaveLength(1);
   });
 
   it('blocks agent file listing before invoking the host shell', async () => {
@@ -177,7 +177,7 @@ describe('runtime tools shell adapter', () => {
     expect(result.bypassReason).toBeUndefined();
     expect(commandCalls).toHaveLength(1);
     expect(commandCalls[0]).toMatchObject({
-      file: expect.stringContaining(process.platform === 'win32' ? 'rtk.exe' : '/rtk'),
+      file: expect.stringContaining('/rtk'),
       args: ['git', 'status'],
       cwd: workspaceRoot
     });
@@ -213,26 +213,26 @@ describe('runtime tools shell adapter', () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     await capabilities.invoke('shell.execute', {
-      command: 'Write-Output /workspace/package.json',
+      command: 'printf /workspace/package.json',
       cwd: workspaceRoot,
       source: 'terminal'
     });
 
     expect(commandCalls).toHaveLength(1);
-    expect(commandCalls[0].args.join(' ')).toContain('Write-Output /workspace/package.json');
+    expect(commandCalls[0].args.join(' ')).toContain('printf /workspace/package.json');
   });
 
   it('executes agent commands with explicit real cwd when no workspace is selected', async () => {
     const { capabilities, commandCalls } = await initializePlugin({ workspacePath: undefined });
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'Write-Output explicit',
+      command: 'printf explicit',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'Write-Output explicit',
+      command: 'printf explicit',
       cwd: workspaceRoot,
       stdout: 'notes.txt\n',
       exitCode: 0,
@@ -272,7 +272,7 @@ describe('runtime tools shell adapter', () => {
     });
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'Write-Output huge',
+      command: 'printf huge',
       cwd: workspaceRoot,
       source: 'agent'
     });

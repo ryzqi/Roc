@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 export function resolveSmokeTarget({
   env = process.env,
-  packagedExe = resolve('release/win-unpacked/Roc.exe'),
+  packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app/Contents/MacOS/Roc'),
   distMainPath = resolve('dist/main/index.js'),
   exists = existsSync
 } = {}) {

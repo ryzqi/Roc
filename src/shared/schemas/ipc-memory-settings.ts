@@ -201,7 +201,6 @@ const rocHookCommandHandlerSchema = z
   .object({
     type: z.literal('command'),
     command: z.string().trim().min(1),
-    commandWindows: z.string().trim().min(1).optional(),
     timeoutSeconds: z.number().int().min(1).max(600).default(30),
     statusMessage: z.string().trim().min(1).optional(),
     enabled: z.boolean().default(true),
@@ -237,7 +236,6 @@ const rocHookConfiguredHandlerSnapshotSchema = z
     event: rocHookEventNameSchema,
     matcher: z.string().nullable(),
     command: z.string(),
-    commandWindows: z.string().nullable(),
     timeoutSeconds: z.number(),
     statusMessage: z.string().nullable(),
     enabled: z.boolean(),

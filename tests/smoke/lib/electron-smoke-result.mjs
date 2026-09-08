@@ -5,7 +5,7 @@ import { buildRendererBoundaryWorkbench } from './electron-smoke-boundary-workbe
 import { nativeFeelScorecard } from './native-feel.mjs';
 
 export function writeElectronSmokeResult(ctx) {
-  const { artifactDir, releaseReadiness, dataRoot, smokeTarget, packagedExe, phase6ApiEvidence, ipcSummary, nativeFeel, nativeModuleProbe, processMetricsSummary, smokeProvider, chatInputEvidence, workspaceSelectButtonEvidence, sidebarDockEvidenceBefore, sidebarDockEvidenceAfter, buttonInteractionEvidence, historySidebarEvidence, memoryStatusApiEvidence, terminalText, terminalLiveOutput, terminalWorkbenchStyleEvidence, gitText, filePreviewLayoutEvidence, filePreviewStatsEvidence, workbenchGitText, workbenchGitAfterBatchStage, gitDiffScrollEvidenceBefore, gitDiffScrollEvidenceAfter, workbenchWidthBefore, workbenchWidthAfter, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatResultTextEvidence, chatResultLayoutEvidence, skillLayoutEvidence, manualRunNowEvidence, manualRunDetailText, manualRunTranscriptText, createdTaskDetailText, taskProposalEvidence, providerSettingsEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, confirmMessages, nativeConfirmIpcSamples, previewText } = ctx;
+  const { artifactDir, releaseReadiness, dataRoot, smokeTarget, packagedExe, phase6ApiEvidence, ipcSummary, nativeFeel, nativeModuleProbe, processMetricsSummary, smokeProvider, chatInputEvidence, workspaceSelectButtonEvidence, sidebarDockEvidenceBefore, sidebarDockEvidenceAfter, buttonInteractionEvidence, historySidebarEvidence, memoryStatusApiEvidence, terminalText, terminalLiveOutput, terminalWorkbenchStyleEvidence, gitText, filePreviewLayoutEvidence, filePreviewStatsEvidence, workbenchGitText, workbenchGitAfterBatchStage, gitDiffScrollEvidenceBefore, gitDiffScrollEvidenceAfter, workbenchWidthBefore, workbenchWidthAfter, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatResultTextEvidence, chatResultLayoutEvidence, skillLayoutEvidence, manualRunNowEvidence, manualRunDetailText, manualRunTranscriptText, createdTaskDetailText, taskProposalEvidence, providerSettingsEvidence, nativeWindowEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, confirmMessages, nativeConfirmIpcSamples, previewText } = ctx;
   const rendererBoundary = {
     ...buildRendererBoundaryWorkbench(ctx),
     ...buildRendererBoundaryCapabilities(ctx)
@@ -13,19 +13,19 @@ export function writeElectronSmokeResult(ctx) {
   const releaseReadinessHonest =
     releaseReadiness.integrations.appProtocol.status === 'absent' &&
     releaseReadiness.integrations.fileAssociation.status === 'absent' &&
-    releaseReadiness.integrations.windowsToast.status === 'absent' &&
-    releaseReadiness.integrations.taskbarJumpList.status === 'absent' &&
-    releaseReadiness.integrations.installerSigningUpdater.status === 'absent' &&
+    releaseReadiness.integrations.notification.status === 'absent' &&
+    releaseReadiness.integrations.dockIntegration.status === 'absent' &&
+    releaseReadiness.integrations.installerSigningUpdater.status === 'partial' &&
     releaseReadiness.integrations.crashReporter.status === 'absent';
 
   const failedChecks = Object.entries({
     hasRequire: !rendererBoundary.hasRequire,
     hasProcess: !rendererBoundary.hasProcess,
     immersiveWorkbandVisible: rendererBoundary.immersiveWorkbandVisible,
-    systemMenuHidden: rendererBoundary.systemMenuHidden,
+    applicationMenuPresent: rendererBoundary.applicationMenuPresent,
     initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
     appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
-    materialEvidenceRecorded: rendererBoundary.materialEvidenceRecorded,
+    nativeWindowControls: rendererBoundary.nativeWindowControls,
     windowPlacementPersisted: rendererBoundary.windowPlacementPersisted,
     phase3WebViewBehavior: rendererBoundary.phase3WebViewBehavior,
     phase4VisualTheme: rendererBoundary.phase4VisualTheme,
@@ -189,7 +189,7 @@ export function writeElectronSmokeResult(ctx) {
           : null
       })),
       providerSettingsEvidence,
-      materialEvidence,
+      nativeWindowEvidence,
       windowPlacementEvidence,
       phase3WebViewEvidence,
       phase4VisualEvidence,

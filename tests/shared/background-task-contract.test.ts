@@ -37,8 +37,8 @@ describe('background task shared tool contract', () => {
     }
   });
 
-  it('canonical example workspacePath is a Windows absolute path', () => {
-    expect(BACKGROUND_TASK_PROPOSE_EXAMPLE.workspacePath).toMatch(/^[A-Z]:\\/u);
+  it('canonical example workspacePath is a macOS absolute path', () => {
+    expect(BACKGROUND_TASK_PROPOSE_EXAMPLE.workspacePath).toMatch(/^\/Users\//u);
   });
 
   it('tool description uses canonical fields without forbidden aliases', () => {

@@ -1,7 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import type { RTKBinaryManager } from './binary-manager';
-import { CommandRewriter, isWindowsRtkDeniedSubcommand } from './rewriter';
+import { CommandRewriter } from './rewriter';
 import type { RewriteResult } from './rewriter';
 
 type Rewriter = {
@@ -50,10 +50,6 @@ export function createRTKMiddleware(binaryManager: RTKBinaryManager, options: RT
           content: `RTK denied command: ${command}`,
           status: 'error'
         });
-      }
-
-      if (rewriteResult.rtkArgs !== null && isWindowsRtkDeniedSubcommand(rewriteResult.rtkArgs)) {
-        return handler(request);
       }
 
       if (rewriteResult.rewritten === null) {

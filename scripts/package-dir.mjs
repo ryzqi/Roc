@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
-import { resolve } from 'node:path';
+import { projectRoot } from './lib/electron-version.mjs';
 import {
   createPackagingEnvironment,
-  runCommand,
-  terminateRunningPackagedApp
+  runCommand
 } from './lib/native-packaging.mjs';
 
-const projectRoot = resolve('.');
+if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) {
+  throw new Error('package:dir requires an arm64 or x64 macOS host.');
+}
 const packagingEnvironment = createPackagingEnvironment();
 let exitCode = 0;
 
@@ -27,11 +28,7 @@ function run(command, args, options = { exitOnFailure: true }) {
 }
 
 run('pnpm', ['build']);
-const { terminatedPids } = terminateRunningPackagedApp();
-if (terminatedPids.length > 0) {
-  console.log(`Terminated running packaged Roc.exe processes before packaging: ${terminatedPids.join(', ')}`);
-}
-exitCode = run('pnpm', ['exec', 'electron-builder', '--dir', '--config', 'electron-builder.yml'], {
+exitCode = run('pnpm', ['exec', 'electron-builder', '--mac', '--dir', `--${process.arch}`, '--publish', 'never', '--config', 'electron-builder.yml'], {
   exitOnFailure: false
 });
 

@@ -99,7 +99,7 @@ function runGit(args: string[], cwd: string): void {
   const result = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',
-    windowsHide: true
+
   });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);

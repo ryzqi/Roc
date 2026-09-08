@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
+import { basename, join } from 'node:path';
+import { userInfo } from 'node:os';
 import { EventEmitter } from 'node:events';
 import { spawn } from 'node-pty';
 import type {
@@ -54,7 +55,7 @@ export class TerminalSessionService {
     mkdirSync(join(this.paths.terminalDir, 'logs'), { recursive: true });
     const logStream = createWriteStream(logPath, { flags: 'a', encoding: 'utf8' });
     const pty = spawn(shell.file, shell.args, {
-      name: 'xterm-color',
+      name: 'xterm-256color',
       cols: this.validCols(request.cols),
       rows: this.validRows(request.rows),
       cwd,
@@ -173,23 +174,8 @@ export class TerminalSessionService {
   }
 
   private resolveShell(): { file: string; args: string[]; label: string } {
-    if (process.platform !== 'win32') {
-      const file = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash');
-      return { file, args: ['-l'], label: file.split('/').at(-1)! };
-    }
-    const pwsh = resolve('C:/Program Files/PowerShell/7/pwsh.exe');
-    if (existsSync(pwsh)) {
-      return {
-        file: pwsh,
-        args: ['-NoLogo'],
-        label: 'pwsh'
-      };
-    }
-    return {
-      file: 'powershell.exe',
-      args: ['-NoLogo'],
-      label: 'powershell'
-    };
+    const file = process.env.SHELL || userInfo().shell || '/bin/zsh';
+    return { file, args: ['-l'], label: basename(file) };
   }
 
   private validCols(value: number): number {

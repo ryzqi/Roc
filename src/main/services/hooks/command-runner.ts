@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { terminateProcessTree } from '../process-tree';
 import type { RocHookCommandInput, RocHookCommandOutput } from '../../../shared/types';
 import { HookCommandOutputSchema } from './schema';
 
@@ -50,10 +51,9 @@ export class HookCommandRunner {
       };
     }
     return await new Promise<HookCommandRunResult>((resolve) => {
-      const child = spawn(request.command, {
+      const child = spawn('/bin/zsh', ['-f', '-c', request.command], {
         cwd: request.cwd,
-        shell: true,
-        windowsHide: true,
+        detached: true,
         stdio: ['pipe', 'pipe', 'pipe']
       });
       let stdout = '';
@@ -178,22 +178,6 @@ export function isVirtualHookCwd(cwd: string): boolean {
     normalized === '/skills' ||
     normalized.startsWith('/skills/')
   );
-}
-
-function terminateProcessTree(child: ReturnType<typeof spawn>): void {
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    try {
-      execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore'
-      });
-    } catch {
-      child.kill();
-    }
-    return;
-  }
-  // Non-Windows fallback signals only the direct child; Windows uses taskkill /t for process-tree cleanup.
-  child.kill();
 }
 
 function truncateOutput(value: string): string {

@@ -22,9 +22,7 @@ export const mainWindowStaticBackground = '#f7f8f5';
 
 export function buildMainWindowOptions(
   preloadPath: string,
-  iconPath: string,
-  restoredBounds: WindowBoundsSnapshot | null = null,
-  platform: NodeJS.Platform = process.platform
+  restoredBounds: WindowBoundsSnapshot | null = null
 ): BrowserWindowConstructorOptions {
   const bounds = restoredBounds === null ? defaultMainWindowBounds : restoredBounds;
   return {
@@ -35,12 +33,10 @@ export function buildMainWindowOptions(
     minWidth: minMainWindowSize.width,
     minHeight: minMainWindowSize.height,
     show: false,
-    frame: false,
-    autoHideMenuBar: true,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 13 },
     backgroundColor: mainWindowStaticBackground,
-    ...(platform === 'win32' ? { backgroundMaterial: 'mica' as const } : {}),
     title: 'Roc',
-    icon: iconPath,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

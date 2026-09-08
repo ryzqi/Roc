@@ -48,13 +48,11 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).not.toContain('afterAllArtifactBuild');
   });
 
-  it.each(['win32', 'darwin'])('removes default Electron app artifacts from the %s runtime', async (platform) => {
+  it('removes default Electron app artifacts from the macOS bundle', async () => {
     const { default: afterExtract } = await import(new URL('../../scripts/builder-hooks/after-extract.mjs', import.meta.url).href);
     const appOutDir = createTemporaryDirectory();
-    const electronDestination = platform === 'darwin' ? join(appOutDir, 'Electron.app') : appOutDir;
-    const resourcesDir = platform === 'darwin'
-      ? join(electronDestination, 'Contents', 'Resources')
-      : join(appOutDir, 'resources');
+    const electronDestination = join(appOutDir, 'Electron.app');
+    const resourcesDir = join(electronDestination, 'Contents', 'Resources');
     mkdirSync(resourcesDir, { recursive: true });
     writeFileSync(join(resourcesDir, 'default_app.asar'), 'default app');
     writeFileSync(join(resourcesDir, 'keep.txt'), 'keep');
@@ -62,7 +60,7 @@ describe('native packaging contract', () => {
 
     await afterExtract({
       appOutDir,
-      electronPlatformName: platform,
+      electronPlatformName: 'darwin',
       packager: { getElectronDestinationDir: () => electronDestination }
     });
 
@@ -75,129 +73,13 @@ describe('native packaging contract', () => {
     expect(packageDirScript).not.toContain('restoreBetterSqlite3ForNode');
   });
 
-  it('terminates running packaged app processes before direct electron-builder output cleanup', () => {
-    expect(beforePackHook).toContain('terminateRunningPackagedApp');
-  });
-
   it('packages bundled RTK binaries as external resources', () => {
     expect(electronBuilderConfig).toContain('extraResources:');
     expect(electronBuilderConfig).toContain('from: resources/rtk-binaries');
     expect(electronBuilderConfig).toContain('to: rtk-binaries');
   });
 
-  it('uses the Roc icon for Windows executables and runtime window icons', () => {
-    expect(electronBuilderConfig).toContain('icon: resources/icon.ico');
-    expect(electronBuilderConfig).toContain('signAndEditExecutable: false');
-    expect(electronBuilderConfig).toContain('from: resources/icon.ico');
-    expect(electronBuilderConfig).toContain('to: icon.ico');
-  });
-
-  it('verifies the Windows executable icon after applying it', () => {
-    expect(afterPackHook).toContain('applyWindowsExecutableIcon');
-    expect(afterPackHook).toContain('verifyWindowsExecutableIcon');
-    expect(afterPackHook.indexOf('applyWindowsExecutableIcon({')).toBeLessThan(
-      afterPackHook.indexOf('verifyWindowsExecutableIcon({')
-    );
-  });
-
-  it('applies the Windows executable icon with rcedit without enabling the signing toolchain', async () => {
-    const run = vi.fn().mockReturnValueOnce(0);
-    const terminateRunningApp = vi.fn();
-    const { applyWindowsExecutableIcon } = await loadNativePackagingModule();
-
-    const result = applyWindowsExecutableIcon({
-      appOutDir: 'F:/Code/Roc/release/win-unpacked',
-      iconPath: 'F:/Code/Roc/resources/icon.ico',
-      projectRoot: 'F:/Code/Roc',
-      run,
-      platform: 'win32',
-      resolveRceditPath: () => 'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
-      terminateRunningApp
-    });
-
-    expect(result).toEqual({
-      applied: true,
-      executablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'),
-      iconPath: 'F:/Code/Roc/resources/icon.ico'
-    });
-    expect(run).toHaveBeenCalledWith(
-      'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
-      [resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'), '--set-icon', 'F:/Code/Roc/resources/icon.ico'],
-      { cwd: 'F:/Code/Roc', stdio: 'pipe' }
-    );
-    expect(terminateRunningApp).toHaveBeenCalledWith({
-      packagedExecutablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe')
-    });
-  });
-
-  it('retries Windows executable icon application when rcedit fails transiently', async () => {
-    const run = vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0);
-    const terminateRunningApp = vi.fn();
-    const { applyWindowsExecutableIcon } = await loadNativePackagingModule();
-
-    const result = applyWindowsExecutableIcon({
-      appOutDir: 'F:/Code/Roc/release/win-unpacked',
-      iconPath: 'F:/Code/Roc/resources/icon.ico',
-      projectRoot: 'F:/Code/Roc',
-      run,
-      platform: 'win32',
-      resolveRceditPath: () => 'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
-      terminateRunningApp
-    });
-
-    expect(result).toEqual({
-      applied: true,
-      executablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'),
-      iconPath: 'F:/Code/Roc/resources/icon.ico'
-    });
-    expect(run).toHaveBeenCalledTimes(2);
-    expect(run).toHaveBeenLastCalledWith(
-      'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
-      [resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'), '--set-icon', 'F:/Code/Roc/resources/icon.ico'],
-      { cwd: 'F:/Code/Roc', stdio: 'pipe' }
-    );
-  });
-
-  it('verifies packaged Roc.exe icon pixels against resources icon on Windows', async () => {
-    const run = vi.fn().mockReturnValueOnce(0);
-    const { verifyWindowsExecutableIcon } = await loadNativePackagingModule();
-
-    const result = verifyWindowsExecutableIcon({
-      appOutDir: 'F:/Code/Roc/release/win-unpacked',
-      iconPath: 'F:/Code/Roc/resources/icon.ico',
-      projectRoot: 'F:/Code/Roc',
-      run,
-      platform: 'win32'
-    });
-
-    const executablePath = resolve('F:/Code/Roc/release/win-unpacked/Roc.exe');
-    expect(result).toEqual({
-      verified: true,
-      executablePath,
-      iconPath: 'F:/Code/Roc/resources/icon.ico'
-    });
-    expect(run).toHaveBeenCalledTimes(1);
-    const [command, args, options] = run.mock.calls[0];
-    expect(command).toBe('powershell.exe');
-    expect(args).toEqual([
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      expect.stringContaining('[System.Drawing.Icon]::ExtractAssociatedIcon')
-    ]);
-    expect(args[5]).toContain('GetPixel');
-    expect(options).toEqual({
-      cwd: 'F:/Code/Roc',
-      env: expect.objectContaining({
-        ROC_EXECUTABLE_ICON_EXE: executablePath,
-        ROC_EXECUTABLE_ICON_ICO: 'F:/Code/Roc/resources/icon.ico'
-      })
-    });
-  });
-
-  it('limits Windows package resources to runtime files', () => {
+  it('limits macOS package resources to runtime files', () => {
     expect(electronBuilderConfig).toContain('electronLanguages:');
     expect(electronBuilderConfig).toContain('  - en-US');
     expect(electronBuilderConfig).toContain('  - zh-CN');
@@ -205,7 +87,7 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('!**/*.d.ts');
     expect(electronBuilderConfig).toContain('!**/*.d.mts');
     expect(electronBuilderConfig).toContain('!**/*.d.cts');
-    expect(electronBuilderConfig).toContain('win32-x64/**');
+    expect(electronBuilderConfig).toContain('darwin-${arch}/**');
   });
 
   it('excludes native module build inputs and non-target prebuilds from the package', () => {
@@ -216,15 +98,15 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/scripts/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/deps/**');
     expect(electronBuilderConfig).not.toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
-    expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/win32-arm64/**');
-    expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/conpty/**/win10-arm64/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/!(darwin-${arch})/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/**');
   });
 
   it('verifies workspace better-sqlite3 under Electron without rebuilding it', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
     const { verifyWorkspaceBetterSqlite3 } = await loadNativePackagingModule();
 
-    verifyWorkspaceBetterSqlite3({ projectRoot: 'F:/Code/Roc', run });
+    verifyWorkspaceBetterSqlite3({ projectRoot: '/Users/test/Projects/Roc', run });
 
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith(
@@ -237,7 +119,7 @@ describe('native packaging contract', () => {
         'better-sqlite3',
         'workspace-better-sqlite3'
       ],
-      { cwd: 'F:/Code/Roc' }
+      { cwd: '/Users/test/Projects/Roc' }
     );
   });
 
@@ -245,7 +127,7 @@ describe('native packaging contract', () => {
     const run = vi.fn().mockReturnValueOnce(1);
     const { verifyWorkspaceBetterSqlite3 } = await loadNativePackagingModule();
 
-    expect(() => verifyWorkspaceBetterSqlite3({ projectRoot: 'F:/Code/Roc', run })).toThrow(
+    expect(() => verifyWorkspaceBetterSqlite3({ projectRoot: '/Users/test/Projects/Roc', run })).toThrow(
       /Electron verify failed for workspace-better-sqlite3/
     );
   });
@@ -287,7 +169,7 @@ describe('native packaging contract', () => {
     );
   });
 
-  it.skipIf(process.platform === 'win32')('makes macOS packaged terminal helpers executable for both bundled architectures', async () => {
+  it('makes macOS packaged terminal helpers executable for both bundled architectures', async () => {
     const { preparePackagedNodePty } = await loadNativePackagingModule();
     const resourcesDir = join(createTemporaryDirectory(), 'Roc.app', 'Contents', 'Resources');
     const helperPaths = ['arm64', 'x64'].map((arch) => {
@@ -311,71 +193,6 @@ describe('native packaging contract', () => {
     mkdirSync(join(resourcesDir, 'app.asar.unpacked/node_modules/node-pty/prebuilds/darwin-arm64'), { recursive: true });
 
     expect(() => preparePackagedNodePty({ resourcesDir, platform: 'darwin' })).toThrow(/ENOENT/);
-  });
-
-  it('terminates only the running Roc processes from the packaged output directory', async () => {
-    const listProcesses = vi.fn()
-      .mockReturnValueOnce([
-        {
-          pid: 101,
-          executablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe'
-        },
-        {
-          pid: 202,
-          executablePath: 'F:\\Other\\Roc\\release\\win-unpacked\\Roc.exe'
-        }
-      ])
-      .mockReturnValueOnce([]);
-    const stopProcess = vi.fn().mockReturnValue(0);
-    const { terminateRunningPackagedApp } = await loadNativePackagingModule();
-
-    const result = terminateRunningPackagedApp({
-      packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
-      listProcesses,
-      stopProcess,
-      platform: 'win32',
-      waitTimeoutMs: 0
-    });
-
-    expect(result.terminatedPids).toEqual([101]);
-    expect(stopProcess).toHaveBeenCalledTimes(1);
-    expect(stopProcess).toHaveBeenCalledWith(101);
-  });
-
-  it('continues when a packaged Roc process exits before taskkill can terminate it', async () => {
-    const listProcesses = vi.fn()
-      .mockReturnValueOnce([
-        {
-          pid: 7332,
-          executablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe'
-        }
-      ])
-      .mockReturnValueOnce([]);
-    const stopProcess = vi.fn().mockReturnValue(128);
-    const { terminateRunningPackagedApp } = await loadNativePackagingModule();
-
-    const result = terminateRunningPackagedApp({
-      packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
-      listProcesses,
-      stopProcess,
-      platform: 'win32',
-      waitTimeoutMs: 0
-    });
-
-    expect(result.terminatedPids).toEqual([]);
-    expect(stopProcess).toHaveBeenCalledWith(7332);
-    expect(listProcesses).toHaveBeenCalledTimes(2);
-  });
-
-  it('builds Windows shell command lines so child_process does not receive shell args', async () => {
-    const { buildWindowsShellCommand } = await loadNativePackagingModule();
-
-    expect(buildWindowsShellCommand('pnpm', ['exec', 'electron-builder', '--dir'])).toBe(
-      'pnpm exec electron-builder --dir'
-    );
-    expect(buildWindowsShellCommand('node', ['scripts/package dir.mjs', 'quoted"value'])).toBe(
-      'node "scripts/package dir.mjs" "quoted\\"value"'
-    );
   });
 
   it('rewrites langgraph-sdk bundled pnpm relative imports to package specifiers', async () => {

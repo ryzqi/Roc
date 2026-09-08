@@ -21,7 +21,7 @@ import { buildReleaseReadinessSnapshot } from './lib/release-readiness.mjs';
 import { resolveSmokeTarget } from './lib/smoke-target.mjs';
 
 const artifactDir = prepareArtifactDir();
-const packagedExe = resolve('release/win-unpacked/Roc.exe');
+const packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app/Contents/MacOS/Roc');
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
 const electronBuilderConfig = readFileSync(resolve('electron-builder.yml'), 'utf8');
 const releaseReadiness = buildReleaseReadinessSnapshot({
@@ -29,7 +29,7 @@ const releaseReadiness = buildReleaseReadinessSnapshot({
   packageJson,
   sourceTexts: {
     main: readFileSync(resolve('src/main/index.ts'), 'utf8'),
-    windowsHost: readFileSync(resolve('src/main/windows-host-service.ts'), 'utf8'),
+    macosHost: readFileSync(resolve('src/main/macos-host-service.ts'), 'utf8'),
     nativeContextMenu: readFileSync(resolve('src/main/native-context-menu.ts'), 'utf8'),
     mainKernelBootstrap: readFileSync(resolve('src/main/main-kernel-bootstrap.ts'), 'utf8'),
     kernelRuntime: readFileSync(resolve('src/main/kernel/kernel-runtime.ts'), 'utf8'),
@@ -107,7 +107,7 @@ try {
   spawnSync('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], {
     cwd: resolve('.'),
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: false
   });
   await rm(dataRoot, { recursive: true, force: true });
   await rm(workspaceRoot, { recursive: true, force: true });

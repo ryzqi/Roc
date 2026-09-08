@@ -274,10 +274,10 @@ describe('prompt blocks', () => {
     ]);
     const selfConfigBlock = withTool.find((block) => block.type === 'self_config');
     expect(selfConfigBlock?.stability).toBe('capability');
-    expect(selfConfigBlock?.content).toContain('%USERPROFILE%\\.roc');
+    expect(selfConfigBlock?.content).toContain('~/.roc');
     expect(selfConfigBlock?.content).toContain('hooks.json');
     expect(selfConfigBlock?.content).toContain('timeoutSeconds');
-    expect(selfConfigBlock?.content).toContain('cmd.exe');
+    expect(selfConfigBlock?.content).toContain('/bin/zsh -f -c');
     expect(selfConfigBlock?.content).toContain('roc_self_config never writes configuration.');
     expect(withoutTool.some((block) => block.type === 'self_config')).toBe(false);
   });

@@ -91,7 +91,7 @@ export function buildPromptBlocks(input: {
 
 function buildStaticPrompt(mode: RunExecutionSnapshotV2['mode']): string {
   return [
-    'You are Roc, a Windows coding agent. Be concise; claim only inspected evidence.',
+    'You are Roc, a macOS coding agent. Be concise; claim only inspected evidence.',
     'Inspect relevant source, tests, and config before edits. Keep changes scoped to the request.',
     'Run direct verification after code or config changes. Report results and blockers plainly.',
     '',
@@ -184,10 +184,10 @@ function buildHumanClarificationPrompt(): string {
 
 function buildSelfConfigPrompt(): string {
   return [
-    "Roc's own configuration lives on the real filesystem under %USERPROFILE%\\.roc: hooks.json, config\\settings.json, config\\hooks-trust.json, skills\\.",
-    'The /workspace/, /memory/, and /skills/ virtual routes cannot reach that directory, and file tools reject Windows absolute paths.',
+    "Roc's own configuration lives on the real filesystem under ~/.roc: hooks.json, config/settings.json, config/hooks-trust.json, skills/.",
+    'The /workspace/, /memory/, and /skills/ virtual routes cannot reach that directory; file tools accept only virtual routes.',
     'For any question about Roc hooks or settings, call roc_self_config instead of reading Roc source code to infer the schema: describe for paths, hooks JSON Schema, event/action matrix, and the hook runtime contract; read for the current hooks.json snapshot (including trustState) and redacted settings; validate for a candidate hooks config; dry_run(handlerId) to re-run one existing handler and see its stdout, stderr, and exit code.',
-    'Hook commands are launched through cmd.exe on Windows, not bash; a bash or python script needs its interpreter spelled out in the command.',
+    'Hook commands run through /bin/zsh -f -c on macOS; scripts using another language must name their interpreter explicitly.',
     'Claude Code / Codex hook files are not compatible: timeout is timeoutSeconds, loop_limit is unsupported, only 6 events exist, stdout must be empty or one {"action":...} object, and the exit code must be 0.',
     'roc_self_config never writes configuration. Hand the finished JSON to the user; saving it and trusting each handler happens in the settings page, and an untrusted handler is silently skipped at run time.'
   ].join('\n');

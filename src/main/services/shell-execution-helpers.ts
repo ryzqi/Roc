@@ -1,10 +1,11 @@
 import type { ShellExecutionResult } from '../../shared/types';
-import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../rtk-integration';
+import { CommandRewriter, parseRtkArgs } from '../../rtk-integration';
 import type { RtkExecutionMetadata } from './rtk-service';
 import { redact } from './deep-agent/redaction';
 import { normalizeShellCommand } from './deep-agent/shell-policy';
 
 const maxPersistedAgentOutputChars = 4096;
+const directCommandPattern = /^[A-Za-z0-9_./:@%+=,-]+(?:[ \t]+[A-Za-z0-9_./:@%+=,-]+)*$/;
 
 export type RtkRoutingDecision =
   | {
@@ -17,16 +18,19 @@ export type RtkRoutingDecision =
     };
 
 export function resolveRtkRoute(command: string): RtkRoutingDecision {
+  if (!directCommandPattern.test(command.trim())) {
+    return { kind: 'fallback', bypassReason: 'command_not_supported' };
+  }
   const explicitRtkArgs = parseRtkArgs(command.trim());
   if (explicitRtkArgs !== null) {
-    return resolveExplicitRtkRoute(explicitRtkArgs);
+    return { kind: 'rtk', args: explicitRtkArgs };
   }
 
   const normalized = normalizeShellCommand(command);
   if (normalized === 'ls' || normalized.startsWith('ls ')) {
     return {
-      kind: 'fallback',
-      bypassReason: 'windows_shell_alias'
+      kind: 'rtk',
+      args: command.trim().split(/\s+/)
     };
   }
   if (normalized === 'git status' || normalized.startsWith('git status ')) {
@@ -53,21 +57,16 @@ export async function resolveRtkRouteAsync(
   signal?: AbortSignal,
   environment?: NodeJS.ProcessEnv
 ): Promise<RtkRoutingDecision> {
+  if (!directCommandPattern.test(command.trim())) {
+    return { kind: 'fallback', bypassReason: 'command_not_supported' };
+  }
   const explicitRtkArgs = parseRtkArgs(command.trim());
   if (explicitRtkArgs !== null) {
-    return resolveExplicitRtkRoute(explicitRtkArgs);
-  }
-
-  const normalized = normalizeShellCommand(command);
-  if (normalized === 'ls' || normalized.startsWith('ls ')) {
-    return {
-      kind: 'fallback',
-      bypassReason: 'windows_shell_alias'
-    };
+    return { kind: 'rtk', args: explicitRtkArgs };
   }
 
   const rewritten = await new CommandRewriter(metadata.binaryPath, { environment }).rewrite(command, signal);
-  if (rewritten.rtkArgs === null || isWindowsRtkDeniedSubcommand(rewritten.rtkArgs)) {
+  if (rewritten.rtkArgs === null) {
     return resolveRtkRoute(command);
   }
   return {
@@ -76,23 +75,8 @@ export async function resolveRtkRouteAsync(
   };
 }
 
-function resolveExplicitRtkRoute(args: string[]): RtkRoutingDecision {
-  if (isWindowsRtkDeniedSubcommand(args)) {
-    return {
-      kind: 'fallback',
-      bypassReason: 'windows_shell_alias'
-    };
-  }
-  return {
-    kind: 'rtk',
-    args
-  };
-}
-
 export function buildRtkEnvironment(metadata: RtkExecutionMetadata): Record<string, string> {
   return {
-    APPDATA: metadata.runtimeRoot,
-    LOCALAPPDATA: metadata.runtimeRoot,
     XDG_CONFIG_HOME: metadata.runtimeRoot,
     XDG_DATA_HOME: metadata.runtimeRoot,
     RTK_DB_PATH: metadata.trackingDatabasePath,

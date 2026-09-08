@@ -43,10 +43,10 @@ beforeEach(() => {
   workspaceRoot = join(root, 'workspace');
   resourcesPath = join(root, 'resources');
   mkdirSync(workspaceRoot, { recursive: true });
-  mkdirSync(join(resourcesPath, 'rtk-binaries', 'win32-x64'), { recursive: true });
+  mkdirSync(join(resourcesPath, 'rtk-binaries', 'darwin-x64'), { recursive: true });
   writeFileSync(join(workspaceRoot, 'README.md'), 'Secondary plugin integration workspace.\n', 'utf8');
-  writeFileSync(join(resourcesPath, 'rtk-binaries', 'win32-x64', 'rtk.exe'), 'fake rtk', 'utf8');
-  execFileSync('git', ['init'], { cwd: workspaceRoot, windowsHide: true });
+  writeFileSync(join(resourcesPath, 'rtk-binaries', 'darwin-x64', 'rtk'), 'fake rtk', { encoding: 'utf8', mode: 0o755 });
+  execFileSync('git', ['init'], { cwd: workspaceRoot  });
   runtime = null;
 });
 
@@ -99,7 +99,7 @@ describe('secondary plugins integration', () => {
           rootDir: root,
           workspacePath: workspaceRoot,
           binaryManager: new RTKBinaryManager({
-            platform: 'win32',
+            platform: 'darwin',
             arch: 'x64',
             resourcesPath
           })
@@ -171,7 +171,7 @@ describe('secondary plugins integration', () => {
     );
     expect(rtkStatus).toMatchObject({
       resourceState: 'ready',
-      binaryPath: join(resourcesPath, 'rtk-binaries', 'win32-x64', 'rtk.exe')
+      binaryPath: join(resourcesPath, 'rtk-binaries', 'darwin-x64', 'rtk')
     });
     expect(performanceSample.timing.samples).toContainEqual(
       expect.objectContaining({

@@ -35,7 +35,7 @@ describe('agent capability preview', () => {
       id: 'builtin:run_shell_command',
       name: 'run_shell_command',
       capabilityType: 'terminal_tool',
-      requiredInput: 'PowerShell command',
+      requiredInput: 'zsh command',
       dependencies: ['ShellExecutionService', 'RtkService'],
       auditCategory: 'agent_execute'
     });

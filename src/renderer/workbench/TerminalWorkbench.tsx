@@ -44,7 +44,7 @@ export function TerminalWorkbench({
       cursorBlink: true,
       cursorStyle: 'bar',
       cursorWidth: 2,
-      fontFamily: '"Cascadia Mono", "JetBrains Mono", Consolas, monospace',
+      fontFamily: '"SFMono-Regular", Menlo, Monaco, monospace',
       fontSize: 13,
       lineHeight: 1.35,
       letterSpacing: 0,

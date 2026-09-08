@@ -11,7 +11,6 @@ const languageLoaders: Record<string, () => Promise<{ default: LanguageFn }>> = 
   json: () => import('highlight.js/lib/languages/json'),
   bash: () => import('highlight.js/lib/languages/bash'),
   shell: () => import('highlight.js/lib/languages/bash'),
-  powershell: () => import('highlight.js/lib/languages/powershell'),
   python: () => import('highlight.js/lib/languages/python'),
   markdown: () => import('highlight.js/lib/languages/markdown'),
   sql: () => import('highlight.js/lib/languages/sql'),

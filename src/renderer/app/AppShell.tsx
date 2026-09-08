@@ -41,7 +41,6 @@ import type { AppBootstrap } from './use-app-bootstrap';
 import { useAppStartupResources } from './use-app-startup-resources';
 import { useAppTaskRuns } from './use-app-task-runs';
 import { useChatWorkspaceScale } from './use-chat-workspace-scale';
-import { useWindowControls } from './use-window-controls';
 import {
   WORKBENCH_VIEWS,
   buildTopMeta,
@@ -62,7 +61,7 @@ function resetScrollPosition(element: HTMLElement): void {
 }
 
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
-  const { error, setError, setState, setWindowState, state, windowState } = bootstrap;
+  const { error, setError, setState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'));
   const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
@@ -241,7 +240,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     chatSidebarCollapsed,
     hostRef: chatWorkspaceScaleHostRef
   });
-  const { closeWindow, minimizeWindow, toggleWindowMaximize } = useWindowControls(client, setWindowState);
 
   useEffect(() => {
     selectedTaskSurfaceTaskIdRef.current = selectedTaskSurfaceTaskId;
@@ -513,12 +511,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         onHistorySearchToggle={toggleHistorySearch}
         onNewConversation={startNewConversation}
         onSidebarToggle={toggleChatSidebar}
-        onWindowClose={closeWindow}
-        onWindowMaximizeToggle={toggleWindowMaximize}
-        onWindowMinimize={minimizeWindow}
         showHistorySearch={showHistorySearch}
         topMeta={topMeta}
-        windowState={windowState}
       />
 
       <div

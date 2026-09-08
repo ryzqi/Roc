@@ -99,7 +99,6 @@ async function buildHandlerSnapshots(
           event,
           matcher,
           command: handler.command,
-          commandWindows: handler.commandWindows === undefined ? null : handler.commandWindows,
           timeoutSeconds: handler.timeoutSeconds,
           statusMessage: handler.statusMessage === undefined ? null : handler.statusMessage,
           enabled: handler.enabled,

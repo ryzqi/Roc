@@ -19,8 +19,8 @@ export type ReleaseReadinessSnapshot = {
   integrations: {
     appProtocol: ReleaseReadinessIntegration;
     fileAssociation: ReleaseReadinessIntegration;
-    windowsToast: ReleaseReadinessIntegration;
-    taskbarJumpList: ReleaseReadinessIntegration;
+    notification: ReleaseReadinessIntegration;
+    dockIntegration: ReleaseReadinessIntegration;
     installerSigningUpdater: ReleaseReadinessIntegration;
     crashReporter: ReleaseReadinessIntegration;
     nativeClipboard: ReleaseReadinessIntegration;

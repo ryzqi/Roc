@@ -19,8 +19,6 @@ export type RewriterOptions = {
   runRewrite?: RewriteRunner;
 };
 
-const windowsRtkDeniedSubcommands = new Set(['ls']);
-
 export class CommandRewriter {
   private readonly timeoutMs: number;
   private readonly runRewrite: RewriteRunner;
@@ -79,19 +77,10 @@ export function parseRtkArgs(command: string): string[] | null {
   if (executable === undefined) {
     return null;
   }
-  const normalized = executable.toLowerCase();
-  if (normalized !== 'rtk' && normalized !== 'rtk.exe') {
+  if (executable !== 'rtk') {
     return null;
   }
   return parts.slice(1);
-}
-
-export function isWindowsRtkDeniedSubcommand(args: readonly string[]): boolean {
-  const subcommand = args[0]?.toLowerCase();
-  if (subcommand === undefined) {
-    return false;
-  }
-  return windowsRtkDeniedSubcommands.has(subcommand);
 }
 
 function splitCommandLine(command: string): string[] {
@@ -119,8 +108,7 @@ async function defaultRunRewrite(
         encoding: 'utf8',
         env: environment,
         timeout: timeoutMs,
-        signal,
-        windowsHide: true
+        signal
       },
       (error, stdout) => {
         if (error === null) {

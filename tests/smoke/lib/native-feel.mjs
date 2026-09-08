@@ -1,23 +1,22 @@
 export const nativeFeelScorecard = Object.freeze({
-  target: 'windows-electron-native-feel',
-  scope: 'current Windows Electron Roc.exe',
+  target: 'macos-electron-native-feel',
+  scope: 'current macOS Roc.app',
   checks: [
     { id: 'cold_launch_ready_to_show', status: 'measured', evidence: 'timing.ready_to_show' },
     { id: 'packaged_exe_startup', status: 'measured', evidence: 'smokeTarget' },
-    { id: 'close_minimize_tray', status: 'guarded', evidence: 'WindowsHostService close policy tests' },
-    { id: 'global_hotkey', status: 'guarded', evidence: 'WindowsHostService globalShortcut tests' },
-    { id: 'single_instance', status: 'guarded', evidence: 'WindowsHostService second-instance tests' },
+    { id: 'close_minimize_tray', status: 'guarded', evidence: 'MacOSHostService close policy tests' },
+    { id: 'global_hotkey', status: 'guarded', evidence: 'MacOSHostService globalShortcut tests' },
+    { id: 'single_instance', status: 'guarded', evidence: 'MacOSHostService second-instance tests' },
     { id: 'native_window_drag', status: 'guarded', evidence: 'smoke windowDragWorks without renderer setBounds IPC' },
-    { id: 'caption_buttons', status: 'guarded', evidence: 'renderer native-feel CSS test' },
-    { id: 'mica_acrylic_fallback', status: 'guarded', evidence: 'smoke materialEvidence and window-material fallback tests' },
+    { id: 'native_traffic_lights', status: 'guarded', evidence: 'smoke nativeWindowEvidence and window-shell tests' },
     { id: 'cursor_selection_scroll', status: 'guarded', evidence: 'renderer native-feel CSS test' },
     { id: 'native_context_menu_dialog', status: 'planned', evidence: 'Phase 3' },
     { id: 'keyboard_ime', status: 'manual-required', evidence: 'Phase 3/6 manual record' },
     { id: 'process_metrics', status: 'measured', evidence: 'diagnostics.samplePerformance.electron' },
     { id: 'notification_url_file_association', status: 'planned', evidence: 'Phase 6' },
-    { id: 'taskbar_jump_list_progress', status: 'planned', evidence: 'Phase 6' },
+    { id: 'dock_menu_progress', status: 'planned', evidence: 'Phase 6' },
     { id: 'signing_installer_updater_crash', status: 'planned', evidence: 'Phase 6' },
-    { id: 'narrator_large_font_forced_colors', status: 'manual-required', evidence: 'Phase 6 manual record' }
+    { id: 'voiceover_large_font_contrast', status: 'manual-required', evidence: 'Phase 6 manual record' }
   ]
 });
 

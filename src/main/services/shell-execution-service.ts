@@ -1,6 +1,6 @@
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
 import { evaluateShellPolicy, normalizeShellCommand } from './deep-agent/shell-policy';
@@ -14,9 +14,7 @@ import {
   toText
 } from './shell-execution-helpers';
 import type { WorkspaceService } from './workspace-service';
-
-const powershellUtf8Prefix =
-  '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
+import { terminateProcessTree } from './process-tree';
 
 type ExecutedShellCommand = {
   stdout: string;
@@ -31,26 +29,17 @@ type ExecutedShellCommand = {
 const maxOutputBytes = 64 * 1024;
 const shellDeadlineMs = 120 * 1000;
 const shellEnvironmentKeys = [
-  'APPDATA',
-  'COMSPEC',
-  'HOMEDRIVE',
-  'HOMEPATH',
   'HOME',
   'SHELL',
   'LANG',
   'LC_ALL',
   'LC_CTYPE',
-  'LOCALAPPDATA',
   'PATH',
-  'PATHEXT',
-  'PROGRAMDATA',
-  'SYSTEMDRIVE',
-  'SYSTEMROOT',
   'TEMP',
   'TMP',
   'TMPDIR',
-  'USERPROFILE',
-  'WINDIR'
+  'USER',
+  'LOGNAME'
 ] as const;
 
 export type ShellTaskEventRecorder = {
@@ -301,7 +290,7 @@ export class ShellExecutionService {
     inheritEnvironment: boolean
   ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
     const shell = resolveCommandShell(command);
-    return this.execFile(shell.file, shell.args, cwd, {}, inheritEnvironment);
+    return this.execFile(shell.file, shell.args, cwd, inheritEnvironment ? {} : this.agentShellEnvironment(), inheritEnvironment);
   }
 
   private async executeSystemShellAsync(
@@ -311,7 +300,18 @@ export class ShellExecutionService {
     inheritEnvironment = false
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
     const shell = resolveCommandShell(command);
-    return await this.execFileAsync(shell.file, shell.args, cwd, {}, signal, inheritEnvironment);
+    return await this.execFileAsync(shell.file, shell.args, cwd, inheritEnvironment ? {} : this.agentShellEnvironment(), signal, inheritEnvironment);
+  }
+
+  private agentShellEnvironment(): Record<string, string> {
+    const metadata = this.rtkService.getExecutionMetadata();
+    if (metadata.resourceState !== 'ready') {
+      return {};
+    }
+    return {
+      ...buildRtkEnvironment(metadata),
+      PATH: [dirname(metadata.binaryPath), process.env.PATH].filter(Boolean).join(':')
+    };
   }
 
   protected execFile(
@@ -327,7 +327,6 @@ export class ShellExecutionService {
           cwd,
           encoding: 'utf8',
           env: buildShellEnvironment(extraEnv, inheritEnvironment),
-          windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe']
         }),
         stderr: '',
@@ -371,7 +370,7 @@ export class ShellExecutionService {
       const child = spawn(file, args, {
         cwd,
         env: buildShellEnvironment(extraEnv, inheritEnvironment),
-        windowsHide: true,
+        detached: true,
         stdio: ['ignore', 'pipe', 'pipe']
       });
       const cleanup = () => {
@@ -406,12 +405,18 @@ export class ShellExecutionService {
         reject(new Error('shell_execution_deadline_exceeded'));
       }, shellDeadlineMs);
       child.stdout.on('data', (chunk: Buffer | string) => {
+        if (settled) {
+          return;
+        }
         artifact.write(`STDOUT\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
         const result = append(stdout, chunk);
         stdout = result.value;
         stdoutTruncated = stdoutTruncated || result.truncated;
       });
       child.stderr.on('data', (chunk: Buffer | string) => {
+        if (settled) {
+          return;
+        }
         artifact.write(`STDERR\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
         const result = append(stderr, chunk);
         stderr = result.value;
@@ -514,10 +519,7 @@ function formatRtkPolicyCommand(args: readonly string[]): string {
 }
 
 function resolveCommandShell(command: string): { file: string; args: string[] } {
-  if (process.platform === 'win32') {
-    return { file: 'powershell.exe', args: ['-NoProfile', '-Command', `${powershellUtf8Prefix} ${command}`] };
-  }
-  return { file: process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh', args: ['-f', '-c', command] };
+  return { file: '/bin/zsh', args: ['-f', '-c', command] };
 }
 
 function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessEnvironment: boolean): NodeJS.ProcessEnv {
@@ -526,7 +528,7 @@ function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessE
   }
   const environment: NodeJS.ProcessEnv = {};
   for (const key of shellEnvironmentKeys) {
-    const value = readEnvironmentValue(key);
+    const value = process.env[key];
     if (value !== undefined) {
       environment[key] = value;
     }
@@ -535,15 +537,6 @@ function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessE
     environment[key] = value;
   }
   return environment;
-}
-
-function readEnvironmentValue(key: string): string | undefined {
-  for (const existingKey of Object.keys(process.env)) {
-    if (existingKey.toUpperCase() === key) {
-      return process.env[existingKey];
-    }
-  }
-  return undefined;
 }
 
 function capText(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -555,19 +548,4 @@ function capText(value: string, maxBytes: number): { value: string; truncated: b
     value: `${buffer.subarray(0, maxBytes).toString('utf8')}\n[truncated; full output: tee artifact]`,
     truncated: true
   };
-}
-
-function terminateProcessTree(child: ReturnType<typeof execFile>): void {
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    try {
-      execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore'
-      });
-    } catch {
-      child.kill();
-    }
-    return;
-  }
-  child.kill();
 }

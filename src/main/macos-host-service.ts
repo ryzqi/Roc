@@ -13,19 +13,14 @@ type MainWindowLike = {
 
 type AppLike = {
   requestSingleInstanceLock: () => boolean;
-  setAppUserModelId: (id: string) => void;
   on: (event: 'before-quit' | 'second-instance', listener: (...args: unknown[]) => void) => void;
   quit: () => void;
   setLoginItemSettings: (settings: {
     openAtLogin: boolean;
-    enabled: boolean;
-    path: string;
-    args: string[];
-    name: string;
   }) => void;
-  getLoginItemSettings: (settings: { path: string; args: string[] }) => {
+  getLoginItemSettings: () => {
     openAtLogin: boolean;
-    executableWillLaunchAtLogin?: boolean;
+    status?: 'not-registered' | 'enabled' | 'requires-approval' | 'not-found';
   };
 };
 
@@ -38,7 +33,6 @@ type GlobalShortcutLike = {
 type TrayLike = {
   setToolTip: (tooltip: string) => void;
   setContextMenu: (menu: unknown) => void;
-  on: (event: 'click', handler: () => void | Promise<void>) => void;
   destroy: () => void;
 };
 
@@ -53,8 +47,6 @@ type TrayMenuItem = {
   type?: 'separator';
   click?: () => void;
 };
-
-export const windowsAppUserModelId = 'com.roc.desktop';
 
 function createDefaultHostIntegrationStatus(): HostIntegrationStatus {
   return {
@@ -71,18 +63,17 @@ function createDefaultHostIntegrationStatus(): HostIntegrationStatus {
   };
 }
 
-export class WindowsHostService {
+export class MacOSHostService {
   private readonly hostIntegration = createDefaultHostIntegrationStatus();
   private mainWindow: MainWindowLike | null = null;
   private tray: TrayLike | null = null;
   private explicitQuit = false;
   private currentHotkey: string | null = null;
-  private minimizeToTray = true;
   private shutdownApplied = false;
 
   constructor(
     private readonly input: {
-      platform: NodeJS.Platform;
+      isPackaged: boolean;
       app: AppLike;
       globalShortcut: GlobalShortcutLike;
       lifecycleService: {
@@ -100,9 +91,6 @@ export class WindowsHostService {
   ) {}
 
   initializeProcessIdentity(): boolean {
-    if (this.input.platform === 'win32') {
-      this.input.app.setAppUserModelId(windowsAppUserModelId);
-    }
     const acquiredLock = this.input.app.requestSingleInstanceLock();
     if (!acquiredLock) {
       return false;
@@ -116,7 +104,7 @@ export class WindowsHostService {
       const args = Array.isArray(commandLine) ? commandLine.slice(1) : [];
       if (args.length > 0) {
         this.input.logService.info('Roc received second-instance launch arguments.', {
-          service: 'windows-host',
+          service: 'macos-host',
           component: 'initializeProcessIdentity',
           metadata: {
             argv: args
@@ -130,7 +118,7 @@ export class WindowsHostService {
   bindMainWindow(window: MainWindowLike): void {
     this.mainWindow = window;
     window.on('close', (event) => {
-      if (this.explicitQuit || (this.input.platform !== 'darwin' && !this.minimizeToTray)) {
+      if (this.explicitQuit) {
         return;
       }
       event.preventDefault();
@@ -139,23 +127,28 @@ export class WindowsHostService {
   }
 
   syncSettings(settings: AppSettings): void {
-    this.minimizeToTray = settings.startup.minimizeToTray;
     this.hostIntegration.startup.configuredOpenAtLogin = settings.startup.openAtLogin;
     this.hostIntegration.startup.syncError = null;
     try {
-      const loginItemSettings = this.buildLoginItemSettings(settings.startup.openAtLogin);
-      this.input.app.setLoginItemSettings(loginItemSettings);
-      const actualLoginItem = this.input.app.getLoginItemSettings({
-        path: loginItemSettings.path,
-        args: loginItemSettings.args
-      });
-      this.hostIntegration.startup.effectiveOpenAtLogin = actualLoginItem.openAtLogin;
+      let actualLoginItem = this.input.app.getLoginItemSettings();
+      if (this.input.isPackaged && actualLoginItem.openAtLogin !== settings.startup.openAtLogin) {
+        this.input.app.setLoginItemSettings({ openAtLogin: settings.startup.openAtLogin });
+        actualLoginItem = this.input.app.getLoginItemSettings();
+      }
+      this.hostIntegration.startup.effectiveOpenAtLogin = this.input.isPackaged && actualLoginItem.openAtLogin && actualLoginItem.status !== 'requires-approval';
+      if (settings.startup.openAtLogin && !this.input.isPackaged) {
+        this.hostIntegration.startup.syncError = '请在打包后的 Roc.app 中设置登录启动。';
+      } else if (actualLoginItem.status === 'requires-approval') {
+        this.hostIntegration.startup.syncError = '请在系统设置的登录项中允许 Roc。';
+      } else if (settings.startup.openAtLogin && actualLoginItem.status === 'not-found') {
+        this.hostIntegration.startup.syncError = '系统未找到 Roc 登录项，请将应用安装到 Applications 后重试。';
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.hostIntegration.startup.syncError = message;
       this.hostIntegration.startup.effectiveOpenAtLogin = false;
       this.input.logService.error('Roc open-at-login sync failed.', toLogError(error), {
-        service: 'windows-host',
+        service: 'macos-host',
         component: 'syncSettings'
       });
     }
@@ -180,7 +173,7 @@ export class WindowsHostService {
         } else {
           this.hostIntegration.globalHotkey.registrationError = 'globalShortcut.register returned false.';
           this.input.logService.warn('Roc global hotkey registration failed.', {
-            service: 'windows-host',
+            service: 'macos-host',
             component: 'syncSettings',
             metadata: {
               accelerator: settings.globalHotkey
@@ -191,7 +184,7 @@ export class WindowsHostService {
         const message = error instanceof Error ? error.message : String(error);
         this.hostIntegration.globalHotkey.registrationError = message;
         this.input.logService.warn('Roc global hotkey registration failed.', {
-          service: 'windows-host',
+          service: 'macos-host',
           component: 'syncSettings',
           metadata: {
             accelerator: settings.globalHotkey,
@@ -290,28 +283,11 @@ export class WindowsHostService {
     this.tray?.destroy();
   }
 
-  private buildLoginItemSettings(openAtLogin: boolean): {
-    openAtLogin: boolean;
-    enabled: boolean;
-    path: string;
-    args: string[];
-    name: string;
-  } {
-    return {
-      openAtLogin,
-      enabled: openAtLogin,
-      path: process.execPath,
-      args: [],
-      name: windowsAppUserModelId
-    };
-  }
-
   private ensureTray(): TrayLike {
     if (this.tray !== null) {
       return this.tray;
     }
     this.tray = this.input.createTray(this.input.trayIconPath);
-    this.tray.on('click', () => this.input.openMainPage('chat'));
     return this.tray;
   }
 

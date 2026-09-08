@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRocWindowsCommandTool } from '../../../../src/main/services/deep-agent/command-tool';
+import { createRocCommandTool } from '../../../../src/main/services/deep-agent/command-tool';
 
-describe('createRocWindowsCommandTool', () => {
+describe('createRocCommandTool', () => {
   it('runs valid commands through the Roc shell adapter', async () => {
     const executeAgentCommand = vi.fn(async () => ({
       command: 'python .\\create_docx.py',
@@ -11,7 +11,7 @@ describe('createRocWindowsCommandTool', () => {
       truncated: false,
       usedRtk: false
     }));
-    const tool = createRocWindowsCommandTool({ executeAgentCommand });
+    const tool = createRocCommandTool({ executeAgentCommand });
 
     await expect(tool.invoke({ command: 'python .\\create_docx.py' })).resolves.toContain('"exitCode": 0');
     expect(executeAgentCommand).toHaveBeenCalledWith({ command: 'python .\\create_docx.py', cwd: undefined });
@@ -19,7 +19,7 @@ describe('createRocWindowsCommandTool', () => {
 
   it('rejects DeepAgents virtual workspace paths before shell execution', async () => {
     const executeAgentCommand = vi.fn();
-    const tool = createRocWindowsCommandTool({ executeAgentCommand });
+    const tool = createRocCommandTool({ executeAgentCommand });
 
     await expect(tool.invoke({ command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py' })).rejects.toThrow(
       'run_shell_command 使用真实本机 cwd，不接受 DeepAgents 文件工具路由 /workspace/...。'

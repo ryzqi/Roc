@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildReleaseReadinessSnapshot, readReleaseIdentity } from '../smoke/lib/release-readiness.mjs';
 
 describe('release readiness evidence', () => {
-  it('reports unsupported Windows release integrations as absent instead of implied', () => {
+  it('reports unsupported macOS release integrations as absent instead of implied', () => {
     const builderConfigText = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
     const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     const snapshot = buildReleaseReadinessSnapshot({
@@ -11,7 +11,7 @@ describe('release readiness evidence', () => {
       packageJson,
       sourceTexts: {
         main: readFileSync(new URL('../../src/main/index.ts', import.meta.url), 'utf8'),
-        windowsHost: readFileSync(new URL('../../src/main/windows-host-service.ts', import.meta.url), 'utf8'),
+        macosHost: readFileSync(new URL('../../src/main/macos-host-service.ts', import.meta.url), 'utf8'),
         nativeContextMenu: readFileSync(new URL('../../src/main/native-context-menu.ts', import.meta.url), 'utf8'),
         mainKernelBootstrap: readFileSync(new URL('../../src/main/main-kernel-bootstrap.ts', import.meta.url), 'utf8'),
         kernelRuntime: readFileSync(new URL('../../src/main/kernel/kernel-runtime.ts', import.meta.url), 'utf8'),
@@ -38,17 +38,17 @@ describe('release readiness evidence', () => {
         status: 'absent',
         evidence: 'electron-builder.yml has no fileAssociations block.'
       },
-      windowsToast: {
+      notification: {
         status: 'absent',
         evidence: 'No main-process Notification or toast click handler is registered.'
       },
-      taskbarJumpList: {
+      dockIntegration: {
         status: 'absent',
-        evidence: 'No Jump List or taskbar progress API is wired.'
+        evidence: 'No custom Dock menu or progress API is wired.'
       },
       installerSigningUpdater: {
-        status: 'absent',
-        evidence: 'Windows target is dir, signAndEditExecutable is false, and no updater dependency is declared.'
+        status: 'partial',
+        evidence: 'macOS uses ad-hoc signing; Developer ID, notarization and automatic updates are not configured.'
       },
       crashReporter: {
         status: 'absent',
@@ -68,7 +68,7 @@ describe('release readiness evidence', () => {
       },
       accessibility: {
         status: 'manual-required',
-        evidence: 'ARIA/focus tests exist; Narrator, large font, and high contrast remain manual checks.'
+        evidence: 'ARIA/focus tests exist; VoiceOver, large font, and high contrast remain manual checks.'
       }
     });
     expect(snapshot.runtime).toEqual({
@@ -81,7 +81,7 @@ describe('release readiness evidence', () => {
         evidence: 'Runtime deletes legacy monolith database files before plugin runtime activation.'
       }
     });
-    expect(['absent', 'manual-required']).toContain(snapshot.integrations.installerSigningUpdater.status);
+    expect(snapshot.integrations.installerSigningUpdater.status).toBe('partial');
   });
 
   it('does not keep monolith-to-plugin migration source in the release tree', () => {
@@ -95,11 +95,11 @@ describe('release readiness evidence', () => {
       builderConfigText: [
         'appId: com.example.changed',
         'productName: Changed',
-        'win:',
+        'mac:',
         '  executableName: ChangedExe',
-        '  signAndEditExecutable: true',
+        '  identity: Developer ID Application',
         '  target:',
-        '    - nsis',
+        '    - zip',
         'fileAssociations:',
         '  - ext: roc'
       ].join('\n'),
@@ -116,7 +116,7 @@ describe('release readiness evidence', () => {
           'crashReporter.start({ submitURL: "https://example.invalid" })',
           'mainWindow.setProgressBar(0.5)'
         ].join('\n'),
-        windowsHost: 'app.setUserTasks([{ program: "Roc.exe" }])',
+        macosHost: 'app.dock.setMenu(menu)',
         nativeContextMenu: 'clipboardApi.writeText("copy")',
         mainKernelBootstrap:
           'function createMainKernelBootstrap() { return new KernelRuntime({ rootDir: pluginDataDir, activateMigration: async () => deleteLegacyMonolithData(root) }); }',
@@ -134,8 +134,8 @@ describe('release readiness evidence', () => {
     });
     expect(snapshot.integrations.appProtocol.status).toBe('present');
     expect(snapshot.integrations.fileAssociation.status).toBe('present');
-    expect(snapshot.integrations.windowsToast.status).toBe('present');
-    expect(snapshot.integrations.taskbarJumpList.status).toBe('present');
+    expect(snapshot.integrations.notification.status).toBe('present');
+    expect(snapshot.integrations.dockIntegration.status).toBe('present');
     expect(snapshot.integrations.installerSigningUpdater.status).toBe('partial');
     expect(snapshot.integrations.crashReporter.status).toBe('present');
     expect(snapshot.integrations.nativeClipboard.status).toBe('partial');

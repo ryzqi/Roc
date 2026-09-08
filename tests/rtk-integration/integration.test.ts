@@ -7,14 +7,14 @@ import { CommandRewriter, RTKBinaryManager, createRTKMiddleware } from '../../sr
 const execFileAsync = promisify(execFile);
 
 describe('RTK integration', () => {
-  it('bundles the expected RTK Windows release', async () => {
+  it('bundles the expected RTK macOS release', async () => {
     const manager = new RTKBinaryManager();
     const binaryPath = manager.getRTKBinaryPath();
     if (binaryPath === null || !manager.isRTKAvailable()) {
       throw new Error('Expected bundled RTK binary to be available for current platform.');
     }
 
-    const { stdout } = await execFileAsync(binaryPath, ['--version'], { windowsHide: true });
+    const { stdout } = await execFileAsync(binaryPath, ['--version']);
 
     expect(stdout.trim()).toBe('rtk 0.48.0');
   });

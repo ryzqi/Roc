@@ -2,14 +2,17 @@
 
 ## Verification Commands
 
-- [ ] `pnpm test`
-- [ ] `pnpm typecheck`
-- [ ] `pnpm build`
-- [ ] `pnpm package:dir`
-- [ ] `pnpm verify:native-packaging`
-- [ ] `pnpm verify:paths`
-- [ ] `pnpm smoke:electron`
-- [ ] `pnpm smoke:performance`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc build`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:native-packaging`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:electron`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:performance`
+
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac`
+- [ ] `rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac`
 
 ## Owner Approval
 
@@ -18,5 +21,5 @@ Get owner approval before:
 - tagging a release
 - pushing to `main`
 - publishing installer artifacts
-- changing `electron-builder.yml` targets beyond the current Windows directory package
+- changing supported platform or architecture targets
 - adding signing certificates or update server config

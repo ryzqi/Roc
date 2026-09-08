@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../src/rtk-integration/rewriter';
+import { CommandRewriter, parseRtkArgs } from '../../src/rtk-integration/rewriter';
 
 describe('CommandRewriter', () => {
   it('returns rewritten RTK command and parsed RTK args', async () => {
@@ -7,11 +7,11 @@ describe('CommandRewriter', () => {
       stdout: 'rtk git status\n',
       exitCode: 3
     });
-    const rewriter = new CommandRewriter('rtk.exe', { runRewrite });
+    const rewriter = new CommandRewriter('rtk', { runRewrite });
 
     const result = await rewriter.rewrite('git status');
 
-    expect(runRewrite).toHaveBeenCalledWith('rtk.exe', ['rewrite', 'git status'], 2000);
+    expect(runRewrite).toHaveBeenCalledWith('rtk', ['rewrite', 'git status'], 2000);
     expect(result).toEqual({
       rewritten: 'rtk git status',
       rtkArgs: ['git', 'status'],
@@ -20,7 +20,7 @@ describe('CommandRewriter', () => {
   });
 
   it('returns null when RTK has no equivalent command', async () => {
-    const rewriter = new CommandRewriter('rtk.exe', {
+    const rewriter = new CommandRewriter('rtk', {
       runRewrite: vi.fn().mockResolvedValue({
         stdout: '',
         exitCode: 1
@@ -35,7 +35,7 @@ describe('CommandRewriter', () => {
   });
 
   it('falls back silently when RTK rewrite fails', async () => {
-    const rewriter = new CommandRewriter('rtk.exe', {
+    const rewriter = new CommandRewriter('rtk', {
       runRewrite: vi.fn().mockRejectedValue(new Error('timeout'))
     });
 
@@ -54,7 +54,7 @@ describe('CommandRewriter', () => {
   });
 
   it('preserves deny exit code from RTK', async () => {
-    const rewriter = new CommandRewriter('rtk.exe', {
+    const rewriter = new CommandRewriter('rtk', {
       runRewrite: vi.fn().mockResolvedValue({
         stdout: '',
         exitCode: 2
@@ -68,9 +68,8 @@ describe('CommandRewriter', () => {
     });
   });
 
-  it('identifies Windows shell aliases that must not be routed to RTK', () => {
-    expect(isWindowsRtkDeniedSubcommand(['ls'])).toBe(true);
-    expect(isWindowsRtkDeniedSubcommand(['ls', '.'])).toBe(true);
-    expect(isWindowsRtkDeniedSubcommand(['git', 'status'])).toBe(false);
+  it('parses native ls commands and respects executable case', () => {
+    expect(parseRtkArgs('rtk ls .')).toEqual(['ls', '.']);
+    expect(parseRtkArgs('RTK ls .')).toBeNull();
   });
 });

@@ -16,7 +16,7 @@ describe('HookConfigSchema', () => {
             hooks: [
               {
                 type: 'command',
-                command: 'powershell -NoProfile -File C:\\Users\\me\\.roc\\hooks\\check.ps1'
+                command: '/bin/zsh /Users/me/.roc/hooks/check.sh'
               }
             ]
           }
@@ -50,6 +50,13 @@ describe('HookConfigSchema', () => {
         }
       })
     ).toThrow();
+  });
+
+  it('rejects removed platform command overrides instead of ignoring them', () => {
+    expect(() => HookConfigSchema.parse({
+      schemaVersion: 1,
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node hook.js', commandWindows: 'legacy-command' }] }] }
+    })).toThrow(/commandWindows/);
   });
 
   it('rejects invalid timeout values', () => {

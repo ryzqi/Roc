@@ -13,7 +13,7 @@ const schema = z.object({
   cwd: z.string().trim().min(1).optional().describe(ROC_SHELL_CWD_SCHEMA_DESCRIPTION)
 });
 
-export function createRocWindowsCommandTool(
+export function createRocCommandTool(
   adapter: AgentExecuteAdapter
 ): DynamicStructuredTool<typeof schema, z.infer<typeof schema>, z.infer<typeof schema>, string> {
   return new DynamicStructuredTool<typeof schema, z.infer<typeof schema>, z.infer<typeof schema>, string>({

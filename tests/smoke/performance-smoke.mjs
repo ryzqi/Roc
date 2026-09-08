@@ -8,7 +8,7 @@ import { resolveSmokeTarget } from './lib/smoke-target.mjs';
 
 const artifactDir = prepareArtifactDir();
 const artifactPath = join(artifactDir, 'performance-smoke.json');
-const packagedExe = resolve('release/win-unpacked/Roc.exe');
+const packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app/Contents/MacOS/Roc');
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget = resolveSmokeTarget({ packagedExe, distMainPath });
 const profileRoots = readProfileRoots();

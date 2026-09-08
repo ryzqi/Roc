@@ -2,14 +2,16 @@ import { readFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 
 const releaseChecklistCommands = [
-  'pnpm test',
-  'pnpm typecheck',
-  'pnpm build',
-  'pnpm package:dir',
-  'pnpm verify:native-packaging',
-  'pnpm verify:paths',
-  'pnpm smoke:electron',
-  'pnpm smoke:performance'
+  'test',
+  'typecheck',
+  'build',
+  'package:dir',
+  'package:mac',
+  'verify:native-packaging',
+  'verify:paths',
+  'smoke:mac',
+  'smoke:electron',
+  'smoke:performance'
 ];
 
 describe('package scripts', () => {
@@ -45,7 +47,7 @@ describe('package scripts', () => {
     expect(devScript).not.toContain('spawnSync(');
   });
 
-  it('records Windows native-feel fields in smoke artifacts', () => {
+  it('records macOS native-feel fields in smoke artifacts', () => {
     const performanceSmokeScript = readFileSync(new URL('../smoke/performance-smoke.mjs', import.meta.url), 'utf8');
     const electronSmokeScript = readFileSync(new URL('../smoke/electron-smoke.mjs', import.meta.url), 'utf8');
     const electronSmokeDiagnosticsHelper = readFileSync(
@@ -67,7 +69,7 @@ describe('package scripts', () => {
     expect(electronSmokeResultHelper).toContain('processMetricsSummary');
     expect(electronSmokeResultHelper).toContain('ipcTopNRecorded');
     expect(electronSmokeResultHelper).toContain('browserWindowCount');
-    expect(electronSmokeResultHelper).toContain('materialEvidence');
+    expect(electronSmokeResultHelper).toContain('nativeWindowEvidence');
     expect(electronSmokeResultHelper).toContain('windowPlacementEvidence');
     expect(electronSmokeResultHelper).toContain('phase3WebViewEvidence');
     expect(electronSmokeScript).toContain('releaseReadiness');
@@ -95,7 +97,7 @@ describe('package scripts', () => {
 
     for (const command of releaseChecklistCommands) {
       expect(releaseChecklist).toContain(command);
-      const scriptName = command.replace(/^pnpm\s+/u, '');
+      const scriptName = command;
       if (scriptName !== 'test') {
         expect(packageJson.scripts[scriptName]).toBeTypeOf('string');
       }
@@ -112,7 +114,7 @@ describe('package scripts', () => {
     expect(releaseChecklist).toContain('tagging a release');
     expect(releaseChecklist).toContain('pushing to `main`');
     expect(releaseChecklist).toContain('publishing installer artifacts');
-    expect(releaseChecklist).toContain('changing `electron-builder.yml` targets beyond the current Windows directory package');
+    expect(releaseChecklist).toContain('changing supported platform or architecture targets');
     expect(releaseChecklist).toContain('adding signing certificates or update server config');
   });
 });

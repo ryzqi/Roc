@@ -56,7 +56,7 @@ export function AppBasicsSection({
                     event.currentTarget.value.trim().length === 0 ? null : event.currentTarget.value
                 })
               }
-              placeholder="例如 F:\\Code\\Roc"
+              placeholder="例如 /Users/me/Projects/Roc"
               value={draft.defaultWorkspace ?? ''}
             />
           </FieldRow>
@@ -81,23 +81,6 @@ export function AppBasicsSection({
               />
               <small className="field-hint">{formatOpenAtLoginHint(hostIntegration)}</small>
             </label>
-            <label className="field checkbox-field settings-toggle-row ui-switch">
-              <span>最小化到托盘</span>
-              <SwitchInput
-                checked={draft.startup.minimizeToTray}
-                data-testid="settings-startup-minimize-to-tray"
-                onChange={(event) =>
-                  onChange({
-                    ...draft,
-                    startup: {
-                      ...draft.startup,
-                      minimizeToTray: event.currentTarget.checked
-                    }
-                  })
-                }
-              />
-              <small className="field-hint">关闭主窗口后保持后台驻留。</small>
-            </label>
           </div>
         </div>
         <div className="settings-section-group">
@@ -115,7 +98,7 @@ export function AppBasicsSection({
                   globalHotkey: value.length === 0 ? null : value
                 });
               }}
-              placeholder="例如 Ctrl+Shift+Space"
+              placeholder="例如 Command+Shift+Space"
               value={draft.globalHotkey ?? ''}
             />
           </FieldRow>

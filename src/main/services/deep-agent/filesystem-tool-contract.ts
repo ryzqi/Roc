@@ -22,7 +22,7 @@ export const ROC_FILE_TOOL_PROMPT_LINES = [
   'File tools accept only Roc routes: /workspace/, /memory/, /skills/.',
   'Memory files use /memory/.../AGENTS.md and related routes.',
   'write_file creates or replaces a file; use edit_file for targeted changes.',
-  'Do not pass Windows absolute or Linux paths to file tools.'
+  'Do not pass real host paths to file tools; use the virtual routes above.'
 ] as const;
 
 export type RocFileToolName = keyof typeof ROC_FILE_TOOL_PATH_FIELDS;

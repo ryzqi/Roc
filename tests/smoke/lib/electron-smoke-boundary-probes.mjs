@@ -1,8 +1,5 @@
 export async function runSmokeBoundaryProbes(ctx) {
-  const { page, mainMaterialEvidence } = ctx;
-  const materialEvidence = {
-    main: mainMaterialEvidence
-  };
+  const { page } = ctx;
 
   const boundary = await page.evaluate(() => ({
     hasRequire: typeof globalThis.require !== 'undefined',
@@ -134,7 +131,6 @@ export async function runSmokeBoundaryProbes(ctx) {
     sidebarDockEvidenceAfter.settingsVisible;
 
   Object.assign(ctx, {
-    materialEvidence,
     boundary,
     workspaceSelectButtonEvidence,
     sidebarDockEvidenceBefore,

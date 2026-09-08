@@ -12,15 +12,13 @@ type NativeThemeSnapshotSource = {
 };
 
 type SystemPreferencesSnapshotSource = {
-  getColor: (color: 'highlight') => string;
+  getAccentColor: () => string;
 };
 
 export function normalizeRgbaHexColor(color: string): string {
-  if (/^#[0-9a-fA-F]{6}$/.test(color)) {
-    return color;
-  }
-  if (/^#[0-9a-fA-F]{8}$/.test(color)) {
-    return color.slice(0, 7);
+  const normalized = color.startsWith('#') ? color : `#${color}`;
+  if (/^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/.test(normalized)) {
+    return normalized.slice(0, 7);
   }
   return fallbackAccentColor;
 }
@@ -30,7 +28,7 @@ export function buildSystemAppearanceSnapshot(input: {
   systemPreferences: SystemPreferencesSnapshotSource;
 }): SystemAppearanceSnapshot {
   return {
-    accentColor: normalizeRgbaHexColor(input.systemPreferences.getColor('highlight')),
+    accentColor: normalizeRgbaHexColor(input.systemPreferences.getAccentColor()),
     inForcedColorsMode: input.nativeTheme.inForcedColorsMode,
     prefersReducedTransparency: input.nativeTheme.prefersReducedTransparency,
     resolvedTheme: input.nativeTheme.shouldUseDarkColors ? 'dark' : 'light',

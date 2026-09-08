@@ -26,11 +26,11 @@ import {
   terminalSessionOutputEventType
 } from './plugins/workspace/terminal-capabilities';
 import { PerformanceObserverService } from './services/performance-observer-service';
-import { WindowsHostService } from './windows-host-service';
+import { MacOSHostService } from './macos-host-service';
+import { initializeMacOSPath } from './macos-environment';
 import {
   buildMainWindowOptions,
   getWindowBounds,
-  mainWindowStaticBackground,
   resolveMainWindowBounds
 } from './window-shell';
 import {
@@ -38,7 +38,6 @@ import {
   readWindowPlacementSnapshot
 } from './window-state-store';
 import { buildApplicationMenuTemplate } from './application-menu';
-import { applyWindowMaterialWithFallback } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { createTerminalOutputBatcher } from './terminal-output-batcher';
 import { bindNativeContextMenu } from './native-context-menu';
@@ -54,9 +53,9 @@ import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-prev
 const mainModuleDir = dirname(fileURLToPath(import.meta.url));
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(mainModuleDir, '../preload/index.cjs');
-const appIconPath = isDevelopment
-  ? join(mainModuleDir, '../../resources/icon.ico')
-  : join(process.resourcesPath, 'icon.ico');
+const trayIconPath = isDevelopment
+  ? join(mainModuleDir, '../../resources/trayTemplate.png')
+  : join(process.resourcesPath, 'trayTemplate.png');
 const mainReadyStartedAtMs = performance.now();
 let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
@@ -71,13 +70,10 @@ let systemAppearanceBound = false;
 let appShutdownComplete = false;
 let appShutdownInProgress: Promise<void> | null = null;
 
-const hostService = new WindowsHostService({
-  platform: process.platform,
+const hostService = new MacOSHostService({
+  isPackaged: app.isPackaged,
   app: {
     requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
-    setAppUserModelId: (id) => {
-      app.setAppUserModelId(id);
-    },
     on: (event, listener) => {
       if (event === 'before-quit') {
         app.on('before-quit', listener);
@@ -137,24 +133,20 @@ const hostService = new WindowsHostService({
     }
   },
   menu: Menu,
-  trayIconPath: appIconPath,
+  trayIconPath,
   createTray: (iconPath) => {
     const trayImage = nativeImage.createFromPath(iconPath);
     if (trayImage.isEmpty()) {
       throw new Error(`Failed to load tray icon from ${iconPath}.`);
     }
-    const tray = new Tray(trayImage.resize({ width: 16, height: 16 }));
+    trayImage.setTemplateImage(true);
+    const tray = new Tray(trayImage);
     return {
       setToolTip: (tooltip) => {
         tray.setToolTip(tooltip);
       },
       setContextMenu: (menu) => {
         tray.setContextMenu(menu as Menu | null);
-      },
-      on: (event, handler) => {
-        tray.on(event, () => {
-          void handler();
-        });
       },
       destroy: () => {
         tray.destroy();
@@ -232,6 +224,7 @@ async function createWindow(): Promise<void> {
   if (!ownsSingleInstanceLock) {
     return;
   }
+  await initializeMacOSPath();
   const performanceObserverService = new PerformanceObserverService();
   const safeStorageBackend = createElectronSafeStorageBackend();
   const runtimeMetricsProvider = createElectronRuntimeMetricsProvider();
@@ -270,19 +263,8 @@ async function createWindow(): Promise<void> {
   );
 
   mainWindow = kernel.performanceObserverService.measure('window_created', 'mainWindow', () =>
-    new BrowserWindow(buildMainWindowOptions(preloadPath, appIconPath, restoredBounds))
+    new BrowserWindow(buildMainWindowOptions(preloadPath, restoredBounds))
   );
-  if (process.platform === 'win32') {
-    applyWindowMaterialWithFallback(
-      mainWindow,
-      {
-        primary: 'mica',
-        fallbacks: ['acrylic'],
-        staticBackground: mainWindowStaticBackground
-      },
-      kernel.logService
-    );
-  }
   if (restoredPlacement !== null && restoredPlacement.maximized) {
     mainWindow.maximize();
   }
@@ -291,9 +273,7 @@ async function createWindow(): Promise<void> {
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
   hostService.syncSettings(kernel.configService.getSettings());
-  const menuTemplate = buildApplicationMenuTemplate(process.platform, showMainPage);
-  Menu.setApplicationMenu(menuTemplate === null ? null : Menu.buildFromTemplate(menuTemplate));
-  mainWindow.setMenuBarVisibility(false);
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildApplicationMenuTemplate(showMainPage)));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -459,7 +439,8 @@ function bindSystemAppearanceBroadcast(): void {
     broadcastToWindows([mainWindow], ipcChannels.appearanceUpdated, getSystemAppearanceSnapshot());
   };
   nativeTheme.on('updated', broadcastSystemAppearance);
-  systemPreferences.on('color-changed', broadcastSystemAppearance);
+  const colorSubscription = systemPreferences.subscribeLocalNotification('NSSystemColorsDidChangeNotification', broadcastSystemAppearance);
+  app.once('will-quit', () => systemPreferences.unsubscribeLocalNotification(colorSubscription));
 }
 
 function getSystemAppearanceSnapshot() {
@@ -496,11 +477,5 @@ app.on('activate', () => {
     }
     mainWindow.show();
     mainWindow.focus();
-  }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
   }
 });

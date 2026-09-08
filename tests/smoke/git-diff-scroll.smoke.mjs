@@ -8,7 +8,7 @@ import { _electron as electron } from '@playwright/test';
 const artifactDir = resolve('.artifacts/git-diff-scroll');
 mkdirSync(artifactDir, { recursive: true });
 
-const packagedExe = resolve('release/win-unpacked/Roc.exe');
+const packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app/Contents/MacOS/Roc');
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget =
@@ -33,7 +33,7 @@ function runWorkspaceGit(args) {
   const result = spawnSync('git', args, {
     cwd: workspaceRoot,
     encoding: 'utf8',
-    windowsHide: true
+
   });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);

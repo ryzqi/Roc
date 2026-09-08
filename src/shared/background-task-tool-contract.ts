@@ -31,7 +31,7 @@ export const BACKGROUND_TASK_PROPOSE_EXAMPLE = {
     ...MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE.trigger,
     description: '每天晚上 7:40 触发'
   },
-  workspacePath: 'F:\\Code\\Roc',
+  workspacePath: '/Users/test/Projects/Roc',
   ...PROPOSE_RUNTIME_DEFAULTS
 } as const satisfies Omit<BackgroundTaskPreviewRequest, 'failurePolicy' | 'enabledCapabilities'>;
 

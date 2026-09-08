@@ -57,7 +57,7 @@ describe('AppShell', () => {
     vi.useRealTimers();
   });
 
-  it('renders navigation, window controls, selected view, and settings trigger', async () => {
+  it('renders navigation and settings while leaving window controls to macOS', async () => {
     const client = createShellClient();
     window.roc = client.api;
 
@@ -66,9 +66,9 @@ describe('AppShell', () => {
     });
 
     expect(container.querySelector('[data-testid="roc-app"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="window-minimize"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="window-toggle-maximize"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="window-close"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="window-minimize"]')).toBeNull();
+    expect(container.querySelector('[data-testid="window-toggle-maximize"]')).toBeNull();
+    expect(container.querySelector('[data-testid="window-close"]')).toBeNull();
     expect(container.querySelector('[data-testid="settings-gear"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="active-view"]')).not.toBeNull();
     expect(container.textContent).toContain('任务工作台');

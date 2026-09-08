@@ -47,6 +47,19 @@ try {
   const rendererReadyMs = Math.round(performance.now() - startedAt);
   const status = await page.evaluate(() => window.roc.app.getStatus());
   assert.equal(status.ok, true, JSON.stringify(status));
+  const expectedAccent = await application.evaluate(({ systemPreferences }) => `#${systemPreferences.getAccentColor().slice(0, 6)}`);
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--system-accent').trim())).toBe(expectedAccent);
+  await page.evaluate(() => {
+    globalThis.__rocAppearanceNotification = null;
+    const dispose = window.roc.app.onAppearanceUpdated((appearance) => {
+      globalThis.__rocAppearanceNotification = appearance;
+      dispose();
+    });
+  });
+  await application.evaluate(({ systemPreferences }) => {
+    systemPreferences.postLocalNotification('NSSystemColorsDidChangeNotification', {});
+  });
+  await expect.poll(() => page.evaluate(() => globalThis.__rocAppearanceNotification?.accentColor)).toBe(expectedAccent);
 
   const workflow = await page.evaluate(async (workspacePath) => {
     const unwrap = (result) => {
@@ -82,6 +95,27 @@ try {
   assert.equal(workflow.terminal, 'ROC_IPC_PTY_OK');
   assert.equal(workflow.shell.exitCode, 0);
   assert.equal(workflow.shell.stdout, 'ROC_IPC_SHELL_OK');
+
+  const windowControls = await application.evaluate(({ BrowserWindow, nativeImage }) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    const { join } = process.getBuiltinModule('node:path');
+    const icon = nativeImage.createFromPath(join(process.resourcesPath, 'trayTemplate.png'));
+    const bitmap = icon.toBitmap();
+    const visiblePixels = bitmap.filter((value, index) => index % 4 === 3 && value > 0).length;
+    return {
+      position: mainWindow.getWindowButtonPosition(),
+      fullscreenable: mainWindow.isFullScreenable(),
+      tray: { empty: icon.isEmpty(), template: icon.isTemplateImage(), size: icon.getSize() },
+      trayVisiblePixels: visiblePixels,
+      trayScales: icon.getScaleFactors()
+    };
+  });
+  assert.deepEqual(windowControls.position, { x: 14, y: 13 });
+  assert.equal(windowControls.fullscreenable, true);
+  assert.deepEqual(windowControls.tray, { empty: false, template: true, size: { width: 16, height: 16 } });
+  assert.ok(windowControls.trayVisiblePixels > 0 && windowControls.trayVisiblePixels < 256);
+  assert.deepEqual(windowControls.trayScales, [1, 2]);
+  await expect(page.locator('[data-testid="window-close"]')).toHaveCount(0);
 
   const native = await application.evaluate(async ({ app }) => {
     const { createRequire } = process.getBuiltinModule('node:module');
@@ -185,6 +219,23 @@ try {
   assert.equal(afterReopen.ok, true, JSON.stringify(afterReopen));
 
   await page.screenshot({ path: join(artifactDir, 'main.png') });
+  const browserWindow = await application.browserWindow(page);
+  await browserWindow.evaluate((window) => window.setBounds({ width: 1280, height: 720 }));
+  const layout = await page.evaluate(() => {
+    const workband = document.querySelector('.window-workband');
+    const primary = document.querySelector('.workband-primary');
+    const meta = document.querySelector('.thread-meta');
+    if (!workband || !primary || !meta) throw new Error('Missing workband layout.');
+    return {
+      nativeControlsSpace: primary.getBoundingClientRect().left >= 80,
+      controlsDoNotOverlap: primary.getBoundingClientRect().right <= meta.getBoundingClientRect().left,
+      fontFamily: getComputedStyle(workband).fontFamily
+    };
+  });
+  assert.equal(layout.nativeControlsSpace, true);
+  assert.equal(layout.controlsDoNotOverlap, true);
+  assert.match(layout.fontFamily, /-apple-system/);
+  await page.screenshot({ path: join(artifactDir, 'main-1280.png') });
   await application.evaluate(({ Menu }) => {
     const settings = Menu.getApplicationMenu()?.getMenuItemById('settings');
     if (settings === undefined) throw new Error('Settings menu is missing.');
@@ -203,7 +254,7 @@ try {
   assert.deepEqual(resources.missingImages, []);
   assert.deepEqual(errors, []);
 
-  const result = { appPath, rendererReadyMs, signature: 'verified', native, workflow, lifecycle, resources, errors };
+  const result = { appPath, rendererReadyMs, signature: 'verified', appearance: { accentColor: expectedAccent, notificationReceived: true }, native, workflow, windowControls, layout, lifecycle, resources, errors };
   writeFileSync(join(artifactDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
   console.log(JSON.stringify(result, null, 2));
 } finally {

@@ -365,9 +365,6 @@ function failureBlocksEvent(event: RocHookEventName, failureMode: RocHookCommand
 }
 
 function resolveCommand(handler: RocHookCommandHandler): string {
-  if (process.platform === 'win32' && handler.commandWindows !== undefined) {
-    return handler.commandWindows;
-  }
   return handler.command;
 }
 

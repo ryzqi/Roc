@@ -56,7 +56,7 @@ describe('workspace and diagnostics surfaces', () => {
           terminalSession: {
             id: 'terminal-1',
             cwd: 'F:\\Code\\Roc',
-            shell: 'pwsh',
+            shell: 'zsh',
             cols: 120,
             rows: 32,
             status: 'ready',
@@ -188,7 +188,7 @@ describe('workspace and diagnostics surfaces', () => {
           terminalSession: {
             id: 'terminal-1',
             cwd: 'F:\\Code\\Roc',
-            shell: 'pwsh',
+            shell: 'zsh',
             cols: 120,
             rows: 32,
             status: 'ready',

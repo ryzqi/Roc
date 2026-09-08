@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const packagedExe = resolve('release/win-unpacked/Roc.exe');
+const packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app/Contents/MacOS/Roc');
 const dataRoot = join(homedir(), '.roc');
 const agentDbPath = join(dataRoot, 'plugin-data', 'data', 'plugins', '@roc', 'plugin-agent.db');
 const prompt = '每天晚上9点搜索今日金价，并记录到当前目录下的docx文件中。先思考，再执行。';

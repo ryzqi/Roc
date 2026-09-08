@@ -8,7 +8,7 @@ describe('RTKBinaryManager', () => {
 
     expect(manager.getRTKBinaryPath()).toContain('resources');
     expect(manager.getRTKBinaryPath()).toContain('rtk-binaries');
-    expect(manager.getRTKBinaryPath()).toContain(process.platform === 'win32' ? 'rtk.exe' : 'rtk');
+    expect(manager.getRTKBinaryPath()).toContain('rtk');
   });
 
   it('returns null for unsupported platforms', () => {
@@ -21,14 +21,14 @@ describe('RTKBinaryManager', () => {
     expect(manager.isRTKAvailable()).toBe(false);
   });
 
-  it('reports the bundled Windows binary as available in development', () => {
+  it('reports the bundled macOS binary as available in development', () => {
     const manager = new RTKBinaryManager({
-      platform: 'win32',
+      platform: 'darwin',
       arch: 'x64',
       resourceRoot: process.cwd()
     });
 
-    expect(manager.getRTKBinaryPath()).toContain('win32-x64');
+    expect(manager.getRTKBinaryPath()).toContain('darwin-x64');
     expect(manager.isRTKAvailable()).toBe(true);
   });
 
@@ -36,17 +36,16 @@ describe('RTKBinaryManager', () => {
     const cases = [
       { platform: 'darwin', arch: 'x64', expected: join('darwin-x64', 'rtk') },
       { platform: 'darwin', arch: 'arm64', expected: join('darwin-arm64', 'rtk') },
-      { platform: 'linux', arch: 'x64', expected: join('linux-x64', 'rtk') }
     ] as const;
 
     for (const platformCase of cases) {
       const manager = new RTKBinaryManager({
         platform: platformCase.platform,
         arch: platformCase.arch,
-        resourcesPath: 'C:\\Packaged\\resources'
+        resourcesPath: '/Applications/Roc.app/Contents/Resources'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe(join('C:\\Packaged\\resources', 'rtk-binaries', platformCase.expected));
+      expect(manager.getRTKBinaryPath()).toBe(join('/Applications/Roc.app/Contents/Resources', 'rtk-binaries', platformCase.expected));
     }
   });
 
@@ -54,14 +53,14 @@ describe('RTKBinaryManager', () => {
     const processWithResources = process as NodeJS.Process & { defaultApp?: boolean; resourcesPath?: string };
     const original = processWithResources.resourcesPath;
     const originalDefaultApp = processWithResources.defaultApp;
-    processWithResources.resourcesPath = 'C:\\Electron\\resources';
+    processWithResources.resourcesPath = '/Electron.app/Contents/Resources';
     try {
       const manager = new RTKBinaryManager({
-        platform: 'win32',
+        platform: 'darwin',
         arch: 'x64'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe(join('C:\\Electron\\resources', 'rtk-binaries', 'win32-x64', 'rtk.exe'));
+      expect(manager.getRTKBinaryPath()).toBe(join('/Electron.app/Contents/Resources', 'rtk-binaries', 'darwin-x64', 'rtk'));
     } finally {
       if (original === undefined) {
         Reflect.deleteProperty(processWithResources, 'resourcesPath');
@@ -80,16 +79,16 @@ describe('RTKBinaryManager', () => {
     const processWithResources = process as NodeJS.Process & { defaultApp?: boolean; resourcesPath?: string };
     const original = processWithResources.resourcesPath;
     const originalDefaultApp = processWithResources.defaultApp;
-    processWithResources.resourcesPath = 'C:\\Electron\\dist\\resources';
+    processWithResources.resourcesPath = '/Electron.app/Contents/Resources';
     processWithResources.defaultApp = true;
     try {
       const manager = new RTKBinaryManager({
-        platform: 'win32',
+        platform: 'darwin',
         arch: 'x64',
-        resourceRoot: 'F:\\Code\\Roc'
+        resourceRoot: '/Users/test/Projects/Roc'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe(join('F:\\Code\\Roc', 'resources', 'rtk-binaries', 'win32-x64', 'rtk.exe'));
+      expect(manager.getRTKBinaryPath()).toBe(join('/Users/test/Projects/Roc', 'resources', 'rtk-binaries', 'darwin-x64', 'rtk'));
     } finally {
       if (original === undefined) {
         Reflect.deleteProperty(processWithResources, 'resourcesPath');

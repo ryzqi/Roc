@@ -36,10 +36,6 @@ export class RTKBinaryManager {
       return false;
     }
 
-    if (this.platform() === 'win32') {
-      return true;
-    }
-
     try {
       accessSync(this.binaryPath, constants.X_OK);
       return true;
@@ -61,17 +57,11 @@ export class RTKBinaryManager {
     const platform = this.platform();
     const arch = this.arch();
 
-    if (platform === 'win32' && arch === 'x64') {
-      return { platformDir: 'win32-x64', binaryName: 'rtk.exe' };
-    }
     if (platform === 'darwin' && arch === 'x64') {
       return { platformDir: 'darwin-x64', binaryName: 'rtk' };
     }
     if (platform === 'darwin' && arch === 'arm64') {
       return { platformDir: 'darwin-arm64', binaryName: 'rtk' };
-    }
-    if (platform === 'linux' && arch === 'x64') {
-      return { platformDir: 'linux-x64', binaryName: 'rtk' };
     }
     return null;
   }

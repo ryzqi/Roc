@@ -8,26 +8,19 @@ import {
 } from '../../src/main/window-shell';
 
 describe('immersive window shell', () => {
-  it('builds a frameless window with hidden system menu bar', () => {
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico', null, 'win32');
+  it('uses native macOS traffic lights within the workband', () => {
+    const options = buildMainWindowOptions('/roc/dist/preload/index.cjs');
 
     expect(options.title).toBe('Roc');
-    expect(options.icon).toBe('C:/roc/resources/icon.ico');
-    expect(options.frame).toBe(false);
-    expect(options.autoHideMenuBar).toBe(true);
+    expect(options.titleBarStyle).toBe('hiddenInset');
+    expect(options.trafficLightPosition).toEqual({ x: 14, y: 13 });
+    expect(options.frame).not.toBe(false);
     expect(options.show).toBe(false);
-    expect(options.backgroundMaterial).toBe('mica');
-    expect(options.webPreferences?.preload).toBe('C:/roc/dist/preload/index.cjs');
+    expect(options).not.toHaveProperty('backgroundMaterial');
+    expect(options.webPreferences?.preload).toBe('/roc/dist/preload/index.cjs');
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
-  });
-
-  it.each(['darwin', 'linux'] as const)('omits Windows-only material on %s', (platform) => {
-    const options = buildMainWindowOptions('/roc/dist/preload/index.cjs', '/roc/resources/icon.ico', null, platform);
-    expect(options).not.toHaveProperty('backgroundMaterial');
-    expect(options.webPreferences?.contextIsolation).toBe(true);
-    expect(options.show).toBe(false);
   });
 
   it('applies restored main-window bounds after display-safe normalization', () => {
@@ -49,7 +42,7 @@ describe('immersive window shell', () => {
         }
       ]
     );
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico', restored);
+    const options = buildMainWindowOptions('/roc/dist/preload/index.cjs', restored);
 
     expect(restored).toEqual({
       x: 1920,

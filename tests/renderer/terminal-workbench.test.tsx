@@ -119,7 +119,7 @@ function createTerminalSession(id: string): TerminalSessionSnapshot {
   return {
     id,
     cwd: 'F:\\Code\\Roc',
-    shell: 'pwsh',
+    shell: 'zsh',
     cols: 80,
     rows: 24,
     status: 'ready',

@@ -7,12 +7,12 @@ import {
 import { buildWorkspaceHash } from '../../../../../src/main/services/paths';
 
 describe('workspace scope utilities', () => {
-  it('derives workspace hash from the real Windows workspace path', () => {
-    const identity = resolveRuntimeWorkspaceIdentity('F:\\Code\\Roc');
+  it('derives workspace hash from the real macOS workspace path', () => {
+    const identity = resolveRuntimeWorkspaceIdentity('/Users/test/Projects/Roc');
 
     expect(identity).toEqual({
-      path: 'F:\\Code\\Roc',
-      hash: buildWorkspaceHash('F:\\Code\\Roc')
+      path: '/Users/test/Projects/Roc',
+      hash: buildWorkspaceHash('/Users/test/Projects/Roc')
     });
   });
 

@@ -67,31 +67,9 @@ export async function readWindowPlacementEvidence(filePath, expectedBounds) {
   };
 }
 
-export async function probeWindowMaterial(browserWindow, requestedMaterial) {
-  return browserWindow.evaluate((window, material) => {
-    if (typeof window.setBackgroundMaterial !== 'function') {
-      return {
-        requestedMaterial: material,
-        apiAvailable: false,
-        accepted: false,
-        errorMessage: 'setBackgroundMaterial is unavailable'
-      };
-    }
-    try {
-      window.setBackgroundMaterial(material);
-      return {
-        requestedMaterial: material,
-        apiAvailable: true,
-        accepted: true,
-        errorMessage: null
-      };
-    } catch (error) {
-      return {
-        requestedMaterial: material,
-        apiAvailable: true,
-        accepted: false,
-        errorMessage: error instanceof Error ? error.message : String(error)
-      };
-    }
-  }, requestedMaterial);
+export async function probeNativeWindow(browserWindow) {
+  return browserWindow.evaluate((window) => ({
+    trafficLightPosition: window.getWindowButtonPosition(),
+    fullscreenable: window.isFullScreenable()
+  }));
 }

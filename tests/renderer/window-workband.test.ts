@@ -45,12 +45,8 @@ describe('WindowWorkband', () => {
         onHistorySearchToggle: vi.fn(),
         onNewConversation: vi.fn(),
         onSidebarToggle: vi.fn(),
-        onWindowClose: vi.fn(),
-        onWindowMaximizeToggle: vi.fn(),
-        onWindowMinimize: vi.fn(),
         showHistorySearch: false,
-        topMeta: buildTopMeta('chat', state),
-        windowState: { maximized: false, minimized: false, fullscreen: false }
+        topMeta: buildTopMeta('chat', state)
       })
     );
 

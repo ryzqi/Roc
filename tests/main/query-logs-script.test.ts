@@ -69,8 +69,7 @@ describe('query logs scripts', () => {
         encoding: 'utf8',
         env: {
           ...process.env,
-          HOME: root,
-          USERPROFILE: root
+          HOME: root
         }
       }
     );
@@ -84,69 +83,4 @@ describe('query logs scripts', () => {
     expect(result.stdout).not.toContain('Slow IPC handler recorded.');
   });
 
-  it('provides a PowerShell query script with structured filters', () => {
-    const script = readFileSync(new URL('../../scripts/query-logs.ps1', import.meta.url), 'utf8');
-
-    expect(script).toContain('[string]$Level');
-    expect(script).toContain('[string]$Service');
-    expect(script).toContain('[string]$TraceId');
-    expect(script).toContain('[string]$RunId');
-    expect(script).toContain('[string]$Grep');
-    expect(script).toContain('[string]$LogPath');
-    expect(script).toContain('ConvertFrom-Json');
-  });
-
-  it.runIf(process.platform === 'win32')('filters structured logs with the PowerShell query script', () => {
-    writeFileSync(
-      join(root, '.roc', 'logs', 'app.jsonl'),
-      [
-        JSON.stringify({
-          timestamp: '2026-06-04T00:00:00.000Z',
-          level: 'info',
-          service: 'ipc',
-          message: 'Slow IPC handler recorded.'
-        }),
-        JSON.stringify({
-          timestamp: '2026-06-04T00:01:00.000Z',
-          level: 'error',
-          service: 'provider-runtime',
-          message: 'Provider request failed.'
-        })
-      ].join('\n') + '\n',
-      'utf8'
-    );
-
-    const result = spawnSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        fileURLToPath(new URL('../../scripts/query-logs.ps1', import.meta.url)),
-        '-Level',
-        'error',
-        '-Service',
-        'provider-runtime',
-        '-Grep',
-        'Provider',
-        '-LogPath',
-        join(root, '.roc', 'logs', 'app.jsonl'),
-        '-Last',
-        '10'
-      ],
-      {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          USERPROFILE: root
-        }
-      }
-    );
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Provider request failed.');
-    expect(result.stdout).toContain('provider-runtime');
-    expect(result.stdout).not.toContain('Slow IPC handler recorded.');
-  });
 });

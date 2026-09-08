@@ -24,7 +24,7 @@ describe('renderer animation configuration', () => {
     expect(css).toContain('backdrop-filter: none;');
   });
 
-  it('keeps Windows native-feel CSS rules from regressing into web defaults', () => {
+  it('keeps desktop interaction CSS rules from regressing into web defaults', () => {
     const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');
     const allCss = [
       'base.css',
@@ -42,9 +42,6 @@ describe('renderer animation configuration', () => {
       .join('\n');
     const appShellBlock = allCss.match(/(^|\n)\s*\.app-shell\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
     const appShellShadow = appShellBlock.match(/box-shadow\s*:\s*([^;]+);/u)?.[1]?.trim();
-    const titlebarBlock = allCss.match(/(^|\n)\s*\.titlebar-button\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
-    const closeHoverBlock =
-      allCss.match(/(^|\n)\s*\.titlebar-button\.danger:hover\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
     const ipcContract = readFileSync('src/shared/ipc.ts', 'utf8');
     const preloadContract = readFileSync('src/preload/index.ts', 'utf8');
     const pointerBlocks = Array.from(
@@ -64,11 +61,8 @@ describe('renderer animation configuration', () => {
     expect(baseCss).toContain('user-select: text;');
     expect(allCss).not.toMatch(/scroll-behavior\s*:\s*smooth\s*;/u);
     expect(appShellShadow).toBe('none');
-    expect(titlebarBlock).toContain('width: 46px;');
-    expect(titlebarBlock).toContain('height: 32px;');
-    expect(titlebarBlock).toContain('border-radius: 0;');
-    expect(closeHoverBlock).toContain('background: #c42b1c;');
-    expect(closeHoverBlock).toContain('color: #ffffff;');
+    expect(allCss).not.toContain('.titlebar-button');
+    expect(allCss).toContain('padding: 0 86px;');
     expect(ipcContract).not.toContain("windowSetBounds: 'roc:window:set-bounds'");
     expect(preloadContract).not.toContain('setBounds: (bounds)');
   });
@@ -82,7 +76,7 @@ describe('renderer animation configuration', () => {
     expect(noDragSelectorBlock).toContain('.icon-button');
   });
 
-  it('uses Windows system theme and accent tokens as the renderer source of truth', () => {
+  it('uses macOS system fonts, theme and accent tokens', () => {
     const tokensCss = readFileSync('src/renderer/styles/tokens.css', 'utf8');
     const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');
 
@@ -93,8 +87,8 @@ describe('renderer animation configuration', () => {
     expect(tokensCss).toContain('color-scheme: dark;');
     expect(tokensCss).toContain(":root[data-forced-colors='true']");
     expect(tokensCss).toContain('--accent: Highlight;');
-    expect(tokensCss).toContain("--font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI'");
-    expect(tokensCss).toContain("--font-display: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI'");
+    expect(tokensCss).toContain('--font-sans: -apple-system, BlinkMacSystemFont');
+    expect(tokensCss).toContain('--font-display: -apple-system, BlinkMacSystemFont');
     expect(tokensCss).not.toContain("--font-sans: 'Inter'");
     expect(tokensCss).not.toContain('--bg-gradient: linear-gradient');
     expect(baseCss).toContain('background: var(--bg);');

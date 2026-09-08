@@ -34,7 +34,7 @@ export class RtkService {
 
   getExecutionMetadata(): RtkExecutionMetadata {
     const bundledBinaryPath = this.binaryManager.getRTKBinaryPath();
-    const binaryPath = bundledBinaryPath === null ? join(this.paths.toolsDir, 'roc-rtk.exe') : bundledBinaryPath;
+    const binaryPath = bundledBinaryPath === null ? join(this.paths.toolsDir, 'roc-rtk') : bundledBinaryPath;
     const binaryExists =
       bundledBinaryPath === null ? existsSync(binaryPath) : this.binaryManager.isRTKAvailable();
     return {

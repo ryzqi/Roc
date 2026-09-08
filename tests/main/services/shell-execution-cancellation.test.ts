@@ -1,5 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,17 +19,18 @@ afterEach(() => {
   rmSync(root, { force: true, recursive: true });
 });
 
-describe.skipIf(process.platform !== 'win32')('ShellExecutionService cancellation', () => {
+describe('ShellExecutionService macOS cancellation', () => {
   it('removes secret environment values from agent commands', async () => {
     const service = createService();
     process.env.ROC_SHELL_SECRET_TEST = 'must-not-leak';
     try {
       const result = await service.executeAsync({
-        command: "if (Test-Path Env:ROC_SHELL_SECRET_TEST) { Write-Output leaked } else { Write-Output clean }",
+        command: '[ -z "${ROC_SHELL_SECRET_TEST-}" ] && printf clean || printf leaked',
         cwd: root,
         source: 'agent'
       });
 
+      expect(result.stderr).toBe('');
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('clean');
     } finally {
@@ -38,17 +38,13 @@ describe.skipIf(process.platform !== 'win32')('ShellExecutionService cancellatio
     }
   });
 
-  it('terminates the full Windows child process tree when the run is aborted', async () => {
+  it('terminates the macOS process group including descendants when aborted', async () => {
     const service = createService();
     const pidPath = join(root, 'child.pid');
-    const escapedPidPath = pidPath.replaceAll("'", "''");
+    writeFileSync(join(root, 'spawn.sh'), 'sleep 30 &\nprintf "%s" "$!" > child.pid\nwait\n');
     const controller = new AbortController();
     const execution = service.executeAsync({
-      command: [
-        "$child = Start-Process powershell.exe -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru",
-        `Set-Content -LiteralPath '${escapedPidPath}' -Value $child.Id`,
-        'Wait-Process -Id $child.Id'
-      ].join('; '),
+      command: '/bin/zsh ./spawn.sh',
       cwd: root,
       source: 'agent',
       signal: controller.signal
@@ -64,7 +60,7 @@ describe.skipIf(process.platform !== 'win32')('ShellExecutionService cancellatio
       controller.abort(new Error('test_cleanup'));
       await execution.catch(() => undefined);
       if (childPid !== null && isProcessRunning(childPid)) {
-        execFileSync('taskkill.exe', ['/PID', String(childPid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        process.kill(childPid, 'SIGKILL');
       }
     }
   }, 15_000);
@@ -77,7 +73,7 @@ function createService(): ShellExecutionService {
   });
   const rtkService = {
     getExecutionMetadata: () => ({
-      binaryPath: join(root, 'missing-rtk.exe'),
+      binaryPath: join(root, 'missing-rtk'),
       runtimeRoot: root,
       configPath: join(root, 'rtk', 'config.toml'),
       teeDir: join(root, 'rtk', 'tee'),
@@ -118,7 +114,7 @@ async function waitForProcessExit(pid: number): Promise<void> {
     await waitUntil(() => !isProcessRunning(pid));
   } finally {
     if (isProcessRunning(pid)) {
-      execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      process.kill(pid, 'SIGKILL');
     }
   }
 }

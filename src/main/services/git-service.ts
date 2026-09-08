@@ -331,7 +331,7 @@ export class GitService {
       return execFileSync('git', args, {
         cwd,
         encoding: 'utf8',
-        windowsHide: true,
+
         stdio: ['ignore', 'pipe', 'pipe']
       });
     } catch (error) {
@@ -347,7 +347,7 @@ export class GitService {
         {
           cwd,
           encoding: 'utf8',
-          windowsHide: true,
+
           maxBuffer: 10 * 1024 * 1024
         },
         (error, stdout, stderr) => {
@@ -366,7 +366,7 @@ export class GitService {
       return execFileSync('git', args, {
         cwd,
         encoding: 'utf8',
-        windowsHide: true,
+
         stdio: ['ignore', 'pipe', 'pipe']
       });
     } catch (error) {
@@ -385,7 +385,7 @@ export class GitService {
         {
           cwd,
           encoding: 'utf8',
-          windowsHide: true,
+
           maxBuffer: 10 * 1024 * 1024
         },
         (error, stdout, stderr) => {
@@ -469,7 +469,7 @@ export class GitService {
       return execFileSync('git', ['config', key], {
         cwd,
         encoding: 'utf8',
-        windowsHide: true,
+
         stdio: ['ignore', 'pipe', 'pipe']
       }).trim();
     } catch {

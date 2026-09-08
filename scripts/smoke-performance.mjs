@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildWindowsShellCommand,
   verifyWorkspaceBetterSqlite3
 } from './lib/native-packaging.mjs';
 
@@ -17,10 +16,9 @@ const profileRoots = {
 const profileRootsJson = JSON.stringify(profileRoots);
 
 function run(command, args, options = { exitOnFailure: true }) {
-  const useWindowsShell = process.platform === 'win32';
-  const result = spawnSync(useWindowsShell ? buildWindowsShellCommand(command, args) : command, useWindowsShell ? [] : args, {
+  const result = spawnSync(command, args, {
     stdio: 'inherit',
-    shell: useWindowsShell,
+    shell: false,
     env: options.env === undefined ? process.env : options.env
   });
 

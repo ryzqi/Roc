@@ -1,5 +1,5 @@
 export function buildRendererBoundaryCapabilities(ctx) {
-  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsPinned, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultTextEvidence, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
+  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsPinned, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultTextEvidence, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, nativeWindowEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
   return {
     memoryFileEditorVisible:
       memoryText.includes('USER.md') &&
@@ -239,10 +239,9 @@ export function buildRendererBoundaryCapabilities(ctx) {
       appShellFrameEvidence.gapRight <= 1 &&
       appShellFrameEvidence.gapBottom <= 1 &&
       appShellFrameEvidence.gapLeft <= 1,
-    materialEvidenceRecorded:
-      materialEvidence.main.requestedMaterial === 'mica' &&
-      materialEvidence.main.apiAvailable &&
-      Object.values(materialEvidence).every((item) => item.accepted || typeof item.errorMessage === 'string'),
+    nativeWindowControls:
+      nativeWindowEvidence.trafficLightPosition?.x === 14 &&
+      nativeWindowEvidence.trafficLightPosition?.y === 13 && nativeWindowEvidence.fullscreenable,
     windowPlacementPersisted:
       windowPlacementEvidence.persisted &&
       windowPlacementEvidence.snapshot?.maximized === false &&
@@ -266,7 +265,7 @@ export function buildRendererBoundaryCapabilities(ctx) {
       phase4VisualEvidence.reducedTransparencyDataset === String(phase4VisualEvidence.appAppearance.prefersReducedTransparency) &&
       phase4VisualEvidence.systemAccentVariable === phase4VisualEvidence.appAppearance.accentColor &&
       phase4VisualEvidence.colorScheme.includes(phase4VisualEvidence.appAppearance.resolvedTheme) &&
-      phase4VisualEvidence.bodyFontFamily.includes('Segoe UI') &&
+      phase4VisualEvidence.bodyFontFamily.includes('-apple-system') &&
       phase4VisualEvidence.bodyBackgroundImage === 'none' &&
       phase4VisualEvidence.appShellBackgroundImage === 'none' &&
       phase4VisualEvidence.forcedColorsMedia === '(forced-colors: active)',

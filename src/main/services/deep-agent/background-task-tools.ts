@@ -72,7 +72,7 @@ export const proposeToolInputSchema = z.strictObject({
 const fullProposeInputSchema = z.strictObject({
   goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
   trigger: triggerSchema,
-  workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。')
+  workspacePath: z.string().min(1).describe('macOS 绝对工作区路径，由 runtime 注入。')
 });
 
 export const proposeInputSchema = fullProposeInputSchema.extend({

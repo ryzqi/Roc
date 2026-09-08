@@ -1,6 +1,5 @@
-import { Copy, Minus, PanelLeft, PanelLeftClose, Search, Square, SquarePen, X } from 'lucide-react';
+import { PanelLeft, PanelLeftClose, Search, SquarePen } from 'lucide-react';
 import type React from 'react';
-import type { WindowStateSnapshot } from '../../shared/types';
 import { PreviewIcon } from '../components/PreviewIcon';
 
 export function WindowWorkband({
@@ -9,24 +8,16 @@ export function WindowWorkband({
   onHistorySearchToggle,
   onNewConversation,
   onSidebarToggle,
-  onWindowClose,
-  onWindowMaximizeToggle,
-  onWindowMinimize,
   showHistorySearch,
-  topMeta,
-  windowState
+  topMeta
 }: {
   activeView: string;
   chatSidebarCollapsed: boolean;
   onHistorySearchToggle: () => void;
   onNewConversation: () => void;
   onSidebarToggle: () => void;
-  onWindowClose: () => void;
-  onWindowMaximizeToggle: () => void;
-  onWindowMinimize: () => void;
   showHistorySearch: boolean;
   topMeta: string;
-  windowState: WindowStateSnapshot;
 }): React.JSX.Element {
   return (
     <header className="window-workband" data-testid="window-workband">
@@ -76,39 +67,6 @@ export function WindowWorkband({
       <div className="thread-meta">
         <PreviewIcon name="folder" />
         <span>{topMeta}</span>
-      </div>
-      <div className="workband-actions">
-        <button
-          className="icon-button titlebar-button"
-          data-testid="window-minimize"
-          title="最小化"
-          type="button"
-          onClick={onWindowMinimize}
-        >
-          <Minus aria-hidden="true" className="titlebar-icon" size={12} strokeWidth={1.6} />
-        </button>
-        <button
-          className="icon-button titlebar-button"
-          data-testid="window-toggle-maximize"
-          title={windowState.maximized ? '还原' : '最大化'}
-          type="button"
-          onClick={onWindowMaximizeToggle}
-        >
-          {windowState.maximized ? (
-            <Copy aria-hidden="true" className="titlebar-icon titlebar-icon--restore" size={12} strokeWidth={1.6} />
-          ) : (
-            <Square aria-hidden="true" className="titlebar-icon" size={11} strokeWidth={1.7} />
-          )}
-        </button>
-        <button
-          className="icon-button titlebar-button danger"
-          data-testid="window-close"
-          title="关闭"
-          type="button"
-          onClick={onWindowClose}
-        >
-          <X aria-hidden="true" className="titlebar-icon" size={13} strokeWidth={1.7} />
-        </button>
       </div>
     </header>
   );

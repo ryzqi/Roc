@@ -36,7 +36,7 @@ describe('platform workspace paths', () => {
     expect(workspace.isPathInsideCurrentWorkspace(`${workspaceRoot}-other/file.txt`)).toBe(false);
   });
 
-  it.skipIf(process.platform === 'win32')('rejects symlink escapes while accepting real nested files', () => {
+  it('rejects symlink escapes while accepting real nested files', () => {
     const inside = join(workspaceRoot, 'nested', 'file.txt');
     const outside = join(root, 'outside.txt');
     writeFileSync(inside, 'inside');
@@ -47,7 +47,7 @@ describe('platform workspace paths', () => {
   });
 });
 
-describe.skipIf(process.platform === 'win32')('POSIX shell execution', () => {
+describe('POSIX shell execution', () => {
   function createShell() {
     const rtk = {
       getExecutionMetadata: () => ({ teeDir: join(root, 'tee') })

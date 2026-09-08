@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../src/shared/types';
-import { WindowsHostService } from '../../src/main/windows-host-service';
+import { MacOSHostService } from '../../src/main/macos-host-service';
 
 type WindowEvent = 'close';
 type AppEvent = 'before-quit' | 'second-instance';
 type TrayEvent = 'click';
-const trayIconPath = 'C:/roc/resources/icon.ico';
+const trayIconPath = '/Applications/Roc.app/Contents/Resources/trayTemplate.png';
 
 function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
@@ -55,7 +55,6 @@ function createAppMock(options: { singleInstanceLock?: boolean; loginItemOpenAtL
   return {
     handlers,
     requestSingleInstanceLock: vi.fn(() => options.singleInstanceLock ?? true),
-    setAppUserModelId: vi.fn(),
     on: vi.fn((event: AppEvent, handler: (...args: unknown[]) => void) => {
       handlers.set(event, handler);
     }),
@@ -103,14 +102,39 @@ function createLogServiceMock() {
   };
 }
 
-describe('WindowsHostService', () => {
-  it('configures AppUserModelID, keeps single-instance ownership, and focuses the existing window on second-instance', async () => {
+describe('MacOSHostService', () => {
+  it.each([false, true])('reports login-item availability for packaged=%s', (isPackaged) => {
+    const app = createAppMock();
+    const getLoginItemSettings = vi.fn(() => ({ openAtLogin: true, status: 'requires-approval' as const }));
+    const host = new MacOSHostService({
+      isPackaged,
+      app: { ...app, getLoginItemSettings },
+      globalShortcut: { register: vi.fn(), unregister: vi.fn(), unregisterAll: vi.fn() },
+      lifecycleService: { getTraySummary: vi.fn(), pauseBackgroundExecution: vi.fn(), resumeBackgroundExecution: vi.fn() },
+      logService: createLogServiceMock(),
+      menu: { buildFromTemplate: vi.fn() },
+      trayIconPath,
+      createTray: vi.fn(() => createTrayMock()),
+      openMainPage: vi.fn(),
+      broadcastTaskUpdated: vi.fn()
+    });
+    vi.spyOn(host, 'refreshTray').mockImplementation(() => undefined);
+    host.syncSettings(createSettings({ startup: { openAtLogin: true, minimizeToTray: true } }));
+    expect(app.setLoginItemSettings).not.toHaveBeenCalled();
+    expect(host.getIntegrationStatus().startup).toEqual({
+      configuredOpenAtLogin: true,
+      effectiveOpenAtLogin: false,
+      syncError: isPackaged ? '请在系统设置的登录项中允许 Roc。' : '请在打包后的 Roc.app 中设置登录启动。'
+    });
+  });
+
+  it('keeps single-instance ownership and focuses the existing window on second-instance', async () => {
     const app = createAppMock({ singleInstanceLock: true });
     const mainWindow = createWindowMock({ minimized: true });
     const logService = createLogServiceMock();
     const tray = createTrayMock();
-    const host = new WindowsHostService({
-      platform: 'win32',
+    const host = new MacOSHostService({
+      isPackaged: true,
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -147,20 +171,19 @@ describe('WindowsHostService', () => {
     host.bindMainWindow(mainWindow);
 
     expect(host.initializeProcessIdentity()).toBe(true);
-    expect(app.setAppUserModelId).toHaveBeenCalledWith('com.roc.desktop');
 
     const secondInstanceHandler = app.handlers.get('second-instance');
     if (secondInstanceHandler === undefined) {
       throw new Error('second-instance handler was not registered.');
     }
 
-    await secondInstanceHandler({}, ['C:\\Program Files\\Roc\\Roc.exe', 'roc://open/tasks']);
+    await secondInstanceHandler({}, ['/Applications/Roc.app/Contents/MacOS/Roc', 'roc://open/tasks']);
 
     expect(mainWindow.restore).toHaveBeenCalledTimes(1);
     expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(mainWindow.focus).toHaveBeenCalledTimes(1);
     expect(logService.info).toHaveBeenCalledWith('Roc received second-instance launch arguments.', {
-      service: 'windows-host',
+      service: 'macos-host',
       component: 'initializeProcessIdentity',
       metadata: {
         argv: ['roc://open/tasks']
@@ -171,8 +194,8 @@ describe('WindowsHostService', () => {
   it('hides the main window on close when minimizeToTray is enabled, but explicit quit bypasses tray residency', () => {
     const app = createAppMock();
     const mainWindow = createWindowMock();
-    const host = new WindowsHostService({
-      platform: 'win32',
+    const host = new MacOSHostService({
+      isPackaged: true,
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -229,10 +252,10 @@ describe('WindowsHostService', () => {
     expect(preventDefaultAfterQuit).not.toHaveBeenCalled();
   });
 
-  it.each(['win32', 'darwin'] as const)('uses the %s close behavior when minimizeToTray is disabled', (platform) => {
+  it('keeps macOS background tasks alive when the legacy minimizeToTray setting is disabled', () => {
     const mainWindow = createWindowMock();
-    const host = new WindowsHostService({
-      platform,
+    const host = new MacOSHostService({
+      isPackaged: true,
       app: createAppMock(),
       globalShortcut: {
         register: vi.fn(() => true),
@@ -276,8 +299,8 @@ describe('WindowsHostService', () => {
 
     closeHandler({ preventDefault });
 
-    expect(preventDefault).toHaveBeenCalledTimes(platform === 'darwin' ? 1 : 0);
-    expect(mainWindow.hide).toHaveBeenCalledTimes(platform === 'darwin' ? 1 : 0);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(mainWindow.hide).toHaveBeenCalledTimes(1);
 
     host.requestQuit();
     const preventQuit = vi.fn();
@@ -287,6 +310,7 @@ describe('WindowsHostService', () => {
 
   it('syncs open-at-login and global hotkey state, and wires tray actions to lifecycle callbacks', async () => {
     const app = createAppMock({ loginItemOpenAtLogin: true });
+    app.getLoginItemSettings.mockReturnValueOnce({ openAtLogin: false });
     const pauseBackgroundExecution = vi.fn(() => ({
       residentEnabled: true,
       backgroundPaused: true,
@@ -321,8 +345,8 @@ describe('WindowsHostService', () => {
       buildFromTemplate: vi.fn((template) => template)
     };
     const broadcastTaskUpdated = vi.fn();
-    const host = new WindowsHostService({
-      platform: 'win32',
+    const host = new MacOSHostService({
+      isPackaged: true,
       app,
       globalShortcut: {
         register: registerHotkey,
@@ -354,14 +378,11 @@ describe('WindowsHostService', () => {
       broadcastTaskUpdated
     });
 
-    host.syncSettings(createSettings({ startup: { openAtLogin: true, minimizeToTray: true }, globalHotkey: 'Ctrl+Alt+R' }));
+    host.syncSettings(createSettings({ startup: { openAtLogin: true, minimizeToTray: true }, globalHotkey: 'Command+Shift+R' }));
 
     expect(app.setLoginItemSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        openAtLogin: true,
-        enabled: true,
-        args: [],
-        name: 'com.roc.desktop'
+        openAtLogin: true
       })
     );
     expect(host.getIntegrationStatus()).toEqual({
@@ -371,7 +392,7 @@ describe('WindowsHostService', () => {
         syncError: null
       },
       globalHotkey: {
-        accelerator: 'Ctrl+Alt+R',
+        accelerator: 'Command+Shift+R',
         registered: true,
         registrationError: null
       }
@@ -389,12 +410,9 @@ describe('WindowsHostService', () => {
     expect(pauseBackgroundExecution).toHaveBeenCalledTimes(1);
     expect(broadcastTaskUpdated).toHaveBeenCalledTimes(1);
 
-    const trayClickHandler = tray.handlers.get('click');
-    if (trayClickHandler === undefined) {
-      throw new Error('tray click handler was not registered.');
-    }
-
-    await trayClickHandler();
+    const openItem = template.find((item) => item.label === '打开 Roc');
+    if (openItem?.click === undefined) throw new Error('open menu item was not built.');
+    openItem.click();
     expect(openMainPage).toHaveBeenCalledWith('chat');
 
     const hotkeyCallback = registerHotkey.mock.calls.at(-1)?.[1];
@@ -425,8 +443,8 @@ describe('WindowsHostService', () => {
       nextRunAt: null,
       updatedAt: '2026-06-05T00:00:00.000Z'
     }));
-    const host = new WindowsHostService({
-      platform: 'win32',
+    const host = new MacOSHostService({
+      isPackaged: true,
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -478,8 +496,8 @@ describe('WindowsHostService', () => {
   it('surfaces global hotkey registration failures instead of silently accepting them', () => {
     const register = vi.fn(() => false);
     const logService = createLogServiceMock();
-    const host = new WindowsHostService({
-      platform: 'win32',
+    const host = new MacOSHostService({
+      isPackaged: true,
       app: createAppMock(),
       globalShortcut: {
         register,
@@ -513,9 +531,9 @@ describe('WindowsHostService', () => {
       broadcastTaskUpdated: vi.fn()
     });
 
-    host.syncSettings(createSettings({ globalHotkey: 'Ctrl+Alt+R' }));
+    host.syncSettings(createSettings({ globalHotkey: 'Command+Shift+R' }));
 
-    expect(register).toHaveBeenCalledWith('Ctrl+Alt+R', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('Command+Shift+R', expect.any(Function));
     expect(host.getIntegrationStatus()).toEqual({
       startup: {
         configuredOpenAtLogin: false,
@@ -523,16 +541,16 @@ describe('WindowsHostService', () => {
         syncError: null
       },
       globalHotkey: {
-        accelerator: 'Ctrl+Alt+R',
+        accelerator: 'Command+Shift+R',
         registered: false,
         registrationError: 'globalShortcut.register returned false.'
       }
     });
     expect(logService.warn).toHaveBeenCalledWith('Roc global hotkey registration failed.', {
-      service: 'windows-host',
+      service: 'macos-host',
       component: 'syncSettings',
       metadata: {
-        accelerator: 'Ctrl+Alt+R'
+        accelerator: 'Command+Shift+R'
       }
     });
   });

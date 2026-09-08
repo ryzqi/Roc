@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -168,7 +167,7 @@ describe('HookCommandRunner', () => {
     expect(result).toMatchObject({ status: 'failed', error: 'hook_command_aborted', durationMs: 0 });
   });
 
-  it.skipIf(process.platform !== 'win32')('terminates a Windows hook child tree when its signal is aborted', async () => {
+  it.each(['abort', 'timeout'] as const)('terminates the macOS hook process group on %s', async (mode) => {
     const dir = mkdtempSync(join(tmpdir(), 'roc-hooks-'));
     const pidPath = join(dir, 'child.pid');
     const scriptPath = join(dir, 'hook.cjs');
@@ -187,7 +186,7 @@ describe('HookCommandRunner', () => {
     const execution = new HookCommandRunner().run({
       command: `node "${scriptPath}"`,
       cwd: process.cwd(),
-      timeoutSeconds: 30,
+      timeoutSeconds: mode === 'timeout' ? 1 : 30,
       signal: controller.signal,
       input: {
         schemaVersion: 1,
@@ -204,8 +203,8 @@ describe('HookCommandRunner', () => {
     try {
       await waitUntil(() => existsSync(pidPath));
       const childPid = Number.parseInt(readFileSync(pidPath, 'utf8').trim(), 10);
-      controller.abort();
-      await expect(execution).resolves.toMatchObject({ status: 'failed', error: 'hook_command_aborted' });
+      if (mode === 'abort') controller.abort();
+      await expect(execution).resolves.toMatchObject({ status: 'failed', error: mode === 'abort' ? 'hook_command_aborted' : 'hook_command_timeout' });
       await waitUntil(() => !isProcessRunning(childPid));
       expect(isProcessRunning(childPid)).toBe(false);
     } finally {
@@ -214,7 +213,7 @@ describe('HookCommandRunner', () => {
       if (existsSync(pidPath)) {
         const childPid = Number.parseInt(readFileSync(pidPath, 'utf8').trim(), 10);
         if (isProcessRunning(childPid)) {
-          execFileSync('taskkill.exe', ['/PID', String(childPid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+          process.kill(childPid, 'SIGKILL');
         }
       }
       rmSync(dir, { recursive: true, force: true });

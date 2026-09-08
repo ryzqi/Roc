@@ -115,9 +115,9 @@
   --transition-fast: var(--duration-fast) var(--easing-standard);
 
   /* 排版 */
-  --font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Inter', sans-serif;
-  --font-display: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Inter Tight', 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
   --font-body-size: 13.5px;
   --font-ui-size: 13px;
   --font-meta-size: 11.5px;

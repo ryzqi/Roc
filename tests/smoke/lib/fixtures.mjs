@@ -22,7 +22,7 @@ function runWorkspaceGit(workspaceRoot, args) {
   const result = spawnSync('git', args, {
     cwd: workspaceRoot,
     encoding: 'utf8',
-    windowsHide: true
+
   });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);

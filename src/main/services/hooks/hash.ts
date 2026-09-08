@@ -13,7 +13,6 @@ export function computeHookHandlerHash(input: HashInput): string {
     matcher: input.matcher,
     type: input.handler.type,
     command: input.handler.command,
-    commandWindows: input.handler.commandWindows === undefined ? null : input.handler.commandWindows,
     timeoutSeconds: input.handler.timeoutSeconds,
     failureMode: input.handler.failureMode
   };

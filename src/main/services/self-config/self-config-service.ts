@@ -142,13 +142,12 @@ const runtimeContract = [
   'stdout 必须为空，或恰好一个 {"action":...} JSON 对象；其它任何输出都会得到 hook_output_json_invalid。',
   '退出码必须为 0。非 0 退出得到 hook_command_exit_<code>，与 stdout 内容无关。',
   'timeoutSeconds 为整数秒，默认 30，上限 600。',
-  '超时或运行被取消时，Windows 下 Roc 用 taskkill /PID <pid> /T /F 杀掉整棵进程树；被杀的 bash / python 子进程常自己打印 Terminated。',
+  '超时或运行被取消时，Roc 用 SIGKILL 终止该命令的独立进程组及其子进程。',
   'failureMode:"continue" 表示失败只记录不阻断；failureMode:"block" 表示失败即阻断本次事件，但 SessionEnd 永不阻断。',
-  '信任 hash 覆盖 event、matcher、type、command、commandWindows、timeoutSeconds、failureMode。改动其中任一项都会让 trustState 回到 review_required，该 handler 在真实运行中被静默跳过。',
+  '信任 hash 覆盖 event、matcher、type、command、timeoutSeconds、failureMode。改动其中任一项都会让 trustState 回到 review_required，该 handler 在真实运行中被静默跳过。',
   'cwd 是当前工作区真实路径；没有工作区时是 Roc 根目录。/workspace/、/memory/、/skills/ 这类虚拟路径会直接失败为 hook_cwd_virtual_path。',
-  'Windows 下命令通过 spawn(command, { shell: true }) 由 cmd.exe 启动，不是 bash；要用 bash / python 必须在命令里显式写出解释器。',
-  'SessionStart 每一轮 run 触发一次，不是每个会话一次；写脚本时不要假设只执行一遍。',
-  'commandWindows 存在时，Windows 上执行 commandWindows，其它平台执行 command。'
+  '命令由 /bin/zsh -f -c 启动；使用其它语言的脚本必须显式指定解释器。',
+  'SessionStart 每一轮 run 触发一次，不是每个会话一次；写脚本时不要假设只执行一遍。'
 ];
 
 const foreignFormatTraps = [
@@ -403,7 +402,6 @@ function redactHandlerSnapshot(handler: RocHookConfiguredHandlerSnapshot): RocHo
   return {
     ...handler,
     command: redact(handler.command),
-    commandWindows: handler.commandWindows === null ? null : redact(handler.commandWindows),
     statusMessage: handler.statusMessage === null ? null : redact(handler.statusMessage)
   };
 }
@@ -442,9 +440,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function resolveHandlerCommand(handler: RocHookConfiguredHandlerSnapshot): string {
-  if (process.platform === 'win32' && handler.commandWindows !== null) {
-    return handler.commandWindows;
-  }
   return handler.command;
 }
 

@@ -4,7 +4,7 @@ import { createRTKMiddleware } from '../../src/rtk-integration/middleware';
 
 function createAvailableManager() {
   return {
-    getRTKBinaryPath: () => 'F:\\Code\\Roc\\resources\\rtk-binaries\\win32-x64\\rtk.exe',
+    getRTKBinaryPath: () => '/Users/test/Projects/Roc\\resources\\rtk-binaries\\darwin-x64\\rtk',
     isRTKAvailable: () => true
   };
 }
@@ -172,7 +172,7 @@ describe('createRTKMiddleware', () => {
     expect(rewrite).not.toHaveBeenCalled();
   });
 
-  it('passes through rewritten Windows shell aliases that RTK cannot execute directly', async () => {
+  it('routes native ls commands through RTK on macOS', async () => {
     const middleware = createRTKMiddleware(createAvailableManager() as never, {
       createRewriter: () => ({
         rewrite: vi.fn().mockResolvedValue({
@@ -200,7 +200,7 @@ describe('createRTKMiddleware', () => {
 
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
       toolCall: expect.objectContaining({
-        args: 'ls'
+        args: 'rtk ls'
       })
     }));
   });

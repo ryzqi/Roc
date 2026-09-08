@@ -6,7 +6,7 @@ let exitCode = 0;
 function run(command, args, options = { exitOnFailure: true }) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: false
   });
 
   if (result.status !== 0) {

@@ -2,9 +2,9 @@
 
 Roc 是一个基于 **Electron + React** 的本地 AI Agent 桌面应用。它把 LangGraph / DeepAgents 执行时、插件化 Kernel、类型安全 IPC、工作区/终端/MCP/Skills/Memory/Task 工作台，以及面向生产的工具调用护栏整合进同一套 desktop runtime。
 
-设计目标不是“又一个聊天壳”，而是一个可在真实 Windows 工作区上持续跑任务的 **Agent Harness**：路径边界清晰、工具调用可恢复、上下文可控、密钥不进仓库。
+Roc 在真实 macOS 工作区上持续执行任务：路径边界清晰、工具调用可恢复、上下文可控、密钥不进仓库。
 
-- 平台：Windows 11 与 macOS（按平台和架构打包 RTK binary）
+- 平台：macOS，支持 Apple Silicon 与 Intel（按架构打包 RTK binary）
 - 运行时：Electron main / preload / renderer 三层隔离
 - Agent 内核：`deepagents` + LangGraph checkpointer / store
 - 数据面：SQLite + Electron `safeStorage` 加密密钥
@@ -106,7 +106,7 @@ Agent 文件工具只认三条虚拟路由：
 - 拒绝 Windows 绝对路径 / UNC / `..` 穿越
 - `write_file` 只创建新文件；改已有文件必须 `read_file` + `edit_file`
 - `delete_file` 仅允许 `/workspace/` 下目标
-- **不要把 `/workspace/...` 当 shell cwd**。shell 使用真实 Windows 工作目录
+- **不要把 `/workspace/...` 当 shell cwd**。shell 使用真实 macOS 工作目录
 
 #### 2.5 Shell 与 RTK
 
@@ -195,8 +195,8 @@ Forge 模块说明见 `src/main/services/forge-guardrails/`。目标是把“模
 ### 4. 类型安全 IPC
 
 - 合同注册：`src/shared/ipc-registry.ts`；payload Zod schema 位于 `src/shared/schemas/`
-- 生成：`pnpm generate:ipc`
-- 漂移检查：`pnpm check:ipc`
+- 生成：`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc generate:ipc`
+- 漂移检查：`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc`
 - preload 只暴露受控 bridge
 
 ### 5. 工作区与终端
@@ -246,32 +246,32 @@ resources/        # 图标与 RTK binaries
 
 ### 环境要求
 
-- Windows 11 + PowerShell（主要开发/验证环境）
+- macOS + zsh
 - Node.js（与仓库当前 Electron/Vite 工具链兼容）
 - `pnpm`
 
 ### 安装与开发
 
-```powershell
-pnpm install
-pnpm dev
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev
 ```
 
-`pnpm dev` 会先处理 native module ABI，再启动 Electron + Vite。
+`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev` 会先验证原生模块，再启动 Electron + Vite。
 
 ### 常用命令
 
-```powershell
-pnpm typecheck
-pnpm test
-pnpm test -- tests/main/path/to/file.test.ts
-pnpm build
-pnpm package:dir
-pnpm generate:ipc
-pnpm check:ipc
-pnpm smoke:electron
-pnpm verify:native-packaging
-pnpm verify:paths
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test tests/main/macos-host-service.test.ts
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc build
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc generate:ipc
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:electron
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:native-packaging
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 ```
 
 ---
@@ -316,7 +316,7 @@ Roc 默认把敏感状态放在用户本机：
 - 不要提交 `.env`、真实 API Key、私钥、导出的 chat 数据库
 - 不要提交 `~/.roc`、本机路径下的用户 memory
 - 测试里只允许明显假数据（如 `sk-ant-test`、AWS 文档示例 `AKIAIOSFODNN7EXAMPLE`）
-- 二进制与大文件：仓库已包含跨平台 RTK binary，新增大文件请先评估必要性
+- 二进制与大文件：仓库只包含 macOS arm64/x64 RTK binary，新增大文件请先评估必要性
 
 当前仓库安全扫描结论（推送前）：
 
@@ -356,6 +356,10 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 - 当前使用 ad-hoc 本地签名，未进行 Developer ID 签名或 Apple 公证；跨机器公开分发前需配置发布证书和公证。
 - macOS 关闭窗口后保留后台任务，点击 Dock 图标恢复；通过菜单或 `Cmd+Q` 完全退出。
 - macOS 终端使用用户登录 Shell，命令执行使用 zsh；工作区文件和 Git 使用系统路径边界，支持 POSIX 目录。
+- Finder/Dock 启动时通过 `shell-env` 恢复登录 Shell 的 PATH；代理命令仍使用环境变量白名单。
+- 窗口使用系统红黄绿按钮、应用菜单和模板菜单栏图标；登录启动项在打包后的应用中设置，系统审批状态在设置页显示。
+- Hook 仅使用 `command`，由 `/bin/zsh -f -c` 执行；旧配置中的 `commandWindows` 必须移除。信任摘要已更新，已有 Hook 需重新审核；旧文件不会被自动改写。
+- 旧设置中的 `startup.minimizeToTray` 字段保留用于读取已有配置；macOS 关闭窗口始终保留后台任务，设置页不再显示该开关。
 
 单独验证已有应用包：
 
@@ -365,15 +369,15 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
 
 ### 目录包
 
-```powershell
-pnpm package:dir
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
 ```
 
 `electron-builder.yml` 会：
 
 - 打包 `dist/**`
 - 解包 `better-sqlite3` / `node-pty`
-- 附带当前平台需要的 RTK binary 与图标
+- 附带当前 macOS 架构需要的 RTK binary 与图标
 
 ---
 

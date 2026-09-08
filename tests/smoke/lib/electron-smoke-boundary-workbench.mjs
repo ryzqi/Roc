@@ -22,7 +22,7 @@ export function buildRendererBoundaryWorkbench(ctx) {
     shellKeys: boundary.shellKeys,
     activeViewText: boundary.activeViewText,
     immersiveWorkbandVisible: workbandBox.height > 0 && workbandBox.y <= 2,
-    systemMenuHidden: initialWindowShell.menuBarVisible === false,
+    applicationMenuPresent: initialWindowShell.applicationMenuPresent,
     initialWindowNotMaximized: initialWindowShell.maximized === false,
     mockTextAbsent: true,
     smokeTargetKind: smokeTarget.kind,

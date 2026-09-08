@@ -13,8 +13,8 @@ let resourcesPath: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-runtime-tools-rtk-'));
   resourcesPath = join(root, 'resources');
-  mkdirSync(join(resourcesPath, 'rtk-binaries', 'win32-x64'), { recursive: true });
-  writeFileSync(join(resourcesPath, 'rtk-binaries', 'win32-x64', 'rtk.exe'), 'fake rtk');
+  mkdirSync(join(resourcesPath, 'rtk-binaries', 'darwin-x64'), { recursive: true });
+  writeFileSync(join(resourcesPath, 'rtk-binaries', 'darwin-x64', 'rtk'), 'fake rtk', { mode: 0o755 });
 });
 
 afterEach(() => {
@@ -26,7 +26,7 @@ describe('runtime tools RTK adapter', () => {
     const service = createRtkService({
       rootDir: root,
       binaryManager: new RTKBinaryManager({
-        platform: 'win32',
+        platform: 'darwin',
         arch: 'x64',
         resourcesPath
       })
@@ -34,7 +34,7 @@ describe('runtime tools RTK adapter', () => {
 
     expect(service.getStatus()).toMatchObject({
       enabledForAgentCommands: true,
-      binaryPath: join(resourcesPath, 'rtk-binaries', 'win32-x64', 'rtk.exe'),
+      binaryPath: join(resourcesPath, 'rtk-binaries', 'darwin-x64', 'rtk'),
       configPath: join(root, 'rtk', 'config.toml'),
       teeDir: join(root, 'rtk', 'tee'),
       resourceState: 'ready'

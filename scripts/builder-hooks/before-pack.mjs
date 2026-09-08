@@ -2,12 +2,10 @@ import {
   createPackagingEnvironment,
   runCommand,
   sanitizeLanggraphSdkForPackaging,
-  terminateRunningPackagedApp,
   verifyWorkspaceBetterSqlite3
 } from '../lib/native-packaging.mjs';
 
 export default async function beforePack() {
-  terminateRunningPackagedApp();
   const langgraphSdkSanitize = sanitizeLanggraphSdkForPackaging();
   if (langgraphSdkSanitize.rewrittenFiles.length > 0) {
     console.log(

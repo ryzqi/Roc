@@ -33,7 +33,7 @@ import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/b
 import { createBackend } from '../../services/deep-agent/backend';
 import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import { toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
-import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
+import { createRocCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import type {
@@ -392,7 +392,7 @@ async function createExecutorTools(input: {
   const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
   const shellTools = manifestToolNames.has('run_shell_command')
     && (input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0)
-    ? [createRocWindowsCommandTool(input.shellExecutionService)]
+    ? [createRocCommandTool(input.shellExecutionService)]
     : [];
   const selfConfigTools = manifestToolNames.has('roc_self_config')
     ? [createSelfConfigTool({

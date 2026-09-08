@@ -24,11 +24,12 @@ files:
   - "!node_modules/node-pty/deps/**"
   - "!node_modules/node-pty/lib/**/*.test.js"
   - "!node_modules/node-pty/lib/test/**"
-  - "!node_modules/node-pty/prebuilds/win32-arm64/**"
-  - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 extraResources:
-  - from: resources/icon.ico
-    to: icon.ico
+  - from: resources
+    to: .
+    filter:
+      - trayTemplate*.png
+      - trayTemplate@2x.png
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
@@ -36,6 +37,7 @@ beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterExtract: ./scripts/builder-hooks/after-extract.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
 mac:
+  executableName: Roc
   icon: resources/icon.icns
   category: public.app-category.productivity
   target:
@@ -57,21 +59,3 @@ mac:
         - darwin-${arch}/**
   identity: "-"
   hardenedRuntime: false
-win:
-  icon: resources/icon.ico
-  executableName: Roc
-  signAndEditExecutable: false
-  target:
-    - dir
-  artifactName: Roc-${version}.${ext}
-  extraResources:
-    - from: resources/rtk-binaries
-      to: rtk-binaries
-      filter:
-        - win32-x64/**
-linux:
-  extraResources:
-    - from: resources/rtk-binaries
-      to: rtk-binaries
-      filter:
-        - linux-${arch}/**

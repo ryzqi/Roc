@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { waitForAppReady } from './assertions.mjs';
-import { probeWindowMaterial, readWindowPlacementEvidence } from './electron-smoke-time.mjs';
+import { probeNativeWindow, readWindowPlacementEvidence } from './electron-smoke-time.mjs';
 
 export async function runSmokeWindowChecks(ctx) {
   const { app, artifactDir, dataRoot } = ctx;
@@ -18,10 +18,10 @@ export async function runSmokeWindowChecks(ctx) {
   await page.waitForSelector('[data-testid="workspace-select-button"]', { timeout: 5000 });
   const browserWindow = await app.browserWindow(page);
   const initialWindowShell = {
-    menuBarVisible: await browserWindow.evaluate((window) => window.isMenuBarVisible()),
+    applicationMenuPresent: await app.evaluate(({ Menu }) => Menu.getApplicationMenu() !== null),
     maximized: await browserWindow.evaluate((window) => window.isMaximized())
   };
-  const mainMaterialEvidence = await probeWindowMaterial(browserWindow, 'mica');
+  const nativeWindowEvidence = await probeNativeWindow(browserWindow);
   const workbandBox = await page.locator('[data-testid="window-workband"]').boundingBox();
   if (workbandBox === null) {
     throw new Error('Smoke could not measure immersive workband.');
@@ -51,7 +51,7 @@ export async function runSmokeWindowChecks(ctx) {
   });
   const nativeDragCssEvidence = await page.evaluate(() => {
     const workband = document.querySelector('[data-testid="window-workband"]');
-    const actions = document.querySelector('.workband-actions');
+    const actions = document.querySelector('.workband-chat-actions');
     if (!(workband instanceof HTMLElement) || !(actions instanceof HTMLElement)) {
       return {
         workbandRegion: '',
@@ -63,15 +63,15 @@ export async function runSmokeWindowChecks(ctx) {
       actionsRegion: getComputedStyle(actions).getPropertyValue('-webkit-app-region')
     };
   });
-  await page.click('[data-testid="window-toggle-maximize"]');
+  await browserWindow.evaluate((window) => window.maximize());
   const maximizedAfterClick = await browserWindow.evaluate((window) => window.isMaximized());
   if (!maximizedAfterClick) {
-    throw new Error('Smoke could not maximize frameless window.');
+    throw new Error('Smoke could not maximize macOS window.');
   }
-  await page.click('[data-testid="window-toggle-maximize"]');
+  await browserWindow.evaluate((window) => window.unmaximize());
   const restoredAfterClick = await browserWindow.evaluate((window) => window.isMaximized());
   if (restoredAfterClick) {
-    throw new Error('Smoke could not restore frameless window.');
+    throw new Error('Smoke could not restore macOS window.');
   }
   const boundsBeforeDrag = await browserWindow.evaluate((window) => window.getBounds());
   await page.mouse.move(workbandBox.x + workbandBox.width / 2, workbandBox.y + workbandBox.height / 2);
@@ -119,7 +119,7 @@ export async function runSmokeWindowChecks(ctx) {
     page,
     browserWindow,
     initialWindowShell,
-    mainMaterialEvidence,
+    nativeWindowEvidence,
     workbandBox,
     appShellFrameEvidence,
     nativeDragCssEvidence,

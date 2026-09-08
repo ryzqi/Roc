@@ -7,7 +7,8 @@ import { packageJsonPath, projectRoot } from './electron-version.mjs';
 export const betterSqlite3ModuleName = 'better-sqlite3';
 export const betterSqlite3ModuleRoot = resolve(projectRoot, 'node_modules', betterSqlite3ModuleName);
 export const betterSqlite3PackagedRelativeRoot = join(
-  'resources',
+  'Contents',
+  'Resources',
   'app.asar.unpacked',
   'node_modules',
   betterSqlite3ModuleName
@@ -16,52 +17,6 @@ export const betterSqlite3WorkspaceRequireBase = packageJsonPath;
 
 const probeScriptPath = resolve(projectRoot, 'scripts', 'probe-better-sqlite3.cjs');
 const electronBuilderCache = resolve(projectRoot, '.runtime', 'electron-builder-cache');
-const windowsIconApplyAttempts = 3;
-const windowsIconApplyRetryDelayMs = 250;
-const compareExecutableIconScript = String.raw`
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Drawing
-
-$exePath = $env:ROC_EXECUTABLE_ICON_EXE
-$iconPath = $env:ROC_EXECUTABLE_ICON_ICO
-$exeIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
-if ($null -eq $exeIcon) {
-  throw "Unable to extract icon from $exePath."
-}
-
-$resourceIcon = [System.Drawing.Icon]::new($iconPath)
-$exeBitmap = $exeIcon.ToBitmap()
-$resourceBitmap = $resourceIcon.ToBitmap()
-
-try {
-  if ($exeBitmap.Width -ne $resourceBitmap.Width -or $exeBitmap.Height -ne $resourceBitmap.Height) {
-    throw "Icon dimensions differ: exe=$($exeBitmap.Width)x$($exeBitmap.Height), resource=$($resourceBitmap.Width)x$($resourceBitmap.Height)."
-  }
-
-  for ($y = 0; $y -lt $exeBitmap.Height; $y++) {
-    for ($x = 0; $x -lt $exeBitmap.Width; $x++) {
-      if ($exeBitmap.GetPixel($x, $y).ToArgb() -ne $resourceBitmap.GetPixel($x, $y).ToArgb()) {
-        throw "Icon pixel mismatch at $x,$y."
-      }
-    }
-  }
-} finally {
-  if ($null -ne $exeBitmap) {
-    $exeBitmap.Dispose()
-  }
-  if ($null -ne $resourceBitmap) {
-    $resourceBitmap.Dispose()
-  }
-  if ($null -ne $exeIcon) {
-    $exeIcon.Dispose()
-  }
-  if ($null -ne $resourceIcon) {
-    $resourceIcon.Dispose()
-  }
-}
-`;
-
-
 export const langgraphSdkPackageName = '@langchain/langgraph-sdk';
 
 
@@ -191,221 +146,14 @@ export function createPackagingEnvironment(baseEnvironment = process.env) {
   };
 }
 
-export function buildWindowsShellCommand(command, args) {
-  return [command, ...args].map((part) => {
-    if (/^[A-Za-z0-9_./:=@+-]+$/.test(part)) {
-      return part;
-    }
-    return `"${part.replaceAll('"', '\\"')}"`;
-  }).join(' ');
-}
-
 export function runCommand(command, args, options = {}) {
-  const useWindowsShell = process.platform === 'win32';
-  const result = spawnSync(useWindowsShell ? buildWindowsShellCommand(command, args) : command, useWindowsShell ? [] : args, {
+  const result = spawnSync(command, args, {
     cwd: options.cwd,
     env: options.env,
     stdio: options.stdio ?? 'inherit',
-    shell: useWindowsShell
+    shell: false
   });
   return result.status === null ? 1 : result.status;
-}
-
-export function resolveWindowsRceditPath({
-  projectRoot: targetProjectRoot = projectRoot
-} = {}) {
-  const pnpmPackagesRoot = resolve(targetProjectRoot, 'node_modules', '.pnpm');
-  const packageDirectories = readdirSync(pnpmPackagesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith('electron-winstaller@'))
-    .map((entry) => entry.name)
-    .sort();
-  for (const packageDirectory of packageDirectories) {
-    const rceditPath = resolve(
-      pnpmPackagesRoot,
-      packageDirectory,
-      'node_modules',
-      'electron-winstaller',
-      'vendor',
-      'rcedit.exe'
-    );
-    if (existsSync(rceditPath)) {
-      return rceditPath;
-    }
-  }
-  throw new Error('Unable to locate electron-winstaller vendor rcedit.exe.');
-}
-
-export function applyWindowsExecutableIcon({
-  appOutDir,
-  executableName = 'Roc',
-  iconPath = resolve(projectRoot, 'resources', 'icon.ico'),
-  projectRoot: targetProjectRoot = projectRoot,
-  run = runCommand,
-  platform = process.platform,
-  resolveRceditPath = resolveWindowsRceditPath,
-  terminateRunningApp = terminateRunningPackagedApp
-}) {
-  if (platform !== 'win32') {
-    return { applied: false };
-  }
-  const executablePath = resolve(appOutDir, `${executableName}.exe`);
-  terminateRunningApp({ packagedExecutablePath: executablePath });
-  const rceditPath = resolveRceditPath({ projectRoot: targetProjectRoot });
-  let status = 1;
-  sleepSync(windowsIconApplyRetryDelayMs);
-  for (let attempt = 1; attempt <= windowsIconApplyAttempts; attempt += 1) {
-    const isFinalAttempt = attempt === windowsIconApplyAttempts;
-    status = run(rceditPath, [executablePath, '--set-icon', iconPath], {
-      cwd: targetProjectRoot,
-      stdio: isFinalAttempt ? 'inherit' : 'pipe'
-    });
-    if (status === 0) {
-      return { applied: true, executablePath, iconPath };
-    }
-    if (attempt < windowsIconApplyAttempts) {
-      sleepSync(windowsIconApplyRetryDelayMs);
-    }
-  }
-  throw new Error(`Failed to apply Windows executable icon to ${executablePath}: rcedit exited ${status}.`);
-}
-
-export function verifyWindowsExecutableIcon({
-  appOutDir,
-  executableName = 'Roc',
-  iconPath = resolve(projectRoot, 'resources', 'icon.ico'),
-  projectRoot: targetProjectRoot = projectRoot,
-  run = runCommand,
-  platform = process.platform
-}) {
-  if (platform !== 'win32') {
-    return { verified: false };
-  }
-  const executablePath = resolve(appOutDir, `${executableName}.exe`);
-  const status = run(
-    'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', compareExecutableIconScript],
-    {
-      cwd: targetProjectRoot,
-      env: {
-        ...process.env,
-        ROC_EXECUTABLE_ICON_EXE: executablePath,
-        ROC_EXECUTABLE_ICON_ICO: iconPath
-      }
-    }
-  );
-  if (status !== 0) {
-    throw new Error(`Packaged Windows executable icon does not match ${iconPath}: ${executablePath}.`);
-  }
-  return { verified: true, executablePath, iconPath };
-}
-
-export function listWindowsProcessesByName(processName) {
-  const result = spawnSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      `$ErrorActionPreference = 'Stop'; Get-CimInstance Win32_Process -Filter "name = '${processName}'" | ConvertTo-Json -Compress`
-    ],
-    {
-      encoding: 'utf8',
-      windowsHide: true
-    }
-  );
-  if (result.status !== 0) {
-    throw new Error(result.stderr.trim() || `Failed to list ${processName} processes.`);
-  }
-  const output = result.stdout.trim();
-  if (output.length === 0) {
-    return [];
-  }
-
-  const parsed = JSON.parse(output);
-  const processes = Array.isArray(parsed) ? parsed : [parsed];
-  return processes.flatMap((process) => {
-    const pid = process.ProcessId;
-    const executablePath = process.ExecutablePath;
-    if (typeof pid !== 'number' || typeof executablePath !== 'string') {
-      return [];
-    }
-    return [{ pid, executablePath }];
-  });
-}
-
-export function terminateWindowsProcess(pid) {
-  const result = spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
-    stdio: 'inherit',
-    windowsHide: true
-  });
-  return result.status === null ? 1 : result.status;
-}
-
-function normalizeWindowsPath(value) {
-  return value.replaceAll('/', '\\').toLowerCase();
-}
-
-function isPackagedExecutableProcess(process, targetPath) {
-  return normalizeWindowsPath(resolve(process.executablePath)) === targetPath;
-}
-
-function sleepSync(ms) {
-  if (ms <= 0) {
-    return;
-  }
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-export function terminateRunningPackagedApp({
-  packagedExecutablePath = resolve(projectRoot, 'release', 'win-unpacked', 'Roc.exe'),
-  listProcesses = () => listWindowsProcessesByName('Roc.exe'),
-  stopProcess = terminateWindowsProcess,
-  platform = process.platform,
-  waitTimeoutMs = 5000
-} = {}) {
-  if (platform !== 'win32') {
-    return { terminatedPids: [] };
-  }
-
-  const targetPath = normalizeWindowsPath(resolve(packagedExecutablePath));
-  const matchingProcesses = listProcesses().filter(
-    (process) => isPackagedExecutableProcess(process, targetPath)
-  );
-  if (matchingProcesses.length === 0) {
-    return { terminatedPids: [] };
-  }
-
-  const terminatedPids = [];
-  for (const matchingProcess of matchingProcesses) {
-    const status = stopProcess(matchingProcess.pid);
-    if (status !== 0) {
-      const stillRunning = listProcesses().some(
-        (process) => process.pid === matchingProcess.pid && isPackagedExecutableProcess(process, targetPath)
-      );
-      if (stillRunning) {
-        throw new Error(`Failed to terminate packaged Roc.exe process ${matchingProcess.pid}.`);
-      }
-      continue;
-    }
-    terminatedPids.push(matchingProcess.pid);
-  }
-
-  const startedAt = Date.now();
-  if (waitTimeoutMs <= 0) {
-    return { terminatedPids };
-  }
-
-  while (Date.now() - startedAt < waitTimeoutMs) {
-    const stillRunning = listProcesses().some(
-      (process) => isPackagedExecutableProcess(process, targetPath)
-    );
-    if (!stillRunning) {
-      return { terminatedPids };
-    }
-    sleepSync(100);
-  }
-
-  throw new Error(`Timed out waiting for packaged Roc.exe processes to exit: ${terminatedPids.join(', ')}.`);
 }
 
 export function verifyBetterSqlite3WithElectron({

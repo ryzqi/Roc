@@ -1,12 +1,8 @@
 import type { MenuItemConstructorOptions } from 'electron';
 
 export function buildApplicationMenuTemplate(
-  platform: NodeJS.Platform,
   openMainPage: (page: string) => void
-): MenuItemConstructorOptions[] | null {
-  if (platform !== 'darwin') {
-    return null;
-  }
+): MenuItemConstructorOptions[] {
   return [
     {
       label: 'Roc',
