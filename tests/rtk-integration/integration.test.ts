@@ -16,7 +16,7 @@ describe('RTK integration', () => {
 
     const { stdout } = await execFileAsync(binaryPath, ['--version'], { windowsHide: true });
 
-    expect(stdout.trim()).toBe('rtk 0.42.4');
+    expect(stdout.trim()).toBe('rtk 0.48.0');
   });
 
   it('uses the bundled RTK binary to rewrite supported commands', async () => {
