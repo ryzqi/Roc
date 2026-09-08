@@ -34,10 +34,10 @@ import {
   resolveMainWindowBounds
 } from './window-shell';
 import {
-  readWindowPlacementSnapshot,
-  writeWindowPlacementSnapshot,
-  type WindowPlacementSnapshot
+  bindWindowPlacementPersistence,
+  readWindowPlacementSnapshot
 } from './window-state-store';
+import { buildApplicationMenuTemplate } from './application-menu';
 import { applyWindowMaterialWithFallback } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { createTerminalOutputBatcher } from './terminal-output-batcher';
@@ -72,6 +72,7 @@ let appShutdownComplete = false;
 let appShutdownInProgress: Promise<void> | null = null;
 
 const hostService = new WindowsHostService({
+  platform: process.platform,
   app: {
     requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
     setAppUserModelId: (id) => {
@@ -271,15 +272,17 @@ async function createWindow(): Promise<void> {
   mainWindow = kernel.performanceObserverService.measure('window_created', 'mainWindow', () =>
     new BrowserWindow(buildMainWindowOptions(preloadPath, appIconPath, restoredBounds))
   );
-  applyWindowMaterialWithFallback(
-    mainWindow,
-    {
-      primary: 'mica',
-      fallbacks: ['acrylic'],
-      staticBackground: mainWindowStaticBackground
-    },
-    kernel.logService
-  );
+  if (process.platform === 'win32') {
+    applyWindowMaterialWithFallback(
+      mainWindow,
+      {
+        primary: 'mica',
+        fallbacks: ['acrylic'],
+        staticBackground: mainWindowStaticBackground
+      },
+      kernel.logService
+    );
+  }
   if (restoredPlacement !== null && restoredPlacement.maximized) {
     mainWindow.maximize();
   }
@@ -288,7 +291,8 @@ async function createWindow(): Promise<void> {
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
   hostService.syncSettings(kernel.configService.getSettings());
-  Menu.setApplicationMenu(null);
+  const menuTemplate = buildApplicationMenuTemplate(process.platform, showMainPage);
+  Menu.setApplicationMenu(menuTemplate === null ? null : Menu.buildFromTemplate(menuTemplate));
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -420,34 +424,6 @@ function shouldBroadcastTaskRefresh(event: ChatRunEvent): boolean {
   );
 }
 
-function bindWindowPlacementPersistence(window: BrowserWindow, filePath: string): void {
-  function persistWindowPlacement(): void {
-    if (window.isDestroyed()) {
-      return;
-    }
-    const normalBounds = window.getNormalBounds();
-    const snapshot: WindowPlacementSnapshot = {
-      bounds: {
-        x: normalBounds.x,
-        y: normalBounds.y,
-        width: normalBounds.width,
-        height: normalBounds.height
-      },
-      maximized: window.isMaximized(),
-      updatedAt: new Date().toISOString()
-    };
-    writeWindowPlacementSnapshot(filePath, snapshot);
-  }
-
-  window.on('move', persistWindowPlacement);
-  window.on('moved', persistWindowPlacement);
-  window.on('resize', persistWindowPlacement);
-  window.on('resized', persistWindowPlacement);
-  window.on('maximize', persistWindowPlacement);
-  window.on('unmaximize', persistWindowPlacement);
-  window.on('close', persistWindowPlacement);
-}
-
 function bindDisplayBoundsCorrection(): void {
   if (screenBoundsBound) {
     return;
@@ -514,8 +490,12 @@ if (!ownsSingleInstanceLock) {
 }
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    void createWindow();
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
   }
 });
 

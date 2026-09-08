@@ -35,6 +35,11 @@ const shellEnvironmentKeys = [
   'COMSPEC',
   'HOMEDRIVE',
   'HOMEPATH',
+  'HOME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
   'LOCALAPPDATA',
   'PATH',
   'PATHEXT',
@@ -43,6 +48,7 @@ const shellEnvironmentKeys = [
   'SYSTEMROOT',
   'TEMP',
   'TMP',
+  'TMPDIR',
   'USERPROFILE',
   'WINDIR'
 ] as const;
@@ -166,7 +172,7 @@ export class ShellExecutionService {
       if (policyDenial !== null) {
         return policyDenial;
       }
-      const fallback = this.executePowerShell(command, cwd);
+      const fallback = this.executeSystemShell(command, cwd);
       return {
         ...fallback,
         usedRtk: false,
@@ -180,7 +186,7 @@ export class ShellExecutionService {
       if (policyDenial !== null) {
         return policyDenial;
       }
-      const fallback = this.executePowerShell(command, cwd);
+      const fallback = this.executeSystemShell(command, cwd);
       return {
         ...fallback,
         usedRtk: false,
@@ -206,7 +212,7 @@ export class ShellExecutionService {
       if (policyDenial !== null) {
         return policyDenial;
       }
-      const fallback = await this.executePowerShellAsync(command, cwd, signal);
+      const fallback = await this.executeSystemShellAsync(command, cwd, signal);
       return {
         ...fallback,
         usedRtk: false,
@@ -231,7 +237,7 @@ export class ShellExecutionService {
       if (policyDenial !== null) {
         return policyDenial;
       }
-      const fallback = await this.executePowerShellAsync(command, cwd, signal);
+      const fallback = await this.executeSystemShellAsync(command, cwd, signal);
       return {
         ...fallback,
         usedRtk: false,
@@ -251,7 +257,7 @@ export class ShellExecutionService {
   }
 
   private executeTerminalCommand(command: string, cwd: string): ExecutedShellCommand {
-    const execution = this.executePowerShellWithEnvironment(command, cwd, true);
+    const execution = this.executeSystemShellWithEnvironment(command, cwd, true);
     return {
       ...execution,
       usedRtk: false,
@@ -260,7 +266,7 @@ export class ShellExecutionService {
   }
 
   private async executeTerminalCommandAsync(command: string, cwd: string, signal?: AbortSignal): Promise<ExecutedShellCommand> {
-    const execution = await this.executePowerShellAsync(command, cwd, signal, true);
+    const execution = await this.executeSystemShellAsync(command, cwd, signal, true);
     return {
       ...execution,
       usedRtk: false,
@@ -285,27 +291,27 @@ export class ShellExecutionService {
     return await this.execFileAsync(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata), signal);
   }
 
-  private executePowerShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
-    return this.executePowerShellWithEnvironment(command, cwd, false);
+  private executeSystemShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
+    return this.executeSystemShellWithEnvironment(command, cwd, false);
   }
 
-  private executePowerShellWithEnvironment(
+  private executeSystemShellWithEnvironment(
     command: string,
     cwd: string,
     inheritEnvironment: boolean
   ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
-    const encodedCommand = `${powershellUtf8Prefix} ${command}`;
-    return this.execFile('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd, {}, inheritEnvironment);
+    const shell = resolveCommandShell(command);
+    return this.execFile(shell.file, shell.args, cwd, {}, inheritEnvironment);
   }
 
-  private async executePowerShellAsync(
+  private async executeSystemShellAsync(
     command: string,
     cwd: string,
     signal?: AbortSignal,
     inheritEnvironment = false
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
-    const encodedCommand = `${powershellUtf8Prefix} ${command}`;
-    return await this.execFileAsync('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd, {}, signal, inheritEnvironment);
+    const shell = resolveCommandShell(command);
+    return await this.execFileAsync(shell.file, shell.args, cwd, {}, signal, inheritEnvironment);
   }
 
   protected execFile(
@@ -505,6 +511,13 @@ export class ShellExecutionService {
 
 function formatRtkPolicyCommand(args: readonly string[]): string {
   return `rtk ${args.join(' ')}`;
+}
+
+function resolveCommandShell(command: string): { file: string; args: string[] } {
+  if (process.platform === 'win32') {
+    return { file: 'powershell.exe', args: ['-NoProfile', '-Command', `${powershellUtf8Prefix} ${command}`] };
+  }
+  return { file: process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh', args: ['-f', '-c', command] };
 }
 
 function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessEnvironment: boolean): NodeJS.ProcessEnv {

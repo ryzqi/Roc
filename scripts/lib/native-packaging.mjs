@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { packageJsonPath, projectRoot } from './electron-version.mjs';
 
 export const betterSqlite3ModuleName = 'better-sqlite3';
@@ -173,10 +174,19 @@ export function sanitizeLanggraphSdkForPackaging({
 }
 
 export function createPackagingEnvironment(baseEnvironment = process.env) {
-  mkdirSync(electronBuilderCache, { recursive: true });
+  const localPaths = {
+    ELECTRON_BUILDER_CACHE: electronBuilderCache,
+    ELECTRON_CACHE: resolve(projectRoot, '.runtime', 'electron-cache'),
+    npm_config_cache: resolve(projectRoot, '.runtime', 'npm-cache'),
+    XDG_CACHE_HOME: resolve(projectRoot, '.runtime', 'cache'),
+    TMPDIR: resolve(projectRoot, '.runtime', 'tmp')
+  };
+  for (const directory of Object.values(localPaths)) {
+    mkdirSync(directory, { recursive: true });
+  }
   return {
     ...baseEnvironment,
-    ELECTRON_BUILDER_CACHE: electronBuilderCache,
+    ...localPaths,
     CSC_IDENTITY_AUTO_DISCOVERY: 'false'
   };
 }
@@ -350,9 +360,10 @@ export function terminateRunningPackagedApp({
   packagedExecutablePath = resolve(projectRoot, 'release', 'win-unpacked', 'Roc.exe'),
   listProcesses = () => listWindowsProcessesByName('Roc.exe'),
   stopProcess = terminateWindowsProcess,
+  platform = process.platform,
   waitTimeoutMs = 5000
 } = {}) {
-  if (process.platform !== 'win32') {
+  if (platform !== 'win32') {
     return { terminatedPids: [] };
   }
 
@@ -433,19 +444,60 @@ export function resolvePackagedBetterSqlite3Root(appOutDir) {
   return resolve(appOutDir, betterSqlite3PackagedRelativeRoot);
 }
 
-export function resolvePackagedBetterSqlite3RequireBase(appOutDir) {
-  return resolve(appOutDir, 'resources', 'app.asar', 'package.json');
+export function resolvePackagedBetterSqlite3RequireBase(resourcesDir) {
+  return resolve(resourcesDir, 'app.asar', 'package.json');
+}
+
+export function verifyPackagedFileLayout({ resourcesDir }) {
+  const require = createRequire(import.meta.url);
+  const builderRequire = createRequire(require.resolve('electron-builder'));
+  const packagerRequire = createRequire(builderRequire.resolve('app-builder-lib'));
+  const { getRawHeader } = packagerRequire('@electron/asar');
+  const archive = resolve(resourcesDir, 'app.asar');
+  const entries = Object.keys(getRawHeader(archive).header.files).sort();
+  const expected = ['dist', 'node_modules', 'package.json'];
+  if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {
+    throw new Error(`Unexpected packaged app files: ${entries.join(', ')}. Only dist, node_modules and package.json may ship.`);
+  }
 }
 
 export function verifyPackagedBetterSqlite3({
-  appOutDir,
+  resourcesDir,
   projectRoot: targetProjectRoot = projectRoot,
   run = runCommand
 }) {
   verifyBetterSqlite3WithElectron({
     label: 'packaged-better-sqlite3',
-    requireBase: resolvePackagedBetterSqlite3RequireBase(appOutDir),
+    requireBase: resolvePackagedBetterSqlite3RequireBase(resourcesDir),
+    moduleSpecifier: resolve(resourcesDir, 'app.asar', 'node_modules', betterSqlite3ModuleName),
     projectRoot: targetProjectRoot,
     run
   });
+}
+
+export function preparePackagedNodePty({ resourcesDir, platform = process.platform }) {
+  prepareNodePtyHelpers({
+    packageRoot: resolve(resourcesDir, 'app.asar.unpacked', 'node_modules', 'node-pty'),
+    platform
+  });
+}
+
+export function prepareWorkspaceNodePty({ projectRoot: targetProjectRoot = projectRoot, platform = process.platform } = {}) {
+  prepareNodePtyHelpers({ packageRoot: resolve(targetProjectRoot, 'node_modules', 'node-pty'), platform });
+}
+
+function prepareNodePtyHelpers({ packageRoot, platform }) {
+  if (platform !== 'darwin' && platform !== 'mas') {
+    return;
+  }
+  const prebuildsDir = resolve(packageRoot, 'prebuilds');
+  const macPrebuilds = readdirSync(prebuildsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('darwin-'));
+  if (macPrebuilds.length === 0) {
+    throw new Error(`Missing macOS node-pty prebuilds in ${prebuildsDir}.`);
+  }
+  for (const entry of macPrebuilds) {
+    const helperPath = resolve(prebuildsDir, entry.name, 'spawn-helper');
+    chmodSync(helperPath, statSync(helperPath).mode | 0o111);
+  }
 }

@@ -23,7 +23,8 @@ export const mainWindowStaticBackground = '#f7f8f5';
 export function buildMainWindowOptions(
   preloadPath: string,
   iconPath: string,
-  restoredBounds: WindowBoundsSnapshot | null = null
+  restoredBounds: WindowBoundsSnapshot | null = null,
+  platform: NodeJS.Platform = process.platform
 ): BrowserWindowConstructorOptions {
   const bounds = restoredBounds === null ? defaultMainWindowBounds : restoredBounds;
   return {
@@ -37,7 +38,7 @@ export function buildMainWindowOptions(
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: mainWindowStaticBackground,
-    backgroundMaterial: 'mica',
+    ...(platform === 'win32' ? { backgroundMaterial: 'mica' as const } : {}),
     title: 'Roc',
     icon: iconPath,
     webPreferences: {

@@ -110,6 +110,7 @@ describe('WindowsHostService', () => {
     const logService = createLogServiceMock();
     const tray = createTrayMock();
     const host = new WindowsHostService({
+      platform: 'win32',
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -171,6 +172,7 @@ describe('WindowsHostService', () => {
     const app = createAppMock();
     const mainWindow = createWindowMock();
     const host = new WindowsHostService({
+      platform: 'win32',
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -227,9 +229,10 @@ describe('WindowsHostService', () => {
     expect(preventDefaultAfterQuit).not.toHaveBeenCalled();
   });
 
-  it('lets the main window close when minimizeToTray is disabled', () => {
+  it.each(['win32', 'darwin'] as const)('uses the %s close behavior when minimizeToTray is disabled', (platform) => {
     const mainWindow = createWindowMock();
     const host = new WindowsHostService({
+      platform,
       app: createAppMock(),
       globalShortcut: {
         register: vi.fn(() => true),
@@ -273,8 +276,13 @@ describe('WindowsHostService', () => {
 
     closeHandler({ preventDefault });
 
-    expect(preventDefault).not.toHaveBeenCalled();
-    expect(mainWindow.hide).not.toHaveBeenCalled();
+    expect(preventDefault).toHaveBeenCalledTimes(platform === 'darwin' ? 1 : 0);
+    expect(mainWindow.hide).toHaveBeenCalledTimes(platform === 'darwin' ? 1 : 0);
+
+    host.requestQuit();
+    const preventQuit = vi.fn();
+    closeHandler({ preventDefault: preventQuit });
+    expect(preventQuit).not.toHaveBeenCalled();
   });
 
   it('syncs open-at-login and global hotkey state, and wires tray actions to lifecycle callbacks', async () => {
@@ -314,6 +322,7 @@ describe('WindowsHostService', () => {
     };
     const broadcastTaskUpdated = vi.fn();
     const host = new WindowsHostService({
+      platform: 'win32',
       app,
       globalShortcut: {
         register: registerHotkey,
@@ -417,6 +426,7 @@ describe('WindowsHostService', () => {
       updatedAt: '2026-06-05T00:00:00.000Z'
     }));
     const host = new WindowsHostService({
+      platform: 'win32',
       app,
       globalShortcut: {
         register: vi.fn(() => true),
@@ -469,6 +479,7 @@ describe('WindowsHostService', () => {
     const register = vi.fn(() => false);
     const logService = createLogServiceMock();
     const host = new WindowsHostService({
+      platform: 'win32',
       app: createAppMock(),
       globalShortcut: {
         register,

@@ -1,13 +1,26 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
-const afterExtractHook = readFileSync(new URL('../../scripts/builder-hooks/after-extract.mjs', import.meta.url), 'utf8');
 const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
 const packageDirScript = readFileSync(new URL('../../scripts/package-dir.mjs', import.meta.url), 'utf8');
 const verifyNativePackagingScript = readFileSync(new URL('../../scripts/verify-native-packaging.mjs', import.meta.url), 'utf8');
+const temporaryDirectories: string[] = [];
+
+function createTemporaryDirectory() {
+  const directory = mkdtempSync(join(tmpdir(), 'roc-native-packaging-'));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 async function loadElectronVersionModule() {
   return import(new URL('../../scripts/lib/electron-version.mjs', import.meta.url).href);
@@ -35,9 +48,27 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).not.toContain('afterAllArtifactBuild');
   });
 
-  it('removes default Electron app artifacts left by the custom unpacked runtime', () => {
-    expect(afterExtractHook).toContain("rm(join(context.appOutDir, 'resources', 'default_app.asar')");
-    expect(afterExtractHook).toContain("rm(join(context.appOutDir, 'version')");
+  it.each(['win32', 'darwin'])('removes default Electron app artifacts from the %s runtime', async (platform) => {
+    const { default: afterExtract } = await import(new URL('../../scripts/builder-hooks/after-extract.mjs', import.meta.url).href);
+    const appOutDir = createTemporaryDirectory();
+    const electronDestination = platform === 'darwin' ? join(appOutDir, 'Electron.app') : appOutDir;
+    const resourcesDir = platform === 'darwin'
+      ? join(electronDestination, 'Contents', 'Resources')
+      : join(appOutDir, 'resources');
+    mkdirSync(resourcesDir, { recursive: true });
+    writeFileSync(join(resourcesDir, 'default_app.asar'), 'default app');
+    writeFileSync(join(resourcesDir, 'keep.txt'), 'keep');
+    writeFileSync(join(appOutDir, 'version'), '44.0.0');
+
+    await afterExtract({
+      appOutDir,
+      electronPlatformName: platform,
+      packager: { getElectronDestinationDir: () => electronDestination }
+    });
+
+    expect(existsSync(join(resourcesDir, 'default_app.asar'))).toBe(false);
+    expect(existsSync(join(appOutDir, 'version'))).toBe(false);
+    expect(readFileSync(join(resourcesDir, 'keep.txt'), 'utf8')).toBe('keep');
   });
 
   it('no longer restores better-sqlite3 after the package-dir command exits', () => {
@@ -184,7 +215,7 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/typings/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/scripts/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/deps/**');
-    expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
+    expect(electronBuilderConfig).not.toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/win32-arm64/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/conpty/**/win10-arm64/**');
   });
@@ -232,12 +263,13 @@ describe('native packaging contract', () => {
     expect(verifyNativePackagingScript).not.toContain('restoreBetterSqlite3ForNode');
   });
 
-  it('verifies packaged better-sqlite3 from the app.asar package boundary', async () => {
+  it.each(['resources', 'Roc.app/Contents/Resources'])('verifies packaged better-sqlite3 inside the %s package boundary', async (relativeResourcesDir) => {
     const run = vi.fn().mockReturnValueOnce(0);
     const { verifyPackagedBetterSqlite3 } = await loadNativePackagingModule();
+    const resourcesDir = resolve(createTemporaryDirectory(), relativeResourcesDir);
 
     verifyPackagedBetterSqlite3({
-      appOutDir: 'F:/Code/Roc/release/win-unpacked',
+      resourcesDir,
       run
     });
 
@@ -247,12 +279,38 @@ describe('native packaging contract', () => {
         'exec',
         'electron',
         expect.stringContaining('scripts'),
-        resolve('F:/Code/Roc/release/win-unpacked/resources/app.asar/package.json'),
-        'better-sqlite3',
+        resolve(resourcesDir, 'app.asar/package.json'),
+        resolve(resourcesDir, 'app.asar/node_modules/better-sqlite3'),
         'packaged-better-sqlite3'
       ],
       { cwd: expect.any(String) }
     );
+  });
+
+  it.skipIf(process.platform === 'win32')('makes macOS packaged terminal helpers executable for both bundled architectures', async () => {
+    const { preparePackagedNodePty } = await loadNativePackagingModule();
+    const resourcesDir = join(createTemporaryDirectory(), 'Roc.app', 'Contents', 'Resources');
+    const helperPaths = ['arm64', 'x64'].map((arch) => {
+      const helperPath = join(resourcesDir, 'app.asar.unpacked/node_modules/node-pty/prebuilds', `darwin-${arch}`, 'spawn-helper');
+      mkdirSync(resolve(helperPath, '..'), { recursive: true });
+      writeFileSync(helperPath, 'packaged helper', { mode: 0o644 });
+      return helperPath;
+    });
+
+    preparePackagedNodePty({ resourcesDir, platform: 'darwin' });
+
+    for (const helperPath of helperPaths) {
+      expect(statSync(helperPath).mode & 0o111).toBe(0o111);
+      expect(() => accessSync(helperPath, constants.X_OK)).not.toThrow();
+    }
+  });
+
+  it('fails when a macOS packaged terminal helper is missing', async () => {
+    const { preparePackagedNodePty } = await loadNativePackagingModule();
+    const resourcesDir = createTemporaryDirectory();
+    mkdirSync(join(resourcesDir, 'app.asar.unpacked/node_modules/node-pty/prebuilds/darwin-arm64'), { recursive: true });
+
+    expect(() => preparePackagedNodePty({ resourcesDir, platform: 'darwin' })).toThrow(/ENOENT/);
   });
 
   it('terminates only the running Roc processes from the packaged output directory', async () => {
@@ -275,6 +333,7 @@ describe('native packaging contract', () => {
       packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
       listProcesses,
       stopProcess,
+      platform: 'win32',
       waitTimeoutMs: 0
     });
 
@@ -299,6 +358,7 @@ describe('native packaging contract', () => {
       packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
       listProcesses,
       stopProcess,
+      platform: 'win32',
       waitTimeoutMs: 0
     });
 

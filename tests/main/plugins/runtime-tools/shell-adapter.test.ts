@@ -14,6 +14,7 @@ import type { ShellExecutionResult } from '../../../../src/shared/types';
 let root: string;
 let workspaceRoot: string;
 let db: Database.Database;
+const systemShell = process.platform === 'win32' ? 'powershell.exe' : process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh';
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-runtime-tools-shell-'));
@@ -29,7 +30,7 @@ afterEach(() => {
 });
 
 describe('runtime tools shell adapter', () => {
-  it('keeps current shell execution and confirmation behavior while executing high-risk agent commands', async () => {
+  it('keeps user shell execution and confirmation while blocking agent file operations', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke('shell.execute', {
@@ -64,21 +65,15 @@ describe('runtime tools shell adapter', () => {
       command: 'Remove-Item notes.txt',
       normalizedCommand: 'remove-item notes.txt',
       cwd: workspaceRoot,
-      stdout: 'notes.txt\n',
-      stderr: '',
-      exitCode: 0,
+      stdout: '',
+      exitCode: 1,
       usedRtk: false,
-      bypassReason: 'command_not_supported'
+      bypassReason: 'shell_file_operation_forbidden'
     });
-    expect(commandCalls).toHaveLength(2);
-    expect(commandCalls[1]).toMatchObject({
-      file: 'powershell.exe',
-      cwd: workspaceRoot
-    });
-    expect(commandCalls[1].args.join(' ')).toContain('Remove-Item notes.txt');
+    expect(commandCalls).toHaveLength(1);
   });
 
-  it('executes unsupported agent commands through raw PowerShell fallback', async () => {
+  it('executes unsupported agent commands through the host shell', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke('shell.execute', {
@@ -99,7 +94,7 @@ describe('runtime tools shell adapter', () => {
     });
     expect(commandCalls).toHaveLength(1);
     expect(commandCalls[0]).toMatchObject({
-      file: 'powershell.exe',
+      file: systemShell,
       cwd: workspaceRoot
     });
     expect(commandCalls[0].args.join(' ')).toContain('Write-Output unknown');
@@ -123,11 +118,11 @@ describe('runtime tools shell adapter', () => {
       usedRtk: false,
       bypassReason: 'virtual_workspace_path'
     });
-    expect(result.stderr).toContain('run_shell_command 使用真实 Windows cwd，不接受 DeepAgents 文件工具路由 /workspace/...。');
+    expect(result.stderr).toContain('run_shell_command 使用真实本机 cwd，不接受 DeepAgents 文件工具路由 /workspace/...。');
     expect(commandCalls).toHaveLength(0);
   });
 
-  it('rejects Linux local paths at the shell service boundary', async () => {
+  it('checks POSIX host paths according to the current platform', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
@@ -136,17 +131,11 @@ describe('runtime tools shell adapter', () => {
       source: 'agent'
     });
 
-    expect(result).toMatchObject({
-      stdout: '',
-      exitCode: 1,
-      usedRtk: false,
-      bypassReason: 'linux_local_path'
-    });
-    expect(result.stderr).toContain('run_shell_command 在 Windows 本地执行，不接受 Linux 本地路径。');
-    expect(commandCalls).toHaveLength(0);
+    expect(result.exitCode).toBe(process.platform === 'win32' ? 1 : 0);
+    expect(commandCalls).toHaveLength(process.platform === 'win32' ? 0 : 1);
   });
 
-  it('uses raw PowerShell for Windows shell aliases that RTK cannot execute directly', async () => {
+  it('blocks agent file listing before invoking the host shell', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
@@ -159,18 +148,12 @@ describe('runtime tools shell adapter', () => {
       command: 'ls',
       normalizedCommand: 'ls',
       cwd: workspaceRoot,
-      stdout: 'notes.txt\n',
-      stderr: '',
-      exitCode: 0,
+      stdout: '',
+      exitCode: 1,
       usedRtk: false,
-      bypassReason: 'windows_shell_alias'
+      bypassReason: 'shell_file_operation_forbidden'
     });
-    expect(commandCalls).toHaveLength(1);
-    expect(commandCalls[0]).toMatchObject({
-      file: 'powershell.exe',
-      cwd: workspaceRoot
-    });
-    expect(commandCalls[0].args.join(' ')).toContain('ls');
+    expect(commandCalls).toHaveLength(0);
   });
 
   it('routes supported agent commands through the bundled RTK binary', async () => {
@@ -194,7 +177,7 @@ describe('runtime tools shell adapter', () => {
     expect(result.bypassReason).toBeUndefined();
     expect(commandCalls).toHaveLength(1);
     expect(commandCalls[0]).toMatchObject({
-      file: expect.stringContaining('rtk.exe'),
+      file: expect.stringContaining(process.platform === 'win32' ? 'rtk.exe' : '/rtk'),
       args: ['git', 'status'],
       cwd: workspaceRoot
     });
@@ -202,8 +185,8 @@ describe('runtime tools shell adapter', () => {
 
   it('applies shell policy to the final command after RTK rewrite', async () => {
     vi.spyOn(CommandRewriter.prototype, 'rewrite').mockResolvedValue({
-      rewritten: 'rtk git /tmp/status.txt',
-      rtkArgs: ['git', '/tmp/status.txt'],
+      rewritten: 'rtk git /workspace/status.txt',
+      rtkArgs: ['git', '/workspace/status.txt'],
       exitCode: 0
     });
     const { capabilities, commandCalls } = await initializePlugin();
@@ -221,7 +204,7 @@ describe('runtime tools shell adapter', () => {
       stdout: '',
       exitCode: 1,
       usedRtk: false,
-      bypassReason: 'linux_local_path'
+      bypassReason: 'virtual_workspace_path'
     });
     expect(commandCalls).toHaveLength(0);
   });
@@ -258,7 +241,7 @@ describe('runtime tools shell adapter', () => {
     });
     expect(commandCalls).toHaveLength(1);
     expect(commandCalls[0]).toMatchObject({
-      file: 'powershell.exe',
+      file: systemShell,
       cwd: workspaceRoot
     });
   });

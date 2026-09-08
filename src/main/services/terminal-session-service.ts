@@ -173,6 +173,10 @@ export class TerminalSessionService {
   }
 
   private resolveShell(): { file: string; args: string[]; label: string } {
+    if (process.platform !== 'win32') {
+      const file = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash');
+      return { file, args: ['-l'], label: file.split('/').at(-1)! };
+    }
     const pwsh = resolve('C:/Program Files/PowerShell/7/pwsh.exe');
     if (existsSync(pwsh)) {
       return {

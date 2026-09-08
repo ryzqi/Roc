@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import type { BrowserWindow } from 'electron';
 import type { WindowBoundsSnapshot } from '../shared/types';
 
 export type WindowPlacementSnapshot = {
@@ -26,6 +27,55 @@ export function readWindowPlacementSnapshot(filePath: string): WindowPlacementSn
 export function writeWindowPlacementSnapshot(filePath: string, snapshot: WindowPlacementSnapshot): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+}
+
+export function bindWindowPlacementPersistence(
+  window: Pick<BrowserWindow, 'on' | 'isDestroyed' | 'getNormalBounds' | 'isMaximized'>,
+  filePath: string
+): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastPlacement: string | null = null;
+
+  function cancelPendingWrite(): void {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function persist(): void {
+    cancelPendingWrite();
+    if (window.isDestroyed()) {
+      return;
+    }
+    const bounds = window.getNormalBounds();
+    const maximized = window.isMaximized();
+    const placement = JSON.stringify({ bounds, maximized });
+    if (placement === lastPlacement) {
+      return;
+    }
+    writeWindowPlacementSnapshot(filePath, {
+      bounds,
+      maximized,
+      updatedAt: new Date().toISOString()
+    });
+    lastPlacement = placement;
+  }
+
+  function schedule(): void {
+    cancelPendingWrite();
+    timer = setTimeout(persist, 200);
+    timer.unref();
+  }
+
+  window.on('move', schedule);
+  window.on('resize', schedule);
+  window.on('moved', persist);
+  window.on('resized', persist);
+  window.on('maximize', persist);
+  window.on('unmaximize', persist);
+  window.on('close', persist);
+  window.on('closed', cancelPendingWrite);
 }
 
 function isWindowPlacementSnapshot(value: unknown): value is WindowPlacementSnapshot {

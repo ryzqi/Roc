@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Workspace } from '../../shared/types';
 import type { RocSettings } from './config-service';
 import { RocDomainError } from './errors';
@@ -122,8 +122,9 @@ export class WorkspaceService {
   }
 
   private isInsideWorkspace(path: string, workspaceRoot: string): boolean {
-    const normalizedRoot = resolve(workspaceRoot).toLocaleLowerCase();
-    const normalizedPath = resolve(path).toLocaleLowerCase();
-    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}\\`);
+    const relativePath = relative(resolve(workspaceRoot), resolve(path));
+    return relativePath === '' || (
+      relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+    );
   }
 }

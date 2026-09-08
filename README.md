@@ -4,7 +4,7 @@ Roc 是一个基于 **Electron + React** 的本地 AI Agent 桌面应用。它�
 
 设计目标不是“又一个聊天壳”，而是一个可在真实 Windows 工作区上持续跑任务的 **Agent Harness**：路径边界清晰、工具调用可恢复、上下文可控、密钥不进仓库。
 
-- 平台：Windows 11 优先（也打包了 macOS/Linux 的 RTK binary）
+- 平台：Windows 11 与 macOS（按平台和架构打包 RTK binary）
 - 运行时：Electron main / preload / renderer 三层隔离
 - Agent 内核：`deepagents` + LangGraph checkpointer / store
 - 数据面：SQLite + Electron `safeStorage` 加密密钥
@@ -339,8 +339,33 @@ Roc 默认把敏感状态放在用户本机：
 
 ## 打包
 
+### macOS
+
+使用匹配本机架构的 Node.js 和 Electron 安装。以下命令在当前项目路径执行；其他位置需替换 `--dir` 的绝对路径。
+
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install --frozen-lockfile
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
+```
+
+`package:mac` 依次完成类型检查、构建、首屏代码体积检查、ZIP 打包、签名验证和包内启动验证，再用系统自带 `hdiutil` 生成含 Applications 链接的 DMG，最后生成 SHA-256 校验文件。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
+
+- Apple Silicon：`release/mac-arm64/Roc.app`、`release/Roc-0.1.0-mac-arm64.dmg`、同名 ZIP。
+- Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app` 和带 `mac-x64` 的归档。
+- 包内只保留当前 macOS 架构的 SQLite、PTY 和 RTK，前端依赖已编入 renderer，不重复携带其源码。
+- 当前使用 ad-hoc 本地签名，未进行 Developer ID 签名或 Apple 公证；跨机器公开分发前需配置发布证书和公证。
+- macOS 关闭窗口后保留后台任务，点击 Dock 图标恢复；通过菜单或 `Cmd+Q` 完全退出。
+- macOS 终端使用用户登录 Shell，命令执行使用 zsh；工作区文件和 Git 使用系统路径边界，支持 POSIX 目录。
+
+单独验证已有应用包：
+
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
+```
+
+### 目录包
+
 ```powershell
-pnpm build
 pnpm package:dir
 ```
 

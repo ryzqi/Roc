@@ -82,6 +82,7 @@ export class WindowsHostService {
 
   constructor(
     private readonly input: {
+      platform: NodeJS.Platform;
       app: AppLike;
       globalShortcut: GlobalShortcutLike;
       lifecycleService: {
@@ -99,7 +100,9 @@ export class WindowsHostService {
   ) {}
 
   initializeProcessIdentity(): boolean {
-    this.input.app.setAppUserModelId(windowsAppUserModelId);
+    if (this.input.platform === 'win32') {
+      this.input.app.setAppUserModelId(windowsAppUserModelId);
+    }
     const acquiredLock = this.input.app.requestSingleInstanceLock();
     if (!acquiredLock) {
       return false;
@@ -127,7 +130,7 @@ export class WindowsHostService {
   bindMainWindow(window: MainWindowLike): void {
     this.mainWindow = window;
     window.on('close', (event) => {
-      if (this.explicitQuit || !this.minimizeToTray) {
+      if (this.explicitQuit || (this.input.platform !== 'darwin' && !this.minimizeToTray)) {
         return;
       }
       event.preventDefault();

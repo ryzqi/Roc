@@ -9,7 +9,7 @@ import {
 
 describe('immersive window shell', () => {
   it('builds a frameless window with hidden system menu bar', () => {
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico');
+    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico', null, 'win32');
 
     expect(options.title).toBe('Roc');
     expect(options.icon).toBe('C:/roc/resources/icon.ico');
@@ -21,6 +21,13 @@ describe('immersive window shell', () => {
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
+  });
+
+  it.each(['darwin', 'linux'] as const)('omits Windows-only material on %s', (platform) => {
+    const options = buildMainWindowOptions('/roc/dist/preload/index.cjs', '/roc/resources/icon.ico', null, platform);
+    expect(options).not.toHaveProperty('backgroundMaterial');
+    expect(options.webPreferences?.contextIsolation).toBe(true);
+    expect(options.show).toBe(false);
   });
 
   it('applies restored main-window bounds after display-safe normalization', () => {

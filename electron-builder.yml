@@ -14,20 +14,19 @@ files:
   - "!**/*.d.ts"
   - "!**/*.d.mts"
   - "!**/*.d.cts"
+  - "!**/.DS_Store"
+  - "!dist/renderer/.vite/**"
   - "!node_modules/better-sqlite3/deps/**"
   - "!node_modules/better-sqlite3/src/**"
   - "!node_modules/node-pty/src/**"
   - "!node_modules/node-pty/typings/**"
   - "!node_modules/node-pty/scripts/**"
   - "!node_modules/node-pty/deps/**"
-  - "!node_modules/node-pty/prebuilds/darwin-*/**"
+  - "!node_modules/node-pty/lib/**/*.test.js"
+  - "!node_modules/node-pty/lib/test/**"
   - "!node_modules/node-pty/prebuilds/win32-arm64/**"
   - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 extraResources:
-  - from: resources/rtk-binaries
-    to: rtk-binaries
-    filter:
-      - win32-x64/**
   - from: resources/icon.ico
     to: icon.ico
 asarUnpack:
@@ -36,6 +35,28 @@ asarUnpack:
 beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterExtract: ./scripts/builder-hooks/after-extract.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  target:
+    - zip
+  artifactName: Roc-${version}-mac-${arch}.${ext}
+  files:
+    - dist/**
+    - package.json
+    - "!dist/**/*.map"
+    - "!dist/renderer/.vite/**"
+    - "!node_modules/better-sqlite3/prebuilds/!(darwin-${arch}).node"
+    - "!node_modules/node-pty/prebuilds/!(darwin-${arch})/**"
+    - "!node_modules/node-pty/third_party/**"
+    - "!node_modules/node-pty/node_modules/node-addon-api/**"
+  extraResources:
+    - from: resources/rtk-binaries
+      to: rtk-binaries
+      filter:
+        - darwin-${arch}/**
+  identity: "-"
+  hardenedRuntime: false
 win:
   icon: resources/icon.ico
   executableName: Roc
@@ -43,3 +64,14 @@ win:
   target:
     - dir
   artifactName: Roc-${version}.${ext}
+  extraResources:
+    - from: resources/rtk-binaries
+      to: rtk-binaries
+      filter:
+        - win32-x64/**
+linux:
+  extraResources:
+    - from: resources/rtk-binaries
+      to: rtk-binaries
+      filter:
+        - linux-${arch}/**

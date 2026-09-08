@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { join } from 'node:path';
 import { RTKBinaryManager } from '../../src/rtk-integration/binary-manager';
 
 describe('RTKBinaryManager', () => {
@@ -33,9 +34,9 @@ describe('RTKBinaryManager', () => {
 
   it('resolves every supported bundled platform directory', () => {
     const cases = [
-      { platform: 'darwin', arch: 'x64', expected: 'darwin-x64\\rtk' },
-      { platform: 'darwin', arch: 'arm64', expected: 'darwin-arm64\\rtk' },
-      { platform: 'linux', arch: 'x64', expected: 'linux-x64\\rtk' }
+      { platform: 'darwin', arch: 'x64', expected: join('darwin-x64', 'rtk') },
+      { platform: 'darwin', arch: 'arm64', expected: join('darwin-arm64', 'rtk') },
+      { platform: 'linux', arch: 'x64', expected: join('linux-x64', 'rtk') }
     ] as const;
 
     for (const platformCase of cases) {
@@ -45,7 +46,7 @@ describe('RTKBinaryManager', () => {
         resourcesPath: 'C:\\Packaged\\resources'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe(`C:\\Packaged\\resources\\rtk-binaries\\${platformCase.expected}`);
+      expect(manager.getRTKBinaryPath()).toBe(join('C:\\Packaged\\resources', 'rtk-binaries', platformCase.expected));
     }
   });
 
@@ -60,7 +61,7 @@ describe('RTKBinaryManager', () => {
         arch: 'x64'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe('C:\\Electron\\resources\\rtk-binaries\\win32-x64\\rtk.exe');
+      expect(manager.getRTKBinaryPath()).toBe(join('C:\\Electron\\resources', 'rtk-binaries', 'win32-x64', 'rtk.exe'));
     } finally {
       if (original === undefined) {
         Reflect.deleteProperty(processWithResources, 'resourcesPath');
@@ -88,7 +89,7 @@ describe('RTKBinaryManager', () => {
         resourceRoot: 'F:\\Code\\Roc'
       });
 
-      expect(manager.getRTKBinaryPath()).toBe('F:\\Code\\Roc\\resources\\rtk-binaries\\win32-x64\\rtk.exe');
+      expect(manager.getRTKBinaryPath()).toBe(join('F:\\Code\\Roc', 'resources', 'rtk-binaries', 'win32-x64', 'rtk.exe'));
     } finally {
       if (original === undefined) {
         Reflect.deleteProperty(processWithResources, 'resourcesPath');

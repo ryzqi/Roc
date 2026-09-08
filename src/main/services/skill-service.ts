@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync
@@ -306,7 +307,7 @@ export class SkillService {
       return this.createInvalidSkillSnapshot(id, skillPath, 'SKILL.md 不符合 Deep Agents Skill 规范。');
     }
 
-    if (metadata.name !== id || !officialSkillIndex.has(resolve(skillFile))) {
+    if (metadata.name !== id || !officialSkillIndex.has(realpathSync(skillFile))) {
       return this.createInvalidSkillSnapshot(
         id,
         skillPath,
@@ -348,7 +349,7 @@ export class SkillService {
 
   private buildOfficialSkillIndex(): Map<string, LoaderSkillMetadata> {
     return new Map(
-      listSkills({ userSkillsDir: this.paths.skillsDir }).map((skill) => [resolve(skill.path), skill] as const)
+      listSkills({ userSkillsDir: this.paths.skillsDir }).map((skill) => [realpathSync(skill.path), skill] as const)
     );
   }
 

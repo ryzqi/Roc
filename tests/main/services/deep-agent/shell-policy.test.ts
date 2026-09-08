@@ -3,20 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createRocShellPolicyMiddleware,
-  evaluateShellPolicy,
+  evaluateShellPolicy as evaluatePlatformShellPolicy,
   parseShellAllowedCommands,
   ROC_SHELL_TOOL_DESCRIPTION_LINES
 } from '../../../../src/main/services/deep-agent/shell-policy';
 
+const evaluateShellPolicy = (input: Parameters<typeof evaluatePlatformShellPolicy>[0]) => evaluatePlatformShellPolicy(input, 'win32');
+
 describe('shell policy', () => {
   it('exports the canonical shell tool guidance used by the tool and workspace prompt', () => {
     expect(ROC_SHELL_TOOL_DESCRIPTION_LINES).toEqual([
-      '在当前 Roc Windows 工作区执行 PowerShell 命令。',
-      '默认 cwd 是用户选择的真实 Windows 工作区。',
+      process.platform === 'win32' ? '在当前 Roc Windows 工作区执行 PowerShell 命令。' : '在当前 Roc 工作区执行系统 POSIX Shell 命令。',
+      '默认 cwd 是用户选择的真实本机工作区。',
       '禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。',
-      '禁止使用 /home/user、/tmp 等 Linux 本地路径。',
+      ...(process.platform === 'win32' ? ['禁止使用 /home/user、/tmp 等 Linux 本地路径。'] : []),
       '禁止用 shell 做文件操作(cat/type/Get-Content/echo/Out-File/Set-Content/New-Item/mkdir/ls/dir/rm/del/重定向)；文件读写用专用文件工具。',
-      '引用工作区文件时用相对路径，或用真实 Windows 路径，例如 F:\\Code\\Roc\\script.ps1。',
+      '引用工作区文件时用相对路径，或用当前系统的真实绝对路径。',
       '适合运行测试、构建、编译、脚本执行和进程类命令。'
     ]);
   });
@@ -30,7 +32,7 @@ describe('shell policy', () => {
       verdict: 'deny',
       reason: 'virtual_workspace_path',
       message:
-        'run_shell_command 使用真实 Windows cwd，不接受 DeepAgents 文件工具路由 /workspace/...。请改用默认 cwd 下的相对路径，或真实 Windows 路径。默认 cwd: F:\\Code\\Roc'
+        'run_shell_command 使用真实本机 cwd，不接受 DeepAgents 文件工具路由 /workspace/...。请改用默认 cwd 下的相对路径，或真实本机路径。默认 cwd: F:\\Code\\Roc'
     });
   });
 
@@ -41,7 +43,7 @@ describe('shell policy', () => {
         verdict: 'deny',
         reason: 'linux_local_path',
         message:
-          'run_shell_command 在 Windows 本地执行，不接受 Linux 本地路径。请改用默认 cwd 下的相对路径，或真实 Windows 路径。默认 cwd: F:\\Code\\Roc'
+          'run_shell_command 在 Windows 本地执行，不接受 Linux 本地路径。请改用默认 cwd 下的相对路径，或真实本机路径。默认 cwd: F:\\Code\\Roc'
       });
     }
   );
@@ -132,8 +134,15 @@ describe('shell policy', () => {
     expect(result).toMatchObject({
       status: 'error',
       content:
-        'run_shell_command 使用真实 Windows cwd，不接受 DeepAgents 文件工具路由 /workspace/...。请改用默认 cwd 下的相对路径，或真实 Windows 路径。默认 cwd: F:\\Code\\Roc'
+        'run_shell_command 使用真实本机 cwd，不接受 DeepAgents 文件工具路由 /workspace/...。请改用默认 cwd 下的相对路径，或真实本机路径。默认 cwd: F:\\Code\\Roc'
     });
+  });
+
+  it.each(['darwin', 'linux'] as const)('accepts host paths on %s while retaining virtual-path and file-operation guards', (platform) => {
+    expect(evaluatePlatformShellPolicy({ command: 'node /tmp/project/script.js', cwd: '/tmp/project' }, platform)).toEqual({ verdict: 'allow' });
+    expect(evaluatePlatformShellPolicy({ command: 'node /workspace/script.js' }, platform)).toMatchObject({ reason: 'virtual_workspace_path' });
+    expect(evaluatePlatformShellPolicy({ command: 'rm /tmp/file.txt' }, platform)).toMatchObject({ reason: 'shell_file_operation_forbidden' });
+    expect(evaluatePlatformShellPolicy({ command: 'node /tmp/script.js', allowedCommands: [] }, platform)).toMatchObject({ reason: 'background_shell_command_not_pre_authorized' });
   });
 
   describe('file operation command blocking', () => {
