@@ -1,7 +1,7 @@
 strictPeerDependencies: false
 
 overrides:
-  # 仅构建 macOS，移除上游自动安装的 Squirrel 打包器。
+  # 仅构建 macOS，移除非目标平台打包器。
   'app-builder-lib>electron-builder-squirrel-windows': '-'
 
 ignoredOptionalDependencies:
