@@ -169,14 +169,14 @@ describe('chat view', () => {
         runId: 'run-1',
         threadId: 'thread-1',
         interruptId: 'interrupt-question',
-        answer: 'Use F:\\Code\\Roc.'
+        answer: 'Use /Users/test/Code/Roc.'
       })
     ).toEqual({
       kind: 'question',
       runId: 'run-1',
       threadId: 'thread-1',
       interruptId: 'interrupt-question',
-      answer: 'Use F:\\Code\\Roc.'
+      answer: 'Use /Users/test/Code/Roc.'
     });
   });
 

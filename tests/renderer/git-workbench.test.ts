@@ -96,13 +96,13 @@ describe('git workbench helpers', () => {
   it('builds a native confirmation request for creating a branch', () => {
     expect(
       buildGitCreateBranchConfirmationRequest({
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         branchName: 'feature/native-confirm',
         checkoutAfterCreate: true
       })
     ).toEqual({
       title: 'Git 分支确认',
-      message: '确认在工作区 F:\\Code\\Roc 创建并切换到分支 feature/native-confirm 吗？',
+      message: '确认在工作区 /Users/test/Code/Roc 创建并切换到分支 feature/native-confirm 吗？',
       confirmLabel: '确认',
       cancelLabel: '取消'
     });
@@ -111,12 +111,12 @@ describe('git workbench helpers', () => {
   it('builds a native confirmation request for checking out a branch', () => {
     expect(
       buildGitCheckoutBranchConfirmationRequest({
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         targetBranch: 'main'
       })
     ).toEqual({
       title: 'Git 分支确认',
-      message: '确认在工作区 F:\\Code\\Roc 切换到分支 main 吗？',
+      message: '确认在工作区 /Users/test/Code/Roc 切换到分支 main 吗？',
       confirmLabel: '确认',
       cancelLabel: '取消'
     });
@@ -178,7 +178,7 @@ describe('git diff preview controller', () => {
       fileDiff: async ({ relativePath }) => ({
         ok: true,
         data: {
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           relativePath,
           patch: `diff --git a/${relativePath} b/${relativePath}\n--- a/${relativePath}\n+++ b/${relativePath}\n@@ -1 +1 @@\n-old\n+new\n`
         }
@@ -202,7 +202,7 @@ describe('git diff preview controller', () => {
       {
         gitSelectedPath: 'src/renderer/App.tsx',
         gitSelectedPreview: {
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           relativePath: 'src/renderer/App.tsx',
           patch:
             'diff --git a/src/renderer/App.tsx b/src/renderer/App.tsx\n--- a/src/renderer/App.tsx\n+++ b/src/renderer/App.tsx\n@@ -1 +1 @@\n-old\n+new\n'
@@ -266,7 +266,7 @@ describe('git diff preview controller', () => {
     deferred.get('src/new.ts')?.resolve({
       ok: true,
       data: {
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         relativePath: 'src/new.ts',
         patch: 'diff --git a/src/new.ts b/src/new.ts\n'
       }
@@ -276,7 +276,7 @@ describe('git diff preview controller', () => {
     deferred.get('src/old.ts')?.resolve({
       ok: true,
       data: {
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         relativePath: 'src/old.ts',
         patch: 'diff --git a/src/old.ts b/src/old.ts\n'
       }
@@ -291,7 +291,7 @@ describe('git diff preview controller', () => {
       {
         gitSelectedPath: 'src/new.ts',
         gitSelectedPreview: {
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           relativePath: 'src/new.ts',
           patch: 'diff --git a/src/new.ts b/src/new.ts\n'
         }

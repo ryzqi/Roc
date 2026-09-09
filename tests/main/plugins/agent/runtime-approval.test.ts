@@ -190,7 +190,7 @@ describe('AgentPluginRuntime', () => {
       threadId: null,
       workflowHint: 'propose_background_task',
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       explicitSkillIds: ['typescript']
     });
     await waitForEvent(() =>
@@ -235,7 +235,7 @@ describe('AgentPluginRuntime', () => {
         threadId: started.threadId,
         workflowHint: 'propose_background_task',
         taskSource: 'workbench',
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         explicitSkillIds: ['typescript']
       })
     ]);

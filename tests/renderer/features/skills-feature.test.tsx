@@ -29,7 +29,7 @@ describe('SkillsFeature', () => {
       id: 'smoke-skill',
       name: 'Smoke Skill',
       enabled: true,
-      path: 'F:\\Code\\Roc\\.tmp\\smoke-skill',
+      path: '/Users/test/Code/Roc/.tmp/smoke-skill',
       description: 'Smoke skill fixture.',
       status: 'ready' as const,
       lastError: null

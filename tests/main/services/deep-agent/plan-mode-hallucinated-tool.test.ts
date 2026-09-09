@@ -138,7 +138,7 @@ function createPlanModeAgent(input: {
       mode: 'plan',
       runId: 'run-plan-hallucinated',
       threadId: 'thread-plan-hallucinated',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       budget: { contextBudgetTokens: null }
     }),
     model: input.model,

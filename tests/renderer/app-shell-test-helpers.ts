@@ -102,7 +102,7 @@ export function createActiveTask(partial: {
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: partial.workspacePath === undefined ? 'F:\\Code\\Roc' : partial.workspacePath,
+    workspacePath: partial.workspacePath === undefined ? '/Users/test/Code/Roc' : partial.workspacePath,
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z'
   };
@@ -144,7 +144,7 @@ export function createBackgroundTaskDetail(task: ActiveTaskItem): TaskDetail {
       triggerDescription: '手动触发',
       nextRunAt: task.nextRunAt,
       cronExpression: null,
-      workspacePath: task.workspacePath ?? 'F:\\Code\\Roc',
+      workspacePath: task.workspacePath ?? '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',

@@ -146,8 +146,8 @@ describe('adaptDeepAgentRun domain translation', () => {
   it('does not stream context summary JSON as visible assistant text', async () => {
     const summaryJson = JSON.stringify({
       decisions: ['Keep the generated SVG.'],
-      facts: ['Workspace directory is G:\\test.'],
-      filesTouched: ['G:\\test\\pelican_bike.svg'],
+      facts: ['Workspace directory is /Users/test/test.'],
+      filesTouched: ['/Users/test/test/pelican_bike.svg'],
       goal: 'create a pelican riding a bicycle svg in the current directory',
       nextActions: ['Report completion of the SVG file.'],
       openQuestions: ['Whether the user wants any visual adjustments.'],
@@ -173,8 +173,8 @@ describe('adaptDeepAgentRun domain translation', () => {
   it('does not stream chunked context summary JSON as visible assistant text', async () => {
     const summaryJson = JSON.stringify({
       decisions: ['Keep the generated SVG.'],
-      facts: ['Workspace directory is G:\\test.'],
-      filesTouched: ['G:\\test\\pelican_bike.svg'],
+      facts: ['Workspace directory is /Users/test/test.'],
+      filesTouched: ['/Users/test/test/pelican_bike.svg'],
       goal: 'create a pelican riding a bicycle svg in the current directory',
       nextActions: ['Report completion of the SVG file.'],
       openQuestions: ['Whether the user wants any visual adjustments.'],

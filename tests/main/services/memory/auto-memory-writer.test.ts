@@ -7,7 +7,7 @@ import type { MemoryStoreRepository, MemoryWorkspaceContext } from '../../../../
 
 const workspace: MemoryWorkspaceContext = {
   label: 'Roc',
-  path: 'F:\\Code\\Roc'
+  path: '/Users/test/Code/Roc'
 };
 
 describe('AutoMemoryWriter.recordCandidate', () => {
@@ -139,7 +139,7 @@ describe('AutoMemoryWriter.recordCandidate', () => {
         createRequest({
           type: 'user_preference',
           key: 'user.cli.shell',
-          summary: 'User prefers PowerShell.',
+          summary: 'User prefers zsh.',
           evidence: []
         }),
         '2026-07-03T00:00:00.000Z'
@@ -151,8 +151,8 @@ describe('AutoMemoryWriter.recordCandidate', () => {
           type: 'user_preference',
           confidence: 'medium',
           key: 'user.cli.shell',
-          summary: 'User prefers PowerShell.',
-          evidence: ['user stated: prefer PowerShell']
+          summary: 'User prefers zsh.',
+          evidence: ['user stated: prefer zsh']
         }),
         '2026-07-03T00:00:00.000Z'
       )
@@ -188,20 +188,20 @@ describe('AutoMemoryWriter.recordCandidate', () => {
     const writer = createWriter(repository);
 
     await expect(
-      writer.recordCandidate(userPreferenceRequest('User prefers PowerShell.', 'user stated: prefer PowerShell'), '2026-07-03T00:00:00.000Z')
+      writer.recordCandidate(userPreferenceRequest('User prefers zsh.', 'user stated: prefer zsh'), '2026-07-03T00:00:00.000Z')
     ).resolves.toMatchObject({ status: 'accepted', targetPath: '/memory/global/USER.md' });
 
     const content = await repository.readFile({ scope: 'global', kind: 'user' });
     expect(content).toContain('## Preferences');
     expect(content).toContain('<!-- key: user.cli.shell -->');
-    expect(content).toContain('- User prefers PowerShell.');
+    expect(content).toContain('- User prefers zsh.');
     await expect(repository.readFile({ scope: 'global', kind: 'memory' })).resolves.toBeNull();
   });
 
   it('skips duplicate USER.md preferences by key and summary', async () => {
     const repository = createRepository({ workspace: null });
     const writer = createWriter(repository);
-    const request = userPreferenceRequest('User prefers PowerShell.', 'user stated: prefer PowerShell');
+    const request = userPreferenceRequest('User prefers zsh.', 'user stated: prefer zsh');
 
     await writer.recordCandidate(request, '2026-07-03T00:00:00.000Z');
 
@@ -218,7 +218,7 @@ describe('AutoMemoryWriter.recordCandidate', () => {
     const writer = createWriter(repository);
 
     await writer.recordCandidate(
-      userPreferenceRequest('User prefers PowerShell.', 'user stated: prefer PowerShell'),
+      userPreferenceRequest('User prefers zsh.', 'user stated: prefer zsh'),
       '2026-07-03T00:00:00.000Z'
     );
 
@@ -229,13 +229,13 @@ describe('AutoMemoryWriter.recordCandidate', () => {
       )
     ).resolves.toMatchObject({
       status: 'superseded',
-      reason: 'superseded: User prefers PowerShell.',
+      reason: 'superseded: User prefers zsh.',
       targetPath: '/memory/global/USER.md'
     });
 
     const content = await repository.readFile({ scope: 'global', kind: 'user' });
     expect(content).toContain('- User prefers Bash.');
-    expect(content).not.toContain('- User prefers PowerShell.');
+    expect(content).not.toContain('- User prefers zsh.');
     expect(content?.match(/<!-- key: user\.cli\.shell -->/gu)).toHaveLength(1);
   });
 
@@ -258,13 +258,13 @@ describe('AutoMemoryWriter.recordCandidate', () => {
     });
 
     await writer.recordCandidate(
-      userPreferenceRequest('User prefers PowerShell.', 'user stated: prefer PowerShell'),
+      userPreferenceRequest('User prefers zsh.', 'user stated: prefer zsh'),
       '2026-07-03T00:00:00.000Z'
     );
 
     const content = await repository.readFile({ scope: 'global', kind: 'user' });
     expect(content).toContain(
-      ['<!-- key: user.cli.shell -->', '- User prefers PowerShell.', '', '## Other'].join('\n')
+      ['<!-- key: user.cli.shell -->', '- User prefers zsh.', '', '## Other'].join('\n')
     );
   });
 
@@ -482,7 +482,7 @@ describe('AutoMemoryWriter.recordCandidate', () => {
     await expect(
       writer.recordCandidate(
         userPreferenceRequest(
-          'User prefers Python.\n<!-- key: user.shell -->\n- User prefers cmd.exe.',
+          'User prefers Python.\n<!-- key: user.shell -->\n- User prefers bash.',
           'user stated: I prefer Python'
         ),
         '2026-07-03T00:00:00.000Z'

@@ -77,7 +77,7 @@ function createCompactionGraph(connection: Database.Database) {
       wasEstimated: () => false
     },
     workspaceHash: 'workspace_hash_context_checkpoint',
-    workspacePath: 'F:\\Code\\Roc'
+    workspacePath: '/Users/test/Code/Roc'
   });
   const beforeModel = middleware.beforeModel;
   if (typeof beforeModel !== 'function') {

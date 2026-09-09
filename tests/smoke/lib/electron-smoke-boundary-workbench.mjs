@@ -144,7 +144,7 @@ export function buildRendererBoundaryWorkbench(ctx) {
     workbenchPreviewNoLargeTrailingGap:
       filePreviewLayoutEvidence.previewExists &&
       !filePreviewLayoutEvidence.footerExists &&
-      !filePreviewLayoutEvidence.footerText.includes('F:\\Code\\Roc') &&
+      !filePreviewLayoutEvidence.footerText.includes('/Users/test/Code/Roc') &&
       filePreviewLayoutEvidence.contentGapToBody !== null &&
       filePreviewLayoutEvidence.contentGapToBody <= 48,
     workbenchPreviewStatsRemoved:

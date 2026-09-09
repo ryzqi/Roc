@@ -21,7 +21,6 @@ describe('validateRocFileToolPath', () => {
     ['/home/user/workarea/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/tmp/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/Users/test/Code/Roc/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
-    ['relative\\file.txt', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['relative/file.txt', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/agents/AGENTS.md', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/workspace/../secret.txt', 'Roc 文件工具路径不能包含 .. 路径段。']

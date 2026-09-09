@@ -10,7 +10,7 @@ import type { SettingsSnapshot } from '../../src/shared/types';
 
 function createHookSnapshot(input: { exists: boolean }): SettingsSnapshot['hooks'] {
   return {
-    configPath: 'C:\\Users\\me\\.roc\\hooks.json',
+    configPath: '/Users/test/Users/me/.roc/hooks.json',
     exists: input.exists,
     config: { schemaVersion: 1, hooks: {} },
     handlers: [],

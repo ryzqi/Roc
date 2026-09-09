@@ -82,5 +82,5 @@ function collectRelativeEntries(base: string, current: string, kind: 'directory'
 }
 
 function toRelativePath(base: string, absolutePath: string): string {
-  return relative(base, absolutePath).replaceAll('\\', '/');
+  return relative(base, absolutePath);
 }

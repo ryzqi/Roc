@@ -83,7 +83,7 @@ describe('RocContextCompactionPipeline', () => {
         wasEstimated: () => false
       },
       workspaceHash: 'workspace_hash_state_update',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
 
     const beforeModel = middleware.beforeModel;
@@ -146,7 +146,7 @@ describe('RocContextCompactionPipeline', () => {
       threadId: 'thread_ctx_pipeline_1',
       toolResultPersistChars: 1000,
       workspaceHash: 'workspace_hash_a',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       messages,
       countTokens: countBeforeAndAfterSummary
     });
@@ -255,7 +255,7 @@ describe('RocContextCompactionPipeline', () => {
       threadId: 'thread_ctx_pipeline_3',
       toolResultPersistChars: 1000,
       workspaceHash: 'workspace_hash_boundary',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       messages,
       countTokens: countBeforeAndAfterSummary
     });
@@ -302,7 +302,7 @@ describe('RocContextCompactionPipeline', () => {
       threadId: 'thread_ctx_pipeline_4',
       toolResultPersistChars: 1000,
       workspaceHash: 'workspace_hash_boundary',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       messages,
       countTokens: async () => 700
     });
@@ -353,7 +353,7 @@ describe('RocContextCompactionPipeline', () => {
       summarize,
       threadId: 'thread_ctx_pipeline_5',
       workspaceHash: 'workspace_hash_summary',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       messages,
       countTokens: countBeforeAndAfterSummary
     });
@@ -399,7 +399,7 @@ describe('RocContextCompactionPipeline', () => {
       },
       threadId: 'thread_ctx_pipeline_summary_failure',
       workspaceHash: 'workspace_hash_summary_failure',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       messages,
       countTokens: countApproximateTokens
     });

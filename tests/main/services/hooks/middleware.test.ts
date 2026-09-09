@@ -33,8 +33,8 @@ function createTestMiddleware(input: {
     runContext: {
       runId: 'run_1',
       threadId: 'thread_1',
-      workspacePath: 'F:\\Code\\Roc',
-      cwd: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
+      cwd: '/Users/test/Code/Roc',
       source: 'chat',
       modelId: 'model_1',
       workflowHint: null

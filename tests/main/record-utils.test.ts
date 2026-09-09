@@ -349,7 +349,7 @@ describe('record-utils assistant text boundaries', () => {
       classifyStreamedAssistantText([
         '<roc_context_digest>',
         '<facts>',
-        '- Workspace is F:\\Code\\Roc.',
+        '- Workspace is /Users/test/Code/Roc.',
         '</facts>',
         '<decisions />',
         '<filesTouched />',
@@ -364,8 +364,8 @@ describe('record-utils assistant text boundaries', () => {
 
 const CONTEXT_SUMMARY_JSON = JSON.stringify({
   decisions: ['The SVG was created with the filename pelican_bike.svg and is complete, 118 lines.'],
-  facts: ['Workspace directory is G:\\test.'],
-  filesTouched: ['G:\\test\\pelican_bike.svg'],
+  facts: ['Workspace directory is /Users/test/test.'],
+  filesTouched: ['/Users/test/test/pelican_bike.svg'],
   goal: 'create a pelican riding a bicycle svg in the current directory',
   nextActions: ['Report completion of the SVG file.'],
   openQuestions: ['Whether the user wants any visual adjustments after previewing the SVG in a browser.'],

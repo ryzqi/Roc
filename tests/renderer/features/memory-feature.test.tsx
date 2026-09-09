@@ -112,7 +112,7 @@ function createMemoryClient(memoryStatus: MemoryStatus): RocClient {
   const api = {
     memory: {
       status: vi.fn().mockResolvedValue({ ok: true, data: memoryStatus }),
-      readFile: vi.fn().mockResolvedValue({ ok: true, data: '# user prefers PowerShell' }),
+      readFile: vi.fn().mockResolvedValue({ ok: true, data: '# user prefers zsh' }),
       writeFile: vi.fn().mockResolvedValue({
         ok: true,
         data: {
@@ -123,7 +123,7 @@ function createMemoryClient(memoryStatus: MemoryStatus): RocClient {
       snapshotPreview: vi.fn().mockResolvedValue({
         ok: true,
         data: {
-          text: '# DeepAgents Memory Preview\n\n## /memory/global/USER.md\n\n# user prefers PowerShell'
+          text: '# DeepAgents Memory Preview\n\n## /memory/global/USER.md\n\n# user prefers zsh'
         }
       })
     },

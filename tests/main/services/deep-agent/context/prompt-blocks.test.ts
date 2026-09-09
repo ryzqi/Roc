@@ -13,7 +13,7 @@ describe('prompt blocks', () => {
     const blocks = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [
         {
@@ -39,7 +39,7 @@ describe('prompt blocks', () => {
     const blocks = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [{ name: 'session_search', description: 'Search prior conversations' }],
       explicitSkillContexts: [],
@@ -62,7 +62,7 @@ describe('prompt blocks', () => {
       buildPromptBlocks({
         mode: 'run',
         enabledCapabilities,
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         workflowHint: null,
         tools: [
         {
@@ -80,7 +80,7 @@ describe('prompt blocks', () => {
     expect(prompt).toContain('<!-- BLOCK:tools:capability:');
     expect(prompt).toContain('<!-- BLOCK:context_recall:workspace:');
     expect(prompt).toContain('session_search');
-    expect(prompt).toContain('F:\\Code\\Roc');
+    expect(prompt).toContain('/Users/test/Code/Roc');
     expect(prompt).toContain('write_file creates or replaces a file; use edit_file for targeted changes.');
   });
 
@@ -89,7 +89,7 @@ describe('prompt blocks', () => {
       buildPromptBlocks({
         mode: 'run',
         enabledCapabilities,
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         workflowHint: null,
         tools: [
         {
@@ -113,7 +113,7 @@ describe('prompt blocks', () => {
         skills: []
       },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       tools: [],
       explicitSkillContexts: [],
       referencedFileContexts: []
@@ -153,7 +153,7 @@ describe('prompt blocks', () => {
         skills: []
       },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       tools: [],
       explicitSkillContexts: [],
       referencedFileContexts: []
@@ -182,7 +182,7 @@ describe('prompt blocks', () => {
         skills: []
       },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       tools: [],
       explicitSkillContexts: [],
       referencedFileContexts: []
@@ -197,7 +197,7 @@ describe('prompt blocks', () => {
     const blocks = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [],
       explicitSkillContexts: [
@@ -222,7 +222,7 @@ describe('prompt blocks', () => {
     const blocks = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [],
       explicitSkillContexts: [],
@@ -247,7 +247,7 @@ describe('prompt blocks', () => {
     const withTool = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [{ name: 'roc_self_config', description: 'Inspect Roc own configuration' }],
       explicitSkillContexts: [],
@@ -256,7 +256,7 @@ describe('prompt blocks', () => {
     const withoutTool = buildPromptBlocks({
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workflowHint: null,
       tools: [{ name: 'session_search', description: 'Search prior conversations' }],
       explicitSkillContexts: [],

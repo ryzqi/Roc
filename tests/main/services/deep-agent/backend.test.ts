@@ -14,7 +14,7 @@ import { defaultSettings } from '../../../../src/main/services/config/defaults';
 import { SecurityScanService } from '../../../../src/main/services/memory/security-scan';
 import { RocPaths } from '../../../../src/main/services/paths';
 
-const workspacePath = 'F:\\Code\\Roc';
+const workspacePath = '/Users/test/Code/Roc';
 const cleanupRoots: string[] = [];
 
 type TestBackend = ReturnType<typeof createBackend>['backend'] & {
@@ -38,7 +38,7 @@ function createTestBackend(input: {
   selectedSkillIds?: readonly string[];
   workspacePath?: string;
 } = {}) {
-  const paths = input.paths === undefined ? new RocPaths('F:\\Code\\Roc\\.test-data') : input.paths;
+  const paths = input.paths === undefined ? new RocPaths('/Users/test/Code/Roc/.test-data') : input.paths;
   const selectedSkillIds = input.selectedSkillIds === undefined ? [] : input.selectedSkillIds;
   const selectedWorkspacePath = input.workspacePath === undefined ? workspacePath : input.workspacePath;
   return createBackend({

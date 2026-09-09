@@ -52,11 +52,11 @@ describe('HookConfigSchema', () => {
     ).toThrow();
   });
 
-  it('rejects removed platform command overrides instead of ignoring them', () => {
+  it('rejects unknown command handler fields instead of ignoring them', () => {
     expect(() => HookConfigSchema.parse({
       schemaVersion: 1,
-      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node hook.js', commandWindows: 'legacy-command' }] }] }
-    })).toThrow(/commandWindows/);
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node hook.js', legacyCommandOverride: 'legacy-command' }] }] }
+    })).toThrow(/legacyCommandOverride/);
   });
 
   it('rejects invalid timeout values', () => {

@@ -76,7 +76,7 @@ describe('SecurityScanService', () => {
     const svc = new SecurityScanService(allOn);
     const safe = [
       '# 用户偏好\n\n- 沟通风格：直接、简短\n- 时区：UTC+8\n',
-      '## 项目记忆\n\n- 使用 PowerShell\n- 默认 UTF-8 无 BOM\n',
+      '## 项目记忆\n\n- 使用 zsh\n- 默认 UTF-8 无 BOM\n',
       'AGENTS rules:\n1. Be precise.\n2. Cite evidence.'
     ];
     for (const text of safe) {

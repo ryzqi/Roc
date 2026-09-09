@@ -499,11 +499,11 @@ export class FileService {
     if (trimmed.length === 0 || trimmed === '.') {
       return '';
     }
-    return trimmed.replaceAll('\\', '/');
+    return trimmed;
   }
 
   private toWorkspaceRelativePath(workspacePath: string, absolutePath: string): string {
-    return relative(workspacePath, absolutePath).replaceAll('\\', '/');
+    return relative(workspacePath, absolutePath);
   }
 
   private positiveLimit(value: number | undefined, fallback: number): number {

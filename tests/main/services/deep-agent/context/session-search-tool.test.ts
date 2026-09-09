@@ -8,7 +8,7 @@ describe('createSessionSearchTool', () => {
   it('creates a session_search tool that defaults to current scope when a workspace exists', async () => {
     const requests: SessionMessageSearchRequest[] = [];
     const tool = createSessionSearchTool({
-      runtimeWorkspacePath: 'F:\\Code\\Roc',
+      runtimeWorkspacePath: '/Users/test/Code/Roc',
       search: (request) => {
         requests.push(request);
         return resultWithContent('Full content should not be returned', 'matching **snippet**');
@@ -23,7 +23,7 @@ describe('createSessionSearchTool', () => {
       {
         query: 'memory',
         workspaceScope: 'current',
-        workspaceHash: buildWorkspaceHash('F:\\Code\\Roc'),
+        workspaceHash: buildWorkspaceHash('/Users/test/Code/Roc'),
         limit: 5
       }
     ]);

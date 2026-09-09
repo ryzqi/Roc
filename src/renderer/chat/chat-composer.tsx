@@ -748,7 +748,7 @@ function createPathImageAttachment(path: string): RendererImageAttachment {
 }
 
 function fileNameFromPath(path: string): string {
-  const segments = path.split(/[/\\]/).filter((segment) => segment.length > 0);
+  const segments = path.split('/').filter((segment) => segment.length > 0);
   if (segments.length === 0) {
     return path;
   }

@@ -169,14 +169,13 @@ export class HookCommandRunner {
 }
 
 export function isVirtualHookCwd(cwd: string): boolean {
-  const normalized = cwd.replaceAll('\\', '/');
   return (
-    normalized === '/workspace' ||
-    normalized.startsWith('/workspace/') ||
-    normalized === '/memory' ||
-    normalized.startsWith('/memory/') ||
-    normalized === '/skills' ||
-    normalized.startsWith('/skills/')
+    cwd === '/workspace' ||
+    cwd.startsWith('/workspace/') ||
+    cwd === '/memory' ||
+    cwd.startsWith('/memory/') ||
+    cwd === '/skills' ||
+    cwd.startsWith('/skills/')
   );
 }
 

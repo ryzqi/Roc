@@ -39,7 +39,7 @@ const topicDocument: MemorySearchDocument = {
   path: '/memory/global/topics/archive-2026-05.md',
   scope: 'global',
   kind: 'topic',
-  content: ['## 2026-05-01', '', 'Archived note about the PowerShell packaging pipeline.'].join('\n')
+  content: ['## 2026-05-01', '', 'Archived note about the zsh packaging pipeline.'].join('\n')
 };
 
 describe('tokenizeQuery', () => {
@@ -90,7 +90,7 @@ describe('searchMemoryDocuments', () => {
   });
 
   it('searches topic file prose as section entries', () => {
-    const result = searchMemoryDocuments([userDocument, topicDocument], 'PowerShell packaging', 5);
+    const result = searchMemoryDocuments([userDocument, topicDocument], 'zsh packaging', 5);
 
     expect(result.hits).toHaveLength(1);
     expect(result.hits[0]).toMatchObject({

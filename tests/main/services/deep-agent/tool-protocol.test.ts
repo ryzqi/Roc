@@ -123,7 +123,7 @@ describe('deep agent tool protocol', () => {
         type: 'manual',
         description: '手动'
       }),
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
 
     expect(normalized).toEqual({
@@ -132,7 +132,7 @@ describe('deep agent tool protocol', () => {
         type: 'manual',
         description: '手动'
       },
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
     expect(proposeToolInputSchema.parse(normalized).trigger).toEqual({
       type: 'manual',

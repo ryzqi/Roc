@@ -184,7 +184,7 @@ function createContext(input: {
       runId: 'run_middleware_stack',
       threadId: 'thread_middleware_stack',
       workspaceHash: 'workspace_middleware_stack',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     },
     toolEffectStore: undefined
   };
@@ -206,8 +206,8 @@ function createHookMiddlewareOptions() {
     runContext: {
       runId: 'run_middleware_stack',
       threadId: 'thread_middleware_stack',
-      workspacePath: 'F:\\Code\\Roc',
-      cwd: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
+      cwd: '/Users/test/Code/Roc',
       source: 'chat' as const,
       modelId: 'model_1',
       workflowHint: null

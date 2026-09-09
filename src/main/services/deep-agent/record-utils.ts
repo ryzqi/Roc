@@ -466,7 +466,7 @@ function hasSkillInstructionPath(value: unknown): boolean {
 }
 
 function isSkillInstructionPath(path: string): boolean {
-  return path.replaceAll('\\', '/').toLowerCase().endsWith('/skill.md');
+  return path.toLowerCase().endsWith('/skill.md');
 }
 
 function readLowercaseString(value: unknown): string | null {

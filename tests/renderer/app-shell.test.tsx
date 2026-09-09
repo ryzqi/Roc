@@ -237,7 +237,7 @@ describe('AppShell', () => {
       },
       workflowHint: 'propose_background_task',
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     }));
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
@@ -553,7 +553,7 @@ describe('AppShell', () => {
       threadId: 'thread-background',
       goal: '等待补充输入',
       status: 'waiting_user',
-      workspacePath: 'G:\\Saved\\Task'
+      workspacePath: '/Users/test/Saved/Task'
     });
     const taskDetail = createBackgroundTaskDetail(waitingTask);
     vi.mocked(client.api.chat.startRun).mockResolvedValue({
@@ -600,7 +600,7 @@ describe('AppShell', () => {
       threadId: 'thread-background',
       workflowHint: 'background_task_change',
       taskSource: 'workbench',
-      workspacePath: 'G:\\Saved\\Task'
+      workspacePath: '/Users/test/Saved/Task'
     }));
   });
 
@@ -777,7 +777,7 @@ describe('AppShell', () => {
       },
       workflowHint: 'propose_background_task',
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     }));
   });
 });

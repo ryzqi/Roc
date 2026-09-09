@@ -151,7 +151,7 @@ function normalizeWatchFilename(filename: string | Buffer | null): string | null
     return null;
   }
   const raw = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
-  const normalized = raw.trim().replaceAll('\\', '/');
+  const normalized = raw.trim();
   return normalized.length === 0 ? null : normalized;
 }
 

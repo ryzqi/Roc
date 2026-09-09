@@ -19,13 +19,13 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           fileTree: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             relativePath: '',
             truncated: false,
             entries: [
@@ -46,7 +46,7 @@ describe('workspace and diagnostics surfaces', () => {
             sizeBytes: 123
           },
           gitStatus: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             isRepository: true,
             branch: 'main',
             porcelain: [' M README.md'],
@@ -55,7 +55,7 @@ describe('workspace and diagnostics surfaces', () => {
           },
           terminalSession: {
             id: 'terminal-1',
-            cwd: 'F:\\Code\\Roc',
+            cwd: '/Users/test/Code/Roc',
             shell: 'zsh',
             cols: 120,
             rows: 32,
@@ -81,7 +81,7 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
@@ -124,7 +124,7 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
@@ -152,7 +152,7 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
@@ -180,14 +180,14 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           terminalSession: {
             id: 'terminal-1',
-            cwd: 'F:\\Code\\Roc',
+            cwd: '/Users/test/Code/Roc',
             shell: 'zsh',
             cols: 120,
             rows: 32,
@@ -211,13 +211,13 @@ describe('workspace and diagnostics surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           gitStatus: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             isRepository: true,
             branch: 'main',
             porcelain: [' M README.md'],
@@ -239,7 +239,7 @@ describe('workspace and diagnostics surfaces', () => {
       diagnosticPackage: {
         id: 'pkg-1',
         taskId: 'task-1',
-        path: 'F:\\Code\\Roc\\.artifacts\\pkg.zip',
+        path: '/Users/test/Code/Roc/.artifacts/pkg.zip',
         createdAt: '2026-05-16T08:00:00.000Z',
         includes: ['task_snapshot', 'performance_sample'],
         redacted: true
@@ -336,7 +336,7 @@ describe('workspace and diagnostics surfaces', () => {
         diagnosticPackage: {
           id: 'pkg-1',
           taskId: 'task-1',
-          path: 'F:\\Code\\Roc\\.artifacts\\pkg.zip',
+          path: '/Users/test/Code/Roc/.artifacts/pkg.zip',
           createdAt: '2026-05-16T08:00:00.000Z',
           includes: ['task_snapshot'],
           redacted: true

@@ -34,7 +34,7 @@ describe('createToolEffectIdempotencyMiddleware', () => {
       toolCall: {
         id: 'call_1',
         name: 'run_shell_command',
-        args: { command: 'pnpm typecheck', cwd: 'F:\\Code\\Roc' }
+        args: { command: 'pnpm typecheck', cwd: '/Users/test/Code/Roc' }
       },
       runtime: runtime('')
     };

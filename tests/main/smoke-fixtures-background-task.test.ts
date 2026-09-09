@@ -78,7 +78,7 @@ describe('smoke provider background task proposal flow', () => {
         ],
         messages: [
           { role: 'system', content: '本轮工作流：创建后台任务。' },
-          { role: 'system', content: 'Workspace: F:\\Code\\Roc' },
+          { role: 'system', content: 'Workspace: /Users/test/Code/Roc' },
           { role: 'user', content: goal }
         ]
       } satisfies SmokeRequestBody)
@@ -97,7 +97,7 @@ describe('smoke provider background task proposal flow', () => {
           cronExpression: `${minute} ${hour} * * *`,
           nextRunAt: nextDailyRunAtUtc(hour, minute, fixedNow)
         },
-        workspacePath: 'F:\\Code\\Roc'
+        workspacePath: '/Users/test/Code/Roc'
       }
     });
   });
@@ -120,7 +120,7 @@ describe('smoke provider background task proposal flow', () => {
         ],
         messages: [
           { role: 'system', content: '本轮工作流：创建后台任务。' },
-          { role: 'system', content: 'Workspace: F:\\Code\\Roc' },
+          { role: 'system', content: 'Workspace: /Users/test/Code/Roc' },
           { role: 'user', content: goal },
           {
             role: 'tool',

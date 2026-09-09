@@ -36,7 +36,7 @@ describe('execution safety middleware scopes', () => {
         capabilityManifest,
         runId: 'run_1',
         threadId: 'thread_1',
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         budget: { contextBudgetTokens: 4096 }
       }),
       model: {} as never,
@@ -132,7 +132,7 @@ describe('execution safety middleware scopes', () => {
     const input: DeepAgentBuildInput = {
       snapshot: createDeepAgentTestSnapshot({
         capabilityManifest: createCapabilityManifest(),
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         budget: { contextBudgetTokens: 4096 }
       }),
       model: {} as never,
@@ -169,7 +169,7 @@ describe('execution safety middleware scopes', () => {
     const input: DeepAgentBuildInput = {
       snapshot: createDeepAgentTestSnapshot({
         capabilityManifest: createCapabilityManifest(['inspect_workspace']),
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         budget: { contextBudgetTokens: 4096 }
       }),
       model: {} as never,

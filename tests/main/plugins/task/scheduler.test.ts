@@ -37,7 +37,7 @@ describe('TaskScheduler', () => {
         description: 'One minute from now',
         nextRunAt
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -74,7 +74,7 @@ describe('TaskScheduler', () => {
         description: 'One second from now',
         nextRunAt
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -136,7 +136,7 @@ describe('TaskScheduler', () => {
         description: 'Ten seconds from now',
         nextRunAt
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -188,7 +188,7 @@ describe('TaskScheduler', () => {
         description: 'Already due',
         nextRunAt: '2026-06-05T00:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -237,7 +237,7 @@ describe('TaskScheduler', () => {
         description: 'Already due',
         nextRunAt: '2026-06-05T00:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -289,7 +289,7 @@ describe('TaskScheduler', () => {
         description: 'Already due',
         nextRunAt: '2026-06-05T00:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -338,7 +338,7 @@ describe('TaskScheduler', () => {
         description: 'Every five minutes',
         nextRunAt: '2026-06-06T00:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -377,7 +377,7 @@ describe('TaskScheduler', () => {
         description: 'One second from now',
         nextRunAt
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -424,7 +424,7 @@ describe('TaskScheduler', () => {
         description: 'One second from now',
         nextRunAt: '2026-07-10T00:00:01.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',

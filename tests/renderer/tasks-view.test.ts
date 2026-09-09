@@ -27,7 +27,7 @@ describe('TasksView', () => {
     expect(html).toContain('class="task-board-column-count status-pill info"');
     expect(html).toContain('class="task-board-card-status status-pill info"');
     expect(html).toContain('class="task-board-card-workspace"');
-    expect(html).toContain('F:\\Code\\Roc');
+    expect(html).toContain('/Users/test/Code/Roc');
   });
 
   it('renders empty lane states without removing the four task columns', () => {
@@ -83,7 +83,7 @@ function createActiveTask(input: Pick<ActiveTaskItem, 'taskId' | 'threadId' | 'g
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z'
   };

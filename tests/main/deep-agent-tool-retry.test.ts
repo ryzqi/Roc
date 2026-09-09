@@ -190,7 +190,7 @@ function createBuildInput(): DeepAgentBuildInput {
   return {
     snapshot: createDeepAgentTestSnapshot({
       capabilityManifest,
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     }),
     model: {} as never,
     systemPrompt: 'system',

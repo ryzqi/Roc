@@ -36,17 +36,17 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
         themeSource: 'system'
       },
       workspace: {
-        selectedPath: 'F:\\Code\\Roc',
+        selectedPath: '/Users/test/Code/Roc',
         label: 'Roc'
       },
       paths: {
-        root: 'F:\\Code\\Roc',
-        configDir: 'F:\\Code\\Roc\\.tmp',
-        memoryDir: 'F:\\Code\\Roc\\.tmp\\memory',
-        logsDir: 'F:\\Code\\Roc\\.tmp\\logs',
-        diagnosticsDir: 'F:\\Code\\Roc\\.tmp\\diagnostics',
-        skillsDir: 'F:\\Code\\Roc\\skills',
-        artifactsDir: 'F:\\Code\\Roc\\.artifacts'
+        root: '/Users/test/Code/Roc',
+        configDir: '/Users/test/Code/Roc/.tmp',
+        memoryDir: '/Users/test/Code/Roc/.tmp/memory',
+        logsDir: '/Users/test/Code/Roc/.tmp/logs',
+        diagnosticsDir: '/Users/test/Code/Roc/.tmp/diagnostics',
+        skillsDir: '/Users/test/Code/Roc/skills',
+        artifactsDir: '/Users/test/Code/Roc/.artifacts'
       },
       services: {},
       defaultModelConfigured: true,
@@ -73,7 +73,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       threads: []
     },
     memoryStatus: {
-      root: 'F:\\Code\\Roc\\.memory',
+      root: '/Users/test/Code/Roc/.memory',
       workspaceHash: null,
       workspaceLabel: null,
       files: [],

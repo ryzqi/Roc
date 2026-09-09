@@ -4,7 +4,7 @@ import { createRTKMiddleware } from '../../src/rtk-integration/middleware';
 
 function createAvailableManager() {
   return {
-    getRTKBinaryPath: () => '/Users/test/Projects/Roc\\resources\\rtk-binaries\\darwin-x64\\rtk',
+    getRTKBinaryPath: () => '/Users/test/Projects/Roc/resources/rtk-binaries/darwin-x64/rtk',
     isRTKAvailable: () => true
   };
 }

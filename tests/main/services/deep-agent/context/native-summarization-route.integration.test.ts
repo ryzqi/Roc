@@ -89,7 +89,7 @@ describe('Deep Agents native summarization route integration', () => {
           capabilityManifest,
           runId: 'run_real_subagent_route',
           threadId: 'thread_real_subagent_route',
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           workspaceHash: 'workspace_real_subagent_route',
           budget: { contextBudgetTokens: 500 }
         }),

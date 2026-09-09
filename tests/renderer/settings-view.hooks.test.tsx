@@ -143,7 +143,7 @@ describe('SettingsView hooks', () => {
 
 function buildHookSettings(): RocHookConfigSnapshot {
   return {
-    configPath: 'C:\\Users\\me\\.roc\\hooks.json',
+    configPath: '/Users/test/Users/me/.roc/hooks.json',
     exists: true,
     config: {
       schemaVersion: 1,

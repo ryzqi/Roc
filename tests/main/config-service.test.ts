@@ -122,7 +122,7 @@ describe('ConfigService unified settings document', () => {
   it('migrates legacy v1 split config files into schemaVersion 4 settings.json with safeStorage credentials', () => {
     const legacyV1Settings = {
       schemaVersion: 1 as const,
-      defaultWorkspace: 'F:\\Code\\Roc',
+      defaultWorkspace: '/Users/test/Code/Roc',
       startup: {
         openAtLogin: true,
         minimizeToTray: false
@@ -194,7 +194,7 @@ describe('ConfigService unified settings document', () => {
     expect(document.schemaVersion).toBe(4);
     expect(document.settings).toMatchObject({
       schemaVersion: 2,
-      defaultWorkspace: 'F:\\Code\\Roc',
+      defaultWorkspace: '/Users/test/Code/Roc',
       startup: { openAtLogin: true, minimizeToTray: false },
       globalHotkey: null,
       memory: defaultSettings.memory

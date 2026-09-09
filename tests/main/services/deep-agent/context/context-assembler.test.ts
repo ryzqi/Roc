@@ -9,7 +9,7 @@ describe('assembleContextHarness', () => {
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       memorySources: ['/memory/global/AGENTS.md'],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
@@ -38,7 +38,7 @@ describe('assembleContextHarness', () => {
     expect(harness.skillSources).toEqual([]);
     expect(harness.memorySources).toEqual(['/memory/global/AGENTS.md']);
     expect(harness.workspaceIdentity).toMatchObject({
-      path: 'F:\\Code\\Roc'
+      path: '/Users/test/Code/Roc'
     });
   });
 
@@ -75,7 +75,7 @@ describe('assembleContextHarness', () => {
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
@@ -111,7 +111,7 @@ describe('assembleContextHarness', () => {
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
@@ -144,7 +144,7 @@ describe('assembleContextHarness', () => {
       mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),

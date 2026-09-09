@@ -28,7 +28,7 @@ describe('shared task contracts', () => {
         description: 'run once',
         nextRunAt: 'tomorrow'
       },
-      workspacePath: 'C:\\workspace',
+      workspacePath: '/Users/test/workspace',
       allowedActions: ['read'],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -56,7 +56,7 @@ describe('shared task contracts', () => {
       triggerDescription: 'run once',
       nextRunAt: timestamp,
       cronExpression: null,
-      workspacePath: 'C:\\workspace',
+      workspacePath: '/Users/test/workspace',
       allowedActions: ['read'],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',

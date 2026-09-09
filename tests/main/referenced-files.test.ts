@@ -69,7 +69,7 @@ describe('loadReferencedFileContexts', () => {
 
   it('rejects escapes out of the workspace and absolute paths', () => {
     const contexts = loadReferencedFileContexts({
-      userInput: `读 @../outside.txt 和 @/etc/hosts 和 @C:\\Windows\\win.ini`,
+      userInput: '读 @../outside.txt 和 @/etc/hosts 和 @/Users/test/system.ini',
       workspacePath
     });
 

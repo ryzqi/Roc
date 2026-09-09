@@ -23,19 +23,19 @@ describe('WorkspaceChangeWatcherService', () => {
       })
     });
 
-    service.setWorkspace('F:\\Code\\Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
     const watcherCallback = watcherCallbackRef.current;
     if (watcherCallback === null) {
       throw new Error('workspace watcher was not registered');
     }
 
-    watcherCallback('rename', 'src\\new-file.ts');
-    watcherCallback('change', 'src\\new-file.ts');
+    watcherCallback('rename', 'src/new-file.ts');
+    watcherCallback('change', 'src/new-file.ts');
     await vi.advanceTimersByTimeAsync(25);
 
     expect(changes).toEqual([
       {
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         relativePath: 'src/new-file.ts',
         eventType: 'change'
       }
@@ -64,19 +64,19 @@ describe('WorkspaceChangeWatcherService', () => {
       })
     });
 
-    service.setWorkspace('F:\\Code\\Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
     const watcherCallback = watcherCallbackRef.current;
     if (watcherCallback === null) {
       throw new Error('workspace watcher was not registered');
     }
 
-    watcherCallback('change', 'node_modules\\pkg\\index.js');
-    watcherCallback('change', '.git\\index');
+    watcherCallback('change', 'node_modules/pkg/index.js');
+    watcherCallback('change', '.git/index');
     await vi.advanceTimersByTimeAsync(25);
 
     expect(changes).toEqual([
       {
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         relativePath: '.git/index',
         eventType: 'change'
       }
@@ -98,8 +98,8 @@ describe('WorkspaceChangeWatcherService', () => {
       watch
     });
 
-    service.setWorkspace('F:\\Code\\Roc');
-    service.setWorkspace('F:\\Code\\Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
 
     expect(watch).toHaveBeenCalledTimes(2);
     service.shutdown();
@@ -124,20 +124,20 @@ describe('WorkspaceChangeWatcherService', () => {
       watch
     });
 
-    service.setWorkspace('F:\\Code\\Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
     const errorListener = errorListenerRef.current;
     if (errorListener === null) {
       throw new Error('watcher error listener was not registered');
     }
 
     errorListener(new Error('permission changed'));
-    service.setWorkspace('F:\\Code\\Roc');
+    service.setWorkspace('/Users/test/Code/Roc');
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       'Workspace change watcher failed after start.',
       expect.objectContaining({
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         error: 'permission changed'
       })
     );

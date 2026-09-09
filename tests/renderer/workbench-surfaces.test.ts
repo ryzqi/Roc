@@ -18,13 +18,13 @@ describe('workbench surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           fileTree: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             relativePath: '',
             truncated: false,
             entries: [
@@ -62,13 +62,13 @@ describe('workbench surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           fileTree: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             relativePath: '',
             truncated: false,
             entries: [
@@ -139,13 +139,13 @@ describe('workbench surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           gitStatus: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             isRepository: true,
             branch: 'main',
             porcelain: [' M README.md'],
@@ -229,7 +229,7 @@ describe('workbench surfaces', () => {
           ]
         } as never,
         selectionPreview: {
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           relativePath: 'src/renderer/App.tsx',
           patch:
             'diff --git a/src/renderer/App.tsx b/src/renderer/App.tsx\n--- a/src/renderer/App.tsx\n+++ b/src/renderer/App.tsx\n@@ -1 +1 @@\n-old\n+new\n'
@@ -261,7 +261,7 @@ describe('workbench surfaces', () => {
         selectionPreview: null,
         state: createLoadedState({
           gitStatus: {
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             isRepository: true,
             branch: 'main',
             porcelain: [' M README.md'],
@@ -289,14 +289,14 @@ describe('workbench surfaces', () => {
         state: createLoadedState({
           workspace: {
             id: 'workspace-1',
-            path: 'F:\\Code\\Roc',
+            path: '/Users/test/Code/Roc',
             displayName: 'Roc',
             lastOpenedAt: '2026-05-16T08:00:00.000Z',
             trustState: 'trusted'
           },
           terminalSession: {
             id: 'terminal-1',
-            cwd: 'F:\\Code\\Roc',
+            cwd: '/Users/test/Code/Roc',
             shell: 'zsh',
             cols: 120,
             rows: 32,
@@ -312,6 +312,5 @@ describe('workbench surfaces', () => {
     expect(html).toContain('data-testid="terminal-xterm"');
     expect(html).toContain('data-session-id="terminal-1"');
     expect(html).toContain('workbench-surface--terminal');
-    expect(html).not.toContain('PowerShell');
   });
 });

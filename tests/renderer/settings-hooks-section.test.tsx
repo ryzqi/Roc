@@ -181,7 +181,7 @@ describe('HooksSection', () => {
 
 function buildSnapshot(input: Partial<RocHookConfigSnapshot> = {}): RocHookConfigSnapshot {
   return {
-    configPath: 'C:\\Users\\me\\.roc\\hooks.json',
+    configPath: '/Users/test/Users/me/.roc/hooks.json',
     exists: true,
     config: {
       schemaVersion: 1,

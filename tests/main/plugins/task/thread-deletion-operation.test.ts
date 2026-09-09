@@ -85,7 +85,7 @@ function createPreview() {
       description: 'Run once',
       nextRunAt: '2026-08-20T00:00:00.000Z'
     },
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     allowedActions: [],
     forbiddenActions: [],
     notificationPolicy: 'failures_and_confirmations' as const,

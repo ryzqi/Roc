@@ -25,7 +25,7 @@ const previewRequest: BackgroundTaskPreviewRequest = {
     type: 'manual',
     description: 'Manual'
   },
-  workspacePath: 'F:\\Code\\Roc',
+  workspacePath: '/Users/test/Code/Roc',
   allowedActions: [],
   forbiddenActions: [],
   failurePolicy: 'pause_and_report',
@@ -222,7 +222,7 @@ describe('task plugin', () => {
       },
       taskSource: 'workbench',
       threadId: task.threadId,
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
     expect(detailDuringRecovery.backgroundTask.lastRunStatus).toBeNull();
     expect(detailDuringRecovery.runHistory[0]).toMatchObject({

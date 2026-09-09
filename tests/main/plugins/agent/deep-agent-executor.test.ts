@@ -103,7 +103,7 @@ describe('createAgentDeepAgentExecutor', () => {
             id: 'python-expert',
             name: 'python-expert',
             enabled: true,
-            path: 'F:\\Code\\Roc\\.roc\\skills\\python-expert',
+            path: '/Users/test/Code/Roc/.roc/skills/python-expert',
             description: 'Python expertise',
             status: 'ready',
             lastError: null
@@ -112,7 +112,7 @@ describe('createAgentDeepAgentExecutor', () => {
             id: 'typescript',
             name: 'typescript',
             enabled: true,
-            path: 'F:\\Code\\Roc\\.roc\\skills\\typescript',
+            path: '/Users/test/Code/Roc/.roc/skills/typescript',
             description: 'TypeScript expertise',
             status: 'ready',
             lastError: null
@@ -272,14 +272,14 @@ describe('createAgentDeepAgentExecutor', () => {
     const result = await invokeTool(tool, {
       question: 'Which workspace should I use?',
       context: 'Two workspaces match.',
-      suggestedResponses: ['F:\\Code\\Roc']
+      suggestedResponses: ['/Users/test/Code/Roc']
     });
 
     expect(interrupt).toHaveBeenCalledWith({
       kind: 'question',
       question: 'Which workspace should I use?',
       context: 'Two workspaces match.',
-      suggestedResponses: ['F:\\Code\\Roc']
+      suggestedResponses: ['/Users/test/Code/Roc']
     });
     expect(result).toBe('Use the Roc workspace.');
   });

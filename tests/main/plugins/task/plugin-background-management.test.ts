@@ -25,7 +25,7 @@ const previewRequest: BackgroundTaskPreviewRequest = {
     type: 'manual',
     description: 'Manual'
   },
-  workspacePath: 'F:\\Code\\Roc',
+  workspacePath: '/Users/test/Code/Roc',
   allowedActions: [],
   forbiddenActions: [],
   failurePolicy: 'pause_and_report',
@@ -162,7 +162,7 @@ function registerWorkspaceGetCurrent(capabilities: CapabilityRegistry): void {
   capabilities.declare('@roc/plugin-workspace', descriptor);
   capabilities.register('@roc/plugin-workspace', descriptor, async () => ({
     id: 'workspace_1',
-    path: 'F:\\Code\\Roc',
+    path: '/Users/test/Code/Roc',
     displayName: 'Roc',
     lastOpenedAt: '2026-06-04T00:00:00.000Z',
     trustState: 'trusted'

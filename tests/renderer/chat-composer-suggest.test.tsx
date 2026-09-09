@@ -26,7 +26,7 @@ Element.prototype.scrollIntoView = function scrollIntoViewStub(
 const workspaceState: Partial<LoadedState> = {
   workspace: {
     id: 'workspace_1',
-    path: 'F:\\Code\\Roc',
+    path: '/Users/test/Code/Roc',
     displayName: 'Roc',
     lastOpenedAt: '2026-08-23T00:00:00.000Z',
     trustState: 'trusted'
@@ -36,7 +36,7 @@ const workspaceState: Partial<LoadedState> = {
       id: 'python-expert',
       name: 'Python 专家',
       enabled: true,
-      path: 'F:\\Code\\Roc\\skills\\python-expert',
+      path: '/Users/test/Code/Roc/skills/python-expert',
       description: 'Python 代码审查与优化',
       status: 'ready'
     },
@@ -44,7 +44,7 @@ const workspaceState: Partial<LoadedState> = {
       id: 'tdd',
       name: 'TDD 流程',
       enabled: true,
-      path: 'F:\\Code\\Roc\\skills\\tdd',
+      path: '/Users/test/Code/Roc/skills/tdd',
       description: '红绿重构',
       status: 'ready'
     }

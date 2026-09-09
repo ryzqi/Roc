@@ -48,7 +48,7 @@ describe('workbench resize separator keyboard controls', () => {
           state={createLoadedState({
             workspace: createWorkspace(),
             fileTree: {
-              workspacePath: 'F:\\Code\\Roc',
+              workspacePath: '/Users/test/Code/Roc',
               relativePath: '',
               truncated: false,
               entries: []
@@ -73,7 +73,7 @@ describe('workbench resize separator keyboard controls', () => {
           state={createLoadedState({
             workspace: createWorkspace(),
             gitStatus: {
-              workspacePath: 'F:\\Code\\Roc',
+              workspacePath: '/Users/test/Code/Roc',
               isRepository: true,
               branch: 'main',
               porcelain: [],
@@ -140,7 +140,7 @@ function keydown(element: HTMLElement, key: string): void {
 function createWorkspace(): NonNullable<ReturnType<typeof createLoadedState>['workspace']> {
   return {
     id: 'workspace-1',
-    path: 'F:\\Code\\Roc',
+    path: '/Users/test/Code/Roc',
     displayName: 'Roc',
     lastOpenedAt: '2026-05-16T08:00:00.000Z',
     trustState: 'trusted'

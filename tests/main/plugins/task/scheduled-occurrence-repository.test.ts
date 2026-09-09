@@ -450,7 +450,7 @@ describe('scheduled occurrence repository', () => {
           nextRunAt: '2026-07-17T00:00:00.000Z',
           type: 'once'
         },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         allowedActions: [],
         forbiddenActions: [],
         failurePolicy: 'pause_and_report',
@@ -514,7 +514,7 @@ function createDueTask(repository: TaskRepository, scheduledAt: string, triggerT
           nextRunAt: scheduledAt,
           type: 'once'
         },
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     allowedActions: [],
     forbiddenActions: [],
     failurePolicy: 'pause_and_report',

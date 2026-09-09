@@ -27,7 +27,7 @@ describe('renderer navigation meta', () => {
           nextRunAt: null,
           lastRunAt: null,
           riskLevel: 'low',
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           createdAt: '2026-06-18T00:00:00.000Z',
           updatedAt: '2026-06-18T00:00:00.000Z'
         }
@@ -42,16 +42,16 @@ describe('renderer navigation meta', () => {
       appStatus: {
         ...createLoadedState({}).appStatus,
         workspace: {
-          selectedPath: 'F:\\Code\\Roc',
-          label: 'F:\\Code\\Roc'
+          selectedPath: '/Users/test/Code/Roc',
+          label: '/Users/test/Code/Roc'
         }
       }
     });
 
     const memoryNav = buildControlNavItems(state).find((item) => item.id === 'memory');
 
-    expect(memoryNav?.meta).toBe('F:\\Code\\Roc');
-    expect(buildTopMeta('memory', state)).toBe('F:\\Code\\Roc');
+    expect(memoryNav?.meta).toBe('/Users/test/Code/Roc');
+    expect(buildTopMeta('memory', state)).toBe('/Users/test/Code/Roc');
   });
 
   it('uses global memory copy when no workspace is selected', () => {

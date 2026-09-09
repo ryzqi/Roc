@@ -118,7 +118,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
       runId: started.runId,
       threadId,
       interruptId: 'interrupt-question',
-      answer: 'F:\\Code\\Roc'
+      answer: '/Users/test/Code/Roc'
     });
     await waitFor(() => runEvents('run_completed').length === 1);
 
@@ -133,7 +133,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
           decisions: [{ type: 'approve' }]
         },
         'interrupt-question': {
-          answer: 'F:\\Code\\Roc'
+          answer: '/Users/test/Code/Roc'
         }
       }
     ]);
@@ -305,7 +305,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
         runId: started.runId,
         threadId,
         interruptId: 'interrupt-audit-commit',
-        answer: 'F:\\Code\\Roc'
+        answer: '/Users/test/Code/Roc'
       })
     ).rejects.toThrow('runtime_resume_audit_commit_failed');
     expect(repository.getRun(started.runId).status).toBe('waiting_user');
@@ -378,7 +378,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
         runId: started.runId,
         threadId,
         interruptId: 'interrupt-question',
-        answer: 'F:\\Code\\Roc'
+        answer: '/Users/test/Code/Roc'
       })
     ).rejects.toThrow('chat_resume_run_not_waiting_user');
     expect(readPendingInterrupts(repository, started.runId).interrupts).toEqual([

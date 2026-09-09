@@ -131,7 +131,7 @@ describe('Deep Agents native summarization conformance', () => {
         threadId: 'thread_native_conformance',
         toolResultPersistChars: 500,
         workspaceHash: 'workspace_native_conformance',
-        workspacePath: 'F:\\Code\\Roc'
+        workspacePath: '/Users/test/Code/Roc'
       });
 
       const nativeText = messageText(deliveredByNative);
@@ -240,7 +240,7 @@ describe('Deep Agents native summarization conformance', () => {
           capabilityManifest,
           runId: 'run_subagent_conformance',
           threadId: 'thread_subagent_conformance',
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           workspaceHash: 'workspace_subagent_conformance',
           budget: { contextBudgetTokens: 500 }
         }),

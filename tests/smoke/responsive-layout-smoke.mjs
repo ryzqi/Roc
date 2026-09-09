@@ -47,7 +47,7 @@ const taskWorkbenchMarkup = `
                   <button class="task-board-card" data-testid="task-board-card-long" type="button">
                     <span class="task-board-card-title">窄屏任务布局回归检查：确认看板卡片和详情页在窗口缩小时不会互相覆盖</span>
                     <span class="task-board-card-meta">pending_confirmation</span>
-                    <span class="task-board-card-meta">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap</span>
+                    <span class="task-board-card-meta">/Users/test/Code/Roc/very/long/workspace/path/that/should/wrap</span>
                   </button>
                 </div>
               </section>
@@ -111,14 +111,14 @@ const taskWorkbenchMarkup = `
                     </div>
                   </section>
                   <form class="task-detail-followup" data-testid="task-detail-followup">
-                    <textarea data-testid="task-detail-followup-input">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap\\inside\\followup</textarea>
+                    <textarea data-testid="task-detail-followup-input">/Users/test/Code/Roc/very/long/workspace/path/that/should/wrap/inside/followup</textarea>
                     <button class="action-button" type="submit">继续任务</button>
                   </form>
                 </div>
                 <aside class="task-detail-side-column">
                   <section class="task-detail-panel task-detail-meta-panel" data-testid="task-detail-meta-panel">
                     <dl class="task-detail-meta-list">
-                      <div class="task-detail-meta-row"><dt>工作区</dt><dd>F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap</dd></div>
+                      <div class="task-detail-meta-row"><dt>工作区</dt><dd>/Users/test/Code/Roc/very/long/workspace/path/that/should/wrap</dd></div>
                       <div class="task-detail-meta-row"><dt>触发器</dt><dd>每天 09:00 · cron</dd></div>
                     </dl>
                   </section>
@@ -214,7 +214,7 @@ const workbenchMarkup = `
           </div>
           <div class="workbench-file-splitter"></div>
           <div class="workbench-content-pane">
-            <div class="pane-header pane-header--content"><span class="pane-path">F:\\Code\\Roc\\very\\long\\file\\path.ts</span></div>
+            <div class="pane-header pane-header--content"><span class="pane-path">/Users/test/Code/Roc/very/long/file/path.ts</span></div>
             <div class="workbench-file-body">
               <pre class="workbench-file-preview">content</pre>
             </div>
@@ -274,7 +274,7 @@ function buildSidebarHistoryMarkup() {
   return `
     <div class="workspace workspace--chat" style="width:320px;height:596px;padding:0;grid-template-columns:220px minmax(0,1fr)">
       <aside class="sidebar">
-        <div class="sidebar-head"><button class="workspace-pill" type="button"><span>F:\\Code\\Roc</span><strong>选择</strong></button></div>
+        <div class="sidebar-head"><button class="workspace-pill" type="button"><span>/Users/test/Code/Roc</span><strong>选择</strong></button></div>
         ${buildDockRowMarkup('nav-chat', '新建对话', null)}
         <div class="sidebar-block sidebar-block--history sidebar-block--history-search">
           <div class="side-title">历史会话</div>

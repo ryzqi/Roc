@@ -23,7 +23,7 @@ describe('agent storage ownership', () => {
   it('keeps operational SQL inside the storage owners', () => {
     const violations: string[] = [];
     for (const filePath of listTypeScriptFiles(sourceRoot)) {
-      const relativePath = relative(sourceRoot, filePath).replaceAll('\\', '/');
+      const relativePath = relative(sourceRoot, filePath);
       if (ownerFiles.has(relativePath)) {
         continue;
       }

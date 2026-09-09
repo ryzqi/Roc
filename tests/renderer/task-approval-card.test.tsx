@@ -23,7 +23,7 @@ describe('TaskApprovalCard', () => {
                     cronExpression: '0 9 * * *',
                     nextRunAt: '2026-05-22T01:00:00.000Z'
                   },
-                  workspacePath: 'F:\\Code\\Roc',
+                  workspacePath: '/Users/test/Code/Roc',
                   allowedActions: ['pnpm test'],
                   forbiddenActions: ['git push']
                 },

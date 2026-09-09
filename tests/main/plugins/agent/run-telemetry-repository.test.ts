@@ -34,7 +34,7 @@ describe('AgentRunTelemetryRepository', () => {
       updated_at: '2026-07-26T01:02:03.000Z'
     });
     expect(persisted.telemetry_json).not.toContain('secret-user-input');
-    expect(persisted.telemetry_json).not.toContain('F:\\private\\workspace');
+    expect(persisted.telemetry_json).not.toContain('/Users/test/private/workspace');
   });
 
   it('rejects unknown fields instead of persisting arbitrary content', () => {

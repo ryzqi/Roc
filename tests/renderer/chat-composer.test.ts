@@ -35,7 +35,7 @@ describe('chat composer skills popover', () => {
               id: 'deep-review',
               name: 'Deep Review',
               enabled: true,
-              path: 'F:\\Code\\Roc\\skills\\deep-review',
+              path: '/Users/test/Code/Roc/skills/deep-review',
               description: '只保留这一段说明文本。',
               status: 'ready',
               lastError: null
@@ -425,7 +425,7 @@ function createSkill(): LoadedState['skills'][number] {
     id: 'deep-review',
     name: 'Deep Review',
     enabled: true,
-    path: 'F:\\Code\\Roc\\skills\\deep-review',
+    path: '/Users/test/Code/Roc/skills/deep-review',
     description: '只保留这一段说明文本。',
     status: 'ready',
     lastError: null

@@ -69,7 +69,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     snapshot: createDeepAgentTestSnapshot({
       capabilityManifest,
       workflowHint: 'propose_background_task',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       budget: { contextBudgetTokens: 4096 }
     }),
     model: 'model-ready' as never,

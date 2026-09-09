@@ -7,7 +7,7 @@ import { SkillsView, buildSkillManagementViewModel } from '../../src/renderer/sk
 function createSkill(overrides: Partial<SkillSnapshot> & Pick<SkillSnapshot, 'id' | 'name'>): SkillSnapshot {
   return {
     enabled: true,
-    path: `F:\\Code\\Roc\\skills\\${overrides.id}`,
+    path: `/Users/test/Code/Roc/skills/${overrides.id}`,
     description: `${overrides.name} 描述`,
     status: 'ready',
     lastError: null,
@@ -63,7 +63,7 @@ describe('skills view', () => {
               id: 'smoke-skill',
               name: 'Smoke Skill',
               description: '用于 smoke 的技能说明。',
-              path: 'F:\\Code\\Roc\\skills\\smoke-skill'
+              path: '/Users/test/Code/Roc/skills/smoke-skill'
             }),
             createSkill({
               id: 'broken-skill',
@@ -96,7 +96,7 @@ describe('skills view', () => {
     expect(html).toContain('missing dependency');
 
     expect(html).not.toContain('Skill 总数');
-    expect(html).not.toContain('F:\\Code\\Roc\\skills\\smoke-skill');
+    expect(html).not.toContain('/Users/test/Code/Roc/skills/smoke-skill');
     expect(html).not.toContain('data-testid="skill-toggle-smoke-skill"');
     expect(html).not.toContain('data-testid="skill-delete-smoke-skill"');
     expect(html).not.toContain('data-testid="skill-drawer"');

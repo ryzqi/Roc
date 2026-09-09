@@ -117,7 +117,7 @@ describe('prepareChatImageAttachments', () => {
           name: 'ambiguous.png',
           mediaType: 'image/png',
           sizeBytes: 1,
-          path: 'C:\\tmp\\ambiguous.png',
+          path: '/Users/test/tmp/ambiguous.png',
           data: Buffer.from([1]).toString('base64')
         }
       ])

@@ -10,7 +10,7 @@ import { createLoadedState } from './view-test-helpers';
 
 const workspace: Workspace = {
   id: 'workspace-1',
-  path: 'F:\\Code\\Roc',
+  path: '/Users/test/Code/Roc',
   displayName: 'Roc',
   lastOpenedAt: '2026-05-16T08:00:00.000Z',
   trustState: 'trusted'

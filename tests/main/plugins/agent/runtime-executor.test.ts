@@ -248,7 +248,7 @@ describe('AgentPluginRuntime', () => {
       repository,
       workspaceProvider: async () => ({
         id: 'workspace-secret',
-        path: 'F:\\private\\workspace',
+        path: '/Users/test/private/workspace',
         displayName: 'Secret workspace',
         lastOpenedAt: '2026-07-26T00:00:00.000Z',
         trustState: 'trusted'
@@ -259,7 +259,7 @@ describe('AgentPluginRuntime', () => {
       ...startRequest,
       input: 'secret-user-input',
       taskSource: 'workbench',
-      workspacePath: 'F:\\private\\workspace'
+      workspacePath: '/Users/test/private/workspace'
     });
 
     await waitForEvent(() => repository.getRun(result.runId).status === 'completed');
@@ -315,7 +315,7 @@ describe('AgentPluginRuntime', () => {
       .pluck()
       .get(result.runId) as string;
     expect(telemetryJson).not.toContain('secret-user-input');
-    expect(telemetryJson).not.toContain('F:\\private\\workspace');
+    expect(telemetryJson).not.toContain('/Users/test/private/workspace');
     expect(telemetryJson).not.toContain('secret-tool-error');
     expect(telemetryJson).not.toContain('secret-subagent-task');
     expect(telemetryJson).not.toContain('secret-subagent-error');
@@ -372,7 +372,7 @@ describe('AgentPluginRuntime', () => {
       repository,
       workspaceProvider: async () => ({
         id: 'workspace-roc',
-        path: 'F:\\Code\\Roc',
+        path: '/Users/test/Code/Roc',
         displayName: 'Roc',
         lastOpenedAt: '2026-07-15T00:00:00.000Z',
         trustState: 'trusted'
@@ -382,7 +382,7 @@ describe('AgentPluginRuntime', () => {
     const result = await runtime.startRun({
       ...startRequest,
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\ScheduledTask'
+      workspacePath: '/Users/test/Code/ScheduledTask'
     });
 
     await waitForEvent(() =>
@@ -394,7 +394,7 @@ describe('AgentPluginRuntime', () => {
         type: 'agent.run.completed',
         payload: expect.objectContaining({
           runId: result.runId,
-          workspacePath: 'F:\\Code\\ScheduledTask'
+          workspacePath: '/Users/test/Code/ScheduledTask'
         })
       })
     );
@@ -713,7 +713,7 @@ describe('AgentPluginRuntime', () => {
       repository,
       workspaceProvider: async () => ({
         id: 'workspace-roc',
-        path: 'F:\\Code\\Roc',
+        path: '/Users/test/Code/Roc',
         displayName: 'Roc',
         lastOpenedAt: '2026-07-15T00:00:00.000Z',
         trustState: 'trusted'
@@ -738,7 +738,7 @@ describe('AgentPluginRuntime', () => {
       runId: start.runId,
       threadId: start.threadId!,
       interruptId: 'interrupt-question',
-      answer: 'Use F:\\Code\\Roc.'
+      answer: 'Use /Users/test/Code/Roc.'
     });
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
@@ -746,12 +746,12 @@ describe('AgentPluginRuntime', () => {
 
     expect(requests.map((request) => request.mode)).toEqual(['plan', 'plan']);
     expect(requests[1]).toMatchObject({
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       explicitSkillIds: ['typescript']
     });
     expect(resumePayloads[1]).toEqual({
       'interrupt-question': {
-        answer: 'Use F:\\Code\\Roc.'
+        answer: 'Use /Users/test/Code/Roc.'
       }
     });
     expect(repository.getRunTelemetry(start.runId)?.model).toEqual({

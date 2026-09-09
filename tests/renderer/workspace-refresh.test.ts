@@ -11,7 +11,7 @@ import {
 
 const workspace: Workspace = {
   id: 'workspace-1',
-  path: 'F:\\Code\\Roc',
+  path: '/Users/test/Code/Roc',
   displayName: 'Roc',
   lastOpenedAt: '2026-05-20T00:00:00.000Z',
   trustState: 'trusted'

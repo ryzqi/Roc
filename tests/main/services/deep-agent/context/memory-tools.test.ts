@@ -64,7 +64,7 @@ describe('createRememberTool', () => {
       },
       runId: 'run_1',
       threadId: 'thread_1',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
 
     const parsed = JSON.parse(
@@ -87,7 +87,7 @@ describe('createRememberTool', () => {
         evidence: ['user stated: I prefer Python'],
         sourceRunId: 'run_1',
         sourceThreadId: 'thread_1',
-        workspacePath: 'F:\\Code\\Roc'
+        workspacePath: '/Users/test/Code/Roc'
       }
     ]);
     expect(parsed).toEqual({

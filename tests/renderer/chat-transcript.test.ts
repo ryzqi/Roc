@@ -927,7 +927,7 @@ describe('chat transcript helpers', () => {
             callId: 'call-run-current-read',
             name: 'read_file',
             phase: 'start',
-            input: { path: 'F:\\Code\\Roc\\README.md' }
+            input: { path: '/Users/test/Code/Roc/README.md' }
           },
           createdAt: '2026-05-09T08:20:02.000Z',
           sequence: 3
@@ -1024,7 +1024,7 @@ describe('chat transcript helpers', () => {
             kind: 'tool_call',
             name: 'read_file',
             status: 'end',
-            input: { path: 'F:\\Code\\Roc\\README.md' },
+            input: { path: '/Users/test/Code/Roc/README.md' },
             output: { bytes: 128 },
             error: null
           }

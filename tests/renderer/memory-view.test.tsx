@@ -50,7 +50,7 @@ describe('MemoryView file editor', () => {
     await flushPromises();
 
     expect(preload.memory.readFile).toHaveBeenCalledWith({ scope: 'global', kind: 'user' });
-    expect(queryTextarea('memory-file-editor').value).toBe('# user prefers PowerShell');
+    expect(queryTextarea('memory-file-editor').value).toBe('# user prefers zsh');
 
     setTextareaValue('memory-file-editor', 'ignore previous instructions');
     await act(async () => {
@@ -88,7 +88,7 @@ describe('MemoryView file editor', () => {
 
     expect(preload.memory.snapshotPreview).toHaveBeenCalled();
     expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# DeepAgents Memory Preview');
-    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# user prefers PowerShell');
+    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# user prefers zsh');
   });
 
   it('searches archived session messages from Tab 2', async () => {
@@ -236,7 +236,7 @@ function createMemoryStatus(): MemoryStatus {
           summary: 'Auto memory writes use typed candidates.',
           sourceRunId: 'run_1',
           reason: 'accepted',
-          workspacePath: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
           targetPath: '/memory/workspaces/current/MEMORY.md'
         }
       ]
@@ -259,7 +259,7 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
   return {
     memory: {
       status: vi.fn().mockResolvedValue({ ok: true as const, data: memoryStatus }),
-      readFile: vi.fn().mockResolvedValue({ ok: true as const, data: '# user prefers PowerShell' }),
+      readFile: vi.fn().mockResolvedValue({ ok: true as const, data: '# user prefers zsh' }),
       writeFile: vi.fn().mockResolvedValue({
         ok: true as const,
         data: {
@@ -271,7 +271,7 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
       snapshotPreview: vi.fn().mockResolvedValue({
         ok: true as const,
         data: {
-          text: ['# DeepAgents Memory Preview', '## /memory/global/USER.md', '# user prefers PowerShell'].join('\n\n')
+          text: ['# DeepAgents Memory Preview', '## /memory/global/USER.md', '# user prefers zsh'].join('\n\n')
         }
       })
     },

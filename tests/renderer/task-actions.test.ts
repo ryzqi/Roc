@@ -151,7 +151,7 @@ function createBackgroundItem(partial: Partial<ActiveTaskItem>): ActiveTaskItem 
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z',
     ...partial

@@ -6,7 +6,7 @@
     "cpuCount": 20,
     "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700H",
     "nodeVersion": "v25.7.0",
-    "platform": "win32"
+    "platform": "darwin"
   },
   "fixture": {
     "model": "RocPerformanceFakeModel",

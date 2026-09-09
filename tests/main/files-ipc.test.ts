@@ -21,7 +21,7 @@ describe('files IPC', () => {
       {
         getCurrentWorkspace: () => ({
           id: 'workspace_1',
-          path: 'C:\\roc-smoke-workspace',
+          path: '/Users/test/roc-smoke-workspace',
           displayName: 'roc-smoke-workspace',
           lastOpenedAt: '2026-07-03T00:00:00.000Z',
           trustState: 'trusted'
@@ -34,7 +34,7 @@ describe('files IPC', () => {
     expect(result).toEqual({
       ok: true,
       data: {
-        filePaths: ['C:\\roc-smoke-workspace\\assets\\smoke-image.png']
+        filePaths: ['/Users/test/roc-smoke-workspace/assets/smoke-image.png']
       }
     });
   });

@@ -78,7 +78,7 @@ describe('context-summary', () => {
       ],
       recentMessages: [new AIMessage({ id: 'recent-ai', content: 'Recent analysis' })],
       userConstraints: ['Use DeepAgents native features first.'],
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
 
     expect(prompt).toContain('Summarize old Roc runtime context.');
@@ -93,7 +93,7 @@ describe('context-summary', () => {
   it('converts a valid summary to a protected context digest message', () => {
     const digest = contextSummaryToDigestMessage({
       goal: 'Finish context pipeline.',
-      facts: ['Workspace is F:\\Code\\Roc.'],
+      facts: ['Workspace is /Users/test/Code/Roc.'],
       decisions: ['Use artifact store.'],
       filesTouched: ['src/main/services/deep-agent/context/context-artifact-store.ts'],
       toolEvidence: ['read_file showed existing context digest.'],
@@ -103,7 +103,7 @@ describe('context-summary', () => {
     });
 
     expect(isContextDigestMessage(digest)).toBe(true);
-    expect(String(digest.content)).toContain('Workspace is F:\\Code\\Roc.');
+    expect(String(digest.content)).toContain('Workspace is /Users/test/Code/Roc.');
     expect(String(digest.content)).toContain('Use artifact store.');
     expect(String(digest.content)).toContain('read_file showed existing context digest.');
   });

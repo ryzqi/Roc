@@ -11,7 +11,7 @@ describe('WindowWorkband', () => {
       appStatus: {
         ...createLoadedState({}).appStatus,
         workspace: {
-          selectedPath: 'F:\\Code\\Roc',
+          selectedPath: '/Users/test/Code/Roc',
           label: 'Roc'
         }
       },

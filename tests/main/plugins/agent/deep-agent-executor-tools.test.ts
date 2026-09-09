@@ -171,14 +171,14 @@ describe('createAgentDeepAgentExecutor', () => {
     });
 
     const output = await invokeTool(findTool(readBuiltTools(), 'run_shell_command'), {
-      command: 'python .\\create_docx.py'
+      command: 'python ./create_docx.py'
     });
 
     expect(output).toContain('"exitCode": 0');
     expect(capabilityCalls).toContainEqual({
       name: 'shell.execute',
       input: {
-        command: 'python .\\create_docx.py',
+        command: 'python ./create_docx.py',
         cwd: workspacePath,
         source: 'agent',
         runId: 'run-1',

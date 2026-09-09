@@ -146,8 +146,7 @@ function readFlags(args: readonly string[], expectedFlags: readonly string[]): M
 
 function resolvePath(value: string | undefined): string {
   const argument = requireArgument(value);
-  const normalized = argument.replaceAll('\\', '/');
-  if (normalized === '/workspace' || normalized.startsWith('/workspace/')) {
+  if (argument === '/workspace' || argument.startsWith('/workspace/')) {
     throw new Error('database_maintenance_workspace_path_invalid');
   }
   return resolve(argument);

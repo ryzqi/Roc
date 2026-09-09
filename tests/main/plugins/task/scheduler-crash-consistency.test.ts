@@ -66,7 +66,7 @@ describe('TaskScheduler crash consistency characterization', () => {
         description: 'One second from now',
         nextRunAt: '2026-07-15T00:00:01.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: ['git status'],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -155,7 +155,7 @@ describe('TaskScheduler crash consistency characterization', () => {
           description: 'Already due',
           nextRunAt: '2026-07-15T00:00:00.000Z'
         },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         allowedActions: [],
         forbiddenActions: [],
         failurePolicy: 'pause_and_report',
@@ -247,7 +247,7 @@ describe('TaskScheduler crash consistency characterization', () => {
           description: 'One second from now',
           nextRunAt: '2026-07-15T00:00:01.000Z'
         },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         allowedActions: [],
         forbiddenActions: [],
         failurePolicy: 'pause_and_report',
@@ -368,7 +368,7 @@ describe('TaskScheduler crash consistency characterization', () => {
           description: 'One second from now',
           nextRunAt: '2026-07-15T00:00:01.000Z'
         },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         allowedActions: [],
         forbiddenActions: [],
         failurePolicy: 'pause_and_report',

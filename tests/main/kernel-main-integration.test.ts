@@ -398,7 +398,7 @@ function collectRelativeFiles(base: string, current: string, entries: string[]):
       continue;
     }
     if (statSync(absolutePath).isFile()) {
-      entries.push(relative(base, absolutePath).replaceAll('\\', '/'));
+      entries.push(relative(base, absolutePath));
     }
   }
 }

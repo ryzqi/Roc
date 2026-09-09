@@ -22,7 +22,7 @@ const manualPreviewRequest: BackgroundTaskPreviewRequest = {
     type: 'manual',
     description: 'Run when requested'
   },
-  workspacePath: 'F:\\Code\\Roc',
+  workspacePath: '/Users/test/Code/Roc',
   allowedActions: [],
   forbiddenActions: [],
   failurePolicy: 'pause_and_report',

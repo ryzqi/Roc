@@ -207,7 +207,7 @@ describe('ChatFeature', () => {
     vi.mocked(client.api.files.selectFromDialog).mockResolvedValue({
       ok: true,
       data: {
-        filePaths: ['F:\\Code\\Roc\\chart.png']
+        filePaths: ['/Users/test/Code/Roc/chart.png']
       }
     });
 
@@ -250,7 +250,7 @@ describe('ChatFeature', () => {
           source: 'file',
           name: 'chart.png',
           mediaType: 'image/png',
-          path: 'F:\\Code\\Roc\\chart.png'
+          path: '/Users/test/Code/Roc/chart.png'
         })
       ]
     });

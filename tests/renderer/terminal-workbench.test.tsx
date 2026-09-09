@@ -108,7 +108,7 @@ describe('TerminalWorkbench', () => {
 function createWorkspace(): NonNullable<ReturnType<typeof createLoadedState>['workspace']> {
   return {
     id: 'workspace-1',
-    path: 'F:\\Code\\Roc',
+    path: '/Users/test/Code/Roc',
     displayName: 'Roc',
     lastOpenedAt: '2026-06-04T00:00:00.000Z',
     trustState: 'trusted'
@@ -118,7 +118,7 @@ function createWorkspace(): NonNullable<ReturnType<typeof createLoadedState>['wo
 function createTerminalSession(id: string): TerminalSessionSnapshot {
   return {
     id,
-    cwd: 'F:\\Code\\Roc',
+    cwd: '/Users/test/Code/Roc',
     shell: 'zsh',
     cols: 80,
     rows: 24,

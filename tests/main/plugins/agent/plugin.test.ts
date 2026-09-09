@@ -83,7 +83,7 @@ describe('agent plugin manifest', () => {
     const plugin = createAgentPlugin({
       deepAgentExecutor: {
         memoryStore: {} as BaseStore,
-        paths: new RocPaths('F:\\Code\\Roc')
+        paths: new RocPaths('/Users/test/Code/Roc')
       }
     });
 
@@ -108,7 +108,7 @@ describe('agent plugin manifest', () => {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
           memoryStore: new RocSqliteStore(memoryDb),
-          paths: new RocPaths('F:\\Code\\Roc')
+          paths: new RocPaths('/Users/test/Code/Roc')
         }
       });
 
@@ -145,7 +145,7 @@ describe('agent plugin manifest', () => {
       const agentPlugin = createAgentPlugin({
         deepAgentExecutor: {
           memoryStore: {} as BaseStore,
-          paths: new RocPaths('F:\\Code\\Roc')
+          paths: new RocPaths('/Users/test/Code/Roc')
         }
       });
       const loader = new PluginLoader({
@@ -227,7 +227,7 @@ describe('agent plugin manifest', () => {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
           memoryStore: new RocSqliteStore(memoryDb),
-          paths: new RocPaths('F:\\Code\\Roc')
+          paths: new RocPaths('/Users/test/Code/Roc')
         }
       });
       const context = createContext(agentDb, memoryDb, taskDb, coreDb);
@@ -262,7 +262,7 @@ describe('agent plugin manifest', () => {
           type: 'manual',
           description: 'Run when requested'
         },
-        workspacePath: 'F:\\Code\\Roc',
+        workspacePath: '/Users/test/Code/Roc',
         allowedActions: [],
         forbiddenActions: [],
         failurePolicy: 'pause_and_report',

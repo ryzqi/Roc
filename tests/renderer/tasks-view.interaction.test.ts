@@ -115,7 +115,7 @@ describe('TasksView interactions', () => {
             selectedSkills: ['task-planner'],
             workspace: {
               id: 'workspace-1',
-              path: 'F:\\Code\\Roc',
+              path: '/Users/test/Code/Roc',
               displayName: 'Roc',
               trustState: 'trusted',
               lastOpenedAt: '2026-05-21T00:00:00.000Z'
@@ -149,7 +149,7 @@ describe('TasksView interactions', () => {
       input: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
       workflowHint: 'propose_background_task',
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
     expect(preload.chat.startRun).not.toHaveBeenCalled();
     expect(preload.tasks.createBackgroundTaskPreview).not.toHaveBeenCalled();
@@ -317,7 +317,7 @@ function createActiveTask(input: {
     nextRunAt: input.nextRunAt ?? null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z'
   };

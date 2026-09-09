@@ -399,7 +399,7 @@ describe('Deep Agents middleware overlap conformance', () => {
     const registerTask = vi.fn();
     const scheduleTool = createBackgroundTaskTools({
       previewStore: new PreviewStore(),
-      runtimeWorkspacePath: 'F:\\Code\\Roc',
+      runtimeWorkspacePath: '/Users/test/Code/Roc',
       taskAdapter: {
         createBackgroundTaskPreview: async () => {
           throw new Error('unexpected_preview');
@@ -787,7 +787,7 @@ function createTestAgent(input: {
       capabilityManifest: manifestFor(input.manifestTools),
       runId: input.runId,
       threadId: input.threadId,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       budget: {
         contextBudgetTokens: null
       }

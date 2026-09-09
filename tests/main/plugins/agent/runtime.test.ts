@@ -235,7 +235,7 @@ describe('AgentPluginRuntime', () => {
     const result = await runtime.startRun({
       ...startRequest,
       taskSource: 'background_schedule',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
     const run = repository.getRun(result.runId);
     const snapshot = repository.getRunExecutionSnapshot(result.runId);
@@ -265,7 +265,7 @@ describe('AgentPluginRuntime', () => {
       ...startRequest,
       dispatchKey: 'background_1:2026-07-17T00:00:00.000Z:1',
       taskSource: 'background_schedule' as const,
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     };
 
     const first = await runtime.startRun(request);
@@ -402,10 +402,10 @@ describe('AgentPluginRuntime', () => {
           cancelSource: null
         }
       }),
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
 
-    expect(result.message.workspaceHash).toBe(buildWorkspaceHash('F:\\Code\\Roc'));
+    expect(result.message.workspaceHash).toBe(buildWorkspaceHash('/Users/test/Code/Roc'));
     expect(repository.listThreadEvents(run.threadId)).toContainEqual(
       expect.objectContaining({
         runId: run.id,
@@ -1069,7 +1069,7 @@ function capabilityPreview(
       id,
       name: id,
       enabled: true,
-      path: `F:\\skills\\${id}`,
+      path: `/Users/test/skills/${id}`,
       description: `${id} skill`,
       status: 'ready' as const
     }))

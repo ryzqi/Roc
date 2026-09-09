@@ -31,7 +31,7 @@ export function createTestCapabilityPreview(
       id,
       name: id,
       enabled: true,
-      path: `F:\\skills\\${id}`,
+      path: `/Users/test/skills/${id}`,
       description: `${id} skill`,
       status: 'ready' as const
     }))

@@ -332,7 +332,7 @@ function seedHistoryEvents(count: number): void {
       'Paged history',
       '2026-07-10T00:00:00.000Z',
       JSON.stringify({ mcpServers: [], skills: [] }),
-      'F:\\Code\\Roc'
+      '/Users/test/Code/Roc'
     );
   const insert = agentDb.prepare(
     `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)

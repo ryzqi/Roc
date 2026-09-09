@@ -3,7 +3,7 @@ import { HookRuntime } from '../../../../src/main/services/hooks/runtime';
 import type { HookCommandRunRequest, HookCommandRunResult } from '../../../../src/main/services/hooks/command-runner';
 import type { RocHookCommandInput, RocHookConfig, RocHookRunEvent } from '../../../../src/shared/types';
 
-function input(event: RocHookCommandInput['event'], payload: RocHookCommandInput['payload'], cwd = 'F:\\Code\\Roc'): RocHookCommandInput {
+function input(event: RocHookCommandInput['event'], payload: RocHookCommandInput['payload'], cwd = '/Users/test/Code/Roc'): RocHookCommandInput {
   return {
     schemaVersion: 1,
     event,

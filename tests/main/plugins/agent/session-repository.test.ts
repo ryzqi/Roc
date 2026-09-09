@@ -1556,20 +1556,20 @@ describe('AgentSessionRepository', () => {
     });
 
     repository.recordSessionMessage({
-      content: 'payment-service evidence lives under F:\\Code\\Roc\\src\\payments',
+      content: 'payment-service evidence lives under /Users/test/Code/Roc/src/payments',
       role: 'assistant',
       threadId: run.threadId,
       workspaceHash: 'workspace_hash_query'
     });
 
     const result = repository.searchSessionMessages({
-      query: 'payment-service F:\\Code\\Roc',
+      query: 'payment-service /Users/test/Code/Roc',
       workspaceHash: 'workspace_hash_query',
       workspaceScope: 'current'
     });
 
     expect(result.items.map((item) => item.content)).toEqual([
-      'payment-service evidence lives under F:\\Code\\Roc\\src\\payments'
+      'payment-service evidence lives under /Users/test/Code/Roc/src/payments'
     ]);
   });
 
@@ -1590,7 +1590,7 @@ describe('AgentSessionRepository', () => {
       workspaceHash: 'workspace_hash_cjk'
     });
     repository.recordSessionMessage({
-      content: '构建脚本使用 PowerShell',
+      content: '构建脚本使用 zsh',
       role: 'assistant',
       threadId: run.threadId,
       workspaceHash: 'workspace_hash_cjk'
@@ -1623,7 +1623,7 @@ describe('AgentSessionRepository', () => {
       workspaceHash: 'workspace_hash_short'
     });
     repository.recordSessionMessage({
-      content: '构建脚本使用 PowerShell',
+      content: '构建脚本使用 zsh',
       role: 'assistant',
       threadId: run.threadId,
       workspaceHash: 'workspace_hash_short'
@@ -1789,7 +1789,7 @@ function createCapabilityPreview(requestedCapabilities: EnabledCapabilities): Ag
       id,
       name: id,
       enabled: true,
-      path: `F:\\skills\\${id}`,
+      path: `/Users/test/skills/${id}`,
       description: `${id} skill`,
       status: 'ready' as const
     })),

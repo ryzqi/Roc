@@ -57,7 +57,7 @@ describe('renderer ui atoms', () => {
     const rowHtml = renderToStaticMarkup(
       React.createElement(Row, {
         title: '当前工作区',
-        sub: 'F:\\Code\\Roc',
+        sub: '/Users/test/Code/Roc',
         tag: '已选择',
         tone: 'ok'
       })

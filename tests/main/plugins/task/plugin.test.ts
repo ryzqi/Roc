@@ -48,7 +48,7 @@ const previewRequest: BackgroundTaskPreviewRequest = {
     type: 'manual',
     description: 'Manual'
   },
-  workspacePath: 'F:\\Code\\Roc',
+  workspacePath: '/Users/test/Code/Roc',
   allowedActions: [],
   forbiddenActions: [],
   failurePolicy: 'pause_and_report',

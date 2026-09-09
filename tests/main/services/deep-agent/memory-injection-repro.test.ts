@@ -11,9 +11,9 @@ import { RocPaths } from '../../../../src/main/services/paths';
 function createTestBackend() {
   return createBackend({
     workspaceService: {
-      getCurrentWorkspace: () => ({ path: 'F:\\Code\\Roc', label: 'Roc' })
+      getCurrentWorkspace: () => ({ path: '/Users/test/Code/Roc', label: 'Roc' })
     } as unknown as Parameters<typeof createBackend>[0]['workspaceService'],
-    paths: new RocPaths('F:\\Code\\Roc\\.test-data'),
+    paths: new RocPaths('/Users/test/Code/Roc/.test-data'),
     store: new InMemoryStore(),
     securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
     capacity: new CapacityService(defaultSettings.memory.charLimits)

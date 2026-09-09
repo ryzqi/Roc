@@ -23,7 +23,7 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
 
 function formatLocation(sourceFile: SourceFile, file: string, position: number): string {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(position);
-  return `${relative(process.cwd(), file).replace(/\\/g, '/')}:${line + 1}:${character + 1}`;
+  return `${relative(process.cwd(), file)}:${line + 1}:${character + 1}`;
 }
 
 function withParsedSourceFiles(files: string[], visitFile: (file: string, sourceFile: SourceFile) => void): void {

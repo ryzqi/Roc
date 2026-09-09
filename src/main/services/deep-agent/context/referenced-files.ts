@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 export type ReferencedFileContext = {
   path: string;
@@ -48,7 +48,7 @@ export function loadReferencedFileContexts(input: {
     if (contexts.length >= maxReferencedFiles) {
       break;
     }
-    const relativePath = token.replaceAll('\\', '/');
+    const relativePath = token;
     if (seen.has(relativePath)) {
       continue;
     }
@@ -109,11 +109,10 @@ function isWorkspaceRelativeFile(workspacePath: string, relativePath: string): b
 }
 
 function isAbsoluteReference(relativePath: string): boolean {
-  return relativePath.startsWith('/') || /^[A-Za-z]:/.test(relativePath);
+  return isAbsolute(relativePath);
 }
 
 function isInsideWorkspace(absolutePath: string, workspacePath: string): boolean {
-  const normalizedRoot = resolve(workspacePath).toLocaleLowerCase();
-  const normalizedPath = resolve(absolutePath).toLocaleLowerCase();
-  return normalizedPath.startsWith(`${normalizedRoot}\\`) || normalizedPath.startsWith(`${normalizedRoot}/`);
+  const relativePath = relative(resolve(workspacePath), resolve(absolutePath));
+  return relativePath.length === 0 || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 }

@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
+import { join } from 'node:path';
 import { ipcChannels } from '../../shared/ipc';
 import type { Workspace } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
@@ -20,7 +21,7 @@ export function registerFilesDialogIpc(
         const smokeWorkspace = await workspaceProvider.getCurrentWorkspace();
         if (smokeWorkspace !== null) {
           return {
-            filePaths: [`${smokeWorkspace.path}\\assets\\smoke-image.png`]
+            filePaths: [join(smokeWorkspace.path, 'assets', 'smoke-image.png')]
           };
         }
       }

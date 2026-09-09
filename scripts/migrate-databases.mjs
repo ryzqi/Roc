@@ -15,8 +15,8 @@ const repoRoot = join(import.meta.dirname, '..');
 const dataRoot = join(homedir(), '.roc', 'plugin-data');
 
 const entrySource = `
-import { DatabasePool } from '${posix(join(repoRoot, 'src/main/infrastructure/database-pool.ts'))}';
-import { acquireDatabaseMaintenanceLease } from '${posix(join(repoRoot, 'src/main/infrastructure/database-maintenance-lease.ts'))}';
+import { DatabasePool } from '${join(repoRoot, 'src/main/infrastructure/database-pool.ts')}';
+import { acquireDatabaseMaintenanceLease } from '${join(repoRoot, 'src/main/infrastructure/database-maintenance-lease.ts')}';
 import {
   applyCoreDatabaseSchema,
   applyAgentDatabaseSchema,
@@ -24,8 +24,8 @@ import {
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema,
   applyDiagnosticsDatabaseSchema
-} from '${posix(join(repoRoot, 'src/main/infrastructure/database-schemas.ts'))}';
-import { readSchemaMetadata } from '${posix(join(repoRoot, 'src/main/infrastructure/database-migrations.ts'))}';
+} from '${join(repoRoot, 'src/main/infrastructure/database-schemas.ts')}';
+import { readSchemaMetadata } from '${join(repoRoot, 'src/main/infrastructure/database-migrations.ts')}';
 
 const rootDir = ${JSON.stringify(dataRoot)};
 const lease = acquireDatabaseMaintenanceLease({ rootDir, owner: { kind: 'cli', pid: process.pid } });
@@ -78,8 +78,4 @@ try {
   await import(pathToFileURL(outPath).href);
 } finally {
   rmSync(workDir, { recursive: true, force: true });
-}
-
-function posix(value) {
-  return value.replaceAll('\\', '/');
 }

@@ -204,7 +204,7 @@ function createRecoveryPoint(relativePath: string): RecoveryPoint {
   return {
     id: 'recovery-1',
     relativePath,
-    snapshotPath: 'F:\\Code\\Roc\\.roc-test\\recovery-1',
+    snapshotPath: '/Users/test/Code/Roc/.roc-test/recovery-1',
     contentSha256: 'sha256-test',
     source: 'agent',
     createdAt: '2026-06-04T00:00:00.000Z',

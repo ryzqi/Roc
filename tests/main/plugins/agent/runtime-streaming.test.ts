@@ -78,7 +78,7 @@ describe('AgentPluginRuntime', () => {
                   cronExpression: '0 21 * * *',
                   nextRunAt: '2026-06-16T13:00:00.000Z'
                 },
-                workspacePath: 'F:\\Code\\Roc'
+                workspacePath: '/Users/test/Code/Roc'
               }
             }
           } satisfies ChatRunEvent;

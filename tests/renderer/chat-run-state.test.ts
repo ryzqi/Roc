@@ -203,7 +203,7 @@ describe('chat run state', () => {
         kind: 'question',
         question: 'Which workspace should I use?',
         context: 'Two workspaces are available.',
-        suggestedResponses: ['F:\\Code\\Roc', 'G:\\问数']
+        suggestedResponses: ['/Users/test/Code/Roc', '/Users/test/问数']
       }
     });
 
@@ -214,7 +214,7 @@ describe('chat run state', () => {
         interruptId: 'interrupt-question',
         question: 'Which workspace should I use?',
         context: 'Two workspaces are available.',
-        suggestedResponses: ['F:\\Code\\Roc', 'G:\\问数']
+        suggestedResponses: ['/Users/test/Code/Roc', '/Users/test/问数']
       }
     ]);
   });

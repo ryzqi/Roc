@@ -158,7 +158,7 @@ describe('agent performance threshold contract', () => {
           cpuCount: 8,
           cpuModel: 'test-cpu',
           nodeVersion: 'v25.0.0',
-          platform: 'win32'
+          platform: 'darwin'
         },
         fixture: {
           model: 'RocPerformanceFakeModel',
@@ -189,7 +189,7 @@ describe('agent performance threshold contract', () => {
           cpuCount: 8,
           cpuModel: 'test-cpu',
           nodeVersion: 'v25.0.0',
-          platform: 'win32'
+          platform: 'darwin'
         },
         fixture: {
           model: 'RocPerformanceFakeModel',
@@ -382,7 +382,7 @@ function createFailureArtifact(metric: ReturnType<typeof buildAgentPerformanceMe
       cpuCount: 8,
       cpuModel: 'test-cpu',
       nodeVersion: 'v25.0.0',
-      platform: 'win32'
+      platform: 'darwin'
     },
     fixture: {
       model: 'RocPerformanceFakeModel' as const,
@@ -402,7 +402,7 @@ function createBaseline() {
       cpuCount: 8,
       cpuModel: 'test-cpu',
       nodeVersion: 'v25.0.0',
-      platform: 'win32'
+      platform: 'darwin'
     },
     fixture: performanceFixture(),
     gitRevision: 'test-revision',

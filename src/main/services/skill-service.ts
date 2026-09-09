@@ -400,7 +400,7 @@ export class SkillService {
     if (trimmed.length === 0 || trimmed === '.') {
       return '';
     }
-    return trimmed.replaceAll('\\', '/');
+    return trimmed;
   }
 
   private resolveInsideSkill(skillRoot: string, relativePath: string): string {

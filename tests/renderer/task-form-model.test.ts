@@ -13,7 +13,7 @@ describe('task form model', () => {
       triggerDescription: '每天 09:00',
       nextRunAt: '2026-05-22T09:00',
       cronExpression: '0 9 * * *',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActionsText: 'pnpm test\npnpm lint',
       forbiddenActionsText: 'git push',
       reason: ''
@@ -27,7 +27,7 @@ describe('task form model', () => {
         cronExpression: '0 9 * * *',
         nextRunAt: expect.stringContaining('2026-05-22T01:00:00.000Z')
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: ['pnpm test', 'pnpm lint'],
       forbiddenActions: ['git push'],
       failurePolicy: 'pause_and_report',
@@ -42,7 +42,7 @@ describe('task form model', () => {
         type: 'manual',
         description: '手动'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: ['pnpm test'],
       forbiddenActions: [],
       reason: '改目标'
@@ -84,7 +84,7 @@ describe('task form model', () => {
               type: 'manual',
               description: '手动'
             },
-            workspacePath: 'F:\\Code\\Roc',
+            workspacePath: '/Users/test/Code/Roc',
             allowedActions: ['pnpm test'],
             forbiddenActions: [],
             failurePolicy: 'pause_and_report',

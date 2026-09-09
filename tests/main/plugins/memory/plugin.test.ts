@@ -84,22 +84,22 @@ describe('memory plugin', () => {
       capabilities.invoke('memory.file.write', {
         scope: 'global',
         kind: 'user',
-        content: '# user prefers PowerShell'
+        content: '# user prefers zsh'
       })
     ).resolves.toMatchObject({
       ok: true,
       meta: {
         absolutePath: '/memory/global/USER.md',
-        charCount: 25,
+        charCount: 18,
         exists: true
       }
     });
     await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'user' })).resolves.toBe(
-      '# user prefers PowerShell'
+      '# user prefers zsh'
     );
     expect(readStoreValue('/USER.md')).toMatchObject({
       namespace_json: '["roc","memory","global"]',
-      value_json: expect.stringContaining('# user prefers PowerShell')
+      value_json: expect.stringContaining('# user prefers zsh')
     });
   });
 
@@ -354,8 +354,8 @@ describe('memory plugin', () => {
         type: 'user_preference',
         confidence: 'high',
         key: 'user.cli.shell',
-        summary: 'User prefers PowerShell.',
-        evidence: ['user stated: prefer PowerShell'],
+        summary: 'User prefers zsh.',
+        evidence: ['user stated: prefer zsh'],
         sourceRunId: 'run_1',
         sourceThreadId: 'thread_1'
       })
@@ -516,7 +516,7 @@ describe('memory plugin', () => {
         })
       ]
     });
-    await expect(capabilities.invoke('memory.entries.search', { query: 'PowerShell' })).resolves.toMatchObject({
+    await expect(capabilities.invoke('memory.entries.search', { query: 'zsh' })).resolves.toMatchObject({
       hits: []
     });
   });

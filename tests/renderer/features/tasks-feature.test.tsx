@@ -79,7 +79,7 @@ describe('TasksFeature', () => {
             activeTasks: [],
             workspace: {
               id: 'workspace-1',
-              path: 'F:\\Code\\Roc',
+              path: '/Users/test/Code/Roc',
               displayName: 'Roc',
               trustState: 'trusted',
               lastOpenedAt: '2026-05-21T00:00:00.000Z'
@@ -106,7 +106,7 @@ describe('TasksFeature', () => {
       input: '每天晚上总结新闻',
       workflowHint: 'propose_background_task',
       taskSource: 'workbench',
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath: '/Users/test/Code/Roc'
     });
   });
 
@@ -245,7 +245,7 @@ function createBackgroundItem(partial: Partial<ActiveTaskItem>): ActiveTaskItem 
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z',
     ...partial
@@ -286,7 +286,7 @@ function createTaskDetail(task: ActiveTaskItem): TaskDetail {
       triggerDescription: '手动触发',
       nextRunAt: null,
       cronExpression: null,
-      workspacePath: task.workspacePath === null ? 'F:\\Code\\Roc' : task.workspacePath,
+      workspacePath: task.workspacePath === null ? '/Users/test/Code/Roc' : task.workspacePath,
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',

@@ -128,11 +128,11 @@ describe('RocSqliteCheckpointer restart integration', () => {
     const restarted = createQuestionGraph(new RocSqliteCheckpointer(db));
     const questionInterruptId = requireInterruptId(questionInterrupts[0]);
     const resumed = await restarted.invoke(
-      new Command({ resume: { [questionInterruptId]: { answer: 'F:\\Code\\Roc' } } }),
+      new Command({ resume: { [questionInterruptId]: { answer: '/Users/test/Code/Roc' } } }),
       config
     );
 
-    expect(resumed.result).toBe('F:\\Code\\Roc');
+    expect(resumed.result).toBe('/Users/test/Code/Roc');
   });
 
   it('resumes multiple parallel ask_user interrupts by id after recreating the graph', async () => {
@@ -267,7 +267,7 @@ function createApprovalAgent(input: {
     },
     {
       name: 'run_shell_command',
-      description: 'Run a PowerShell command.',
+      description: 'Run a zsh command.',
       schema: z.object({ command: z.string() })
     }
   );

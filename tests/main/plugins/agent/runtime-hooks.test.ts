@@ -11,7 +11,7 @@ import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/t
 let db: Database.Database;
 let events: RocEventEnvelope[];
 
-const workspacePath = 'F:\\Code\\Roc';
+const workspacePath = '/Users/test/Code/Roc';
 
 const modelFactory: AgentModelFactoryAdapter = {
   createDefaultModelHandle: async () => ({

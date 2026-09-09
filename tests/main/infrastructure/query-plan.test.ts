@@ -48,7 +48,7 @@ describe('query plan helpers', () => {
         description: 'At the recorded time',
         nextRunAt: '2026-07-17T00:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',

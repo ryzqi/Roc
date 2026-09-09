@@ -65,7 +65,7 @@ describe('chat view slash skill command', () => {
                 id: 'python-expert',
                 name: 'Python 专家',
                 enabled: true,
-                path: 'F:\\Code\\Roc\\skills\\python-expert',
+                path: '/Users/test/Code/Roc/skills/python-expert',
                 description: 'Python 代码审查与优化',
                 status: 'ready'
               }

@@ -40,7 +40,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -77,7 +77,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       mode: 'run',
       runOrigin: 'workbench_creation',
       workflowHint: 'background_task_change',
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -105,7 +105,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       budget: {
         contextBudgetTokens: 4096,
       },
@@ -137,7 +137,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'plan',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -171,7 +171,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -206,7 +206,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -235,7 +235,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'plan',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -323,7 +323,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -349,7 +349,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -381,7 +381,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -407,8 +407,8 @@ describe('buildDeepAgent harness profile wiring', () => {
         runContext: {
           runId: 'run_1',
           threadId: 'thread_1',
-          workspacePath: 'F:\\Code\\Roc',
-          cwd: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
+          cwd: '/Users/test/Code/Roc',
           source: 'chat',
           modelId: 'model_1',
           workflowHint: null
@@ -433,7 +433,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -466,8 +466,8 @@ describe('buildDeepAgent harness profile wiring', () => {
         runContext: {
           runId: 'run_1',
           threadId: 'thread_1',
-          workspacePath: 'F:\\Code\\Roc',
-          cwd: 'F:\\Code\\Roc',
+          workspacePath: '/Users/test/Code/Roc',
+          cwd: '/Users/test/Code/Roc',
           source: 'chat',
           modelId: 'model_1',
           workflowHint: null
@@ -516,7 +516,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       runId: 'run_1',
       threadId: 'thread_1',
     }),
@@ -568,7 +568,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workspaceHash: 'workspace_hash_context',
       budget: {
         contextBudgetTokens: 4096,
@@ -616,7 +616,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -683,7 +683,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: 'F:\\\\Code\\\\Roc',
+      workspacePath: '/Users/test//Code//Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -728,7 +728,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'plan',
       workflowHint: null,
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       workspaceHash: 'workspace_hash_plan',
     }),
       contextCompaction: {

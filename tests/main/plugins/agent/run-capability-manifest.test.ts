@@ -44,7 +44,7 @@ describe('run capability manifest', () => {
         {
           canonicalIdentity: 'skill:research',
           name: 'research',
-          sourcePath: 'F:\\Skills\\research',
+          sourcePath: '/Users/test/Skills/research',
           description: 'research skill'
         }
       ],
@@ -233,7 +233,7 @@ describe('run capability manifest', () => {
       skills: [
         {
           ...skill({ id: 'research' }),
-          path: 'F:\\Skills\\relocated-research'
+          path: '/Users/test/Skills/relocated-research'
         }
       ],
       mode: 'chat',
@@ -501,7 +501,7 @@ function skill(input: { id: string; status?: 'ready' | 'invalid' }): {
     id: input.id,
     name: input.id,
     enabled: true,
-    path: `F:\\Skills\\${input.id}`,
+    path: `/Users/test/Skills/${input.id}`,
     description: `${input.id} skill`,
     status: input.status === undefined ? 'ready' : input.status
   };

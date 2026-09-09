@@ -194,7 +194,7 @@ describe('agent outbox projector', () => {
         nextRunAt: scheduledAt,
         type: 'once'
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
@@ -482,7 +482,7 @@ function seedBackgroundTask(repository: TaskRepository, db: Database.Database, r
       type: 'manual',
       description: 'Manual test task'
     },
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     allowedActions: [],
     forbiddenActions: [],
     failurePolicy: 'pause_and_report',

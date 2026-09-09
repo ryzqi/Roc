@@ -96,7 +96,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
       runId: started.runId,
       threadId,
       interruptId: firstInterruptId,
-      answer: 'F:\\Code\\Roc'
+      answer: '/Users/test/Code/Roc'
     });
     await waitFor(() => readChatEvents('run_interrupted').length === 3);
     expect(restarted.repository.getRun(started.runId).status).toBe('waiting_user');
@@ -119,7 +119,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
       runId: started.runId,
       threadId,
       interruptId: secondInterruptId,
-      answer: 'F:\\Code\\Fallback'
+      answer: '/Users/test/Code/Fallback'
     });
     await waitFor(() => readChatEvents('run_completed').length === 1);
 
@@ -130,8 +130,8 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
       .filter((message) => message.role === 'assistant')
       .map((message) => message.content)
       .join('\n');
-    expect(assistantText).toContain('F:\\Code\\Roc');
-    expect(assistantText).toContain('F:\\Code\\Fallback');
+    expect(assistantText).toContain('/Users/test/Code/Roc');
+    expect(assistantText).toContain('/Users/test/Code/Fallback');
   }, 60_000);
 });
 

@@ -112,7 +112,7 @@ describe('chat message row', () => {
             interruptId: 'interrupt-question',
             question: 'Which path should I inspect?',
             context: 'Two paths match.',
-            suggestedResponses: ['F:\\Code\\Roc']
+            suggestedResponses: ['/Users/test/Code/Roc']
           }],
           isStreaming: false
         }
@@ -121,7 +121,7 @@ describe('chat message row', () => {
 
     expect(html).toContain('data-testid="chat-question-card"');
     expect(html).toContain('Which path should I inspect?');
-    expect(html).toContain('F:\\Code\\Roc');
+    expect(html).toContain('/Users/test/Code/Roc');
   });
 
   it('renders every pending interrupt in the assistant message', () => {
@@ -145,7 +145,7 @@ describe('chat message row', () => {
               kind: 'question',
               interruptId: 'interrupt-question',
               question: 'Which workspace should I use?',
-              suggestedResponses: ['F:\\Code\\Roc']
+              suggestedResponses: ['/Users/test/Code/Roc']
             }
           ],
           isStreaming: false
@@ -178,7 +178,7 @@ describe('chat message row', () => {
               kind: 'tool_call',
               name: 'read_file',
               status: 'end',
-              input: { path: 'F:\\Code\\Roc\\README.md' },
+              input: { path: '/Users/test/Code/Roc/README.md' },
               output: { bytes: 128 },
               error: null
             }
@@ -194,7 +194,7 @@ describe('chat message row', () => {
     expect(html).toContain('read_file');
     expect(html).toContain('成功');
     expect(html).toContain('&quot;path&quot;');
-    expect(html).toContain('F:\\\\Code\\\\Roc\\\\README.md');
+    expect(html).toContain('/Users/test//Code//Roc//README.md');
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<summary/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<pre/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*最终答案/);
@@ -309,7 +309,7 @@ describe('chat message row', () => {
                   kind: 'tool_call',
                   name: 'read_file',
                   status: 'end',
-                  input: { path: 'F:\\Code\\Roc\\README.md' },
+                  input: { path: '/Users/test/Code/Roc/README.md' },
                   output: { bytes: 128 },
                   error: null
                 }
@@ -618,7 +618,7 @@ describe('chat message row', () => {
                       cronExpression: '0 9 * * *',
                       nextRunAt: '2026-05-22T01:00:00.000Z'
                     },
-                    workspacePath: 'F:\\Code\\Roc',
+                    workspacePath: '/Users/test/Code/Roc',
                     allowedActions: ['pnpm test'],
                     forbiddenActions: ['git push']
                   },
@@ -669,7 +669,7 @@ describe('chat message row', () => {
                     cronExpression: '0 9 * * *',
                     nextRunAt: '2026-05-22T01:00:00.000Z'
                   },
-                  workspacePath: 'F:\\Code\\Roc',
+                  workspacePath: '/Users/test/Code/Roc',
                   allowedActions: ['pnpm test'],
                   forbiddenActions: ['git push']
                 }

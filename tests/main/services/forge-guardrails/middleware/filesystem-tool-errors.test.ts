@@ -18,7 +18,7 @@ async function runWrapToolCall(input: {
     {
       toolCall: {
         name: input.toolName,
-        args: { file_path: 'G:\\杂\\test\\quicksort_example.py' },
+        args: { file_path: '/Users/test/杂/test/quicksort_example.py' },
         id: `call-${input.toolName}`
       }
     } as never,

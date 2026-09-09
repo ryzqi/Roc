@@ -45,7 +45,7 @@ function backgroundTaskPreviewRequest(): BackgroundTaskPreviewRequest {
       type: 'manual',
       description: '手动'
     },
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     allowedActions: [],
     forbiddenActions: [],
     failurePolicy: 'pause_and_report',
@@ -61,7 +61,7 @@ function backgroundTaskPreview(): BackgroundTaskPreview {
       type: 'manual',
       description: '手动'
     },
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: '/Users/test/Code/Roc',
     allowedActions: [],
     forbiddenActions: [],
     failurePolicy: 'pause_and_report',

@@ -56,7 +56,7 @@ export function validProposeInput(overrides: DeepPartial<ProposeInput> = {}): Pr
         cronExpression: '50 21 * * *',
         nextRunAt: futureIso()
       },
-      workspacePath: 'F:\\Code\\Roc',
+      workspacePath: '/Users/test/Code/Roc',
       allowedActions: [],
       forbiddenActions: [],
       notificationPolicy: 'failures_and_confirmations'
