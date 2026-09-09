@@ -5,8 +5,8 @@ import { readDeepAgentsExecutionIdentity } from '../../../../src/main/services/d
 
 describe('Deep Agents execution identity adapter', () => {
   it('pins the vendor versions that own the configurable shape', () => {
-    expect(packageJson.dependencies.deepagents).toBe('1.13.2');
-    expect(packageJson.dependencies['@langchain/langgraph']).toBe('1.4.13');
+    expect(packageJson.dependencies.deepagents).toBe('1.13.3');
+    expect(packageJson.dependencies['@langchain/langgraph']).toBe('1.4.14');
   });
 
   it('translates root and subagent configurable identities', () => {

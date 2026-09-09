@@ -106,19 +106,11 @@ expect.extend({
 });
 
 declare module 'vitest' {
-  interface Assertion<T = any> {
-    toBeAcceptedByProposeSchema(): T;
-    toBeAcceptedByProposeToolSchema(): T;
-    toBeRejectedByProposeSchemaAtPath(expectedPath: string): T;
-    toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): T;
-    toReferenceForbiddenField(): T;
-  }
-
-  interface AsymmetricMatchersContaining {
-    toBeAcceptedByProposeSchema(): unknown;
-    toBeAcceptedByProposeToolSchema(): unknown;
-    toBeRejectedByProposeSchemaAtPath(expectedPath: string): unknown;
-    toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): unknown;
-    toReferenceForbiddenField(): unknown;
+  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
+    toBeAcceptedByProposeSchema(): R;
+    toBeAcceptedByProposeToolSchema(): R;
+    toBeRejectedByProposeSchemaAtPath(expectedPath: string): R;
+    toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): R;
+    toReferenceForbiddenField(): R;
   }
 }
