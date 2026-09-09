@@ -17,12 +17,12 @@ describe('RocContextDigest', () => {
   it('creates a protected digest message', () => {
     const message = createContextDigestMessage({
       ...createEmptyContextDigest(),
-      facts: ['Workspace is F:\\Code\\Roc.'],
+      facts: ['Workspace is /Users/test/Code/Roc.'],
       nextActions: ['Run targeted tests.']
     });
 
     expect(isContextDigestMessage(message)).toBe(true);
-    expect(String(message.content)).toContain('Workspace is F:\\Code\\Roc.');
+    expect(String(message.content)).toContain('Workspace is /Users/test/Code/Roc.');
     expect(String(message.content)).toContain('Run targeted tests.');
   });
 

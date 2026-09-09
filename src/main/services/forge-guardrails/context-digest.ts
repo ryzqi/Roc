@@ -114,7 +114,7 @@ function collectToolMessage(digest: RocContextDigest, message: ToolMessage): voi
     return;
   }
   addUnique(digest.verifications, `${message.name}: ${content.slice(0, 200)}`);
-  const fileMatches = content.match(/[A-Za-z]:\\[^\s'"<>|]+|\/workspace\/[^\s'"<>|]+/gu);
+  const fileMatches = content.match(/\/workspace\/[^\s'"<>|]+/gu);
   if (fileMatches === null) {
     return;
   }

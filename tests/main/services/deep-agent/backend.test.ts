@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBackend } from '../../../../src/main/services/deep-agent/backend';
 import {
   ROC_FILE_TOOL_ROUTE_ERROR,
-  ROC_FILE_TOOL_WINDOWS_PATH_ERROR,
   createRocFilesystemPermissions
 } from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 import { CapacityService } from '../../../../src/main/services/memory/capacity';
@@ -116,11 +115,11 @@ describe('DeepAgents Roc backend', () => {
     await expect(call(backend as TestBackend)).resolves.toEqual({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   });
 
-  it('rejects Windows absolute paths at the backend boundary', async () => {
+  it('rejects host absolute paths at the backend boundary', async () => {
     const { backend } = createTestBackend();
 
-    await expect(backend.read('F:\\Code\\Roc\\package.json')).resolves.toEqual({
-      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+    await expect(backend.read('/Users/test/Code/Roc/package.json')).resolves.toEqual({
+      error: ROC_FILE_TOOL_ROUTE_ERROR
     });
   });
 

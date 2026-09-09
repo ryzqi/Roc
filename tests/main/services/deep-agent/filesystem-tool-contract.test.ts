@@ -7,7 +7,6 @@ import {
   ROC_FILE_TOOL_PROMPT_LINES,
   ROC_FILE_TOOL_ROUTE_ERROR,
   ROC_FILE_TOOL_TRAVERSAL_ERROR,
-  ROC_FILE_TOOL_WINDOWS_PATH_ERROR,
   createRocFilesystemPermissions,
   getRocFileToolPathField,
   isRocFileToolName,
@@ -20,7 +19,6 @@ describe('Roc DeepAgents file-tool contract', () => {
   it('defines the only agent-visible file routes', () => {
     expect(ROC_FILE_TOOL_ALLOWED_ROUTE_PREFIXES).toEqual(['/workspace', '/skills', '/memory']);
     expect(ROC_FILE_TOOL_ROUTE_ERROR).toBe('Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。');
-    expect(ROC_FILE_TOOL_WINDOWS_PATH_ERROR).toBe('Roc 文件工具使用虚拟路径；请改用 /workspace/...。');
     expect(ROC_FILE_TOOL_TRAVERSAL_ERROR).toBe('Roc 文件工具路径不能包含 .. 路径段。');
     expect(ROC_FILE_TOOL_MISSING_PATH_ERROR).toBe('Roc 文件工具调用缺少 path/file_path 字符串参数。');
     expect(ROC_DELETE_FILE_WORKSPACE_ERROR).toBe('delete_file 只允许删除 /workspace/ 路径下的文件或空目录。');
@@ -58,8 +56,8 @@ describe('Roc DeepAgents file-tool contract', () => {
     ['/home/user/workarea/create_docx.py', ROC_FILE_TOOL_ROUTE_ERROR],
     ['/tmp/create_docx.py', ROC_FILE_TOOL_ROUTE_ERROR],
     ['/frontend/index.html', ROC_FILE_TOOL_ROUTE_ERROR],
-    ['F:\\Code\\Roc\\create_docx.py', ROC_FILE_TOOL_WINDOWS_PATH_ERROR],
-    ['\\\\server\\share\\file.txt', ROC_FILE_TOOL_WINDOWS_PATH_ERROR],
+    ['/Users/test/Code/Roc/create_docx.py', ROC_FILE_TOOL_ROUTE_ERROR],
+    ['relative\\file.txt', ROC_FILE_TOOL_ROUTE_ERROR],
     ['relative/file.txt', ROC_FILE_TOOL_ROUTE_ERROR],
     ['/agents/AGENTS.md', ROC_FILE_TOOL_ROUTE_ERROR],
     ['/workspace/../secret.txt', ROC_FILE_TOOL_TRAVERSAL_ERROR]

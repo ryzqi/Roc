@@ -28,15 +28,15 @@ describe('Deep Agents filesystem symlink conformance', () => {
       create: (root: string): GlobBackend => new LocalShellBackend({ rootDir: root }),
       searchPath: (root: string): string => root
     }
-  ])('$name glob does not follow Windows junctions', async ({ create, searchPath }) => {
+  ])('$name glob does not follow symlink escapes', async ({ create, searchPath }) => {
     const fixture = await createJunctionFixture();
     const result = await create(fixture.root).glob('**/*', searchPath(fixture.root));
     const paths = requireGlobPaths(result);
 
     expect(paths.some((path) => path.endsWith('normal.txt'))).toBe(true);
     expect(paths.filter((path) => path.endsWith('inner.txt'))).toHaveLength(1);
-    expect(paths.some((path) => /sub[\\/]loop[\\/]/u.test(path))).toBe(false);
-    expect(paths.some((path) => /outside-link[\\/]secret\.txt$/u.test(path))).toBe(false);
+    expect(paths.some((path) => path.includes('/sub/loop/'))).toBe(false);
+    expect(paths.some((path) => path.endsWith('/outside-link/secret.txt'))).toBe(false);
   });
 
   it('keeps FilesystemBackend grep fallback inside its root', async () => {
@@ -71,8 +71,8 @@ async function createJunctionFixture(): Promise<{ root: string }> {
   await writeFile(join(root, 'normal.txt'), 'OUTSIDE_MARKER', 'utf8');
   await writeFile(join(sub, 'inner.txt'), 'inner', 'utf8');
   await writeFile(join(outside, 'secret.txt'), 'OUTSIDE_MARKER', 'utf8');
-  await symlink(sub, join(sub, 'loop'), 'junction');
-  await symlink(outside, join(root, 'outside-link'), 'junction');
+  await symlink(sub, join(sub, 'loop'));
+  await symlink(outside, join(root, 'outside-link'));
   return { root };
 }
 

@@ -1,7 +1,6 @@
 import type { FilesystemPermission } from 'deepagents';
 
 export const ROC_FILE_TOOL_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';
-export const ROC_FILE_TOOL_WINDOWS_PATH_ERROR = 'Roc 文件工具使用虚拟路径；请改用 /workspace/...。';
 export const ROC_FILE_TOOL_TRAVERSAL_ERROR = 'Roc 文件工具路径不能包含 .. 路径段。';
 export const ROC_FILE_TOOL_MISSING_PATH_ERROR = 'Roc 文件工具调用缺少 path/file_path 字符串参数。';
 export const ROC_DELETE_FILE_WORKSPACE_ERROR = 'delete_file 只允许删除 /workspace/ 路径下的文件或空目录。';
@@ -81,9 +80,6 @@ export function normalizeRocFileToolPath(path: string): PathNormalizationResult 
   if (containsTraversal(path)) {
     return { ok: false, error: ROC_FILE_TOOL_TRAVERSAL_ERROR };
   }
-  if (isWindowsAbsolutePath(path) || isUncPath(path)) {
-    return { ok: false, error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR };
-  }
   if (isAllowedRoutePath(path)) {
     return { ok: true, path };
   }
@@ -110,13 +106,5 @@ function isAllowedRoutePath(path: string): boolean {
 }
 
 function containsTraversal(path: string): boolean {
-  return path.split(/[\\/]/).some((segment) => segment === '..');
-}
-
-function isWindowsAbsolutePath(path: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(path);
-}
-
-function isUncPath(path: string): boolean {
-  return path.startsWith('\\\\');
+  return path.split('/').some((segment) => segment === '..');
 }

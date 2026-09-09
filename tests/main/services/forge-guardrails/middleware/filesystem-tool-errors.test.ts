@@ -1,8 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import {
-  ROC_FILE_TOOL_ROUTE_ERROR,
-  ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+  ROC_FILE_TOOL_ROUTE_ERROR
 } from '../../../../../src/main/services/deep-agent/filesystem-tool-contract';
 import { createFilesystemToolErrorMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/filesystem-tool-errors';
 
@@ -125,13 +124,13 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
     expect((result as ToolMessage).status).toBe('success');
   });
 
-  it('marks Windows virtual-route violations as hard file-tool errors', async () => {
+  it('marks host-path violations as hard file-tool errors', async () => {
     const result = await runWrapToolCall({
       toolName: 'read_file',
       content: [
         {
           type: 'text',
-          text: `Error: ${ROC_FILE_TOOL_WINDOWS_PATH_ERROR}`
+          text: `Error: ${ROC_FILE_TOOL_ROUTE_ERROR}`
         }
       ]
     });

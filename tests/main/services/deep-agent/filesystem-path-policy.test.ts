@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRocFilesystemPathPolicyMiddleware, normalizeRocFileToolPath, validateRocFileToolPath } from '../../../../src/main/services/deep-agent/filesystem-path-policy';
 import {
   ROC_FILE_TOOL_MISSING_PATH_ERROR,
-  ROC_FILE_TOOL_ROUTE_ERROR,
-  ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+  ROC_FILE_TOOL_ROUTE_ERROR
 } from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 
 describe('validateRocFileToolPath', () => {
@@ -21,29 +20,13 @@ describe('validateRocFileToolPath', () => {
   it.each([
     ['/home/user/workarea/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/tmp/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
-    ['F:\\Code\\Roc\\create_docx.py', 'Roc 文件工具使用虚拟路径；请改用 /workspace/...。'],
-    ['\\\\server\\share\\file.txt', 'Roc 文件工具使用虚拟路径；请改用 /workspace/...。'],
+    ['/Users/test/Code/Roc/create_docx.py', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
+    ['relative\\file.txt', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['relative/file.txt', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/agents/AGENTS.md', 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
     ['/workspace/../secret.txt', 'Roc 文件工具路径不能包含 .. 路径段。']
   ])('rejects invalid path %s', (path, error) => {
     expect(validateRocFileToolPath(path)).toEqual({ ok: false, error });
-  });
-});
-
-describe('normalizeRocFileToolPath', () => {
-  it('rejects selected workspace Windows paths instead of rewriting them', () => {
-    expect(normalizeRocFileToolPath('F:\\Code\\Roc\\scripts\\probe.ts')).toEqual({
-      ok: false,
-      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
-    });
-  });
-
-  it('rejects Windows paths outside the selected workspace', () => {
-    expect(normalizeRocFileToolPath('F:\\Other\\probe.ts')).toEqual({
-      ok: false,
-      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
-    });
   });
 });
 
