@@ -3,6 +3,7 @@ import type { MainViewId, PreviewIconName, ViewId, WorkbenchTool } from './types
 
 const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
+  'research',
   'tasks-board',
   'task-detail',
   'workspace',
@@ -95,6 +96,9 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
   }
   if (view === 'skills') {
     return `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 个可用 Skill`;
+  }
+  if (view === 'research') {
+    return '项目流程与证据追踪';
   }
   if (view === 'settings') {
     return state.defaultModelId === null ? '默认模型未配置' : `默认模型 ${state.defaultModelId}`;

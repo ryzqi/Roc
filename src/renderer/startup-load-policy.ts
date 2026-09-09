@@ -1,5 +1,6 @@
 type StartupLoadViewId =
   | 'chat'
+  | 'research'
   | 'tasks-board'
   | 'task-detail'
   | 'workspace'

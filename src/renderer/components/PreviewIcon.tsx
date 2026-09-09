@@ -48,6 +48,16 @@ export function PreviewIcon({ name }: { name: PreviewIconName }): React.JSX.Elem
           <path d="M8 6h8"></path>
         </svg>
       );
+    case 'microscope':
+      return (
+        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4h4v3H7z"></path>
+          <path d="M9 7v5a4 4 0 0 0 8 0V9"></path>
+          <path d="M17 9h3"></path>
+          <path d="M5 20h14"></path>
+          <path d="M9 16a6 6 0 0 0-4 4"></path>
+        </svg>
+      );
     case 'paperclip':
       return (
         <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">

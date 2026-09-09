@@ -30,6 +30,10 @@ export function applyDiagnosticsDatabaseSchema(db: DatabaseConnection, now?: Clo
   applySchema(db, 'plugin:@roc/plugin-diagnostics', diagnosticsMigrations, now);
 }
 
+export function applyResearchDatabaseSchema(db: DatabaseConnection, now?: Clock): void {
+  applySchema(db, 'plugin:@roc/plugin-research', researchMigrations, now);
+}
+
 export const coreMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
@@ -911,6 +915,168 @@ export const diagnosticsMigrations: RocDatabaseMigration[] = [
         includes_json TEXT NOT NULL,
         redacted INTEGER NOT NULL
       );
+    `
+  }
+];
+
+export const researchMigrations: RocDatabaseMigration[] = [
+  {
+    version: 1,
+    name: 'research_workbench_foundation',
+    sql: `
+      CREATE TABLE IF NOT EXISTS research_projects (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        workspace_path TEXT,
+        status TEXT NOT NULL CHECK(status IN ('active','paused','completed','archived')),
+        current_stage TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS research_stage_states (
+        project_id TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        status TEXT NOT NULL,
+        active_run_id TEXT,
+        artifact_ids_json TEXT NOT NULL,
+        entered_at TEXT,
+        completed_at TEXT,
+        gate_required INTEGER NOT NULL,
+        gate_approved INTEGER NOT NULL,
+        last_error TEXT,
+        PRIMARY KEY(project_id, stage),
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS research_artifacts (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        path TEXT,
+        status TEXT NOT NULL CHECK(status IN ('draft','approved','superseded')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS research_provenance (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        artifact_id TEXT,
+        subject_type TEXT NOT NULL,
+        subject_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        locator TEXT,
+        excerpt TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(artifact_id) REFERENCES research_artifacts(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS research_workflow_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS research_embedding_configs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        api_key_secret_key TEXT NOT NULL,
+        enabled INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS research_knowledge_documents (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        indexed_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS research_knowledge_documents_fts USING fts5(
+        title,
+        content,
+        content='research_knowledge_documents',
+        content_rowid='rowid',
+        tokenize='unicode61 remove_diacritics 2'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS research_knowledge_documents_ai AFTER INSERT ON research_knowledge_documents BEGIN
+        INSERT INTO research_knowledge_documents_fts(rowid, title, content)
+          VALUES (new.rowid, new.title, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS research_knowledge_documents_ad AFTER DELETE ON research_knowledge_documents BEGIN
+        INSERT INTO research_knowledge_documents_fts(research_knowledge_documents_fts, rowid, title, content)
+          VALUES ('delete', old.rowid, old.title, old.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS research_knowledge_documents_au AFTER UPDATE ON research_knowledge_documents BEGIN
+        INSERT INTO research_knowledge_documents_fts(research_knowledge_documents_fts, rowid, title, content)
+          VALUES ('delete', old.rowid, old.title, old.content);
+        INSERT INTO research_knowledge_documents_fts(rowid, title, content)
+          VALUES (new.rowid, new.title, new.content);
+      END;
+
+      CREATE TABLE IF NOT EXISTS research_knowledge_chunks (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        project_id TEXT,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        locator TEXT,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(document_id) REFERENCES research_knowledge_documents(id) ON DELETE CASCADE,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE,
+        UNIQUE(document_id, chunk_index)
+      );
+
+      CREATE TABLE IF NOT EXISTS research_knowledge_embeddings (
+        chunk_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        vector_blob BLOB NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(chunk_id, model),
+        FOREIGN KEY(chunk_id) REFERENCES research_knowledge_chunks(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_research_projects_updated
+        ON research_projects(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_stage_states_project
+        ON research_stage_states(project_id, stage);
+      CREATE INDEX IF NOT EXISTS idx_research_artifacts_project_stage
+        ON research_artifacts(project_id, stage, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_provenance_subject
+        ON research_provenance(subject_type, subject_id);
+      CREATE INDEX IF NOT EXISTS idx_research_workflow_events_project_created
+        ON research_workflow_events(project_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_knowledge_documents_project
+        ON research_knowledge_documents(project_id, indexed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_knowledge_chunks_document
+        ON research_knowledge_chunks(document_id, chunk_index);
     `
   }
 ];

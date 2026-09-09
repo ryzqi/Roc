@@ -28,6 +28,12 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
   const taskCounts = state.taskSnapshot.counts;
   return [
     {
+      id: 'research',
+      label: '科研工作台',
+      meta: '项目、阶段流程与证据追踪',
+      icon: 'microscope'
+    },
+    {
       id: 'tasks-board',
       label: '任务工作台',
       meta: `${taskCounts.running} 运行中 · ${taskCounts.pendingConfirmation} 待确认 · ${taskCounts.total} 共计`,

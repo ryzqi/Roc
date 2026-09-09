@@ -25,6 +25,7 @@ const TasksBoardFeature = lazy(() =>
 const WorkspaceFeature = lazy(() =>
   import('../features/workspace').then((module) => ({ default: module.WorkspaceFeature }))
 );
+const ResearchView = lazy(() => import('./research/ResearchView').then((module) => ({ default: module.ResearchView })));
 
 export function ViewContent({
   activeView,
@@ -91,6 +92,9 @@ export function ViewContent({
         onBoardUiStateChange={onTaskBoardUiStateChange}
       />
     );
+  }
+  if (activeView === 'research') {
+    return renderLazyView(<ResearchView client={client} state={state} />);
   }
   if (activeView === 'task-detail') {
     if (selectedTaskDetailId === null) {

@@ -39,6 +39,7 @@ describe('runDatabaseFastProbe', () => {
       'core',
       'memory',
       'plugin:@roc/plugin-diagnostics',
+      'plugin:@roc/plugin-research',
       'plugin:@roc/plugin-workspace',
       'task'
     ]);
@@ -50,7 +51,8 @@ describe('runDatabaseFastProbe', () => {
       memory: 1,
       task: 4,
       'plugin:@roc/plugin-workspace': 1,
-      'plugin:@roc/plugin-diagnostics': 1
+      'plugin:@roc/plugin-diagnostics': 1,
+      'plugin:@roc/plugin-research': 1
     });
     expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(0);
   });

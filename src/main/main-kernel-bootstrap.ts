@@ -23,6 +23,7 @@ import type { RuntimeMetricsProvider } from './plugins/diagnostics/runtime-metri
 import { createMcpPlugin } from './plugins/mcp';
 import { createMemoryPlugin } from './plugins/memory';
 import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
+import { createResearchPlugin } from './plugins/research';
 import { createSkillsPlugin } from './plugins/skills';
 import { createTaskPlugin } from './plugins/task';
 import { createWorkspacePlugin } from './plugins/workspace';
@@ -245,6 +246,7 @@ function createDefaultMainKernelPlugins(input: {
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
+    createResearchPlugin(),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({

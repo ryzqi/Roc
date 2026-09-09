@@ -7,6 +7,7 @@ import {
   applyCoreDatabaseSchema,
   applyDiagnosticsDatabaseSchema,
   applyMemoryDatabaseSchema,
+  applyResearchDatabaseSchema,
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema
 } from './database-schemas';
@@ -107,6 +108,26 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
     requiredTables: ['performance_samples', 'diagnostic_packages', 'schema_migrations', 'schema_metadata'],
     open: (pool) => pool.getConnection('@roc/plugin-diagnostics'),
     applySchema: applyDiagnosticsDatabaseSchema
+  },
+  {
+    dbName: 'plugin:@roc/plugin-research',
+    backupFileName: '@roc-plugin-research.db',
+    requiredTables: [
+      'research_projects',
+      'research_stage_states',
+      'research_artifacts',
+      'research_provenance',
+      'research_workflow_events',
+      'research_embedding_configs',
+      'research_knowledge_documents',
+      'research_knowledge_documents_fts',
+      'research_knowledge_chunks',
+      'research_knowledge_embeddings',
+      'schema_migrations',
+      'schema_metadata'
+    ],
+    open: (pool) => pool.getConnection('@roc/plugin-research'),
+    applySchema: applyResearchDatabaseSchema
   }
 ];
 

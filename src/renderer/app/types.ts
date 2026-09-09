@@ -23,6 +23,7 @@ import type {
 
 export type ViewId =
   | 'chat'
+  | 'research'
   | 'tasks-board'
   | 'task-detail'
   | 'workspace'
@@ -46,6 +47,7 @@ export type PreviewIconName =
   | 'nodes'
   | 'paperclip'
   | 'panel-right'
+  | 'microscope'
   | 'send'
   | 'sparkles'
   | 'stethoscope'

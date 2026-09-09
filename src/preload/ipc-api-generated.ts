@@ -101,6 +101,14 @@ export const rocApi: RocPreloadApi = {
     listFiles: (...args) => ipcRenderer.invoke(ipcChannels.skillsListFiles, ...args),
     readFile: (...args) => ipcRenderer.invoke(ipcChannels.skillsReadFile, ...args)
   },
+  research: {
+    listProjects: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsList, ...args),
+    getProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsGet, ...args),
+    createProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsCreate, ...args),
+    updateProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsUpdate, ...args),
+    getWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowGet, ...args),
+    transitionWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowTransition, ...args)
+  },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),
     getConfigPreview: (...args) => ipcRenderer.invoke(ipcChannels.agentGetConfigPreview, ...args),

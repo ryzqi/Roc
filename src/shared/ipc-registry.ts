@@ -94,6 +94,14 @@ import {
   skillSnapshotSchema
 } from './schemas/ipc-mcp-skills';
 import {
+  researchProjectCreateRequestSchema,
+  researchProjectIdRequestSchema,
+  researchProjectSchema,
+  researchProjectUpdateRequestSchema,
+  researchWorkflowSnapshotSchema,
+  researchWorkflowTransitionRequestSchema
+} from './schemas/research';
+import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -273,6 +281,12 @@ export const ipcRegistry = {
     request({ key: 'skillsDelete', channel: 'roc:skills:delete', domain: 'skills', method: 'deleteSkill', kind: 'plugin', capabilityName: 'skills.delete', inputTransform: id('id'), contract: methodContract(stringArg, deletedResultSchema) }),
     request({ key: 'skillsListFiles', channel: 'roc:skills:list-files', domain: 'skills', method: 'listFiles', kind: 'plugin', capabilityName: 'skills.files.list', inputTransform: first, contract: methodContract(oneArg(skillFileTreeRequestSchema), skillFileTreeResultSchema) }),
     request({ key: 'skillsReadFile', channel: 'roc:skills:read-file', domain: 'skills', method: 'readFile', kind: 'plugin', capabilityName: 'skills.file.read', inputTransform: first, contract: methodContract(oneArg(skillFilePreviewRequestSchema), skillFilePreviewResultSchema) }),
+    request({ key: 'researchProjectsList', channel: 'roc:research:projects-list', domain: 'research', method: 'listProjects', kind: 'plugin', capabilityName: 'research.projects.list', inputTransform: none, contract: methodContract(noArgs, researchProjectSchema.array()) }),
+    request({ key: 'researchProjectsGet', channel: 'roc:research:projects-get', domain: 'research', method: 'getProject', kind: 'plugin', capabilityName: 'research.projects.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchProjectsCreate', channel: 'roc:research:projects-create', domain: 'research', method: 'createProject', kind: 'plugin', capabilityName: 'research.projects.create', inputTransform: first, contract: methodContract(oneArg(researchProjectCreateRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchProjectsUpdate', channel: 'roc:research:projects-update', domain: 'research', method: 'updateProject', kind: 'plugin', capabilityName: 'research.projects.update', inputTransform: first, contract: methodContract(oneArg(researchProjectUpdateRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchWorkflowGet', channel: 'roc:research:workflow-get', domain: 'research', method: 'getWorkflow', kind: 'plugin', capabilityName: 'research.workflow.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchWorkflowSnapshotSchema) }),
+    request({ key: 'researchWorkflowTransition', channel: 'roc:research:workflow-transition', domain: 'research', method: 'transitionWorkflow', kind: 'plugin', capabilityName: 'research.workflow.transition', inputTransform: first, contract: methodContract(oneArg(researchWorkflowTransitionRequestSchema), researchWorkflowSnapshotSchema) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),

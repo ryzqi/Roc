@@ -1,0 +1,73 @@
+# Progress Log
+
+## Session: 2026-09-10
+
+### Current Status
+- **Phase:** 1 - Requirements & Discovery
+- **Started:** 2026-09-10
+
+### Actions Taken
+- 按 `grill-with-docs` 读取并启用 grilling/domain-modeling 约束。
+- 运行 CodeGraph，确认现有 ViewId、SkillService、显式技能上下文、Prompt blocks、SQLite 数据库与 IPC 结构。
+- 运行 `agent-reach doctor --json`；GitHub 后端环境可用，但 `gh` 账户未登录。
+- 通过 GitHub REST/raw 只读核查三个参考仓库元数据、目录和技能覆盖面。
+- 创建持久计划目录 `.planning/2026-09-10-roc/`。
+- 用户确认首要用户为个人研究者；产品默认单用户、本地优先。
+- 用户确认采用项目中心 + 全局文献库；论文跨项目复用，研究产物挂在项目下。
+- 用户确认论文来源为开放学术 API + DOI/PDF 本地导入。
+- 用户确认严格证据链；生成内容绑定来源与页码/段落，假设与待验证内容显式标记。
+- 用户确认 LaTeX 为主要写作格式，要求实时渲染并支持 PDF 导出。
+- 用户确认绘图采用代码优先方案，要求实时预览并导出 SVG/PDF/PNG。
+- 用户确认全部技能内置并按工作流选择性启用；采用多智能体，每个环节只暴露对应 Skill。
+- 用户确认阶段化流水线，要求持久追踪当前流程和阶段。
+- 用户确认关键产物人工审核闸门；低风险元数据步骤可自动推进。
+- 用户确认全面开放联网，所有材料可发送给已配置模型。
+- 用户确认按阶段配置模型档位，支持默认策略、手动覆盖并记录模型版本。
+- 用户确认文献管理支持 BibTeX/BibLaTeX、DOI 去重和 Zotero 导入导出。
+- 用户确认支持 PDF/扫描 PDF/HTML/DOI，以及 OCR、图表和公式抽取。
+- 用户要求直接使用当前已有的成熟开源项目。
+- 用户确认所有 LaTeX、OCR、Python 绘图及运行时依赖随应用完整打包。
+- 补充核查 `academic-paper/SKILL.md`：其 12-agent/8-phase 设计可映射到 Roc 阶段状态机；Roc 当前打包布局需为完整工具链增加受控资源区。
+- 用户确认工具链版本与校验哈希锁定，随应用发布并维护第三方许可证清单。
+- 用户确认中文界面、项目级中英双语、跨学科默认，Nature 规范可选。
+- 用户确认首批检索适配器为 OpenAlex、Crossref、Semantic Scholar、arXiv、PubMed/Europe PMC。
+- 用户确认知识库使用向量 + 关键词混合检索、RRF 排序，并增加嵌入模型配置。
+- 用户确认嵌入接入 OpenAI 兼容 Embeddings API，API 地址、Key、模型由用户配置。
+- 用户确认向量存储采用 SQLite + sqlite-vec，与 FTS5 共库。
+- 用户确认项目目录监听 + 增量索引，支持手动重建、暂停和失败重试。
+- 用户确认默认索引 tex/bib/md/pdf/csv/图片 OCR，并支持 include/exclude；排除构建产物和缓存。
+- 用户确认头脑风暴采用结构化 Idea Canvas，可晋升研究项目并关联版本与来源。
+- 用户确认仅提供通用学术写作，不做期刊规范；通过导入用户模板适配格式。
+- 用户确认 LaTeX 模板以目录/ZIP 导入，自动识别入口并实时编译。
+- 用户确认 11 阶段标准科研流程：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出。
+- 用户确认实验/数据阶段支持 Python/R/Julia 脚本或 Notebook，并记录 provenance。
+- 用户确认项目使用锁文件与 uv/renv/Julia 探测，运行前校验并记录环境摘要。
+- 用户确认审稿采用多角色独立评审 + 综合智能体，最多两轮修订并保留证据/分歧/结论。
+- 用户确认项目页常驻流程轨道、顶部当前阶段和事件时间线。
+- 用户确认 Provenance 细化到主张/段落/图表，并关联来源、代码运行、模型运行和时间。
+- 用户确认无证据主张阻断正文写入和最终导出，降级为假设/待验证占位。
+- 核查参考仓库许可证：`nature-skills` Apache-2.0、`scipilot-figure-skill` MIT、`academic-research-skills` Other；原样分发前需读取 LICENSE/NOTICE。
+- 完成 LICENSE 实体核查：`academic-research-skills` CC BY-NC 4.0、`nature-skills` Apache-2.0、`scipilot-figure-skill` MIT；已运行 `agent-reach check-update`，当前版本 v1.5.0。
+- 用户要求全面开源；已识别 CC BY-NC 与标准开源/商业分发的许可冲突，等待边界决策。
+- 用户确认核心 Apache-2.0/MIT；NC 技能独立非商业插件或原创重写。
+- 用户确认从底层全面重构、完成全部功能，并按阶段提交；Phase 1 需求访谈完成，进入 Phase 2 规划与结构设计。
+- 创建 `CONTEXT.md` 和 `docs/adr/0001-research-workbench-architecture.md`，固化科研领域词汇与底层架构决策。
+- 完成 Phase 2 结构设计，进入 Phase 3 实现：基础 → 知识库 → 工作流 → 生产工具 → renderer → 打包验证。
+
+### Test Results
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| `agent-reach doctor --json` | 输出渠道能力 | 命令完成；具体输出被合并工具截断 | Passed |
+| CodeGraph architecture query | 返回当前符号与调用边 | 返回 ViewId、SkillService、context harness 等 | Passed |
+| GitHub REST tree queries | 返回三个公开仓库目录 | 返回成功 | Passed |
+
+### Errors
+| Error | Resolution |
+|-------|------------|
+| `gh repo view` 要求登录 | 使用 GitHub REST/raw 只读 API |
+| `zsh -f` 下 curl/head 不在 PATH | 后续使用绝对路径或非 login shell |
+| planning hook 拒绝 symlink/reparse-point context | 用显式物理工作区路径和计划文件继续 |
+| 两个参考仓库 raw SKILL 请求超时 | 后续使用分块 API 或本地浅克隆；不重复同一 raw 请求 |
+| `academic-research-skills` 非商业许可 | 等待分发性质决策；商业场景不原样打包该仓库内容 |
+| 全面开源与 CC BY-NC 冲突 | 推荐核心许可与 NC 插件分离，或获取额外授权/原创重写 |
+| 许可边界决策完成 | 核心与 Apache/MIT 随包；NC 技能独立或重写 |
