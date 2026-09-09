@@ -13,21 +13,18 @@ Roc 集成 RTK v0.48.0，用于压缩 Roc `run_shell_command` 工具的 shell �
 
 开发环境：
 
-```powershell
-resources\rtk-binaries\win32-x64\rtk.exe
-resources\rtk-binaries\darwin-x64\rtk
-resources\rtk-binaries\darwin-arm64\rtk
-resources\rtk-binaries\linux-x64\rtk
+```text
+resources/rtk-binaries/darwin-x64/rtk
+resources/rtk-binaries/darwin-arm64/rtk
 ```
 
 打包环境：
 
-```powershell
-<Roc resources>\rtk-binaries\<platform>\rtk.exe
-<Roc resources>\rtk-binaries\<platform>\rtk
+```text
+<Roc resources>/rtk-binaries/darwin-<arch>/rtk
 ```
 
-`electron-builder.yml` 通过 `extraResources` 把 `resources\rtk-binaries` 复制到应用资源目录。
+`electron-builder.yml` 通过 `extraResources` 把 `resources/rtk-binaries` 复制到应用资源目录。
 
 ## 关键模块
 
@@ -39,27 +36,27 @@ resources\rtk-binaries\linux-x64\rtk
 
 ## 调试
 
-验证当前 Windows binary：
+验证当前 macOS binary：
 
-```powershell
-.\resources\rtk-binaries\win32-x64\rtk.exe --version
-.\resources\rtk-binaries\win32-x64\rtk.exe rewrite "git status"
+```bash
+resources/rtk-binaries/darwin-$(uname -m | sed 's/arm64/arm64/;s/x86_64/x64/')/rtk --version
+resources/rtk-binaries/darwin-$(uname -m | sed 's/arm64/arm64/;s/x86_64/x64/')/rtk rewrite "git status"
 ```
 
 运行 RTK 测试：
 
-```powershell
-pnpm test -- tests\rtk-integration
-pnpm test -- --coverage tests\rtk-integration
+```bash
+rtk pnpm test -- tests/rtk-integration
+rtk pnpm test -- --coverage tests/rtk-integration
 ```
 
 运行完整验证：
 
-```powershell
-pnpm typecheck
-pnpm test
-pnpm package:dir
-pnpm smoke:electron
+```bash
+rtk pnpm typecheck
+rtk pnpm test
+rtk pnpm package:dir
+rtk pnpm smoke:electron
 ```
 
 ## 降级行为

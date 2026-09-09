@@ -103,7 +103,7 @@ Agent 文件工具只认三条虚拟路由：
 
 硬边界：
 
-- 拒绝 Windows 绝对路径 / UNC / `..` 穿越
+- 拒绝真实主机绝对路径与 `..` 穿越
 - `write_file` 只创建新文件；改已有文件必须 `read_file` + `edit_file`
 - `delete_file` 仅允许 `/workspace/` 下目标
 - **不要把 `/workspace/...` 当 shell cwd**。shell 使用真实 macOS 工作目录
@@ -358,7 +358,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 - macOS 终端使用用户登录 Shell，命令执行使用 zsh；工作区文件和 Git 使用系统路径边界，支持 POSIX 目录。
 - Finder/Dock 启动时通过 `shell-env` 恢复登录 Shell 的 PATH；代理命令仍使用环境变量白名单。
 - 窗口使用系统红黄绿按钮、应用菜单和模板菜单栏图标；登录启动项在打包后的应用中设置，系统审批状态在设置页显示。
-- Hook 仅使用 `command`，由 `/bin/zsh -f -c` 执行；旧配置中的 `commandWindows` 必须移除。信任摘要已更新，已有 Hook 需重新审核；旧文件不会被自动改写。
+- Hook 仅使用 `command`，由 `/bin/zsh -f -c` 执行。信任摘要已更新，已有 Hook 需重新审核；旧文件不会被自动改写。
 - 旧设置中的 `startup.minimizeToTray` 字段保留用于读取已有配置；macOS 关闭窗口始终保留后台任务，设置页不再显示该开关。
 
 单独验证已有应用包：
