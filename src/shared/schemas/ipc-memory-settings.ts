@@ -337,7 +337,6 @@ export const providerModelSchema = z
         repetitionPenalty: z.number().min(0).max(2).optional(),
         seed: z.number().int().optional(),
         stop: z.array(z.string().min(1)).max(4).optional(),
-        useResponsesApi: z.boolean().optional(),
         reasoning: z
           .object({
             effort: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
@@ -348,9 +347,6 @@ export const providerModelSchema = z
         includeReasoning: z.boolean().optional(),
         parallelToolCalls: z.boolean().optional(),
         streamUsage: z.boolean().optional(),
-        serviceTier: z.enum(['auto', 'default', 'flex', 'scale', 'priority']).optional(),
-        verbosity: z.enum(['low', 'medium', 'high']).optional(),
-        zdrEnabled: z.boolean().optional(),
         modelKwargs: jsonObjectSchema.optional(),
         anthropicThinking: z
           .discriminatedUnion('mode', [
@@ -380,9 +376,7 @@ export const providerModelSchema = z
             repeatPenalty: z.number().min(0).max(2).optional()
           })
           .strict()
-          .optional(),
-        invocationKwargs: jsonObjectSchema.optional(),
-        anthropicBetas: z.array(z.string()).optional()
+          .optional()
       })
       .strict()
       .superRefine((options, context) => {

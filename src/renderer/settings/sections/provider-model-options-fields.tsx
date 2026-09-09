@@ -18,13 +18,6 @@ const effortOptions: EnumOption[] = [
 const summaryOptions: EnumOption[] = [
   { label: '自动', value: 'auto' }, { label: '简要', value: 'concise' }, { label: '详细', value: 'detailed' }
 ];
-const serviceTierOptions: EnumOption[] = [
-  { label: '自动', value: 'auto' }, { label: '默认', value: 'default' }, { label: '弹性', value: 'flex' },
-  { label: '扩容', value: 'scale' }, { label: '优先', value: 'priority' }
-];
-const verbosityOptions: EnumOption[] = [
-  { label: '简洁', value: 'low' }, { label: '适中', value: 'medium' }, { label: '详尽', value: 'high' }
-];
 const thinkingModeOptions: EnumOption[] = [
   { label: '关闭', value: 'disabled' }, { label: '自适应', value: 'adaptive' }, { label: '开启', value: 'enabled' }
 ];
@@ -87,19 +80,15 @@ export function ProviderModelOptionsFields({ index, options, providerType, onCha
     </div>
     {providerType === 'openai_compatible' ? <div className="form-grid">
       {number('重复词惩罚', 'frequencyPenalty', false, 'frequency_penalty', '抑制同一词反复出现')}{number('新话题倾向', 'presencePenalty', false, 'presence_penalty', '提高值鼓励换新话题')}{number('随机种子', 'seed', true, 'seed', '同参数同种子尽量复现同一输出')}
-      {bool('使用 Responses 接口', 'useResponsesApi', 'useResponsesApi')}{bool('允许并行调用工具', 'parallelToolCalls', 'parallel_tool_calls')}{bool('流式返回用量统计', 'streamUsage', 'stream_usage')}{bool('零数据保留', 'zdrEnabled', 'zdrEnabled', '开启后供应商不留存请求内容')}
+      {bool('允许并行调用工具', 'parallelToolCalls', 'parallel_tool_calls')}{bool('流式返回用量统计', 'streamUsage', 'stream_usage')}
       <SelectOption apiName="reasoning.effort" label="推理投入程度" onChange={(value) => set('reasoning', value === 'unset' && current.reasoning?.summary === undefined ? undefined : { ...current.reasoning, effort: value === 'unset' ? undefined : value as NonNullable<ProviderModelOptions['reasoning']>['effort'] })} options={effortOptions} value={current.reasoning?.effort} />
       <SelectOption apiName="reasoning.summary" label="推理摘要详细度" onChange={(value) => set('reasoning', value === 'unset' && current.reasoning?.effort === undefined ? undefined : { ...current.reasoning, summary: value === 'unset' ? undefined : value as NonNullable<ProviderModelOptions['reasoning']>['summary'] })} options={summaryOptions} value={current.reasoning?.summary} />
-      <SelectOption apiName="service_tier" label="服务档位" onChange={(value) => set('serviceTier', value === 'unset' ? undefined : value as ProviderModelOptions['serviceTier'])} options={serviceTierOptions} value={current.serviceTier} />
-      <SelectOption apiName="verbosity" label="回复详细度" onChange={(value) => set('verbosity', value === 'unset' ? undefined : value as ProviderModelOptions['verbosity'])} options={verbosityOptions} value={current.verbosity} />
       <JsonOption apiName="model_kwargs" hint="合法 JSON 对象，原样透传给模型" label="额外模型参数" onChange={(value) => set('modelKwargs', value as ProviderModelOptions['modelKwargs'])} value={current.modelKwargs} />
     </div> : null}
     {providerType === 'anthropic_compatible' ? <div className="form-grid">
       {number('候选词数量上限', 'topK', true, 'top_k')}{bool('流式返回用量统计', 'streamUsage', 'stream_usage')}
       <SelectOption apiName="thinking" label="扩展思考" onChange={(value) => set('anthropicThinking', value === 'unset' ? undefined : value === 'enabled' ? { mode: value, budgetTokens: 1024 } : { mode: value } as ProviderModelOptions['anthropicThinking'])} options={thinkingModeOptions} value={current.anthropicThinking?.mode} />
       {current.anthropicThinking?.mode === 'enabled' ? <TextOption apiName="thinking.budget_tokens" hint="思考过程可用的 token 上限" label="思考预算" onChange={(value) => { const parsed = Number(value); if (Number.isInteger(parsed)) set('anthropicThinking', { mode: 'enabled', budgetTokens: parsed }); }} value={current.anthropicThinking.budgetTokens} /> : null}
-      <TextOption apiName="anthropic_betas" full hint="填 beta 标识，多个用逗号分隔" label="Beta 功能开关" onChange={(value) => set('anthropicBetas', list(value))} value={current.anthropicBetas?.join(', ')} />
-      <JsonOption apiName="invocation_kwargs" hint="合法 JSON 对象，原样透传" label="额外调用参数" onChange={(value) => set('invocationKwargs', value as ProviderModelOptions['invocationKwargs'])} value={current.invocationKwargs} />
     </div> : null}
     {providerType === 'nvidia' ? <div className="form-grid">
       {bool('扩展思考', 'thinking', 'thinking')}{number('候选词数量上限', 'topK', true, 'top_k')}{number('最小概率阈值', 'minP', false, 'min_p', '低于该概率的候选词被丢弃')}{number('重复词惩罚', 'frequencyPenalty', false, 'frequency_penalty')}{number('新话题倾向', 'presencePenalty', false, 'presence_penalty')}{number('重复惩罚系数', 'repetitionPenalty', false, 'repetition_penalty', '1 表示不惩罚')}

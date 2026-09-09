@@ -56,8 +56,6 @@ export type AnthropicThinkingOption = NonNullable<ProviderModelOptions['anthropi
 export type OpenAiReasoningOption = NonNullable<ProviderModelOptions['reasoning']>;
 export type OpenAiReasoningEffort = NonNullable<OpenAiReasoningOption['effort']>;
 export type OpenAiReasoningSummary = NonNullable<OpenAiReasoningOption['summary']>;
-export type OpenAiServiceTier = NonNullable<ProviderModelOptions['serviceTier']>;
-export type OpenAiVerbosity = NonNullable<ProviderModelOptions['verbosity']>;
 
 export const anthropicThinkingMinBudgetTokens = 1024;
 

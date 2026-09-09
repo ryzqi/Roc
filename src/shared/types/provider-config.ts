@@ -2,8 +2,6 @@ import type {
   AnthropicThinkingOption,
   NvidiaToolChoice,
   OpenAiReasoningOption,
-  OpenAiServiceTier,
-  OpenAiVerbosity,
   ProviderConfig,
   ProviderConnectionOptions,
   ProviderModel,
@@ -15,8 +13,6 @@ export type {
   AnthropicThinkingOption,
   NvidiaToolChoice,
   OpenAiReasoningOption,
-  OpenAiServiceTier,
-  OpenAiVerbosity,
   ProviderSamplingProfileOverrides
 } from './settings';
 
@@ -48,13 +44,9 @@ export type OpenAICompatibleParams = CommonProviderParams & {
   presencePenalty?: number;
   seed?: number;
   stop?: string[];
-  useResponsesApi?: boolean;
   reasoning?: OpenAiReasoningOption;
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
-  serviceTier?: OpenAiServiceTier;
-  verbosity?: OpenAiVerbosity;
-  zdrEnabled?: boolean;
   modelKwargs?: ProviderModelOptions['modelKwargs'];
 };
 
@@ -62,8 +54,6 @@ export type AnthropicCompatibleParams = CommonProviderParams & {
   topK?: number;
   stopSequences?: string[];
   thinking?: AnthropicThinkingOption;
-  betas?: string[];
-  invocationKwargs?: ProviderModelOptions['invocationKwargs'];
 };
 
 export type NvidiaParams = CommonProviderParams & {
@@ -151,13 +141,9 @@ export function toTypedProviderConfig(
           presencePenalty: opts.presencePenalty,
           seed: opts.seed,
           stop: opts.stop,
-          useResponsesApi: opts.useResponsesApi,
           reasoning: opts.reasoning,
           parallelToolCalls: opts.parallelToolCalls,
           streamUsage: opts.streamUsage,
-          serviceTier: opts.serviceTier,
-          verbosity: opts.verbosity,
-          zdrEnabled: opts.zdrEnabled,
           modelKwargs: opts.modelKwargs
         }
       };
@@ -172,9 +158,7 @@ export function toTypedProviderConfig(
           topP: opts.topP,
           topK: opts.topK,
           stopSequences: opts.stop,
-          thinking: opts.anthropicThinking,
-          betas: opts.anthropicBetas,
-          invocationKwargs: opts.invocationKwargs
+          thinking: opts.anthropicThinking
         }
       };
 
@@ -263,9 +247,7 @@ function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderMod
         topP: typed.params.topP,
         topK: typed.params.topK,
         stop: typed.params.stopSequences,
-        anthropicThinking: typed.params.thinking,
-        anthropicBetas: typed.params.betas,
-        invocationKwargs: typed.params.invocationKwargs
+        anthropicThinking: typed.params.thinking
       };
 
     case 'openrouter':

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LangChainModelFactory, resolveAnthropicBetas } from '../../src/main/services/langchain-model-factory';
+import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
 import type { ProviderConfig, ProviderModelOptions } from '../../src/shared/types';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 
@@ -14,27 +14,6 @@ afterEach(async () => {
 
 
 describe('LangChainModelFactory', () => {
-  describe('resolveAnthropicBetas', () => {
-    it('filters empty beta strings', () => {
-      expect(resolveAnthropicBetas(['valid-beta', '', 'another-valid'])).toEqual(['valid-beta', 'another-valid']);
-    });
-
-    it('filters whitespace-only beta strings', () => {
-      expect(resolveAnthropicBetas(['valid', '  ', '\t', 'also-valid'])).toEqual(['valid', 'also-valid']);
-    });
-
-    it('returns an empty array for an empty array', () => {
-      expect(resolveAnthropicBetas([])).toEqual([]);
-    });
-
-    it('keeps all valid beta strings', () => {
-      const betas = ['prompt-caching-2024-07-31', 'pdfs-2024-09-25'];
-
-      expect(resolveAnthropicBetas(betas)).toEqual(betas);
-    });
-  });
-
-
   describe('buildAnthropicClientOptions', () => {
     it('uses provider timeout when configured', () => {
       const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
@@ -155,68 +134,4 @@ describe('LangChainModelFactory', () => {
       expect(config.stopSequences).toBeUndefined();
     });
   });
-
-
-  describe('applyAnthropicPhase1Features', () => {
-    it('applies configured Anthropic betas', () => {
-      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
-      };
-      const config: Record<string, unknown> = {};
-
-      factory.applyAnthropicPhase1Features(config, {
-        anthropicBetas: ['prompt-caching-2024-07-31', 'pdfs-2024-09-25']
-      });
-
-      expect(config.betas).toEqual(['prompt-caching-2024-07-31', 'pdfs-2024-09-25']);
-    });
-
-    it('applies invocation kwargs', () => {
-      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
-      };
-      const config: Record<string, unknown> = {};
-
-      factory.applyAnthropicPhase1Features(config, {
-        invocationKwargs: { metadata: { user_id: 'test' } }
-      });
-
-      expect(config.invocationKwargs).toEqual({ metadata: { user_id: 'test' } });
-    });
-
-    it('skips undefined phase 1 options', () => {
-      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
-      };
-      const config: Record<string, unknown> = {};
-
-      factory.applyAnthropicPhase1Features(config, {});
-
-      expect(config.betas).toBeUndefined();
-      expect(config.invocationKwargs).toBeUndefined();
-    });
-
-    it('omits empty beta arrays', () => {
-      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
-      };
-      const config: Record<string, unknown> = {};
-
-      factory.applyAnthropicPhase1Features(config, { anthropicBetas: [] });
-
-      expect(config.betas).toBeUndefined();
-    });
-
-    it('omits betas when every configured value is empty', () => {
-      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
-        applyAnthropicPhase1Features(config: Record<string, unknown>, options: ProviderModelOptions): void;
-      };
-      const config: Record<string, unknown> = {};
-
-      factory.applyAnthropicPhase1Features(config, { anthropicBetas: ['', '  '] });
-
-      expect(config.betas).toBeUndefined();
-    });
-  });
-
 });

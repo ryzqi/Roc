@@ -85,11 +85,7 @@ describe('LangChainModelFactory', () => {
               options: {
                 contextBudgetTokens: 4096,
                 reasoning: { effort: 'medium' },
-                serviceTier: 'flex',
-                streamUsage: true,
-                useResponsesApi: true,
-                verbosity: 'high',
-                zdrEnabled: true
+                streamUsage: true
               }
             }
           ],
@@ -105,7 +101,6 @@ describe('LangChainModelFactory', () => {
     const chatModel = result.model as unknown as {
       clientConfig?: { baseURL?: string; organization?: string };
       invocationParams: () => Record<string, unknown>;
-      useResponsesApi?: boolean;
     };
 
     expect(result.runtime.streaming).toBe(true);
@@ -117,7 +112,6 @@ describe('LangChainModelFactory', () => {
       baseURL: 'http://127.0.0.1:9090/v1'
     });
     expect(chatModel.clientConfig?.organization).not.toBe('org_should_not_send');
-    expect(chatModel.useResponsesApi).not.toBe(true);
     expect(chatModel.invocationParams()).not.toMatchObject({
       reasoning: expect.anything(),
       service_tier: expect.anything(),

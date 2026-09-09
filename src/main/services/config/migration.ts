@@ -170,6 +170,26 @@ function normalizeProviderModel(value: unknown): unknown {
 
 const providerConnectionOptionKeys = new Set(['timeoutMs', 'defaultHeaders', 'organization', 'endpointOverride']);
 
+const retiredProviderModelOptionKeys = new Set([
+  'useResponsesApi',
+  'serviceTier',
+  'verbosity',
+  'zdrEnabled',
+  'anthropicBetas',
+  'invocationKwargs'
+]);
+
+function stripRetiredProviderModelOptions(options: Record<string, unknown>): Record<string, unknown> | undefined {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (!retiredProviderModelOptionKeys.has(key)) {
+      next[key] = value;
+    }
+  }
+  return Object.keys(next).length === 0 ? undefined : next;
+}
+
+
 function migrateProviderEntry(entry: unknown): unknown {
   if (entry === null || typeof entry !== 'object') {
     return entry;
@@ -195,10 +215,15 @@ function migrateProviderEntry(entry: unknown): unknown {
           modelRecord.options !== null && typeof modelRecord.options === 'object' && !Array.isArray(modelRecord.options)
             ? (modelRecord.options as Record<string, unknown>)
             : undefined;
-        if (Object.keys(modelOptions).length === 0 && existingOptions === undefined) {
-          return modelRecord;
+        const mergedOptions = stripRetiredProviderModelOptions({ ...modelOptions, ...(existingOptions ?? {}) });
+        if (mergedOptions === undefined) {
+          if (existingOptions === undefined && Object.keys(modelOptions).length === 0) {
+            return modelRecord;
+          }
+          const { options: _options, ...rest } = modelRecord;
+          return rest;
         }
-        return { ...modelRecord, options: { ...modelOptions, ...(existingOptions ?? {}) } };
+        return { ...modelRecord, options: mergedOptions };
       })
     : [];
   return {

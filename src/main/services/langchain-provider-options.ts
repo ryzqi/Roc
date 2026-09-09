@@ -164,16 +164,6 @@ export function resolveStreamUsage(provider: ProviderConfig, modelOptions: Provi
   return undefined;
 }
 
-export function resolveAnthropicBetas(betas: string[]): string[] {
-  const validBetas: string[] = [];
-  for (const beta of betas) {
-    if (beta.trim().length > 0) {
-      validBetas.push(beta);
-    }
-  }
-  return validBetas;
-}
-
 export function resolveAnthropicThinking(
   options: ProviderModelOptions
 ): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {
@@ -235,9 +225,6 @@ export function resolveOpenAiCompatibleDefaultOptions(
   }
   if (typeof params.parallelToolCalls === 'boolean') {
     defaults.parallel_tool_calls = params.parallelToolCalls;
-  }
-  if (params.verbosity !== undefined) {
-    defaults.verbosity = params.verbosity;
   }
   return defaults;
 }

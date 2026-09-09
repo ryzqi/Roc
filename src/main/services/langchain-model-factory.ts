@@ -19,7 +19,6 @@ import {
   buildNvidiaModelKwargs,
   createFetchWithoutAuthorization,
   isLangChainProviderType,
-  resolveAnthropicBetas,
   resolveAnthropicThinking,
   resolveLlamaCppSamplingProfile,
   resolveOpenAiCompatibleDefaultOptions,
@@ -28,8 +27,6 @@ import {
 } from './langchain-provider-options';
 import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
-
-export { resolveAnthropicBetas };
 
 type LangChainModelRuntime = {
   providerType: ProviderType;
@@ -172,18 +169,6 @@ export class LangChainModelFactory {
     }
   }
 
-  private applyAnthropicPhase1Features(config: ChatAnthropicInput, options: ProviderModelOptions): void {
-    if (options.anthropicBetas !== undefined) {
-      const betas = resolveAnthropicBetas(options.anthropicBetas);
-      if (betas.length > 0) {
-        config.betas = betas as NonNullable<ChatAnthropicInput['betas']>;
-      }
-    }
-    if (options.invocationKwargs !== undefined) {
-      config.invocationKwargs = options.invocationKwargs;
-    }
-  }
-
   private createAnthropicModel(
     provider: ProviderConfig,
     modelId: string,
@@ -211,7 +196,6 @@ export class LangChainModelFactory {
     if (thinking !== undefined) {
       config.thinking = thinking;
     }
-    this.applyAnthropicPhase1Features(config, providerOptions);
     const model = new ChatAnthropic(config);
     warnIfAnthropicCacheControlConfigured(model, this.logService);
     return {
@@ -325,10 +309,6 @@ export class LangChainModelFactory {
     const openAiReasoning = openAiParams?.reasoning;
     const openAiOrganization =
       provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
-    const openAiUseResponsesApi = provider.type === 'openai_compatible' ? openAiParams?.useResponsesApi : undefined;
-    const openAiServiceTier = provider.type === 'openai_compatible' ? openAiParams?.serviceTier : undefined;
-    const openAiVerbosity = provider.type === 'openai_compatible' ? openAiParams?.verbosity : undefined;
-    const openAiZdrEnabled = provider.type === 'openai_compatible' ? openAiParams?.zdrEnabled : undefined;
     const openAiTopP = provider.type === 'llama_cpp' ? llamaCppParams?.topP ?? llamaCppSamplingProfile?.topP : modelOptions.topP;
     const openAiPresencePenalty =
       provider.type === 'llama_cpp'
@@ -367,11 +347,7 @@ export class LangChainModelFactory {
       maxTokens,
       timeout: openAiRequestTimeoutMs,
       configuration: openAiConfiguration,
-      ...(openAiUseResponsesApi === undefined ? {} : { useResponsesApi: openAiUseResponsesApi }),
       ...(openAiReasoning === undefined ? {} : { reasoning: openAiReasoning }),
-      ...(openAiServiceTier === undefined ? {} : { service_tier: openAiServiceTier }),
-      ...(openAiVerbosity === undefined ? {} : { verbosity: openAiVerbosity }),
-      ...(openAiZdrEnabled === undefined ? {} : { zdrEnabled: openAiZdrEnabled }),
       modelKwargs
     };
     const chatModel =

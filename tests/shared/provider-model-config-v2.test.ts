@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { providerConfigSchema, providerModelSchema, providersConfigSchema } from '../../src/shared/schemas/ipc-memory-settings';
-import { migrateLegacyUnifiedDocument } from '../../src/main/services/config/migration';
+import { migrateLegacyUnifiedDocument, normalizeCurrentSettingsDocument } from '../../src/main/services/config/migration';
+import { defaultMcpConfig, defaultPermissions, defaultSettings, defaultShortcuts } from '../../src/main/services/config/defaults';
 
 const model = (id: string, options?: Record<string, unknown>) => ({
   id,
@@ -72,5 +73,39 @@ describe('provider model configuration v2', () => {
       { temperature: 0.4 }
     ]);
     expect(providersConfigSchema.parse(migrated.providers)).toEqual(migrated.providers);
+  });
+
+  it('drops retired OpenAI and Anthropic model options from current documents', () => {
+    const normalized = normalizeCurrentSettingsDocument({
+      schemaVersion: 4,
+      settings: defaultSettings,
+      providers: {
+        schemaVersion: 2,
+        defaultModelId: 'p:a',
+        providers: [{
+          id: 'p',
+          name: 'Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://example.test/v1',
+          credentialRef: null,
+          enabled: true,
+          models: [model('a', {
+            temperature: 0.2,
+            useResponsesApi: true,
+            serviceTier: 'flex',
+            verbosity: 'high',
+            zdrEnabled: true,
+            anthropicBetas: ['prompt-caching-2024-07-31'],
+            invocationKwargs: { metadata: { user_id: 'x' } }
+          })]
+        }]
+      },
+      mcp: defaultMcpConfig,
+      permissions: defaultPermissions,
+      shortcuts: defaultShortcuts
+    });
+    const provider = normalized.providers.providers.find((item) => item.id === 'p');
+    expect(provider?.models[0]?.options).toEqual({ temperature: 0.2 });
+    expect(providersConfigSchema.parse(normalized.providers)).toEqual(normalized.providers);
   });
 });
