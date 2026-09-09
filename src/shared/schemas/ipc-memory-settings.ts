@@ -269,7 +269,7 @@ export const appSettingsSchema = z
   .object({
     schemaVersion: z.literal(2),
     defaultWorkspace: z.string().nullable(),
-    startup: z.object({ openAtLogin: z.boolean(), minimizeToTray: z.boolean() }).strict(),
+    startup: z.object({ openAtLogin: z.boolean() }).strict(),
     globalHotkey: z.string().nullable(),
     memory: z
       .object({

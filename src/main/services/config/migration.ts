@@ -146,8 +146,7 @@ function upgradeLegacySettings(raw: unknown): AppSettings {
     schemaVersion: 2,
     defaultWorkspace: typeof value.defaultWorkspace === 'string' ? value.defaultWorkspace : null,
     startup: {
-      openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false,
-      minimizeToTray: typeof startup.minimizeToTray === 'boolean' ? startup.minimizeToTray : true
+      openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false
     },
     globalHotkey: typeof value.globalHotkey === 'string' && value.globalHotkey.length > 0 ? value.globalHotkey : null,
     memory: upgradeMemorySettings(value.memory),

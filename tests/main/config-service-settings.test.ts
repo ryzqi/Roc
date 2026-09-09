@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '../../src/main/services/config-service';
-import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
+import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from '../../src/main/services/config/defaults';
 import { RocPaths } from '../../src/main/services/paths';
 import type { ProviderConfig } from '../../src/shared/types';
 
@@ -27,6 +27,58 @@ afterEach(() => {
 
 
 describe('ConfigService unified settings document', () => {
+  it.each([2, 3, 4])('drops obsolete startup fields from version %i documents without changing other settings', (schemaVersion) => {
+    const expectedSettings = {
+      ...defaultSettings,
+      defaultWorkspace: '/Users/test/Code/Roc',
+      startup: { openAtLogin: true },
+      globalHotkey: 'Command+Shift+R'
+    };
+    writeFileSync(
+      join(root, 'config', 'settings.json'),
+      `${JSON.stringify({
+        schemaVersion,
+        settings: {
+          ...expectedSettings,
+          startup: { ...expectedSettings.startup, minimizeToTray: false }
+        },
+        providers: defaultProviders,
+        mcp: defaultMcpConfig,
+        permissions: defaultPermissions,
+        shortcuts: defaultShortcuts
+      }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    expect(configService.getSettings()).toEqual(expectedSettings);
+    const persisted = readSettingsDocument() as { schemaVersion: number; settings: unknown };
+    expect(persisted.schemaVersion).toBe(4);
+    expect(persisted.settings).toEqual(expectedSettings);
+  });
+
+  it('rejects obsolete startup fields in save requests without changing persisted settings', async () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+    const originalDocument = readSettingsDocument();
+    const request = {
+      settings: {
+        ...defaultSettings,
+        startup: { openAtLogin: true, minimizeToTray: true }
+      },
+      providers: defaultProviders.providers,
+      defaultModelId: defaultProviders.defaultModelId,
+      permissions: defaultPermissions
+    };
+
+    expect(() => configService.saveSettingsSnapshot(request)).toThrow();
+    await expect(configService.saveSettingsSnapshotAsync(request)).rejects.toThrow();
+    expect(configService.getSettings()).toEqual(defaultSettings);
+    expect(readSettingsDocument()).toEqual(originalDocument);
+  });
+
   it('returns default task thresholds when settings.json omits task settings', () => {
     writeFileSync(
       join(root, 'config', 'settings.json'),
@@ -36,7 +88,7 @@ describe('ConfigService unified settings document', () => {
           settings: {
             schemaVersion: 2,
             defaultWorkspace: null,
-            startup: { openAtLogin: false, minimizeToTray: true },
+            startup: { openAtLogin: false },
             globalHotkey: null,
             memory: {
               candidateReviewMode: 'manual',
@@ -192,7 +244,7 @@ describe('ConfigService unified settings document', () => {
         settings: {
           schemaVersion: 2,
           defaultWorkspace: null,
-          startup: { openAtLogin: false, minimizeToTray: true },
+          startup: { openAtLogin: false },
           ['notifica' + 'tions']: { ['low' + 'Distraction']: true },
           globalHotkey: null,
           memory: {

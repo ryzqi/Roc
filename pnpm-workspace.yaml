@@ -1,5 +1,9 @@
 strictPeerDependencies: false
 
+overrides:
+  # 仅构建 macOS，移除上游自动安装的 Squirrel 打包器。
+  'app-builder-lib>electron-builder-squirrel-windows': '-'
+
 allowBuilds:
   better-sqlite3: false
   electron: true

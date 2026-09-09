@@ -114,17 +114,6 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
   pushIfChanged(
     rows,
     'app-basics',
-    'startup.minimizeToTray',
-    base.settings.startup.minimizeToTray,
-    draft.settings.startup.minimizeToTray,
-    '会影响关闭主窗口后是否驻留托盘。',
-    'info',
-    (value) => (value ? '最小化到托盘' : '直接退出')
-  );
-
-  pushIfChanged(
-    rows,
-    'app-basics',
     'globalHotkey',
     base.settings.globalHotkey,
     draft.settings.globalHotkey,

@@ -15,8 +15,7 @@ export const defaultSettings: AppSettings = {
   schemaVersion: 2,
   defaultWorkspace: null,
   startup: {
-    openAtLogin: false,
-    minimizeToTray: true
+    openAtLogin: false
   },
   globalHotkey: null,
   memory: {

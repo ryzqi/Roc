@@ -166,6 +166,7 @@ describe('shell policy', () => {
       'git status && git diff',
       'python script.py',
       'node index.js',
+      'node -e "console.log(2 > (1))"',
       'cargo build',
       'dotnet run',
       'pnpm test --filter="version>1.0"',

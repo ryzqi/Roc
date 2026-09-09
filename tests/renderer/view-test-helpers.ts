@@ -87,8 +87,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       schemaVersion: 2,
       defaultWorkspace: null,
       startup: {
-        openAtLogin: false,
-        minimizeToTray: false
+        openAtLogin: false
       },
       globalHotkey: null,
       memory: {

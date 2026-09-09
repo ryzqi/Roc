@@ -36,27 +36,27 @@ resources/rtk-binaries/darwin-arm64/rtk
 
 ## 调试
 
-验证当前 macOS binary：
+验证 Apple Silicon binary（Intel Mac 将 `darwin-arm64` 替换为 `darwin-x64`）：
 
 ```bash
-resources/rtk-binaries/darwin-$(uname -m | sed 's/arm64/arm64/;s/x86_64/x64/')/rtk --version
-resources/rtk-binaries/darwin-$(uname -m | sed 's/arm64/arm64/;s/x86_64/x64/')/rtk rewrite "git status"
+rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/rtk --version
+rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
 ```
 
 运行 RTK 测试：
 
 ```bash
-rtk pnpm test -- tests/rtk-integration
-rtk pnpm test -- --coverage tests/rtk-integration
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run tests/rtk-integration
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run --coverage tests/rtk-integration
 ```
 
 运行完整验证：
 
 ```bash
-rtk pnpm typecheck
-rtk pnpm test
-rtk pnpm package:dir
-rtk pnpm smoke:electron
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
 ```
 
 ## 降级行为

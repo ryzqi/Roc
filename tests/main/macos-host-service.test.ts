@@ -13,7 +13,6 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
     defaultWorkspace: null,
     startup: {
       openAtLogin: false,
-      minimizeToTray: true,
       ...overrides.startup
     },
     globalHotkey: overrides.globalHotkey ?? null,
@@ -119,7 +118,7 @@ describe('MacOSHostService', () => {
       broadcastTaskUpdated: vi.fn()
     });
     vi.spyOn(host, 'refreshTray').mockImplementation(() => undefined);
-    host.syncSettings(createSettings({ startup: { openAtLogin: true, minimizeToTray: true } }));
+    host.syncSettings(createSettings({ startup: { openAtLogin: true } }));
     expect(app.setLoginItemSettings).not.toHaveBeenCalled();
     expect(host.getIntegrationStatus().startup).toEqual({
       configuredOpenAtLogin: true,
@@ -191,7 +190,7 @@ describe('MacOSHostService', () => {
     });
   });
 
-  it('hides the main window on close when minimizeToTray is enabled, but explicit quit bypasses tray residency', () => {
+  it('hides the main window on close and exits only after an explicit quit', () => {
     const app = createAppMock();
     const mainWindow = createWindowMock();
     const host = new MacOSHostService({
@@ -229,7 +228,7 @@ describe('MacOSHostService', () => {
       broadcastTaskUpdated: vi.fn()
     });
 
-    host.syncSettings(createSettings({ startup: { openAtLogin: false, minimizeToTray: true } }));
+    host.syncSettings(createSettings());
     host.bindMainWindow(mainWindow);
 
     const closeHandler = mainWindow.handlers.get('close');
@@ -252,7 +251,7 @@ describe('MacOSHostService', () => {
     expect(preventDefaultAfterQuit).not.toHaveBeenCalled();
   });
 
-  it('keeps macOS background tasks alive when the legacy minimizeToTray setting is disabled', () => {
+  it('keeps macOS background tasks alive before settings are synchronized', () => {
     const mainWindow = createWindowMock();
     const host = new MacOSHostService({
       isPackaged: true,
@@ -289,7 +288,6 @@ describe('MacOSHostService', () => {
       broadcastTaskUpdated: vi.fn()
     });
 
-    host.syncSettings(createSettings({ startup: { openAtLogin: false, minimizeToTray: false } }));
     host.bindMainWindow(mainWindow);
     const closeHandler = mainWindow.handlers.get('close');
     if (closeHandler === undefined) {
@@ -378,7 +376,7 @@ describe('MacOSHostService', () => {
       broadcastTaskUpdated
     });
 
-    host.syncSettings(createSettings({ startup: { openAtLogin: true, minimizeToTray: true }, globalHotkey: 'Command+Shift+R' }));
+    host.syncSettings(createSettings({ startup: { openAtLogin: true }, globalHotkey: 'Command+Shift+R' }));
 
     expect(app.setLoginItemSettings).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -9,7 +9,7 @@ function createSettings(): AppSettings {
   return {
     schemaVersion: 2,
     defaultWorkspace: null,
-    startup: { openAtLogin: false, minimizeToTray: true },
+    startup: { openAtLogin: false },
     globalHotkey: null,
     memory: {
       charLimits: { user: 1375, agents: 800, memory: 2200 },

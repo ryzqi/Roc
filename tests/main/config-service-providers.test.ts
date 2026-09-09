@@ -42,7 +42,7 @@ describe('ConfigService unified settings document', () => {
       settings: {
         schemaVersion: 1,
         defaultWorkspace: null,
-        startup: { openAtLogin: false, minimizeToTray: true },
+        startup: { openAtLogin: false },
         memory: { candidateReviewMode: 'manual', warmRecallEnabled: true }
       },
       providers: {
@@ -233,7 +233,7 @@ describe('ConfigService unified settings document', () => {
     const settings: AppSettings = {
       schemaVersion: 2,
       defaultWorkspace: null,
-      startup: { openAtLogin: true, minimizeToTray: true },
+      startup: { openAtLogin: true },
       globalHotkey: 'Ctrl+Alt+R',
       memory: {
         ...defaultSettings.memory,

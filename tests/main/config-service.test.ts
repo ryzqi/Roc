@@ -195,10 +195,12 @@ describe('ConfigService unified settings document', () => {
     expect(document.settings).toMatchObject({
       schemaVersion: 2,
       defaultWorkspace: '/Users/test/Code/Roc',
-      startup: { openAtLogin: true, minimizeToTray: false },
+      startup: { openAtLogin: true },
       globalHotkey: null,
       memory: defaultSettings.memory
     });
+    expect(configService.getSettings().startup).toEqual({ openAtLogin: true });
+    expect((document.settings as { startup: unknown }).startup).toEqual({ openAtLogin: true });
     expect(document.providers).toMatchObject({
       schemaVersion: 2,
       defaultModelId: 'provider-openai:provider-openai-model'

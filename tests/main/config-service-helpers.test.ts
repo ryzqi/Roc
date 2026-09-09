@@ -251,7 +251,7 @@ describe('config helper modules', () => {
       rawSettings: {
         schemaVersion: 2,
         defaultWorkspace: null,
-        startup: { openAtLogin: false, minimizeToTray: true },
+        startup: { openAtLogin: false },
         globalHotkey: null,
         memory: {
           frozenSnapshotEnabled: false,
