@@ -14,7 +14,7 @@ export const rendererChunkRules = [
 ] as const;
 
 export function resolveRendererManualChunk(id: string): string | undefined {
-  const normalizedId = id.replace(/\\/g, '/');
+  const normalizedId = id;
   const marker = '/node_modules/';
   const markerIndex = normalizedId.lastIndexOf(marker);
   if (markerIndex < 0) {

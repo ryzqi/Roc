@@ -204,7 +204,7 @@ function evaluateFileOperationCommand(command: string): ShellPolicyVerdict {
   const FILE_OPERATION_PATTERNS = [
     /\bcat\b/,
     /\becho\b/,
-    /\s+(?:>{1,2}&?|&>)\s*[\w\.\-\/]/,
+    /\s+(?:>{1,2}&?|&>)\s*\S/u,
     /\b(touch|ls|rm|mkdir|cp|mv)\b/
   ];
 

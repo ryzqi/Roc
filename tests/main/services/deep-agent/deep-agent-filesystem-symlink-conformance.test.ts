@@ -29,7 +29,7 @@ describe('Deep Agents filesystem symlink conformance', () => {
       searchPath: (root: string): string => root
     }
   ])('$name glob does not follow symlink escapes', async ({ create, searchPath }) => {
-    const fixture = await createJunctionFixture();
+    const fixture = await createSymlinkFixture();
     const result = await create(fixture.root).glob('**/*', searchPath(fixture.root));
     const paths = requireGlobPaths(result);
 
@@ -40,7 +40,7 @@ describe('Deep Agents filesystem symlink conformance', () => {
   });
 
   it('keeps FilesystemBackend grep fallback inside its root', async () => {
-    const fixture = await createJunctionFixture();
+    const fixture = await createSymlinkFixture();
     const backend = new FilesystemBackend({ rootDir: fixture.root, virtualMode: true });
     const fallbackTarget = backend as unknown as {
       ripgrepSearch: (...args: unknown[]) => Promise<null>;
@@ -60,8 +60,8 @@ describe('Deep Agents filesystem symlink conformance', () => {
   });
 });
 
-async function createJunctionFixture(): Promise<{ root: string }> {
-  const container = await mkdtemp(join(tmpdir(), 'roc-deepagents-junction-'));
+async function createSymlinkFixture(): Promise<{ root: string }> {
+  const container = await mkdtemp(join(tmpdir(), 'roc-deepagents-symlink-'));
   cleanupRoots.push(container);
   const root = join(container, 'root');
   const sub = join(root, 'sub');

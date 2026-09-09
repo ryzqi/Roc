@@ -114,5 +114,5 @@ function isAbsoluteReference(relativePath: string): boolean {
 
 function isInsideWorkspace(absolutePath: string, workspacePath: string): boolean {
   const relativePath = relative(resolve(workspacePath), resolve(absolutePath));
-  return relativePath.length === 0 || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
+  return relativePath !== '..' && !relativePath.startsWith('../') && !isAbsolute(relativePath);
 }

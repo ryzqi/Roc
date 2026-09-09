@@ -37,7 +37,7 @@ describe('agent performance baseline contract', () => {
     ).toThrow('agent_performance_baseline_metric_set_invalid');
   });
 
-  it('ships the measured five-run baseline without placeholder gates', async () => {
+  it('ships the measured macOS baseline without placeholder gates', async () => {
     const content = await readFile(
       new URL('../performance/datasets/agent-performance-baseline.v1.json', import.meta.url),
       'utf8'

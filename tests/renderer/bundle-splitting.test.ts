@@ -4,15 +4,15 @@ import { rendererChunkRules, resolveRendererManualChunk } from '../../electron.v
 
 describe('renderer bundle splitting', () => {
   it('keeps heavy renderer dependencies in named lazy chunks', () => {
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/@xterm/xterm/lib/xterm.js')).toBe('renderer-terminal');
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/@xterm/addon-fit/lib/addon-fit.js')).toBe('renderer-terminal');
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/@xterm/xterm/lib/xterm.js')).toBe('renderer-terminal');
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/@xterm/addon-fit/lib/addon-fit.js')).toBe('renderer-terminal');
     expect(
-      resolveRendererManualChunk('F:/Code/Roc/node_modules/.pnpm/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.js')
+      resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/.pnpm/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.js')
     ).toBe('renderer-terminal');
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-diff-view/esm/index.js')).toBe('renderer-diff');
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-markdown/index.js')).toBeUndefined();
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/rehype-highlight/index.js')).toBeUndefined();
-    expect(resolveRendererManualChunk('F:/Code/Roc/src/renderer/App.tsx')).toBeUndefined();
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/react-diff-view/esm/index.js')).toBe('renderer-diff');
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/react-markdown/index.js')).toBeUndefined();
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/node_modules/rehype-highlight/index.js')).toBeUndefined();
+    expect(resolveRendererManualChunk('/Users/test/Code/Roc/src/renderer/App.tsx')).toBeUndefined();
   });
 
   it('keeps manual chunk rules aligned to installed package dependencies', () => {

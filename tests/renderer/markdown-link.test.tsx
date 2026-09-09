@@ -38,7 +38,7 @@ describe('Markdown external links', () => {
     expect(open).toHaveBeenCalledWith('https://example.com/docs', '_blank', 'noopener,noreferrer');
   });
 
-  it.each(['./relative', 'file:///C:/secret.txt', 'javascript:alert(1)'])(
+  it.each(['./relative', 'file:///Users/test/secret.txt', 'javascript:alert(1)'])(
     'keeps a blocked Markdown target readable but non-interactive: %s',
     async (href) => {
       const open = vi.spyOn(window, 'open').mockReturnValue(null);

@@ -21,7 +21,7 @@ describe('external link policy', () => {
   );
 
   it.each([
-    'file:///C:/secret.txt?token=sensitive',
+    'file:///Users/test/secret.txt?token=sensitive',
     'javascript:alert(1)',
     'data:text/html,owned',
     'roc-preview://workspace/pdf/secret.pdf'

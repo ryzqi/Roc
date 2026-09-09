@@ -146,6 +146,7 @@ describe('shell policy', () => {
     it.each([
       'cat file.txt',
       'echo "test" > output.txt',
+      'printf "test" > \\output.txt',
       'ls .',
       'touch test.txt',
       'rm old.txt',

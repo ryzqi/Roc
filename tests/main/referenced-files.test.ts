@@ -49,6 +49,13 @@ describe('loadReferencedFileContexts', () => {
     expect(contexts).toEqual([]);
   });
 
+  it('keeps a POSIX file name starting with two dots', () => {
+    writeFileSync(join(workspacePath, '..notes.md'), 'fixture', 'utf8');
+    expect(loadReferencedFileContexts({ userInput: '@..notes.md', workspacePath })).toEqual([
+      { path: '..notes.md' }
+    ]);
+  });
+
   it('drops directories because only files are referenceable', () => {
     const contexts = loadReferencedFileContexts({
       userInput: '看看 @src/renderer/chat/nested',

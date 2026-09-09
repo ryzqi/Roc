@@ -79,7 +79,7 @@ export function normalizeBranchName(name: string): string {
       userAction: '请输入有效的本地分支名后再继续。'
     });
   }
-  if (normalizedName.includes('..') || normalizedName.startsWith('/') || normalizedName.endsWith('/')) {
+  if (normalizedName.includes('..') || normalizedName.includes('\\') || normalizedName.startsWith('/') || normalizedName.endsWith('/')) {
     throw new RocDomainError({
       code: 'git_branch_name_invalid',
       message: '分支名不合法。',
