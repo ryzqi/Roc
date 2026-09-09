@@ -227,7 +227,7 @@ describe('TaskDetailView', () => {
                 triggerDescription: '每天 09:00',
                 nextRunAt: '2026-05-17T01:00:00.000Z',
                 cronExpression: '0 9 * * *',
-                workspacePath: '/Users/test//Code//Roc',
+                workspacePath: '/Users/test/Code/Roc',
                 allowedActions: ['读取工作区', '写入日报'],
                 forbiddenActions: ['删除文件'],
                 failurePolicy: 'pause_and_report',
@@ -273,7 +273,7 @@ describe('TaskDetailView', () => {
     expect(container.querySelector('.task-detail-head-pills')).toBeNull();
     expect(container.textContent).not.toContain('风险 medium');
     expect(container.textContent).not.toContain('调度器已注册');
-    expect(container.textContent).toContain('/Users/test//Code//Roc');
+    expect(container.textContent).toContain('/Users/test/Code/Roc');
     expect(container.textContent).toContain('每天 09:00');
     expect(container.textContent).toContain('0 9 * * *');
     expect(container.textContent).toContain('2026-05-17 01:00');

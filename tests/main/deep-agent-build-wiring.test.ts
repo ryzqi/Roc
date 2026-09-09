@@ -683,7 +683,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       snapshot: createFixtureSnapshot({
       mode: 'run',
       workflowHint: null,
-      workspacePath: '/Users/test//Code//Roc',
+      workspacePath: '/Users/test/Code/Roc',
     }),
       model: {} as unknown,
       systemPrompt: 'system',
@@ -918,5 +918,4 @@ function createNamedTool(name: string) {
     schema: z.object({})
   });
 }
-
 

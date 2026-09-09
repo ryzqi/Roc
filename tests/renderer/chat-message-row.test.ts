@@ -194,7 +194,7 @@ describe('chat message row', () => {
     expect(html).toContain('read_file');
     expect(html).toContain('成功');
     expect(html).toContain('&quot;path&quot;');
-    expect(html).toContain('/Users/test//Code//Roc//README.md');
+    expect(html).toContain('/Users/test/Code/Roc/README.md');
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<summary/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<pre/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*最终答案/);
