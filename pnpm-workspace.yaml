@@ -4,6 +4,12 @@ overrides:
   # 仅构建 macOS，移除上游自动安装的 Squirrel 打包器。
   'app-builder-lib>electron-builder-squirrel-windows': '-'
 
+ignoredOptionalDependencies:
+  - '@esbuild/win32-*'
+  - '@rolldown/binding-win32-*'
+  - '@typescript/typescript-win32-*'
+  - 'lightningcss-win32-*'
+
 allowBuilds:
   better-sqlite3: false
   electron: true
