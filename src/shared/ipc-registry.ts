@@ -172,6 +172,11 @@ import {
 } from './schemas/ipc-workspace';
 import type { IpcResult } from './types';
 import {
+  researchArtifactContentRequestSchema, researchArtifactContentSchema, researchStagePoliciesRequestSchema,
+  researchStagePolicySchema, researchStageRunIdRequestSchema, researchStageRunRetryRequestSchema,
+  researchStageRunSchema, researchStageRunStartRequestSchema, researchStageRunsRequestSchema
+} from './schemas/research-runs';
+import {
   researchClaimCreateRequestSchema,
   researchClaimHistoryRequestSchema,
   researchClaimListRequestSchema,
@@ -330,6 +335,14 @@ export const ipcRegistry = {
     request({ key: 'researchWorkflowGet', channel: 'roc:research:workflow-get', domain: 'research', method: 'getWorkflow', kind: 'plugin', capabilityName: 'research.workflow.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchWorkflowSnapshotSchema) }),
     request({ key: 'researchWorkflowTransition', channel: 'roc:research:workflow-transition', domain: 'research', method: 'transitionWorkflow', kind: 'plugin', capabilityName: 'research.workflow.transition', inputTransform: first, contract: methodContract(oneArg(researchWorkflowTransitionRequestSchema), researchWorkflowSnapshotSchema) }),
     request({ key: 'researchWorkflowEvents', channel: 'roc:research:workflow-events', domain: 'research', method: 'listWorkflowEvents', kind: 'plugin', capabilityName: 'research.workflow.events', inputTransform: first, contract: methodContract(oneArg(researchWorkflowEventsRequestSchema), researchWorkflowEventSchema.array()) }),
+    request({ key: 'researchWorkflowPolicies', channel: 'roc:research:workflow-policies', domain: 'research', method: 'listStagePolicies', kind: 'plugin', capabilityName: 'research.workflow.policies', inputTransform: first, contract: methodContract(oneArg(researchStagePoliciesRequestSchema), researchStagePolicySchema.array()) }),
+    request({ key: 'researchWorkflowSavePolicy', channel: 'roc:research:workflow-save-policy', domain: 'research', method: 'saveStagePolicy', kind: 'plugin', capabilityName: 'research.workflow.savePolicy', inputTransform: first, contract: methodContract(oneArg(researchStagePolicySchema), researchStagePolicySchema) }),
+    request({ key: 'researchWorkflowStartRun', channel: 'roc:research:workflow-start-run', domain: 'research', method: 'startStageRun', kind: 'plugin', capabilityName: 'research.workflow.startRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunStartRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchWorkflowGetRun', channel: 'roc:research:workflow-get-run', domain: 'research', method: 'getStageRun', kind: 'plugin', capabilityName: 'research.workflow.getRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchWorkflowListRuns', channel: 'roc:research:workflow-list-runs', domain: 'research', method: 'listStageRuns', kind: 'plugin', capabilityName: 'research.workflow.listRuns', inputTransform: first, contract: methodContract(oneArg(researchStageRunsRequestSchema), researchStageRunSchema.array()) }),
+    request({ key: 'researchWorkflowCancelRun', channel: 'roc:research:workflow-cancel-run', domain: 'research', method: 'cancelStageRun', kind: 'plugin', capabilityName: 'research.workflow.cancelRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchWorkflowRetryRun', channel: 'roc:research:workflow-retry-run', domain: 'research', method: 'retryStageRun', kind: 'plugin', capabilityName: 'research.workflow.retryRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunRetryRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchArtifactContent', channel: 'roc:research:artifact-content', domain: 'research', method: 'getArtifactContent', kind: 'plugin', capabilityName: 'research.artifacts.content', inputTransform: first, contract: methodContract(oneArg(researchArtifactContentRequestSchema), researchArtifactContentSchema.nullable()) }),
     request({ key: 'researchArtifactsCreate', channel: 'roc:research:artifacts-create', domain: 'research', method: 'createArtifact', kind: 'plugin', capabilityName: 'research.artifacts.create', inputTransform: first, contract: methodContract(oneArg(researchArtifactCreateRequestSchema), researchArtifactSchema) }),
     request({ key: 'researchArtifactsGet', channel: 'roc:research:artifacts-get', domain: 'research', method: 'getArtifact', kind: 'plugin', capabilityName: 'research.artifacts.get', inputTransform: first, contract: methodContract(oneArg(researchArtifactIdRequestSchema), researchArtifactSchema) }),
     request({ key: 'researchArtifactsList', channel: 'roc:research:artifacts-list', domain: 'research', method: 'listArtifacts', kind: 'plugin', capabilityName: 'research.artifacts.list', inputTransform: first, contract: methodContract(oneArg(researchArtifactListRequestSchema), researchArtifactSchema.array()) }),

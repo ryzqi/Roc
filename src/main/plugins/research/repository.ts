@@ -39,6 +39,7 @@ import type {
 } from '../../../shared/types';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchEvidenceRepository } from './evidence-repository';
+import { ResearchRunRepository } from './run-repository';
 
 export const researchStages = [
   'discovery',
@@ -71,6 +72,7 @@ const stageGateRequired = new Set<(typeof researchStages)[number]>([
 
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
+  readonly runs: ResearchRunRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -80,6 +82,7 @@ export class ResearchRepository {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, now);
+    this.runs = new ResearchRunRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -131,6 +134,7 @@ export class ResearchRepository {
           stageGateRequired.has(stage) ? 1 : 0
         );
       });
+      this.runs.initializeProject(id);
       this.appendEvent(id, 'discovery', 'project_created', '研究项目已创建。', { title: request.title }, timestamp);
     });
     insert();
@@ -388,6 +392,12 @@ export class ResearchRepository {
       if (experiment.project_id !== request.projectId) throw new Error('research_provenance_project_mismatch');
     }
     if (request.artifactId !== null) this.requireEditableArtifact(request.artifactId);
+    if (request.sourceType === 'model_run') this.runs.get(request.sourceId, request.projectId);
+    if (request.sourceType === 'workflow_event') {
+      const event = this.db.prepare('SELECT project_id FROM research_workflow_events WHERE id = ?')
+        .get(request.sourceId) as { project_id: string } | undefined;
+      if (event === undefined || event.project_id !== request.projectId) throw new Error('research_provenance_source_invalid');
+    }
     const record: ResearchProvenance = { ...request, id: randomUUID(), createdAt: this.now() };
     this.db
       .prepare(
@@ -563,7 +573,7 @@ export class ResearchRepository {
       .map((term) => `"${term}"`)
       .join(' OR ');
     if (match.length === 0) return [];
-    const projectClause = projectId === null ? '' : 'AND d.project_id = ?';
+    const projectClause = projectId === null ? '' : 'AND (d.project_id = ? OR d.project_id IS NULL)';
     const args = projectId === null ? [match, limit] : [match, projectId, limit];
     const rows = this.db
       .prepare(
@@ -584,7 +594,7 @@ export class ResearchRepository {
     limit: number,
     vector: { model: string; dimensions: number; blob: Buffer }
   ): ResearchKnowledgeSearchHit[] {
-    const projectClause = projectId === null ? '' : 'AND c.project_id = ?';
+    const projectClause = projectId === null ? '' : 'AND (c.project_id = ? OR c.project_id IS NULL)';
     const args = projectId === null
       ? [vector.model, vector.dimensions, vector.blob, limit]
       : [vector.model, vector.dimensions, projectId, vector.blob, limit];
@@ -666,6 +676,12 @@ export class ResearchRepository {
             this.updateStage(request.projectId, current.stage, { status: 'waiting_approval' });
             this.appendEvent(request.projectId, current.stage, 'approval_requested', '阶段产物等待用户审核。', request, timestamp);
           } else {
+            if (current.artifactIds.length > 0) {
+              this.requireStageArtifacts(request.projectId, current);
+              for (const id of current.artifactIds) {
+                this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, id);
+              }
+            }
             this.completeStage(request.projectId, current.stage, timestamp);
           }
           break;

@@ -1200,6 +1200,43 @@ export const researchMigrations: RocDatabaseMigration[] = [
         updated_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 3,
+    name: 'research_stage_execution',
+    sql: `
+      CREATE TABLE research_stage_policies (
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        policy_json TEXT NOT NULL,
+        PRIMARY KEY(project_id, stage)
+      );
+      INSERT INTO research_stage_policies (project_id, stage, policy_json)
+        SELECT project_id, stage, json_object(
+          'projectId', project_id, 'stage', stage,
+          'tier', CASE WHEN stage = 'retrieval' THEN 'fast' WHEN stage IN ('writing','review','revision') THEN 'deep' ELSE 'balanced' END,
+          'model', json_object('kind', 'app_default'), 'maxSteps', 30, 'timeoutMs', 180000
+        ) FROM research_stage_states;
+      CREATE TABLE research_stage_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        parent_run_id TEXT REFERENCES research_stage_runs(id),
+        status TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        context_json TEXT NOT NULL,
+        UNIQUE(project_id, request_id)
+      );
+      CREATE INDEX idx_research_stage_runs_project ON research_stage_runs(project_id, stage, status);
+      CREATE TABLE research_artifact_contents (
+        artifact_id TEXT PRIMARY KEY REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL REFERENCES research_stage_runs(id),
+        output_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `
   }
 ];
 

@@ -39,7 +39,8 @@ Phase 3 — Implementation（Workflow）
 ## Implementation increments
 - [x] Workflow 1：阶段回退/中途进入、产物审批生命周期、项目归属、产物/事件 IPC；review 与定向验证通过。
 - [x] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出数据包硬闸门；review 与定向验证通过。
-- [ ] Workflow 3：阶段模型策略、角色 Skill 隔离、持久运行、独立审稿与最多两轮修订。
+- [x] Workflow 3a：阶段模型策略、角色 Skill/工具隔离、持久运行、取消/重试/恢复；review、116 测试与 build 通过。
+- [ ] Workflow 3b：多角色独立审稿、综合与最多两轮修订。
 - [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
@@ -95,6 +96,11 @@ Phase 3 — Implementation（Workflow）
 ## Errors Encountered
 | Error | Resolution |
 |-------|------------|
+| 真实 LangChain 结构化输出末尾为 ToolMessage，模型版本落成 null | 从尾部查找最后一个含 model_name/model 的响应元数据，保留未知时 null |
+| 阶段运行测试在 execute 前失败：模型句柄整体展开混入函数，严格 snapshot schema 拒绝 | 只复制 providerId/modelId 到持久记录，重跑生命周期测试 |
+| LangChain response_metadata 类型为 Partial<unknown>，不能直接访问 model_name/model | 以 unknown 接收，确认对象后读取模型版本字段 |
+| 第三部分迁移测试：新版 createProject 访问 v1 库不存在的 research_stage_policies | 旧库夹具按旧 SQL 结构构造，升级后用新版仓储验证，不增加运行时兼容回退 |
+| 第三部分 apply_patch 对同一路径同时 Delete/Add 被拒绝，未修改文件 | 改用单一 Update 操作，保留已有文件路径 |
 | IPC adapter 测试的 domain 预期漏掉已存在的 research | 补齐 research 与本部分五条接口映射覆盖，重跑 IPC 测试 |
 | 续作首次生命周期回归：8 项失败，复现导航缺失、孤立产物、跨项目来源与审批版本可修改 | 完成实现后 22 项科研域测试及类型检查通过，进入双轴 review |
 | `mcporter list context7`：Unknown MCP server | 使用官方 `https://mcp.context7.com/mcp`，resolve-library-id 成功 |

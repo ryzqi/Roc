@@ -98,3 +98,14 @@
 - 第二部分已实现：不可变证据、主张版本与并发校验、LaTeX 正文和可见引用/参考文献、审批/导出摘要检查、九条 IPC；增加注册插件到 IPC adapter 的完整证据→正文→审核→导出测试。
 - 第二部分初审：两轴均发现主张修订会误删非 model_run 原始审计边。改为仅追加并去重派生关系，主张历史保留每版 evidenceIds；新增审计保留回归。另明确 figure 实体与 figure_claim 图稿主张的来源类型，保留已有图稿记录接口语义。
 - 第二部分复查：Standards / Spec 均 0 项未解决问题；11 文件 / 68 测试、typecheck、check:ipc 通过。Review 记录 `reviews/02-evidence-manuscripts.md`。状态：Verified passing，独立提交。
+- 第二部分已提交：`a38e684`。
+- 第三部分实现选择：复用已安装 LangChain createAgent 与 Roc 模型工厂；每个科研角色是独立受限工具循环，阶段协调器持久保存输入、技能、模型、状态与产物。写入统一在结果验证后的事务中提交；中断从角色边界重试，取消后的迟到结果不得产生工件。保持现有通用 DeepAgents runtime 不变。
+- 用户中断后继续：前两部分提交保持不变；第三部分当前未提交内容为运行 schema、v3 migration、角色配置和 11 份原创内置技能。未发现遗留 Vitest/tsc/mcporter 进程，继续执行层实现。
+- 续作基线：科研域 41 测试通过。接入运行仓储后旧迁移测试使用新版仓储写 v1 数据库，缺少 stage_policies；夹具改为按 v1 实体结构插入项目/阶段，升级后验证策略与原数据保留。
+- 执行层已新增：运行仓储、角色执行器、按项目绑定的工具和取消/超时运行管理。再次中断后续作；类型检查指出 LangChain response_metadata 为 unknown，改为边界类型校验后读取实际模型版本。
+- 运行生命周期初测发现模型句柄整体展开把 execute 函数带入严格持久快照，3 项测试在执行前失败；改为只写 providerId/modelId，保留严格 schema。阶段运行已注册 IPC，并接入主应用模型工厂。
+- 8 项执行生命周期测试通过，覆盖幂等、项目隔离、取消迟到结果、未支持正文回滚、快照重试、重启、超时和暂停。真实 LangChain 测试发现末尾 ToolMessage 不带模型版本，改为向前读取最后一个有模型元数据的消息。
+- 实际已安装 LangChain createAgent + toolStrategy 的集成测试通过，确认结构化结果、角色工具面和模型版本记录。Workflow 3 拆为 3a 执行基础与 3b 独立审稿/两轮修订；先完成 3a review/提交。
+- 3a 提交前验证：19 文件 / 115 测试、build（含 typecheck）、check:ipc 通过。Standards review 发现 requestId 幂等未比较 retryOfRunId，重试可能误返回另一失败运行；已补重试来源身份比较及 start/retry 碰撞回归。
+- 3a Spec review 另发现拒绝无证据正文时事务回滚会丢失已返回模型版本；改为先独立记录响应模型版本，再事务校验/提交产物。无证据输出仍回滚，失败运行保留实际模型身份。Standards 幂等问题复查关闭。
+- 3a 完成：两轴复查均 0 项未解决；最终 19 文件 / 116 测试、build（含 typecheck）、check:ipc 与差异检查通过。记录 `reviews/03a-stage-execution.md`，状态 Verified passing，独立提交。

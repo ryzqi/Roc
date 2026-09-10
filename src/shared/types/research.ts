@@ -1,5 +1,16 @@
 import type { z } from 'zod';
 import type {
+  researchArtifactContentSchema,
+  researchModelSelectionSchema,
+  researchStageOutputSchema,
+  researchStagePolicySchema,
+  researchStageRunSchema,
+  researchStageRunStartRequestSchema,
+  researchStageRunIdRequestSchema,
+  researchStageRunRetryRequestSchema,
+  researchStageRunsRequestSchema
+} from '../schemas/research-runs';
+import type {
   researchEvidenceSchema,
   researchEvidenceCaptureRequestSchema,
   researchEvidenceListRequestSchema,
@@ -97,3 +108,12 @@ export type ResearchManuscript = z.infer<typeof researchManuscriptSchema>;
 export type ResearchManuscriptSaveRequest = z.infer<typeof researchManuscriptSaveRequestSchema>;
 export type ResearchExportBundle = z.infer<typeof researchExportBundleSchema>;
 export type ResearchExportBundleRequest = z.infer<typeof researchExportBundleRequestSchema>;
+export type ResearchArtifactContent = z.infer<typeof researchArtifactContentSchema>;
+export type ResearchModelSelection = z.infer<typeof researchModelSelectionSchema>;
+export type ResearchStageOutput = z.infer<typeof researchStageOutputSchema>;
+export type ResearchStagePolicy = z.infer<typeof researchStagePolicySchema>;
+export type ResearchStageRun = z.infer<typeof researchStageRunSchema>;
+export type ResearchStageRunStartRequest = z.infer<typeof researchStageRunStartRequestSchema>;
+export type ResearchStageRunIdRequest = z.infer<typeof researchStageRunIdRequestSchema>;
+export type ResearchStageRunRetryRequest = z.infer<typeof researchStageRunRetryRequestSchema>;
+export type ResearchStageRunsRequest = z.infer<typeof researchStageRunsRequestSchema>;

@@ -226,12 +226,18 @@ describe('research evidence and manuscript boundaries', () => {
     const legacy = new Database(':memory:');
     try {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.slice(0, 1) });
-      const old = new ResearchRepository(legacy).createProject({ title: 'Existing', description: 'Preserve me.', workspacePath: null });
+      const old = { id: 'legacy-project', title: 'Existing', description: 'Preserve me.', workspacePath: null,
+        status: 'active', currentStage: 'discovery', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z' };
+      legacy.prepare('INSERT INTO research_projects (id, title, description, workspace_path, status, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(old.id, old.title, old.description, old.workspacePath, old.status, old.currentStage, old.createdAt, old.updatedAt);
+      legacy.prepare("INSERT INTO research_stage_states (project_id, stage, status, active_run_id, artifact_ids_json, entered_at, completed_at, gate_required, gate_approved, last_error) VALUES (?, 'discovery', 'ready', NULL, '[]', ?, NULL, 0, 0, NULL)")
+        .run(old.id, old.createdAt);
       applyResearchDatabaseSchema(legacy);
       applyResearchDatabaseSchema(legacy);
       const upgraded = new ResearchRepository(legacy);
       expect(upgraded.getProject(old.id)).toEqual(old);
       expect(upgraded.evidence.list(old.id)).toEqual([]);
+      expect(upgraded.runs.listPolicies(old.id)).toMatchObject([{ stage: 'discovery', model: { kind: 'app_default' } }]);
     } finally {
       legacy.close();
     }

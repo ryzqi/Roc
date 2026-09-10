@@ -24,6 +24,7 @@ import { createMcpPlugin } from './plugins/mcp';
 import { createMemoryPlugin } from './plugins/memory';
 import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
 import { createResearchPlugin } from './plugins/research';
+import { createResearchRoleExecutor } from './plugins/research/role-executor';
 import { createSkillsPlugin } from './plugins/skills';
 import { createTaskPlugin } from './plugins/task';
 import { createWorkspacePlugin } from './plugins/workspace';
@@ -185,6 +186,9 @@ function createDefaultMainKernelPlugins(input: {
   input.paths.ensureTree();
   const configService = input.configService;
   const defaultWorkspace = configService.getSettings().defaultWorkspace;
+  const agentModelFactory = new LangChainAgentModelFactoryAdapter(input.modelFactory, {
+    beforeCreate: () => configService.reloadSettingsDocument()
+  });
 
   return [
     createAppPlugin({
@@ -221,11 +225,7 @@ function createDefaultMainKernelPlugins(input: {
         paths: input.paths,
         selfConfigService: input.selfConfigService
       },
-      modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
-        beforeCreate: () => {
-          configService.reloadSettingsDocument();
-        }
-      }),
+      modelFactory: agentModelFactory,
       statusProvider: () => {
         configService.reloadSettingsDocument();
         return createAgentRuntimeStatus(configService);
@@ -246,7 +246,7 @@ function createDefaultMainKernelPlugins(input: {
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
-    createResearchPlugin(),
+    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory) }),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({
