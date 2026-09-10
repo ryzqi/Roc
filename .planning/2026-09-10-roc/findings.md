@@ -101,6 +101,7 @@
 | “全面开源”与 CC BY-NC 冲突 | 等待许可边界决策；核心许可、第三方技能许可和可选插件需分离 |
 | 许可边界已确认 | 核心与 Apache/MIT 能力可随包；NC 能力不进入标准开源核心分发 |
 | 底层到界面的六阶段交付 | 先稳定领域模型、索引、状态机和 provenance，再接入生产工具、UI 和打包，降低跨层返工 |
+| sqlite-vec + FTS5 + RRF 已实现 | `sqlite-vec` 0.1.9 可加载；知识库支持文献 API 归一化、关键词/向量召回和 RRF 结果 |
 
 ## Resources
 - `https://github.com/Imbad0202/academic-research-skills`

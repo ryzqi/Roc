@@ -1001,6 +1001,23 @@ export const researchMigrations: RocDatabaseMigration[] = [
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS research_literature_records (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        doi TEXT,
+        title TEXT NOT NULL,
+        authors_json TEXT NOT NULL,
+        abstract TEXT,
+        published_year INTEGER,
+        citation_count INTEGER,
+        url TEXT,
+        open_access_url TEXT,
+        imported_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(source, external_id)
+      );
+
       CREATE TABLE IF NOT EXISTS research_knowledge_documents (
         id TEXT PRIMARY KEY,
         project_id TEXT,
@@ -1063,6 +1080,48 @@ export const researchMigrations: RocDatabaseMigration[] = [
         FOREIGN KEY(chunk_id) REFERENCES research_knowledge_chunks(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS research_templates (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        root_path TEXT NOT NULL,
+        entry_path TEXT NOT NULL,
+        status TEXT NOT NULL,
+        pdf_path TEXT,
+        errors_json TEXT NOT NULL,
+        last_compiled_at TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS research_experiment_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        command TEXT NOT NULL,
+        parameters_json TEXT NOT NULL,
+        environment_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        outputs_json TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS research_figures (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        code_path TEXT NOT NULL,
+        data_paths_json TEXT NOT NULL,
+        output_paths_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        run_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES research_projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(run_id) REFERENCES research_experiment_runs(id) ON DELETE SET NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_research_projects_updated
         ON research_projects(updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_research_stage_states_project
@@ -1075,8 +1134,18 @@ export const researchMigrations: RocDatabaseMigration[] = [
         ON research_workflow_events(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_research_knowledge_documents_project
         ON research_knowledge_documents(project_id, indexed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_literature_doi
+        ON research_literature_records(doi);
+      CREATE INDEX IF NOT EXISTS idx_research_literature_updated
+        ON research_literature_records(updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_research_knowledge_chunks_document
         ON research_knowledge_chunks(document_id, chunk_index);
+      CREATE INDEX IF NOT EXISTS idx_research_templates_project
+        ON research_templates(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_experiment_runs_project
+        ON research_experiment_runs(project_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_research_figures_project
+        ON research_figures(project_id, updated_at DESC);
     `
   }
 ];

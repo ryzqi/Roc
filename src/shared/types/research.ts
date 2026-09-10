@@ -7,10 +7,30 @@ import {
   researchProjectListRequestSchema,
   researchProjectSchema,
   researchProjectUpdateRequestSchema,
+  researchEmbeddingConfigSaveRequestSchema,
+  researchEmbeddingConfigSchema,
+  researchKnowledgeDocumentSchema,
+  researchKnowledgeDocumentUpsertRequestSchema,
+  researchKnowledgeSearchRequestSchema,
+  researchKnowledgeSearchHitSchema,
+  researchKnowledgeSearchResultSchema,
+  researchExperimentRunRecordRequestSchema,
+  researchExperimentRunSchema,
+  researchFigureRecordRequestSchema,
+  researchFigureSchema,
+  researchLiteratureSchema,
+  researchLiteratureSearchRequestSchema,
   researchProvenanceSchema,
   researchStageStateSchema,
   researchWorkflowSnapshotSchema,
   researchWorkflowTransitionRequestSchema
+  ,researchTemplateCompileRequestSchema
+  ,researchTemplateImportRequestSchema
+  ,researchTemplateSchema
+  ,researchStageRoleProfileSchema
+  ,researchStageRoleRequestSchema
+  ,researchProvenanceCreateRequestSchema
+  ,researchProvenanceListRequestSchema
 } from '../schemas/research';
 
 export type ResearchProject = z.infer<typeof researchProjectSchema>;
@@ -23,4 +43,23 @@ export type ResearchWorkflowSnapshot = z.infer<typeof researchWorkflowSnapshotSc
 export type ResearchWorkflowTransitionRequest = z.infer<typeof researchWorkflowTransitionRequestSchema>;
 export type ResearchArtifact = z.infer<typeof researchArtifactSchema>;
 export type ResearchProvenance = z.infer<typeof researchProvenanceSchema>;
-
+export type ResearchLiterature = z.infer<typeof researchLiteratureSchema>;
+export type ResearchLiteratureSearchRequest = z.infer<typeof researchLiteratureSearchRequestSchema>;
+export type ResearchEmbeddingConfig = z.infer<typeof researchEmbeddingConfigSchema>;
+export type ResearchEmbeddingConfigSaveRequest = z.infer<typeof researchEmbeddingConfigSaveRequestSchema>;
+export type ResearchKnowledgeDocument = z.infer<typeof researchKnowledgeDocumentSchema>;
+export type ResearchKnowledgeDocumentUpsertRequest = z.infer<typeof researchKnowledgeDocumentUpsertRequestSchema>;
+export type ResearchKnowledgeSearchRequest = z.infer<typeof researchKnowledgeSearchRequestSchema>;
+export type ResearchKnowledgeSearchHit = z.infer<typeof researchKnowledgeSearchHitSchema>;
+export type ResearchKnowledgeSearchResult = z.infer<typeof researchKnowledgeSearchResultSchema>;
+export type ResearchTemplate = z.infer<typeof researchTemplateSchema>;
+export type ResearchTemplateImportRequest = z.infer<typeof researchTemplateImportRequestSchema>;
+export type ResearchTemplateCompileRequest = z.infer<typeof researchTemplateCompileRequestSchema>;
+export type ResearchExperimentRun = z.infer<typeof researchExperimentRunSchema>;
+export type ResearchExperimentRunRecordRequest = z.infer<typeof researchExperimentRunRecordRequestSchema>;
+export type ResearchFigure = z.infer<typeof researchFigureSchema>;
+export type ResearchFigureRecordRequest = z.infer<typeof researchFigureRecordRequestSchema>;
+export type ResearchStageRoleProfile = z.infer<typeof researchStageRoleProfileSchema>;
+export type ResearchStageRoleRequest = z.infer<typeof researchStageRoleRequestSchema>;
+export type ResearchProvenanceCreateRequest = z.infer<typeof researchProvenanceCreateRequestSchema>;
+export type ResearchProvenanceListRequest = z.infer<typeof researchProvenanceListRequestSchema>;

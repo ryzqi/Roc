@@ -107,7 +107,19 @@ export const rocApi: RocPreloadApi = {
     createProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsCreate, ...args),
     updateProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsUpdate, ...args),
     getWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowGet, ...args),
-    transitionWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowTransition, ...args)
+    transitionWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowTransition, ...args),
+    searchLiterature: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureSearch, ...args),
+    listEmbeddingConfigs: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingList, ...args),
+    saveEmbeddingConfig: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingSave, ...args),
+    upsertKnowledgeDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchKnowledgeUpsert, ...args),
+    searchKnowledge: (...args) => ipcRenderer.invoke(ipcChannels.researchKnowledgeSearch, ...args),
+    getRoleProfile: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowRole, ...args),
+    recordExperimentRun: (...args) => ipcRenderer.invoke(ipcChannels.researchExperimentRecord, ...args),
+    recordFigure: (...args) => ipcRenderer.invoke(ipcChannels.researchFigureRecord, ...args),
+    addProvenance: (...args) => ipcRenderer.invoke(ipcChannels.researchProvenanceAdd, ...args),
+    listProvenance: (...args) => ipcRenderer.invoke(ipcChannels.researchProvenanceList, ...args),
+    importTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateImport, ...args),
+    compileTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCompile, ...args)
   },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),

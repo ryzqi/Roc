@@ -53,6 +53,8 @@
 - 用户确认从底层全面重构、完成全部功能，并按阶段提交；Phase 1 需求访谈完成，进入 Phase 2 规划与结构设计。
 - 创建 `CONTEXT.md` 和 `docs/adr/0001-research-workbench-architecture.md`，固化科研领域词汇与底层架构决策。
 - 完成 Phase 2 结构设计，进入 Phase 3 实现：基础 → 知识库 → 工作流 → 生产工具 → renderer → 打包验证。
+- 完成基础阶段并提交 commit `2542836`。
+- 完成知识库基础：sqlite-vec 加载、FTS5 + 向量 RRF、OpenAI 兼容 Embeddings、OpenAlex/Crossref/Semantic Scholar/arXiv/Europe PMC 适配、论文检索/知识库/嵌入配置面板。
 
 ### Test Results
 | Test | Expected | Actual | Status |

@@ -1,8 +1,10 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
+import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-client';
 
 let db: Database.Database;
 let repository: ResearchRepository;
@@ -10,6 +12,7 @@ let repository: ResearchRepository;
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
+  sqliteVec.load(db);
   applyResearchDatabaseSchema(db, () => '2026-09-10T00:00:00.000Z');
   repository = new ResearchRepository(db, () => '2026-09-10T00:00:00.000Z');
 });
@@ -80,5 +83,62 @@ describe('ResearchRepository', () => {
       repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'retrieval' })
     ).toThrow('research_workflow_stage_conflict:discovery');
   });
-});
 
+  it('combines FTS5 and sqlite-vec results with RRF ordering', () => {
+    repository.upsertKnowledgeDocument({
+      id: 'doc-a',
+      projectId: null,
+      sourceType: 'literature',
+      sourceId: 'paper-a',
+      title: 'Evidence graph',
+      content: 'evidence graph retrieval',
+      chunks: [{ content: 'evidence graph retrieval', locator: 'p. 1' }],
+      embeddingConfigId: null
+    });
+    repository.upsertKnowledgeDocument({
+      id: 'doc-b',
+      projectId: null,
+      sourceType: 'note',
+      sourceId: 'note-b',
+      title: 'Unrelated note',
+      content: 'retrieval methods',
+      chunks: [{ content: 'retrieval methods', locator: 'line 2' }],
+      embeddingConfigId: null
+    });
+    repository.storeChunkEmbeddings({
+      model: 'test-embedding',
+      dimensions: 3,
+      chunkIds: ['doc-a:chunk:0', 'doc-b:chunk:0'],
+      vectors: [vectorToBlob([1, 0, 0]), vectorToBlob([0, 1, 0])]
+    });
+
+    const result = repository.searchKnowledge({
+      request: { query: 'evidence', projectId: null, limit: 10, embeddingConfigId: 'test' },
+      vector: { model: 'test-embedding', dimensions: 3, blob: vectorToBlob([1, 0, 0]) }
+    });
+
+    expect(result.keywordCount).toBe(1);
+    expect(result.vectorCount).toBe(2);
+    expect(result.hits[0]).toMatchObject({ chunkId: 'doc-a:chunk:0', keywordRank: 1, vectorRank: 1 });
+    expect(result.hits[0].rrfScore).toBeGreaterThan(result.hits[1].rrfScore);
+  });
+
+  it('persists provenance and template compile state for audit and resume', () => {
+    const project = repository.createProject({ title: 'Audit test', description: 'Audit.', workspacePath: '/tmp/audit' });
+    const provenance = repository.addProvenance({
+      projectId: project.id,
+      artifactId: null,
+      subjectType: 'claim',
+      subjectId: 'claim-1',
+      sourceType: 'literature',
+      sourceId: 'doi:10.1000/test',
+      locator: 'p. 4, para. 2',
+      excerpt: 'Evidence excerpt'
+    });
+    expect(repository.listProvenance({ projectId: project.id, subjectId: 'claim-1' })).toEqual([provenance]);
+
+    const template = repository.createTemplate({ id: 'template-1', projectId: project.id, rootPath: '/tmp/audit/template-1', entryPath: 'main.tex' });
+    expect(template).toMatchObject({ status: 'imported', pdfPath: null });
+    expect(repository.updateTemplateCompile({ projectId: project.id, templateId: template.id, status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf', errors: [], lastCompiledAt: '2026-09-10T00:00:00.000Z' })).toMatchObject({ status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf' });
+  });
+});

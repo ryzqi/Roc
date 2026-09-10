@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
@@ -8,6 +8,22 @@ import {
   researchWorkflowSnapshotSchema
 } from '../../../shared/schemas/research';
 import type {
+  ResearchEmbeddingConfigSaveRequest,
+  ResearchExperimentRun,
+  ResearchExperimentRunRecordRequest,
+  ResearchFigure,
+  ResearchFigureRecordRequest,
+  ResearchKnowledgeDocumentUpsertRequest,
+  ResearchKnowledgeSearchHit,
+  ResearchKnowledgeSearchRequest,
+  ResearchKnowledgeSearchResult,
+  ResearchLiterature,
+  ResearchLiteratureSearchRequest,
+  ResearchProvenance,
+  ResearchProvenanceCreateRequest,
+  ResearchProvenanceListRequest,
+  ResearchTemplate,
+  ResearchTemplateCompileRequest,
   ResearchProject,
   ResearchProjectCreateRequest,
   ResearchProjectUpdateRequest,
@@ -125,6 +141,336 @@ export class ResearchRepository {
         request.id
       );
     return this.getProject(request.id);
+  }
+
+  upsertLiterature(record: ResearchLiterature): ResearchLiterature {
+    this.db
+      .prepare(
+        `INSERT INTO research_literature_records
+         (id, source, external_id, doi, title, authors_json, abstract, published_year, citation_count, url, open_access_url, imported_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(source, external_id) DO UPDATE SET
+           doi = excluded.doi,
+           title = excluded.title,
+           authors_json = excluded.authors_json,
+           abstract = excluded.abstract,
+           published_year = excluded.published_year,
+           citation_count = excluded.citation_count,
+           url = excluded.url,
+           open_access_url = excluded.open_access_url,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        record.id,
+        record.source,
+        record.externalId,
+        record.doi,
+        record.title,
+        JSON.stringify(record.authors),
+        record.abstract,
+        record.publishedYear,
+        record.citationCount,
+        record.url,
+        record.openAccessUrl,
+        record.importedAt,
+        record.updatedAt
+      );
+    return record;
+  }
+
+  recordExperimentRun(request: ResearchExperimentRunRecordRequest): ResearchExperimentRun {
+    this.db
+      .prepare(
+        `INSERT INTO research_experiment_runs
+         (id, project_id, label, command, parameters_json, environment_json, status, outputs_json, started_at, ended_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           label = excluded.label,
+           command = excluded.command,
+           parameters_json = excluded.parameters_json,
+           environment_json = excluded.environment_json,
+           status = excluded.status,
+           outputs_json = excluded.outputs_json,
+           ended_at = excluded.ended_at`
+      )
+      .run(request.id, request.projectId, request.label, request.command, JSON.stringify(request.parameters), JSON.stringify(request.environment), request.status, JSON.stringify(request.outputs), request.startedAt, request.endedAt);
+    return request;
+  }
+
+  recordFigure(request: ResearchFigureRecordRequest): ResearchFigure {
+    const timestamp = this.now();
+    this.db
+      .prepare(
+        `INSERT INTO research_figures
+         (id, project_id, title, code_path, data_paths_json, output_paths_json, status, run_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           title = excluded.title,
+           code_path = excluded.code_path,
+           data_paths_json = excluded.data_paths_json,
+           output_paths_json = excluded.output_paths_json,
+           status = excluded.status,
+           run_id = excluded.run_id,
+           updated_at = excluded.updated_at`
+      )
+      .run(request.id, request.projectId, request.title, request.codePath, JSON.stringify(request.dataPaths), JSON.stringify(request.outputPaths), request.status, request.runId, timestamp, timestamp);
+    return { ...request, createdAt: timestamp, updatedAt: timestamp };
+  }
+
+  createTemplate(input: { id: string; projectId: string; rootPath: string; entryPath: string }): ResearchTemplate {
+    const timestamp = this.now();
+    this.db
+      .prepare(
+        `INSERT INTO research_templates
+         (id, project_id, root_path, entry_path, status, pdf_path, errors_json, last_compiled_at, updated_at)
+         VALUES (?, ?, ?, ?, 'imported', NULL, '[]', NULL, ?)`
+      )
+      .run(input.id, input.projectId, input.rootPath, input.entryPath, timestamp);
+    return this.getTemplate({ projectId: input.projectId, templateId: input.id });
+  }
+
+  getTemplate(input: ResearchTemplateCompileRequest): ResearchTemplate {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, root_path, entry_path, status, pdf_path, errors_json, last_compiled_at, updated_at
+         FROM research_templates WHERE id = ? AND project_id = ?`
+      )
+      .get(input.templateId, input.projectId) as TemplateRow | undefined;
+    if (row === undefined) throw new Error(`research_template_not_found:${input.templateId}`);
+    return toTemplate(row);
+  }
+
+  updateTemplateCompile(input: {
+    projectId: string;
+    templateId: string;
+    status: ResearchTemplate['status'];
+    pdfPath: string | null;
+    errors: readonly string[];
+    lastCompiledAt: string | null;
+  }): ResearchTemplate {
+    this.getTemplate({ projectId: input.projectId, templateId: input.templateId });
+    this.db
+      .prepare(
+        `UPDATE research_templates SET status = ?, pdf_path = ?, errors_json = ?, last_compiled_at = ?, updated_at = ?
+         WHERE id = ? AND project_id = ?`
+      )
+      .run(input.status, input.pdfPath, JSON.stringify(input.errors), input.lastCompiledAt, this.now(), input.templateId, input.projectId);
+    return this.getTemplate({ projectId: input.projectId, templateId: input.templateId });
+  }
+
+  addProvenance(request: ResearchProvenanceCreateRequest): ResearchProvenance {
+    const record: ResearchProvenance = { ...request, id: randomUUID(), createdAt: this.now() };
+    this.db
+      .prepare(
+        `INSERT INTO research_provenance
+         (id, project_id, artifact_id, subject_type, subject_id, source_type, source_id, locator, excerpt, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(record.id, record.projectId, record.artifactId, record.subjectType, record.subjectId, record.sourceType, record.sourceId, record.locator, record.excerpt, record.createdAt);
+    return record;
+  }
+
+  listProvenance(request: ResearchProvenanceListRequest): ResearchProvenance[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, project_id, artifact_id, subject_type, subject_id, source_type, source_id, locator, excerpt, created_at
+         FROM research_provenance WHERE project_id = ? ${request.subjectId === undefined ? '' : 'AND subject_id = ?'}
+         ORDER BY created_at DESC`
+      )
+      .all(...(request.subjectId === undefined ? [request.projectId] : [request.projectId, request.subjectId])) as ProvenanceRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      artifactId: row.artifact_id,
+      subjectType: row.subject_type,
+      subjectId: row.subject_id,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
+      locator: row.locator,
+      excerpt: row.excerpt,
+      createdAt: row.created_at
+    }));
+  }
+
+  listLiterature(request: ResearchLiteratureSearchRequest): ResearchLiterature[] {
+    const placeholders = request.sources.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT id, source, external_id, doi, title, authors_json, abstract, published_year,
+                citation_count, url, open_access_url, imported_at, updated_at
+         FROM research_literature_records
+         WHERE source IN (${placeholders})
+         ORDER BY updated_at DESC LIMIT ?`
+      )
+      .all(...request.sources, request.limit) as LiteratureRow[];
+    return rows.map(toLiterature);
+  }
+
+  saveEmbeddingConfig(request: ResearchEmbeddingConfigSaveRequest, apiKeySecretKey: string): void {
+    const timestamp = this.now();
+    this.db
+      .prepare(
+        `INSERT INTO research_embedding_configs
+         (id, name, base_url, model, dimensions, api_key_secret_key, enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           base_url = excluded.base_url,
+           model = excluded.model,
+           dimensions = excluded.dimensions,
+           api_key_secret_key = excluded.api_key_secret_key,
+           enabled = excluded.enabled,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        request.id,
+        request.name,
+        request.baseUrl.replace(/\/+$/, ''),
+        request.model,
+        request.dimensions,
+        apiKeySecretKey,
+        request.enabled ? 1 : 0,
+        timestamp,
+        timestamp
+      );
+  }
+
+  listEmbeddingConfigRows(): EmbeddingConfigRow[] {
+    return this.db
+      .prepare(
+        `SELECT id, name, base_url, model, dimensions, api_key_secret_key, enabled, updated_at
+         FROM research_embedding_configs ORDER BY updated_at DESC`
+      )
+      .all() as EmbeddingConfigRow[];
+  }
+
+  upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest): void {
+    const timestamp = this.now();
+    const write = this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO research_knowledge_documents
+           (id, project_id, source_type, source_id, title, content, metadata_json, content_hash, indexed_at)
+           VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             project_id = excluded.project_id,
+             source_type = excluded.source_type,
+             source_id = excluded.source_id,
+             title = excluded.title,
+             content = excluded.content,
+             content_hash = excluded.content_hash,
+             indexed_at = excluded.indexed_at`
+        )
+        .run(request.id, request.projectId, request.sourceType, request.sourceId, request.title, request.content, hashText(request.content), timestamp);
+      this.db.prepare('DELETE FROM research_knowledge_chunks WHERE document_id = ?').run(request.id);
+      const insertChunk = this.db.prepare(
+        `INSERT INTO research_knowledge_chunks
+         (id, document_id, project_id, chunk_index, content, locator, content_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      request.chunks.forEach((chunk, index) => {
+        insertChunk.run(`${request.id}:chunk:${index}`, request.id, request.projectId, index, chunk.content, chunk.locator, hashText(chunk.content), timestamp);
+      });
+    });
+    write();
+  }
+
+  storeChunkEmbeddings(input: { model: string; dimensions: number; chunkIds: readonly string[]; vectors: readonly Buffer[] }): void {
+    if (input.chunkIds.length !== input.vectors.length) {
+      throw new Error('research_embedding_chunk_count_mismatch');
+    }
+    const write = this.db.transaction(() => {
+      const statement = this.db.prepare(
+        `INSERT INTO research_knowledge_embeddings (chunk_id, model, dimensions, vector_blob, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(chunk_id, model) DO UPDATE SET
+           dimensions = excluded.dimensions,
+           vector_blob = excluded.vector_blob,
+           created_at = excluded.created_at`
+      );
+      input.chunkIds.forEach((chunkId, index) => statement.run(chunkId, input.model, input.dimensions, input.vectors[index], this.now()));
+    });
+    write();
+  }
+
+  searchKnowledge(input: {
+    request: ResearchKnowledgeSearchRequest;
+    vector: { model: string; dimensions: number; blob: Buffer } | null;
+  }): ResearchKnowledgeSearchResult {
+    const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, input.request.limit);
+    const vectorHits = input.vector === null ? [] : this.vectorSearch(input.request.projectId, input.request.limit, input.vector);
+    const merged = new Map<string, ResearchKnowledgeSearchHit>();
+    keywordHits.forEach((hit, index) => {
+      merged.set(hit.chunkId, { ...hit, keywordRank: index + 1, vectorRank: null, rrfScore: 1 / (60 + index + 1) });
+    });
+    vectorHits.forEach((hit, index) => {
+      const existing = merged.get(hit.chunkId);
+      const vectorScore = 1 / (60 + index + 1);
+      if (existing === undefined) {
+        merged.set(hit.chunkId, { ...hit, keywordRank: null, vectorRank: index + 1, rrfScore: vectorScore });
+      } else {
+        existing.vectorRank = index + 1;
+        existing.rrfScore += vectorScore;
+      }
+    });
+    const hits = Array.from(merged.values())
+      .sort((left, right) => right.rrfScore - left.rrfScore)
+      .slice(0, input.request.limit);
+    return {
+      query: input.request.query,
+      hits,
+      keywordCount: keywordHits.length,
+      vectorCount: vectorHits.length,
+      embeddingModel: input.vector?.model ?? null,
+      generatedAt: this.now()
+    };
+  }
+
+  private keywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
+    const match = query
+      .split(/\s+/u)
+      .map((term) => term.replace(/"/gu, ''))
+      .filter((term) => term.length > 0)
+      .map((term) => `"${term}"`)
+      .join(' OR ');
+    if (match.length === 0) return [];
+    const projectClause = projectId === null ? '' : 'AND d.project_id = ?';
+    const args = projectId === null ? [match, limit] : [match, projectId, limit];
+    const rows = this.db
+      .prepare(
+        `SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
+                d.source_type, d.source_id
+         FROM research_knowledge_documents_fts f
+         JOIN research_knowledge_documents d ON d.rowid = f.rowid
+         JOIN research_knowledge_chunks c ON c.document_id = d.id
+         WHERE research_knowledge_documents_fts MATCH ? ${projectClause}
+         ORDER BY bm25(research_knowledge_documents_fts) ASC LIMIT ?`
+      )
+      .all(...args) as KnowledgeHitRow[];
+    return rows.map((row) => toKnowledgeHit(row));
+  }
+
+  private vectorSearch(
+    projectId: string | null,
+    limit: number,
+    vector: { model: string; dimensions: number; blob: Buffer }
+  ): ResearchKnowledgeSearchHit[] {
+    const projectClause = projectId === null ? '' : 'AND c.project_id = ?';
+    const args = projectId === null
+      ? [vector.model, vector.dimensions, vector.blob, limit]
+      : [vector.model, vector.dimensions, projectId, vector.blob, limit];
+    const rows = this.db
+      .prepare(
+        `SELECT e.chunk_id, c.document_id, d.title, c.content, c.locator,
+                d.source_type, d.source_id
+         FROM research_knowledge_embeddings e
+         JOIN research_knowledge_chunks c ON c.id = e.chunk_id
+         JOIN research_knowledge_documents d ON d.id = c.document_id
+         WHERE e.model = ? AND e.dimensions = ? ${projectClause}
+         ORDER BY vec_distance_cosine(e.vector_blob, ?) ASC LIMIT ?`
+      )
+      .all(...args) as KnowledgeHitRow[];
+    return rows.map((row) => toKnowledgeHit(row));
   }
 
   getWorkflow(projectId: string): ResearchWorkflowSnapshot {
@@ -309,6 +655,68 @@ type ResearchEventRow = {
   created_at: string;
 };
 
+export type EmbeddingConfigRow = {
+  id: string;
+  name: string;
+  base_url: string;
+  model: string;
+  dimensions: number;
+  api_key_secret_key: string;
+  enabled: number;
+  updated_at: string;
+};
+
+type LiteratureRow = {
+  id: string;
+  source: ResearchLiterature['source'];
+  external_id: string;
+  doi: string | null;
+  title: string;
+  authors_json: string;
+  abstract: string | null;
+  published_year: number | null;
+  citation_count: number | null;
+  url: string | null;
+  open_access_url: string | null;
+  imported_at: string;
+  updated_at: string;
+};
+
+type KnowledgeHitRow = {
+  chunk_id: string;
+  document_id: string;
+  title: string;
+  content: string;
+  locator: string | null;
+  source_type: string;
+  source_id: string;
+};
+
+type ProvenanceRow = {
+  id: string;
+  project_id: string;
+  artifact_id: string | null;
+  subject_type: ResearchProvenance['subjectType'];
+  subject_id: string;
+  source_type: ResearchProvenance['sourceType'];
+  source_id: string;
+  locator: string | null;
+  excerpt: string | null;
+  created_at: string;
+};
+
+type TemplateRow = {
+  id: string;
+  project_id: string;
+  root_path: string;
+  entry_path: string;
+  status: ResearchTemplate['status'];
+  pdf_path: string | null;
+  errors_json: string;
+  last_compiled_at: string | null;
+  updated_at: string;
+};
+
 function toProject(row: ResearchProjectRow): ResearchProject {
   return researchProjectSchema.parse({
     id: row.id,
@@ -342,3 +750,65 @@ function toStageState(row: ResearchStageStateRow): ResearchStageState {
   });
 }
 
+function toLiterature(row: LiteratureRow): ResearchLiterature {
+  let authors: unknown;
+  try {
+    authors = JSON.parse(row.authors_json);
+  } catch {
+    throw new Error('research_literature_authors_invalid');
+  }
+  return {
+    id: row.id,
+    source: row.source,
+    externalId: row.external_id,
+    doi: row.doi,
+    title: row.title,
+    authors: Array.isArray(authors) ? authors.filter((author): author is string => typeof author === 'string') : [],
+    abstract: row.abstract,
+    publishedYear: row.published_year,
+    citationCount: row.citation_count,
+    url: row.url,
+    openAccessUrl: row.open_access_url,
+    importedAt: row.imported_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toTemplate(row: TemplateRow): ResearchTemplate {
+  let errors: unknown;
+  try {
+    errors = JSON.parse(row.errors_json);
+  } catch {
+    throw new Error('research_template_errors_invalid');
+  }
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    rootPath: row.root_path,
+    entryPath: row.entry_path,
+    status: row.status,
+    pdfPath: row.pdf_path,
+    errors: Array.isArray(errors) ? errors.filter((error): error is string => typeof error === 'string') : [],
+    lastCompiledAt: row.last_compiled_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toKnowledgeHit(row: KnowledgeHitRow): ResearchKnowledgeSearchHit {
+  return {
+    chunkId: row.chunk_id,
+    documentId: row.document_id,
+    title: row.title,
+    content: row.content,
+    locator: row.locator,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    keywordRank: null,
+    vectorRank: null,
+    rrfScore: 0
+  };
+}
+
+function hashText(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}

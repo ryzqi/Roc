@@ -2,6 +2,9 @@ import { Check, ChevronRight, CircleAlert, Pause, Play, Plus, RotateCcw, Send, X
 import { useEffect, useMemo, useState } from 'react';
 
 import type {
+  ResearchEmbeddingConfig,
+  ResearchKnowledgeSearchResult,
+  ResearchLiterature,
   ResearchProject,
   ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest
@@ -45,6 +48,18 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'literature' | 'knowledge' | 'embedding'>('workflow');
+  const [literatureQuery, setLiteratureQuery] = useState('');
+  const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
+  const [knowledgeQuery, setKnowledgeQuery] = useState('');
+  const [knowledgeResult, setKnowledgeResult] = useState<ResearchKnowledgeSearchResult | null>(null);
+  const [embeddingConfigs, setEmbeddingConfigs] = useState<ResearchEmbeddingConfig[]>([]);
+  const [embeddingId, setEmbeddingId] = useState('default');
+  const [embeddingName, setEmbeddingName] = useState('默认嵌入模型');
+  const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState('https://api.openai.com/v1');
+  const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-small');
+  const [embeddingDimensions, setEmbeddingDimensions] = useState('1536');
+  const [embeddingApiKey, setEmbeddingApiKey] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +161,89 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+  async function searchLiterature(): Promise<void> {
+    if (literatureQuery.trim().length === 0) return;
+    setWorking(true);
+    try {
+      const result = await client.api.research.searchLiterature({
+        query: literatureQuery.trim(),
+        sources: ['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc'],
+        limit: 20
+      });
+      setLiteratureResults(unwrap('论文检索', result));
+      setError(null);
+    } catch (searchError: unknown) {
+      setError(searchError instanceof Error ? searchError.message : '论文检索失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function searchKnowledge(): Promise<void> {
+    if (knowledgeQuery.trim().length === 0) return;
+    setWorking(true);
+    try {
+      const result = await client.api.research.searchKnowledge({
+        query: knowledgeQuery.trim(),
+        projectId: selectedProjectId,
+        limit: 20,
+        embeddingConfigId: null
+      });
+      setKnowledgeResult(unwrap('知识库检索', result));
+      setError(null);
+    } catch (searchError: unknown) {
+      setError(searchError instanceof Error ? searchError.message : '知识库检索失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function loadEmbeddingConfigs(): Promise<void> {
+    try {
+      const result = await client.api.research.listEmbeddingConfigs();
+      const configs = unwrap('嵌入配置', result);
+      setEmbeddingConfigs(configs);
+      const active = configs.find((config) => config.enabled) ?? configs[0];
+      if (active !== undefined) {
+        setEmbeddingId(active.id);
+        setEmbeddingName(active.name);
+        setEmbeddingBaseUrl(active.baseUrl);
+        setEmbeddingModel(active.model);
+        setEmbeddingDimensions(String(active.dimensions));
+      }
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : '嵌入配置读取失败。');
+    }
+  }
+
+  async function saveEmbeddingConfig(): Promise<void> {
+    const dimensions = Number(embeddingDimensions);
+    if (!Number.isInteger(dimensions) || dimensions <= 0 || embeddingApiKey.trim().length === 0) {
+      setError('嵌入维度必须为正整数，API Key 不能为空。');
+      return;
+    }
+    setWorking(true);
+    try {
+      const result = await client.api.research.saveEmbeddingConfig({
+        id: embeddingId.trim(),
+        name: embeddingName.trim(),
+        baseUrl: embeddingBaseUrl.trim(),
+        model: embeddingModel.trim(),
+        dimensions,
+        apiKey: embeddingApiKey.trim(),
+        enabled: true
+      });
+      const config = unwrap('保存嵌入配置', result);
+      setEmbeddingConfigs((current) => [config, ...current.filter((item) => item.id !== config.id)]);
+      setEmbeddingApiKey('');
+      setError(null);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : '嵌入配置保存失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <section className="canvas-stage research-page" data-testid="research-view">
       <header className="research-header">
@@ -159,6 +257,22 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           新建项目
         </button>
       </header>
+
+      <nav className="research-tabs" aria-label="科研工作台视图">
+        {([
+          ['workflow', '流程'],
+          ['literature', '论文检索'],
+          ['knowledge', '知识库'],
+          ['embedding', '嵌入配置']
+        ] as const).map(([tab, label]) => (
+          <button className={activeTab === tab ? 'research-tab research-tab--active' : 'research-tab'} key={tab} type="button" onClick={() => {
+            setActiveTab(tab);
+            if (tab === 'embedding') void loadEmbeddingConfigs();
+          }}>
+            {label}
+          </button>
+        ))}
+      </nav>
 
       {createOpen ? (
         <section className="research-create-panel" aria-label="新建科研项目">
@@ -191,8 +305,8 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         </div>
       )}
 
-      {loading ? <div className="research-loading">正在读取科研项目…</div> : null}
-      {!loading && projects.length === 0 ? (
+      {activeTab === 'workflow' && loading ? <div className="research-loading">正在读取科研项目…</div> : null}
+      {activeTab === 'workflow' && !loading && projects.length === 0 ? (
         <div className="research-empty">
           <div className="research-empty-mark">∑</div>
           <h2>从一个研究问题开始</h2>
@@ -204,7 +318,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         </div>
       ) : null}
 
-      {!loading && projects.length > 0 ? (
+      {activeTab === 'workflow' && !loading && projects.length > 0 ? (
         <div className="research-layout">
           <aside className="research-projects" aria-label="科研项目列表">
             <div className="research-section-label">项目</div>
@@ -312,6 +426,32 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           </main>
         </div>
       ) : null}
+
+      {activeTab === 'literature' ? (
+        <LiteraturePanel query={literatureQuery} results={literatureResults} working={working} onQueryChange={setLiteratureQuery} onSearch={() => void searchLiterature()} />
+      ) : null}
+      {activeTab === 'knowledge' ? (
+        <KnowledgePanel query={knowledgeQuery} result={knowledgeResult} working={working} onQueryChange={setKnowledgeQuery} onSearch={() => void searchKnowledge()} />
+      ) : null}
+      {activeTab === 'embedding' ? (
+        <EmbeddingPanel
+          configs={embeddingConfigs}
+          id={embeddingId}
+          name={embeddingName}
+          baseUrl={embeddingBaseUrl}
+          model={embeddingModel}
+          dimensions={embeddingDimensions}
+          apiKey={embeddingApiKey}
+          working={working}
+          onIdChange={setEmbeddingId}
+          onNameChange={setEmbeddingName}
+          onBaseUrlChange={setEmbeddingBaseUrl}
+          onModelChange={setEmbeddingModel}
+          onDimensionsChange={setEmbeddingDimensions}
+          onApiKeyChange={setEmbeddingApiKey}
+          onSave={() => void saveEmbeddingConfig()}
+        />
+      ) : null}
     </section>
   );
 }
@@ -324,3 +464,157 @@ function formatEventTime(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
+function LiteraturePanel({
+  query,
+  results,
+  working,
+  onQueryChange,
+  onSearch
+}: {
+  query: string;
+  results: ResearchLiterature[];
+  working: boolean;
+  onQueryChange: (value: string) => void;
+  onSearch: () => void;
+}): React.JSX.Element {
+  return (
+    <section className="research-tool-panel">
+      <div className="research-tool-heading">
+        <div>
+          <div className="research-section-label">Literature Search</div>
+          <h2>论文检索</h2>
+          <p>OpenAlex、Crossref、Semantic Scholar、arXiv、PubMed 和 Europe PMC。</p>
+        </div>
+        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
+          <input aria-label="检索论文" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
+          <button className="action-button action-button--primary" disabled={working} type="submit">
+            <Send aria-hidden="true" size={15} />
+            检索
+          </button>
+        </form>
+      </div>
+      <div className="research-literature-list">
+        {results.length === 0 ? <div className="research-loading">输入问题开始检索。</div> : results.map((record) => (
+          <article className="research-literature-row" key={record.id}>
+            <div className="research-literature-source">{record.source} {record.publishedYear === null ? '' : `· ${record.publishedYear}`}</div>
+            <h3>{record.title}</h3>
+            <p>{record.abstract ?? '暂无摘要'}</p>
+            <div className="research-literature-meta">
+              <span>{record.authors.slice(0, 3).join('、') || '作者信息待补充'}</span>
+              <span>{record.doi ?? '无 DOI'}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function KnowledgePanel({
+  query,
+  result,
+  working,
+  onQueryChange,
+  onSearch
+}: {
+  query: string;
+  result: ResearchKnowledgeSearchResult | null;
+  working: boolean;
+  onQueryChange: (value: string) => void;
+  onSearch: () => void;
+}): React.JSX.Element {
+  return (
+    <section className="research-tool-panel">
+      <div className="research-tool-heading">
+        <div>
+          <div className="research-section-label">Knowledge Base</div>
+          <h2>知识库</h2>
+          <p>关键词和向量混合召回，使用 RRF 合并排序。</p>
+        </div>
+        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
+          <input aria-label="搜索知识库" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
+          <button className="action-button action-button--primary" disabled={working} type="submit">
+            <Send aria-hidden="true" size={15} />
+            搜索
+          </button>
+        </form>
+      </div>
+      <div className="research-knowledge-summary">
+        <span>关键词 {result?.keywordCount ?? 0}</span>
+        <span>向量 {result?.vectorCount ?? 0}</span>
+        <span>{result?.embeddingModel ?? '未启用嵌入模型'}</span>
+      </div>
+      <div className="research-knowledge-list">
+        {result === null ? <div className="research-loading">输入查询开始召回证据。</div> : result.hits.map((hit) => (
+          <article className="research-knowledge-row" key={hit.chunkId}>
+            <div className="research-knowledge-rank">RRF {hit.rrfScore.toFixed(4)}</div>
+            <h3>{hit.title}</h3>
+            <p>{hit.content}</p>
+            <div className="research-literature-meta"><span>{hit.sourceType} · {hit.sourceId}</span><span>{hit.locator ?? '未定位'}</span></div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EmbeddingPanel({
+  configs,
+  id,
+  name,
+  baseUrl,
+  model,
+  dimensions,
+  apiKey,
+  working,
+  onIdChange,
+  onNameChange,
+  onBaseUrlChange,
+  onModelChange,
+  onDimensionsChange,
+  onApiKeyChange,
+  onSave
+}: {
+  configs: ResearchEmbeddingConfig[];
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  dimensions: string;
+  apiKey: string;
+  working: boolean;
+  onIdChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onBaseUrlChange: (value: string) => void;
+  onModelChange: (value: string) => void;
+  onDimensionsChange: (value: string) => void;
+  onApiKeyChange: (value: string) => void;
+  onSave: () => void;
+}): React.JSX.Element {
+  return (
+    <section className="research-tool-panel">
+      <div className="research-tool-heading">
+        <div>
+          <div className="research-section-label">Embedding Provider</div>
+          <h2>嵌入模型配置</h2>
+          <p>连接 OpenAI 兼容 Embeddings API。Key 只写入本地加密 Secret Store。</p>
+        </div>
+        <span className="research-config-count">{configs.length} 个配置</span>
+      </div>
+      <div className="research-config-grid">
+        <label>配置 ID<input value={id} onChange={(event) => onIdChange(event.target.value)} /></label>
+        <label>名称<input value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
+        <label className="research-config-wide">Base URL<input value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} /></label>
+        <label>模型<input value={model} onChange={(event) => onModelChange(event.target.value)} /></label>
+        <label>向量维度<input inputMode="numeric" value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} /></label>
+        <label className="research-config-wide">API Key<input type="password" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} placeholder="保存时写入 Secret Store" /></label>
+      </div>
+      <div className="research-form-actions">
+        <button className="action-button action-button--primary" disabled={working} type="button" onClick={onSave}>保存配置</button>
+      </div>
+      <div className="research-config-list">
+        {configs.map((config) => <div className="research-config-row" key={config.id}><strong>{config.name}</strong><span>{config.model} · {config.dimensions} 维 · {config.keyConfigured ? 'Key 已配置' : '缺少 Key'}</span></div>)}
+      </div>
+    </section>
+  );
+}

@@ -24,7 +24,8 @@ Phase 1
 
 ### Phase 3: Implementation
 - [ ] Foundation: research domain schema, migrations, IPC contracts
-- [ ] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
+- [x] Foundation: research domain schema, migrations, IPC contracts
+- [x] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
 - [ ] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
 - [ ] Production: LaTeX templates/live PDF, experiments, figures, exports
 - [ ] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
