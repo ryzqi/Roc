@@ -8,6 +8,7 @@ import {
   researchWorkflowSnapshotSchema
 } from '../../../shared/schemas/research';
 import type {
+  ResearchArtifact,
   ResearchEmbeddingConfigSaveRequest,
   ResearchExperimentRun,
   ResearchExperimentRunRecordRequest,
@@ -215,6 +216,75 @@ export class ResearchRepository {
       )
       .run(request.id, request.projectId, request.title, request.codePath, JSON.stringify(request.dataPaths), JSON.stringify(request.outputPaths), request.status, request.runId, timestamp, timestamp);
     return { ...request, createdAt: timestamp, updatedAt: timestamp };
+  }
+
+  createArtifact(input: {
+    projectId: string;
+    stage: ResearchArtifact['stage'];
+    kind: ResearchArtifact['kind'];
+    title: string;
+    path: string | null;
+  }): ResearchArtifact {
+    this.getProject(input.projectId);
+    const timestamp = this.now();
+    const id = 'artifact_' + randomUUID();
+    this.db.prepare(
+      `INSERT INTO research_artifacts
+       (id, project_id, stage, kind, title, path, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+    ).run(id, input.projectId, input.stage, input.kind, input.title, input.path, timestamp, timestamp);
+    this.attachArtifactToStage(input.projectId, input.stage, id);
+    return this.getArtifact(id);
+  }
+
+  getArtifact(id: string): ResearchArtifact {
+    const row = this.db.prepare(
+      `SELECT id, project_id, stage, kind, title, path, status, created_at, updated_at
+       FROM research_artifacts WHERE id = ?`
+    ).get(id) as ArtifactRow | undefined;
+    if (row === undefined) {
+      throw new Error(`research_artifact_not_found:${id}`);
+    }
+    return toArtifact(row);
+  }
+
+  listArtifacts(projectId: string, stage?: ResearchStageState['stage']): ResearchArtifact[] {
+    const rows = (stage === undefined
+      ? this.db.prepare(
+          `SELECT id, project_id, stage, kind, title, path, status, created_at, updated_at
+           FROM research_artifacts WHERE project_id = ? ORDER BY updated_at DESC`
+        ).all(projectId)
+      : this.db.prepare(
+          `SELECT id, project_id, stage, kind, title, path, status, created_at, updated_at
+           FROM research_artifacts WHERE project_id = ? AND stage = ? ORDER BY updated_at DESC`
+        ).all(projectId, stage)) as ArtifactRow[];
+    return rows.map(toArtifact);
+  }
+
+  updateArtifact(input: {
+    id: string;
+    title?: string;
+    path?: string | null;
+    status?: ResearchArtifact['status'];
+  }): ResearchArtifact {
+    const current = this.getArtifact(input.id);
+    this.db.prepare(
+      `UPDATE research_artifacts SET title = ?, path = ?, status = ?, updated_at = ? WHERE id = ?`
+    ).run(
+      input.title ?? current.title,
+      input.path === undefined ? current.path : input.path,
+      input.status ?? current.status,
+      this.now(),
+      input.id
+    );
+    return this.getArtifact(input.id);
+  }
+
+  private attachArtifactToStage(projectId: string, stage: ResearchStageState['stage'], artifactId: string): void {
+    const state = this.readStage(projectId, stage);
+    this.db.prepare(
+      'UPDATE research_stage_states SET artifact_ids_json = ? WHERE project_id = ? AND stage = ?'
+    ).run(JSON.stringify([...state.artifactIds, artifactId]), projectId, stage);
   }
 
   createTemplate(input: { id: string; projectId: string; rootPath: string; entryPath: string }): ResearchTemplate {
@@ -531,6 +601,9 @@ export class ResearchRepository {
         case 'complete':
           this.requireStatus(current, ['running'], 'research_stage_not_running');
           if (current.gateRequired) {
+            if (current.artifactIds.length === 0) {
+              throw new Error('research_stage_artifact_required');
+            }
             this.updateStage(request.projectId, current.stage, { status: 'waiting_approval' });
             this.appendEvent(request.projectId, current.stage, 'approval_requested', '阶段产物等待用户审核。', request, timestamp);
           } else {
@@ -539,6 +612,9 @@ export class ResearchRepository {
           break;
         case 'approve':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
+          current.artifactIds.forEach((artifactId) => {
+            this.updateArtifact({ id: artifactId, status: 'approved' });
+          });
           this.updateStage(request.projectId, current.stage, { gateApproved: true });
           this.completeStage(request.projectId, current.stage, timestamp);
           break;
@@ -717,6 +793,18 @@ type TemplateRow = {
   updated_at: string;
 };
 
+type ArtifactRow = {
+  id: string;
+  project_id: string;
+  stage: ResearchArtifact['stage'];
+  kind: ResearchArtifact['kind'];
+  title: string;
+  path: string | null;
+  status: ResearchArtifact['status'];
+  created_at: string;
+  updated_at: string;
+};
+
 function toProject(row: ResearchProjectRow): ResearchProject {
   return researchProjectSchema.parse({
     id: row.id,
@@ -790,6 +878,20 @@ function toTemplate(row: TemplateRow): ResearchTemplate {
     pdfPath: row.pdf_path,
     errors: Array.isArray(errors) ? errors.filter((error): error is string => typeof error === 'string') : [],
     lastCompiledAt: row.last_compiled_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toArtifact(row: ArtifactRow): ResearchArtifact {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    stage: row.stage,
+    kind: row.kind,
+    title: row.title,
+    path: row.path,
+    status: row.status,
+    createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 }

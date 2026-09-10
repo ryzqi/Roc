@@ -73,3 +73,9 @@
 | `academic-research-skills` 非商业许可 | 等待分发性质决策；商业场景不原样打包该仓库内容 |
 | 全面开源与 CC BY-NC 冲突 | 推荐核心许可与 NC 插件分离，或获取额外授权/原创重写 |
 | 许可边界决策完成 | 核心与 Apache/MIT 随包；NC 技能独立或重写 |
+
+- Phase 3 Artifact Domain 第二步：补充 listArtifacts()/updateArtifact()，形成 Artifact 基础 CRUD 骨架。
+- Phase 3 Artifact Domain 第三步：完成 create/get/list/update Artifact 仓储接口，并建立 workflow stage 与 artifact_ids_json 关联。
+
+- Phase 3 Artifact Domain Review：补充仓储层测试用例，验证 Artifact 与 Workflow Stage 的关联关系。
+- Phase 3 Artifact Domain Review 修正：审批闸门回归测试已移入统一测试生命周期；既有审批流程测试补齐 `source_corpus` 阶段产物，并验证审批同步更新 Artifact 状态。仓储测试 8 项、类型检查与差异检查通过。

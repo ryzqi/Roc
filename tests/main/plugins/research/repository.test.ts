@@ -53,6 +53,13 @@ describe('ResearchRepository', () => {
     expect(workflow.stages.find((stage) => stage.stage === 'retrieval')).toMatchObject({ status: 'ready' });
 
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'retrieval' });
+    repository.createArtifact({
+      projectId: project.id,
+      stage: 'retrieval',
+      kind: 'source_corpus',
+      title: 'Retrieved evidence',
+      path: null
+    });
     workflow = repository.transitionWorkflow({ projectId: project.id, action: 'complete', expectedStage: 'retrieval' });
     expect(workflow.currentStage).toBe('retrieval');
     expect(workflow.stages.find((stage) => stage.stage === 'retrieval')).toMatchObject({
@@ -66,6 +73,13 @@ describe('ResearchRepository', () => {
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'discovery' });
     repository.transitionWorkflow({ projectId: project.id, action: 'complete', expectedStage: 'discovery' });
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'retrieval' });
+    const artifact = repository.createArtifact({
+      projectId: project.id,
+      stage: 'retrieval',
+      kind: 'source_corpus',
+      title: 'Approval evidence',
+      path: null
+    });
     repository.transitionWorkflow({ projectId: project.id, action: 'complete', expectedStage: 'retrieval' });
 
     const workflow = repository.transitionWorkflow({ projectId: project.id, action: 'approve', expectedStage: 'retrieval' });
@@ -74,6 +88,7 @@ describe('ResearchRepository', () => {
       status: 'completed',
       gateApproved: true
     });
+    expect(repository.getArtifact(artifact.id).status).toBe('approved');
   });
 
   it('rejects stale transitions so two views cannot advance different stages', () => {
@@ -121,6 +136,64 @@ describe('ResearchRepository', () => {
     expect(result.vectorCount).toBe(2);
     expect(result.hits[0]).toMatchObject({ chunkId: 'doc-a:chunk:0', keywordRank: 1, vectorRank: 1 });
     expect(result.hits[0].rrfScore).toBeGreaterThan(result.hits[1].rrfScore);
+  });
+
+  it('creates and links artifacts to workflow stages', () => {
+    const project = repository.createProject({
+      title: 'Artifact test',
+      description: 'Artifact domain.',
+      workspacePath: null
+    });
+
+    const artifact = repository.createArtifact({
+      projectId: project.id,
+      stage: 'discovery',
+      kind: 'search_strategy',
+      title: 'Search strategy',
+      path: '/tmp/search.md'
+    });
+
+    expect(repository.getArtifact(artifact.id)).toMatchObject({
+      projectId: project.id,
+      stage: 'discovery'
+    });
+
+    expect(repository.listArtifacts(project.id)).toHaveLength(1);
+
+    const workflow = repository.getWorkflow(project.id);
+    expect(workflow.stages[0].artifactIds).toContain(artifact.id);
+  });
+
+  it('requires an artifact before entering a gated approval flow', () => {
+    const project = repository.createProject({
+      title: 'Gate',
+      description: 'Gate',
+      workspacePath: null
+    });
+
+    repository.transitionWorkflow({
+      projectId: project.id,
+      action: 'start',
+      expectedStage: 'discovery'
+    });
+    repository.transitionWorkflow({
+      projectId: project.id,
+      action: 'complete',
+      expectedStage: 'discovery'
+    });
+    repository.transitionWorkflow({
+      projectId: project.id,
+      action: 'start',
+      expectedStage: 'retrieval'
+    });
+
+    expect(() =>
+      repository.transitionWorkflow({
+        projectId: project.id,
+        action: 'complete',
+        expectedStage: 'retrieval'
+      })
+    ).toThrow('research_stage_artifact_required');
   });
 
   it('persists provenance and template compile state for audit and resume', () => {
