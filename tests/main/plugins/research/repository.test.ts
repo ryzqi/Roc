@@ -198,17 +198,18 @@ describe('ResearchRepository', () => {
 
   it('persists provenance and template compile state for audit and resume', () => {
     const project = repository.createProject({ title: 'Audit test', description: 'Audit.', workspacePath: '/tmp/audit' });
+    const artifact = repository.createArtifact({ projectId: project.id, stage: 'discovery', kind: 'search_strategy', title: 'Strategy', path: null });
     const provenance = repository.addProvenance({
       projectId: project.id,
-      artifactId: null,
-      subjectType: 'claim',
-      subjectId: 'claim-1',
+      artifactId: artifact.id,
+      subjectType: 'artifact',
+      subjectId: artifact.id,
       sourceType: 'literature',
       sourceId: 'doi:10.1000/test',
       locator: 'p. 4, para. 2',
       excerpt: 'Evidence excerpt'
     });
-    expect(repository.listProvenance({ projectId: project.id, subjectId: 'claim-1' })).toEqual([provenance]);
+    expect(repository.listProvenance({ projectId: project.id, subjectId: artifact.id })).toEqual([provenance]);
 
     const template = repository.createTemplate({ id: 'template-1', projectId: project.id, rootPath: '/tmp/audit/template-1', entryPath: 'main.tex' });
     expect(template).toMatchObject({ status: 'imported', pdfPath: null });

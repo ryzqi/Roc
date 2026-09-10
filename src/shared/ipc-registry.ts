@@ -171,6 +171,21 @@ import {
   workspaceSelectRequestSchema
 } from './schemas/ipc-workspace';
 import type { IpcResult } from './types';
+import {
+  researchClaimCreateRequestSchema,
+  researchClaimHistoryRequestSchema,
+  researchClaimListRequestSchema,
+  researchClaimSchema,
+  researchClaimUpdateRequestSchema,
+  researchEvidenceCaptureRequestSchema,
+  researchEvidenceListRequestSchema,
+  researchEvidenceSchema,
+  researchExportBundleRequestSchema,
+  researchExportBundleSchema,
+  researchManuscriptGetRequestSchema,
+  researchManuscriptSaveRequestSchema,
+  researchManuscriptSchema
+} from './schemas/research-evidence';
 
 export type IpcInputTransform =
   | { readonly kind: 'none' }
@@ -319,6 +334,15 @@ export const ipcRegistry = {
     request({ key: 'researchArtifactsGet', channel: 'roc:research:artifacts-get', domain: 'research', method: 'getArtifact', kind: 'plugin', capabilityName: 'research.artifacts.get', inputTransform: first, contract: methodContract(oneArg(researchArtifactIdRequestSchema), researchArtifactSchema) }),
     request({ key: 'researchArtifactsList', channel: 'roc:research:artifacts-list', domain: 'research', method: 'listArtifacts', kind: 'plugin', capabilityName: 'research.artifacts.list', inputTransform: first, contract: methodContract(oneArg(researchArtifactListRequestSchema), researchArtifactSchema.array()) }),
     request({ key: 'researchArtifactsUpdate', channel: 'roc:research:artifacts-update', domain: 'research', method: 'updateArtifact', kind: 'plugin', capabilityName: 'research.artifacts.update', inputTransform: first, contract: methodContract(oneArg(researchArtifactUpdateRequestSchema), researchArtifactSchema) }),
+    request({ key: 'researchEvidenceCapture', channel: 'roc:research:evidence-capture', domain: 'research', method: 'captureEvidence', kind: 'plugin', capabilityName: 'research.evidence.capture', inputTransform: first, contract: methodContract(oneArg(researchEvidenceCaptureRequestSchema), researchEvidenceSchema) }),
+    request({ key: 'researchEvidenceList', channel: 'roc:research:evidence-list', domain: 'research', method: 'listEvidence', kind: 'plugin', capabilityName: 'research.evidence.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceListRequestSchema), researchEvidenceSchema.array()) }),
+    request({ key: 'researchClaimsCreate', channel: 'roc:research:claims-create', domain: 'research', method: 'createClaim', kind: 'plugin', capabilityName: 'research.claims.create', inputTransform: first, contract: methodContract(oneArg(researchClaimCreateRequestSchema), researchClaimSchema) }),
+    request({ key: 'researchClaimsUpdate', channel: 'roc:research:claims-update', domain: 'research', method: 'updateClaim', kind: 'plugin', capabilityName: 'research.claims.update', inputTransform: first, contract: methodContract(oneArg(researchClaimUpdateRequestSchema), researchClaimSchema) }),
+    request({ key: 'researchClaimsList', channel: 'roc:research:claims-list', domain: 'research', method: 'listClaims', kind: 'plugin', capabilityName: 'research.claims.list', inputTransform: first, contract: methodContract(oneArg(researchClaimListRequestSchema), researchClaimSchema.array()) }),
+    request({ key: 'researchClaimsHistory', channel: 'roc:research:claims-history', domain: 'research', method: 'getClaimHistory', kind: 'plugin', capabilityName: 'research.claims.history', inputTransform: first, contract: methodContract(oneArg(researchClaimHistoryRequestSchema), researchClaimSchema.array()) }),
+    request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
+    request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
+    request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
     request({ key: 'researchLiteratureSearch', channel: 'roc:research:literature-search', domain: 'research', method: 'searchLiterature', kind: 'plugin', capabilityName: 'research.literature.search', inputTransform: first, contract: methodContract(oneArg(researchLiteratureSearchRequestSchema), researchLiteratureSchema.array()) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),

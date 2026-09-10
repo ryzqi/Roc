@@ -59,6 +59,7 @@ import { LiteratureSearchService } from './literature-service';
 import { ResearchRepository, type EmbeddingConfigRow } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { compileImportedLatexTemplate, importLatexTemplate } from './template-service';
+import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 
 const pluginId = '@roc/plugin-research';
 const capabilityVersion = '1.0.0';
@@ -112,13 +113,14 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities)]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
       sqliteVec.load(db);
       repository = new ResearchRepository(db);
       const researchRepository = repository;
+      registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
         researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));
       context.capabilities.register(pluginId, lifecycleCapabilities.getArtifact, async (input) =>

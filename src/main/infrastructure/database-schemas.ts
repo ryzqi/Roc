@@ -1147,6 +1147,59 @@ export const researchMigrations: RocDatabaseMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_research_figures_project
         ON research_figures(project_id, updated_at DESC);
     `
+  },
+  {
+    version: 2,
+    name: 'research_evidence_and_manuscripts',
+    sql: `
+      CREATE TABLE research_evidence (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        document_id TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        source_type TEXT NOT NULL CHECK(source_type IN ('literature','file','experiment')),
+        source_id TEXT NOT NULL,
+        source_version TEXT NOT NULL,
+        title TEXT NOT NULL,
+        locator TEXT NOT NULL,
+        excerpt TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(project_id, chunk_id, source_version, locator, content_hash)
+      );
+      CREATE INDEX idx_research_evidence_project ON research_evidence(project_id, created_at DESC);
+
+      CREATE TABLE research_claims (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        subject_type TEXT NOT NULL CHECK(subject_type IN ('claim','paragraph','figure')),
+        content TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('supported','hypothesis','pending')),
+        evidence_ids_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_research_claims_artifact ON research_claims(project_id, artifact_id);
+
+      CREATE TABLE research_claim_revisions (
+        claim_id TEXT NOT NULL REFERENCES research_claims(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        PRIMARY KEY(claim_id, version)
+      );
+
+      CREATE TABLE research_manuscripts (
+        artifact_id TEXT PRIMARY KEY REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        sections_json TEXT NOT NULL,
+        latex TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        claims_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `
   }
 ];
 

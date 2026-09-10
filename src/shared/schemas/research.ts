@@ -179,7 +179,7 @@ export const researchProvenanceSchema = z
     id: z.string(),
     projectId: z.string(),
     artifactId: z.string().nullable(),
-    subjectType: z.enum(['claim', 'paragraph', 'figure', 'experiment', 'artifact']),
+    subjectType: z.enum(['claim', 'paragraph', 'figure_claim', 'figure', 'experiment', 'artifact']),
     subjectId: z.string(),
     sourceType: z.enum(['literature', 'file', 'experiment', 'model_run', 'workflow_event']),
     sourceId: z.string(),

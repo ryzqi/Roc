@@ -38,6 +38,7 @@ import type {
   ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
 import { getResearchStageRoleProfile } from './role-profiles';
+import { ResearchEvidenceRepository } from './evidence-repository';
 
 export const researchStages = [
   'discovery',
@@ -69,10 +70,17 @@ const stageGateRequired = new Set<(typeof researchStages)[number]>([
 ]);
 
 export class ResearchRepository {
+  readonly evidence: ResearchEvidenceRepository;
+
   constructor(
     private readonly db: DatabaseConnection,
     private readonly now: Clock = () => new Date().toISOString()
-  ) {}
+  ) {
+    this.evidence = new ResearchEvidenceRepository(db, {
+      get: (id) => this.getArtifact(id),
+      requireEditable: (id) => this.requireEditableArtifact(id)
+    }, now);
+  }
 
   listProjects(): ResearchProject[] {
     const rows = this.db
@@ -269,11 +277,7 @@ export class ResearchRepository {
   }
 
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
-    const current = this.getArtifact(input.id);
-    if (current.status !== 'draft') {
-      throw new Error('research_artifact_immutable');
-    }
-    this.requireEditableStage(current.projectId, current.stage);
+    const current = this.requireEditableArtifact(input.id);
     const timestamp = this.now();
     return this.db.transaction(() => {
       this.db.prepare(
@@ -296,6 +300,13 @@ export class ResearchRepository {
     const state = this.readStage(projectId, stage);
     this.requireStatus(state, ['ready', 'running', 'paused', 'blocked', 'failed'], 'research_stage_not_editable');
     return state;
+  }
+
+  private requireEditableArtifact(id: string): ResearchArtifact {
+    const artifact = this.getArtifact(id);
+    if (artifact.status !== 'draft') throw new Error('research_artifact_immutable');
+    this.requireEditableStage(artifact.projectId, artifact.stage);
+    return artifact;
   }
 
   private attachArtifactToStage(projectId: string, stage: ResearchStageState['stage'], artifactId: string): void {
@@ -358,7 +369,25 @@ export class ResearchRepository {
       if (request.artifactId !== request.subjectId) {
         throw new Error('research_provenance_artifact_mismatch');
       }
+    } else if (request.subjectType === 'claim' || request.subjectType === 'paragraph' || request.subjectType === 'figure_claim') {
+      const claim = this.evidence.getClaim(request.subjectId);
+      if (claim.projectId !== request.projectId) throw new Error('research_provenance_project_mismatch');
+      const claimSubjectType = request.subjectType === 'figure_claim' ? 'figure' : request.subjectType;
+      if (claim.artifactId !== request.artifactId || claim.subjectType !== claimSubjectType) {
+        throw new Error('research_provenance_subject_mismatch');
+      }
+    } else if (request.subjectType === 'figure') {
+      const figure = this.db.prepare('SELECT project_id FROM research_figures WHERE id = ?')
+        .get(request.subjectId) as { project_id: string } | undefined;
+      if (figure === undefined) throw new Error('research_figure_not_found');
+      if (figure.project_id !== request.projectId) throw new Error('research_provenance_project_mismatch');
+    } else {
+      const experiment = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?')
+        .get(request.subjectId) as { project_id: string } | undefined;
+      if (experiment === undefined) throw new Error('research_experiment_not_found');
+      if (experiment.project_id !== request.projectId) throw new Error('research_provenance_project_mismatch');
     }
+    if (request.artifactId !== null) this.requireEditableArtifact(request.artifactId);
     const record: ResearchProvenance = { ...request, id: randomUUID(), createdAt: this.now() };
     this.db
       .prepare(
@@ -686,6 +715,7 @@ export class ResearchRepository {
           artifact.kind !== getResearchStageRoleProfile(state.stage).outputKind) {
         throw new Error('research_stage_artifact_invalid');
       }
+      this.evidence.assertPublishable(artifact);
     }
   }
 

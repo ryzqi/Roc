@@ -1,4 +1,17 @@
 import type { z } from 'zod';
+import type {
+  researchEvidenceSchema,
+  researchEvidenceCaptureRequestSchema,
+  researchEvidenceListRequestSchema,
+  researchClaimSchema,
+  researchClaimCreateRequestSchema,
+  researchClaimUpdateRequestSchema,
+  researchClaimListRequestSchema,
+  researchManuscriptSchema,
+  researchManuscriptSaveRequestSchema,
+  researchExportBundleSchema,
+  researchExportBundleRequestSchema
+} from '../schemas/research-evidence';
 
 import {
   researchArtifactCreateRequestSchema,
@@ -73,3 +86,14 @@ export type ResearchStageRoleProfile = z.infer<typeof researchStageRoleProfileSc
 export type ResearchStageRoleRequest = z.infer<typeof researchStageRoleRequestSchema>;
 export type ResearchProvenanceCreateRequest = z.infer<typeof researchProvenanceCreateRequestSchema>;
 export type ResearchProvenanceListRequest = z.infer<typeof researchProvenanceListRequestSchema>;
+export type ResearchEvidence = z.infer<typeof researchEvidenceSchema>;
+export type ResearchEvidenceCaptureRequest = z.infer<typeof researchEvidenceCaptureRequestSchema>;
+export type ResearchEvidenceListRequest = z.infer<typeof researchEvidenceListRequestSchema>;
+export type ResearchClaim = z.infer<typeof researchClaimSchema>;
+export type ResearchClaimCreateRequest = z.infer<typeof researchClaimCreateRequestSchema>;
+export type ResearchClaimUpdateRequest = z.infer<typeof researchClaimUpdateRequestSchema>;
+export type ResearchClaimListRequest = z.infer<typeof researchClaimListRequestSchema>;
+export type ResearchManuscript = z.infer<typeof researchManuscriptSchema>;
+export type ResearchManuscriptSaveRequest = z.infer<typeof researchManuscriptSaveRequestSchema>;
+export type ResearchExportBundle = z.infer<typeof researchExportBundleSchema>;
+export type ResearchExportBundleRequest = z.infer<typeof researchExportBundleRequestSchema>;

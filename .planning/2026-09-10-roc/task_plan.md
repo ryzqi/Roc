@@ -38,7 +38,7 @@ Phase 3 — Implementation（Workflow）
 
 ## Implementation increments
 - [x] Workflow 1：阶段回退/中途进入、产物审批生命周期、项目归属、产物/事件 IPC；review 与定向验证通过。
-- [ ] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出硬闸门。
+- [x] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出数据包硬闸门；review 与定向验证通过。
 - [ ] Workflow 3：阶段模型策略、角色 Skill 隔离、持久运行、独立审稿与最多两轮修订。
 - [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
