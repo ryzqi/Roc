@@ -5,10 +5,15 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 import {
   researchProjectSchema,
   researchStageStateSchema,
+  researchWorkflowEventSchema,
   researchWorkflowSnapshotSchema
 } from '../../../shared/schemas/research';
 import type {
   ResearchArtifact,
+  ResearchArtifactCreateRequest,
+  ResearchArtifactUpdateRequest,
+  ResearchWorkflowEvent,
+  ResearchWorkflowEventsRequest,
   ResearchEmbeddingConfigSaveRequest,
   ResearchExperimentRun,
   ResearchExperimentRunRecordRequest,
@@ -32,6 +37,7 @@ import type {
   ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
+import { getResearchStageRoleProfile } from './role-profiles';
 
 export const researchStages = [
   'discovery',
@@ -218,23 +224,23 @@ export class ResearchRepository {
     return { ...request, createdAt: timestamp, updatedAt: timestamp };
   }
 
-  createArtifact(input: {
-    projectId: string;
-    stage: ResearchArtifact['stage'];
-    kind: ResearchArtifact['kind'];
-    title: string;
-    path: string | null;
-  }): ResearchArtifact {
-    this.getProject(input.projectId);
-    const timestamp = this.now();
-    const id = 'artifact_' + randomUUID();
-    this.db.prepare(
-      `INSERT INTO research_artifacts
-       (id, project_id, stage, kind, title, path, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
-    ).run(id, input.projectId, input.stage, input.kind, input.title, input.path, timestamp, timestamp);
-    this.attachArtifactToStage(input.projectId, input.stage, id);
-    return this.getArtifact(id);
+  createArtifact(input: ResearchArtifactCreateRequest): ResearchArtifact {
+    return this.db.transaction(() => {
+      this.requireEditableStage(input.projectId, input.stage);
+      if (input.kind !== getResearchStageRoleProfile(input.stage).outputKind) {
+        throw new Error('research_artifact_kind_mismatch');
+      }
+      const timestamp = this.now();
+      const id = `artifact_${randomUUID()}`;
+      this.db.prepare(
+        `INSERT INTO research_artifacts
+         (id, project_id, stage, kind, title, path, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+      ).run(id, input.projectId, input.stage, input.kind, input.title, input.path, timestamp, timestamp);
+      this.attachArtifactToStage(input.projectId, input.stage, id);
+      this.appendEvent(input.projectId, input.stage, 'artifact_created', input.title, { artifactId: id }, timestamp);
+      return this.getArtifact(id);
+    })();
   }
 
   getArtifact(id: string): ResearchArtifact {
@@ -249,6 +255,7 @@ export class ResearchRepository {
   }
 
   listArtifacts(projectId: string, stage?: ResearchStageState['stage']): ResearchArtifact[] {
+    this.getProject(projectId);
     const rows = (stage === undefined
       ? this.db.prepare(
           `SELECT id, project_id, stage, kind, title, path, status, created_at, updated_at
@@ -261,23 +268,34 @@ export class ResearchRepository {
     return rows.map(toArtifact);
   }
 
-  updateArtifact(input: {
-    id: string;
-    title?: string;
-    path?: string | null;
-    status?: ResearchArtifact['status'];
-  }): ResearchArtifact {
+  updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
     const current = this.getArtifact(input.id);
-    this.db.prepare(
-      `UPDATE research_artifacts SET title = ?, path = ?, status = ?, updated_at = ? WHERE id = ?`
-    ).run(
-      input.title ?? current.title,
-      input.path === undefined ? current.path : input.path,
-      input.status ?? current.status,
-      this.now(),
-      input.id
-    );
-    return this.getArtifact(input.id);
+    if (current.status !== 'draft') {
+      throw new Error('research_artifact_immutable');
+    }
+    this.requireEditableStage(current.projectId, current.stage);
+    const timestamp = this.now();
+    return this.db.transaction(() => {
+      this.db.prepare(
+        `UPDATE research_artifacts SET title = ?, path = ?, updated_at = ? WHERE id = ?`
+      ).run(
+        input.title ?? current.title,
+        input.path === undefined ? current.path : input.path,
+        timestamp,
+        input.id
+      );
+      this.appendEvent(current.projectId, current.stage, 'artifact_updated', input.title ?? current.title, { artifactId: input.id }, timestamp);
+      return this.getArtifact(input.id);
+    })();
+  }
+
+  private requireEditableStage(projectId: string, stage: ResearchStageState['stage']): ResearchStageState {
+    const project = this.getProject(projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    if (project.currentStage !== stage) throw new Error('research_artifact_stage_inactive');
+    const state = this.readStage(projectId, stage);
+    this.requireStatus(state, ['ready', 'running', 'paused', 'blocked', 'failed'], 'research_stage_not_editable');
+    return state;
   }
 
   private attachArtifactToStage(projectId: string, stage: ResearchStageState['stage'], artifactId: string): void {
@@ -329,6 +347,18 @@ export class ResearchRepository {
   }
 
   addProvenance(request: ResearchProvenanceCreateRequest): ResearchProvenance {
+    this.getProject(request.projectId);
+    if (request.artifactId !== null && this.getArtifact(request.artifactId).projectId !== request.projectId) {
+      throw new Error('research_provenance_project_mismatch');
+    }
+    if (request.subjectType === 'artifact') {
+      if (this.getArtifact(request.subjectId).projectId !== request.projectId) {
+        throw new Error('research_provenance_project_mismatch');
+      }
+      if (request.artifactId !== request.subjectId) {
+        throw new Error('research_provenance_artifact_mismatch');
+      }
+    }
     const record: ResearchProvenance = { ...request, id: randomUUID(), createdAt: this.now() };
     this.db
       .prepare(
@@ -573,6 +603,7 @@ export class ResearchRepository {
 
   transitionWorkflow(request: ResearchWorkflowTransitionRequest): ResearchWorkflowSnapshot {
     const project = this.getProject(request.projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
     if (project.currentStage !== request.expectedStage) {
       throw new Error(`research_workflow_stage_conflict:${project.currentStage}`);
     }
@@ -582,7 +613,7 @@ export class ResearchRepository {
       switch (request.action) {
         case 'start':
           this.requireStatus(current, ['ready'], 'research_stage_not_ready');
-          this.updateStage(request.projectId, current.stage, { status: 'running', enteredAt: current.enteredAt ?? timestamp });
+          this.updateStage(request.projectId, current.stage, { status: 'running', enteredAt: current.enteredAt ?? timestamp, lastError: null });
           this.updateProjectStatus(request.projectId, 'active', timestamp);
           this.appendEvent(request.projectId, current.stage, 'stage_started', '阶段已开始。', request, timestamp);
           break;
@@ -600,10 +631,9 @@ export class ResearchRepository {
           break;
         case 'complete':
           this.requireStatus(current, ['running'], 'research_stage_not_running');
+          if (current.activeRunId !== null) throw new Error('research_stage_run_active');
           if (current.gateRequired) {
-            if (current.artifactIds.length === 0) {
-              throw new Error('research_stage_artifact_required');
-            }
+            this.requireStageArtifacts(request.projectId, current);
             this.updateStage(request.projectId, current.stage, { status: 'waiting_approval' });
             this.appendEvent(request.projectId, current.stage, 'approval_requested', '阶段产物等待用户审核。', request, timestamp);
           } else {
@@ -612,10 +642,12 @@ export class ResearchRepository {
           break;
         case 'approve':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
+          this.requireStageArtifacts(request.projectId, current);
           current.artifactIds.forEach((artifactId) => {
-            this.updateArtifact({ id: artifactId, status: 'approved' });
+            this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, artifactId);
           });
           this.updateStage(request.projectId, current.stage, { gateApproved: true });
+          this.appendEvent(request.projectId, current.stage, 'approval_granted', request.note ?? '阶段产物已通过审核。', { artifactIds: current.artifactIds }, timestamp);
           this.completeStage(request.projectId, current.stage, timestamp);
           break;
         case 'reject':
@@ -623,10 +655,65 @@ export class ResearchRepository {
           this.updateStage(request.projectId, current.stage, { status: 'running', gateApproved: false, lastError: request.note ?? '用户要求修改。' });
           this.appendEvent(request.projectId, current.stage, 'approval_rejected', request.note ?? '用户要求修改。', request, timestamp);
           break;
+        case 'move':
+          this.moveStage(request.projectId, current, request.targetStage, request.note, timestamp);
+          break;
       }
     });
     transition();
     return this.getWorkflow(request.projectId);
+  }
+
+  listWorkflowEvents(request: ResearchWorkflowEventsRequest): ResearchWorkflowEvent[] {
+    this.getProject(request.projectId);
+    const rows = this.db.prepare(
+      `SELECT id, project_id, stage, type, message, payload_json, created_at
+       FROM research_workflow_events WHERE project_id = ? ORDER BY rowid DESC LIMIT ?`
+    ).all(request.projectId, request.limit) as Array<{
+      id: string; project_id: string; stage: string; type: string; message: string; payload_json: string; created_at: string;
+    }>;
+    return rows.map((row) => researchWorkflowEventSchema.parse({
+      id: row.id, projectId: row.project_id, stage: row.stage, type: row.type,
+      message: row.message, payload: JSON.parse(row.payload_json), createdAt: row.created_at
+    }));
+  }
+
+  private requireStageArtifacts(projectId: string, state: ResearchStageState): void {
+    if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
+    for (const id of state.artifactIds) {
+      const artifact = this.getArtifact(id);
+      if (artifact.projectId !== projectId || artifact.stage !== state.stage || artifact.status !== 'draft' ||
+          artifact.kind !== getResearchStageRoleProfile(state.stage).outputKind) {
+        throw new Error('research_stage_artifact_invalid');
+      }
+    }
+  }
+
+  private moveStage(
+    projectId: string,
+    current: ResearchStageState,
+    target: ResearchStageState['stage'],
+    note: string | undefined,
+    timestamp: string
+  ): void {
+    this.requireStatus(current, ['ready', 'paused', 'blocked', 'failed', 'completed'], 'research_stage_cannot_move');
+    if (current.activeRunId !== null) throw new Error('research_stage_run_active');
+    const targetIndex = researchStages.indexOf(target);
+    researchStages.forEach((stage, index) => {
+      const state = this.readStage(projectId, stage);
+      if (index < targetIndex && state.status === 'completed') return;
+      this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE project_id = ? AND stage = ? AND status != 'superseded'")
+        .run(timestamp, projectId, stage);
+      this.db.prepare("UPDATE research_stage_states SET artifact_ids_json = '[]' WHERE project_id = ? AND stage = ?").run(projectId, stage);
+      this.updateStage(projectId, stage, {
+        status: index === targetIndex ? 'ready' : 'locked', activeRunId: null,
+        enteredAt: index === targetIndex ? timestamp : null, completedAt: null, gateApproved: false, lastError: null
+      });
+    });
+    this.db.prepare("UPDATE research_projects SET current_stage = ?, status = 'active', updated_at = ? WHERE id = ?")
+      .run(target, timestamp, projectId);
+    const type = targetIndex <= researchStages.indexOf(current.stage) ? 'stage_reopened' : 'stage_entered';
+    this.appendEvent(projectId, target, type, note ?? '已切换研究阶段，重新收集本阶段及后续产物。', { fromStage: current.stage, targetStage: target }, timestamp);
   }
 
   private completeStage(projectId: string, stage: ResearchStageState['stage'], timestamp: string): void {

@@ -4,10 +4,10 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-建立科研领域词汇与架构 ADR，盘点底层重构边界，然后按阶段实现并验证。
+从提交 `86405a4` 继续，先补齐 Workflow；后续依次完成 Production、Renderer、Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
-Phase 1
+Phase 3 — Implementation（Workflow）
 
 ## Phases
 
@@ -23,7 +23,6 @@ Phase 1
 - **Status:** complete
 
 ### Phase 3: Implementation
-- [ ] Foundation: research domain schema, migrations, IPC contracts
 - [x] Foundation: research domain schema, migrations, IPC contracts
 - [x] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
 - [ ] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
@@ -36,6 +35,14 @@ Phase 1
 - [ ] Verify requirements met
 - [ ] Document test results
 - **Status:** pending
+
+## Implementation increments
+- [x] Workflow 1：阶段回退/中途进入、产物审批生命周期、项目归属、产物/事件 IPC；review 与定向验证通过。
+- [ ] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出硬闸门。
+- [ ] Workflow 3：阶段模型策略、角色 Skill 隔离、持久运行、独立审稿与最多两轮修订。
+- [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
+- [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
+- [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery
 - [ ] Review outputs
@@ -88,5 +95,8 @@ Phase 1
 ## Errors Encountered
 | Error | Resolution |
 |-------|------------|
+| IPC adapter 测试的 domain 预期漏掉已存在的 research | 补齐 research 与本部分五条接口映射覆盖，重跑 IPC 测试 |
+| 续作首次生命周期回归：8 项失败，复现导航缺失、孤立产物、跨项目来源与审批版本可修改 | 完成实现后 22 项科研域测试及类型检查通过，进入双轴 review |
+| `mcporter list context7`：Unknown MCP server | 使用官方 `https://mcp.context7.com/mcp`，resolve-library-id 成功 |
 | GitHub CLI 未登录 | 改用 agent-reach 路由下的 GitHub REST/raw 只读访问 |
 | planning hook 拒绝 symlink/reparse-point context | 当前工作目录物理路径可读；继续使用显式 `.planning/2026-09-10-roc/` 路径 |

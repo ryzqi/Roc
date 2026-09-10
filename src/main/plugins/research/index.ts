@@ -3,6 +3,11 @@ import { z } from 'zod';
 import * as sqliteVec from 'sqlite-vec';
 
 import {
+  researchArtifactCreateRequestSchema,
+  researchArtifactIdRequestSchema,
+  researchArtifactListRequestSchema,
+  researchArtifactSchema,
+  researchArtifactUpdateRequestSchema,
   researchProjectCreateRequestSchema,
   researchProjectIdRequestSchema,
   researchProjectListRequestSchema,
@@ -29,6 +34,8 @@ import {
   researchTemplateImportRequestSchema,
   researchTemplateSchema,
   researchWorkflowSnapshotSchema,
+  researchWorkflowEventSchema,
+  researchWorkflowEventsRequestSchema,
   researchWorkflowTransitionRequestSchema
 } from '../../../shared/schemas/research';
 import type {
@@ -78,6 +85,14 @@ const researchCapabilityDescriptors = [
   descriptor('research.template.compile', researchTemplateCompileRequestSchema, researchTemplateSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
+const lifecycleCapabilities = {
+  createArtifact: descriptor('research.artifacts.create', researchArtifactCreateRequestSchema, researchArtifactSchema),
+  getArtifact: descriptor('research.artifacts.get', researchArtifactIdRequestSchema, researchArtifactSchema),
+  listArtifacts: descriptor('research.artifacts.list', researchArtifactListRequestSchema, researchArtifactSchema.array()),
+  updateArtifact: descriptor('research.artifacts.update', researchArtifactUpdateRequestSchema, researchArtifactSchema),
+  events: descriptor('research.workflow.events', researchWorkflowEventsRequestSchema, researchWorkflowEventSchema.array())
+};
+
 export type ResearchPluginOptions = {
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
@@ -97,12 +112,25 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: researchCapabilityDescriptors
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities)]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
       sqliteVec.load(db);
       repository = new ResearchRepository(db);
+      const researchRepository = repository;
+      context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
+        researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));
+      context.capabilities.register(pluginId, lifecycleCapabilities.getArtifact, async (input) =>
+        researchRepository.getArtifact(researchArtifactIdRequestSchema.parse(input).id));
+      context.capabilities.register(pluginId, lifecycleCapabilities.listArtifacts, async (input) => {
+        const request = researchArtifactListRequestSchema.parse(input);
+        return researchRepository.listArtifacts(request.projectId, request.stage);
+      });
+      context.capabilities.register(pluginId, lifecycleCapabilities.updateArtifact, async (input) =>
+        researchRepository.updateArtifact(researchArtifactUpdateRequestSchema.parse(input)));
+      context.capabilities.register(pluginId, lifecycleCapabilities.events, async (input) =>
+        researchRepository.listWorkflowEvents(researchWorkflowEventsRequestSchema.parse(input)));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[0], async () => repository!.listProjects());
       context.capabilities.register(pluginId, researchCapabilityDescriptors[1], async (input) => repository!.getProject((input as { id: string }).id));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[2], async (input) => repository!.createProject(input as never));

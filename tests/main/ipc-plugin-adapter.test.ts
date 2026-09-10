@@ -47,6 +47,7 @@ describe('plugin capability IPC adapter', () => {
         'lifecycle',
         'mcp',
         'memory',
+        'research',
         'rtk',
         'sessions',
         'shell',
@@ -105,6 +106,11 @@ function requiredMappings(): Array<{
 }> {
   const request = { requestId: 'request_1' };
   return [
+    { preloadMethod: 'research.createArtifact', capabilityName: 'research.artifacts.create', args: [request], expectedInput: request },
+    { preloadMethod: 'research.getArtifact', capabilityName: 'research.artifacts.get', args: [request], expectedInput: request },
+    { preloadMethod: 'research.listArtifacts', capabilityName: 'research.artifacts.list', args: [request], expectedInput: request },
+    { preloadMethod: 'research.updateArtifact', capabilityName: 'research.artifacts.update', args: [request], expectedInput: request },
+    { preloadMethod: 'research.listWorkflowEvents', capabilityName: 'research.workflow.events', args: [request], expectedInput: request },
     { preloadMethod: 'chat.startRun', capabilityName: 'agent.run.start', args: [request], expectedInput: request },
     { preloadMethod: 'chat.cancelRun', capabilityName: 'agent.run.cancel', args: ['run_1'], expectedInput: { runId: 'run_1' } },
     { preloadMethod: 'chat.resumeRun', capabilityName: 'agent.run.resume', args: [request], expectedInput: request },

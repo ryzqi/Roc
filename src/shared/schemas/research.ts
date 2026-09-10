@@ -108,14 +108,36 @@ export const researchWorkflowSnapshotSchema = z
   })
   .strict();
 
-export const researchWorkflowTransitionRequestSchema = z
-  .object({
-    projectId: z.string().min(1),
-    action: z.enum(['start', 'pause', 'resume', 'complete', 'approve', 'reject']),
-    expectedStage: researchStageSchema,
-    note: z.string().trim().max(2000).optional()
-  })
-  .strict();
+const researchWorkflowTransitionBaseSchema = z.object({
+  projectId: z.string().min(1),
+  expectedStage: researchStageSchema,
+  note: z.string().trim().max(2000).optional()
+});
+
+export const researchWorkflowTransitionRequestSchema = z.discriminatedUnion('action', [
+  researchWorkflowTransitionBaseSchema.extend({
+    action: z.enum(['start', 'pause', 'resume', 'complete', 'approve', 'reject'])
+  }).strict(),
+  researchWorkflowTransitionBaseSchema.extend({
+    action: z.literal('move'),
+    targetStage: researchStageSchema
+  }).strict()
+]);
+
+export const researchWorkflowEventSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  stage: researchStageSchema,
+  type: z.string(),
+  message: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string()
+}).strict();
+
+export const researchWorkflowEventsRequestSchema = z.object({
+  projectId: z.string().min(1),
+  limit: z.number().int().positive().max(200)
+}).strict();
 
 export const researchArtifactSchema = z
   .object({
@@ -130,6 +152,27 @@ export const researchArtifactSchema = z
     updatedAt: z.string()
   })
   .strict();
+
+export const researchArtifactCreateRequestSchema = z.object({
+  projectId: z.string().min(1),
+  stage: researchStageSchema,
+  kind: researchArtifactKindSchema,
+  title: z.string().trim().min(1).max(300),
+  path: z.string().trim().min(1).nullable()
+}).strict();
+
+export const researchArtifactIdRequestSchema = z.object({ id: z.string().min(1) }).strict();
+
+export const researchArtifactUpdateRequestSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1).max(300).optional(),
+  path: z.string().trim().min(1).nullable().optional()
+}).strict();
+
+export const researchArtifactListRequestSchema = z.object({
+  projectId: z.string().min(1),
+  stage: researchStageSchema.optional()
+}).strict();
 
 export const researchProvenanceSchema = z
   .object({

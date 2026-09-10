@@ -1,7 +1,10 @@
 import type { z } from 'zod';
 
 import {
+  researchArtifactCreateRequestSchema,
+  researchArtifactListRequestSchema,
   researchArtifactSchema,
+  researchArtifactUpdateRequestSchema,
   researchProjectCreateRequestSchema,
   researchProjectIdRequestSchema,
   researchProjectListRequestSchema,
@@ -23,6 +26,8 @@ import {
   researchProvenanceSchema,
   researchStageStateSchema,
   researchWorkflowSnapshotSchema,
+  researchWorkflowEventSchema,
+  researchWorkflowEventsRequestSchema,
   researchWorkflowTransitionRequestSchema
   ,researchTemplateCompileRequestSchema
   ,researchTemplateImportRequestSchema
@@ -42,6 +47,11 @@ export type ResearchStageState = z.infer<typeof researchStageStateSchema>;
 export type ResearchWorkflowSnapshot = z.infer<typeof researchWorkflowSnapshotSchema>;
 export type ResearchWorkflowTransitionRequest = z.infer<typeof researchWorkflowTransitionRequestSchema>;
 export type ResearchArtifact = z.infer<typeof researchArtifactSchema>;
+export type ResearchArtifactCreateRequest = z.infer<typeof researchArtifactCreateRequestSchema>;
+export type ResearchArtifactUpdateRequest = z.infer<typeof researchArtifactUpdateRequestSchema>;
+export type ResearchArtifactListRequest = z.infer<typeof researchArtifactListRequestSchema>;
+export type ResearchWorkflowEvent = z.infer<typeof researchWorkflowEventSchema>;
+export type ResearchWorkflowEventsRequest = z.infer<typeof researchWorkflowEventsRequestSchema>;
 export type ResearchProvenance = z.infer<typeof researchProvenanceSchema>;
 export type ResearchLiterature = z.infer<typeof researchLiteratureSchema>;
 export type ResearchLiteratureSearchRequest = z.infer<typeof researchLiteratureSearchRequestSchema>;

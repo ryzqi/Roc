@@ -3,7 +3,7 @@
 ## Session: 2026-09-10
 
 ### Current Status
-- **Phase:** 1 - Requirements & Discovery
+- **Phase:** 3 - Implementation（Workflow）
 - **Started:** 2026-09-10
 
 ### Actions Taken
@@ -79,3 +79,17 @@
 
 - Phase 3 Artifact Domain Review：补充仓储层测试用例，验证 Artifact 与 Workflow Stage 的关联关系。
 - Phase 3 Artifact Domain Review 修正：审批闸门回归测试已移入统一测试生命周期；既有审批流程测试补齐 `source_corpus` 阶段产物，并验证审批同步更新 Artifact 状态。仓储测试 8 项、类型检查与差异检查通过。
+
+### 续作：逐部分 review 与提交
+- 起点：`86405a4`；`main` 比 `origin/main` 领先 16 个提交，工作区原本干净。
+- 用户要求：接续本计划；每部分实现后 review、验证并本地提交。
+- 已通过显式 `PLAN_ID=2026-09-10-roc`、`PWF_PLAN_ROOT=/Users/Apple_501/Desktop/Roc/Roc` 解析计划，目录及三份计划文件均无符号链接。
+- 以当前代码、`CONTEXT.md`、架构 ADR 与本计划的已确认决策为验收依据；旧的访谈等待记录已不构成阻塞。
+- 验证路径：每部分定向 Vitest → 类型检查；IPC 变更生成并检查；界面/打包阶段增加构建和实际 smoke。
+- 基线验证：`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test tests/main/plugins/research`，4 文件 / 14 测试通过。
+- 第一部分范围：可恢复阶段导航、产物不可变审批版本、原子创建与项目归属校验、产物/时间线 IPC；补充生命周期回归测试。
+- 第一部分 red/green：新增 8 个生命周期测试在原实现全部失败；修复后科研域 5 文件 / 22 测试通过，`typecheck`、`git diff --check` 通过。已生成 Artifact CRUD 与 workflow events 的 IPC；开始双轴 review。
+- Context7 官方远程 MCP 可用；通过 `mcporter` 解析 `/langchain-ai/deepagentsjs`，用于后续角色运行 API 核查。
+- IPC 扩展验证发现旧 domain 列表漏掉 research；补齐 domain 与新增接口路由断言。Review 提醒原子性测试提前在 INSERT 前失败，改为数据库 trigger 在关联 UPDATE 时抛错，验证产物、关联及事件一同回滚。
+- Standards review：回滚测试修正后 0 项未解决问题。Spec review 发现 artifact 类型 subjectId 可跨项目而 artifactId 为空的旁路；补齐 subject 所属项目及两个 Artifact ID 一致性校验与回归测试。
+- 第一部分完成：Standards / Spec 均 0 项未解决问题；科研域与 IPC 9 文件 / 39 测试、类型检查、IPC 漂移检查通过。Review 记录：`reviews/01-workflow-lifecycle.md`。状态：Verified passing，准备独立提交。

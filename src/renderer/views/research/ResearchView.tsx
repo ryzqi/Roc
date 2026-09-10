@@ -134,7 +134,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
-  async function transition(action: ResearchWorkflowTransitionRequest['action']): Promise<void> {
+  async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>): Promise<void> {
     if (workflow === null || selectedProjectId === null) return;
     setWorking(true);
     try {

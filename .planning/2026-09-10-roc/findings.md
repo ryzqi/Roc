@@ -95,6 +95,8 @@
 ## Issues Encountered
 | Issue | Resolution |
 |-------|------------|
+| 续作盘点：Workflow 只有 start/pause/resume/complete/approve/reject；Artifact 无 IPC、创建与关联未使用事务、审批版本可被原地改写 | 第一部分补齐导航与产物生命周期；独立验证并 review 后提交 |
+| Context7 未注册到当前 MCP / mcporter | 尝试官方远程 MCP；已安装类型与仓库代码仍作为本地 API 依据 |
 | planning hook 拒绝 symlink/reparse-point context | 物理路径与计划文件可直接访问；记录并继续 |
 | 两个参考仓库 raw SKILL 请求超时 | 保留已成功的 REST 元数据/目录结果；后续改用分块 API 或本地浅克隆，避免重复超时请求 |
 | `academic-research-skills` 为 CC BY-NC 4.0 | 在分发性质确认前不原样打包；商业场景改为独立授权或仅实现兼容的原创流程 |
