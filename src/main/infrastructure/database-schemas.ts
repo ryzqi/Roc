@@ -1237,6 +1237,41 @@ export const researchMigrations: RocDatabaseMigration[] = [
         created_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 4,
+    name: 'research_peer_review_cycles',
+    sql: `
+      CREATE TABLE research_review_cycles (
+        project_id TEXT PRIMARY KEY REFERENCES research_projects(id) ON DELETE CASCADE,
+        origin_artifact_id TEXT NOT NULL REFERENCES research_artifacts(id),
+        manuscript_artifact_id TEXT NOT NULL REFERENCES research_artifacts(id),
+        revision_round INTEGER NOT NULL CHECK(revision_round BETWEEN 0 AND 2),
+        status TEXT NOT NULL CHECK(status IN ('reviewing','revision_required','accepted')),
+        report_artifact_ids_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO research_review_cycles (project_id, origin_artifact_id, manuscript_artifact_id, revision_round, status, report_artifact_ids_json, updated_at)
+        SELECT p.id, a.id, a.id, 0,
+          CASE WHEN s.gate_approved = 1 AND p.current_stage = 'revision' THEN 'revision_required'
+               WHEN s.gate_approved = 1 AND p.current_stage = 'export' THEN 'accepted' ELSE 'reviewing' END,
+          s.artifact_ids_json, p.updated_at
+        FROM research_projects p
+        JOIN research_artifacts a ON a.id = (SELECT latest.id FROM research_artifacts latest
+          WHERE latest.project_id = p.id AND latest.kind = 'manuscript' AND latest.status = 'approved' ORDER BY latest.rowid DESC LIMIT 1)
+        JOIN research_stage_states s ON s.project_id = p.id AND s.stage = 'review';
+      UPDATE research_stage_runs AS r SET snapshot_json = json_set(snapshot_json,
+        '$.reviewCycleId', CASE WHEN r.stage IN ('review','revision','export') THEN
+          (SELECT a.id FROM json_each(r.snapshot_json, '$.inputArtifactIds') i
+            JOIN research_artifacts a ON a.id = i.value
+            WHERE a.project_id = r.project_id AND a.kind = 'manuscript' ORDER BY a.rowid DESC LIMIT 1)
+          ELSE NULL END,
+        '$.revisionRound', CASE WHEN r.stage = 'revision' THEN 1 ELSE 0 END),
+        context_json = json_set(context_json, '$.reviewReports', json('[]'));
+      UPDATE research_stage_runs SET snapshot_json = json_insert(snapshot_json, '$.toolNames[#]', 'read_review_report')
+        WHERE stage = 'review' AND parent_run_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM json_each(snapshot_json, '$.toolNames') WHERE value = 'read_review_report');
+    `
   }
 ];
 

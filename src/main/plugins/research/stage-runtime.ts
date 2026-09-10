@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import type { ResearchStageRun, ResearchStageRunIdRequest, ResearchStageRunRetryRequest, ResearchStageRunStartRequest, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import type { ResearchRepository } from './repository';
-import type { ResearchRoleExecutor } from './role-executor';
+import type { PreparedResearchRole, ResearchRoleExecutor } from './role-executor';
 import { createResearchRoleTools } from './role-tools';
 
 type ActiveRole = { controller: AbortController; pending: Promise<void>; projectId: string };
@@ -59,6 +59,9 @@ export class ResearchStageRuntime {
   }
 
   private stop(request: ResearchStageRunIdRequest, status: 'cancelled' | 'interrupted', reason: string): ResearchStageRun {
+    if (this.repository.runs.get(request.runId, request.projectId).parentRunId !== null) {
+      throw new Error('research_run_cancel_parent_required');
+    }
     const run = this.repository.runs.terminate(request.runId, request.projectId, status, reason);
     this.active.get(run.id)?.controller.abort(new Error(reason));
     return run;
@@ -75,21 +78,49 @@ export class ResearchStageRuntime {
 
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
     const timeout = setTimeout(() => controller.abort(new Error('research_run_timeout')), queued.policy.timeoutMs);
+    let children: Promise<ResearchStageRun>[] = [];
     try {
-      if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
-      const prepared = await withAbort(this.executor.prepare(queued.policy.model), controller.signal);
-      controller.signal.throwIfAborted();
-      const run = this.repository.runs.markRunning(queued.id, queued.projectId, prepared);
-      const context = this.repository.runs.getContext(run.id);
-      const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal: controller.signal });
-      const result = await withAbort(prepared.execute({ run, context, tools, signal: controller.signal }), controller.signal);
-      controller.signal.throwIfAborted();
-      this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);
-      this.repository.runs.complete(run.id, run.projectId, result.output);
+      const { prepared, run } = await this.prepareRole(queued, controller.signal);
+      if (run.stage === 'review') {
+        children = this.repository.runs.createReviewChildren(run.id, run.projectId)
+          .map((child) => this.executeChild(child, controller.signal));
+        const reports = await Promise.all(children);
+        this.repository.runs.setReviewReports(run.id, run.projectId, reports);
+      }
+      await this.executeOutput(run, prepared, controller.signal);
     } catch (error) {
+      controller.abort(error);
+      await Promise.allSettled(children);
       this.repository.runs.terminate(queued.id, queued.projectId, 'failed', executionErrorCode(error));
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  private async prepareRole(queued: ResearchStageRun, signal: AbortSignal) {
+    signal.throwIfAborted();
+    if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
+    const prepared = await withAbort(this.executor.prepare(queued.policy.model), signal);
+    signal.throwIfAborted();
+    return { prepared, run: this.repository.runs.markRunning(queued.id, queued.projectId, prepared) };
+  }
+
+  private async executeOutput(run: ResearchStageRun, prepared: PreparedResearchRole, signal: AbortSignal): Promise<ResearchStageRun> {
+    const context = this.repository.runs.getContext(run.id);
+    const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal });
+    const result = await withAbort(prepared.execute({ run, context, tools, signal }), signal);
+    signal.throwIfAborted();
+    this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);
+    return this.repository.runs.complete(run.id, run.projectId, result.output);
+  }
+
+  private async executeChild(queued: ResearchStageRun, signal: AbortSignal): Promise<ResearchStageRun> {
+    try {
+      const { prepared, run } = await this.prepareRole(queued, signal);
+      return await this.executeOutput(run, prepared, signal);
+    } catch (error) {
+      this.repository.runs.terminate(queued.id, queued.projectId, signal.aborted ? 'interrupted' : 'failed', executionErrorCode(error));
+      throw error;
     }
   }
 }

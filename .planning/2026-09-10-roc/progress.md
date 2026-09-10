@@ -3,7 +3,7 @@
 ## Session: 2026-09-10
 
 ### Current Status
-- **Phase:** 3 - Implementation（Workflow）
+- **Phase:** 3 - Implementation（Production）
 - **Started:** 2026-09-10
 
 ### Actions Taken
@@ -109,3 +109,8 @@
 - 3a 提交前验证：19 文件 / 115 测试、build（含 typecheck）、check:ipc 通过。Standards review 发现 requestId 幂等未比较 retryOfRunId，重试可能误返回另一失败运行；已补重试来源身份比较及 start/retry 碰撞回归。
 - 3a Spec review 另发现拒绝无证据正文时事务回滚会丢失已返回模型版本；改为先独立记录响应模型版本，再事务校验/提交产物。无证据输出仍回滚，失败运行保留实际模型身份。Standards 幂等问题复查关闭。
 - 3a 完成：两轴复查均 0 项未解决；最终 19 文件 / 116 测试、build（含 typecheck）、check:ipc 与差异检查通过。记录 `reviews/03a-stage-execution.md`，状态 Verified passing，独立提交。
+- 3a 已提交：`96818f4`，提交后工作区干净。进入 3b：方法/统计、证据/引用、结构/表达三角色独立评审，综合角色随后读取三份报告；review 的人工审批明确选择接受或修订，最多两轮已批准修订。
+- 3b 已接入审稿周期、三角色并行与独立输入、综合报告分页读取、显式人工决策和两轮修订限制。主流程集成测试通过；追加中断/部分报告重试、输入闸门及 v3→v4 运行快照迁移回归。
+- 3b 新增 5 个集成场景通过，含两轮完整循环、第三轮拒绝、当前稿保留、并行互盲、部分报告取消重试和运行快照升级；类型检查与 IPC 漂移检查通过，进入双轴 review。
+- 3b 初审发现：重开 review 未撤销旧 accepted；v4 把旧 review/revision/export 运行周期统一置空导致重试冲突。修复为回到审稿或更早阶段时撤销接受状态，并按旧输入稿件关联迁移周期/轮次；旧审稿协调器补只读报告工具，子角色仍严格过滤其他报告。
+- 3b 完成：两轴复查均 0 项未解决；最终 20 文件 / 124 测试、build（含 typecheck）、check:ipc、差异检查通过。Review 记录 `reviews/03b-peer-review.md`，Workflow 子阶段完成，进入 Production。

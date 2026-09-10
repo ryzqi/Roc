@@ -52,7 +52,11 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter): R
           const result = await agent.invoke({
             messages: [{ role: 'user', content: JSON.stringify({
               instruction: input.run.instruction, project: input.context.project,
-              inputs: input.context.inputs.map((entry) => entry.artifact)
+              inputs: input.context.inputs.map((entry) => entry.artifact),
+              reviewReports: input.context.reviewReports.map((report) => ({
+                role: report.role, artifactId: report.artifactId, title: report.output.title, verdict: report.output.verdict
+              })),
+              revisionRound: input.run.revisionRound
             }) }]
           }, { signal: input.signal, recursionLimit: input.run.policy.maxSteps });
           let modelVersion: string | null = null;

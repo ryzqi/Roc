@@ -116,13 +116,18 @@ const researchWorkflowTransitionBaseSchema = z.object({
 
 export const researchWorkflowTransitionRequestSchema = z.discriminatedUnion('action', [
   researchWorkflowTransitionBaseSchema.extend({
-    action: z.enum(['start', 'pause', 'resume', 'complete', 'approve', 'reject'])
+    action: z.enum(['start', 'pause', 'resume', 'complete', 'approve', 'reject']),
+    reviewDecision: z.enum(['accept', 'revise']).optional()
   }).strict(),
   researchWorkflowTransitionBaseSchema.extend({
     action: z.literal('move'),
     targetStage: researchStageSchema
   }).strict()
-]);
+]).refine((request) => {
+  if (request.action === 'move') return true;
+  if (request.action === 'approve' && request.expectedStage === 'review') return request.reviewDecision !== undefined;
+  return request.reviewDecision === undefined;
+}, 'A review approval must explicitly accept the manuscript or request revision.');
 
 export const researchWorkflowEventSchema = z.object({
   id: z.string(),

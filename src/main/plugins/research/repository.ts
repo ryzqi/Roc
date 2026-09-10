@@ -40,6 +40,7 @@ import type {
 import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchEvidenceRepository } from './evidence-repository';
 import { ResearchRunRepository } from './run-repository';
+import { ResearchReviewRepository } from './review-repository';
 
 export const researchStages = [
   'discovery',
@@ -73,6 +74,7 @@ const stageGateRequired = new Set<(typeof researchStages)[number]>([
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly runs: ResearchRunRepository;
+  readonly reviews: ResearchReviewRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -83,6 +85,7 @@ export class ResearchRepository {
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, now);
     this.runs = new ResearchRunRepository(db, this, now);
+    this.reviews = new ResearchReviewRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -692,8 +695,10 @@ export class ResearchRepository {
             this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, artifactId);
           });
           this.updateStage(request.projectId, current.stage, { gateApproved: true });
-          this.appendEvent(request.projectId, current.stage, 'approval_granted', request.note ?? '阶段产物已通过审核。', { artifactIds: current.artifactIds }, timestamp);
-          this.completeStage(request.projectId, current.stage, timestamp);
+          this.appendEvent(request.projectId, current.stage, 'approval_granted', request.note ?? '阶段产物已通过审核。', {
+            artifactIds: current.artifactIds, reviewDecision: request.reviewDecision ?? null
+          }, timestamp);
+          this.completeStage(request.projectId, current.stage, timestamp, request.reviewDecision);
           break;
         case 'reject':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
@@ -733,6 +738,8 @@ export class ResearchRepository {
       }
       this.evidence.assertPublishable(artifact);
     }
+    if (state.stage === 'review') this.runs.requireReviewPanel(projectId, state.artifactIds);
+    if (state.stage === 'export') this.reviews.requireForStage(projectId, 'export');
   }
 
   private moveStage(
@@ -745,11 +752,17 @@ export class ResearchRepository {
     this.requireStatus(current, ['ready', 'paused', 'blocked', 'failed', 'completed'], 'research_stage_cannot_move');
     if (current.activeRunId !== null) throw new Error('research_stage_run_active');
     const targetIndex = researchStages.indexOf(target);
+    const retainedManuscript = ['review', 'revision', 'export'].includes(target)
+      ? this.reviews.get(projectId)?.manuscriptArtifactId ?? null : null;
+    if (targetIndex <= researchStages.indexOf('review')) {
+      this.db.prepare("UPDATE research_review_cycles SET status = 'reviewing', report_artifact_ids_json = '[]', updated_at = ? WHERE project_id = ?")
+        .run(timestamp, projectId);
+    }
     researchStages.forEach((stage, index) => {
       const state = this.readStage(projectId, stage);
       if (index < targetIndex && state.status === 'completed') return;
-      this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE project_id = ? AND stage = ? AND status != 'superseded'")
-        .run(timestamp, projectId, stage);
+      this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE project_id = ? AND stage = ? AND status != 'superseded' AND (? IS NULL OR id != ?)")
+        .run(timestamp, projectId, stage, retainedManuscript, retainedManuscript);
       this.db.prepare("UPDATE research_stage_states SET artifact_ids_json = '[]' WHERE project_id = ? AND stage = ?").run(projectId, stage);
       this.updateStage(projectId, stage, {
         status: index === targetIndex ? 'ready' : 'locked', activeRunId: null,
@@ -762,16 +775,19 @@ export class ResearchRepository {
     this.appendEvent(projectId, target, type, note ?? '已切换研究阶段，重新收集本阶段及后续产物。', { fromStage: current.stage, targetStage: target }, timestamp);
   }
 
-  private completeStage(projectId: string, stage: ResearchStageState['stage'], timestamp: string): void {
+  private completeStage(projectId: string, stage: ResearchStageState['stage'], timestamp: string, reviewDecision?: 'accept' | 'revise'): void {
     const index = researchStages.indexOf(stage);
-    const nextStage = researchStages[index + 1];
+    const nextStage = this.reviews.afterApproval(projectId, stage, this.readStage(projectId, stage).artifactIds, reviewDecision) ?? researchStages[index + 1];
     this.updateStage(projectId, stage, { status: 'completed', completedAt: timestamp });
     if (nextStage === undefined) {
       this.updateProjectStatus(projectId, 'completed', timestamp);
       this.appendEvent(projectId, stage, 'workflow_completed', '科研流程已完成。', {}, timestamp);
       return;
     }
-    this.updateStage(projectId, nextStage, { status: 'ready', enteredAt: timestamp });
+    if (nextStage === 'review' || nextStage === 'revision') {
+      this.db.prepare("UPDATE research_stage_states SET artifact_ids_json = '[]' WHERE project_id = ? AND stage = ?").run(projectId, nextStage);
+    }
+    this.updateStage(projectId, nextStage, { status: 'ready', enteredAt: timestamp, completedAt: null, gateApproved: false, lastError: null });
     this.db.prepare('UPDATE research_projects SET current_stage = ?, updated_at = ? WHERE id = ?').run(nextStage, timestamp, projectId);
     this.appendEvent(projectId, stage, 'stage_completed', `阶段已完成，下一阶段为 ${nextStage}。`, { nextStage }, timestamp);
   }

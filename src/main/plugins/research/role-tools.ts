@@ -21,6 +21,15 @@ export function createResearchRoleTools(input: {
     if (run.status !== 'running') throw new Error('research_run_not_current');
   };
   const factories: Record<string, () => StructuredToolInterface> = {
+    read_review_report: () => tool(async ({ artifactId, offset, limit }) => {
+      assertActive();
+      const report = input.context.reviewReports.find((entry) => entry.artifactId === artifactId);
+      if (report === undefined) throw new Error('research_review_report_not_in_context');
+      const content = JSON.stringify(report);
+      return { artifactId, content: content.slice(offset, offset + limit), totalChars: content.length,
+        nextOffset: offset + limit < content.length ? offset + limit : null };
+    }, { name: 'read_review_report', description: '综合角色分页读取本轮已完成的独立评审报告。',
+      schema: z.object({ artifactId: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
     search_knowledge: () => tool(async ({ query, limit }) => {
       assertActive();
       const result = await input.capabilities.invoke<ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult>('research.knowledge.search', {

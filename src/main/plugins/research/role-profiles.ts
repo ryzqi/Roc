@@ -5,7 +5,8 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.literature.search': 'search_literature',
   'research.evidence.capture': 'capture_evidence',
   'research.evidence.list': 'list_evidence',
-  'research.artifacts.get': 'read_artifact'
+  'research.artifacts.get': 'read_artifact',
+  'research.review.readReport': 'read_review_report'
 };
 
 const readCapabilities = ['research.knowledge.search', 'research.evidence.list', 'research.artifacts.get'];
@@ -20,7 +21,7 @@ const profiles: Record<ResearchStageRoleProfile['stage'], ResearchStageRoleProfi
   experiment: { stage: 'experiment', role: 'experiment-agent', skillIds: ['roc-experiment-provenance'], allowedCapabilities: evidenceCapabilities, outputKind: 'experiment_run' },
   figure: { stage: 'figure', role: 'scientific-figure-agent', skillIds: ['roc-scientific-figure'], allowedCapabilities: evidenceCapabilities, outputKind: 'figure' },
   writing: { stage: 'writing', role: 'academic-writing-agent', skillIds: ['roc-academic-writing'], allowedCapabilities: evidenceCapabilities, outputKind: 'manuscript' },
-  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: readCapabilities, outputKind: 'review_report' },
+  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: [...readCapabilities, 'research.review.readReport'], outputKind: 'review_report' },
   revision: { stage: 'revision', role: 'revision-agent', skillIds: ['roc-revision-coach'], allowedCapabilities: evidenceCapabilities, outputKind: 'manuscript' },
   export: { stage: 'export', role: 'manuscript-export-agent', skillIds: ['roc-manuscript-export'], allowedCapabilities: readCapabilities, outputKind: 'export_package' }
 };

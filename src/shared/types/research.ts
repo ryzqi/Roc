@@ -8,7 +8,8 @@ import type {
   researchStageRunStartRequestSchema,
   researchStageRunIdRequestSchema,
   researchStageRunRetryRequestSchema,
-  researchStageRunsRequestSchema
+  researchStageRunsRequestSchema,
+  researchReviewCycleSchema
 } from '../schemas/research-runs';
 import type {
   researchEvidenceSchema,
@@ -117,3 +118,4 @@ export type ResearchStageRunStartRequest = z.infer<typeof researchStageRunStartR
 export type ResearchStageRunIdRequest = z.infer<typeof researchStageRunIdRequestSchema>;
 export type ResearchStageRunRetryRequest = z.infer<typeof researchStageRunRetryRequestSchema>;
 export type ResearchStageRunsRequest = z.infer<typeof researchStageRunsRequestSchema>;
+export type ResearchReviewCycle = z.infer<typeof researchReviewCycleSchema>;

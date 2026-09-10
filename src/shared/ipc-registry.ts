@@ -174,7 +174,7 @@ import type { IpcResult } from './types';
 import {
   researchArtifactContentRequestSchema, researchArtifactContentSchema, researchStagePoliciesRequestSchema,
   researchStagePolicySchema, researchStageRunIdRequestSchema, researchStageRunRetryRequestSchema,
-  researchStageRunSchema, researchStageRunStartRequestSchema, researchStageRunsRequestSchema
+  researchStageRunSchema, researchStageRunStartRequestSchema, researchStageRunsRequestSchema, researchReviewCycleSchema
 } from './schemas/research-runs';
 import {
   researchClaimCreateRequestSchema,
@@ -336,6 +336,7 @@ export const ipcRegistry = {
     request({ key: 'researchWorkflowTransition', channel: 'roc:research:workflow-transition', domain: 'research', method: 'transitionWorkflow', kind: 'plugin', capabilityName: 'research.workflow.transition', inputTransform: first, contract: methodContract(oneArg(researchWorkflowTransitionRequestSchema), researchWorkflowSnapshotSchema) }),
     request({ key: 'researchWorkflowEvents', channel: 'roc:research:workflow-events', domain: 'research', method: 'listWorkflowEvents', kind: 'plugin', capabilityName: 'research.workflow.events', inputTransform: first, contract: methodContract(oneArg(researchWorkflowEventsRequestSchema), researchWorkflowEventSchema.array()) }),
     request({ key: 'researchWorkflowPolicies', channel: 'roc:research:workflow-policies', domain: 'research', method: 'listStagePolicies', kind: 'plugin', capabilityName: 'research.workflow.policies', inputTransform: first, contract: methodContract(oneArg(researchStagePoliciesRequestSchema), researchStagePolicySchema.array()) }),
+    request({ key: 'researchWorkflowReviewCycle', channel: 'roc:research:workflow-review-cycle', domain: 'research', method: 'getReviewCycle', kind: 'plugin', capabilityName: 'research.workflow.reviewCycle', inputTransform: first, contract: methodContract(oneArg(researchStagePoliciesRequestSchema), researchReviewCycleSchema.nullable()) }),
     request({ key: 'researchWorkflowSavePolicy', channel: 'roc:research:workflow-save-policy', domain: 'research', method: 'saveStagePolicy', kind: 'plugin', capabilityName: 'research.workflow.savePolicy', inputTransform: first, contract: methodContract(oneArg(researchStagePolicySchema), researchStagePolicySchema) }),
     request({ key: 'researchWorkflowStartRun', channel: 'roc:research:workflow-start-run', domain: 'research', method: 'startStageRun', kind: 'plugin', capabilityName: 'research.workflow.startRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunStartRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchWorkflowGetRun', channel: 'roc:research:workflow-get-run', domain: 'research', method: 'getStageRun', kind: 'plugin', capabilityName: 'research.workflow.getRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),

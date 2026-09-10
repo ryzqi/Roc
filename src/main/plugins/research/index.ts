@@ -128,7 +128,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchRepository.runs.recoverInterrupted();
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor);
       stageRuntime = runtime;
-      registerResearchRunCapabilities(context, researchRepository.runs, runtime);
+      registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
         researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));

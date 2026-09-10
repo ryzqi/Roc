@@ -4,10 +4,10 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-从提交 `86405a4` 继续，先补齐 Workflow；后续依次完成 Production、Renderer、Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow 已完成；继续 Production（文献解析/增量索引、LaTeX、实验/绘图/导出），然后 Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
-Phase 3 — Implementation（Workflow）
+Phase 3 — Implementation（Production）
 
 ## Phases
 
@@ -25,7 +25,7 @@ Phase 3 — Implementation（Workflow）
 ### Phase 3: Implementation
 - [x] Foundation: research domain schema, migrations, IPC contracts
 - [x] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
-- [ ] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
+- [x] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
 - [ ] Production: LaTeX templates/live PDF, experiments, figures, exports
 - [ ] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
 - [ ] Packaging: bundled toolchain, licenses, resource verification
@@ -40,7 +40,7 @@ Phase 3 — Implementation（Workflow）
 - [x] Workflow 1：阶段回退/中途进入、产物审批生命周期、项目归属、产物/事件 IPC；review 与定向验证通过。
 - [x] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出数据包硬闸门；review 与定向验证通过。
 - [x] Workflow 3a：阶段模型策略、角色 Skill/工具隔离、持久运行、取消/重试/恢复；review、116 测试与 build 通过。
-- [ ] Workflow 3b：多角色独立审稿、综合与最多两轮修订。
+- [x] Workflow 3b：多角色独立审稿、综合与最多两轮修订；review、124 测试与 build 通过。
 - [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。

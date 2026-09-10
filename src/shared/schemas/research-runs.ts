@@ -50,6 +50,8 @@ export const researchStageRunSchema = z.object({
   requestId: id,
   parentRunId: id.nullable(),
   retryOfRunId: id.nullable(),
+  reviewCycleId: id.nullable(),
+  revisionRound: z.number().int().min(0).max(2),
   role: id,
   outputKind: researchArtifactKindSchema,
   status: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
@@ -76,4 +78,14 @@ export const researchArtifactContentSchema = z.object({
   runId: id,
   output: researchStageOutputSchema,
   createdAt: id
+}).strict();
+
+export const researchReviewCycleSchema = z.object({
+  projectId: id,
+  originArtifactId: id,
+  manuscriptArtifactId: id,
+  revisionRound: z.number().int().min(0).max(2),
+  status: z.enum(['reviewing', 'revision_required', 'accepted']),
+  reportArtifactIds: z.array(id),
+  updatedAt: id
 }).strict();
