@@ -96,6 +96,28 @@ describe('pdf preview protocol', () => {
     expect(await response.text()).toBe('Preview unavailable');
   });
 
+  it('routes document sources and versioned assets using identifiers and content hashes', async () => {
+    const invokeCapability = vi.fn().mockImplementation(async () => new Response('resource'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'c'.repeat(64);
+    expect((await handler(new Request(`roc-preview://research/documents/document%201/source/${hash}`))).status).toBe(200);
+    expect(invokeCapability).toHaveBeenLastCalledWith('research.document.source', { documentId: 'document 1', sourceHash: hash });
+    expect((await handler(new Request(`roc-preview://research/documents/document%201/parses/parse%202/asset_0/${hash}.png`))).status).toBe(200);
+    expect(invokeCapability).toHaveBeenLastCalledWith('research.document.asset', { documentId: 'document 1', parseId: 'parse 2', assetId: 'asset_0', sha256: hash });
+  });
+
+  it('rejects malformed document routes and conceals unavailable source details', async () => {
+    const invokeCapability = vi.fn().mockRejectedValue(new Error('private document path'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'd'.repeat(64);
+    expect((await handler(new Request(`roc-preview://research/documents/%ZZ/source/${hash}`))).status).toBe(400);
+    expect((await handler(new Request('roc-preview://research/documents/document/source/private.pdf'))).status).toBe(404);
+    expect(invokeCapability).not.toHaveBeenCalled();
+    const response = await handler(new Request(`roc-preview://research/documents/document/source/${hash}`));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Preview unavailable');
+  });
+
   function captureHandler(getKernel: () => MainKernelBootstrap | null): ProtocolHandler {
     registerPdfPreviewProtocol(getKernel);
     expect(handle).toHaveBeenCalledTimes(1);

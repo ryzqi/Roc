@@ -26,6 +26,14 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
     }
     const url = new URL(request.url);
     if (url.hostname === 'research') {
+      const source = /^\/documents\/([^/]+)\/source\/([a-f0-9]{64})$/u.exec(url.pathname);
+      const asset = /^\/documents\/([^/]+)\/parses\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.png$/u.exec(url.pathname);
+      try {
+        if (source !== null) return kernel.invokeCapability<{ documentId: string; sourceHash: string }, Response>('research.document.source', { documentId: decodeURIComponent(source[1]), sourceHash: source[2] })
+          .catch(() => new Response('Preview unavailable', { status: 404 }));
+        if (asset !== null) return kernel.invokeCapability<{ documentId: string; parseId: string; assetId: string; sha256: string }, Response>('research.document.asset', { documentId: decodeURIComponent(asset[1]), parseId: decodeURIComponent(asset[2]),
+          assetId: decodeURIComponent(asset[3]), sha256: asset[4] }).catch(() => new Response('Preview unavailable', { status: 404 }));
+      } catch { return new Response('Invalid path', { status: 400 }); }
       const match = /^\/templates\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.pdf$/u.exec(url.pathname);
       if (match === null) return new Response('Not found', { status: 404 });
       let projectId: string;

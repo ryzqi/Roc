@@ -43,6 +43,7 @@ import { ResearchEvidenceRepository } from './evidence-repository';
 import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
+import { ResearchDocumentRepository } from './document-repository';
 
 export const researchStages = [
   'discovery',
@@ -78,6 +79,7 @@ export class ResearchRepository {
   readonly runs: ResearchRunRepository;
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
+  readonly documents: ResearchDocumentRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -90,6 +92,7 @@ export class ResearchRepository {
     this.runs = new ResearchRunRepository(db, this, now);
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);
+    this.documents = new ResearchDocumentRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {

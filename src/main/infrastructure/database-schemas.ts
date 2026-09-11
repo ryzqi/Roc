@@ -1309,6 +1309,38 @@ export const researchMigrations: RocDatabaseMigration[] = [
       );
       CREATE INDEX idx_research_library_projects_project ON research_library_projects(project_id, item_id);
     `
+  },
+  {
+    version: 7,
+    name: 'research_library_document_versions',
+    sql: `
+      CREATE TABLE research_documents (
+        id TEXT PRIMARY KEY,
+        library_item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        source_path TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        size INTEGER NOT NULL CHECK(size >= 0),
+        status TEXT NOT NULL CHECK(status IN ('imported','parsing','ready','failed','cancelled')),
+        current_parse_id TEXT,
+        active_parse_id TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(library_item_id, source_hash)
+      );
+      CREATE TABLE research_document_parses (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES research_documents(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK(status IN ('running','ready','failed','cancelled')),
+        data_json TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      CREATE INDEX idx_research_document_parses_document ON research_document_parses(document_id, created_at);
+    `
   }
 ];
 

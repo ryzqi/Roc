@@ -158,3 +158,9 @@
 - 公共 DOI HTTP 200 已确认，真实 Crossref 将 ISSN 返回数组；在 DOI API 边界保留全部 ISSN/ISBN 并转为 CSL 字符串。随后完整性失败已定位到 v2 额外的 5 个 .pyc，来自搬迁测试启动子解释器时未继承禁写字节码环境；已修正测试，以新工具链 v3 复验。
 - Standards 复核又捕获空期刊别名覆盖非空值的分支；统一 journal_title() 处理后，三种格式的空值/空白/冲突回归通过。最终工具链更新到 `darwin-arm64-library-v4`。
 - 4c1 完成：Standards/Spec 最终均 0 未解决；科研域/IPC 19 文件 118 项通过，Python 44 项通过，真实 IPC 文件往返、公共 DOI 联网导入/导出、build/typecheck、check:ipc 和完整性清单通过。真实证据 `research-library-integration/roc library integration-QWaCYk/result.json` 与 `roc library integration-kq3jRW/live-doi-result.json`；Review 记录 `reviews/04c1-literature-library.md`。状态 Verified passing，独立提交后继续 4c2/4c3。
+- 4c1 已提交 `2c88502`，提交后工作区干净；验证后的工具链已激活到 `.runtime/research-toolchain/darwin-arm64`，旧目录保留为 `darwin-arm64-before-library-20260911`。
+- 4c2 开始：全文附件作为全局文献的一部分保存不可变原文件；直接导入可根据显式标题/引用键建立最小文献记录。每次解析保留独立版本、定位和资源清单，原子发布当前结果及全文索引，失败/取消不覆盖旧结果；提供重试、重启恢复与只读取已登记资源的预览。项目文件监听/嵌入重建仍属 4c3。
+- 4c2 已接入 v7 附件/解析版本模型、原文件安全复制与按哈希去重、当前版本原子发布、归档/恢复全文索引、取消与运行恢复、七条 IPC 和原文件/PNG 预览路由。Docling 返回资源相对路径，主进程逐项验证路径、文件类型和哈希，再关联阅读块；正在补仓储/服务/协议与真实解析回归。状态 Changed, unverified。
+- 4c2 首轮 12 项生命周期测试中 11 项通过，唯一失败是测试误用检索字段 excerpt；已对照现有 schema 修正为 content。追加 IPC、原始 HTML 强制下载、版本化 PNG 预览与错误隐藏测试，并开始真实 HTML/PDF → 索引 → 证据 → 资源读取链路验证。
+- 4c2 定向 22 项测试、typecheck 和 IPC 漂移检查通过。真实 IPC 集成已完成 HTML 导入/解析/全文检索/证据捕获，以及 Tectonic PDF → 导入副本 → Docling 页码/页面图 → 哈希资源读取；删除原 PDF 后仍能读取已保存副本。已进入 Standards/Spec 双轴 review，继续最终相关回归。
+- 4c2 完成：Standards/Spec 最终均 0 未解决；科研域/IPC/协议 22 文件 140 项通过，真实 HTML/PDF 集成通过，build/typecheck、check:ipc 与差异检查通过。证据 `.artifacts/research-document-integration/roc document integration-nRycvI/result.json`，Review 记录 `reviews/04c2-document-reading.md`。状态 Verified passing，独立提交后继续 4c3。

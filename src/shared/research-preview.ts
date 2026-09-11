@@ -4,3 +4,11 @@ export function researchTemplatePreviewUrl(template: Pick<ResearchTemplate, 'pro
   if (template.pdfPath === null || template.pdfHash === null) return null;
   return `roc-preview://research/templates/${encodeURIComponent(template.projectId)}/${encodeURIComponent(template.id)}/${template.pdfHash}.pdf`;
 }
+
+export function researchDocumentSourceUrl(document: { id: string; sourceHash: string }): string {
+  return `roc-preview://research/documents/${encodeURIComponent(document.id)}/source/${document.sourceHash}`;
+}
+
+export function researchDocumentAssetUrl(documentId: string, parseId: string, asset: { id: string; sha256: string }): string {
+  return `roc-preview://research/documents/${encodeURIComponent(documentId)}/parses/${encodeURIComponent(parseId)}/${encodeURIComponent(asset.id)}/${asset.sha256}.png`;
+}

@@ -159,7 +159,14 @@ export const rocApi: RocPreloadApi = {
     exportBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryExport, ...args),
     linkLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryLink, ...args),
     archiveLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryArchive, ...args),
-    setLibraryCitationKey: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryCitationKey, ...args)
+    setLibraryCitationKey: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryCitationKey, ...args),
+    importDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentImport, ...args),
+    listDocuments: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentList, ...args),
+    getDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentGet, ...args),
+    parseDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentParse, ...args),
+    cancelDocumentParse: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentCancel, ...args),
+    listDocumentParses: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentRuns, ...args),
+    getDocumentContent: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentContent, ...args)
   },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),

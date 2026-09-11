@@ -51,6 +51,7 @@ export class ResearchLibraryRepository {
       let createdCount = 0;
       let duplicateCount = 0;
       const ids: string[] = [];
+      const restoredIds = new Set<string>();
       for (const entry of parsed) {
         const existing = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ?').get(entry.identity) as { id: string } | undefined;
         const timestamp = this.now();
@@ -64,6 +65,7 @@ export class ResearchLibraryRepository {
         } else {
           id = existing.id;
           const current = this.get(id);
+          if (current.archived) restoredIds.add(id);
           const sources = [...current.sources];
           const fingerprint = bibliographyIdentity(entry.bibliography);
           if (!sources.some((source) => sameMetadata(source.metadata, entry.metadata) && bibliographyIdentity(source.bibliography) === fingerprint)) {
@@ -109,6 +111,7 @@ export class ResearchLibraryRepository {
       }
       const items = ids.map((id) => this.get(id));
       for (const item of items) this.indexMetadata(item);
+      for (const id of restoredIds) this.research.documents.syncLibraryIndex(id);
       return { items, createdCount, duplicateCount };
     })();
   }
@@ -131,6 +134,7 @@ export class ResearchLibraryRepository {
       const item = this.get(id);
       if (archived) this.db.prepare('DELETE FROM research_knowledge_documents WHERE id = ?').run(`library:${id}`);
       else this.indexMetadata(item);
+      this.research.documents.syncLibraryIndex(id);
       return item;
     })();
   }

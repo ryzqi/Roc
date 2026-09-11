@@ -140,6 +140,10 @@ import {
   researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema
 } from './schemas/research-library';
 import {
+  researchDocumentIdRequestSchema, researchDocumentImportRequestSchema, researchDocumentListRequestSchema,
+  researchDocumentParseRequestSchema, researchDocumentParseSchema, researchDocumentRunSchema, researchDocumentSchema
+} from './schemas/research-documents';
+import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -397,6 +401,13 @@ export const ipcRegistry = {
     request({ key: 'researchLibraryLink', channel: 'roc:research:library-link', domain: 'research', method: 'linkLibraryItem', kind: 'plugin', capabilityName: 'research.library.linkProject', inputTransform: first, contract: methodContract(oneArg(researchLibraryLinkRequestSchema), researchLibraryItemSchema) }),
     request({ key: 'researchLibraryArchive', channel: 'roc:research:library-archive', domain: 'research', method: 'archiveLibraryItem', kind: 'plugin', capabilityName: 'research.library.archive', inputTransform: first, contract: methodContract(oneArg(researchLibraryArchiveRequestSchema), researchLibraryItemSchema) }),
     request({ key: 'researchLibraryCitationKey', channel: 'roc:research:library-citation-key', domain: 'research', method: 'setLibraryCitationKey', kind: 'plugin', capabilityName: 'research.library.setCitationKey', inputTransform: first, contract: methodContract(oneArg(researchLibraryCitationKeyRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchDocumentImport', channel: 'roc:research:document-import', domain: 'research', method: 'importDocument', kind: 'plugin', capabilityName: 'research.document.import', inputTransform: first, contract: methodContract(oneArg(researchDocumentImportRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentList', channel: 'roc:research:document-list', domain: 'research', method: 'listDocuments', kind: 'plugin', capabilityName: 'research.document.list', inputTransform: first, contract: methodContract(oneArg(researchDocumentListRequestSchema), researchDocumentSchema.array()) }),
+    request({ key: 'researchDocumentGet', channel: 'roc:research:document-get', domain: 'research', method: 'getDocument', kind: 'plugin', capabilityName: 'research.document.get', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentParse', channel: 'roc:research:document-parse', domain: 'research', method: 'parseDocument', kind: 'plugin', capabilityName: 'research.document.parse', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentCancel', channel: 'roc:research:document-cancel', domain: 'research', method: 'cancelDocumentParse', kind: 'plugin', capabilityName: 'research.document.cancel', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentRuns', channel: 'roc:research:document-runs', domain: 'research', method: 'listDocumentParses', kind: 'plugin', capabilityName: 'research.document.runs', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentRunSchema.array()) }),
+    request({ key: 'researchDocumentContent', channel: 'roc:research:document-content', domain: 'research', method: 'getDocumentContent', kind: 'plugin', capabilityName: 'research.document.content', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentParseSchema) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),

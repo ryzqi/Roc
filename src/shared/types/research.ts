@@ -1,5 +1,20 @@
 import type { z } from 'zod';
 import type {
+  researchDocumentSchema, researchDocumentContentSchema, researchDocumentParseSchema, researchDocumentRunSchema,
+  researchDocumentImportRequestSchema, researchDocumentIdRequestSchema, researchDocumentListRequestSchema,
+  researchDocumentParseRequestSchema, researchDocumentAssetSchema
+} from '../schemas/research-documents';
+
+export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
+export type ResearchDocumentContent = z.infer<typeof researchDocumentContentSchema>;
+export type ResearchDocumentParse = z.infer<typeof researchDocumentParseSchema>;
+export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
+export type ResearchDocumentImportRequest = z.infer<typeof researchDocumentImportRequestSchema>;
+export type ResearchDocumentIdRequest = z.infer<typeof researchDocumentIdRequestSchema>;
+export type ResearchDocumentListRequest = z.infer<typeof researchDocumentListRequestSchema>;
+export type ResearchDocumentParseRequest = z.infer<typeof researchDocumentParseRequestSchema>;
+export type ResearchDocumentAsset = z.infer<typeof researchDocumentAssetSchema>;
+import type {
   researchBibliographyEntrySchema, researchBibliographyFormatSchema, researchLibraryItemSchema,
   researchLibraryListRequestSchema, researchLibraryImportResultSchema, researchLibraryExportSchema
 } from '../schemas/research-library';
