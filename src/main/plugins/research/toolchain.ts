@@ -41,6 +41,11 @@ export class ResearchToolchain {
     }
   }
 
+  async identity(): Promise<string> {
+    const { manifest } = await this.resolve();
+    return researchContentHash(JSON.stringify(manifest.lockHashes));
+  }
+
   async parseDocument(input: WorkerInput): Promise<z.infer<typeof researchParsedDocumentSchema>> {
     return await this.worker(input, { operation: 'parse_document' }, researchParsedDocumentSchema, 600_000);
   }

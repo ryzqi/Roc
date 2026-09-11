@@ -8,6 +8,7 @@ import { vectorToBlob } from './embedding-vectors';
 import type { EmbeddingConfigRow, ResearchRepository } from './repository';
 
 type EmbeddingTask = { configId: string | null; controller: AbortController; promise: Promise<unknown> };
+export type ResearchEmbeddingReceipt = { configId: string; revision: number } | null;
 
 export class ResearchEmbeddingService {
   private readonly tasks = new Set<EmbeddingTask>();
@@ -54,21 +55,40 @@ export class ResearchEmbeddingService {
       this.requireActive(active);
       if (row !== null) this.repository.requireEmbeddingConfig(row.id, row.revision);
       const document = this.repository.upsertKnowledgeDocument(request);
-      if (row !== null) {
-        const chunks = this.repository.knowledgeChunks(request.id);
-        const vectors: Buffer[] = [];
-        for (let offset = 0; offset < chunks.length; offset += 32) {
-          this.requireActive(active);
-          this.repository.requireEmbeddingConfig(row.id, row.revision);
-          const batch = chunks.slice(offset, offset + 32);
-          const values = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row), texts: batch.map((chunk) => chunk.content), signal: active });
-          vectors.push(...values.map(vectorToBlob));
-        }
-        this.requireActive(active);
-        this.repository.storeChunkEmbeddings({ configId: row.id, configRevision: row.revision, chunks, vectors });
-      }
+      if (row !== null) await this.embedChunks(request.id, row, active);
       return document;
     });
+  }
+
+  selectedConfiguration(id: string | null): ResearchEmbeddingReceipt {
+    const row = this.select(id);
+    return row === null ? null : { configId: row.id, revision: row.revision };
+  }
+
+  async embedDocument(documentId: string, configId: string | null, signal?: AbortSignal): Promise<ResearchEmbeddingReceipt> {
+    this.requireOpen();
+    const row = this.select(configId);
+    return await this.task(row?.id ?? null, signal, async (active) => {
+      this.requireActive(active);
+      this.repository.knowledgeDocument(documentId);
+      if (row === null) return null;
+      await this.embedChunks(documentId, row, active);
+      return { configId: row.id, revision: row.revision };
+    });
+  }
+
+  private async embedChunks(documentId: string, row: EmbeddingConfigRow, signal: AbortSignal): Promise<void> {
+    const chunks = this.repository.knowledgeChunks(documentId);
+    const vectors: Buffer[] = [];
+    for (let offset = 0; offset < chunks.length; offset += 32) {
+      this.requireActive(signal);
+      this.repository.requireEmbeddingConfig(row.id, row.revision);
+      const values = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row),
+        texts: chunks.slice(offset, offset + 32).map((chunk) => chunk.content), signal });
+      vectors.push(...values.map(vectorToBlob));
+    }
+    this.requireActive(signal);
+    this.repository.storeChunkEmbeddings({ configId: row.id, configRevision: row.revision, chunks, vectors });
   }
 
   async search(request: ResearchKnowledgeSearchRequest, signal?: AbortSignal): Promise<ResearchKnowledgeSearchResult> {

@@ -144,6 +144,11 @@ import {
   researchDocumentParseRequestSchema, researchDocumentParseSchema, researchDocumentRunSchema, researchDocumentSchema
 } from './schemas/research-documents';
 import {
+  researchIndexedFileSchema, researchIndexedSourceSchema, researchIndexControlRequestSchema, researchIndexEvidenceSourceRequestSchema,
+  researchIndexFilesRequestSchema, researchIndexJobsRequestSchema, researchIndexJobSchema, researchIndexProjectRequestSchema,
+  researchIndexSettingsSaveSchema, researchIndexStatusSchema
+} from './schemas/research-index';
+import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -408,6 +413,12 @@ export const ipcRegistry = {
     request({ key: 'researchDocumentCancel', channel: 'roc:research:document-cancel', domain: 'research', method: 'cancelDocumentParse', kind: 'plugin', capabilityName: 'research.document.cancel', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentSchema) }),
     request({ key: 'researchDocumentRuns', channel: 'roc:research:document-runs', domain: 'research', method: 'listDocumentParses', kind: 'plugin', capabilityName: 'research.document.runs', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentRunSchema.array()) }),
     request({ key: 'researchDocumentContent', channel: 'roc:research:document-content', domain: 'research', method: 'getDocumentContent', kind: 'plugin', capabilityName: 'research.document.content', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentParseSchema) }),
+    request({ key: 'researchIndexStatus', channel: 'roc:research:index-status', domain: 'research', method: 'getIndexStatus', kind: 'plugin', capabilityName: 'research.index.status', inputTransform: first, contract: methodContract(oneArg(researchIndexProjectRequestSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexConfigure', channel: 'roc:research:index-configure', domain: 'research', method: 'saveIndexSettings', kind: 'plugin', capabilityName: 'research.index.configure', inputTransform: first, contract: methodContract(oneArg(researchIndexSettingsSaveSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexControl', channel: 'roc:research:index-control', domain: 'research', method: 'controlIndex', kind: 'plugin', capabilityName: 'research.index.control', inputTransform: first, contract: methodContract(oneArg(researchIndexControlRequestSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexFiles', channel: 'roc:research:index-files', domain: 'research', method: 'listIndexedFiles', kind: 'plugin', capabilityName: 'research.index.files', inputTransform: first, contract: methodContract(oneArg(researchIndexFilesRequestSchema), researchIndexedFileSchema.array()) }),
+    request({ key: 'researchIndexJobs', channel: 'roc:research:index-jobs', domain: 'research', method: 'listIndexJobs', kind: 'plugin', capabilityName: 'research.index.jobs', inputTransform: first, contract: methodContract(oneArg(researchIndexJobsRequestSchema), researchIndexJobSchema.array()) }),
+    request({ key: 'researchIndexEvidenceSource', channel: 'roc:research:index-evidence-source', domain: 'research', method: 'getEvidenceIndexSource', kind: 'plugin', capabilityName: 'research.index.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchIndexEvidenceSourceRequestSchema), researchIndexedSourceSchema.nullable()) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),

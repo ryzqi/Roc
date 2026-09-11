@@ -1,4 +1,14 @@
 import type { z } from 'zod';
+import type { researchIndexedFileSchema, researchIndexedSourceSchema, researchIndexJobSchema, researchIndexSettingsSchema, researchIndexStatusSchema,
+  researchIndexSettingsSaveSchema, researchIndexControlRequestSchema } from '../schemas/research-index';
+
+export type ResearchIndexSettings = z.infer<typeof researchIndexSettingsSchema>;
+export type ResearchIndexStatus = z.infer<typeof researchIndexStatusSchema>;
+export type ResearchIndexedFile = z.infer<typeof researchIndexedFileSchema>;
+export type ResearchIndexJob = z.infer<typeof researchIndexJobSchema>;
+export type ResearchIndexedSource = z.infer<typeof researchIndexedSourceSchema>;
+export type ResearchIndexSettingsSaveRequest = z.infer<typeof researchIndexSettingsSaveSchema>;
+export type ResearchIndexControlRequest = z.infer<typeof researchIndexControlRequestSchema>;
 import type {
   researchDocumentSchema, researchDocumentContentSchema, researchDocumentParseSchema, researchDocumentRunSchema,
   researchDocumentImportRequestSchema, researchDocumentIdRequestSchema, researchDocumentListRequestSchema,

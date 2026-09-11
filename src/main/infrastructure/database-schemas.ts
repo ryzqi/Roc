@@ -1350,6 +1350,46 @@ export const researchMigrations: RocDatabaseMigration[] = [
       ALTER TABLE research_knowledge_embeddings RENAME COLUMN model TO space_key;
       UPDATE research_knowledge_embeddings SET space_key = 'legacy:' || hex(space_key);
     `
+  },
+  {
+    version: 9,
+    name: 'research_project_file_index',
+    sql: `
+      CREATE TABLE research_index_projects (
+        project_id TEXT PRIMARY KEY REFERENCES research_projects(id) ON DELETE CASCADE,
+        options_json TEXT NOT NULL, revision INTEGER NOT NULL, generation INTEGER NOT NULL,
+        workspace_path TEXT, root_path TEXT, archived INTEGER NOT NULL CHECK(archived IN (0,1)),
+        phase TEXT NOT NULL, error TEXT, scan_id TEXT, last_scan_at TEXT, embedding_key TEXT NOT NULL,
+        scan_requested INTEGER NOT NULL, scan_force INTEGER NOT NULL, active_scan_force INTEGER NOT NULL
+      );
+      INSERT INTO research_index_projects
+      SELECT id,'{"kinds":["markdown","latex","bibliography","csv","pdf","image"],"include":["**/*"],"exclude":["**/.*","**/.*/**","**/node_modules/**","**/dist/**","**/build/**","**/out/**","**/coverage/**","**/release/**","**/*.aux","**/*.log"],"watch":true,"paused":false,"embeddingConfigId":null}',1,1,workspace_path,NULL,CASE WHEN status = 'archived' THEN 1 ELSE 0 END,'idle',NULL,NULL,NULL,'none',0,0,0 FROM research_projects;
+      CREATE TABLE research_index_files (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        path TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL, signature TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('queued','running','ready','failed','missing')),
+        source_hash TEXT, indexed_hash TEXT, indexed_chunks INTEGER NOT NULL, parser_key TEXT, embedding_key TEXT NOT NULL,
+        payload_json TEXT, error TEXT, active_job_id TEXT, force_needed INTEGER NOT NULL CHECK(force_needed IN (0,1)), updated_at TEXT NOT NULL,
+        UNIQUE(project_id,path)
+      );
+      CREATE TABLE research_index_jobs (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        file_id TEXT NOT NULL REFERENCES research_index_files(id) ON DELETE CASCADE, path TEXT NOT NULL, generation INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('queued','running','ready','failed','cancelled')), error TEXT, snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT
+      );
+      CREATE INDEX idx_research_index_jobs_queue ON research_index_jobs(status,created_at);
+      CREATE INDEX idx_research_index_jobs_project ON research_index_jobs(project_id,created_at);
+      CREATE INDEX idx_research_index_jobs_file ON research_index_jobs(file_id);
+      CREATE TABLE research_index_sources (
+        file_id TEXT NOT NULL REFERENCES research_index_files(id) ON DELETE CASCADE, source_hash TEXT NOT NULL,
+        cache_path TEXT NOT NULL, size INTEGER NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY(file_id,source_hash)
+      );
+      CREATE TABLE research_evidence_source_metadata (
+        evidence_id TEXT PRIMARY KEY REFERENCES research_evidence(id) ON DELETE CASCADE, metadata_json TEXT NOT NULL
+      );
+    `
   }
 ];
 

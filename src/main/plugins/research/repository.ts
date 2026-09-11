@@ -4,6 +4,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import {
   researchProjectSchema,
+  researchKnowledgeDocumentSchema,
   researchTemplateSchema,
   researchStageStateSchema,
   researchWorkflowEventSchema,
@@ -45,6 +46,7 @@ import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
 import { ResearchDocumentRepository } from './document-repository';
+import { ResearchIndexRepository } from './index-repository';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
@@ -82,6 +84,7 @@ export class ResearchRepository {
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
   readonly documents: ResearchDocumentRepository;
+  readonly indexing: ResearchIndexRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -95,6 +98,7 @@ export class ResearchRepository {
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);
     this.documents = new ResearchDocumentRepository(db, this, now);
+    this.indexing = new ResearchIndexRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -147,6 +151,7 @@ export class ResearchRepository {
         );
       });
       this.runs.initializeProject(id);
+      this.indexing.initializeProject(id);
       this.appendEvent(id, 'discovery', 'project_created', '研究项目已创建。', { title: request.title }, timestamp);
     });
     insert();
@@ -521,7 +526,7 @@ export class ResearchRepository {
       .all() as EmbeddingConfigRow[];
   }
 
-  upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest): ResearchKnowledgeDocument {
+  upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest, sourceMetadata: Record<string, unknown> = {}): ResearchKnowledgeDocument {
     if (request.projectId !== null) this.getProject(request.projectId);
     const existing = this.db.prepare('SELECT project_id FROM research_knowledge_documents WHERE id = ?').get(request.id) as { project_id: string | null } | undefined;
     if (existing !== undefined && existing.project_id !== request.projectId) throw new Error('research_knowledge_project_mismatch');
@@ -531,17 +536,18 @@ export class ResearchRepository {
         .prepare(
           `INSERT INTO research_knowledge_documents
            (id, project_id, source_type, source_id, title, content, metadata_json, content_hash, indexed_at)
-           VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              project_id = excluded.project_id,
              source_type = excluded.source_type,
              source_id = excluded.source_id,
              title = excluded.title,
              content = excluded.content,
+             metadata_json = excluded.metadata_json,
              content_hash = excluded.content_hash,
              indexed_at = excluded.indexed_at`
         )
-        .run(request.id, request.projectId, request.sourceType, request.sourceId, request.title, request.content, hashText(request.content), timestamp);
+        .run(request.id, request.projectId, request.sourceType, request.sourceId, request.title, request.content, JSON.stringify(sourceMetadata), hashText(request.content), timestamp);
       this.db.prepare('DELETE FROM research_knowledge_chunks WHERE document_id = ?').run(request.id);
       const insertChunk = this.db.prepare(
         `INSERT INTO research_knowledge_chunks
@@ -568,6 +574,13 @@ export class ResearchRepository {
   knowledgeChunks(documentId: string): Array<{ id: string; content: string; contentHash: string }> {
     return this.db.prepare('SELECT id,content,content_hash AS contentHash FROM research_knowledge_chunks WHERE document_id = ? ORDER BY chunk_index')
       .all(documentId) as Array<{ id: string; content: string; contentHash: string }>;
+  }
+
+  knowledgeDocument(id: string): ResearchKnowledgeDocument {
+    const row = this.db.prepare(`SELECT id,project_id AS projectId,source_type AS sourceType,source_id AS sourceId,title,content,indexed_at AS indexedAt
+      FROM research_knowledge_documents WHERE id = ?`).get(id);
+    if (row === undefined) throw new Error('research_knowledge_document_not_found');
+    return researchKnowledgeDocumentSchema.parse(row);
   }
 
   storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string }[]; vectors: readonly Buffer[] }): void {

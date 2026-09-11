@@ -21,6 +21,7 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- 实验环境接线：已安装 uv 的帮助明确支持 `sync --check`（环境与项目同步检查）和 `--locked`；Context7 官方 uv 文档确认 `lock --check` 对项目元数据过期返回错误。后续运行前需同时验证环境和锁文件，不能用 `--no-sync` 代替环境一致性验证。
 - 文献互操作：Context7 的 Zotero 官方文档确认 BibTeX、BibLaTeX 与 CSL JSON 均支持导入/导出。已安装 Bibtexparser 2.0.0 提供默认字符串宏展开、失败块、SeparateCoAuthors/SplitNameParts；名称拆分应在 LaTeX 解码之前，以保留机构作者。4c 优先完成文献库与互操作，再接文档/目录索引。
 - 下一增量的 macOS 进程隔离预检：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT；当前系统 `/System/Library/Sandbox/Profiles/system.sb` 包含必要 dyld/系统初始化规则。引入 system.sb 并允许 mach-bootstrap/syscall 后受限 Python 启动通过。应用接线时仍须验证项目外读写拒绝与子进程取消，尚未把该原型作为已完成能力。
 - 离线打包：Tectonic 0.17.0 `ZipBundle` 按文件名直接读取，bundle 内须包含 SHA256SUM；旧官方 TAR 本身是扁平资源布局。私有 Python 使用 standalone 基础解释器及由 `uv.lock` 导出的带哈希依赖，直接安装进私有 prefix，避免依赖开发 venv 的外部解释器路径。

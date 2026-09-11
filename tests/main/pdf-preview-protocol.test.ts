@@ -106,6 +106,15 @@ describe('pdf preview protocol', () => {
     expect(invokeCapability).toHaveBeenLastCalledWith('research.document.asset', { documentId: 'document 1', parseId: 'parse 2', assetId: 'asset_0', sha256: hash });
   });
 
+  it('routes indexed source versions by project, file identity and hash', async () => {
+    const invokeCapability = vi.fn().mockResolvedValue(new Response('source'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'e'.repeat(64);
+    expect((await handler(new Request(`roc-preview://research/project-files/project%201/file%202/${hash}`))).status).toBe(200);
+    expect(invokeCapability).toHaveBeenCalledWith('research.index.source', { projectId: 'project 1', fileId: 'file 2', sourceHash: hash });
+    expect((await handler(new Request(`roc-preview://research/project-files/%ZZ/file/${hash}`))).status).toBe(400);
+  });
+
   it('rejects malformed document routes and conceals unavailable source details', async () => {
     const invokeCapability = vi.fn().mockRejectedValue(new Error('private document path'));
     const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));

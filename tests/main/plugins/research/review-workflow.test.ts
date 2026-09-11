@@ -219,7 +219,7 @@ describe('independent review and revision workflow', () => {
     try {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.slice(0, 3) });
       const oldRepository = new ResearchRepository(legacy);
-      const project = oldRepository.createProject({ title: 'Existing run', description: 'Preserve the saved input.', workspacePath: null });
+      const project = createV3Project(legacy, oldRepository, 'Existing run', 'Preserve the saved input.');
       const run = oldRepository.runs.begin({ projectId: project.id, expectedStage: 'discovery', instruction: 'Original input.', requestId: 'legacy-run' });
       legacy.exec("UPDATE research_stage_runs SET snapshot_json = json_remove(snapshot_json, '$.reviewCycleId', '$.revisionRound'), context_json = json_remove(context_json, '$.reviewReports')");
       applyResearchDatabaseSchema(legacy);
@@ -237,7 +237,7 @@ describe('independent review and revision workflow', () => {
 function createLegacyReviewFixture(legacy: Database.Database, stage: 'review' | 'revision') {
   applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.slice(0, 3) });
   const old = new ResearchRepository(legacy);
-  const project = old.createProject({ title: 'Legacy manuscript', description: 'Keep this saved input.', workspacePath: null });
+  const project = createV3Project(legacy, old, 'Legacy manuscript', 'Keep this saved input.');
   const queued = old.runs.begin({ projectId: project.id, expectedStage: 'discovery', instruction: 'Continue the saved manuscript.', requestId: `legacy-${stage}` });
   legacy.prepare("UPDATE research_stage_states SET active_run_id = NULL, status = 'completed' WHERE project_id = ? AND stage = 'discovery'").run(project.id);
   legacy.prepare("UPDATE research_projects SET current_stage = 'writing' WHERE id = ?").run(project.id);
@@ -273,4 +273,16 @@ function createLegacyReviewFixture(legacy: Database.Database, stage: 'review' | 
   legacy.prepare("UPDATE research_stage_runs SET stage = ?, status = 'running', snapshot_json = json_remove(?, '$.reviewCycleId', '$.revisionRound'), context_json = ? WHERE id = ?")
     .run(stage, JSON.stringify(snapshot), JSON.stringify(context), queued.id);
   return { projectId: project.id, runId: queued.id, artifactId: artifact.id, evidenceId: evidence.id, skillHash };
+}
+
+function createV3Project(legacy: Database.Database, repository: ResearchRepository, title: string, description: string) {
+  const projectId = 'legacy-project';
+  const timestamp = '2026-09-10T00:00:00.000Z';
+  legacy.prepare('INSERT INTO research_projects VALUES (?,?,?,?,?,?,?,?)').run(projectId, title, description, null, 'active', 'discovery', timestamp, timestamp);
+  for (const stage of ['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure', 'writing', 'review', 'revision', 'export']) {
+    legacy.prepare(`INSERT INTO research_stage_states (project_id,stage,status,active_run_id,artifact_ids_json,entered_at,completed_at,gate_required,gate_approved,last_error)
+      VALUES (?,?,?,NULL,'[]',?,NULL,?,0,NULL)`).run(projectId, stage, stage === 'discovery' ? 'ready' : 'locked', stage === 'discovery' ? timestamp : null, stage === 'discovery' ? 0 : 1);
+  }
+  repository.runs.initializeProject(projectId);
+  return repository.getProject(projectId);
 }

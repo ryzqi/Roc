@@ -45,34 +45,55 @@ export class ResearchEvidenceRepository {
     this.requireProject(request.projectId);
     const row = this.db.prepare(
       `SELECT c.id AS chunk_id, c.document_id, d.project_id, d.source_type, d.source_id,
-       d.content_hash AS source_version, d.title, c.locator, c.content, c.content_hash
+       d.content_hash AS source_version, d.title, d.metadata_json, c.locator, c.content, c.content_hash
        FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id = c.document_id
        WHERE c.id = ?`
     ).get(request.chunkId) as {
       chunk_id: string; document_id: string; project_id: string | null; source_type: string; source_id: string;
-      source_version: string; title: string; locator: string | null; content: string; content_hash: string;
+      source_version: string; title: string; metadata_json: string; locator: string | null; content: string; content_hash: string;
     } | undefined;
     if (row === undefined) throw new Error('research_evidence_chunk_not_found');
     if (row.project_id !== null && row.project_id !== request.projectId) throw new Error('research_evidence_project_mismatch');
     if (row.source_type === 'note') throw new Error('research_evidence_source_unsupported');
     if (row.locator === null || row.locator.trim().length === 0) throw new Error('research_evidence_locator_required');
     if (row.content_hash !== hash(row.content)) throw new Error('research_evidence_integrity_invalid');
+    const metadata: unknown = JSON.parse(row.metadata_json);
+    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('research_evidence_metadata_invalid');
+    const hasMetadata = Object.keys(metadata).length > 0;
+    const sourceIdentity: unknown[] = [row.source_version, row.source_type, row.source_id, row.title];
+    if (hasMetadata) sourceIdentity.push(metadata);
     const record = researchEvidenceSchema.parse({
       id: `evidence_${randomUUID()}`, projectId: request.projectId, documentId: row.document_id, chunkId: row.chunk_id,
       sourceType: row.source_type, sourceId: row.source_id,
-      sourceVersion: hash(JSON.stringify([row.source_version, row.source_type, row.source_id, row.title])),
+      sourceVersion: hash(JSON.stringify(sourceIdentity)),
       title: row.title, locator: row.locator, excerpt: row.content, contentHash: row.content_hash, createdAt: this.now()
     });
-    this.db.prepare(
-      `INSERT INTO research_evidence (id, project_id, document_id, chunk_id, source_type, source_id,
-       source_version, title, locator, excerpt, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(project_id, chunk_id, source_version, locator, content_hash) DO NOTHING`
-    ).run(record.id, record.projectId, record.documentId, record.chunkId, record.sourceType, record.sourceId,
-      record.sourceVersion, record.title, record.locator, record.excerpt, record.contentHash, record.createdAt);
-    return researchEvidenceSchema.parse(this.db.prepare(
-      `SELECT ${evidenceColumns} FROM research_evidence
-       WHERE project_id = ? AND chunk_id = ? AND source_version = ? AND locator = ? AND content_hash = ?`
-    ).get(record.projectId, record.chunkId, record.sourceVersion, record.locator, record.contentHash));
+    return this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO research_evidence (id, project_id, document_id, chunk_id, source_type, source_id,
+         source_version, title, locator, excerpt, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(project_id, chunk_id, source_version, locator, content_hash) DO NOTHING`
+      ).run(record.id, record.projectId, record.documentId, record.chunkId, record.sourceType, record.sourceId,
+        record.sourceVersion, record.title, record.locator, record.excerpt, record.contentHash, record.createdAt);
+      const stored = researchEvidenceSchema.parse(this.db.prepare(
+        `SELECT ${evidenceColumns} FROM research_evidence
+         WHERE project_id = ? AND chunk_id = ? AND source_version = ? AND locator = ? AND content_hash = ?`
+      ).get(record.projectId, record.chunkId, record.sourceVersion, record.locator, record.contentHash));
+      if (hasMetadata) this.db.prepare('INSERT INTO research_evidence_source_metadata (evidence_id,metadata_json) VALUES (?,?) ON CONFLICT DO NOTHING')
+        .run(stored.id, JSON.stringify(metadata));
+      return stored;
+    })();
+  }
+
+  sourceMetadata(projectId: string, evidenceId: string): Record<string, unknown> | null {
+    this.requireProject(projectId);
+    const exists = this.db.prepare('SELECT id FROM research_evidence WHERE id = ? AND project_id = ?').get(evidenceId, projectId);
+    if (exists === undefined) throw new Error('research_evidence_not_found');
+    const row = this.db.prepare('SELECT metadata_json FROM research_evidence_source_metadata WHERE evidence_id = ?').get(evidenceId) as { metadata_json: string } | undefined;
+    if (row === undefined) return null;
+    const metadata: unknown = JSON.parse(row.metadata_json);
+    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('research_evidence_metadata_invalid');
+    return metadata as Record<string, unknown>;
   }
 
   list(projectId: string): ResearchEvidence[] {

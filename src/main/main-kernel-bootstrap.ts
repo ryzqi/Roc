@@ -250,7 +250,7 @@ function createDefaultMainKernelPlugins(input: {
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
     createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
-      libraryRoot: join(input.paths.root, 'research-library') }),
+      libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index') }),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({

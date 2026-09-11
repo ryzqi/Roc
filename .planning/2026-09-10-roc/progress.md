@@ -174,3 +174,15 @@
 - 4c3a 追加定向 14 项通过，包含真实本机 HTTP 收发与传输取消、失败配置保存不打断旧请求、批量中途失败不留下部分向量。确认现有 Renderer 使用 embeddingConfigId:null，未受严格显式配置检查影响；已进入 Standards/Spec review。
 - 4c3a 全科研域/IPC/协议 23 文件 152 项与 build/typecheck、check:ipc 通过。两轴 review 均复现极大/极小 Float32 向量在实际 sqlite-vec 余弦计算中返回 NULL；已在编码、仓储和查询边界使用按最大坐标缩放的稳定单位化，补实际 SQLite 距离/排序回归，17 项定向验证通过，进入窄复查。
 - 4c3a 完成：Standards/Spec 最终均 0 未解决；最终科研域/IPC/协议 24 文件 155 项通过，本机 HTTP 取消与实际 SQLite 极端数值验证通过，build/typecheck、check:ipc、差异检查通过。Review 记录 `reviews/04c3a-embedding-consistency.md`。状态 Verified passing，独立提交后继续 4c3b 项目监听与增量索引。
+- 4c3a 已提交 `c7a5b3c`，提交后工作区干净。进入 4c3b：项目范围配置和持久文件任务、自动监听、增量/手动重建、暂停/恢复/重试。
+- 4c3b 实现边界：项目文件独立于全局文献附件；原文件按摘要保存可追溯快照，旧证据在原文件变更/删除后仍可读取。默认索引 tex/bib/md/pdf/csv/图片，配置 include/exclude；原始文本按物理行定位，PDF/图片/HTML 复用已验证的 Docling。扫描完整成功后才更新文件清单；任务以项目配置版本和文件身份防止迟到提交，关键词文本与嵌入状态分别记录。
+- 4c3b 文件筛选/快照身份/Unicode 行分段 5 项通过；嵌入前置与筛选合并 14 项通过。已新增 v9 项目索引配置、文件/任务/源版本仓储，补独立嵌入已有文档和工具链身份查询。旧 v3 迁移夹具调用新版 createProject 导致缺索引表，正改为按 v3 SQL 生成夹具；首次改写的列数笔误已修正。状态 Changed, unverified，尚未开始本部分 review。
+- 4c3b 后台服务的 8 项生命周期回归已通过，包含原文件修改/删除后的证据快照、缓存复用、解析器/嵌入变更、暂停迟到结果、无监听模式重启恢复、失败重试、监听错误与工作区切换。迁移夹具已统一使用 v3 SQL，相关 24 项证据/审稿测试通过。补接主进程、六条 IPC 与源版本预览；一次 bootstrap 补丁因行布局不符整批被拒，核实无部分写入后按实际行重做。测试 mock 的可选函数类型错误已修正。
+- 4c3b 仓储/服务/协议 24 项通过；真实目录监听经 IPC 验证文件变化、暂停恢复、删除与旧证据源读取通过。首次资源调用夹具把完整源描述传给严格请求 schema，被正确拒绝，已改为仅传 projectId/fileId/sourceHash。正在执行私有工具链 PDF 索引与全相关回归/构建，随后双轴 review。
+- 4c3b 当前全相关回归 28 文件 / 176 项通过，build/typecheck、check:ipc、差异检查通过；真实目录监听与私有工具链 PDF 索引 2 项均通过。已进入 Standards/Spec 双轴 review，等待并处理审查结果后提交。
+- 4c3b 两轴初审均复现解析器升级失效：仅 ready 文件比较已发布 parserKey，排队任务可能复用旧缓存，失败文件可能不再重试。正在补 queued/running/failed 与关闭监听后重启的回归，统一对照最近任务的解析器身份并在执行/发布前核验当前工具链。
+- 升级回归首先稳定复现 5 个旧任务/缓存失败；第 6 个测试的任意错误文本被现有安全边界规范化，已修正测试为显式 research_ 错误码。已按最近任务 parserKey 判定升级、为任务文件查询增加索引，并让重启排队任务先重扫；执行/发布前也核验当前解析器身份。
+- 解析器升级定向 20 项全部通过。Standards 另复现已索引目录消失后，范围变更遗留的 queued 文件使失败状态被错误显示为 indexing；新增目录消失/恢复回归并调整状态优先级。查找可选 `docs/agents` 返回目录不存在，审查依据继续使用用户指定计划及现有 README/CONTEXT。
+- 扫描失败状态已稳定 red-green；修复后索引/文件/预览 36 项通过，最终全相关回归 28 文件 / 183 项通过（5 个可选真实资源用例跳过，先前已独立开启验证），build/typecheck 通过。两轴正在复核修复。
+- 下一部分预研：Context7 与私有 uv 的本地帮助确认 `uv lock --check` 与 `uv sync --check` 可分别检查锁与环境，避免只凭锁文件存在认定可复现。初次猜测 `research-process.ts` 不存在，已通过文件清单定位现有 `process-runner.ts`，继续沿用该受限进程边界。
+- 4c3b 完成：Standards/Spec 最终均 0 未解决；183 项相关回归、真实监听/PDF 链路与构建通过。Review 记录 `reviews/04c3b-project-index.md`，状态 Verified passing，独立提交。下一增量已开始起草实验合同与 Python/Notebook 执行片段，单独保留供 4d1 实现。
