@@ -7,6 +7,8 @@ release/
 .artifacts/
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 *.log
 docs/*
 !docs/superpowers/

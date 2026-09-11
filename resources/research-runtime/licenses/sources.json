@@ -1,0 +1,22 @@
+[
+  {
+    "file": "tectonic-MIT.txt",
+    "source": "https://raw.githubusercontent.com/tectonic-typesetting/tectonic/tectonic%400.17.0/LICENSE",
+    "sha256": "814a258f76e420b25cb3c07172eb2b3956f34cefbf0a650413b78e65c425f306"
+  },
+  {
+    "file": "uv-APACHE.txt",
+    "source": "https://raw.githubusercontent.com/astral-sh/uv/0.12.10/LICENSE-APACHE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "file": "uv-MIT.txt",
+    "source": "https://raw.githubusercontent.com/astral-sh/uv/0.12.10/LICENSE-MIT",
+    "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c"
+  },
+  {
+    "file": "CDLA-Permissive-2.0.txt",
+    "source": "https://raw.githubusercontent.com/spdx/license-list-data/v3.25.0/text/CDLA-Permissive-2.0.txt",
+    "sha256": "4531a67d443284d93ffed0803df5b10634aff21c3d77e381f2d48af01d875868"
+  }
+]

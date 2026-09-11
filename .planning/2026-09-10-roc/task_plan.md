@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow 已完成；继续 Production（文献解析/增量索引、LaTeX、实验/绘图/导出），然后 Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow 与 Production 4a 工具链已完成；继续 Production 4b（主进程工具链接线、受限进程、模板编辑/离线编译与预览），再完成文献导入/增量索引、实验/绘图/导出、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -42,6 +42,8 @@ Phase 3 — Implementation（Production）
 - [x] Workflow 3a：阶段模型策略、角色 Skill/工具隔离、持久运行、取消/重试/恢复；review、116 测试与 build 通过。
 - [x] Workflow 3b：多角色独立审稿、综合与最多两轮修订；review、124 测试与 build 通过。
 - [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
+- [x] Production 4a：固定依赖/模型/TeX 资源、可恢复准备脚本、离线运行与搬迁验证；双轴 review、22 测试和真实离线 smoke 通过。
+- [ ] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
@@ -96,6 +98,13 @@ Phase 3 — Implementation（Production）
 ## Errors Encountered
 | Error | Resolution |
 |-------|------------|
+| PDFium 5.13 的 PdfPage/PdfBitmap/PdfTextPage 不支持 with 协议 | 通过已安装 API 核实，使用 contextlib.closing 调用 close，补真实 PDF 渲染与越界回归 |
+| 官方 TeX 归档 134,980 文件超出初始转换上限 100,000 | 核对完整归档后将上限调为 200,000，转换通过并锁定 ZIP 哈希 |
+| TeX 整体下载与 16 MiB 分段下载均提前 EOF，失败清理导致断点丢失 | 改为持久分块及部分字节续传；验证资源身份和最终哈希，再转换离线包 |
+| 标准 Docling 的 antlr4-python3-runtime 4.9.3 仅提供源码分发，--no-build 拒绝安装 | 保留 uv.lock 的源码哈希，在隔离环境按锁文件构建该纯 Python 依赖 |
+| Tectonic 默认 bundle URL 跟随重定向后返回 403 | 检查官方重定向目标，改用可核查的 HTTPS 资源地址 |
+| Docling minimal PDFium extra 导入 DocumentConverter 时缺少 docling_parse | 改用标准 docling 依赖集合，重新锁定并验证实际解析 |
+| Tectonic 0.17.0 中旧 crates/bundles/build.rs 路径 404 | 查询该 tag 的 Git tree，使用 crates/bundles/src/lib.rs 与 crates/io_base/src/app_dirs.rs |
 | 真实 LangChain 结构化输出末尾为 ToolMessage，模型版本落成 null | 从尾部查找最后一个含 model_name/model 的响应元数据，保留未知时 null |
 | 阶段运行测试在 execute 前失败：模型句柄整体展开混入函数，严格 snapshot schema 拒绝 | 只复制 providerId/modelId 到持久记录，重跑生命周期测试 |
 | LangChain response_metadata 类型为 Partial<unknown>，不能直接访问 model_name/model | 以 unknown 接收，确认对象后读取模型版本字段 |

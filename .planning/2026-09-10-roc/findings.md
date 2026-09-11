@@ -21,6 +21,10 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- 下一增量的 macOS 进程隔离预检：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT；当前系统 `/System/Library/Sandbox/Profiles/system.sb` 包含必要 dyld/系统初始化规则。引入 system.sb 并允许 mach-bootstrap/syscall 后受限 Python 启动通过。应用接线时仍须验证项目外读写拒绝与子进程取消，尚未把该原型作为已完成能力。
+- 离线打包：Tectonic 0.17.0 `ZipBundle` 按文件名直接读取，bundle 内须包含 SHA256SUM；旧官方 TAR 本身是扁平资源布局。私有 Python 使用 standalone 基础解释器及由 `uv.lock` 导出的带哈希依赖，直接安装进私有 prefix，避免依赖开发 venv 的外部解释器路径。
+- Production 续作：Tectonic 最新正式发布为 0.17.0；官方 arm64 SHA-256 为 `a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667`，x64 为 `7c90ef5b6ddb1eb1937e4337add5237b79338e4b9676459fa91187d24d6cdf80`。来源：`https://api.github.com/repos/tectonic-typesetting/tectonic/releases/latest`（2026-09-11）。
+- Python 源包已核实：Docling 2.126.0（MIT）、PDFium2 5.13.0（BSD/Apache + dependency notices）、Matplotlib 3.11.1、RapidOCR 3.9.2（Apache-2.0）；需先核查 Intel wheel 及模型许可，再固定工具链锁文件。
 - Roc 是 macOS Electron 44 + React 19 桌面应用；Agent 层使用 DeepAgents/LangGraph，数据层使用 SQLite，renderer/preload/main 通过 Zod IPC 合同隔离。
 - 现有 ViewId 包含 chat、tasks-board、task-detail、workspace、git、terminal、preview、mcp、skills、memory、settings、diagnostics；适合在现有工作台扩展科研域视图，而非另起应用壳。
 - 现有插件职责包含 agent、workspace、mcp、skills、task、memory、app、diagnostics、runtime-tools；SkillService 已支持导入、启用/禁用、删除和文件树读取。
@@ -57,6 +61,7 @@
 ## Technical Decisions
 | Decision | Rationale |
 |----------|-----------|
+| Python 3.12.14 + 双架构 uv.lock（149 包），Docling PDFium 后端与 Vision OCR | Intel PyTorch 官方 wheel 限于 Python <=3.12；当前 Docling 声明兼容 torch>=2.2.2，架构锁保留 Intel 支持，ARM 使用当前版本；OCR 不依赖无 Intel wheel 的新 ONNX Runtime |
 | 审稿/修订循环以当前已批准正文为输入，回到审稿时保留该稿，旧报告独立存档 | 线性阶段顺序不能把修订稿误当成需作废的下游输出；报告互盲，综合阶段显式读取三份结果 |
 | 证据快照与索引记录分离；来源元数据参与版本摘要 | 重建/删除索引不丢失已引用原文，同一 chunk 的来源更正形成新证据 |
 | 主张修订保存版本历史、写入需 expectedVersion；正文保存段落引用和摘要 | 拦截并发旧写入，保留修订来源，阻止过期正文直接审核/导出 |

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "pythonVersion": "3.12.14",
+  "uvVersion": "0.12.10",
+  "tectonicVersion": "0.17.0",
+  "texBundle": {
+    "url": "https://data1b.fullyjustified.net/tlextras-2022.0r0.tar",
+    "sha256": "425685e124746c15ba9bb8e0596bdaad98fce886afa347fbcf9ec0e9acd7fe79",
+    "zipSha256": "c508958589f4c18218f98a7785ff21af901fb2460106e9a11d7b7bf065204487",
+    "size": 2881562112,
+    "formatSerial": 33,
+    "upstreamDefault": "https://relay.fullyjustified.net/default_bundle_v33.tar"
+  },
+  "architectures": {
+    "arm64": {
+      "python": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "81a359f1cfadd4da11766534c5913791cea55f26e1bb902cacd2a531bb1e4b2b"
+      },
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.12.10/uv-aarch64-apple-darwin.tar.gz",
+        "sha256": "51c6170e8e3a01cef9f33b94f582b7b81ac65046f55d40afb35f9cff5a68c179"
+      },
+      "tectonic": {
+        "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-aarch64-apple-darwin.tar.gz",
+        "sha256": "a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667"
+      }
+    },
+    "x64": {
+      "python": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "65b195c9cedc1fef6767f044f9822069adbd1bd9204d424ece4628776fdc04bb"
+      },
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.12.10/uv-x86_64-apple-darwin.tar.gz",
+        "sha256": "5296d5aa2b9143360405eea866f8ef4d5dc8986b164eb0dc35e8f876a9304d30"
+      },
+      "tectonic": {
+        "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-apple-darwin.tar.gz",
+        "sha256": "7c90ef5b6ddb1eb1937e4337add5237b79338e4b9676459fa91187d24d6cdf80"
+      }
+    }
+  }
+}

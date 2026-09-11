@@ -114,3 +114,23 @@
 - 3b 新增 5 个集成场景通过，含两轮完整循环、第三轮拒绝、当前稿保留、并行互盲、部分报告取消重试和运行快照升级；类型检查与 IPC 漂移检查通过，进入双轴 review。
 - 3b 初审发现：重开 review 未撤销旧 accepted；v4 把旧 review/revision/export 运行周期统一置空导致重试冲突。修复为回到审稿或更早阶段时撤销接受状态，并按旧输入稿件关联迁移周期/轮次；旧审稿协调器补只读报告工具，子角色仍严格过滤其他报告。
 - 3b 完成：两轴复查均 0 项未解决；最终 20 文件 / 124 测试、build（含 typecheck）、check:ipc、差异检查通过。Review 记录 `reviews/03b-peer-review.md`，Workflow 子阶段完成，进入 Production。
+- 3b 已提交：`39bfab2`，提交后工作区干净。生产工具盘点：现有 LaTeX 依赖 PATH，主机无 TeX/OCR；磁盘可用约 404 GiB。
+- 已从官方发布 API 确认 Tectonic 0.17.0 arm64/x64 tar.gz 与官方 SHA-256；Context7 已核查离线 bundle、only-cached、untrusted 编译及 PDFium 页面接口。Docling/PDFium/Matplotlib/OCR 依赖与双架构 wheel 兼容性正在核对。
+- 科研 Python 采用已发布的 3.12.14（uv 目录确认双架构包）；Intel 的 PyTorch 最高官方 wheel 为 2.2.2，采用架构约束锁定兼容依赖。Docling 使用 PDFium 后端，OCR 使用 MIT ocrmac/Vision，保留表格与公式模型能力。已初始化独立运行时 pyproject，开始生成锁文件。
+- 初始锁 115 包、隔离环境安装成功；Tectonic 0.17.0 已下载、官方 SHA 校验并运行。实际导入发现 Docling 的 minimal PDFium extra 仍强制导入 docling_parse，改用官方标准 docling 包，继续用显式 PDFium/Vision 配置。
+- 标准运行时锁定 149 包并安装完成；Docling/PDFium/Vision 导入成功。三组模型（布局、表格、公式）已按固定 Hugging Face commit 下载并校验全部权重 SHA-256，许可为 Apache-2.0 或 CDLA-Permissive-2.0。
+- Tectonic 0.17.0 的格式编号确认为 33，官方默认资源指向 tlextras-2022.0r0.tar（2,881,562,112 字节）；服务使用 Range 请求，已验证后开始完整离线资源下载。
+- 离线解析实测通过：`worker.py` 用固定 Docling 模型和 Vision 解析中英文扫描图，正确返回“研究数据与方法”、Control/Treatment 数字及结论；1 页、5 文本块、1 页图、无警告。证据位于 `.artifacts/research-runtime-x_3u99ys/`。
+- TeX 全量请求提前结束；随后 16 MiB 分段下载超过 1 GiB 后仍遇到 IncompleteRead，进程已失败退出。两次临时文件均被旧脚本清理，未留下完整包或可恢复分块。
+- 续作已核对 `39bfab2` 与工作区；先完成 Production 4a：可恢复且校验哈希的资源准备、离线 Python/OCR/PDF/LaTeX 工具链与搬迁验证，再独立 review/提交。应用接入及其他生产能力继续后续增量。
+- 已实现持久分块下载器；5 项本地 HTTP 回归全部通过，覆盖跨进程重试时保留部分字节、ETag 变化、缓存哈希损坏及符号链接拒绝。真实 TeX 资源已超过 1.8 GB，断点保存在 `.runtime/research-downloads/tlextras-2022.0r0.tar.parts/`。
+- Context7 与 Tectonic 0.17.0 官方 `ZipBundle` 源码确认：ZIP 使用扁平文件名并要求 SHA256SUM；将完整保留官方 TAR 中的文件内容，转换为 ZIP 后做空缓存离线编译实测。
+- TeX 下载完成：2,881,562,112 字节，完整 SHA-256 `425685e124746c15ba9bb8e0596bdaad98fce886afa347fbcf9ec0e9acd7fe79`，已固定在 tools.lock.json。arm64 Python/uv/Tectonic 归档也全部下载并通过官方 SHA 校验。
+- 官方 TeX bundle 含 134,980 个文件，首次转换触发原定 100,000 文件上限；核对归档后调整为 200,000，并保留 4 GiB 总量及单文件上限。ZIP 转换完成：1,481,187,938 字节，SHA-256 `c508958589f4c18218f98a7785ff21af901fb2460106e9a11d7b7bf065204487`。
+- 私有 arm64 工具链已成功组装，144 个实际依赖、38,564 个清单文件/链接；模型从权重扩展到全部 22 个配置/分词器/权重文件哈希。真实 PDF 回归暴露 PdfPage 不能作为 context manager，已改用 closing 并继续测试。
+- 搬迁到含空格路径的真实离线 smoke 全部通过：禁止外网、空缓存，中英文 LaTeX、PDF 渲染、扫描页 OCR、表格/公式/图稿解析、PNG/SVG/PDF 绘图及 Notebook（结果 30）。解析得到 1 页、8 个块，包含全部五类文本/表格/公式/图稿，E=mc² 与 12/18/50 数值正确，无警告。前后完整性校验通过；证据 `.artifacts/research-runtime-smoke-02/result.json`。
+- Production 4a 已进入 Standards/Spec 双轴 review；随后更新准备产物并完成最终核验，再独立提交。主进程接线仍属下一增量。
+- Standards 初审发现模型下载仍使用临时目录，连接中断会丢失 Hugging Face 的部分权重与元数据。改成按目录/commit 固定持久 staging，增加模型级文件锁，完成校验后才原子发布；补跨次中断恢复回归。
+- Standards 复查已关闭恢复缺口；补齐许可证目录中普通文件名的索引（PDFium 的 19 份许可文件现在均有索引），定向复查通过。最终回归 22 项全通过。
+- 最新工具链重新完整准备成功；`.artifacts/research-runtime-smoke-03/result.json` 的全链路离线 smoke 通过，额外覆盖原生 PDF（7 块）与 HTML（3 块）。资源共约 3.99 GB，145 项 Python 分发元数据（含 standalone 自带 pip），清单覆盖 38,564 文件/链接。
+- Production 4a 完成：Standards/Spec 最终均 0 项未解决问题，22 项回归和完整离线 smoke 通过。Review 记录 `reviews/04a-research-toolchain.md`，状态 Verified passing，独立提交。
