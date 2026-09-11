@@ -134,6 +134,12 @@ import {
   researchToolchainStatusSchema
 } from './schemas/research-production';
 import {
+  researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
+  researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
+  researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
+  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema
+} from './schemas/research-library';
+import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -382,6 +388,15 @@ export const ipcRegistry = {
     request({ key: 'researchTemplateSaveFile', channel: 'roc:research:template-save-file', domain: 'research', method: 'saveTemplateFile', kind: 'plugin', capabilityName: 'research.template.saveFile', inputTransform: first, contract: methodContract(oneArg(researchTemplateFileSaveRequestSchema), researchTemplateFileContentSchema) }),
     request({ key: 'researchTemplateSetEntry', channel: 'roc:research:template-set-entry', domain: 'research', method: 'setTemplateEntry', kind: 'plugin', capabilityName: 'research.template.setEntry', inputTransform: first, contract: methodContract(oneArg(researchTemplateEntryRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchTemplateCancel', channel: 'roc:research:template-cancel', domain: 'research', method: 'cancelTemplateCompile', kind: 'plugin', capabilityName: 'research.template.cancel', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchLibraryList', channel: 'roc:research:library-list', domain: 'research', method: 'listLibrary', kind: 'plugin', capabilityName: 'research.library.list', inputTransform: first, contract: methodContract(oneArg(researchLibraryListRequestSchema), researchLibraryItemSchema.array()) }),
+    request({ key: 'researchLibraryGet', channel: 'roc:research:library-get', domain: 'research', method: 'getLibraryItem', kind: 'plugin', capabilityName: 'research.library.get', inputTransform: first, contract: methodContract(oneArg(researchLibraryIdRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryImportRecord', channel: 'roc:research:library-import-record', domain: 'research', method: 'importLibraryRecord', kind: 'plugin', capabilityName: 'research.library.importRecord', inputTransform: first, contract: methodContract(oneArg(researchLibraryRecordImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryImportDoi', channel: 'roc:research:library-import-doi', domain: 'research', method: 'importLibraryDoi', kind: 'plugin', capabilityName: 'research.library.importDoi', inputTransform: first, contract: methodContract(oneArg(researchLibraryDoiImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryImportFile', channel: 'roc:research:library-import-file', domain: 'research', method: 'importBibliography', kind: 'plugin', capabilityName: 'research.library.importFile', inputTransform: first, contract: methodContract(oneArg(researchLibraryFileImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryExport', channel: 'roc:research:library-export', domain: 'research', method: 'exportBibliography', kind: 'plugin', capabilityName: 'research.library.export', inputTransform: first, contract: methodContract(oneArg(researchLibraryExportRequestSchema), researchLibraryExportSchema) }),
+    request({ key: 'researchLibraryLink', channel: 'roc:research:library-link', domain: 'research', method: 'linkLibraryItem', kind: 'plugin', capabilityName: 'research.library.linkProject', inputTransform: first, contract: methodContract(oneArg(researchLibraryLinkRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryArchive', channel: 'roc:research:library-archive', domain: 'research', method: 'archiveLibraryItem', kind: 'plugin', capabilityName: 'research.library.archive', inputTransform: first, contract: methodContract(oneArg(researchLibraryArchiveRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryCitationKey', channel: 'roc:research:library-citation-key', domain: 'research', method: 'setLibraryCitationKey', kind: 'plugin', capabilityName: 'research.library.setCitationKey', inputTransform: first, contract: methodContract(oneArg(researchLibraryCitationKeyRequestSchema), researchLibraryItemSchema) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),

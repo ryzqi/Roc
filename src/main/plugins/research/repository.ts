@@ -42,6 +42,7 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchEvidenceRepository } from './evidence-repository';
 import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
+import { ResearchLibraryRepository } from './library-repository';
 
 export const researchStages = [
   'discovery',
@@ -76,6 +77,7 @@ export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly runs: ResearchRunRepository;
   readonly reviews: ResearchReviewRepository;
+  readonly library: ResearchLibraryRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -87,6 +89,7 @@ export class ResearchRepository {
     }, now);
     this.runs = new ResearchRunRepository(db, this, now);
     this.reviews = new ResearchReviewRepository(db, this, now);
+    this.library = new ResearchLibraryRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -512,6 +515,9 @@ export class ResearchRepository {
   }
 
   upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest): void {
+    if (request.projectId !== null) this.getProject(request.projectId);
+    const existing = this.db.prepare('SELECT project_id FROM research_knowledge_documents WHERE id = ?').get(request.id) as { project_id: string | null } | undefined;
+    if (existing !== undefined && existing.project_id !== request.projectId) throw new Error('research_knowledge_project_mismatch');
     const timestamp = this.now();
     const write = this.db.transaction(() => {
       this.db

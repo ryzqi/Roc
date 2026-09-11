@@ -194,7 +194,7 @@ export const researchProvenanceSchema = z
   })
   .strict();
 
-export const researchLiteratureSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc', 'local']);
+export const researchLiteratureSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc', 'local', 'doi']);
 
 export const researchLiteratureSchema = z
   .object({
@@ -217,7 +217,7 @@ export const researchLiteratureSchema = z
 export const researchLiteratureSearchRequestSchema = z
   .object({
     query: z.string().trim().min(1),
-    sources: z.array(researchLiteratureSourceSchema).min(1),
+    sources: z.array(researchLiteratureSourceSchema.exclude(['doi'])).min(1),
     limit: z.number().int().positive().max(50)
   })
   .strict();

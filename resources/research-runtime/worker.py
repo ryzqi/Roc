@@ -27,6 +27,8 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 mimetypes.knownfiles = []
 mimetypes.init(files=[])
 MAX_PAGE_PIXELS = 25_000_000
+# 附属模块只从已校验的运行时目录加载，不加入项目目录。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 class Location(TypedDict):
@@ -54,6 +56,7 @@ class DocumentRequest:
     models: Path | None = None
     page: int | None = None
     scale: float | None = None
+    bibliography_format: str | None = None
 
 
 def absolute_path(value: object, *, must_exist: bool) -> Path:
@@ -81,7 +84,9 @@ def parse_request(value: object) -> DocumentRequest:
         fields.add("modelsPath")
     elif operation == "render_pdf":
         fields.update({"page", "scale"})
-    elif operation != "extract_template":
+    elif operation in {"read_bibliography", "write_bibliography"}:
+        fields.add("format")
+    elif operation not in {"extract_template", "normalize_bibliography"}:
         raise ValueError("research_operation_unknown")
     if set(value) != fields:
         raise ValueError("research_request_fields_invalid")
@@ -96,6 +101,13 @@ def parse_request(value: object) -> DocumentRequest:
     output = within(root, value["outputDir"], must_exist=False)
     if output.exists():
         raise ValueError("research_output_already_exists")
+    if operation in {"read_bibliography", "write_bibliography"}:
+        format_name = value["format"]
+        if not isinstance(format_name, str) or format_name not in {"bibtex", "biblatex", "csl-json"}:
+            raise ValueError("research_bibliography_format_invalid")
+        return DocumentRequest(operation, root, source, output, bibliography_format=format_name)
+    if operation == "normalize_bibliography":
+        return DocumentRequest(operation, root, source, output)
     if operation == "extract_template":
         if source.suffix.lower() != ".zip":
             raise ValueError("research_template_zip_required")
@@ -293,8 +305,19 @@ def execute(request: DocumentRequest) -> dict:
     before = file_hash(request.source)
     request.output.mkdir(parents=True, exist_ok=False)
     try:
-        operation = {"parse_document": parse_document, "render_pdf": render_pdf, "extract_template": extract_template}[request.operation]
-        result = operation(request)
+        if request.operation in {"read_bibliography", "write_bibliography", "normalize_bibliography"}:
+            from bibliography import normalize_file, read_file, write_file
+
+            if request.operation == "normalize_bibliography":
+                result = normalize_file(request.source)
+            elif request.bibliography_format is None:
+                raise ValueError("research_bibliography_format_required")
+            else:
+                result = (read_file(request.source, request.bibliography_format) if request.operation == "read_bibliography"
+                          else write_file(request.source, request.output, request.bibliography_format))
+        else:
+            operation = {"parse_document": parse_document, "render_pdf": render_pdf, "extract_template": extract_template}[request.operation]
+            result = operation(request)
         if file_hash(request.source) != before:
             raise ValueError("research_source_changed_during_parse")
         return {**result, "sourceHash": before}

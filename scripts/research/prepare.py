@@ -67,7 +67,8 @@ def prepare(architecture: str, output: Path, cache: Path, model_cache: Path) -> 
     if any(output.is_relative_to(source) or source.is_relative_to(output) for source in (cache, model_cache)):
         raise ValueError("research_toolchain_output_overlaps_cache")
     lock_hashes = {name: file_sha256(SOURCES / name) for name in LOCK_FILES}
-    lock_hashes["worker.py"] = file_sha256(SOURCES / "worker.py")
+    for source_file in sorted(SOURCES.glob("*.py")):
+        lock_hashes[source_file.name] = file_sha256(source_file)
     for license_file in sorted((SOURCES / "licenses").rglob("*")):
         if license_file.is_file():
             lock_hashes[license_file.relative_to(SOURCES).as_posix()] = file_sha256(license_file)
@@ -134,7 +135,8 @@ def prepare(architecture: str, output: Path, cache: Path, model_cache: Path) -> 
                 raise ValueError("research_tex_zip_hash_mismatch")
             (root / "tex").mkdir()
             shutil.copy2(cached_zip, root / "tex/bundle.zip")
-            shutil.copy2(SOURCES / "worker.py", root / "worker.py")
+            for source_file in SOURCES.glob("*.py"):
+                shutil.copy2(source_file, root / source_file.name)
             (root / "locks").mkdir()
             for name in LOCK_FILES:
                 shutil.copy2(SOURCES / name, root / "locks" / name)

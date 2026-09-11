@@ -1286,6 +1286,29 @@ export const researchMigrations: RocDatabaseMigration[] = [
       ALTER TABLE research_templates ADD COLUMN diagnostics_json TEXT NOT NULL DEFAULT '[]';
       UPDATE research_templates SET status = 'imported' WHERE status IN ('ready', 'compiling');
     `
+  },
+  {
+    version: 6,
+    name: 'research_global_literature_library',
+    sql: `
+      CREATE TABLE research_library (
+        id TEXT PRIMARY KEY,
+        identity_key TEXT NOT NULL UNIQUE,
+        metadata_json TEXT NOT NULL,
+        bibliography_json TEXT NOT NULL,
+        sources_json TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        archived INTEGER NOT NULL CHECK(archived IN (0,1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE research_library_projects (
+        item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        PRIMARY KEY(item_id, project_id)
+      );
+      CREATE INDEX idx_research_library_projects_project ON research_library_projects(project_id, item_id);
+    `
   }
 ];
 

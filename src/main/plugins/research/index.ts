@@ -56,6 +56,8 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
 import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
+import { ResearchLibraryService } from './library-service';
+import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from './library-capabilities';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -93,6 +95,8 @@ const lifecycleCapabilities = {
 };
 
 export type ResearchPluginOptions = {
+  libraryRoot?: string;
+  libraryFetch?: ConstructorParameters<typeof ResearchLibraryService>[3];
   toolchainRoot?: string;
   roleExecutor?: ResearchRoleExecutor;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
@@ -103,6 +107,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let repository: ResearchRepository | null = null;
   let stageRuntime: ResearchStageRuntime | null = null;
   let templates: ResearchTemplateService | null = null;
+  let library: ResearchLibraryService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -116,7 +121,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -127,6 +132,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchRepository.recoverTemplateCompiles();
       templates = new ResearchTemplateService(researchRepository, toolchain);
       registerResearchProductionCapabilities(context, templates, toolchain);
+      library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
+      registerResearchLibraryCapabilities(context, researchRepository.library, library);
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor);
       stageRuntime = runtime;
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
@@ -197,6 +204,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
     shutdown: async () => {
       await stageRuntime?.shutdown();
       await templates?.shutdown();
+      await library?.shutdown();
+      library = null;
       templates = null;
       stageRuntime = null;
       repository = null;

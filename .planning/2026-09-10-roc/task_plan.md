@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a 工具链与 4b 模板后端已完成；继续文献导入/增量索引，再完成实验/绘图/导出、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a 工具链、4b 模板后端、4c1 文献库与互操作已完成；继续 4c2 全文附件/解析与 4c3 增量索引，再完成实验/绘图/导出、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -45,6 +45,9 @@ Phase 3 — Implementation（Production）
 - [x] Production 4a：固定依赖/模型/TeX 资源、可恢复准备脚本、离线运行与搬迁验证；双轴 review、22 测试和真实离线 smoke 通过。
 - [x] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览；两轴 review 与真实链路通过。
 - [ ] Production 4c：文献本地/DOI/BibTeX/Zotero 导入、文档解析、项目监听与增量索引。
+- [x] Production 4c1：全局文献库、跨项目关联、DOI 去重、BibTeX/BibLaTeX/CSL JSON 互操作；双轴 review、118 项 Node/44 项 Python、真实 IPC/公共 DOI 与构建通过。
+- [ ] Production 4c2：全文附件/PDF/HTML 解析与阅读资源接入。
+- [ ] Production 4c3：项目监听、增量索引、重建/暂停/重试。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 

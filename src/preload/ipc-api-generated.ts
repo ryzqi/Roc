@@ -150,7 +150,16 @@ export const rocApi: RocPreloadApi = {
     readTemplateFile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateReadFile, ...args),
     saveTemplateFile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateSaveFile, ...args),
     setTemplateEntry: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateSetEntry, ...args),
-    cancelTemplateCompile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCancel, ...args)
+    cancelTemplateCompile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCancel, ...args),
+    listLibrary: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryList, ...args),
+    getLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryGet, ...args),
+    importLibraryRecord: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportRecord, ...args),
+    importLibraryDoi: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportDoi, ...args),
+    importBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportFile, ...args),
+    exportBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryExport, ...args),
+    linkLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryLink, ...args),
+    archiveLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryArchive, ...args),
+    setLibraryCitationKey: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryCitationKey, ...args)
   },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),

@@ -1,5 +1,16 @@
 import type { z } from 'zod';
 import type {
+  researchBibliographyEntrySchema, researchBibliographyFormatSchema, researchLibraryItemSchema,
+  researchLibraryListRequestSchema, researchLibraryImportResultSchema, researchLibraryExportSchema
+} from '../schemas/research-library';
+
+export type ResearchBibliographyEntry = z.infer<typeof researchBibliographyEntrySchema>;
+export type ResearchBibliographyFormat = z.infer<typeof researchBibliographyFormatSchema>;
+export type ResearchLibraryItem = z.infer<typeof researchLibraryItemSchema>;
+export type ResearchLibraryListRequest = z.infer<typeof researchLibraryListRequestSchema>;
+export type ResearchLibraryImportResult = z.infer<typeof researchLibraryImportResultSchema>;
+export type ResearchLibraryExport = z.infer<typeof researchLibraryExportSchema>;
+import type {
   researchTemplateFileSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateEntryRequestSchema, researchTemplateListRequestSchema,
   researchToolchainStatusSchema, researchParsedDocumentSchema, researchRenderedPdfSchema

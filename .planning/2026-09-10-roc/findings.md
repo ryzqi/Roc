@@ -21,6 +21,7 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- 文献互操作：Context7 的 Zotero 官方文档确认 BibTeX、BibLaTeX 与 CSL JSON 均支持导入/导出。已安装 Bibtexparser 2.0.0 提供默认字符串宏展开、失败块、SeparateCoAuthors/SplitNameParts；名称拆分应在 LaTeX 解码之前，以保留机构作者。4c 优先完成文献库与互操作，再接文档/目录索引。
 - 下一增量的 macOS 进程隔离预检：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT；当前系统 `/System/Library/Sandbox/Profiles/system.sb` 包含必要 dyld/系统初始化规则。引入 system.sb 并允许 mach-bootstrap/syscall 后受限 Python 启动通过。应用接线时仍须验证项目外读写拒绝与子进程取消，尚未把该原型作为已完成能力。
 - 离线打包：Tectonic 0.17.0 `ZipBundle` 按文件名直接读取，bundle 内须包含 SHA256SUM；旧官方 TAR 本身是扁平资源布局。私有 Python 使用 standalone 基础解释器及由 `uv.lock` 导出的带哈希依赖，直接安装进私有 prefix，避免依赖开发 venv 的外部解释器路径。
 - Production 续作：Tectonic 最新正式发布为 0.17.0；官方 arm64 SHA-256 为 `a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667`，x64 为 `7c90ef5b6ddb1eb1937e4337add5237b79338e4b9676459fa91187d24d6cdf80`。来源：`https://api.github.com/repos/tectonic-typesetting/tectonic/releases/latest`（2026-09-11）。
@@ -103,6 +104,10 @@
 ## Issues Encountered
 | Issue | Resolution |
 |-------|------------|
+| CSL/DOI 互操作的真实字段形状与数据保留 | Crossref 的 journal-article 与 ISSN/ISBN 数组在 API 边界映射；来源保存完整书目快照；期刊字段与日期字段成组合并，避免静默覆盖 |
+| 验证时额外 .pyc 使完整性清单失败 | 私有解释器使用 -B，搬迁测试子进程显式继承 PYTHONDONTWRITEBYTECODE=1；最新工具链在全套测试及真实导入后完整性校验通过 |
+| 文献元数据初始实现缺少边界回归 | 新增批量索引中途失败回滚、旧引用证据保留及 shutdown 迟到结果测试；已复现并修正仓储 4 项问题 |
+| Bib 字段顺序改变导致无 DOI 文献重复导入为新记录 | 本地内容身份采用排序后的字段，保留 source/externalId 与 DOI 的去重层级 |
 | 续作盘点：Workflow 只有 start/pause/resume/complete/approve/reject；Artifact 无 IPC、创建与关联未使用事务、审批版本可被原地改写 | 第一部分补齐导航与产物生命周期；独立验证并 review 后提交 |
 | Context7 未注册到当前 MCP / mcporter | 尝试官方远程 MCP；已安装类型与仓库代码仍作为本地 API 依据 |
 | planning hook 拒绝 symlink/reparse-point context | 物理路径与计划文件可直接访问；记录并继续 |

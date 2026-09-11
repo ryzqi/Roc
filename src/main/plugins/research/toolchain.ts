@@ -6,7 +6,9 @@ import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
 import modelsLock from '../../../../resources/research-runtime/models.lock.json';
 import workerSource from '../../../../resources/research-runtime/worker.py?raw';
+import bibliographySource from '../../../../resources/research-runtime/bibliography.py?raw';
 import { researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema } from '../../../shared/schemas/research-production';
+import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
 
@@ -49,6 +51,24 @@ export class ResearchToolchain {
 
   async extractTemplate(input: WorkerInput): Promise<void> {
     await this.worker(input, { operation: 'extract_template' }, z.object({ sourceHash: digestSchema, fileCount: z.number().int().nonnegative() }).strict(), 60_000);
+  }
+
+  async readBibliography(input: WorkerInput & { format: z.infer<typeof researchBibliographyFormatSchema> }): Promise<z.infer<typeof researchBibliographyEntrySchema>[]> {
+    const result = await this.worker(input, { operation: 'read_bibliography', format: input.format },
+      z.object({ sourceHash: digestSchema, entries: z.array(researchBibliographyEntrySchema) }).strict(), 60_000);
+    return result.entries;
+  }
+
+  async normalizeBibliography(input: WorkerInput): Promise<z.infer<typeof researchBibliographyEntrySchema>[]> {
+    const result = await this.worker(input, { operation: 'normalize_bibliography' },
+      z.object({ sourceHash: digestSchema, entries: z.array(researchBibliographyEntrySchema) }).strict(), 60_000);
+    return result.entries;
+  }
+
+  async writeBibliography(input: WorkerInput & { format: z.infer<typeof researchBibliographyFormatSchema> }): Promise<{ filename: string; content: string }> {
+    const result = await this.worker(input, { operation: 'write_bibliography', format: input.format },
+      z.object({ sourceHash: digestSchema, filename: z.string(), content: z.string() }).strict(), 60_000);
+    return { filename: result.filename, content: result.content };
   }
 
   async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
@@ -114,6 +134,7 @@ export class ResearchToolchain {
       if (entry?.type !== 'file' || entry.sha256 !== hash) throw new ResearchProcessError('research_toolchain_source_mismatch');
     };
     requireHash('worker.py', researchContentHash(workerSource));
+    requireHash('bibliography.py', researchContentHash(bibliographySource));
     requireHash('tex/bundle.zip', toolsLock.texBundle.zipSha256);
     for (const model of modelsLock.models) {
       for (const [path, digest] of Object.entries(model.files)) requireHash(`models/${model.directory}/${path}`, digest);

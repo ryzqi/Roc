@@ -145,3 +145,16 @@
 - Vision 对照已验证：IOSurface + GPU + ANE 的客户端组合恢复中文识别（两种组合均通过），单独文件/进程/图形权限无效。仅 parse_document 授权这五类计算客户端。精简页面中的公式可能被布局模型标为普通段落；集成验收改用 4a 已验证的实际论文样式样例，保留模型分类局限。
 - 主进程真实集成现已通过：Node 清单校验 → ZIP 模板导入 → 中英文 LaTeX（含嵌套图片资源）→ PDF 哈希预览 → PDFium 渲染 → 严格文件沙箱内 OCR/表格/公式识别。`ROC_RESEARCH_TOOLCHAIN=.../darwin-arm64-production-v2` 的 2 项集成测试通过；样例和结果保存在 `.artifacts/research-production-integration/`。独立验证了子目录入口的相对 `\\input` 资源，Tectonic 可正确解析。
 - 4b 完成：两轴最终 0 未解决；常规 18 文件/107 测试通过（真实用例已单独开启通过），另新增旧模板升级回归后仓储 9 项通过；Python 27 项通过，build/typecheck、check:ipc、差异检查通过。记录 `reviews/04b-template-production.md`；主进程与模板后端状态 Verified passing，进入 4c。
+- 4b 已提交 `dfb92f7`，工作区干净；当前开发工具链 `.runtime/research-toolchain/darwin-arm64` 已更新为包含 ZIP 与 MIME 修复的版本。4c 拆成可独立验证的文献库/解析互操作和项目增量索引两部分，各自 review 后提交。
+- 4c1 文献互操作已使用 Bibtexparser 2.0 实现机构作者/姓名粒子、宏展开、保护大小写标题、preamble、自定义字段及 CSL 扩展字段保留；7 项 Python 回归通过。CSL DOI/URL 保留百分号编码，避免被 LaTeX 解码当注释截断。
+- DOI 内容协商实际请求返回 200，并跳转到 Crossref transform；发现该服务的 `type` 使用 journal-article，需在 API 边界显式映射为 CSL 类型。官方网页的 Jina 读取 30 秒超时，保留 Context7 与实际端点返回作为当前证据。
+- 4c1 续作确认：`dfb92f7` 为本次基点，main 领先 22 提交；接续中的 typecheck 已完成并通过。以本计划、CONTEXT 与现有 IPC/数据库边界为验收依据。先完成文献库与互操作独立提交，再推进全文解析和项目索引；不把当前元数据服务视为全部 Production 已完成。
+- 4c1 验证补充范围：缺失字段合并、重复导入保持向量、归档/恢复与证据保留、批量事务、项目归属、引用键冲突、DOI 边界、关闭后的迟到结果；CSL 日期及引用键双向往返。归档文献允许解除已有项目关联，新增关联要求先恢复。
+- 新增 10 项仓储测试与 3 项 Python 场景先复现失败：空 Bib 字段挡住补齐、未比较索引 source_type、归档后仍可新增关联、DOI 错误未统一；另复现 CSL 接受畸形日期/未知类型以及 BibLaTeX 完整日期导出丢失月日。正在逐项修正。
+- 仓储 10 项和服务 8 项已通过；服务测试另复现并修复无 DOI 本地记录对字段顺序敏感、导出未拒绝重复选项。补充 Python 作者/月份/日期范围回归，修复机构名中的 and 被拆分及 sep 无法导出的问题；Context7 已核对 CSL 类型表和 Zotero 的 ISO 日期范围语法。
+- 新工具链 `darwin-arm64-library-v1` 已准备，清单 38,565 项；Python 全套 39 项通过。IPC 测试首先纠正了空 description 的无效夹具；真实 IPC→私有 Python 验证随后复现 DOI 补充的 CSL 日期覆盖既有 Bib 日期，正在修正导出以已保留字段为准，并保留原始作者扩展字段/日期限定信息。
+- bibliography 14 项回归通过，Node 新增 19 项通过，build/typecheck、check:ipc 通过；4c1 已进入双轴 review。工具链 v2 已准备；追加回归复现 date/year 混合不同来源导致 Bib 导出冲突，修复为日期字段成组保留/补齐，避免 CSL 与 Bib 往返结论不同。
+- 两轴初审发现四处保留问题：无 DOI CSL 的 edition/editor 未参与本地身份、期刊字段互相覆盖、editor/edition 跨格式丢失、同 DOI 后续 CSL 扩展丢失。均已有失败回归；修复包含规范化完整书目身份、期刊字段组合并/冲突错误、编辑者/译者/版次/书籍容器映射、完整来源书目快照与非冲突扩展合并。新 v6 尚未提交，因此来源 JSON 契约直接采用完整快照，不引入旧格式兼容分支。
+- 公共 DOI HTTP 200 已确认，真实 Crossref 将 ISSN 返回数组；在 DOI API 边界保留全部 ISSN/ISBN 并转为 CSL 字符串。随后完整性失败已定位到 v2 额外的 5 个 .pyc，来自搬迁测试启动子解释器时未继承禁写字节码环境；已修正测试，以新工具链 v3 复验。
+- Standards 复核又捕获空期刊别名覆盖非空值的分支；统一 journal_title() 处理后，三种格式的空值/空白/冲突回归通过。最终工具链更新到 `darwin-arm64-library-v4`。
+- 4c1 完成：Standards/Spec 最终均 0 未解决；科研域/IPC 19 文件 118 项通过，Python 44 项通过，真实 IPC 文件往返、公共 DOI 联网导入/导出、build/typecheck、check:ipc 和完整性清单通过。真实证据 `research-library-integration/roc library integration-QWaCYk/result.json` 与 `roc library integration-kq3jRW/live-doi-result.json`；Review 记录 `reviews/04c1-literature-library.md`。状态 Verified passing，独立提交后继续 4c2/4c3。

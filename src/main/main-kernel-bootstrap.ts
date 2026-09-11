@@ -249,7 +249,8 @@ function createDefaultMainKernelPlugins(input: {
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
-    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot }),
+    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
+      libraryRoot: join(input.paths.root, 'research-library') }),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({

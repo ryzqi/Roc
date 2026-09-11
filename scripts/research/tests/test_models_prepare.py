@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from email.message import Message
 from pathlib import Path
 import subprocess
@@ -107,7 +108,8 @@ class RelocationTests(unittest.TestCase):
             portable_python(prefix)
             moved = root / "moved python"
             prefix.rename(moved)
-            result = subprocess.run([moved / "bin/example", "works with spaces"], text=True, capture_output=True, check=True)
+            result = subprocess.run([moved / "bin/example", "works with spaces"], text=True, capture_output=True, check=True,
+                                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
             self.assertEqual(result.stdout.strip(), "works with spaces")
             self.assertEqual(json.loads((moved / "share/jupyter/kernels/python3/kernel.json").read_text())["argv"][0], "python3")
 
