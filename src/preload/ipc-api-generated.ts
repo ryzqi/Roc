@@ -142,7 +142,15 @@ export const rocApi: RocPreloadApi = {
     addProvenance: (...args) => ipcRenderer.invoke(ipcChannels.researchProvenanceAdd, ...args),
     listProvenance: (...args) => ipcRenderer.invoke(ipcChannels.researchProvenanceList, ...args),
     importTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateImport, ...args),
-    compileTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCompile, ...args)
+    compileTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCompile, ...args),
+    getToolchainStatus: (...args) => ipcRenderer.invoke(ipcChannels.researchToolchainStatus, ...args),
+    getTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateGet, ...args),
+    listTemplates: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateList, ...args),
+    getTemplateFiles: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateFiles, ...args),
+    readTemplateFile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateReadFile, ...args),
+    saveTemplateFile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateSaveFile, ...args),
+    setTemplateEntry: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateSetEntry, ...args),
+    cancelTemplateCompile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCancel, ...args)
   },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),

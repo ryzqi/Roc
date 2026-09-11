@@ -134,3 +134,14 @@
 - Standards 复查已关闭恢复缺口；补齐许可证目录中普通文件名的索引（PDFium 的 19 份许可文件现在均有索引），定向复查通过。最终回归 22 项全通过。
 - 最新工具链重新完整准备成功；`.artifacts/research-runtime-smoke-03/result.json` 的全链路离线 smoke 通过，额外覆盖原生 PDF（7 块）与 HTML（3 块）。资源共约 3.99 GB，145 项 Python 分发元数据（含 standalone 自带 pip），清单覆盖 38,564 文件/链接。
 - Production 4a 完成：Standards/Spec 最终均 0 项未解决问题，22 项回归和完整离线 smoke 通过。Review 记录 `reviews/04a-research-toolchain.md`，状态 Verified passing，独立提交。
+- 4a 已提交 `bc04b41`，提交后工作区干净；最新工具链已激活到 `.runtime/research-toolchain/darwin-arm64`。继续 4b：应用使用固定资源根、受限/可取消进程、模板版本与编译快照、安全导入与文件编辑、项目 PDF 预览。
+- 4b 已接入：固定工具链清单验证、受限进程/进程组取消、模板 ZIP 安全提取、版本与摘要、独立编译快照、文件冲突检测、编译恢复及 8 个新增 IPC。数据库追加 v5，不修改旧 migration。模板、进程、仓储定向 25 测试通过；Python 包含 ZIP 越界/符号链接/大小写冲突的 26 项回归通过。
+- 4b 实现中旧 helper 签名与模板序列化的过渡类型错误已修正，当前 typecheck 通过。正在运行 Node 主进程到私有 Python/Tectonic 的真实文件沙箱集成验证。
+- 真实文件沙箱下 ZIP 导入、TeX、PDF 渲染通过；Docling 导入失败。用 diagnosing-bugs 缩小到 mimetypes 注册类型时访问主机 MIME 表（0.2 秒回归可稳定复现），改为初始化内置表。另将进程测试直接指定 /bin/bash，避免 /bin/sh 包装器转执行另一未授权程序；生产只允许所选可执行文件。
+- MIME 回归与原扫描页的严格文件沙箱复现已通过。Python 3.12 初次 init(files=[]) 仍拼接 knownfiles，已核对实现并显式清空该主机文件列表；内置 PDF/图像类型保留。工作进程错误统一写 stderr traceback，stdout 保持结构化协议，便于真实故障定位。
+- 进一步语义校验发现严格沙箱的 Vision OCR 静默返回空数组；独立 OCR 对照中 baseline 为 22 条文本，放开文件读取或进程信息均无效，仅 iokit-open-user-client 恢复 22 条文本。正在按系统现有 profile 收窄所需客户端。取消测试的 PID 文件空内容竞态已修复，所有测试路径均在 finally 取消并等待子进程；清理了此前失败测试遗留的进程组。
+- 4b Standards 子审查遭遇模型速率限制，稍后复用该代理重试；主线验证和 Spec review 继续。
+- 两轴 review 发现模板扩展名过滤丢失 .tikz/.csv/.fd 资源、文件保存后 DB 失败不回滚；已保留普通资源并加入原文/新文件/外部编辑保护回归。复查又捕获 DB 提交前取消旧编译，已将取消移至提交之后，补在途编译+失败保存+迟到结果+shutdown 回归；模板 12 项测试通过，两轴相关问题已关闭。
+- Vision 对照已验证：IOSurface + GPU + ANE 的客户端组合恢复中文识别（两种组合均通过），单独文件/进程/图形权限无效。仅 parse_document 授权这五类计算客户端。精简页面中的公式可能被布局模型标为普通段落；集成验收改用 4a 已验证的实际论文样式样例，保留模型分类局限。
+- 主进程真实集成现已通过：Node 清单校验 → ZIP 模板导入 → 中英文 LaTeX（含嵌套图片资源）→ PDF 哈希预览 → PDFium 渲染 → 严格文件沙箱内 OCR/表格/公式识别。`ROC_RESEARCH_TOOLCHAIN=.../darwin-arm64-production-v2` 的 2 项集成测试通过；样例和结果保存在 `.artifacts/research-production-integration/`。独立验证了子目录入口的相对 `\\input` 资源，Tectonic 可正确解析。
+- 4b 完成：两轴最终 0 未解决；常规 18 文件/107 测试通过（真实用例已单独开启通过），另新增旧模板升级回归后仓储 9 项通过；Python 27 项通过，build/typecheck、check:ipc、差异检查通过。记录 `reviews/04b-template-production.md`；主进程与模板后端状态 Verified passing，进入 4c。

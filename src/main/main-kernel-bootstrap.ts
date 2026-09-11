@@ -42,6 +42,7 @@ import { SelfConfigService } from './services/self-config';
 
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
+  researchToolchainRoot?: string;
   safeStorage: SafeStorageBackend;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
   plugins?: readonly RocPlugin[];
@@ -122,7 +123,8 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
         selfConfigService,
         version: requireMainKernelVersion(options.version),
         isPackaged: options.isPackaged,
-        getAppearance: options.getAppearance
+        getAppearance: options.getAppearance,
+        researchToolchainRoot: options.researchToolchainRoot
       }),
     safeStorage: options.safeStorage
   });
@@ -169,6 +171,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 }
 
 function createDefaultMainKernelPlugins(input: {
+  researchToolchainRoot?: string;
   databasePool: DatabasePool;
   paths: RocPaths;
   configService: ConfigService;
@@ -246,7 +249,7 @@ function createDefaultMainKernelPlugins(input: {
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
-    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory) }),
+    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot }),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({

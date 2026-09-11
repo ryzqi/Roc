@@ -129,6 +129,11 @@ import {
   researchWorkflowTransitionRequestSchema
 } from './schemas/research';
 import {
+  researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
+  researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
+  researchToolchainStatusSchema
+} from './schemas/research-production';
+import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -369,6 +374,14 @@ export const ipcRegistry = {
     request({ key: 'researchProvenanceList', channel: 'roc:research:provenance-list', domain: 'research', method: 'listProvenance', kind: 'plugin', capabilityName: 'research.provenance.list', inputTransform: first, contract: methodContract(oneArg(researchProvenanceListRequestSchema), researchProvenanceSchema.array()) }),
     request({ key: 'researchTemplateImport', channel: 'roc:research:template-import', domain: 'research', method: 'importTemplate', kind: 'plugin', capabilityName: 'research.template.import', inputTransform: first, contract: methodContract(oneArg(researchTemplateImportRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchTemplateCompile', channel: 'roc:research:template-compile', domain: 'research', method: 'compileTemplate', kind: 'plugin', capabilityName: 'research.template.compile', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchToolchainStatus', channel: 'roc:research:toolchain-status', domain: 'research', method: 'getToolchainStatus', kind: 'plugin', capabilityName: 'research.toolchain.status', inputTransform: none, contract: methodContract(noArgs, researchToolchainStatusSchema) }),
+    request({ key: 'researchTemplateGet', channel: 'roc:research:template-get', domain: 'research', method: 'getTemplate', kind: 'plugin', capabilityName: 'research.template.get', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchTemplateList', channel: 'roc:research:template-list', domain: 'research', method: 'listTemplates', kind: 'plugin', capabilityName: 'research.template.list', inputTransform: first, contract: methodContract(oneArg(researchTemplateListRequestSchema), researchTemplateSchema.array()) }),
+    request({ key: 'researchTemplateFiles', channel: 'roc:research:template-files', domain: 'research', method: 'getTemplateFiles', kind: 'plugin', capabilityName: 'research.template.files', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateFileSchema.array()) }),
+    request({ key: 'researchTemplateReadFile', channel: 'roc:research:template-read-file', domain: 'research', method: 'readTemplateFile', kind: 'plugin', capabilityName: 'research.template.readFile', inputTransform: first, contract: methodContract(oneArg(researchTemplateFileRequestSchema), researchTemplateFileContentSchema) }),
+    request({ key: 'researchTemplateSaveFile', channel: 'roc:research:template-save-file', domain: 'research', method: 'saveTemplateFile', kind: 'plugin', capabilityName: 'research.template.saveFile', inputTransform: first, contract: methodContract(oneArg(researchTemplateFileSaveRequestSchema), researchTemplateFileContentSchema) }),
+    request({ key: 'researchTemplateSetEntry', channel: 'roc:research:template-set-entry', domain: 'research', method: 'setTemplateEntry', kind: 'plugin', capabilityName: 'research.template.setEntry', inputTransform: first, contract: methodContract(oneArg(researchTemplateEntryRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchTemplateCancel', channel: 'roc:research:template-cancel', domain: 'research', method: 'cancelTemplateCompile', kind: 'plugin', capabilityName: 'research.template.cancel', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),

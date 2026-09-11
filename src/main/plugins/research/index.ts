@@ -30,9 +30,6 @@ import {
   researchProvenanceCreateRequestSchema,
   researchProvenanceSchema,
   researchProvenanceListRequestSchema,
-  researchTemplateCompileRequestSchema,
-  researchTemplateImportRequestSchema,
-  researchTemplateSchema,
   researchWorkflowSnapshotSchema,
   researchWorkflowEventSchema,
   researchWorkflowEventsRequestSchema,
@@ -49,8 +46,6 @@ import type {
   ,ResearchStageRoleRequest
   ,ResearchProvenanceCreateRequest
   ,ResearchProvenanceListRequest
-  ,ResearchTemplateImportRequest
-  ,ResearchTemplateCompileRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { vectorToBlob } from './embedding-client';
@@ -58,7 +53,9 @@ import { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { LiteratureSearchService } from './literature-service';
 import { ResearchRepository, type EmbeddingConfigRow } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
-import { compileImportedLatexTemplate, importLatexTemplate } from './template-service';
+import { ResearchTemplateService } from './template-service';
+import { ResearchToolchain } from './toolchain';
+import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -85,8 +82,6 @@ const researchCapabilityDescriptors = [
   descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema),
   descriptor('research.provenance.add', researchProvenanceCreateRequestSchema, researchProvenanceSchema),
   descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array()),
-  descriptor('research.template.import', researchTemplateImportRequestSchema, researchTemplateSchema),
-  descriptor('research.template.compile', researchTemplateCompileRequestSchema, researchTemplateSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 const lifecycleCapabilities = {
@@ -98,6 +93,7 @@ const lifecycleCapabilities = {
 };
 
 export type ResearchPluginOptions = {
+  toolchainRoot?: string;
   roleExecutor?: ResearchRoleExecutor;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
@@ -106,6 +102,8 @@ export type ResearchPluginOptions = {
 export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPlugin {
   let repository: ResearchRepository | null = null;
   let stageRuntime: ResearchStageRuntime | null = null;
+  let templates: ResearchTemplateService | null = null;
+  const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
   return {
@@ -118,7 +116,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -126,6 +124,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       repository = new ResearchRepository(db);
       const researchRepository = repository;
       researchRepository.runs.recoverInterrupted();
+      researchRepository.recoverTemplateCompiles();
+      templates = new ResearchTemplateService(researchRepository, toolchain);
+      registerResearchProductionCapabilities(context, templates, toolchain);
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor);
       stageRuntime = runtime;
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
@@ -192,24 +193,11 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       );
       context.capabilities.register(pluginId, researchCapabilityDescriptors[14], async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[15], async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[16], async (input) => {
-        const request = input as ResearchTemplateImportRequest;
-        const project = repository!.getProject(request.projectId);
-        if (project.workspacePath === null) throw new Error('research_project_workspace_required');
-        const templateId = `template_${randomUUID()}`;
-        const imported = importLatexTemplate({ sourcePath: request.sourcePath, destinationRoot: `${project.workspacePath}/.roc-research/templates/${templateId}` });
-        return repository!.createTemplate({ id: templateId, projectId: request.projectId, rootPath: imported.rootPath, entryPath: imported.entryPath });
-      });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[17], async (input) => {
-        const request = input as ResearchTemplateCompileRequest;
-        const template = repository!.getTemplate(request);
-        repository!.updateTemplateCompile({ projectId: request.projectId, templateId: request.templateId, status: 'compiling', pdfPath: template.pdfPath, errors: [], lastCompiledAt: template.lastCompiledAt });
-        const compiled = await compileImportedLatexTemplate({ rootPath: template.rootPath, entryPath: template.entryPath });
-        return repository!.updateTemplateCompile({ projectId: request.projectId, templateId: request.templateId, status: compiled.status, pdfPath: compiled.pdfPath, errors: compiled.errors, lastCompiledAt: new Date().toISOString() });
-      });
     },
     shutdown: async () => {
       await stageRuntime?.shutdown();
+      await templates?.shutdown();
+      templates = null;
       stageRuntime = null;
       repository = null;
     },

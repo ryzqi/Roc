@@ -25,6 +25,16 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
       return new Response('Preview service unavailable', { status: 503 });
     }
     const url = new URL(request.url);
+    if (url.hostname === 'research') {
+      const match = /^\/templates\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.pdf$/u.exec(url.pathname);
+      if (match === null) return new Response('Not found', { status: 404 });
+      let projectId: string;
+      let templateId: string;
+      try { projectId = decodeURIComponent(match[1]); templateId = decodeURIComponent(match[2]); }
+      catch { return new Response('Invalid path', { status: 400 }); }
+      return kernel.invokeCapability<{ projectId: string; templateId: string; pdfHash: string }, Response>('research.template.preview', { projectId, templateId, pdfHash: match[3] })
+        .catch(() => new Response('Preview unavailable', { status: 404 }));
+    }
     if (url.hostname !== 'workspace' || !url.pathname.startsWith('/pdf/')) {
       return new Response('Not found', { status: 404 });
     }

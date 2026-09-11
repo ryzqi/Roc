@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyResearchDatabaseSchema, researchMigrations } from '../../../../src/main/infrastructure/database-schemas';
+import { applyDatabaseMigrations } from '../../../../src/main/infrastructure/database-migrations';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-client';
 
@@ -22,6 +23,23 @@ afterEach(() => {
 });
 
 describe('ResearchRepository', () => {
+  it('upgrades v4 templates without claiming an unverified legacy PDF is current', () => {
+    const legacy = new Database(':memory:');
+    try {
+      legacy.pragma('foreign_keys = ON');
+      sqliteVec.load(legacy);
+      applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((item) => item.version <= 4) });
+      legacy.exec("INSERT INTO research_projects VALUES ('legacy-project','Legacy','Keep template','/tmp/legacy','active','discovery','2026-09-10T00:00:00.000Z','2026-09-10T00:00:00.000Z')");
+      legacy.prepare(`INSERT INTO research_templates (id,project_id,root_path,entry_path,status,pdf_path,errors_json,last_compiled_at,updated_at)
+        VALUES ('legacy-template','legacy-project','/tmp/legacy/template','main.tex','ready','/tmp/legacy/old.pdf','[]',NULL,'2026-09-10T00:00:00.000Z')`).run();
+      applyResearchDatabaseSchema(legacy);
+      applyResearchDatabaseSchema(legacy);
+      const upgraded = new ResearchRepository(legacy).getTemplate({ projectId: 'legacy-project', templateId: 'legacy-template' });
+      expect(upgraded).toMatchObject({ rootPath: '/tmp/legacy/template', entryPath: 'main.tex', pdfPath: '/tmp/legacy/old.pdf',
+        status: 'imported', revision: 1, compiledRevision: null, sourceDigest: null, compiledDigest: null, pdfHash: null, activeCompileId: null, diagnostics: [] });
+    } finally { legacy.close(); }
+  });
+
   it('creates a project with an ordered, persisted eleven-stage workflow', () => {
     const project = repository.createProject({
       title: 'Evidence graph',
@@ -211,8 +229,10 @@ describe('ResearchRepository', () => {
     });
     expect(repository.listProvenance({ projectId: project.id, subjectId: artifact.id })).toEqual([provenance]);
 
-    const template = repository.createTemplate({ id: 'template-1', projectId: project.id, rootPath: '/tmp/audit/template-1', entryPath: 'main.tex' });
+    const template = repository.createTemplate({ id: 'template-1', projectId: project.id, rootPath: '/tmp/audit/template-1', entryPath: 'main.tex', sourceDigest: 'a'.repeat(64) });
     expect(template).toMatchObject({ status: 'imported', pdfPath: null });
-    expect(repository.updateTemplateCompile({ projectId: project.id, templateId: template.id, status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf', errors: [], lastCompiledAt: '2026-09-10T00:00:00.000Z' })).toMatchObject({ status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf' });
+    expect(repository.saveTemplate({ ...template, status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf', pdfHash: 'b'.repeat(64),
+      compiledRevision: 1, compiledDigest: template.sourceDigest, errors: [], lastCompiledAt: '2026-09-10T00:00:00.000Z' }, 1))
+      .toMatchObject({ status: 'ready', pdfPath: '/tmp/audit/template-1/.roc-build/main.pdf' });
   });
 });

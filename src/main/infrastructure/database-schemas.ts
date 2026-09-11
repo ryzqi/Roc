@@ -1272,6 +1272,20 @@ export const researchMigrations: RocDatabaseMigration[] = [
         WHERE stage = 'review' AND parent_run_id IS NULL
           AND NOT EXISTS (SELECT 1 FROM json_each(snapshot_json, '$.toolNames') WHERE value = 'read_review_report');
     `
+  },
+  {
+    version: 5,
+    name: 'research_template_compile_versions',
+    sql: `
+      ALTER TABLE research_templates ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE research_templates ADD COLUMN compiled_revision INTEGER;
+      ALTER TABLE research_templates ADD COLUMN source_digest TEXT;
+      ALTER TABLE research_templates ADD COLUMN compiled_digest TEXT;
+      ALTER TABLE research_templates ADD COLUMN pdf_hash TEXT;
+      ALTER TABLE research_templates ADD COLUMN active_compile_id TEXT;
+      ALTER TABLE research_templates ADD COLUMN diagnostics_json TEXT NOT NULL DEFAULT '[]';
+      UPDATE research_templates SET status = 'imported' WHERE status IN ('ready', 'compiling');
+    `
   }
 ];
 

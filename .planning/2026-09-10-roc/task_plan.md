@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow 与 Production 4a 工具链已完成；继续 Production 4b（主进程工具链接线、受限进程、模板编辑/离线编译与预览），再完成文献导入/增量索引、实验/绘图/导出、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a 工具链与 4b 模板后端已完成；继续文献导入/增量索引，再完成实验/绘图/导出、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -43,7 +43,8 @@ Phase 3 — Implementation（Production）
 - [x] Workflow 3b：多角色独立审稿、综合与最多两轮修订；review、124 测试与 build 通过。
 - [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [x] Production 4a：固定依赖/模型/TeX 资源、可恢复准备脚本、离线运行与搬迁验证；双轴 review、22 测试和真实离线 smoke 通过。
-- [ ] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览。
+- [x] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览；两轴 review 与真实链路通过。
+- [ ] Production 4c：文献本地/DOI/BibTeX/Zotero 导入、文档解析、项目监听与增量索引。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
@@ -98,6 +99,7 @@ Phase 3 — Implementation（Production）
 ## Errors Encountered
 | Error | Resolution |
 |-------|------------|
+| 文件沙箱中的 Docling 导入触发 mimetypes 读取 /etc/apache2/mime.types，报 PermissionError | 最小 0.2 秒回归复现；worker 显式初始化内置 MIME 表，不依赖主机配置 |
 | PDFium 5.13 的 PdfPage/PdfBitmap/PdfTextPage 不支持 with 协议 | 通过已安装 API 核实，使用 contextlib.closing 调用 close，补真实 PDF 渲染与越界回归 |
 | 官方 TeX 归档 134,980 文件超出初始转换上限 100,000 | 核对完整归档后将上限调为 200,000，转换通过并锁定 ZIP 哈希 |
 | TeX 整体下载与 16 MiB 分段下载均提前 EOF，失败清理导致断点丢失 | 改为持久分块及部分字节续传；验证资源身份和最终哈希，再转换离线包 |

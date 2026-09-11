@@ -77,6 +77,25 @@ describe('pdf preview protocol', () => {
     expect(invokeCapability).not.toHaveBeenCalled();
   });
 
+  it('requests a research PDF by project, template and content hash', async () => {
+    const invokeCapability = vi.fn().mockResolvedValue(new Response('research-pdf'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'a'.repeat(64);
+    const response = await handler(new Request(`roc-preview://research/templates/project-1/template-1/${hash}.pdf`));
+    expect(invokeCapability).toHaveBeenCalledWith('research.template.preview', { projectId: 'project-1', templateId: 'template-1', pdfHash: hash });
+    expect(await response.text()).toBe('research-pdf');
+  });
+
+  it('rejects arbitrary research file paths and conceals failed preview details', async () => {
+    const invokeCapability = vi.fn().mockRejectedValue(new Error('private path details'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    expect((await handler(new Request('roc-preview://research/files/private.txt'))).status).toBe(404);
+    expect(invokeCapability).not.toHaveBeenCalled();
+    const response = await handler(new Request(`roc-preview://research/templates/project/template/${'b'.repeat(64)}.pdf`));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Preview unavailable');
+  });
+
   function captureHandler(getKernel: () => MainKernelBootstrap | null): ProtocolHandler {
     registerPdfPreviewProtocol(getKernel);
     expect(handle).toHaveBeenCalledTimes(1);

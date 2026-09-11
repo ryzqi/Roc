@@ -68,6 +68,24 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(json.loads(result.stdout), {"ok": False, "error": {"code": "research_operation_unknown", "type": "ValueError"}})
 
+    def test_worker_uses_bundled_mime_types_without_reading_host_configuration(self):
+        host = self.root / "host-mime.types"
+        host.write_text("application/host-only host-only-extension", encoding="utf-8")
+        script = """import builtins, mimetypes, runpy, sys
+mimetypes.knownfiles = [sys.argv[2]]
+original = builtins.open
+def guarded(path, *args, **kwargs):
+    if str(path) == sys.argv[2]:
+        raise PermissionError('host MIME file denied by sandbox')
+    return original(path, *args, **kwargs)
+builtins.open = guarded
+runpy.run_path(sys.argv[1])
+mimetypes.add_type('application/x-test', '.test')
+assert mimetypes.guess_type('paper.pdf')[0] == 'application/pdf'
+"""
+        result = subprocess.run([sys.executable, "-I", "-B", "-c", script, str(WORKER), str(host)], text=True, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_renders_real_pdf_and_rejects_out_of_range_page(self):
         import pypdfium2 as pdfium
 

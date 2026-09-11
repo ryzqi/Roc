@@ -1,5 +1,20 @@
 import type { z } from 'zod';
 import type {
+  researchTemplateFileSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
+  researchTemplateFileSaveRequestSchema, researchTemplateEntryRequestSchema, researchTemplateListRequestSchema,
+  researchToolchainStatusSchema, researchParsedDocumentSchema, researchRenderedPdfSchema
+} from '../schemas/research-production';
+
+export type ResearchTemplateFile = z.infer<typeof researchTemplateFileSchema>;
+export type ResearchTemplateFileContent = z.infer<typeof researchTemplateFileContentSchema>;
+export type ResearchTemplateFileRequest = z.infer<typeof researchTemplateFileRequestSchema>;
+export type ResearchTemplateFileSaveRequest = z.infer<typeof researchTemplateFileSaveRequestSchema>;
+export type ResearchTemplateEntryRequest = z.infer<typeof researchTemplateEntryRequestSchema>;
+export type ResearchTemplateListRequest = z.infer<typeof researchTemplateListRequestSchema>;
+export type ResearchToolchainStatus = z.infer<typeof researchToolchainStatusSchema>;
+export type ResearchParsedDocument = z.infer<typeof researchParsedDocumentSchema>;
+export type ResearchRenderedPdf = z.infer<typeof researchRenderedPdfSchema>;
+import type {
   researchArtifactContentSchema,
   researchModelSelectionSchema,
   researchStageOutputSchema,

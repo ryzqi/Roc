@@ -4,6 +4,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import {
   researchProjectSchema,
+  researchTemplateSchema,
   researchStageStateSchema,
   researchWorkflowEventSchema,
   researchWorkflowSnapshotSchema
@@ -323,45 +324,69 @@ export class ResearchRepository {
     ).run(JSON.stringify([...state.artifactIds, artifactId]), projectId, stage);
   }
 
-  createTemplate(input: { id: string; projectId: string; rootPath: string; entryPath: string }): ResearchTemplate {
-    const timestamp = this.now();
-    this.db
-      .prepare(
+  createTemplate(input: { id: string; projectId: string; rootPath: string; entryPath: string; sourceDigest: string }): ResearchTemplate {
+    this.getProject(input.projectId);
+    return this.db.transaction(() => {
+      const timestamp = this.now();
+      this.db.prepare(
         `INSERT INTO research_templates
-         (id, project_id, root_path, entry_path, status, pdf_path, errors_json, last_compiled_at, updated_at)
-         VALUES (?, ?, ?, ?, 'imported', NULL, '[]', NULL, ?)`
-      )
-      .run(input.id, input.projectId, input.rootPath, input.entryPath, timestamp);
-    return this.getTemplate({ projectId: input.projectId, templateId: input.id });
+         (id, project_id, root_path, entry_path, status, pdf_path, errors_json, last_compiled_at, updated_at, source_digest)
+         VALUES (?, ?, ?, ?, 'imported', NULL, '[]', NULL, ?, ?)`
+      ).run(input.id, input.projectId, input.rootPath, input.entryPath, timestamp, input.sourceDigest);
+      const template = this.getTemplate({ projectId: input.projectId, templateId: input.id });
+      this.recordTemplateEvent(template, 'template_imported', '已导入 LaTeX 模板。');
+      return template;
+    })();
   }
 
   getTemplate(input: ResearchTemplateCompileRequest): ResearchTemplate {
     const row = this.db
       .prepare(
-        `SELECT id, project_id, root_path, entry_path, status, pdf_path, errors_json, last_compiled_at, updated_at
-         FROM research_templates WHERE id = ? AND project_id = ?`
+        'SELECT * FROM research_templates WHERE id = ? AND project_id = ?'
       )
       .get(input.templateId, input.projectId) as TemplateRow | undefined;
     if (row === undefined) throw new Error(`research_template_not_found:${input.templateId}`);
     return toTemplate(row);
   }
 
-  updateTemplateCompile(input: {
-    projectId: string;
-    templateId: string;
-    status: ResearchTemplate['status'];
-    pdfPath: string | null;
-    errors: readonly string[];
-    lastCompiledAt: string | null;
-  }): ResearchTemplate {
-    this.getTemplate({ projectId: input.projectId, templateId: input.templateId });
-    this.db
-      .prepare(
-        `UPDATE research_templates SET status = ?, pdf_path = ?, errors_json = ?, last_compiled_at = ?, updated_at = ?
-         WHERE id = ? AND project_id = ?`
-      )
-      .run(input.status, input.pdfPath, JSON.stringify(input.errors), input.lastCompiledAt, this.now(), input.templateId, input.projectId);
-    return this.getTemplate({ projectId: input.projectId, templateId: input.templateId });
+  listTemplates(projectId: string): ResearchTemplate[] {
+    this.getProject(projectId);
+    return (this.db.prepare('SELECT * FROM research_templates WHERE project_id = ? ORDER BY updated_at DESC, id')
+      .all(projectId) as TemplateRow[]).map(toTemplate);
+  }
+
+  saveTemplate(input: ResearchTemplate, expectedRevision: number): ResearchTemplate {
+    const next = researchTemplateSchema.parse(input);
+    return this.db.transaction(() => {
+      const current = this.getTemplate({ projectId: next.projectId, templateId: next.id });
+      if (next.rootPath !== current.rootPath) throw new Error('research_template_root_immutable');
+      if (next.revision !== current.revision && next.revision !== current.revision + 1) throw new Error('research_template_version_invalid');
+      const result = this.db.prepare(`UPDATE research_templates SET entry_path = ?, status = ?, pdf_path = ?, errors_json = ?,
+        diagnostics_json = ?, revision = ?, compiled_revision = ?, source_digest = ?, compiled_digest = ?, pdf_hash = ?,
+        active_compile_id = ?, last_compiled_at = ?, updated_at = ? WHERE id = ? AND project_id = ? AND revision = ?`)
+        .run(next.entryPath, next.status, next.pdfPath, JSON.stringify(next.errors), JSON.stringify(next.diagnostics),
+          next.revision, next.compiledRevision, next.sourceDigest, next.compiledDigest, next.pdfHash, next.activeCompileId,
+          next.lastCompiledAt, this.now(), next.id, next.projectId, expectedRevision);
+      if (result.changes !== 1) throw new Error('research_template_version_conflict');
+      const saved = this.getTemplate({ projectId: next.projectId, templateId: next.id });
+      if (next.status !== 'imported' && (current.status !== next.status || current.activeCompileId !== next.activeCompileId)) {
+        const messages = { compiling: 'LaTeX 编译已开始。', ready: 'PDF 预览已更新。', failed: 'LaTeX 编译失败或已取消。' };
+        this.recordTemplateEvent(saved, `template_compile_${next.status}`, messages[next.status]);
+      }
+      return saved;
+    })();
+  }
+
+  recoverTemplateCompiles(): void {
+    this.db.prepare(`UPDATE research_templates SET status = 'failed', active_compile_id = NULL,
+      errors_json = '["research_compile_interrupted"]',
+      diagnostics_json = '[{"severity":"error","message":"上次编译已中断，请重新编译。","file":null,"line":null}]',
+      updated_at = ? WHERE status = 'compiling'`).run(this.now());
+  }
+
+  private recordTemplateEvent(template: ResearchTemplate, type: string, message: string): void {
+    const project = this.getProject(template.projectId);
+    this.appendEvent(project.id, project.currentStage, type, message, { templateId: template.id, revision: template.revision }, this.now());
   }
 
   addProvenance(request: ResearchProvenanceCreateRequest): ResearchProvenance {
@@ -938,6 +963,13 @@ type TemplateRow = {
   status: ResearchTemplate['status'];
   pdf_path: string | null;
   errors_json: string;
+  diagnostics_json: string;
+  revision: number;
+  compiled_revision: number | null;
+  source_digest: string | null;
+  compiled_digest: string | null;
+  pdf_hash: string | null;
+  active_compile_id: string | null;
   last_compiled_at: string | null;
   updated_at: string;
 };
@@ -1018,17 +1050,24 @@ function toTemplate(row: TemplateRow): ResearchTemplate {
   } catch {
     throw new Error('research_template_errors_invalid');
   }
-  return {
+  return researchTemplateSchema.parse({
     id: row.id,
     projectId: row.project_id,
     rootPath: row.root_path,
     entryPath: row.entry_path,
     status: row.status,
     pdfPath: row.pdf_path,
-    errors: Array.isArray(errors) ? errors.filter((error): error is string => typeof error === 'string') : [],
+    errors,
+    diagnostics: JSON.parse(row.diagnostics_json),
+    revision: row.revision,
+    compiledRevision: row.compiled_revision,
+    sourceDigest: row.source_digest,
+    compiledDigest: row.compiled_digest,
+    pdfHash: row.pdf_hash,
+    activeCompileId: row.active_compile_id,
     lastCompiledAt: row.last_compiled_at,
     updatedAt: row.updated_at
-  };
+  });
 }
 
 function toArtifact(row: ArtifactRow): ResearchArtifact {

@@ -29,5 +29,8 @@ TeX 资源从固定 TAR 转为保留全部 134,980 个文件的 ZIP，原始与�
 
 - `render_pdf`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、从 1 开始的 `page`、0.5–4 的 `scale`。
 - `parse_document`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、固定的 `modelsPath`。
+- `extract_template`：必填 `projectRoot`、项目内的 ZIP `sourcePath`、新的 `outputDir`。拒绝越界、链接、加密条目及大小写路径冲突；最多 5,000 条目、256 MiB 解压总量、64 MiB 单文件。
 
 路径必须为绝对路径，输入与输出都必须处于项目内；拒绝覆盖已有输出。解析返回带源文件摘要、页码、边界框坐标原点和节点定位的文本/表格/公式/图稿，生成页面图及 Docling 原始结构。任何失败都清理本次新建的输出目录，来源在处理期间变化也会失败。
+
+Worker 使用内置 MIME 类型表；不读取开发机的 Apache 或用户 MIME 配置。异常 traceback 输出至 stderr，便于主进程诊断，JSON stdout 不混入日志。

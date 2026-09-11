@@ -307,6 +307,13 @@ export const researchKnowledgeSearchResultSchema = z
   })
   .strict();
 
+export const researchLatexDiagnosticSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  message: z.string(),
+  file: z.string().nullable(),
+  line: z.number().int().positive().nullable()
+}).strict();
+
 export const researchTemplateSchema = z
   .object({
     id: z.string(),
@@ -316,10 +323,22 @@ export const researchTemplateSchema = z
     status: z.enum(['imported', 'compiling', 'ready', 'failed']),
     pdfPath: z.string().nullable(),
     errors: z.array(z.string()),
+    diagnostics: z.array(researchLatexDiagnosticSchema),
+    revision: z.number().int().positive(),
+    compiledRevision: z.number().int().positive().nullable(),
+    sourceDigest: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+    compiledDigest: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+    pdfHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+    activeCompileId: z.string().nullable(),
     lastCompiledAt: z.string().nullable(),
     updatedAt: z.string()
   })
-  .strict();
+  .strict()
+  .refine((value) => value.status !== 'ready' || (value.pdfPath !== null && value.pdfHash !== null
+    && value.sourceDigest !== null && value.compiledDigest === value.sourceDigest && value.compiledRevision === value.revision),
+  { message: 'research_template_ready_snapshot_required' })
+  .refine((value) => (value.status === 'compiling') === (value.activeCompileId !== null),
+    { message: 'research_template_compile_identity_invalid' });
 
 export const researchTemplateImportRequestSchema = z
   .object({ projectId: z.string().min(1), sourcePath: z.string().min(1) })

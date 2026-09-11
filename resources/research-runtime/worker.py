@@ -8,16 +8,24 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import mimetypes
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
+import stat
 import sys
+import traceback
 from typing import TypedDict
+import unicodedata
+import zipfile
 
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
+# Docling 注册类型时只使用随解释器提供的表，不读取主机 MIME 配置。
+mimetypes.knownfiles = []
+mimetypes.init(files=[])
 MAX_PAGE_PIXELS = 25_000_000
 
 
@@ -73,7 +81,7 @@ def parse_request(value: object) -> DocumentRequest:
         fields.add("modelsPath")
     elif operation == "render_pdf":
         fields.update({"page", "scale"})
-    else:
+    elif operation != "extract_template":
         raise ValueError("research_operation_unknown")
     if set(value) != fields:
         raise ValueError("research_request_fields_invalid")
@@ -88,6 +96,10 @@ def parse_request(value: object) -> DocumentRequest:
     output = within(root, value["outputDir"], must_exist=False)
     if output.exists():
         raise ValueError("research_output_already_exists")
+    if operation == "extract_template":
+        if source.suffix.lower() != ".zip":
+            raise ValueError("research_template_zip_required")
+        return DocumentRequest(operation, root, source, output)
     if operation == "parse_document":
         if source.suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".html", ".htm"}:
             raise ValueError("research_source_format_unsupported")
@@ -106,6 +118,49 @@ def parse_request(value: object) -> DocumentRequest:
 def file_hash(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def extract_template(request: DocumentRequest) -> dict:
+    with zipfile.ZipFile(request.source) as archive:
+        members = archive.infolist()
+        if len(members) > 5000 or sum(member.file_size for member in members) > 256 * 1024 * 1024:
+            raise ValueError("research_template_archive_too_large")
+        names: dict[str, str] = {}
+        files: set[str] = set()
+        for member in members:
+            name = member.orig_filename
+            path = PurePosixPath(name)
+            mode = member.external_attr >> 16
+            if (path.is_absolute() or not path.parts or ".." in path.parts or "\\" in name
+                    or any(ord(char) < 32 for char in name) or stat.S_ISLNK(mode)
+                    or stat.S_IFMT(mode) not in {0, stat.S_IFDIR, stat.S_IFREG} or member.flag_bits & 1):
+                raise ValueError("research_template_archive_entry_invalid")
+            if member.file_size > 64 * 1024 * 1024:
+                raise ValueError("research_template_archive_too_large")
+            for index in range(1, len(path.parts) + 1):
+                part = PurePosixPath(*path.parts[:index]).as_posix()
+                folded = unicodedata.normalize("NFC", part).casefold()
+                if folded in names and names[folded] != part:
+                    raise ValueError("research_template_archive_path_collision")
+                names[folded] = part
+            if not member.is_dir():
+                if path.as_posix() in files:
+                    raise ValueError("research_template_archive_path_collision")
+                files.add(path.as_posix())
+        extracted = 0
+        for member in members:
+            path = PurePosixPath(member.filename)
+            if any(part in {"__MACOSX", ".git", ".DS_Store", ".roc-research", ".roc-build"} for part in path.parts):
+                continue
+            target = request.output.joinpath(*path.parts)
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member) as source, target.open("xb") as destination:
+                    shutil.copyfileobj(source, destination)
+                extracted += 1
+        return {"fileCount": extracted}
 
 
 def render_pdf(request: DocumentRequest) -> dict:
@@ -238,7 +293,8 @@ def execute(request: DocumentRequest) -> dict:
     before = file_hash(request.source)
     request.output.mkdir(parents=True, exist_ok=False)
     try:
-        result = parse_document(request) if request.operation == "parse_document" else render_pdf(request)
+        operation = {"parse_document": parse_document, "render_pdf": render_pdf, "extract_template": extract_template}[request.operation]
+        result = operation(request)
         if file_hash(request.source) != before:
             raise ValueError("research_source_changed_during_parse")
         return {**result, "sourceHash": before}
@@ -258,6 +314,7 @@ def main() -> None:
         json.dump({"ok": True, "result": result}, sys.stdout, ensure_ascii=False)
         sys.stdout.write("\n")
     except Exception as error:
+        traceback.print_exception(error, file=sys.stderr)
         code = str(error) if isinstance(error, ValueError) and str(error).startswith("research_") else "research_runtime_failed"
         json.dump({"ok": False, "error": {"code": code, "type": type(error).__name__}}, sys.stdout)
         sys.stdout.write("\n")

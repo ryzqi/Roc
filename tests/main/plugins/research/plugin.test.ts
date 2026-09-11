@@ -1,12 +1,16 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createPluginCapabilityAdapter } from '../../../../src/main/ipc/plugin-capability-adapter';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import { createResearchPlugin } from '../../../../src/main/plugins/research';
-import { researchArtifactSchema, researchProjectSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
+import { researchArtifactSchema, researchProjectSchema, researchTemplateSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
+import { researchTemplateFileContentSchema, researchTemplateFileSchema } from '../../../../src/shared/schemas/research-production';
 import { researchClaimSchema, researchEvidenceSchema, researchExportBundleSchema, researchManuscriptSchema } from '../../../../src/shared/schemas/research-evidence';
 
 let db: Database.Database;
@@ -44,6 +48,28 @@ async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Pr
 }
 
 describe('research plugin IPC integration', () => {
+  it('routes template import, versioned editing and unavailable compiler state through IPC', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-template-ipc-')));
+    try {
+      const source = join(root, 'source');
+      await mkdir(source);
+      await writeFile(join(source, 'main.tex'), '\\documentclass{article}\nOriginal');
+      const project = await call('createProject', { title: 'Templates', description: 'IPC template editing', workspacePath: root }, researchProjectSchema);
+      const template = await call('importTemplate', { projectId: project.id, sourcePath: source }, researchTemplateSchema);
+      const request = { projectId: project.id, templateId: template.id };
+      expect(await call('listTemplates', { projectId: project.id }, researchTemplateSchema.array())).toHaveLength(1);
+      expect(await call('getTemplateFiles', request, researchTemplateFileSchema.array())).toHaveLength(1);
+      const file = await call('readTemplateFile', { ...request, path: 'main.tex' }, researchTemplateFileContentSchema);
+      await call('saveTemplateFile', { ...request, path: file.path, content: '\\documentclass{article}\nChanged', expectedHash: file.sha256 }, researchTemplateFileContentSchema);
+      expect((await call('getTemplate', request, researchTemplateSchema)).revision).toBe(2);
+      expect((await adapter.invoke('research.saveTemplateFile', [{ ...request, path: file.path, content: 'stale', expectedHash: file.sha256 }])).ok).toBe(false);
+      const compiled = await call('compileTemplate', request, researchTemplateSchema);
+      expect(compiled).toMatchObject({ status: 'failed', activeCompileId: null, pdfPath: null, errors: ['research_toolchain_unavailable'] });
+      const status = await adapter.invoke('research.getToolchainStatus', []);
+      expect(status).toMatchObject({ ok: true, data: { available: false, error: 'research_toolchain_unavailable' } });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it('carries evidence through a gated manuscript to a validated export bundle', async () => {
     const project = await call('createProject', { title: 'IPC study', description: 'End-to-end provenance.', workspacePath: null }, researchProjectSchema);
     await call('transitionWorkflow', { projectId: project.id, expectedStage: 'discovery', action: 'move', targetStage: 'writing' }, researchWorkflowSnapshotSchema);

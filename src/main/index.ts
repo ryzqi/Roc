@@ -238,6 +238,8 @@ async function createWindow(): Promise<void> {
     dataRoot: process.env.ROC_DATA_ROOT,
     getAppearance: getSystemAppearanceSnapshot,
     isPackaged: app.isPackaged,
+    researchToolchainRoot: app.isPackaged ? join(process.resourcesPath, 'research-toolchain')
+      : join(mainModuleDir, `../../.runtime/research-toolchain/darwin-${process.arch}`),
     performanceObserverService,
     safeStorage: safeStorageBackend,
     runtimeMetricsProvider,
