@@ -1341,6 +1341,15 @@ export const researchMigrations: RocDatabaseMigration[] = [
       );
       CREATE INDEX idx_research_document_parses_document ON research_document_parses(document_id, created_at);
     `
+  },
+  {
+    version: 8,
+    name: 'research_embedding_configuration_revisions',
+    sql: `
+      ALTER TABLE research_embedding_configs ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE research_knowledge_embeddings RENAME COLUMN model TO space_key;
+      UPDATE research_knowledge_embeddings SET space_key = 'legacy:' || hex(space_key);
+    `
   }
 ];
 

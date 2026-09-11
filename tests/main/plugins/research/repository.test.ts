@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applyResearchDatabaseSchema, researchMigrations } from '../../../../src/main/infrastructure/database-schemas';
 import { applyDatabaseMigrations } from '../../../../src/main/infrastructure/database-migrations';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
-import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-client';
+import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 
 let db: Database.Database;
 let repository: ResearchRepository;
@@ -138,16 +138,16 @@ describe('ResearchRepository', () => {
       chunks: [{ content: 'retrieval methods', locator: 'line 2' }],
       embeddingConfigId: null
     });
+    repository.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test-embedding', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
     repository.storeChunkEmbeddings({
-      model: 'test-embedding',
-      dimensions: 3,
-      chunkIds: ['doc-a:chunk:0', 'doc-b:chunk:0'],
+      configId: 'test', configRevision: 1,
+      chunks: [...repository.knowledgeChunks('doc-a'), ...repository.knowledgeChunks('doc-b')],
       vectors: [vectorToBlob([1, 0, 0]), vectorToBlob([0, 1, 0])]
     });
 
     const result = repository.searchKnowledge({
       request: { query: 'evidence', projectId: null, limit: 10, embeddingConfigId: 'test' },
-      vector: { model: 'test-embedding', dimensions: 3, blob: vectorToBlob([1, 0, 0]) }
+      vector: { configId: 'test', configRevision: 1, blob: vectorToBlob([1, 0, 0]) }
     });
 
     expect(result.keywordCount).toBe(1);

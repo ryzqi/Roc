@@ -164,3 +164,13 @@
 - 4c2 首轮 12 项生命周期测试中 11 项通过，唯一失败是测试误用检索字段 excerpt；已对照现有 schema 修正为 content。追加 IPC、原始 HTML 强制下载、版本化 PNG 预览与错误隐藏测试，并开始真实 HTML/PDF → 索引 → 证据 → 资源读取链路验证。
 - 4c2 定向 22 项测试、typecheck 和 IPC 漂移检查通过。真实 IPC 集成已完成 HTML 导入/解析/全文检索/证据捕获，以及 Tectonic PDF → 导入副本 → Docling 页码/页面图 → 哈希资源读取；删除原 PDF 后仍能读取已保存副本。已进入 Standards/Spec 双轴 review，继续最终相关回归。
 - 4c2 完成：Standards/Spec 最终均 0 未解决；科研域/IPC/协议 22 文件 140 项通过，真实 HTML/PDF 集成通过，build/typecheck、check:ipc 与差异检查通过。证据 `.artifacts/research-document-integration/roc document integration-nRycvI/result.json`，Review 记录 `reviews/04c2-document-reading.md`。状态 Verified passing，独立提交后继续 4c3。
+- 4c2 已提交 `7e3a329`，提交后工作区干净；实际解析后工具链 38,565 项完整性校验通过。
+- 4c3 盘点：科研域尚无持久索引任务/监听实现；通用 WorkspaceChangeWatcher 仅维护当前工作区，不能直接表达研究项目索引失败/恢复状态。已用 Electron 自身确认 Node 24.20.0 提供 fs.watch 与 path.matchesGlob。
+- 4c3a 先处理已定位的前置正确性缺口：嵌入响应未严格检查 index/坐标类型，异步向量写入没有核对原文摘要，缓存只按 model 名隔离且无配置修订，网络请求没有取消/关闭归属。完成该独立增量后再接持久项目任务与目录监听。
+- Context7 已取得 OpenAI 官方 Embeddings 响应示例（data/index/浮点向量）与 Node 24 监听 API；直接读取官方 HTML 文档返回 403，改试同页 Markdown 端点，不影响本地可复现的索引一致性修复。
+- 官方 Markdown 端点也返回 403，保留 Context7 的官方文档索引结果作协议参考。新增回归先复现 7 类问题；初次集成测试误写 capability 名，按本地 IPC registry 修正为 research.embedding.save 后，5 个异步/缓存/密钥场景全部稳定失败，确认是实际实现问题。
+- 4c3a 已新增配置修订与缓存命名空间、文本摘要条件写入、严格 index/坐标验证、Float32 约束、取消/超时/响应大小边界和请求生命周期。配置保存使用独立新密钥引用，数据库提交后才撤销旧任务/清理旧引用。一次大块 apply_patch 因旧 helper 文本不匹配被拒绝，随后改为小块接线并按确切函数边界提取服务。
+- 前述失败场景修正后，首轮 31 项相关回归和 typecheck 通过；追加 v7→v8 缓存迁移、配置名称与端点变化、分批失败的原子写入、缺失配置及本机 HTTP 实际取消验证。旧向量保留为 legacy 命名空间，不再参与当前配置检索，原始知识与证据保留。
+- 4c3a 追加定向 14 项通过，包含真实本机 HTTP 收发与传输取消、失败配置保存不打断旧请求、批量中途失败不留下部分向量。确认现有 Renderer 使用 embeddingConfigId:null，未受严格显式配置检查影响；已进入 Standards/Spec review。
+- 4c3a 全科研域/IPC/协议 23 文件 152 项与 build/typecheck、check:ipc 通过。两轴 review 均复现极大/极小 Float32 向量在实际 sqlite-vec 余弦计算中返回 NULL；已在编码、仓储和查询边界使用按最大坐标缩放的稳定单位化，补实际 SQLite 距离/排序回归，17 项定向验证通过，进入窄复查。
+- 4c3a 完成：Standards/Spec 最终均 0 未解决；最终科研域/IPC/协议 24 文件 155 项通过，本机 HTTP 取消与实际 SQLite 极端数值验证通过，build/typecheck、check:ipc、差异检查通过。Review 记录 `reviews/04c3a-embedding-consistency.md`。状态 Verified passing，独立提交后继续 4c3b 项目监听与增量索引。

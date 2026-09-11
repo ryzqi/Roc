@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import * as sqliteVec from 'sqlite-vec';
 
@@ -36,7 +35,6 @@ import {
   researchWorkflowTransitionRequestSchema
 } from '../../../shared/schemas/research';
 import type {
-  ResearchEmbeddingConfig,
   ResearchEmbeddingConfigSaveRequest,
   ResearchExperimentRunRecordRequest,
   ResearchFigureRecordRequest,
@@ -48,10 +46,10 @@ import type {
   ,ResearchProvenanceListRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
-import { vectorToBlob } from './embedding-client';
 import { OpenAICompatibleEmbeddingClient } from './embedding-client';
+import { ResearchEmbeddingService } from './embedding-service';
 import { LiteratureSearchService } from './literature-service';
-import { ResearchRepository, type EmbeddingConfigRow } from './repository';
+import { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
@@ -111,6 +109,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let templates: ResearchTemplateService | null = null;
   let library: ResearchLibraryService | null = null;
   let documents: ResearchDocumentService | null = null;
+  let embeddings: ResearchEmbeddingService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -131,6 +130,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       sqliteVec.load(db);
       repository = new ResearchRepository(db);
       const researchRepository = repository;
+      const researchEmbeddings = new ResearchEmbeddingService(researchRepository, embeddingClient, context);
+      embeddings = researchEmbeddings;
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
       templates = new ResearchTemplateService(researchRepository, toolchain);
@@ -182,23 +183,10 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         }
         return records;
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[7], async () => listEmbeddingConfigs(context, repository!));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[8], async (input) => saveEmbeddingConfig(context, repository!, input as ResearchEmbeddingConfigSaveRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[9], async (input) => {
-        const request = input as ResearchKnowledgeDocumentUpsertRequest;
-        repository!.upsertKnowledgeDocument(request);
-        await embedDocument(context, repository!, embeddingClient, request);
-        return {
-          id: request.id,
-          projectId: request.projectId,
-          sourceType: request.sourceType,
-          sourceId: request.sourceId,
-          title: request.title,
-          content: request.content,
-          indexedAt: new Date().toISOString()
-        };
-      });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[10], async (input) => searchKnowledge(context, repository!, embeddingClient, input as ResearchKnowledgeSearchRequest));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[7], async () => researchEmbeddings.listConfigs());
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[8], async (input) => researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[9], async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[10], async (input) => await researchEmbeddings.search(input as ResearchKnowledgeSearchRequest));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[11], async (input) => repository!.recordExperimentRun(input as ResearchExperimentRunRecordRequest));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[12], async (input) => repository!.recordFigure(input as ResearchFigureRecordRequest));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[13], async (input) =>
@@ -208,92 +196,17 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       context.capabilities.register(pluginId, researchCapabilityDescriptors[15], async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
     },
     shutdown: async () => {
-      await stageRuntime?.shutdown();
-      await templates?.shutdown();
-      await documents?.shutdown();
-      await library?.shutdown();
+      const results = await Promise.allSettled([embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      embeddings = null;
       documents = null;
       library = null;
       templates = null;
       stageRuntime = null;
       repository = null;
+      const errors: unknown[] = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (errors.length > 0) throw new AggregateError(errors, 'research_shutdown_failed');
     },
     healthCheck: async () => ({ status: 'healthy' })
-  };
-}
-
-function listEmbeddingConfigs(context: RocPluginContext, repository: ResearchRepository): ResearchEmbeddingConfig[] {
-  return repository.listEmbeddingConfigRows().map((row) => toEmbeddingConfig(row, context));
-}
-
-function saveEmbeddingConfig(
-  context: RocPluginContext,
-  repository: ResearchRepository,
-  request: ResearchEmbeddingConfigSaveRequest
-): ResearchEmbeddingConfig {
-  const secretKey = `research.embedding.${request.id}`;
-  context.secrets.set(secretKey, request.apiKey);
-  repository.saveEmbeddingConfig(request, secretKey);
-  const row = repository.listEmbeddingConfigRows().find((item) => item.id === request.id);
-  if (row === undefined) throw new Error('research_embedding_config_missing_after_save');
-  return toEmbeddingConfig(row, context);
-}
-
-async function embedDocument(
-  context: RocPluginContext,
-  repository: ResearchRepository,
-  client: OpenAICompatibleEmbeddingClient,
-  request: ResearchKnowledgeDocumentUpsertRequest
-): Promise<void> {
-  const row = selectEmbeddingRow(repository, request.embeddingConfigId);
-  if (row === null || row.enabled !== 1) return;
-  const apiKey = context.secrets.get(row.api_key_secret_key);
-  if (apiKey === null) return;
-  const config = toEmbeddingConfig(row, context);
-  const vectors = await client.embed({ config, apiKey, texts: request.chunks.map((chunk) => chunk.content) });
-  repository.storeChunkEmbeddings({
-    model: row.model,
-    dimensions: row.dimensions,
-    chunkIds: request.chunks.map((_, index) => `${request.id}:chunk:${index}`),
-    vectors: vectors.map(vectorToBlob)
-  });
-}
-
-async function searchKnowledge(
-  context: RocPluginContext,
-  repository: ResearchRepository,
-  client: OpenAICompatibleEmbeddingClient,
-  request: ResearchKnowledgeSearchRequest
-): Promise<ReturnType<ResearchRepository['searchKnowledge']>> {
-  const row = selectEmbeddingRow(repository, request.embeddingConfigId);
-  if (row === null || row.enabled !== 1) {
-    return repository.searchKnowledge({ request, vector: null });
-  }
-  const apiKey = context.secrets.get(row.api_key_secret_key);
-  if (apiKey === null) return repository.searchKnowledge({ request, vector: null });
-  const config = toEmbeddingConfig(row, context);
-  const [vector] = await client.embed({ config, apiKey, texts: [request.query] });
-  return repository.searchKnowledge({
-    request,
-    vector: { model: row.model, dimensions: row.dimensions, blob: vectorToBlob(vector) }
-  });
-}
-
-function selectEmbeddingRow(repository: ResearchRepository, id: string | null): EmbeddingConfigRow | null {
-  const rows = repository.listEmbeddingConfigRows();
-  return (id === null ? rows.find((row) => row.enabled === 1) : rows.find((row) => row.id === id)) ?? null;
-}
-
-function toEmbeddingConfig(row: EmbeddingConfigRow, context: RocPluginContext): ResearchEmbeddingConfig {
-  return {
-    id: row.id,
-    name: row.name,
-    baseUrl: row.base_url,
-    model: row.model,
-    dimensions: row.dimensions,
-    keyConfigured: context.secrets.get(row.api_key_secret_key) !== null,
-    enabled: row.enabled === 1,
-    updatedAt: row.updated_at
   };
 }
 

@@ -1,9 +1,65 @@
 import { describe, expect, it } from 'vitest';
+import { createServer } from 'node:http';
 
 import { OpenAICompatibleEmbeddingClient } from '../../../../src/main/plugins/research/embedding-client';
+import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 import { LiteratureSearchService } from '../../../../src/main/plugins/research/literature-service';
 
 describe('research adapters', () => {
+  it('sends float embeddings over HTTP and aborts a pending transport', async () => {
+    let hold = false;
+    let entered!: () => void;
+    const requestEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const server = createServer((request, result) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        if (hold) { entered(); return; }
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { encoding_format: string };
+        result.writeHead(200, { 'content-type': 'application/json' });
+        result.end(JSON.stringify({ data: [{ index: 0, embedding: payload.encoding_format === 'float' ? [1, 0, 0] : [0, 0, 0] }] }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') throw new Error('server_address_required');
+      const client = new OpenAICompatibleEmbeddingClient();
+      const input = { config: { id: 'local', name: 'Local', baseUrl: `http://127.0.0.1:${address.port}`, model: 'test', dimensions: 3,
+        keyConfigured: true, enabled: true, updatedAt: '2026-09-12T00:00:00.000Z' }, apiKey: 'sample-key', texts: ['Text'] };
+      expect(await client.embed(input)).toEqual([[1, 0, 0]]);
+      hold = true;
+      const controller = new AbortController();
+      const pending = client.embed({ ...input, signal: controller.signal });
+      await requestEntered;
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it('rejects missing, duplicate, fractional and out-of-range embedding indexes', async () => {
+    const cases = [
+      [{ embedding: [1, 0, 0] }], [{ index: 0.5, embedding: [1, 0, 0] }], [{ index: 1, embedding: [1, 0, 0] }],
+      [{ index: 0, embedding: [1, 0, 0] }, { index: 0, embedding: [0, 1, 0] }]
+    ];
+    for (const data of cases) {
+      const client = new OpenAICompatibleEmbeddingClient(async () => Response.json({ data }));
+      await expect(client.embed({ config: { id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test', dimensions: 3,
+        keyConfigured: true, enabled: true, updatedAt: '2026-09-12T00:00:00.000Z' }, apiKey: 'sample-key', texts: data.map(() => 'text') })).rejects.toThrow('embedding_provider_');
+    }
+  });
+
+  it('rejects invalid coordinates without dropping them or overflowing float32 storage', async () => {
+    const client = new OpenAICompatibleEmbeddingClient(async () => Response.json({ data: [{ index: 0, embedding: [1, 'invalid', 0, 0] }] }));
+    await expect(client.embed({ config: { id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test', dimensions: 3,
+      keyConfigured: true, enabled: true, updatedAt: '2026-09-12T00:00:00.000Z' }, apiKey: 'sample-key', texts: ['text'] })).rejects.toThrow('embedding_provider_');
+    expect(() => vectorToBlob([Number.POSITIVE_INFINITY, 0, 1])).toThrow('embedding_vector_invalid');
+    expect(() => vectorToBlob([0, 0, 0])).toThrow('embedding_vector_invalid');
+  });
+
   it('preserves embedding response indexes and validates configured dimensions', async () => {
     const client = new OpenAICompatibleEmbeddingClient(async (url, init) => {
       expect(url).toBe('https://embedding.test/v1/embeddings');
@@ -70,4 +126,3 @@ describe('research adapters', () => {
     ]));
   });
 });
-

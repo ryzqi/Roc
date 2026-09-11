@@ -5,7 +5,7 @@ import { applyResearchDatabaseSchema, researchMigrations } from '../../../../src
 import { applyDatabaseMigrations } from '../../../../src/main/infrastructure/database-migrations';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { normalizeResearchDoi } from '../../../../src/main/plugins/research/literature-identity';
-import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-client';
+import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 import { libraryEntry } from './library-fixtures';
 
 let db: Database.Database;
@@ -118,7 +118,8 @@ describe('research library repository', () => {
   it('keeps embeddings and revisions on an unchanged reimport and treats search wildcards literally', () => {
     const entry = libraryEntry({ title: 'A 50% improvement' });
     const first = repository.library.import([entry], null).items[0];
-    repository.storeChunkEmbeddings({ model: 'test', dimensions: 3, chunkIds: [`library:${first.id}:chunk:0`], vectors: [vectorToBlob([1, 0, 0])] });
+    repository.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
+    repository.storeChunkEmbeddings({ configId: 'test', configRevision: 1, chunks: repository.knowledgeChunks(`library:${first.id}`), vectors: [vectorToBlob([1, 0, 0])] });
     const repeat = { ...entry, metadata: { ...entry.metadata, importedAt: '2026-09-12T00:00:00.000Z', updatedAt: '2026-09-12T00:00:00.000Z' } };
     expect(repository.library.import([repeat], null).items[0].revision).toBe(first.revision);
     expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_embeddings').get()).toEqual({ count: 1 });

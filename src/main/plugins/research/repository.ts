@@ -21,6 +21,7 @@ import type {
   ResearchFigure,
   ResearchFigureRecordRequest,
   ResearchKnowledgeDocumentUpsertRequest,
+  ResearchKnowledgeDocument,
   ResearchKnowledgeSearchHit,
   ResearchKnowledgeSearchRequest,
   ResearchKnowledgeSearchResult,
@@ -44,6 +45,7 @@ import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
 import { ResearchDocumentRepository } from './document-repository';
+import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
   'discovery',
@@ -487,6 +489,8 @@ export class ResearchRepository {
          (id, name, base_url, model, dimensions, api_key_secret_key, enabled, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
+           revision = CASE WHEN base_url <> excluded.base_url OR model <> excluded.model OR dimensions <> excluded.dimensions
+             OR api_key_secret_key <> excluded.api_key_secret_key OR enabled <> excluded.enabled THEN revision + 1 ELSE revision END,
            name = excluded.name,
            base_url = excluded.base_url,
            model = excluded.model,
@@ -511,13 +515,13 @@ export class ResearchRepository {
   listEmbeddingConfigRows(): EmbeddingConfigRow[] {
     return this.db
       .prepare(
-        `SELECT id, name, base_url, model, dimensions, api_key_secret_key, enabled, updated_at
+        `SELECT id, name, base_url, model, dimensions, api_key_secret_key, enabled, updated_at, revision
          FROM research_embedding_configs ORDER BY updated_at DESC`
       )
       .all() as EmbeddingConfigRow[];
   }
 
-  upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest): void {
+  upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest): ResearchKnowledgeDocument {
     if (request.projectId !== null) this.getProject(request.projectId);
     const existing = this.db.prepare('SELECT project_id FROM research_knowledge_documents WHERE id = ?').get(request.id) as { project_id: string | null } | undefined;
     if (existing !== undefined && existing.project_id !== request.projectId) throw new Error('research_knowledge_project_mismatch');
@@ -549,32 +553,56 @@ export class ResearchRepository {
       });
     });
     write();
+    return { id: request.id, projectId: request.projectId, sourceType: request.sourceType, sourceId: request.sourceId,
+      title: request.title, content: request.content, indexedAt: timestamp };
   }
 
-  storeChunkEmbeddings(input: { model: string; dimensions: number; chunkIds: readonly string[]; vectors: readonly Buffer[] }): void {
-    if (input.chunkIds.length !== input.vectors.length) {
+  requireEmbeddingConfig(id: string, revision: number): EmbeddingConfigRow {
+    const row = this.listEmbeddingConfigRows().find((entry) => entry.id === id);
+    if (row === undefined) throw new Error('research_embedding_config_not_found');
+    if (row.revision !== revision) throw new Error('research_embedding_config_changed');
+    if (row.enabled !== 1) throw new Error('research_embedding_config_disabled');
+    return row;
+  }
+
+  knowledgeChunks(documentId: string): Array<{ id: string; content: string; contentHash: string }> {
+    return this.db.prepare('SELECT id,content,content_hash AS contentHash FROM research_knowledge_chunks WHERE document_id = ? ORDER BY chunk_index')
+      .all(documentId) as Array<{ id: string; content: string; contentHash: string }>;
+  }
+
+  storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string }[]; vectors: readonly Buffer[] }): void {
+    if (input.chunks.length !== input.vectors.length || new Set(input.chunks.map((chunk) => chunk.id)).size !== input.chunks.length) {
       throw new Error('research_embedding_chunk_count_mismatch');
     }
     const write = this.db.transaction(() => {
+      const config = this.requireEmbeddingConfig(input.configId, input.configRevision);
+      const vectors: Buffer[] = [];
+      for (const [index, chunk] of input.chunks.entries()) {
+        const current = this.db.prepare('SELECT content_hash FROM research_knowledge_chunks WHERE id = ?').get(chunk.id) as { content_hash: string } | undefined;
+        if (current === undefined || current.content_hash !== chunk.contentHash) throw new Error('research_embedding_source_changed');
+        vectors.push(normalizeEmbeddingBlob(input.vectors[index], config.dimensions));
+      }
       const statement = this.db.prepare(
-        `INSERT INTO research_knowledge_embeddings (chunk_id, model, dimensions, vector_blob, created_at)
+        `INSERT INTO research_knowledge_embeddings (chunk_id, space_key, dimensions, vector_blob, created_at)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(chunk_id, model) DO UPDATE SET
+         ON CONFLICT(chunk_id, space_key) DO UPDATE SET
            dimensions = excluded.dimensions,
            vector_blob = excluded.vector_blob,
            created_at = excluded.created_at`
       );
-      input.chunkIds.forEach((chunkId, index) => statement.run(chunkId, input.model, input.dimensions, input.vectors[index], this.now()));
+      input.chunks.forEach((chunk, index) => statement.run(chunk.id, embeddingSpaceKey(config.id, config.revision), config.dimensions, vectors[index], this.now()));
     });
     write();
   }
 
   searchKnowledge(input: {
     request: ResearchKnowledgeSearchRequest;
-    vector: { model: string; dimensions: number; blob: Buffer } | null;
+    vector: { configId: string; configRevision: number; blob: Buffer } | null;
   }): ResearchKnowledgeSearchResult {
     const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, input.request.limit);
-    const vectorHits = input.vector === null ? [] : this.vectorSearch(input.request.projectId, input.request.limit, input.vector);
+    const config = input.vector === null ? null : this.requireEmbeddingConfig(input.vector.configId, input.vector.configRevision);
+    const vectorHits = input.vector === null || config === null ? [] : this.vectorSearch(input.request.projectId, input.request.limit,
+      { spaceKey: embeddingSpaceKey(config.id, config.revision), dimensions: config.dimensions, blob: input.vector.blob });
     const merged = new Map<string, ResearchKnowledgeSearchHit>();
     keywordHits.forEach((hit, index) => {
       merged.set(hit.chunkId, { ...hit, keywordRank: index + 1, vectorRank: null, rrfScore: 1 / (60 + index + 1) });
@@ -597,7 +625,7 @@ export class ResearchRepository {
       hits,
       keywordCount: keywordHits.length,
       vectorCount: vectorHits.length,
-      embeddingModel: input.vector?.model ?? null,
+      embeddingModel: config?.model ?? null,
       generatedAt: this.now()
     };
   }
@@ -629,12 +657,13 @@ export class ResearchRepository {
   private vectorSearch(
     projectId: string | null,
     limit: number,
-    vector: { model: string; dimensions: number; blob: Buffer }
+    vector: { spaceKey: string; dimensions: number; blob: Buffer }
   ): ResearchKnowledgeSearchHit[] {
+    const blob = normalizeEmbeddingBlob(vector.blob, vector.dimensions);
     const projectClause = projectId === null ? '' : 'AND (c.project_id = ? OR c.project_id IS NULL)';
     const args = projectId === null
-      ? [vector.model, vector.dimensions, vector.blob, limit]
-      : [vector.model, vector.dimensions, projectId, vector.blob, limit];
+      ? [vector.spaceKey, vector.dimensions, blob, limit]
+      : [vector.spaceKey, vector.dimensions, projectId, blob, limit];
     const rows = this.db
       .prepare(
         `SELECT e.chunk_id, c.document_id, d.title, c.content, c.locator,
@@ -642,7 +671,7 @@ export class ResearchRepository {
          FROM research_knowledge_embeddings e
          JOIN research_knowledge_chunks c ON c.id = e.chunk_id
          JOIN research_knowledge_documents d ON d.id = c.document_id
-         WHERE e.model = ? AND e.dimensions = ? ${projectClause}
+         WHERE e.space_key = ? AND e.dimensions = ? ${projectClause}
          ORDER BY vec_distance_cosine(e.vector_blob, ?) ASC LIMIT ?`
       )
       .all(...args) as KnowledgeHitRow[];
@@ -923,6 +952,7 @@ export type EmbeddingConfigRow = {
   api_key_secret_key: string;
   enabled: number;
   updated_at: string;
+  revision: number;
 };
 
 type LiteratureRow = {
@@ -1110,4 +1140,8 @@ function toKnowledgeHit(row: KnowledgeHitRow): ResearchKnowledgeSearchHit {
 
 function hashText(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function embeddingSpaceKey(id: string, revision: number): string {
+  return `embedding:${id}:${revision}`;
 }
