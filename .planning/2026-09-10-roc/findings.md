@@ -21,6 +21,7 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- R/Julia 实际运行已验证：R 的 libc popen/system 经 fork/exec 适配后可保持 syscall 82/147/244 禁止，普通 popen 与 DARWIN_EXTSN 入口都需适配；R_LIBS_SITE 必须设为 NULL，空值会恢复系统库。Julia 按 Base.preferences_names 与 Pkg.Artifacts.artifact_names 收集冻结配置，避免丢失优先文件。两项环境差异均经真实 red-green 回归确认；项目环境不自动安装或改写。
 - Python 实验环境：uv 在查询解释器时会加载项目 `.pth`；仅 `-I/-B` 不能阻止它。当前流程在禁止脱离进程组的 Python 中探测真实包，再让固定 uv 检查独立的安装元数据副本；uv 环境必须共享内置 Python，且不继承系统包。实际 `.pth`、wheel、Notebook 取消和完整工具链验证均已通过。
 - R/Julia 预备验证：Julia 官方 versions.json 当前稳定版 1.13.0，arm64 TAR SHA-256 `c8546ad39de9df9edd74b8104066fb23be0ece60890bb2dbfffadd24e73ba2c2`；已下载并私有解包，Pkg 当前接口可用。CRAN R 4.6.1 arm64 pkg 官方 SHA1 `fc9f4ada15589e8e037b9bf05563d21e97181635`，下载后的 SHA-256 `67f6eea4ced4ce48f0a0d4fa3a1cac43d1859a05a88993ee3dff7c52e7edbc4b`，Apple 签名/公证通过；私有解包的 R 仍需处理硬编码 Framework 动态库路径。没有修改系统安装。
 - 实验环境接线：已安装 uv 的帮助明确支持 `sync --check`（环境与项目同步检查）和 `--locked`；Context7 官方 uv 文档确认 `lock --check` 对项目元数据过期返回错误。后续运行前需同时验证环境和锁文件，不能用 `--no-sync` 代替环境一致性验证。

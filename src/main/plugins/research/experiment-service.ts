@@ -7,6 +7,8 @@ import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { executePythonNotebook } from './experiment-python';
+import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
+import { runRExperimentProcess } from './experiment-native-process';
 import { indexText, indexLocatedText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
@@ -199,12 +201,16 @@ export class ResearchExperimentService {
       await writeFile(join(kernel, 'kernel.json'), JSON.stringify({ argv: [executable, '-B', '-s', '-m', 'ipykernel_launcher', '-f', '{connection_file}'],
         display_name: 'Roc experiment', language: 'python' }), { flag: 'wx', mode: 0o400 });
     }
-    return await this.run({ command: notebook ? prepared.python : executable,
-      args: notebook ? ['-I', '-B', '-c', executePythonNotebook, join(input, request.sourcePath), join(root, 'notebook/executed.ipynb'), executable, String(Math.ceil(request.timeoutMs / 1000))]
-        : ['-B', '-s', join(input, request.sourcePath), ...request.arguments],
+    const source = join(input, request.sourcePath);
+    const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
+      : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
+      : notebook ? { command: prepared.python, args: ['-I', '-B', '-c', executePythonNotebook, source, join(root, 'notebook/executed.ipynb'), executable, String(Math.ceil(request.timeoutMs / 1000))] }
+      : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
+    const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
       writablePaths: [output, scratch, ...notebook ? [join(root, 'notebook')] : []], environment,
-      timeoutMs: request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : notebook ? 'loopback' : 'none' });
+      timeoutMs: request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : notebook ? 'loopback' : 'none' };
+    return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }
 
   private async indexDocuments(run: ResearchExperimentExecution, files: ResearchExperimentFile[]) {

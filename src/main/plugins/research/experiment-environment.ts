@@ -6,6 +6,7 @@ import { assertResearchDescendant, createResearchDirectory, readResearchFile, re
 import { inspectPythonEnvironment } from './experiment-python';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessRequest } from './process-runner';
 import type { ResearchToolchain } from './toolchain';
+import { inspectNativeExperimentEnvironment } from './experiment-native-environment';
 
 const pythonReportSchema = researchExperimentEnvironmentSchema.omit({ runtime: true, toolchainHash: true, metadataHash: true, lockFiles: true, hash: true })
   .extend({ metadataPaths: z.array(z.string().min(1)).max(10000) });
@@ -20,6 +21,7 @@ export class ResearchExperimentEnvironmentService {
   async inspect(root: string, runtime: ResearchExperimentRuntime, jobDir: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
     signal.throwIfAborted();
     const tools = await this.tools.experimentRuntime(jobDir);
+    if (runtime.kind === 'renv' || runtime.kind === 'julia') return await inspectNativeExperimentEnvironment(root, runtime, jobDir, tools, this.run, signal);
     const config = await createResearchDirectory(jobDir, 'config');
     const environment = { ...tools.environment, XDG_CONFIG_HOME: config, UV_CACHE_DIR: join(jobDir, 'cache/uv'),
       UV_PYTHON_DOWNLOADS: 'never', UV_OFFLINE: '1', UV_NO_PROGRESS: '1', UV_NO_MANAGED_PYTHON: '1' };
