@@ -11,6 +11,9 @@ export type ResearchProcessRequest = {
   environment: NodeJS.ProcessEnv;
   timeoutMs: number;
   allowOcrAcceleration: boolean;
+  networkAccess: 'none' | 'loopback' | 'full';
+  allowPosixSpawn: boolean;
+  additionalExecutables?: readonly string[];
   signal?: AbortSignal;
   input?: string;
   maxOutputBytes?: number;
@@ -25,8 +28,10 @@ export class ResearchProcessError extends Error {
   }
 }
 
-export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowOcrAcceleration'>): Promise<string> {
+export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowOcrAcceleration' | 'networkAccess' | 'allowPosixSpawn' | 'additionalExecutables'>): Promise<string> {
   if (typeof request.allowOcrAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
+  if (!['none', 'loopback', 'full'].includes(request.networkAccess)) throw new Error('research_process_network_policy_required');
+  if (typeof request.allowPosixSpawn !== 'boolean') throw new Error('research_process_spawn_policy_required');
   const filter = async (path: string): Promise<string> => {
     if (!isAbsolute(path)) throw new Error('research_process_absolute_path_required');
     const resolved = await realpath(path);
@@ -34,17 +39,21 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
   };
   const readable = await Promise.all([...request.readablePaths, request.command].map(filter));
   const writable = await Promise.all(request.writablePaths.map(filter));
-  const executable = await filter(request.command);
+  const executable = await Promise.all([request.command, ...(request.additionalExecutables ?? [])].map(filter));
   return [
     '(version 1)', '(deny default)', '(import "system.sb")',
     '(allow mach-bootstrap)', '(allow syscall*)', '(allow process-fork)',
-    `(allow process-exec ${executable})`, '(allow signal (target self) (target children))',
+    // Darwin SDK: setpgid=82、setsid=147、posix_spawn=244；阻止运行代码脱离受控进程组。
+    `(deny syscall-unix (syscall-number 82 147${request.allowPosixSpawn ? '' : ' 244'}))`,
+    `(allow process-exec ${executable.join(' ')})`, '(allow signal (target self) (target children))',
     '(allow mach-lookup)', '(allow sysctl-read)', '(allow file-read-metadata)',
     `(allow file-read* ${[...readable, ...writable].join(' ')})`,
     `(allow file-map-executable ${readable.join(' ')})`,
     ...(writable.length === 0 ? [] : [`(allow file-write* ${writable.join(' ')})`]),
     '(deny file-write-create (subpath "/cores"))',
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
+    ...(request.networkAccess === 'full' ? ['(allow network*)'] : request.networkAccess === 'loopback'
+      ? ['(allow network-outbound (remote ip "localhost:*"))', '(allow network-inbound (local ip "localhost:*"))', '(allow network-bind (local ip "localhost:*"))'] : []),
     // Vision 需要 IOSurface、GPU 和 ANE；只允许计算客户端，不开放整个 IOKit。
     ...(request.allowOcrAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient" "H11ANEInDirectPathClient" "H1xANELoadBalancerDirectPathClient"))'] : [])
   ].join('\n');
@@ -98,7 +107,7 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
     child.stderr.on('data', (chunk: Buffer) => append(stderr, chunk));
     const finish = (code: number | null, error?: Error): void => {
       if (settled) return;
-      if (stopped !== null) kill('SIGKILL');
+      kill('SIGKILL');
       settled = true;
       clearTimeout(timeout);
       if (forcedKill !== undefined) clearTimeout(forcedKill);

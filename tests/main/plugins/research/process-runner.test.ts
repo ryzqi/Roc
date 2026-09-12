@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { researchSandboxProfile, runResearchProcess, type ResearchProcessRequest } from '../../../../src/main/plugins/research/process-runner';
 
 const roots: string[] = [];
@@ -9,7 +9,7 @@ async function fixture(): Promise<ResearchProcessRequest> {
   const cwd = await realpath(await mkdtemp(join(tmpdir(), 'roc-research-process-')));
   roots.push(cwd);
   return { command: '/bin/bash', args: [], cwd, readablePaths: [cwd, '/bin'], writablePaths: [cwd],
-    environment: { PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8' }, timeoutMs: 5000, allowOcrAcceleration: false };
+    environment: { PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8' }, timeoutMs: 5000, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
 }
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
@@ -72,5 +72,23 @@ describe.runIf(process.platform === 'darwin')('research process boundary', () =>
     }
     expect(alive).toBe(false);
     } finally { controller.abort(); await completed; }
+  });
+
+  it('reaps remaining child processes after the parent succeeds', async () => {
+    const request = await fixture();
+    const result = await runResearchProcess({ ...request, args: ['-c', '(while :; do :; done) >/dev/null 2>&1 & printf "%s" "$!" > child.pid; exit 0'] });
+    expect(result.exitCode).toBe(0);
+    const pid = Number(await readFile(join(request.cwd, 'child.pid'), 'utf8'));
+    expect(pid).toBeGreaterThan(0);
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })));
+  });
+
+  it('prevents child jobs from escaping cancellation by changing their process group', async () => {
+    const request = await fixture();
+    const result = await runResearchProcess({ ...request, args: ['-c', 'set -m; (trap "" HUP TERM; while :; do :; done) >/dev/null 2>&1 & printf "%s" "$!" > child.pid; exit 0'] });
+    expect(result.exitCode).toBe(0);
+    const pid = Number(await readFile(join(request.cwd, 'child.pid'), 'utf8'));
+    try { await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))); }
+    finally { try { process.kill(pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
   });
 });

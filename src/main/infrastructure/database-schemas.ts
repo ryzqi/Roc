@@ -1390,6 +1390,20 @@ export const researchMigrations: RocDatabaseMigration[] = [
         evidence_id TEXT PRIMARY KEY REFERENCES research_evidence(id) ON DELETE CASCADE, metadata_json TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 10,
+    name: 'research_experiment_executions',
+    sql: `
+      CREATE TABLE research_experiment_executions (
+        run_id TEXT PRIMARY KEY REFERENCES research_experiment_runs(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        request_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('preparing','running','completed','failed','cancelled','interrupted')),
+        snapshot_json TEXT NOT NULL, root_path TEXT NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE(project_id,request_id)
+      );
+      CREATE INDEX idx_research_experiment_executions_project ON research_experiment_executions(project_id,created_at);
+    `
   }
 ];
 

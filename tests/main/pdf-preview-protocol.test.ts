@@ -115,6 +115,25 @@ describe('pdf preview protocol', () => {
     expect((await handler(new Request(`roc-preview://research/project-files/%ZZ/file/${hash}`))).status).toBe(400);
   });
 
+  it('routes experiment outputs with their content hash and keeps directory paths encoded', async () => {
+    const invokeCapability = vi.fn().mockResolvedValue(new Response('experiment-output'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'f'.repeat(64);
+    const response = await handler(new Request(`roc-preview://research/experiments/project%201/run%202/output/plots%2Fresult%20one.pdf/${hash}`));
+    expect(await response.text()).toBe('experiment-output');
+    expect(invokeCapability).toHaveBeenCalledWith('research.experiment.source', { projectId: 'project 1', runId: 'run 2', area: 'output', path: 'plots/result one.pdf', sha256: hash });
+    expect((await handler(new Request(`roc-preview://research/experiments/project/run/output/%ZZ/${hash}`))).status).toBe(400);
+    expect((await handler(new Request(`roc-preview://research/experiments/project/run/scratch/private/${hash}`))).status).toBe(404);
+  });
+
+  it('conceals unavailable experiment resource paths', async () => {
+    const invokeCapability = vi.fn().mockRejectedValue(new Error('private experiment path'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const response = await handler(new Request(`roc-preview://research/experiments/project/run/output/result.pdf/${'a'.repeat(64)}`));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Preview unavailable');
+  });
+
   it('rejects malformed document routes and conceals unavailable source details', async () => {
     const invokeCapability = vi.fn().mockRejectedValue(new Error('private document path'));
     const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));

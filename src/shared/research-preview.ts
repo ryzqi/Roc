@@ -16,3 +16,7 @@ export function researchDocumentAssetUrl(documentId: string, parseId: string, as
 export function researchIndexedSourceUrl(source: { projectId: string; fileId: string; sourceHash: string }): string {
   return `roc-preview://research/project-files/${encodeURIComponent(source.projectId)}/${encodeURIComponent(source.fileId)}/${source.sourceHash}`;
 }
+
+export function researchExperimentSourceUrl(projectId: string, runId: string, file: { area: string; path: string; sha256: string }): string {
+  return `roc-preview://research/experiments/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/${file.area}/${encodeURIComponent(file.path)}/${file.sha256}`;
+}

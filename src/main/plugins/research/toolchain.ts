@@ -46,6 +46,12 @@ export class ResearchToolchain {
     return researchContentHash(JSON.stringify(manifest.lockHashes));
   }
 
+  async experimentRuntime(jobDir: string): Promise<{ root: string; python: string; pythonVersion: string; uv: string; hash: string; environment: NodeJS.ProcessEnv }> {
+    const { root, manifest } = await this.resolve();
+    return { root, python: join(root, 'python/bin/python3'), pythonVersion: manifest.versions.python, uv: join(root, 'bin/uv'),
+      hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.environment(root, jobDir) };
+  }
+
   async parseDocument(input: WorkerInput): Promise<z.infer<typeof researchParsedDocumentSchema>> {
     return await this.worker(input, { operation: 'parse_document' }, researchParsedDocumentSchema, 600_000);
   }
@@ -82,7 +88,7 @@ export class ResearchToolchain {
     return await runResearchProcess({ command: join(root, 'bin/tectonic'),
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
-      timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false });
+      timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
   private async worker<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>, timeoutMs: number): Promise<T> {
@@ -92,7 +98,7 @@ export class ResearchToolchain {
     const result = await runResearchProcess({ command: join(root, 'python/bin/python3'), args: ['-I', '-B', join(root, 'worker.py')],
       cwd: input.jobDir, readablePaths: [root, input.sourcePath], writablePaths: [input.jobDir],
       environment: await this.environment(root, input.jobDir), input: JSON.stringify(request), timeoutMs, signal: input.signal,
-      allowOcrAcceleration: operation.operation === 'parse_document' });
+      allowOcrAcceleration: operation.operation === 'parse_document', networkAccess: 'none', allowPosixSpawn: false });
     const envelope = z.discriminatedUnion('ok', [
       z.object({ ok: z.literal(true), result: schema }).strict(),
       z.object({ ok: z.literal(false), error: z.object({ code: z.string(), type: z.string() }).strict() }).strict()

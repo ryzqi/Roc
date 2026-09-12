@@ -47,6 +47,7 @@ import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
 import { ResearchDocumentRepository } from './document-repository';
 import { ResearchIndexRepository } from './index-repository';
+import { ResearchExperimentRepository } from './experiment-repository';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
@@ -85,6 +86,7 @@ export class ResearchRepository {
   readonly library: ResearchLibraryRepository;
   readonly documents: ResearchDocumentRepository;
   readonly indexing: ResearchIndexRepository;
+  readonly experiments: ResearchExperimentRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -99,6 +101,7 @@ export class ResearchRepository {
     this.library = new ResearchLibraryRepository(db, this, now);
     this.documents = new ResearchDocumentRepository(db, this, now);
     this.indexing = new ResearchIndexRepository(db, this, now);
+    this.experiments = new ResearchExperimentRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -215,6 +218,10 @@ export class ResearchRepository {
   }
 
   recordExperimentRun(request: ResearchExperimentRunRecordRequest): ResearchExperimentRun {
+    this.getProject(request.projectId);
+    if (this.experiments.managed(request.id)) throw new Error('research_experiment_execution_immutable');
+    const previous = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.id) as { project_id: string } | undefined;
+    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_experiment_project_mismatch');
     this.db
       .prepare(
         `INSERT INTO research_experiment_runs
@@ -434,6 +441,10 @@ export class ResearchRepository {
     }
     if (request.artifactId !== null) this.requireEditableArtifact(request.artifactId);
     if (request.sourceType === 'model_run') this.runs.get(request.sourceId, request.projectId);
+    if (request.sourceType === 'experiment') {
+      const source = this.db.prepare('SELECT project_id,status FROM research_experiment_runs WHERE id = ?').get(request.sourceId) as { project_id: string; status: string } | undefined;
+      if (source === undefined || source.project_id !== request.projectId || source.status !== 'completed') throw new Error('research_provenance_source_invalid');
+    }
     if (request.sourceType === 'workflow_event') {
       const event = this.db.prepare('SELECT project_id FROM research_workflow_events WHERE id = ?')
         .get(request.sourceId) as { project_id: string } | undefined;

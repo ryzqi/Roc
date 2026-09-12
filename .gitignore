@@ -11,6 +11,7 @@ __pycache__/
 *.py[cod]
 *.log
 docs/*
+!docs/research-experiments.md
 !docs/superpowers/
 !docs/release/
 !docs/release/release-candidate-checklist.md

@@ -60,6 +60,9 @@ import { ResearchDocumentService } from './document-service';
 import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
+import { ResearchExperimentEnvironmentService } from './experiment-environment';
+import { ResearchExperimentService } from './experiment-service';
+import { registerResearchExperimentCapabilities, researchExperimentCapabilities } from './experiment-capabilities';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -97,6 +100,7 @@ const lifecycleCapabilities = {
 };
 
 export type ResearchPluginOptions = {
+  experimentRoot?: string;
   indexRoot?: string;
   indexWatch?: ResearchIndexWatch;
   libraryRoot?: string;
@@ -115,6 +119,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let documents: ResearchDocumentService | null = null;
   let embeddings: ResearchEmbeddingService | null = null;
   let indexer: ResearchIndexService | null = null;
+  let experiments: ResearchExperimentService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -128,7 +133,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -140,6 +145,10 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;
       registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);
+      const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
+      experiments = researchExperiments;
+      researchExperiments.recover();
+      registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
       templates = new ResearchTemplateService(researchRepository, toolchain);
@@ -175,6 +184,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       context.capabilities.register(pluginId, researchCapabilityDescriptors[3], async (input) => {
         const project = researchRepository.updateProject(researchProjectUpdateRequestSchema.parse(input));
         researchIndexer.projectChanged(project.id);
+        researchExperiments.projectChanged(project.id);
         return project;
       });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[4], async (input) => repository!.getWorkflow((input as { id: string }).id));
@@ -217,7 +227,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchIndexer.start();
     },
     shutdown: async () => {
-      const results = await Promise.allSettled([indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      const results = await Promise.allSettled([experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      experiments = null;
       indexer = null;
       embeddings = null;
       documents = null;

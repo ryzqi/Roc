@@ -186,3 +186,14 @@
 - 扫描失败状态已稳定 red-green；修复后索引/文件/预览 36 项通过，最终全相关回归 28 文件 / 183 项通过（5 个可选真实资源用例跳过，先前已独立开启验证），build/typecheck 通过。两轴正在复核修复。
 - 下一部分预研：Context7 与私有 uv 的本地帮助确认 `uv lock --check` 与 `uv sync --check` 可分别检查锁与环境，避免只凭锁文件存在认定可复现。初次猜测 `research-process.ts` 不存在，已通过文件清单定位现有 `process-runner.ts`，继续沿用该受限进程边界。
 - 4c3b 完成：Standards/Spec 最终均 0 未解决；183 项相关回归、真实监听/PDF 链路与构建通过。Review 记录 `reviews/04c3b-project-index.md`，状态 Verified passing，独立提交。下一增量已开始起草实验合同与 Python/Notebook 执行片段，单独保留供 4d1 实现。
+- 4c3b 已提交 `3e9ba8e`。4d1 已接入实验执行合同、Python/uv 环境检查、输入快照、持久运行/日志/输出、取消与中断恢复、知识/证据来源和流程发布。Notebook 使用指定解释器的临时 kernel 配置；进程边界新增明确联网策略与额外可执行程序清单。首次生命周期测试复现事件列名误写为 metadata_json，已按现有表结构修正为 payload_json；当前状态 Changed, unverified。
+- 4d1 首轮生命周期 10 项通过；已接入 8 条 IPC、按哈希读取的实验资源和项目/应用关闭生命周期。真实 IPC → 私有 Python（参数/输入及项目外访问拒绝）、离线 uv 预检/运行、Notebook 指定内核/失败单元格保留共 3 项通过，约 22 秒。继续补 v9→v10 迁移、进程退出清理、协议和完整性检查，随后双轴 review。
+- v9→v10/进程清理 7 项通过，相关服务/证据/IPC 35 项通过，工具链 38,565 项完整性通过。新增实验文档被既有 `docs/*` 忽略规则拒绝暂存，已为该明确文件增加例外；其他改动已成功暂存，进入 review 前补齐该文档。
+- 4d1 全相关回归 198 项与 build/check:ipc 通过。初审复现子进程换组逃逸、失败后日志登记丢失、Notebook 输出未索引、manifest 与 DB 不一致/未验证等问题；新增 5 个失败回归。正在通过 Darwin syscall 过滤及受控 Notebook provisioner 固定进程组，保留已收集文件，以 DB 终态为权威、发布前生成并校验清单，按单元格索引 Notebook 文本输出。
+- Darwin SDK 核对 setpgid=82、setsid=147、posix_spawn=244。syscall 过滤可用，猜测的 process-setcontrol 操作不存在；uv 查询解释器需要 posix_spawn，故只有固定 uv 预检显式授权该调用。一次含文档整行匹配的补丁未命中且未改文件，已拆分后完成修改。
+- R/Julia 预研：Jina 读取 CRAN 超时，官方原页直读成功；确认 R 4.6.1 官方签名 pkg 与 Julia 1.13.0 官方 SHA-256。Julia 224,095,616 字节已通过现有可恢复下载器及官方 SHA-256 校验，尚未改动系统安装。
+- 4d1 修复后生命周期/进程 18 项通过；Notebook 文本保留原始换行，回归断言已更正为原样保留。受控 provisioner 下真实 Python/uv/Notebook 3 项再次通过；追加真实 Notebook 内核及子进程取消、setsid/posix_spawn 逃逸拒绝用例通过。现有工具链完整 LaTeX/PDF/OCR/表格/公式链路 2 项通过（约 69 秒），类型检查通过。准备两轴窄复核。
+- 4d1 Spec 三项已关闭。Standards 指出的 uv 继承风险经真实 `.pth` 回归确认：旧预检确实允许启动钩子调用 posix_spawn。已改为先在受限 Python 中探测，后由固定 uv 检查无启动钩子的安装元数据副本；两者临时写入范围隔离。uv 环境须共享已验证的内置解释器，禁用系统 site-packages；元数据摘要纳入环境指纹，原项目不会被改写。
+- uv 隔离修复后真实链路 5 项通过（含 `.pth` red-green，uv stderr 确认使用 uv-check 临时环境）；追加真实本地 wheel 安装/运行、同版本元数据变化检测和未验证解释器拒绝 2 项通过。复制的只有受验证 dist-info/egg-info，系统 site-packages 关闭，项目 Python 探测与 uv 临时写入空间隔离；类型检查通过。R 官方 pkg 的签名/公证验证通过，已仅解包到私有测试目录。
+- 4d1 完成：Standards/Spec 最终均 0 未解决，最终 201 项相关回归、7 项真实实验用例、既有工具链集成、build/check:ipc 与 38,565 项完整性校验通过。Review 记录 `reviews/04d1-python-notebook-experiments.md`，状态 Verified passing，独立提交。
+- 4d2 预备资源：Julia 1.13.0 已在私有目录验证启动及 Pkg.Operations.is_manifest_current/is_instantiated 的实际接口；R 4.6.1 pkg 已核验官方 SHA1、Apple 分发签名与公证，解包后直接启动因绝对 libR.dylib 安装路径失败（SIGABRT）。未安装到系统，下一步验证受限运行中的私有库路径。后续 Julia 调用显式指定私有 JULIA_DEPOT_PATH，避免使用默认用户缓存。

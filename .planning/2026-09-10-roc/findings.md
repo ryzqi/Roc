@@ -21,6 +21,8 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- Python 实验环境：uv 在查询解释器时会加载项目 `.pth`；仅 `-I/-B` 不能阻止它。当前流程在禁止脱离进程组的 Python 中探测真实包，再让固定 uv 检查独立的安装元数据副本；uv 环境必须共享内置 Python，且不继承系统包。实际 `.pth`、wheel、Notebook 取消和完整工具链验证均已通过。
+- R/Julia 预备验证：Julia 官方 versions.json 当前稳定版 1.13.0，arm64 TAR SHA-256 `c8546ad39de9df9edd74b8104066fb23be0ece60890bb2dbfffadd24e73ba2c2`；已下载并私有解包，Pkg 当前接口可用。CRAN R 4.6.1 arm64 pkg 官方 SHA1 `fc9f4ada15589e8e037b9bf05563d21e97181635`，下载后的 SHA-256 `67f6eea4ced4ce48f0a0d4fa3a1cac43d1859a05a88993ee3dff7c52e7edbc4b`，Apple 签名/公证通过；私有解包的 R 仍需处理硬编码 Framework 动态库路径。没有修改系统安装。
 - 实验环境接线：已安装 uv 的帮助明确支持 `sync --check`（环境与项目同步检查）和 `--locked`；Context7 官方 uv 文档确认 `lock --check` 对项目元数据过期返回错误。后续运行前需同时验证环境和锁文件，不能用 `--no-sync` 代替环境一致性验证。
 - 文献互操作：Context7 的 Zotero 官方文档确认 BibTeX、BibLaTeX 与 CSL JSON 均支持导入/导出。已安装 Bibtexparser 2.0.0 提供默认字符串宏展开、失败块、SeparateCoAuthors/SplitNameParts；名称拆分应在 LaTeX 解码之前，以保留机构作者。4c 优先完成文献库与互操作，再接文档/目录索引。
 - 下一增量的 macOS 进程隔离预检：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT；当前系统 `/System/Library/Sandbox/Profiles/system.sb` 包含必要 dyld/系统初始化规则。引入 system.sb 并允许 mach-bootstrap/syscall 后受限 Python 启动通过。应用接线时仍须验证项目外读写拒绝与子进程取消，尚未把该原型作为已完成能力。
