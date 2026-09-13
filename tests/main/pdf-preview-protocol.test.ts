@@ -134,6 +134,20 @@ describe('pdf preview protocol', () => {
     expect(await response.text()).toBe('Preview unavailable');
   });
 
+  it('routes figure formats by immutable identity and conceals changed files', async () => {
+    const invokeCapability = vi.fn().mockResolvedValue(new Response('figure-output'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'a'.repeat(64);
+    expect((await handler(new Request(`roc-preview://research/figures/project%201/figure%202/svg/${hash}`))).status).toBe(200);
+    expect(invokeCapability).toHaveBeenCalledWith('research.figure.source', { projectId: 'project 1', figureId: 'figure 2', format: 'svg', sha256: hash });
+    expect((await handler(new Request(`roc-preview://research/figures/%ZZ/figure/png/${hash}`))).status).toBe(400);
+    expect((await handler(new Request(`roc-preview://research/figures/project/figure/html/${hash}`))).status).toBe(404);
+    invokeCapability.mockRejectedValueOnce(new Error('private figure path'));
+    const response = await handler(new Request(`roc-preview://research/figures/project/figure/pdf/${hash}`));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Preview unavailable');
+  });
+
   it('rejects malformed document routes and conceals unavailable source details', async () => {
     const invokeCapability = vi.fn().mockRejectedValue(new Error('private document path'));
     const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));

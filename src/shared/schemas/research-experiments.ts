@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { researchFigureOptionsSchema } from './research-plotting';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((value) =>
@@ -26,14 +27,15 @@ export const researchExperimentEnvironmentRequestSchema = z.object({
   projectId: z.string().min(1), runtime: researchExperimentRuntimeSchema
 }).strict();
 export const researchExperimentStartSchema = z.object({
-  projectId: z.string().min(1), requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'notebook', 'r', 'julia']),
+  projectId: z.string().min(1), requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'notebook', 'r', 'julia', 'matplotlib']),
   runtime: researchExperimentRuntimeSchema, sourcePath: researchExperimentPathSchema,
   inputPaths: z.array(researchExperimentPathSchema).max(1000),
   arguments: z.array(z.string().max(8192).refine((value) => !value.includes('\u0000'))).max(100),
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
-  expectedEnvironmentHash: digest, timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
+  expectedEnvironmentHash: digest, timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled']),
+  figure: researchFigureOptionsSchema.optional()
 }).strict().superRefine((value, context) => {
-  const extensions = { python: '.py', notebook: '.ipynb', r: '.r', julia: '.jl' };
+  const extensions = { python: '.py', notebook: '.ipynb', r: '.r', julia: '.jl', matplotlib: '.py' };
   if (!value.sourcePath.toLowerCase().endsWith(extensions[value.engine])) {
     context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
   }
@@ -43,6 +45,10 @@ export const researchExperimentStartSchema = z.object({
   if (expectedRuntime === null ? !['bundled-python', 'uv'].includes(value.runtime.kind) : value.runtime.kind !== expectedRuntime) {
     context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
   }
+  if (value.engine === 'matplotlib' ? value.figure === undefined : value.figure !== undefined) {
+    context.addIssue({ code: 'custom', message: 'research_figure_options_invalid', path: ['figure'] });
+  }
+  if (value.engine === 'matplotlib' && value.network !== 'disabled') context.addIssue({ code: 'custom', message: 'research_figure_offline_required', path: ['network'] });
 });
 export const researchExperimentExecutionSchema = z.object({
   id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema,

@@ -191,7 +191,7 @@ describe('research evidence and manuscript boundaries', () => {
     expect(() => repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' })).toThrow('research_manuscript_required');
   });
 
-  it('requires evidence for a figure before it can be submitted for approval', () => {
+  it('requires figure evidence and a real render before it can be submitted for approval', () => {
     const { id } = project();
     repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'figure' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'figure', action: 'start' });
@@ -200,8 +200,7 @@ describe('research evidence and manuscript boundaries', () => {
     document(id);
     const evidence = repository.evidence.capture({ projectId: id, chunkId: 'paper:chunk:0' });
     repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'figure', content: 'Measured comparison.', status: 'supported', evidenceIds: [evidence.id] });
-    expect(repository.transitionWorkflow({ projectId: id, expectedStage: 'figure', action: 'complete' }).stages.find((stage) => stage.stage === 'figure')?.status)
-      .toBe('waiting_approval');
+    expect(() => repository.transitionWorkflow({ projectId: id, expectedStage: 'figure', action: 'complete' })).toThrow('research_figure_render_required');
   });
 
   it('refuses corrupted evidence during export even after approval', () => {

@@ -151,6 +151,8 @@ import {
 import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentEvidenceRequestSchema,
   researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema, researchExperimentIdRequestSchema,
   researchExperimentListRequestSchema, researchExperimentStartSchema } from './schemas/research-experiments';
+import { researchFigureIdRequestSchema, researchFigureListRequestSchema, researchFigurePublicationSchema,
+  researchFigurePublishRequestSchema } from './schemas/research-figures';
 import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
@@ -396,6 +398,9 @@ export const ipcRegistry = {
     request({ key: 'researchExperimentPublish', channel: 'roc:research:experiment-publish', domain: 'research', method: 'publishExperiment', kind: 'plugin', capabilityName: 'research.experiment.publish', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchExperimentExecutionSchema) }),
     request({ key: 'researchExperimentEvidence', channel: 'roc:research:experiment-evidence', domain: 'research', method: 'getEvidenceExperimentSource', kind: 'plugin', capabilityName: 'research.experiment.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchExperimentEvidenceRequestSchema), researchExperimentFileRequestSchema.nullable()) }),
     request({ key: 'researchFigureRecord', channel: 'roc:research:figure-record', domain: 'research', method: 'recordFigure', kind: 'plugin', capabilityName: 'research.figure.record', inputTransform: first, contract: methodContract(oneArg(researchFigureRecordRequestSchema), researchFigureSchema) }),
+    request({ key: 'researchFigurePublish', channel: 'roc:research:figure-publish', domain: 'research', method: 'publishFigure', kind: 'plugin', capabilityName: 'research.figure.publish', inputTransform: first, contract: methodContract(oneArg(researchFigurePublishRequestSchema), researchFigurePublicationSchema) }),
+    request({ key: 'researchFigureGet', channel: 'roc:research:figure-get', domain: 'research', method: 'getFigure', kind: 'plugin', capabilityName: 'research.figure.get', inputTransform: first, contract: methodContract(oneArg(researchFigureIdRequestSchema), researchFigurePublicationSchema) }),
+    request({ key: 'researchFigureList', channel: 'roc:research:figure-list', domain: 'research', method: 'listFigures', kind: 'plugin', capabilityName: 'research.figure.list', inputTransform: first, contract: methodContract(oneArg(researchFigureListRequestSchema), researchFigurePublicationSchema.array()) }),
     request({ key: 'researchProvenanceAdd', channel: 'roc:research:provenance-add', domain: 'research', method: 'addProvenance', kind: 'plugin', capabilityName: 'research.provenance.add', inputTransform: first, contract: methodContract(oneArg(researchProvenanceCreateRequestSchema), researchProvenanceSchema) }),
     request({ key: 'researchProvenanceList', channel: 'roc:research:provenance-list', domain: 'research', method: 'listProvenance', kind: 'plugin', capabilityName: 'research.provenance.list', inputTransform: first, contract: methodContract(oneArg(researchProvenanceListRequestSchema), researchProvenanceSchema.array()) }),
     request({ key: 'researchTemplateImport', channel: 'roc:research:template-import', domain: 'research', method: 'importTemplate', kind: 'plugin', capabilityName: 'research.template.import', inputTransform: first, contract: methodContract(oneArg(researchTemplateImportRequestSchema), researchTemplateSchema) }),

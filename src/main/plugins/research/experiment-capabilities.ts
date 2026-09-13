@@ -38,7 +38,7 @@ export function registerResearchExperimentCapabilities(context: RocPluginContext
     const mediaTypes: Record<string, string> = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml' };
     const mediaType = mediaTypes[extname(file.path).toLowerCase()];
     return new Response(new Uint8Array(bytes), { headers: { 'content-type': mediaType ?? 'application/octet-stream', 'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff', 'content-security-policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+      'x-content-type-options': 'nosniff', 'content-security-policy': "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'",
       'content-disposition': `${mediaType === undefined ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(basename(file.path))}` } });
   });
 }

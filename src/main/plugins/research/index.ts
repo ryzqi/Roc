@@ -63,6 +63,8 @@ import { registerResearchIndexCapabilities, researchIndexCapabilities } from './
 import { ResearchExperimentEnvironmentService } from './experiment-environment';
 import { ResearchExperimentService } from './experiment-service';
 import { registerResearchExperimentCapabilities, researchExperimentCapabilities } from './experiment-capabilities';
+import { ResearchFigureService } from './figure-service';
+import { registerResearchFigureCapabilities, researchFigureCapabilities } from './figure-capabilities';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -120,6 +122,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let embeddings: ResearchEmbeddingService | null = null;
   let indexer: ResearchIndexService | null = null;
   let experiments: ResearchExperimentService | null = null;
+  let figures: ResearchFigureService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -133,7 +136,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -149,6 +152,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       experiments = researchExperiments;
       researchExperiments.recover();
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
+      const researchFigures = new ResearchFigureService(researchRepository, researchExperiments);
+      figures = researchFigures;
+      registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
       templates = new ResearchTemplateService(researchRepository, toolchain);
@@ -188,7 +194,11 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         return project;
       });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[4], async (input) => repository!.getWorkflow((input as { id: string }).id));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[5], async (input) => runtime.transition(researchWorkflowTransitionRequestSchema.parse(input)));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[5], async (input) => {
+        const request = researchWorkflowTransitionRequestSchema.parse(input);
+        if (request.expectedStage === 'figure' && (request.action === 'complete' || request.action === 'approve')) return await researchFigures.transition(request);
+        return await runtime.transition(request);
+      });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[6], async (input) => {
         const request = input as ResearchLiteratureSearchRequest;
         const records = await literatureService.search(request);
@@ -227,7 +237,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchIndexer.start();
     },
     shutdown: async () => {
-      const results = await Promise.allSettled([experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      const results = await Promise.allSettled([figures?.shutdown(), experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      figures = null;
       experiments = null;
       indexer = null;
       embeddings = null;

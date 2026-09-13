@@ -48,6 +48,7 @@ import { ResearchLibraryRepository } from './library-repository';
 import { ResearchDocumentRepository } from './document-repository';
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
+import { ResearchFigureRepository } from './figure-repository';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
@@ -87,6 +88,7 @@ export class ResearchRepository {
   readonly documents: ResearchDocumentRepository;
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
+  readonly figures: ResearchFigureRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -102,6 +104,7 @@ export class ResearchRepository {
     this.documents = new ResearchDocumentRepository(db, this, now);
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
+    this.figures = new ResearchFigureRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -241,6 +244,14 @@ export class ResearchRepository {
   }
 
   recordFigure(request: ResearchFigureRecordRequest): ResearchFigure {
+    this.getProject(request.projectId);
+    if (this.figures.managed(request.id)) throw new Error('research_figure_publication_immutable');
+    const previous = this.db.prepare('SELECT project_id,created_at FROM research_figures WHERE id = ?').get(request.id) as { project_id: string; created_at: string } | undefined;
+    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_figure_project_mismatch');
+    if (request.runId !== null) {
+      const run = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.runId) as { project_id: string } | undefined;
+      if (run === undefined || run.project_id !== request.projectId) throw new Error('research_figure_run_invalid');
+    }
     const timestamp = this.now();
     this.db
       .prepare(
@@ -257,7 +268,7 @@ export class ResearchRepository {
            updated_at = excluded.updated_at`
       )
       .run(request.id, request.projectId, request.title, request.codePath, JSON.stringify(request.dataPaths), JSON.stringify(request.outputPaths), request.status, request.runId, timestamp, timestamp);
-    return { ...request, createdAt: timestamp, updatedAt: timestamp };
+    return { ...request, createdAt: previous?.created_at ?? timestamp, updatedAt: timestamp };
   }
 
   createArtifact(input: ResearchArtifactCreateRequest): ResearchArtifact {
@@ -306,6 +317,7 @@ export class ResearchRepository {
 
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
     const current = this.requireEditableArtifact(input.id);
+    if (this.figures.hasArtifact(input.id)) throw new Error('research_figure_publication_immutable');
     const timestamp = this.now();
     return this.db.transaction(() => {
       this.db.prepare(
@@ -824,6 +836,7 @@ export class ResearchRepository {
         throw new Error('research_stage_artifact_invalid');
       }
       this.evidence.assertPublishable(artifact);
+      if (artifact.kind === 'figure') this.figures.forArtifact(artifact);
     }
     if (state.stage === 'review') this.runs.requireReviewPanel(projectId, state.artifactIds);
     if (state.stage === 'export') this.reviews.requireForStage(projectId, 'export');

@@ -26,6 +26,13 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
     }
     const url = new URL(request.url);
     if (url.hostname === 'research') {
+      const figure = /^\/figures\/([^/]+)\/([^/]+)\/(png|svg|pdf)\/([a-f0-9]{64})$/u.exec(url.pathname);
+      if (figure !== null) {
+        try {
+          return kernel.invokeCapability<unknown, Response>('research.figure.source', { projectId: decodeURIComponent(figure[1]), figureId: decodeURIComponent(figure[2]),
+            format: figure[3], sha256: figure[4] }).catch(() => new Response('Preview unavailable', { status: 404 }));
+        } catch { return new Response('Invalid path', { status: 400 }); }
+      }
       const experiment = /^\/experiments\/([^/]+)\/([^/]+)\/(input|output|log|notebook)\/([^/]+)\/([a-f0-9]{64})$/u.exec(url.pathname);
       if (experiment !== null) {
         try {

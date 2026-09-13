@@ -9,6 +9,7 @@ import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapsho
 import { executePythonNotebook } from './experiment-python';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
 import { runRExperimentProcess } from './experiment-native-process';
+import { figureRenderer, figureRendererPath, validateFigureOutput } from './figure-runner';
 import { indexText, indexLocatedText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
@@ -93,7 +94,7 @@ export class ResearchExperimentService {
     catch { return { file: record, content: bytes.toString('base64'), encoding: 'base64' }; }
   }
 
-  async publish(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
+  async snapshot(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
     return await this.task(async (signal) => {
       const run = this.repository.experiments.get(projectId, runId);
       if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
@@ -107,8 +108,14 @@ export class ResearchExperimentService {
         if (researchContentHash(await readResearchFile(root, 'manifest.json', experimentFileLimit)) !== researchContentHash(content)) throw new Error('research_experiment_manifest_changed');
       }
       signal.throwIfAborted();
-      return this.repository.experiments.publish(projectId, runId);
+      return run;
     });
+  }
+
+  async publish(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
+    await this.snapshot(projectId, runId);
+    this.requireOpen();
+    return this.repository.experiments.publish(projectId, runId);
   }
 
   evidenceSource(projectId: string, evidenceId: string): FileRequest | null {
@@ -154,18 +161,24 @@ export class ResearchExperimentService {
       prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       if (initial.request.engine === 'notebook' && !prepared.snapshot.packages.some((entry) => entry.name.toLowerCase() === 'ipykernel')) throw new Error('research_experiment_ipykernel_required');
-      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal);
+      if (initial.request.engine === 'matplotlib' && !prepared.snapshot.packages.some((entry) => entry.name.toLowerCase() === 'matplotlib')) throw new Error('research_figure_matplotlib_required');
+      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal,
+        initial.request.engine === 'matplotlib' ? { [figureRendererPath]: figureRenderer } : {});
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
       output = await this.executeProcess(initial, prepared, root, input, out, scratch, signal);
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
+      if (initial.request.engine === 'matplotlib') {
+        if (initial.request.figure === undefined) throw new Error('research_figure_options_invalid');
+        await validateFigureOutput(prepared, initial.request.figure, out, scratch, signal, this.run);
+      }
       await this.verifyProject(initial, signal);
       const current = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
       failure = error;
-      if (error instanceof ResearchProcessError) output = { exitCode: 1, stdout: error.stdout, stderr: error.stderr };
+      if (error instanceof ResearchProcessError) output = { exitCode: 1, stdout: output.stdout + error.stdout, stderr: output.stderr + error.stderr };
     }
     try {
       await createResearchDirectory(root, 'log');
@@ -195,7 +208,8 @@ export class ResearchExperimentService {
     const notebook = request.engine === 'notebook';
     const environment = { ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
       ROC_PARAMETERS_JSON: JSON.stringify(request.parameters), IPYTHONDIR: join(scratch, 'ipython'), JUPYTER_CONFIG_DIR: join(scratch, 'jupyter-config'),
-      JUPYTER_RUNTIME_DIR: join(scratch, 'jupyter-runtime'), JUPYTER_PATH: join(scratch, 'jupyter') };
+      JUPYTER_RUNTIME_DIR: join(scratch, 'jupyter-runtime'), JUPYTER_PATH: join(scratch, 'jupyter'),
+      ...(request.engine === 'matplotlib' ? { SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' } : {}) };
     if (notebook) {
       const kernel = await createResearchDirectory(scratch, 'jupyter/kernels/roc-experiment');
       await writeFile(join(kernel, 'kernel.json'), JSON.stringify({ argv: [executable, '-B', '-s', '-m', 'ipykernel_launcher', '-f', '{connection_file}'],
@@ -205,6 +219,7 @@ export class ResearchExperimentService {
     const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
       : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
       : notebook ? { command: prepared.python, args: ['-I', '-B', '-c', executePythonNotebook, source, join(root, 'notebook/executed.ipynb'), executable, String(Math.ceil(request.timeoutMs / 1000))] }
+      : request.engine === 'matplotlib' ? { command: executable, args: ['-B', '-s', join(input, figureRendererPath), 'render', source, output, JSON.stringify(request.figure), ...request.arguments] }
       : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
