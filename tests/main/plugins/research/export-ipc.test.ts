@@ -18,6 +18,7 @@ import { researchProjectSchema, researchTemplateSchema, researchWorkflowSnapshot
 import { researchExperimentEnvironmentSchema, researchExperimentExecutionSchema } from '../../../../src/shared/schemas/research-experiments';
 import { researchExportDeliverySchema, researchExportExecutionSchema, type ResearchExportPrepare } from '../../../../src/shared/schemas/research-exports';
 import { researchFigurePublicationSchema } from '../../../../src/shared/schemas/research-figures';
+import { researchProductionInputContentSchema, researchProductionInputSchema } from '../../../../src/shared/schemas/research-production-inputs';
 import { approveExportManuscript, crossrefLibraryEntries } from './export-test-helpers';
 import { libraryEntry } from './library-fixtures';
 
@@ -116,12 +117,21 @@ describe.skipIf(toolchain === undefined)('actual final export IPC and bundled to
     const pdf = record.files.find((file) => file.path === 'paper.pdf')!;
     const response = await capabilities.invoke<unknown, Response>('research.export.source', { projectId, exportId: record.id, sha256: pdf.sha256 });
     expect(researchContentHash(Buffer.from(await response.arrayBuffer()))).toBe(pdf.sha256);
-    await call('publishExport', { projectId, exportId: record.id, replacesExportId: null }, researchExportExecutionSchema);
+    const published = await call('publishExport', { projectId, exportId: record.id, replacesExportId: null }, researchExportExecutionSchema);
+    await expect(call('inspectProductionInput', { projectId, artifactId: published.artifactId }, researchProductionInputSchema))
+      .rejects.toMatchObject({ cause: { message: 'research_production_approval_required' } });
     const destinationPath = join(root, 'study.zip');
     await expect(call('writeExport', { projectId, exportId: record.id, destinationPath }, researchExportDeliverySchema)).rejects.toMatchObject({ cause: { message: 'research_export_approval_required' } });
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'start' });
     await call('transitionWorkflow', { projectId, expectedStage: 'export', action: 'complete' }, researchWorkflowSnapshotSchema);
     await call('transitionWorkflow', { projectId, expectedStage: 'export', action: 'approve' }, researchWorkflowSnapshotSchema);
+    const input = await call('inspectProductionInput', { projectId, artifactId: published.artifactId }, researchProductionInputSchema);
+    expect(input.source).toMatchObject({ kind: 'export', execution: { id: record.id, approval: 'approved' } });
+    const manuscript = await call('readProductionInputFile', { projectId, artifactId: published.artifactId, area: 'bundle', path: 'source/roc-manuscript.tex' }, researchProductionInputContentSchema);
+    expect(manuscript.encoding).toBe('utf8'); expect(manuscript.content).toContain('20\\%');
+    expect(input.files).toContainEqual(manuscript.file);
+    const data = await call('readProductionInputFile', { projectId, artifactId: published.artifactId, area: 'bundle', path: `provenance/experiments/${run.id}/input/data.csv` }, researchProductionInputContentSchema);
+    expect(data.content).toBe('improvement\n20\n');
     const delivery = await call('writeExport', { projectId, exportId: record.id, destinationPath }, researchExportDeliverySchema);
     const result = await execute(join(toolchain, 'python/bin/python3'), ['-I', '-B', '-c', `import hashlib,json,sys,zipfile
 with zipfile.ZipFile(sys.argv[1]) as archive:

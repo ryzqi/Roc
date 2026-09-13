@@ -1433,6 +1433,14 @@ export const researchMigrations: RocDatabaseMigration[] = [
       CREATE INDEX idx_research_export_executions_project ON research_export_executions(project_id,created_at);
       CREATE INDEX idx_research_library_citation_key ON research_library(json_extract(bibliography_json, '$.citationKey'));
     `
+  },
+  {
+    version: 13,
+    name: 'research_experiment_artifact_lookup',
+    sql: `
+      CREATE UNIQUE INDEX idx_research_experiment_artifact ON research_experiment_executions(json_extract(snapshot_json, '$.artifactId'))
+        WHERE json_extract(snapshot_json, '$.artifactId') IS NOT NULL;
+    `
   }
 ];
 

@@ -68,6 +68,8 @@ import { registerResearchFigureCapabilities, researchFigureCapabilities } from '
 import { registerResearchExportCapabilities, researchExportCapabilities } from './export-capabilities';
 import { ResearchExportService } from './export-service';
 import { ResearchExportSourceService } from './export-sources';
+import { ResearchProductionInputService } from './production-input-service';
+import { registerResearchProductionInputCapabilities, researchProductionInputCapabilities } from './production-input-capabilities';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -128,6 +130,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let experiments: ResearchExperimentService | null = null;
   let figures: ResearchFigureService | null = null;
   let exports: ResearchExportService | null = null;
+  let productionInputs: ResearchProductionInputService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -141,7 +144,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -170,6 +173,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       exports = researchExports;
       researchExports.recover();
       registerResearchExportCapabilities(context, researchRepository.exports, researchExports);
+      productionInputs = new ResearchProductionInputService(researchRepository, researchExperiments, researchFigures, researchExports);
+      registerResearchProductionInputCapabilities(context, productionInputs);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
       researchRepository.documents.recover();
@@ -252,7 +257,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchIndexer.start();
     },
     shutdown: async () => {
-      const results = await Promise.allSettled([exports?.shutdown(), figures?.shutdown(), experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      const results = await Promise.allSettled([productionInputs?.shutdown(), exports?.shutdown(), figures?.shutdown(), experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
+      productionInputs = null;
       exports = null;
       figures = null;
       experiments = null;

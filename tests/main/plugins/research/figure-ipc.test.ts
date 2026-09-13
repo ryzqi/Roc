@@ -16,6 +16,7 @@ import { researchClaimSchema, researchEvidenceSchema } from '../../../../src/sha
 import { researchFigurePublicationSchema } from '../../../../src/shared/schemas/research-figures';
 import { researchExperimentEnvironmentSchema, researchExperimentExecutionSchema, researchExperimentFileContentSchema } from '../../../../src/shared/schemas/research-experiments';
 import { researchFigureValidationSchema } from '../../../../src/shared/schemas/research-plotting';
+import { researchProductionInputContentSchema, researchProductionInputSchema } from '../../../../src/shared/schemas/research-production-inputs';
 import { verifySvgPreviews } from './figure-preview-helper';
 
 const tools = process.env.ROC_RESEARCH_TOOLCHAIN;
@@ -132,6 +133,8 @@ describe.skipIf(tools === undefined)('actual research figure rendering', () => {
     await call('createClaim', { projectId, artifactId: published.artifactId, subjectType: 'figure', content: 'The maximum measured response is 8.', status: 'supported', evidenceIds: [evidence.id] }, researchClaimSchema);
     const waiting = await call('transitionWorkflow', { projectId, expectedStage: 'figure', action: 'complete' }, researchWorkflowSnapshotSchema);
     expect(waiting.stages.find((stage) => stage.stage === 'figure')?.status).toBe('waiting_approval');
+    await expect(call('inspectProductionInput', { projectId, artifactId: published.artifactId }, researchProductionInputSchema))
+      .rejects.toMatchObject({ cause: { message: 'research_production_approval_required' } });
     const output = join(root, 'runs', run.id, 'output/figure.png');
     await writeFile(output, 'changed since review');
     await expect(call('transitionWorkflow', { projectId, expectedStage: 'figure', action: 'approve' }, researchWorkflowSnapshotSchema))
@@ -141,6 +144,14 @@ describe.skipIf(tools === undefined)('actual research figure rendering', () => {
     await call('transitionWorkflow', { projectId, expectedStage: 'figure', action: 'approve' }, researchWorkflowSnapshotSchema);
     expect((await call('getFigure', { projectId, figureId: published.id }, researchFigurePublicationSchema)).status).toBe('approved');
     await writeFile(join(workspace, 'data.csv'), 'changed workspace data');
+    const input = await call('inspectProductionInput', { projectId, artifactId: published.artifactId }, researchProductionInputSchema);
+    expect(input.source).toMatchObject({ kind: 'figure', figure: { id: published.id }, execution: { id: run.id, status: 'completed' } });
+    const data = await call('readProductionInputFile', { projectId, artifactId: published.artifactId, area: 'input', path: 'data.csv' }, researchProductionInputContentSchema);
+    expect(data).toMatchObject({ encoding: 'utf8', content: '1,2\n2,4\n3,8\n' });
+    expect(input.files).toContainEqual(data.file);
+    const image = await call('readProductionInputFile', { projectId, artifactId: published.artifactId, area: 'output', path: 'figure.png' }, researchProductionInputContentSchema);
+    expect(image.encoding).toBe('base64');
+    expect(researchContentHash(Buffer.from(image.content, 'base64'))).toBe(png.sha256);
     expect(researchContentHash(Buffer.from(await (await capabilities.invoke<typeof source, Response>('research.figure.source', source)).arrayBuffer()))).toBe(png.sha256);
     await writeFile(join(root, 'figure-review-result.json'), JSON.stringify({ runId: run.id, figureId: published.id, artifactId: published.artifactId, evidenceId: evidence.id, status: 'approved' }, null, 2));
   }, 60000);

@@ -89,6 +89,14 @@ export class ResearchExportService {
     return bytes;
   }
 
+  async inspect(projectId: string, id: string): Promise<ResearchExportExecution> {
+    return await this.task(async (signal) => {
+      const record = this.repository.exports.get(projectId, id);
+      await this.verifyContent(record, signal);
+      return record;
+    });
+  }
+
   async read(projectId: string, id: string, path: string): Promise<z.infer<typeof researchExportFileContentSchema>> {
     const record = this.repository.exports.get(projectId, id);
     const expected = record.files.find((file) => file.path === path);
@@ -183,6 +191,12 @@ export class ResearchExportService {
     this.repository.exports.requireCurrent(record.request);
     const current = await this.sources.capture(record.request, signal);
     if (exportSourceHash(current) !== record.sourceHash || exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
+    await this.verifyContent(record, signal);
+  }
+
+  private async verifyContent(record: ResearchExportExecution, signal: AbortSignal): Promise<void> {
+    if (record.status !== 'ready' || record.sources === null || record.sourceHash === null || record.archive === null) throw new Error('research_export_ready_required');
+    if (exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
     for (const file of record.files) { this.requireActive(signal); await this.file(record, file.path); }
     await hashExportArchive(this.repository.exports.root(record.projectId, record.id), record.archive, signal);
     this.requireActive(signal);

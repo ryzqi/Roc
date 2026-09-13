@@ -4,6 +4,7 @@ import type { Database } from 'better-sqlite3';
 import { researchExperimentExecutionSchema, type ResearchExperimentExecution, type ResearchExperimentEnvironment,
   type ResearchExperimentFile, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { ResearchRepository } from './repository';
+import type { ResearchArtifact } from '../../../shared/types';
 
 type ExecutionRow = { snapshot_json: string; root_path: string };
 const activeStatuses = new Set<ResearchExperimentExecution['status']>(['preparing', 'running']);
@@ -50,6 +51,14 @@ export class ResearchExperimentRepository {
 
   root(projectId: string, id: string): string { this.get(projectId, id); return this.row(id).root_path; }
   managed(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_experiment_executions WHERE run_id = ?').get(id) !== undefined; }
+  forArtifact(artifact: ResearchArtifact): ResearchExperimentExecution {
+    const row = this.db.prepare("SELECT run_id FROM research_experiment_executions WHERE json_extract(snapshot_json, '$.artifactId') = ? AND project_id = ?")
+      .get(artifact.id, artifact.projectId) as { run_id: string } | undefined;
+    if (row === undefined) throw new Error('research_experiment_execution_required');
+    const run = this.get(artifact.projectId, row.run_id);
+    if (artifact.kind !== 'experiment_run' || run.status !== 'completed' || run.artifactId !== artifact.id) throw new Error('research_experiment_artifact_invalid');
+    return run;
+  }
   list(projectId: string, limit: number): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')

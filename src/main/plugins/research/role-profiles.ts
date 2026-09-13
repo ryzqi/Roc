@@ -6,11 +6,14 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.evidence.capture': 'capture_evidence',
   'research.evidence.list': 'list_evidence',
   'research.artifacts.get': 'read_artifact',
+  'research.artifacts.inspectProduction': 'inspect_production_input',
+  'research.artifacts.readProductionFile': 'read_production_input_file',
   'research.review.readReport': 'read_review_report'
 };
 
 const readCapabilities = ['research.knowledge.search', 'research.evidence.list', 'research.artifacts.get'];
 const evidenceCapabilities = [...readCapabilities, 'research.evidence.capture'];
+const productionInputs = ['research.artifacts.inspectProduction', 'research.artifacts.readProductionFile'];
 
 const profiles: Record<ResearchStageRoleProfile['stage'], ResearchStageRoleProfile> = {
   discovery: { stage: 'discovery', role: 'research-discovery-agent', skillIds: ['roc-research-discovery'], allowedCapabilities: readCapabilities, outputKind: 'search_strategy' },
@@ -18,12 +21,12 @@ const profiles: Record<ResearchStageRoleProfile['stage'], ResearchStageRoleProfi
   reading: { stage: 'reading', role: 'paper-reading-agent', skillIds: ['roc-paper-reading'], allowedCapabilities: evidenceCapabilities, outputKind: 'reading_notes' },
   ideation: { stage: 'ideation', role: 'research-ideation-agent', skillIds: ['roc-research-ideation'], allowedCapabilities: evidenceCapabilities, outputKind: 'idea_canvas' },
   planning: { stage: 'planning', role: 'research-planning-agent', skillIds: ['roc-research-planning'], allowedCapabilities: evidenceCapabilities, outputKind: 'research_plan' },
-  experiment: { stage: 'experiment', role: 'experiment-agent', skillIds: ['roc-experiment-provenance'], allowedCapabilities: evidenceCapabilities, outputKind: 'experiment_run' },
-  figure: { stage: 'figure', role: 'scientific-figure-agent', skillIds: ['roc-scientific-figure'], allowedCapabilities: evidenceCapabilities, outputKind: 'figure' },
-  writing: { stage: 'writing', role: 'academic-writing-agent', skillIds: ['roc-academic-writing'], allowedCapabilities: evidenceCapabilities, outputKind: 'manuscript' },
-  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: [...readCapabilities, 'research.review.readReport'], outputKind: 'review_report' },
-  revision: { stage: 'revision', role: 'revision-agent', skillIds: ['roc-revision-coach'], allowedCapabilities: evidenceCapabilities, outputKind: 'manuscript' },
-  export: { stage: 'export', role: 'manuscript-export-agent', skillIds: ['roc-manuscript-export'], allowedCapabilities: readCapabilities, outputKind: 'export_package' }
+  experiment: { stage: 'experiment', role: 'experiment-agent', skillIds: ['roc-experiment-provenance'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'experiment_run' },
+  figure: { stage: 'figure', role: 'scientific-figure-agent', skillIds: ['roc-scientific-figure'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'figure' },
+  writing: { stage: 'writing', role: 'academic-writing-agent', skillIds: ['roc-academic-writing'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'manuscript' },
+  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: [...readCapabilities, ...productionInputs, 'research.review.readReport'], outputKind: 'review_report' },
+  revision: { stage: 'revision', role: 'revision-agent', skillIds: ['roc-revision-coach'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'manuscript' },
+  export: { stage: 'export', role: 'manuscript-export-agent', skillIds: ['roc-manuscript-export'], allowedCapabilities: [...readCapabilities, ...productionInputs], outputKind: 'export_package' }
 };
 
 export function getResearchStageRoleProfile(stage: ResearchStageRoleProfile['stage']): ResearchStageRoleProfile {

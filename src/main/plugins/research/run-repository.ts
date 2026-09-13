@@ -303,7 +303,7 @@ export class ResearchRunRepository {
     return rows.length;
   }
 
-  private requireActive(id: string, projectId: string): ResearchStageRun {
+  requireActive(id: string, projectId: string): ResearchStageRun {
     const run = this.get(id, projectId);
     const workflow = this.research.getWorkflow(projectId);
     const current = workflow.stages.find((stage) => stage.stage === run.stage);

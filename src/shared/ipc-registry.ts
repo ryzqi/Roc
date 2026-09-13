@@ -156,6 +156,8 @@ import { researchFigureIdRequestSchema, researchFigureListRequestSchema, researc
 import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
   researchExportListRequestSchema, researchExportPrepareSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
   researchExportWriteRequestSchema } from './schemas/research-exports';
+import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputRequestSchema,
+  researchProductionInputSchema } from './schemas/research-production-inputs';
 import {
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
@@ -372,6 +374,8 @@ export const ipcRegistry = {
     request({ key: 'researchWorkflowCancelRun', channel: 'roc:research:workflow-cancel-run', domain: 'research', method: 'cancelStageRun', kind: 'plugin', capabilityName: 'research.workflow.cancelRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchWorkflowRetryRun', channel: 'roc:research:workflow-retry-run', domain: 'research', method: 'retryStageRun', kind: 'plugin', capabilityName: 'research.workflow.retryRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunRetryRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchArtifactContent', channel: 'roc:research:artifact-content', domain: 'research', method: 'getArtifactContent', kind: 'plugin', capabilityName: 'research.artifacts.content', inputTransform: first, contract: methodContract(oneArg(researchArtifactContentRequestSchema), researchArtifactContentSchema.nullable()) }),
+    request({ key: 'researchProductionInputInspect', channel: 'roc:research:production-input-inspect', domain: 'research', method: 'inspectProductionInput', kind: 'plugin', capabilityName: 'research.artifacts.inspectProduction', inputTransform: first, contract: methodContract(oneArg(researchProductionInputRequestSchema), researchProductionInputSchema) }),
+    request({ key: 'researchProductionInputRead', channel: 'roc:research:production-input-read', domain: 'research', method: 'readProductionInputFile', kind: 'plugin', capabilityName: 'research.artifacts.readProductionFile', inputTransform: first, contract: methodContract(oneArg(researchProductionInputReadSchema), researchProductionInputContentSchema) }),
     request({ key: 'researchArtifactsCreate', channel: 'roc:research:artifacts-create', domain: 'research', method: 'createArtifact', kind: 'plugin', capabilityName: 'research.artifacts.create', inputTransform: first, contract: methodContract(oneArg(researchArtifactCreateRequestSchema), researchArtifactSchema) }),
     request({ key: 'researchArtifactsGet', channel: 'roc:research:artifacts-get', domain: 'research', method: 'getArtifact', kind: 'plugin', capabilityName: 'research.artifacts.get', inputTransform: first, contract: methodContract(oneArg(researchArtifactIdRequestSchema), researchArtifactSchema) }),
     request({ key: 'researchArtifactsList', channel: 'roc:research:artifacts-list', domain: 'research', method: 'listArtifacts', kind: 'plugin', capabilityName: 'research.artifacts.list', inputTransform: first, contract: methodContract(oneArg(researchArtifactListRequestSchema), researchArtifactSchema.array()) }),

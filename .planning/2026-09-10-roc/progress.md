@@ -222,3 +222,10 @@
 - 4f review 复现两项：嵌套入口使用 nested/ 下旧占位正文；crossref 父条目漏入导出，PDF 缺会议、编辑和年份。两项真实 PDF 回归先失败后通过（22.56 秒）：生成槽位与图稿改随入口目录；补齐父依赖、版本、依赖排序及引用键索引。追加缺父、循环、歧义和父版本变化测试。另复现 Tectonic 对 BibTeX 错误仍返回 0，已在导出边界拒绝该已知错误报告。关闭/迟到书目变化 2 项回归通过；Standards 其余审查及旧行为等价已通过，待修复复核。Spec 回合遇到临时限流，修复后再请求窄复核。
 - 4f 最终整组：246 项相关回归（含迁移）通过，34 项可选资源测试按环境跳过；4 项实际导出链路通过（47.73 秒），3 项 ZIP Python 回归通过，build/typecheck、check:ipc 与差异检查通过。Spec 最终未解决 0，Standards 已完成通用审查并正在最后窄复核。开始用 agent-development 技能核对后续生产工具/角色接线；当前只做源码盘点，未改该增量代码。
 - 4f 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 `reviews/04f-final-exports.md`，状态 Verified passing。最终验证与真实导出证据均已保留；独立提交后继续 Integration 4g。科研 Agent 真实工具接线、Idea Canvas/项目语言、完整 Renderer 和 Packaging 仍未完成。
+- 4f 已提交 `c64e3fa`，工作区干净。4g 按可独立验证的读取、受控副作用、真实产物完成三个增量推进，机器可读验收见 `agent-integration-acceptance.json`。先做 4g1：现有 read_artifact 只能读取冻结的描述/正文，生产工件的实际运行记录和文件内容尚不可达；新增读取须绑定本次批准输入、验证哈希，并在取消或过期后拒绝返回。
+- 4g1 已实现读取服务、角色工具和两个 IPC；初步 33 项定向测试及类型检查通过。继续补真实 LangChain 写作工具循环、图稿/导出 IPC 读取与 v12→v13 迁移验证，随后双轴 review；当前状态 Changed, unverified。
+- 新增写作测试已完成 SDK 工具循环，但断言误用不存在的 manuscript.markdown；真实图稿读取通过，导出读取因测试误用未登记 manuscript.md 被正确拒绝。按当前 schema/导出清单改为 latex 与 source/roc-manuscript.tex 后复验。
+- 4g1 新增回归 3 文件 11 项通过；真实图稿、中文 PDF/ZIP 读取均通过。开始以 c64e3fa 为固定基点审查暂存增量，同时执行完整相关回归与构建。测试路径检索曾误含不存在的 tests/main/ipc（rg exit 2），已使用实际根目录下的 IPC 测试文件。
+- 4g1 首轮完整相关回归 246 项、build/typecheck、check:ipc 通过。补充检查复现 UTF-8 可解码的 NUL 二进制与纯 ASCII PDF 被误发为模型文本；沿用现有文件预览的 NUL/PDF 边界阻止文本返回，新增两项回归并纳入最终复核。
+- 4g1 最终 36 文件、262 项回归通过（34 项可选资源跳过），真实图稿和中文 PDF/ZIP 读取各 1 项通过；build/typecheck、check:ipc、diff check 通过。Spec 最终未解决 0，独立 9/9 回归通过；Standards 最终窄复核待返回。
+- 4g1 完成：Standards 最终硬违反 0、判断项 0、未解决 0，独立 12/12 回归通过；Spec 最终未解决 0。审查记录 reviews/04g1-production-inputs.md，验收表只将 4g1 标为通过，状态 Verified passing；本地独立提交后下一步为 4g2，整体 Production/Agent 接线/Renderer/Packaging 仍未完成。
