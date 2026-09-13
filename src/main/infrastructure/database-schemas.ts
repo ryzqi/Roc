@@ -1418,6 +1418,21 @@ export const researchMigrations: RocDatabaseMigration[] = [
       );
       CREATE INDEX idx_research_figure_publications_project ON research_figure_publications(project_id,created_at);
     `
+  },
+  {
+    version: 12,
+    name: 'research_export_executions',
+    sql: `
+      CREATE TABLE research_export_executions (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        request_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('preparing','ready','failed','cancelled','interrupted')),
+        artifact_id TEXT UNIQUE REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        snapshot_json TEXT NOT NULL, root_path TEXT NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE(project_id,request_id)
+      );
+      CREATE INDEX idx_research_export_executions_project ON research_export_executions(project_id,created_at);
+      CREATE INDEX idx_research_library_citation_key ON research_library(json_extract(bibliography_json, '$.citationKey'));
+    `
   }
 ];
 

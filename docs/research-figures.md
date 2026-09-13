@@ -48,7 +48,7 @@ await research.publishFigure({ projectId, runId, replacesFigureId: null });
 roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf}/{sha256}
 ```
 
-图稿与实验来源在工作区原文件变化后仍可读取。完整编辑界面和论文最终导出由后续增量接入。
+图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)；完整编辑界面由 Renderer 增量接入。
 
 ## 验证
 

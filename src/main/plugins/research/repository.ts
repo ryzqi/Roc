@@ -49,6 +49,7 @@ import { ResearchDocumentRepository } from './document-repository';
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchFigureRepository } from './figure-repository';
+import { ResearchExportRepository } from './export-repository';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
@@ -89,6 +90,7 @@ export class ResearchRepository {
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
   readonly figures: ResearchFigureRepository;
+  readonly exports: ResearchExportRepository;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -105,6 +107,7 @@ export class ResearchRepository {
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
     this.figures = new ResearchFigureRepository(db, this, now);
+    this.exports = new ResearchExportRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
@@ -318,6 +321,7 @@ export class ResearchRepository {
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
     const current = this.requireEditableArtifact(input.id);
     if (this.figures.hasArtifact(input.id)) throw new Error('research_figure_publication_immutable');
+    if (this.exports.hasArtifact(input.id)) throw new Error('research_export_publication_immutable');
     const timestamp = this.now();
     return this.db.transaction(() => {
       this.db.prepare(
@@ -330,6 +334,19 @@ export class ResearchRepository {
       );
       this.appendEvent(current.projectId, current.stage, 'artifact_updated', input.title ?? current.title, { artifactId: input.id }, timestamp);
       return this.getArtifact(input.id);
+    })();
+  }
+
+  supersedeArtifact(previousId: string, replacementId: string): void {
+    this.db.transaction(() => {
+      const previous = this.requireEditableArtifact(previousId);
+      const replacement = this.requireEditableArtifact(replacementId);
+      const stage = this.readStage(previous.projectId, previous.stage);
+      if (previous.id === replacement.id || previous.projectId !== replacement.projectId || previous.stage !== replacement.stage
+        || !stage.artifactIds.includes(previousId) || !stage.artifactIds.includes(replacementId)) throw new Error('research_artifact_replacement_invalid');
+      this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE id = ?").run(this.now(), previousId);
+      this.db.prepare('UPDATE research_stage_states SET artifact_ids_json = ? WHERE project_id = ? AND stage = ?')
+        .run(JSON.stringify(stage.artifactIds.filter((id) => id !== previousId)), previous.projectId, previous.stage);
     })();
   }
 
@@ -839,7 +856,10 @@ export class ResearchRepository {
       if (artifact.kind === 'figure') this.figures.forArtifact(artifact);
     }
     if (state.stage === 'review') this.runs.requireReviewPanel(projectId, state.artifactIds);
-    if (state.stage === 'export') this.reviews.requireForStage(projectId, 'export');
+    if (state.stage === 'export') {
+      this.reviews.requireForStage(projectId, 'export');
+      for (const id of state.artifactIds) this.exports.forArtifact(this.getArtifact(id));
+    }
   }
 
   private moveStage(

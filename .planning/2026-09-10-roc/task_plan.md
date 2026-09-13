@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a 工具链、4b 模板后端、4c 文献库/全文解析/项目增量索引、4d Python/Notebook/R/Julia 实验、4e 可复现绘图与图稿审核已完成；继续 4f 最终论文/参考文献/图稿导出，再完成 Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow 与 Production 4a–4f 后端已完成；继续 4g 科研 Agent 生产工具和真实产物接线，再完成 Idea Canvas/项目语言、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -53,7 +53,9 @@ Phase 3 — Implementation（Production）
 - [x] Production 4d1：Python/Notebook 实验、锁文件/环境校验、输入快照、日志/输出、取消/中断恢复与 provenance；双轴 review、201 项相关回归、7 项真实实验用例及构建通过。
 - [x] Production 4d2：R/Julia 项目环境探测与脚本执行；双轴 review、202 项相关回归、14 项真实运行/进程回归及构建通过。
 - [x] Production 4e：可复现科研绘图、PNG/SVG/PDF 输出和图稿审核；双轴 review、215 项相关回归、5 项真实绘图/审核/Electron 预览测试与构建通过。
-- [ ] Production 4f：论文/参考文献/图稿最终导出及审核闸门接线。
+- [x] Production 4f：论文/参考文献/图稿最终导出及审核闸门接线；双轴 review、246 项相关回归、4 项真实 PDF/ZIP 链路、3 项 ZIP Python 回归与构建通过。
+- [ ] Integration 4g：科研 Agent 生产工具、项目/运行作用域、真实产物关联和取消/重试接线。
+- [ ] Integration 4h：结构化 Idea Canvas、项目晋升、项目级中英语言设置。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 

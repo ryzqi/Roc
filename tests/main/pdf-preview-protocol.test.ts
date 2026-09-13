@@ -148,6 +148,19 @@ describe('pdf preview protocol', () => {
     expect(await response.text()).toBe('Preview unavailable');
   });
 
+  it('routes prepared export PDFs by identity and refuses archive or unversioned paths', async () => {
+    const invokeCapability = vi.fn().mockResolvedValue(new Response('export-pdf'));
+    const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));
+    const hash = 'c'.repeat(64);
+    expect((await handler(new Request(`roc-preview://research/exports/project%201/export%202/${hash}.pdf`))).status).toBe(200);
+    expect(invokeCapability).toHaveBeenCalledWith('research.export.source', { projectId: 'project 1', exportId: 'export 2', sha256: hash });
+    expect((await handler(new Request(`roc-preview://research/exports/project/export/${hash}.zip`))).status).toBe(404);
+    expect((await handler(new Request(`roc-preview://research/exports/%ZZ/export/${hash}.pdf`))).status).toBe(400);
+    invokeCapability.mockRejectedValueOnce(new Error('private export path'));
+    const response = await handler(new Request(`roc-preview://research/exports/project/export/${hash}.pdf`));
+    expect(response.status).toBe(404); expect(await response.text()).toBe('Preview unavailable');
+  });
+
   it('rejects malformed document routes and conceals unavailable source details', async () => {
     const invokeCapability = vi.fn().mockRejectedValue(new Error('private document path'));
     const handler = captureHandler(() => ({ invokeCapability } as unknown as MainKernelBootstrap));

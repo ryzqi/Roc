@@ -26,6 +26,18 @@ export class ResearchLibraryRepository {
         .map((entry) => (entry as { project_id: string }).project_id) });
   }
 
+  resolveCitationKey(projectId: string, citationKey: string): LibraryItem {
+    this.research.getProject(projectId);
+    const rows = this.db.prepare(`SELECT l.id, EXISTS (
+      SELECT 1 FROM research_library_projects p WHERE p.item_id = l.id AND p.project_id = ?
+    ) AS linked FROM research_library l WHERE l.archived = 0 AND json_extract(l.bibliography_json, '$.citationKey') = ?
+      ORDER BY linked DESC,l.id`).all(projectId, citationKey) as Array<{ id: string; linked: number }>;
+    if (rows.length === 0) throw new Error('research_library_citation_key_missing');
+    const candidates = rows.filter((row) => row.linked === rows[0].linked);
+    if (candidates.length !== 1) throw new Error('research_library_citation_key_ambiguous');
+    return this.get(candidates[0].id);
+  }
+
   list(request: z.infer<typeof researchLibraryListRequestSchema>): LibraryItem[] {
     if (request.projectId !== null) this.research.getProject(request.projectId);
     const query = `%${request.query.trim().replace(/[\\%_]/gu, '\\$&')}%`;

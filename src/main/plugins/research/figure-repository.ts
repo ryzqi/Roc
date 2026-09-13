@@ -58,11 +58,7 @@ export class ResearchFigureRepository {
         subjectType, subjectId: subjectType === 'figure' ? id : artifact.id, sourceType: 'experiment', sourceId: runId,
         locator: `inputs:${run.inputHash}; manifest:${manifestHash}`, excerpt: figure.title });
       if (previous !== null) {
-        const stage = this.research.getWorkflow(projectId).stages.find((entry) => entry.stage === 'figure');
-        if (stage === undefined || !stage.artifactIds.includes(previous.artifactId)) throw new Error('research_figure_replacement_invalid');
-        this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE id = ?").run(record.createdAt, previous.artifactId);
-        this.db.prepare("UPDATE research_stage_states SET artifact_ids_json = ? WHERE project_id = ? AND stage = 'figure'")
-          .run(JSON.stringify(stage.artifactIds.filter((artifactId) => artifactId !== previous.artifactId)), projectId);
+        this.research.supersedeArtifact(previous.artifactId, artifact.id);
         this.db.prepare(`INSERT INTO research_workflow_events (id,project_id,stage,type,message,payload_json,created_at)
           VALUES (?,?,'figure','figure_replaced',?,?,?)`).run(randomUUID(), projectId, '图稿已更新，旧图稿及其证据保留在历史中。',
           JSON.stringify({ previousFigureId: previous.id, figureId: id, artifactId: artifact.id }), record.createdAt);

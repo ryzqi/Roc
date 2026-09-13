@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import { renderManuscriptLatex } from './latex-source';
 
 import {
   researchClaimCreateRequestSchema,
@@ -169,7 +170,7 @@ export class ResearchEvidenceRepository {
     const artifact = this.artifacts.requireEditable(request.artifactId);
     if (artifact.kind !== 'manuscript') throw new Error('research_manuscript_artifact_required');
     const claims = this.resolveManuscriptClaims(artifact, request.sections);
-    const latex = renderLatex(request.sections, claims, this.evidenceForClaims(claims, artifact.projectId));
+    const latex = renderManuscriptLatex(request.sections, claims, this.evidenceForClaims(claims, artifact.projectId));
     const record: ResearchManuscript = {
       ...request, projectId: artifact.projectId, latex,
       contentHash: hash(latex), claimsHash: hashClaims(claims), updatedAt: this.now()
@@ -226,7 +227,7 @@ export class ResearchEvidenceRepository {
     const claims = this.resolveManuscriptClaims(artifact, manuscript.sections);
     if (manuscript.projectId !== artifact.projectId || manuscript.claimsHash !== hashClaims(claims) ||
         manuscript.contentHash !== hash(manuscript.latex) ||
-        manuscript.latex !== renderLatex(manuscript.sections, claims, this.evidenceForClaims(claims, artifact.projectId))) {
+        manuscript.latex !== renderManuscriptLatex(manuscript.sections, claims, this.evidenceForClaims(claims, artifact.projectId))) {
       throw new Error('research_manuscript_stale');
     }
     return { manuscript, claims };
@@ -255,7 +256,7 @@ export class ResearchEvidenceRepository {
     for (const id of claim.evidenceIds) this.getEvidence(id, claim.projectId);
   }
 
-  private getEvidence(id: string, projectId: string): ResearchEvidence {
+  getEvidence(id: string, projectId: string): ResearchEvidence {
     const row = this.db.prepare(`SELECT ${evidenceColumns} FROM research_evidence WHERE id = ?`).get(id);
     if (row === undefined) throw new Error('research_evidence_not_found');
     const evidence = researchEvidenceSchema.parse(row);
@@ -316,29 +317,4 @@ function hash(value: string): string {
 
 function hashClaims(claims: ResearchClaim[]): string {
   return hash(JSON.stringify(claims.map(({ id, version, content, status, evidenceIds }) => ({ id, version, content, status, evidenceIds }))));
-}
-
-function renderLatex(sections: ResearchManuscript['sections'], claims: ResearchClaim[], evidence: ResearchEvidence[]): string {
-  const byId = new Map(claims.map((claim) => [claim.id, claim]));
-  const body = sections.map((section) => [
-    `\\section{${escapeLatex(section.title)}}`,
-    ...section.claimIds.map((id) => {
-      const claim = byId.get(id);
-      if (claim === undefined) throw new Error('research_claim_not_found');
-      return `% claim: ${id}; version: ${claim.version}\n${escapeLatex(claim.content)}\\cite{${claim.evidenceIds.join(',')}}`;
-    })
-  ].join('\n\n')).join('\n\n');
-  const bibliography = evidence.map((source) =>
-    `% source-version: ${source.sourceVersion}; excerpt-hash: ${source.contentHash}\n` +
-    `\\bibitem{${source.id}} ${escapeLatex(source.title)}. ${escapeLatex(source.sourceId)}. ${escapeLatex(source.locator)}.`
-  ).join('\n');
-  return `${body}\n\n\\begin{thebibliography}{99}\n${bibliography}\n\\end{thebibliography}\n`;
-}
-
-function escapeLatex(text: string): string {
-  const replacements: Record<string, string> = {
-    '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', '%': '\\%', '&': '\\&',
-    '#': '\\#', '_': '\\_', '$': '\\$', '~': '\\textasciitilde{}', '^': '\\textasciicircum{}'
-  };
-  return text.replace(/[\\{}%&#_$~^]/gu, (character) => replacements[character]);
 }
