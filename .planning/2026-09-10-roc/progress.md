@@ -241,3 +241,6 @@
 
 - 5a 已实现：项目仪表盘显示流程轨道、下一步、产物、事件时间线和阶段角色启动/取消/重试；审稿批准需显式接受或修订。
 - 5a 完成：Standards/Spec 最终未解决 0。审查记录 reviews/05a-project-dashboard.md。research-view 3/3、导航/壳层回归与 typecheck 通过。状态 Verified passing；本地独立提交后继续文献库/阅读器。
+
+- 5b 已实现：文献库视图支持检索导入、DOI 导入、项目关联，以及打开已解析全文。
+- 5b 完成：Standards/Spec 未解决 0。审查记录 reviews/05b-library-reader.md。research-view 4/4 与 typecheck 通过。状态 Verified passing；下一步 Idea Canvas 编辑器。

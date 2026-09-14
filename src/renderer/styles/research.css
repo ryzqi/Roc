@@ -676,3 +676,65 @@
     gap: 4px;
   }
 }
+
+.research-library-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.research-library-toolbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-library-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.9fr);
+  gap: 24px;
+  min-width: 0;
+}
+
+.research-library-row--active {
+  border-color: var(--accent);
+}
+
+.research-reader {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.research-reader h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.research-reader-content {
+  display: grid;
+  gap: 12px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.research-reader-content span {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.research-reader-content p {
+  margin: 4px 0 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .research-library-layout {
+    grid-template-columns: 1fr;
+  }
+}

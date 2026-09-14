@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type {
   ResearchArtifact,
+  ResearchDocument,
+  ResearchDocumentParse,
   ResearchEmbeddingConfig,
   ResearchKnowledgeSearchResult,
+  ResearchLibraryItem,
   ResearchLiterature,
   ResearchProject,
   ResearchStageRun,
@@ -15,6 +18,7 @@ import type {
 import { unwrap } from '../../loaded-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 import { researchStageLabels } from './research-workflow';
 
@@ -33,9 +37,15 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'literature' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
+  const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
+  const [libraryScope, setLibraryScope] = useState<'project' | 'all'>('project');
+  const [doi, setDoi] = useState('');
+  const [openLibraryItem, setOpenLibraryItem] = useState<ResearchLibraryItem | null>(null);
+  const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
+  const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [knowledgeResult, setKnowledgeResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const [embeddingConfigs, setEmbeddingConfigs] = useState<ResearchEmbeddingConfig[]>([]);
@@ -231,6 +241,76 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+  async function loadLibrary(projectId = selectedProjectId, scope = libraryScope, query = literatureQuery): Promise<void> {
+    const result = await client.api.research.listLibrary({
+      projectId: scope === 'project' ? projectId : null,
+      query: query.trim(),
+      includeArchived: false,
+      limit: 100
+    });
+    setLibraryItems(unwrap('文献库', result));
+  }
+
+  async function importDoi(): Promise<void> {
+    if (doi.trim().length === 0) return;
+    setWorking(true);
+    try {
+      unwrap('导入 DOI', await client.api.research.importLibraryDoi({ doi: doi.trim(), projectId: selectedProjectId }));
+      await loadLibrary();
+      setError(null);
+    } catch (importError: unknown) {
+      setError(importError instanceof Error ? importError.message : 'DOI 导入失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function importRecord(record: ResearchLiterature): Promise<void> {
+    setWorking(true);
+    try {
+      unwrap('导入文献', await client.api.research.importLibraryRecord({
+        record, citationKey: (record.doi ?? record.externalId).replace(/[^A-Za-z0-9]+/g, '').slice(0, 40) || 'cite', projectId: selectedProjectId
+      }));
+      await loadLibrary();
+      setError(null);
+    } catch (importError: unknown) {
+      setError(importError instanceof Error ? importError.message : '文献导入失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function linkItem(item: ResearchLibraryItem, linked: boolean): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('关联文献', await client.api.research.linkLibraryItem({ id: item.id, projectId: selectedProjectId, linked }));
+      await loadLibrary();
+      setError(null);
+    } catch (linkError: unknown) {
+      setError(linkError instanceof Error ? linkError.message : '文献关联失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function openItem(item: ResearchLibraryItem): Promise<void> {
+    setWorking(true);
+    try {
+      const documents = unwrap('文献附件', await client.api.research.listDocuments({ libraryItemId: item.id }));
+      setOpenLibraryItem(item);
+      setOpenDocuments(documents);
+      const ready = documents.find((document) => document.status === 'ready' && document.currentParseId !== null);
+      if (ready?.currentParseId === null || ready === undefined) setOpenContent(null);
+      else setOpenContent(unwrap('文献全文', await client.api.research.getDocumentContent({ documentId: ready.id, parseId: ready.currentParseId })));
+      setError(null);
+    } catch (openError: unknown) {
+      setError(openError instanceof Error ? openError.message : '文献阅读失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function searchKnowledge(): Promise<void> {
     if (knowledgeQuery.trim().length === 0) return;
     setWorking(true);
@@ -313,13 +393,14 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       <nav className="research-tabs" aria-label="科研工作台视图">
         {([
           ['workflow', '流程'],
-          ['literature', '论文检索'],
+          ['library', '文献库'],
           ['knowledge', '知识库'],
           ['embedding', '嵌入配置']
         ] as const).map(([tab, label]) => (
           <button className={activeTab === tab ? 'research-tab research-tab--active' : 'research-tab'} key={tab} type="button" onClick={() => {
             setActiveTab(tab);
             if (tab === 'embedding') void loadEmbeddingConfigs();
+            if (tab === 'library') void loadLibrary();
           }}>
             {label}
           </button>
@@ -420,8 +501,28 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         </div>
       ) : null}
 
-      {activeTab === 'literature' ? (
-        <LiteraturePanel query={literatureQuery} results={literatureResults} working={working} onQueryChange={setLiteratureQuery} onSearch={() => void searchLiterature()} />
+      {activeTab === 'library' ? (
+        <ResearchLibraryPanel
+          doi={doi}
+          items={libraryItems}
+          onChangeDoi={setDoi}
+          onImportDoi={() => void importDoi()}
+          onImportRecord={(record) => void importRecord(record)}
+          onLink={(item, linked) => void linkItem(item, linked)}
+          onOpen={(item) => void openItem(item)}
+          onQueryChange={setLiteratureQuery}
+          onSearch={() => void searchLiterature()}
+          onSearchLibrary={() => void loadLibrary()}
+          onScopeChange={(value) => { setLibraryScope(value); void loadLibrary(selectedProjectId, value); }}
+          openContent={openContent}
+          openDocuments={openDocuments}
+          openItem={openLibraryItem}
+          projectId={selectedProjectId}
+          query={literatureQuery}
+          results={literatureResults}
+          scope={libraryScope}
+          working={working}
+        />
       ) : null}
       {activeTab === 'knowledge' ? (
         <KnowledgePanel query={knowledgeQuery} result={knowledgeResult} working={working} onQueryChange={setKnowledgeQuery} onSearch={() => void searchKnowledge()} />
@@ -445,52 +546,6 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onSave={() => void saveEmbeddingConfig()}
         />
       ) : null}
-    </section>
-  );
-}
-
-function LiteraturePanel({
-  query,
-  results,
-  working,
-  onQueryChange,
-  onSearch
-}: {
-  query: string;
-  results: ResearchLiterature[];
-  working: boolean;
-  onQueryChange: (value: string) => void;
-  onSearch: () => void;
-}): React.JSX.Element {
-  return (
-    <section className="research-tool-panel">
-      <div className="research-tool-heading">
-        <div>
-          <div className="research-section-label">Literature Search</div>
-          <h2>论文检索</h2>
-          <p>OpenAlex、Crossref、Semantic Scholar、arXiv、PubMed 和 Europe PMC。</p>
-        </div>
-        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
-          <input aria-label="检索论文" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
-          <button className="action-button action-button--primary" disabled={working} type="submit">
-            <Send aria-hidden="true" size={15} />
-            检索
-          </button>
-        </form>
-      </div>
-      <div className="research-literature-list">
-        {results.length === 0 ? <div className="research-loading">输入问题开始检索。</div> : results.map((record) => (
-          <article className="research-literature-row" key={record.id}>
-            <div className="research-literature-source">{record.source} {record.publishedYear === null ? '' : `· ${record.publishedYear}`}</div>
-            <h3>{record.title}</h3>
-            <p>{record.abstract ?? '暂无摘要'}</p>
-            <div className="research-literature-meta">
-              <span>{record.authors.slice(0, 3).join('、') || '作者信息待补充'}</span>
-              <span>{record.doi ?? '无 DOI'}</span>
-            </div>
-          </article>
-        ))}
-      </div>
     </section>
   );
 }

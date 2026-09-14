@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -39,6 +39,46 @@ describe('ResearchView project dashboard', () => {
     expect(text('research-current-stage')).toBe('审稿');
     await click('research-review-accept');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve', reviewDecision: 'accept', expectedStage: 'review' }));
+  });
+
+  it('imports a search hit into the library and opens parsed reader text', async () => {
+    const record: ResearchLiterature = {
+      id: 'openalex:1', source: 'openalex', externalId: '1', doi: '10.1234/paper', title: 'Measured study',
+      authors: ['Jane Doe'], abstract: 'Measured improvement.', publishedYear: 2026, citationCount: 1,
+      url: null, openAccessUrl: null, importedAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z'
+    };
+    const item: ResearchLibraryItem = {
+      id: 'lib_1', metadata: record, bibliography: { citationKey: 'doe2026', entryType: 'article', fields: { title: record.title }, preambles: [], csl: null,
+        title: record.title, authors: record.authors, doi: record.doi, publishedYear: 2026, abstract: record.abstract, url: null },
+      sources: [], projectIds: ['research_1'], revision: 1, archived: false, createdAt: record.importedAt, updatedAt: record.updatedAt
+    };
+    const document: ResearchDocument = {
+      id: 'doc_1', libraryItemId: item.id, filename: 'paper.pdf', mediaType: 'application/pdf', sourceHash: 'a'.repeat(64),
+      size: 12, status: 'ready', currentParseId: 'parse_1', activeParseId: null, error: null, createdAt: record.importedAt, updatedAt: record.updatedAt
+    };
+    const parse: ResearchDocumentParse = {
+      run: { id: 'parse_1', documentId: 'doc_1', status: 'ready', error: null, createdAt: record.importedAt, finishedAt: record.updatedAt },
+      content: { sourceHash: document.sourceHash, parserVersion: 'roc-pdf-1', pageCount: 1, content: 'Measured improvement.', warnings: [],
+        assets: [], blocks: [{ id: 'b1', kind: 'paragraph', label: 'Body', text: 'Measured improvement.', locator: 'page 1', imageAssetId: null, locations: [] }] }
+    };
+    const api = createResearchApi();
+    api.searchLiterature.mockResolvedValue({ ok: true, data: [record] });
+    api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
+    api.importLibraryRecord.mockResolvedValue({ ok: true, data: { items: [item], createdCount: 1, duplicateCount: 0 } });
+    api.listDocuments.mockResolvedValue({ ok: true, data: [document] });
+    api.getDocumentContent.mockResolvedValue({ ok: true, data: parse });
+    await renderView(api);
+    await clickTab('文献库');
+    setInput('research-library-query', 'evidence graph');
+    await clickSubmit('research-library-panel');
+    expect(api.searchLiterature).toHaveBeenCalled();
+    const importButton = Array.from(documentButtons()).find((button) => button.textContent?.includes('导入文献库'));
+    expect(importButton).not.toBeUndefined();
+    await act(async () => { importButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { await Promise.resolve(); });
+    expect(api.importLibraryRecord).toHaveBeenCalled();
+    await click(`research-library-open-${item.id}`);
+    expect(text('research-reader-content')).toContain('Measured improvement.');
   });
 
   it('starts a stage role with the typed instruction', async () => {
@@ -78,10 +118,16 @@ function createResearchApi(overrides: {
     cancelStageRun: vi.fn(),
     retryStageRun: vi.fn(),
     createProject: vi.fn(),
-    searchLiterature: vi.fn(),
+    searchLiterature: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     searchKnowledge: vi.fn(),
     listEmbeddingConfigs: vi.fn(),
-    saveEmbeddingConfig: vi.fn()
+    saveEmbeddingConfig: vi.fn(),
+    listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    importLibraryDoi: vi.fn(),
+    importLibraryRecord: vi.fn(),
+    linkLibraryItem: vi.fn(),
+    listDocuments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getDocumentContent: vi.fn()
   };
 }
 
@@ -150,4 +196,30 @@ function setValue(testId: string, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(textarea, value);
   textarea?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function clickTab(label: string): Promise<void> {
+  const button = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === label);
+  expect(button).not.toBeUndefined();
+  await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await act(async () => { await Promise.resolve(); });
+}
+
+async function clickSubmit(testId: string): Promise<void> {
+  const form = document.querySelector(`[data-testid="${testId}"] form`);
+  expect(form).not.toBeNull();
+  await act(async () => { form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  await act(async () => { await Promise.resolve(); });
+}
+
+function setInput(testId: string, value: string): void {
+  const input = document.querySelector<HTMLInputElement>(`[data-testid="${testId}"]`);
+  expect(input).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function documentButtons(): HTMLButtonElement[] {
+  return Array.from(document.querySelectorAll('button'));
 }
