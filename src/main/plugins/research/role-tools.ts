@@ -3,10 +3,13 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 import { z } from 'zod';
 
 import { researchLiteratureSearchRequestSchema } from '../../../shared/schemas/research';
+import { researchOwnedExperimentStartSchema } from '../../../shared/schemas/research-experiments';
+import { researchOwnedExportPrepareSchema } from '../../../shared/schemas/research-exports';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputSchema,
   type ResearchProductionInput } from '../../../shared/schemas/research-production-inputs';
 import type { ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult, ResearchLiterature, ResearchStageRun } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
+import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchRepository } from './repository';
 import type { ResearchExecutionContext } from './run-repository';
 
@@ -16,6 +19,7 @@ export function createResearchRoleTools(input: {
   repository: ResearchRepository;
   capabilities: RocCapabilityRegistry;
   signal: AbortSignal;
+  effects?: ResearchProductionEffectService;
 }): StructuredToolInterface[] {
   const assertActive = () => {
     input.signal.throwIfAborted();
@@ -28,6 +32,12 @@ export function createResearchRoleTools(input: {
     if (artifact === undefined) throw new Error('research_artifact_not_in_run_inputs');
     return artifact;
   };
+  const effects = () => {
+    assertActive();
+    if (input.effects === undefined) throw new Error('research_production_effects_unavailable');
+    return input.effects;
+  };
+  const after = <T>(value: T): T => { assertActive(); return value; };
   const factories: Record<string, () => StructuredToolInterface> = {
     inspect_production_input: () => tool(async ({ artifactId, section, offset, limit }) => {
       requireInput(artifactId);
@@ -94,7 +104,68 @@ export function createResearchRoleTools(input: {
       assertActive();
       return records.map((record) => ({ ...record, abstract: record.abstract?.slice(0, 4000) ?? null }));
     }, { name: 'search_literature', description: '通过开放学术 API 查找文献；真实摘要自动进入全局知识库，之后可检索和捕获证据。',
-      schema: researchLiteratureSearchRequestSchema })
+      schema: researchLiteratureSearchRequestSchema }),
+    read_workspace_file: () => tool(async ({ path, offset, limit }) => {
+      const file = await effects().readWorkspaceFile(input.run.id, input.run.projectId, path);
+      return after({ path: file.path, sha256: file.sha256, revision: file.revision, ...page(file.content, offset, limit) });
+    }, { name: 'read_workspace_file', description: '读取当前项目内的脚本或数据文本。项目身份由服务绑定；结果按字符分页。',
+      schema: z.object({ path: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
+    save_workspace_file: () => tool(async ({ path, content, expectedHash }) => {
+      const file = await effects().saveWorkspaceFile(input.run.id, input.run.projectId, { path, content, expectedHash });
+      return after({ path: file.path, sha256: file.sha256, size: file.size, revision: file.revision });
+    }, { name: 'save_workspace_file', description: '按 expectedHash 写入当前项目脚本或数据。新建传 null；冲突或取消后的迟到写入会被拒绝。',
+      schema: z.object({ path: z.string().min(1), content: z.string().max(1024 * 1024), expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
+    start_experiment: () => tool(async (request) => {
+      if (input.run.stage === 'figure' && request.engine !== 'matplotlib') throw new Error('research_figure_engine_required');
+      if (input.run.stage === 'experiment' && request.engine === 'matplotlib') throw new Error('research_experiment_engine_invalid');
+      const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
+      return after(summarizeExperiment(started));
+    }, { name: 'start_experiment', description: '启动当前项目的实验或绘图运行。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
+      schema: researchOwnedExperimentStartSchema }),
+    get_experiment: () => tool(async ({ experimentId }) => {
+      return after(summarizeExperiment(effects().getExperiment(input.run.id, input.run.projectId, experimentId)));
+    }, { name: 'get_experiment', description: '读取本次运行创建的实验或绘图执行状态，不含二进制内容。',
+      schema: z.object({ experimentId: z.string().min(1) }).strict() }),
+    publish_experiment: () => tool(async ({ experimentId }) => {
+      const published = await effects().publishExperiment(input.run.id, input.run.projectId, experimentId);
+      return after(summarizeExperiment(published));
+    }, { name: 'publish_experiment', description: '发布本次运行完成的实验。取消或替换后的迟到发布会被拒绝。',
+      schema: z.object({ experimentId: z.string().min(1) }).strict() }),
+    publish_figure: () => tool(async ({ experimentId, replacesFigureId }) => {
+      const published = await effects().publishFigure(input.run.id, input.run.projectId, experimentId, replacesFigureId);
+      return after({ figureId: published.id, artifactId: published.artifactId, runId: published.runId, status: published.status, replacesFigureId: published.replacesFigureId });
+    }, { name: 'publish_figure', description: '把本次运行完成的绘图执行为图稿。replacesFigureId 指向被替换的草稿；取消后不能发布。',
+      schema: z.object({ experimentId: z.string().min(1), replacesFigureId: z.string().min(1).nullable() }).strict() }),
+    read_template_file: () => tool(async ({ templateId, path, offset, limit }) => {
+      const file = await effects().readTemplateFile(input.run.id, input.run.projectId, { templateId, path });
+      return after({ path: file.path, sha256: file.sha256, ...page(file.content, offset, limit) });
+    }, { name: 'read_template_file', description: '读取当前项目已导入模板中的可编辑文本。',
+      schema: z.object({ templateId: z.string().min(1), path: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
+    save_template_file: () => tool(async ({ templateId, path, content, expectedHash }) => {
+      const file = await effects().saveTemplateFile(input.run.id, input.run.projectId, { templateId, path, content, expectedHash });
+      return after({ path: file.path, sha256: file.sha256, size: file.size });
+    }, { name: 'save_template_file', description: '按 expectedHash 修改当前项目模板。新建传 null；版本冲突或取消后的迟到写入会被拒绝。',
+      schema: z.object({ templateId: z.string().min(1), path: z.string().min(1), content: z.string().max(1024 * 1024),
+        expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
+    compile_template: () => tool(async ({ templateId }) => {
+      const template = await effects().compileTemplate(input.run.id, input.run.projectId, templateId);
+      return after({ templateId: template.id, revision: template.revision, status: template.status, errors: template.errors });
+    }, { name: 'compile_template', description: '编译当前项目模板。取消后的迟到编译结果不会写回。',
+      schema: z.object({ templateId: z.string().min(1) }).strict() }),
+    prepare_export: () => tool(async (request) => {
+      const started = await effects().prepareExport(input.run.id, input.run.projectId, request);
+      return after(summarizeExport(started));
+    }, { name: 'prepare_export', description: '准备当前项目的最终导出。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有作业。',
+      schema: researchOwnedExportPrepareSchema }),
+    get_export: () => tool(async ({ exportId }) => {
+      return after(summarizeExport(effects().getExport(input.run.id, input.run.projectId, exportId)));
+    }, { name: 'get_export', description: '读取本次运行创建的导出作业状态。',
+      schema: z.object({ exportId: z.string().min(1) }).strict() }),
+    publish_export: () => tool(async ({ exportId, replacesExportId }) => {
+      const published = await effects().publishExport(input.run.id, input.run.projectId, exportId, replacesExportId);
+      return after(summarizeExport(published));
+    }, { name: 'publish_export', description: '把本次运行准备好的导出关联到审核闸门。不能交付最终文件或宣称已批准。',
+      schema: z.object({ exportId: z.string().min(1), replacesExportId: z.string().min(1).nullable() }).strict() })
   };
   return input.run.toolNames.map((name) => {
     const factory = factories[name];
@@ -106,6 +177,16 @@ export function createResearchRoleTools(input: {
 function page(content: string, offset: number, limit: number) {
   return { content: content.slice(offset, offset + limit), totalChars: content.length,
     nextOffset: offset + limit < content.length ? offset + limit : null };
+}
+
+function summarizeExperiment(run: { id: string; request: { requestId: string }; ownerRunId: string | null; status: string; error: string | null; artifactId: string | null; files: unknown[] }) {
+  return { experimentId: run.id, requestId: run.request.requestId, ownerRunId: run.ownerRunId, status: run.status, error: run.error,
+    artifactId: run.artifactId, fileCount: run.files.length };
+}
+
+function summarizeExport(record: { id: string; request: { requestId: string }; ownerRunId: string | null; status: string; error: string | null; artifactId: string | null; approval: string }) {
+  return { exportId: record.id, requestId: record.request.requestId, ownerRunId: record.ownerRunId, status: record.status, error: record.error,
+    artifactId: record.artifactId, approval: record.approval };
 }
 
 function productionSection(input: ResearchProductionInput, section: 'summary' | 'files' | 'environment'): unknown {

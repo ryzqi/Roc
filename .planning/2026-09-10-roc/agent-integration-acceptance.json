@@ -15,7 +15,7 @@
       "criterion": "生产工具的项目和运行身份由服务端绑定；脚本/模板修改、实验与产物发布有版本和幂等控制，取消或替换运行后不能提交迟到副作用。",
       "verificationCommand": "rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research",
       "evidence": "reviews/04g2-owned-effects.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "4g3-production-role-results",

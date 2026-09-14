@@ -229,3 +229,6 @@
 - 4g1 首轮完整相关回归 246 项、build/typecheck、check:ipc 通过。补充检查复现 UTF-8 可解码的 NUL 二进制与纯 ASCII PDF 被误发为模型文本；沿用现有文件预览的 NUL/PDF 边界阻止文本返回，新增两项回归并纳入最终复核。
 - 4g1 最终 36 文件、262 项回归通过（34 项可选资源跳过），真实图稿和中文 PDF/ZIP 读取各 1 项通过；build/typecheck、check:ipc、diff check 通过。Spec 最终未解决 0，独立 9/9 回归通过；Standards 最终窄复核待返回。
 - 4g1 完成：Standards 最终硬违反 0、判断项 0、未解决 0，独立 12/12 回归通过；Spec 最终未解决 0。审查记录 reviews/04g1-production-inputs.md，验收表只将 4g1 标为通过，状态 Verified passing；本地独立提交后下一步为 4g2，整体 Production/Agent 接线/Renderer/Packaging 仍未完成。
+- 4g1 已提交 `892b6f8`。4g2 将生产写工具接到阶段运行：服务绑定项目/运行身份，脚本修改使用 expectedHash，实验/导出用 requestId 幂等，取消后拒绝迟到副作用。
+- 4g2 已实现：v14 回填 ownerRunId 并增加 workspace 文件版本表；角色工具不接受模型提供的 projectId；取消先 abort 在途实验/导出/模板编译，写回前再校验归属。新增 owned-effects 6 项回归。
+- 4g2 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g2-owned-effects.md，验收表只将 4g1/4g2 标为通过。最终相关回归 37 文件 / 268 项通过（34 项可选资源跳过），owned-effects 6/6，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 4g3。

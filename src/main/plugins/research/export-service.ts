@@ -37,6 +37,8 @@ export class ResearchExportService {
     });
   }
 
+  abort(id: string): void { this.preparing.get(id)?.controller.abort(); }
+
   async cancel(projectId: string, id: string): Promise<ResearchExportExecution> {
     this.requireOpen();
     const record = this.repository.exports.get(projectId, id);

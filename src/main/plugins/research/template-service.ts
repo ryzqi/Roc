@@ -11,11 +11,11 @@ import { copyTemplateFiles, editableTemplateExtensions, listTemplateFiles, requi
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 
-type CompileState = { template: ResearchTemplate; workspace: string; root: string; job: string; source: string; runId: string; controller: AbortController };
+type CompileState = { template: ResearchTemplate; workspace: string; root: string; job: string; source: string; runId: string; controller: AbortController; ownerRunId: string | null };
 
 export class ResearchTemplateService {
   private readonly operations = new Map<string, Promise<unknown>>();
-  private readonly active = new Map<string, { runId: string; controller: AbortController }>();
+  private readonly active = new Map<string, { runId: string; controller: AbortController; ownerRunId: string | null }>();
   private readonly imports = new Set<AbortController>();
   private readonly completions = new Set<Promise<ResearchTemplate>>();
   private closed = false;
@@ -87,9 +87,10 @@ export class ResearchTemplateService {
       content: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
   }
 
-  async saveFile(request: z.infer<typeof researchTemplateFileSaveRequestSchema>): Promise<z.infer<typeof researchTemplateFileContentSchema>> {
+  async saveFile(request: z.infer<typeof researchTemplateFileSaveRequestSchema>, ownerRunId: string | null = null): Promise<z.infer<typeof researchTemplateFileContentSchema>> {
     return await this.serial(request.templateId, async () => {
       this.requireOpen();
+      if (ownerRunId !== null) this.repository.runs.requireActive(ownerRunId, request.projectId);
       const { template, root } = await this.current(request, true);
       this.requireEditablePath(request.path);
       const bytes = Buffer.from(request.content, 'utf8');
@@ -122,6 +123,7 @@ export class ResearchTemplateService {
         published = true;
         await rm(temporary, { force: true });
         const files = await listTemplateFiles(root);
+        if (ownerRunId !== null) this.repository.runs.requireActive(ownerRunId, request.projectId);
         this.repository.saveTemplate({ ...template, revision: template.revision + 1, status: 'imported', activeCompileId: null,
           sourceDigest: templateDigest(template.entryPath, files), errors: [], diagnostics: [] }, template.revision);
         this.active.get(template.id)?.controller.abort();
@@ -148,9 +150,10 @@ export class ResearchTemplateService {
     });
   }
 
-  async compile(request: ResearchTemplateCompileRequest): Promise<ResearchTemplate> {
+  async compile(request: ResearchTemplateCompileRequest, ownerRunId: string | null = null): Promise<ResearchTemplate> {
     const state = await this.serial(request.templateId, async (): Promise<CompileState> => {
       this.requireOpen();
+      if (ownerRunId !== null) this.repository.runs.requireActive(ownerRunId, request.projectId);
       const current = await this.current(request, true);
       const files = await listTemplateFiles(current.root);
       const template = this.refresh(current.template, templateDigest(current.template.entryPath, files));
@@ -163,9 +166,9 @@ export class ResearchTemplateService {
         const runId = randomUUID();
         const controller = new AbortController();
         const running = this.repository.saveTemplate({ ...template, status: 'compiling', activeCompileId: runId, errors: [], diagnostics: [] }, template.revision);
-        this.active.set(template.id, { runId, controller });
+        this.active.set(template.id, { runId, controller, ownerRunId });
         previous?.controller.abort();
-        return { ...current, template: running, job, source, runId, controller };
+        return { ...current, template: running, job, source, runId, controller, ownerRunId };
       } catch (error) {
         await rm(job, { recursive: true, force: true });
         throw error;
@@ -176,6 +179,10 @@ export class ResearchTemplateService {
     const remove = (): void => { this.completions.delete(completion); };
     void completion.then(remove, remove);
     return await completion;
+  }
+
+  abortOwned(ownerRunId: string): void {
+    for (const active of this.active.values()) if (active.ownerRunId === ownerRunId) active.controller.abort();
   }
 
   async cancel(request: ResearchTemplateCompileRequest): Promise<ResearchTemplate> {
@@ -217,6 +224,7 @@ export class ResearchTemplateService {
         const files = await listTemplateFiles(state.root);
         current = this.refresh(current, templateDigest(current.entryPath, files));
         if (current.activeCompileId !== state.runId) return current;
+        if (state.ownerRunId !== null) this.repository.runs.requireActive(state.ownerRunId, current.projectId);
         const next = this.repository.saveTemplate({ ...current, status: result.status, activeCompileId: null,
           errors: result.errors, diagnostics: result.diagnostics, lastCompiledAt: new Date().toISOString(),
           ...(result.status === 'ready' ? { pdfPath: result.pdfPath, pdfHash: result.pdfHash,

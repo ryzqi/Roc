@@ -47,6 +47,12 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter): R
               ...(input.run.toolNames.includes('inspect_production_input') ? [
                 '生产输入先用 inspect_production_input 查看实际运行、文件清单和环境，再用 read_production_input_file 读取所需文本。描述工件不能代替执行结果；二进制元数据不代表已完成视觉检查。'
               ] : []),
+              ...(input.run.toolNames.includes('start_experiment') ? [
+                '生产工具已绑定当前项目和本次运行。修改脚本或模板必须提供 expectedHash；启动、发布实验或图稿使用服务返回的真实 ID。取消或替换后不得继续提交副作用。不能调用人工批准或最终交付。'
+              ] : []),
+              ...(input.run.toolNames.includes('prepare_export') ? [
+                '导出工具已绑定当前项目和本次运行。可准备、查看和发布导出作业，不能写入最终 ZIP 或宣称已通过人工审核。'
+              ] : []),
               '输出 title、markdown、claims、sections、verdict。无内容的数组使用 []。正文 sections 用 claimIndexes 引用本次 claims 中受证据支持的段落。',
               'markdown 是工作记录，正文由系统从已验证的段落生成。不能自行宣称通过人工审核或最终导出。'
             ].join('\n\n'),

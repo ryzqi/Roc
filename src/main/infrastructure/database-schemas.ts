@@ -1441,6 +1441,28 @@ export const researchMigrations: RocDatabaseMigration[] = [
       CREATE UNIQUE INDEX idx_research_experiment_artifact ON research_experiment_executions(json_extract(snapshot_json, '$.artifactId'))
         WHERE json_extract(snapshot_json, '$.artifactId') IS NOT NULL;
     `
+  },
+  {
+    version: 14,
+    name: 'research_owned_production_effects',
+    sql: `
+      UPDATE research_experiment_executions SET snapshot_json = json_set(snapshot_json, '$.ownerRunId', json('null'))
+        WHERE json_extract(snapshot_json, '$.ownerRunId') IS NULL;
+      UPDATE research_export_executions SET snapshot_json = json_set(snapshot_json, '$.ownerRunId', json('null'))
+        WHERE json_extract(snapshot_json, '$.ownerRunId') IS NULL;
+      CREATE INDEX idx_research_experiment_owner ON research_experiment_executions(json_extract(snapshot_json, '$.ownerRunId'));
+      CREATE INDEX idx_research_export_owner ON research_export_executions(json_extract(snapshot_json, '$.ownerRunId'));
+      CREATE TABLE research_workspace_files (
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        size INTEGER NOT NULL CHECK(size >= 0),
+        revision INTEGER NOT NULL,
+        owner_run_id TEXT REFERENCES research_stage_runs(id),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(project_id, path)
+      );
+    `
   }
 ];
 

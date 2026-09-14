@@ -21,7 +21,7 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
-- 科研 Agent 接线预研：role-profiles 目前仍只放行检索/证据/工件读取；ResearchRunRepository.complete 总是新建 path=null 的阶段工件。实验、图稿和导出已有真实后端后，下一增量需绑定真实生产产物及模型 provenance，并在取消/重试时约束工具副作用，不能继续用模型描述代替生产结果。
+- 科研 Agent 接线预研：4g2 已把实验/图稿/导出写工具绑定到阶段运行，并拒绝取消后的迟到副作用。ResearchRunRepository.complete 仍新建 path=null 的阶段工件；4g3 需把真实运行/工件接到阶段输出和模型 provenance。
 - 最终导出实际发现：Tectonic 按嵌套入口目录解析 input/bibliography；只在 source 根层生成内容会成功编译旧占位正文。BibTeX crossref 父条目须随引用一起收集并位于子条目之后；Tectonic 可在 BibTeX 出错时仍返回 0。均有真实 PDF 先失败后通过的回归，导出边界另拦截“错误被忽略”的报告。
 - 最终导出预研：现有 evidence.exportBundle 返回已批准正文、主张和证据；正文是含内联 thebibliography 的 LaTeX 片段。review.requireForStage 对 export 要求 accepted 的审稿周期。模板服务会冻结源文件后编译并记录 PDF 哈希，但当前没有把批准正文、图稿、引用文件与最终交付文件绑定的导出作业；4f 需在这些既有边界上接线。
 - 绘图：Context7 的 Matplotlib 官方文档确认 Figure.savefig 可对同一对象导出 PNG/SVG/PDF；PDF 使用 CreationDate=None 去掉时间戳，SVG 使用 Date=None 和固定 svg.hashsalt。当前固定 Matplotlib 3.11.1 已实际验证连续两次渲染的全部输出字节相同，PNG 为 600×450，PDF/SVG 为 288×216 pt；图稿内容正确性仍由关联证据和人工审核判断。

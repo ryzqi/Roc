@@ -26,8 +26,8 @@ describe('experiment persistence migration and provenance', () => {
       const pending = repository.experiments.create({ ...request, requestId: 'pending' }, '/workspace', '/workspace', '/managed-runs');
       const artifact = repository.getArtifact(published.artifactId);
       applyResearchDatabaseSchema(db); applyResearchDatabaseSchema(db);
-      expect(repository.experiments.forArtifact(artifact)).toEqual(published);
-      expect(repository.experiments.get(project.id, pending.id)).toEqual(pending);
+      expect(repository.experiments.forArtifact(artifact)).toEqual({ ...published, ownerRunId: null });
+      expect(repository.experiments.get(project.id, pending.id)).toEqual({ ...pending, ownerRunId: null });
       expect(repository.getArtifact(artifact.id)).toEqual(artifact);
       expect(() => db.prepare("UPDATE research_experiment_executions SET snapshot_json = json_set(snapshot_json, '$.artifactId', ?) WHERE run_id = ?")
         .run(artifact.id, pending.id)).toThrow(/UNIQUE constraint/u);

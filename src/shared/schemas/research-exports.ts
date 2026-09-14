@@ -13,9 +13,13 @@ export const researchExportTemplateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('default'), language: z.enum(['zh', 'en']) }).strict(),
   z.object({ kind: z.literal('imported'), templateId: id, expectedRevision: z.number().int().positive(), expectedSourceDigest: digest }).strict()
 ]);
-export const researchExportPrepareSchema = z.object({
-  projectId: id, requestId: id.max(128), title: z.string().trim().min(1).max(256), manuscriptArtifactId: id,
+const researchExportPrepareFields = {
+  requestId: id.max(128), title: z.string().trim().min(1).max(256), manuscriptArtifactId: id,
   figureIds: z.array(id).max(100).refine((ids) => new Set(ids).size === ids.length), template: researchExportTemplateSchema
+} as const;
+export const researchOwnedExportPrepareSchema = z.object(researchExportPrepareFields).strict();
+export const researchExportPrepareSchema = z.object({
+  projectId: id, ownerRunId: id.nullable().optional(), ...researchExportPrepareFields
 }).strict();
 export const researchExportSourcesSchema = z.object({
   project: z.object({ id, title: z.string(), description: z.string(), workspacePath: z.string().nullable() }).strict(),
@@ -29,7 +33,7 @@ export const researchExportSourcesSchema = z.object({
     sourceDigest: digest, files: z.array(researchExportFileSchema) }).strict().nullable()
 }).strict();
 export const researchExportExecutionSchema = z.object({
-  id, projectId: id, request: researchExportPrepareSchema,
+  id, projectId: id, request: researchExportPrepareSchema, ownerRunId: id.nullable(),
   status: z.enum(['preparing', 'ready', 'failed', 'cancelled', 'interrupted']),
   sources: researchExportSourcesSchema.nullable(), sourceHash: digest.nullable(), toolchainHash: digest.nullable(),
   files: z.array(researchExportFileSchema), archive: researchExportFileSchema.nullable(),

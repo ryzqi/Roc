@@ -70,6 +70,8 @@ import { ResearchExportService } from './export-service';
 import { ResearchExportSourceService } from './export-sources';
 import { ResearchProductionInputService } from './production-input-service';
 import { registerResearchProductionInputCapabilities, researchProductionInputCapabilities } from './production-input-capabilities';
+import { ResearchProductionEffectService } from './production-effects';
+import { ResearchWorkspaceFileService } from './workspace-files';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -180,7 +182,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchRepository.documents.recover();
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
-      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor);
+      const effects = new ResearchProductionEffectService(researchRepository, new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString()),
+        researchExperiments, researchFigures, researchTemplates, researchExports);
+      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, effects);
       stageRuntime = runtime;
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);

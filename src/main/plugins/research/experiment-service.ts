@@ -54,6 +54,8 @@ export class ResearchExperimentService {
     });
   }
 
+  abort(id: string): void { this.executions.get(id)?.controller.abort(); }
+
   async cancel(projectId: string, id: string): Promise<ResearchExperimentExecution> {
     this.requireOpen();
     const run = this.repository.experiments.get(projectId, id);

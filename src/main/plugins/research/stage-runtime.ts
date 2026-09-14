@@ -5,8 +5,9 @@ import type { RocCapabilityRegistry } from '../../kernel/types';
 import type { ResearchRepository } from './repository';
 import type { PreparedResearchRole, ResearchRoleExecutor } from './role-executor';
 import { createResearchRoleTools } from './role-tools';
+import type { ResearchProductionEffectService } from './production-effects';
 
-type ActiveRole = { controller: AbortController; pending: Promise<void>; projectId: string };
+type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string };
 
 export class ResearchStageRuntime {
   private readonly active = new Map<string, ActiveRole>();
@@ -14,7 +15,8 @@ export class ResearchStageRuntime {
   constructor(
     private readonly repository: ResearchRepository,
     private readonly capabilities: RocCapabilityRegistry,
-    private readonly executor: ResearchRoleExecutor | undefined
+    private readonly executor: ResearchRoleExecutor | undefined,
+    private readonly effects?: ResearchProductionEffectService
   ) {}
 
   start(request: ResearchStageRunStartRequest): ResearchStageRun {
@@ -47,7 +49,7 @@ export class ResearchStageRuntime {
   }
 
   async shutdown(): Promise<void> {
-    const pending = [...this.active.values()].map((entry) => entry.pending);
+    const pending = [...this.active.values()].map((entry) => entry.cleanup);
     for (const [runId, entry] of this.active) {
       this.stop({ projectId: entry.projectId, runId }, 'interrupted', 'research_run_interrupted_by_shutdown');
     }
@@ -55,15 +57,21 @@ export class ResearchStageRuntime {
   }
 
   async waitForIdle(): Promise<void> {
-    await Promise.all([...this.active.values()].map((entry) => entry.pending));
+    await Promise.all([...this.active.values()].map((entry) => entry.cleanup));
   }
 
   private stop(request: ResearchStageRunIdRequest, status: 'cancelled' | 'interrupted', reason: string): ResearchStageRun {
-    if (this.repository.runs.get(request.runId, request.projectId).parentRunId !== null) {
+    const previous = this.repository.runs.get(request.runId, request.projectId);
+    if (previous.parentRunId !== null) {
       throw new Error('research_run_cancel_parent_required');
     }
     const run = this.repository.runs.terminate(request.runId, request.projectId, status, reason);
-    this.active.get(run.id)?.controller.abort(new Error(reason));
+    const active = this.active.get(run.id);
+    active?.controller.abort(new Error(reason));
+    if (['queued', 'running'].includes(previous.status) && this.effects !== undefined) {
+      const cleanup = this.effects.cancelOwned(run.projectId, run.id);
+      if (active !== undefined) active.cleanup = Promise.allSettled([active.pending, cleanup]).then(() => undefined);
+    }
     return run;
   }
 
@@ -73,7 +81,7 @@ export class ResearchStageRuntime {
     const pending = Promise.resolve().then(() => this.execute(run, controller)).finally(() => {
       this.active.delete(run.id);
     });
-    this.active.set(run.id, { controller, pending, projectId: run.projectId });
+    this.active.set(run.id, { controller, pending, cleanup: pending, projectId: run.projectId });
   }
 
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
@@ -92,6 +100,7 @@ export class ResearchStageRuntime {
       controller.abort(error);
       await Promise.allSettled(children);
       this.repository.runs.terminate(queued.id, queued.projectId, 'failed', executionErrorCode(error));
+      await this.effects?.cancelOwned(queued.projectId, queued.id);
     } finally {
       clearTimeout(timeout);
     }
@@ -107,7 +116,7 @@ export class ResearchStageRuntime {
 
   private async executeOutput(run: ResearchStageRun, prepared: PreparedResearchRole, signal: AbortSignal): Promise<ResearchStageRun> {
     const context = this.repository.runs.getContext(run.id);
-    const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal });
+    const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal, effects: this.effects });
     const result = await withAbort(prepared.execute({ run, context, tools, signal }), signal);
     signal.throwIfAborted();
     this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);

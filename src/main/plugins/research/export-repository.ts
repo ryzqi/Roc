@@ -18,12 +18,16 @@ export class ResearchExportRepository {
         .get(project.id, request.requestId) as { id: string } | undefined;
       if (existing !== undefined) {
         const record = this.get(project.id, existing.id);
-        if (JSON.stringify(record.request) !== JSON.stringify(request)) throw new Error('research_export_request_conflict');
+        if (JSON.stringify(record.request) !== JSON.stringify(request) || record.ownerRunId !== (request.ownerRunId ?? null)) {
+          throw new Error('research_export_request_conflict');
+        }
         return record;
       }
       this.requireCurrent(request);
+      const ownerRunId = request.ownerRunId ?? null;
+      if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, project.id);
       const id = `export_${randomUUID()}`;
-      const record = researchExportExecutionSchema.parse({ id, projectId: project.id, request, status: 'preparing', sources: null, sourceHash: null,
+      const record = researchExportExecutionSchema.parse({ id, projectId: project.id, request, ownerRunId, status: 'preparing', sources: null, sourceHash: null,
         toolchainHash: null, files: [], archive: null, artifactId: null, approval: 'unpublished', replacesExportId: null,
         error: null, createdAt: this.now(), endedAt: null });
       this.db.prepare(`INSERT INTO research_export_executions (id,project_id,request_id,status,artifact_id,snapshot_json,root_path,created_at)
@@ -45,6 +49,11 @@ export class ResearchExportRepository {
     return (this.db.prepare('SELECT id FROM research_export_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')
       .all(projectId, limit) as Array<{ id: string }>).map((row) => this.get(projectId, row.id));
   }
+  ownedPreparing(projectId: string, ownerRunId: string): ResearchExportExecution[] {
+    this.research.getProject(projectId);
+    return (this.db.prepare("SELECT id FROM research_export_executions WHERE project_id = ? AND json_extract(snapshot_json, '$.ownerRunId') = ? AND status = 'preparing'")
+      .all(projectId, ownerRunId) as Array<{ id: string }>).map((row) => this.get(projectId, row.id));
+  }
 
   root(projectId: string, id: string): string { this.get(projectId, id); return this.row(id).root_path; }
   hasArtifact(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_export_executions WHERE artifact_id = ?').get(id) !== undefined; }
@@ -54,12 +63,17 @@ export class ResearchExportRepository {
       const record = this.get(projectId, id);
       if (record.status !== 'preparing') return record;
       if (result.status === 'preparing') throw new Error('research_export_terminal_status_required');
-      if (result.status === 'ready') {
-        this.requireCurrent(record.request);
-        if (result.sources === null || result.sourceHash === null || result.toolchainHash === null || result.archive === null || result.error !== null
-          || !result.files.some((file) => file.path === 'paper.pdf') || !result.files.some((file) => file.path === 'manifest.json')) throw new Error('research_export_result_invalid');
+      let next = result;
+      if (next.status === 'ready' && record.ownerRunId !== null) {
+        try { this.research.runs.requireActive(record.ownerRunId, projectId); }
+        catch { next = { ...next, status: 'cancelled', error: 'research_export_cancelled' }; }
       }
-      const value = { ...record, ...result, endedAt: this.now() };
+      if (next.status === 'ready') {
+        this.requireCurrent(record.request);
+        if (next.sources === null || next.sourceHash === null || next.toolchainHash === null || next.archive === null || next.error !== null
+          || !next.files.some((file) => file.path === 'paper.pdf') || !next.files.some((file) => file.path === 'manifest.json')) throw new Error('research_export_result_invalid');
+      }
+      const value = { ...record, ...next, endedAt: this.now() };
       this.save(value);
       this.event(value, `export_${value.status}`, value.status === 'ready' ? '交付文件已生成，等待预览与最终审核。' : '导出准备已结束，详情见日志。');
       return value;
@@ -70,6 +84,7 @@ export class ResearchExportRepository {
     return this.db.transaction(() => {
       const record = this.get(projectId, id);
       if (record.status !== 'ready') throw new Error('research_export_ready_required');
+      if (record.ownerRunId !== null) this.research.runs.requireActive(record.ownerRunId, projectId);
       if (record.artifactId !== null) {
         if (record.replacesExportId !== replacesExportId) throw new Error('research_export_publish_conflict');
         return record;

@@ -26,15 +26,16 @@ export const researchExperimentEnvironmentSchema = z.object({
 export const researchExperimentEnvironmentRequestSchema = z.object({
   projectId: z.string().min(1), runtime: researchExperimentRuntimeSchema
 }).strict();
-export const researchExperimentStartSchema = z.object({
-  projectId: z.string().min(1), requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'notebook', 'r', 'julia', 'matplotlib']),
+const researchExperimentStartFields = {
+  requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'notebook', 'r', 'julia', 'matplotlib']),
   runtime: researchExperimentRuntimeSchema, sourcePath: researchExperimentPathSchema,
   inputPaths: z.array(researchExperimentPathSchema).max(1000),
   arguments: z.array(z.string().max(8192).refine((value) => !value.includes('\u0000'))).max(100),
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
   expectedEnvironmentHash: digest, timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled']),
   figure: researchFigureOptionsSchema.optional()
-}).strict().superRefine((value, context) => {
+} as const;
+function refineExperimentStart(value: { engine: 'python' | 'notebook' | 'r' | 'julia' | 'matplotlib'; sourcePath: string; inputPaths: string[]; arguments: string[]; runtime: { kind: string }; figure?: unknown; network: string }, context: z.RefinementCtx): void {
   const extensions = { python: '.py', notebook: '.ipynb', r: '.r', julia: '.jl', matplotlib: '.py' };
   if (!value.sourcePath.toLowerCase().endsWith(extensions[value.engine])) {
     context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
@@ -49,9 +50,13 @@ export const researchExperimentStartSchema = z.object({
     context.addIssue({ code: 'custom', message: 'research_figure_options_invalid', path: ['figure'] });
   }
   if (value.engine === 'matplotlib' && value.network !== 'disabled') context.addIssue({ code: 'custom', message: 'research_figure_offline_required', path: ['network'] });
-});
+}
+export const researchOwnedExperimentStartSchema = z.object(researchExperimentStartFields).strict().superRefine(refineExperimentStart);
+export const researchExperimentStartSchema = z.object({
+  projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional(), ...researchExperimentStartFields
+}).strict().superRefine(refineExperimentStart);
 export const researchExperimentExecutionSchema = z.object({
-  id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema,
+  id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema, ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   environment: researchExperimentEnvironmentSchema.nullable(), files: z.array(researchExperimentFileSchema),
   inputHash: digest.nullable(), exitCode: z.number().int().nullable(), error: z.string().nullable(), artifactId: z.string().nullable(),
@@ -65,9 +70,21 @@ export const researchExperimentFileRequestSchema = researchExperimentIdRequestSc
 export const researchExperimentFileContentSchema = z.object({ file: researchExperimentFileSchema, content: z.string(), encoding: z.enum(['utf8', 'base64']) }).strict();
 export const researchExperimentSourceRequestSchema = researchExperimentFileRequestSchema.extend({ sha256: digest }).strict();
 export const researchExperimentEvidenceRequestSchema = z.object({ projectId: z.string().min(1), evidenceId: z.string().min(1) }).strict();
+export const researchWorkspaceFileSchema = z.object({
+  projectId: z.string().min(1), path: researchExperimentPathSchema, sha256: digest, size: z.number().int().nonnegative(),
+  revision: z.number().int().positive(), ownerRunId: z.string().min(1).nullable(), updatedAt: z.string()
+}).strict();
+export const researchWorkspaceFileContentSchema = researchWorkspaceFileSchema.extend({ content: z.string() }).strict();
+export const researchWorkspaceFileRequestSchema = z.object({ projectId: z.string().min(1), path: researchExperimentPathSchema }).strict();
+export const researchWorkspaceFileSaveRequestSchema = researchWorkspaceFileRequestSchema.extend({
+  content: z.string().max(1024 * 1024), expectedHash: digest.nullable()
+}).strict();
 
 export type ResearchExperimentRuntime = z.infer<typeof researchExperimentRuntimeSchema>;
 export type ResearchExperimentEnvironment = z.infer<typeof researchExperimentEnvironmentSchema>;
 export type ResearchExperimentStart = z.infer<typeof researchExperimentStartSchema>;
 export type ResearchExperimentExecution = z.infer<typeof researchExperimentExecutionSchema>;
 export type ResearchExperimentFile = z.infer<typeof researchExperimentFileSchema>;
+export type ResearchWorkspaceFile = z.infer<typeof researchWorkspaceFileSchema>;
+export type ResearchWorkspaceFileContent = z.infer<typeof researchWorkspaceFileContentSchema>;
+export type ResearchWorkspaceFileSaveRequest = z.infer<typeof researchWorkspaceFileSaveRequestSchema>;

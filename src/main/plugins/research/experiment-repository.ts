@@ -25,12 +25,16 @@ export class ResearchExperimentRepository {
       if (project.workspacePath !== workspace) throw new Error('research_experiment_workspace_changed');
       const previous = this.existing(request.projectId, request.requestId);
       if (previous !== null) {
-        if (JSON.stringify(previous.request) !== JSON.stringify(request)) throw new Error('research_experiment_request_conflict');
+        if (JSON.stringify(previous.request) !== JSON.stringify(request) || previous.ownerRunId !== (request.ownerRunId ?? null)) {
+          throw new Error('research_experiment_request_conflict');
+        }
         return previous;
       }
       const id = `experiment_${randomUUID()}`;
       const createdAt = this.now();
-      const run = researchExperimentExecutionSchema.parse({ id, projectId: request.projectId, request, workspacePath: workspace, workspaceRoot,
+      const ownerRunId = request.ownerRunId ?? null;
+      if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, request.projectId);
+      const run = researchExperimentExecutionSchema.parse({ id, projectId: request.projectId, request, ownerRunId, workspacePath: workspace, workspaceRoot,
         status: 'preparing', environment: null, files: [], inputHash: null, exitCode: null, error: null, artifactId: null, createdAt, startedAt: null, endedAt: null });
       this.db.prepare(`INSERT INTO research_experiment_runs
         (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
@@ -64,6 +68,11 @@ export class ResearchExperimentRepository {
     return (this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')
       .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
   }
+  ownedActive(projectId: string, ownerRunId: string): ResearchExperimentExecution[] {
+    this.research.getProject(projectId);
+    return (this.db.prepare("SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? AND json_extract(snapshot_json, '$.ownerRunId') = ? AND status IN ('preparing','running')")
+      .all(projectId, ownerRunId) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+  }
 
   start(projectId: string, id: string, environment: ResearchExperimentEnvironment, files: ResearchExperimentFile[], inputHash: string): ResearchExperimentExecution {
     return this.db.transaction(() => {
@@ -87,16 +96,21 @@ export class ResearchExperimentRepository {
       const run = this.get(projectId, id);
       if (!activeStatuses.has(run.status)) return run;
       if (activeStatuses.has(result.status)) throw new Error('research_experiment_terminal_status_required');
-      if (result.status === 'completed') {
+      let next = result;
+      if (next.status === 'completed' && run.ownerRunId !== null) {
+        try { this.research.runs.requireActive(run.ownerRunId, projectId); }
+        catch { next = { status: 'cancelled', files: next.files, exitCode: next.exitCode, error: 'research_experiment_cancelled' }; }
+      }
+      if (next.status === 'completed') {
         this.requireActive(projectId, id);
-        if (run.status !== 'running' || run.environment === null || run.inputHash === null || result.exitCode !== 0 || result.error !== null) throw new Error('research_experiment_result_invalid');
+        if (run.status !== 'running' || run.environment === null || run.inputHash === null || next.exitCode !== 0 || next.error !== null) throw new Error('research_experiment_result_invalid');
         for (const { metadata, ...document } of documents) this.research.upsertKnowledgeDocument({ ...document, projectId, sourceType: 'experiment', sourceId: id, embeddingConfigId: null }, metadata);
       }
-      const value = { ...run, ...result, endedAt: this.now() };
+      const value = { ...run, ...next, endedAt: this.now() };
       this.save(value);
       this.db.prepare('UPDATE research_experiment_runs SET status = ?,outputs_json = ?,ended_at = ? WHERE id = ?')
-        .run(result.status === 'interrupted' ? 'failed' : result.status, JSON.stringify(result.files.filter((file) => file.area === 'output' || file.area === 'notebook').map((file) => `${file.area}/${file.path}`)), value.endedAt, id);
-      this.event(value, `experiment_${result.status}`, result.status === 'completed' ? '实验完成，输出与日志已保存。' : '实验已结束，详情见运行记录。');
+        .run(next.status === 'interrupted' ? 'failed' : next.status, JSON.stringify(next.files.filter((file) => file.area === 'output' || file.area === 'notebook').map((file) => `${file.area}/${file.path}`)), value.endedAt, id);
+      this.event(value, `experiment_${next.status}`, next.status === 'completed' ? '实验完成，输出与日志已保存。' : '实验已结束，详情见运行记录。');
       return value;
     })();
   }
@@ -105,6 +119,7 @@ export class ResearchExperimentRepository {
     return this.db.transaction(() => {
       const run = this.get(projectId, id);
       if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
+      if (run.ownerRunId !== null) this.research.runs.requireActive(run.ownerRunId, projectId);
       if (run.artifactId !== null) return run;
       const artifact = this.research.createArtifact({ projectId, stage: 'experiment', kind: 'experiment_run', title: run.request.label, path: join(this.root(projectId, id), 'manifest.json') });
       this.research.addProvenance({ projectId, artifactId: artifact.id, subjectType: 'artifact', subjectId: artifact.id, sourceType: 'experiment', sourceId: id,
@@ -140,7 +155,8 @@ export class ResearchExperimentRepository {
   }
   private save(run: ResearchExperimentExecution): void {
     const value = researchExperimentExecutionSchema.parse(run);
-    this.db.prepare('UPDATE research_experiment_executions SET status = ?,snapshot_json = ? WHERE run_id = ?').run(value.status, JSON.stringify(value), value.id);
+    this.db.prepare('UPDATE research_experiment_executions SET status = ?,snapshot_json = ? WHERE run_id = ?')
+      .run(value.status, JSON.stringify(value), value.id);
   }
   private event(run: ResearchExperimentExecution, type: string, message: string): void {
     const project = this.research.getProject(run.projectId);

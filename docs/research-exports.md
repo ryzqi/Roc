@@ -17,7 +17,7 @@ await research.prepareExport({
 });
 ```
 
-`manuscriptArtifactId` 必须是当前审稿周期接受的正文；所选 `figureIds` 必须已批准。每次新准备使用新的 `requestId`，重复同一请求返回原记录，改变已有请求内容会失败。中文默认使用固定 TeX bundle 中的 CTeX/Fandol；英文使用通用 article。默认格式不套用期刊规范。
+`manuscriptArtifactId` 必须是当前审稿周期接受的正文；所选 `figureIds` 必须已批准。每次新准备使用新的 `requestId`，重复同一请求返回原记录，改变已有请求内容会失败。阶段 Agent 调用导出时，项目和运行身份由服务绑定；不能写入最终 ZIP 或宣称已批准。中文默认使用固定 TeX bundle 中的 CTeX/Fandol；英文使用通用 article。默认格式不套用期刊规范。
 
 使用用户模板时，传入 `{kind: "imported", templateId, expectedRevision, expectedSourceDigest}`。版本与摘要来自当前模板记录。模板入口须包含：
 
