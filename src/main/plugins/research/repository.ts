@@ -320,6 +320,7 @@ export class ResearchRepository {
 
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
     const current = this.requireEditableArtifact(input.id);
+    if (this.experiments.hasArtifact(input.id)) throw new Error('research_experiment_publication_immutable');
     if (this.figures.hasArtifact(input.id)) throw new Error('research_figure_publication_immutable');
     if (this.exports.hasArtifact(input.id)) throw new Error('research_export_publication_immutable');
     const timestamp = this.now();
@@ -853,6 +854,7 @@ export class ResearchRepository {
         throw new Error('research_stage_artifact_invalid');
       }
       this.evidence.assertPublishable(artifact);
+      if (artifact.kind === 'experiment_run') this.experiments.forArtifact(artifact);
       if (artifact.kind === 'figure') this.figures.forArtifact(artifact);
     }
     if (state.stage === 'review') this.runs.requireReviewPanel(projectId, state.artifactIds);

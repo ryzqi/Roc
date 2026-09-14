@@ -38,7 +38,7 @@ await research.publishFigure({ projectId, runId, replacesFigureId: null });
 
 发布前重新验证全部冻结文件，写入并核验图稿清单，然后在同一事务中建立图稿、流程工件和实验 provenance。`getFigure({projectId, figureId})` 和 `listFigures({projectId, limit})` 返回图稿、验证报告、当前审核状态和运行标识。旧 `recordFigure` 接口只能保存历史元数据，不能覆盖这些已发布图稿，也不能用元数据记录替代真实渲染通过审核。
 
-发布后的状态为 `rendered`。通过 `createClaim` 将图稿说明保存为 `subjectType: "figure"` 的主张，并关联带定位的证据。绘图阶段 `complete` 先验证清单、代码、数据和输出，再检查证据；通过后进入 `waiting_approval`。用户检查图稿、主张与证据后调用阶段 `approve`，图稿才显示 `approved`。核验期间阶段、图稿或主张版本改变时，旧请求失败，须基于当前内容重新审核；应用关闭也会撤销迟到批准。审核过程中任何文件变化都会阻止批准。输出能被解析不代表科学结论已获证实，图稿内容仍须审核。
+发布后的状态为 `rendered`。通过 `createClaim` 将图稿说明保存为 `subjectType: "figure"` 的主张，并关联带定位的证据。阶段 Agent 完成绘图时，结构化输出会写到本次运行已发布的图稿，并追加模型 provenance；不会另造空图稿。绘图阶段 `complete` 先验证清单、代码、数据和输出，再检查证据；通过后进入 `waiting_approval`。用户检查图稿、主张与证据后调用阶段 `approve`，图稿才显示 `approved`。核验期间阶段、图稿或主张版本改变时，旧请求失败，须基于当前内容重新审核；应用关闭也会撤销迟到批准。审核过程中任何文件变化都会阻止批准。输出能被解析不代表科学结论已获证实，图稿内容仍须审核。
 
 审核退回后，重新运行修改后的代码，再用旧图稿 ID 作为 `replacesFigureId` 发布新图。替换会原子移除旧图在当前审核集合中的位置，并将旧图标为 `superseded`；旧代码、文件、主张、证据和替换事件保留。新图须重新关联主张，证据不会自动继承。等待批准或已批准的版本不能直接替换，须先退回或按流程回到绘图阶段。
 

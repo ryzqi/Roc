@@ -22,7 +22,7 @@
       "criterion": "阶段 Agent 的实验/绘图/导出结果绑定真实运行和工件，记录模型 provenance；失败/重试保留记录，模型不能调用人工批准或最终交付操作。",
       "verificationCommand": "rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research",
       "evidence": "reviews/04g3-production-role-results.md",
-      "passes": false
+      "passes": true
     }
   ]
 }

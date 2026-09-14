@@ -56,7 +56,7 @@ roc-preview://research/exports/{encodedProjectId}/{encodedExportId}/{pdfSha256}.
 
 ## 审核和保存
 
-准备完成后调用 `publishExport({projectId, exportId, replacesExportId: null})`。发布、阶段 complete/approve 和最终保存都会重新检查来源、文件及 ZIP；核验期间改变来源或替换待审核版本，会拒绝旧请求。手工创建的 export_package 元数据不能代替实际导出准备。
+准备完成后调用 `publishExport({projectId, exportId, replacesExportId: null})`。发布、阶段 complete/approve 和最终保存都会重新检查来源、文件及 ZIP；核验期间改变来源或替换待审核版本，会拒绝旧请求。阶段 Agent 完成导出时，结构化输出会写到本次运行已发布的交付工件并记录模型 provenance；不能写入最终 ZIP 或宣称已批准。手工创建的 export_package 元数据不能代替实际导出准备。
 
 在导出阶段 start 后，complete 进入 waiting_approval；用户检查 PDF、文献、图稿和来源后 approve。退回后可准备新版本，并通过 `replacesExportId` 替换旧草稿；旧版本保留，已批准版本不可原地修改。
 

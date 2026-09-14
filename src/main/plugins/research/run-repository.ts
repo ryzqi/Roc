@@ -11,7 +11,7 @@ import {
   researchStageRunSchema
 } from '../../../shared/schemas/research-runs';
 import type {
-  ResearchArtifactContent, ResearchStageOutput, ResearchStagePolicy, ResearchStageRun,
+  ResearchArtifact, ResearchArtifactContent, ResearchStageOutput, ResearchStagePolicy, ResearchStageRun,
   ResearchStageRunStartRequest, ResearchStageRunRetryRequest, ResearchStageRunsRequest
 } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
@@ -242,32 +242,18 @@ export class ResearchRunRepository {
     return this.db.transaction(() => {
       const run = this.requireActive(id, projectId);
       if (run.status !== 'running') throw new Error('research_run_not_started');
-      const artifact = this.research.createArtifact({ projectId, stage: run.stage, kind: run.outputKind, title: output.title, path: null });
-      const claims = output.claims.map((claim) => this.research.evidence.createClaim({ ...claim, projectId, artifactId: artifact.id }));
-      if (run.outputKind === 'manuscript') {
-        this.research.evidence.saveManuscript({
-          artifactId: artifact.id,
-          sections: output.sections.map((section) => ({ title: section.title, claimIds: section.claimIndexes.map((index) => {
-            const claim = claims[index];
-            if (claim === undefined) throw new Error('research_output_claim_index_invalid');
-            return claim.id;
-          }) }))
-        });
-      }
+      const artifacts = this.outputArtifacts(run, output);
       const timestamp = this.now();
-      this.db.prepare('INSERT INTO research_artifact_contents (artifact_id, project_id, run_id, output_json, created_at) VALUES (?, ?, ?, ?, ?)')
-        .run(artifact.id, projectId, run.id, JSON.stringify(output), timestamp);
-      for (const subject of [{ type: 'artifact' as const, id: artifact.id }, ...claims.map((claim) => ({
-        type: claim.subjectType === 'figure' ? 'figure_claim' as const : claim.subjectType, id: claim.id
-      }))]) {
-        this.research.addProvenance({ projectId, artifactId: artifact.id, subjectType: subject.type, subjectId: subject.id,
-          sourceType: 'model_run', sourceId: run.id, locator: null, excerpt: null });
-      }
-      const completed: ResearchStageRun = { ...run, status: 'completed', outputArtifactIds: [...run.outputArtifactIds, artifact.id], endedAt: timestamp };
+      for (const artifact of artifacts) this.attachOutput(run, artifact, output, timestamp);
+      const outputArtifactIds = [...run.outputArtifactIds];
+      for (const artifact of artifacts) if (!outputArtifactIds.includes(artifact.id)) outputArtifactIds.push(artifact.id);
+      const completed: ResearchStageRun = { ...run, status: 'completed', outputArtifactIds, endedAt: timestamp };
       this.saveRun(completed);
       if (run.parentRunId !== null) {
         const parent = this.get(run.parentRunId, projectId);
-        this.saveRun({ ...parent, outputArtifactIds: [...parent.outputArtifactIds, artifact.id] });
+        const parentOutputIds = [...parent.outputArtifactIds];
+        for (const artifact of artifacts) if (!parentOutputIds.includes(artifact.id)) parentOutputIds.push(artifact.id);
+        this.saveRun({ ...parent, outputArtifactIds: parentOutputIds });
       }
       this.recordEvent(completed, 'role_completed', '阶段角色已生成产物。');
       if (run.parentRunId === null) {
@@ -329,11 +315,85 @@ export class ResearchRunRepository {
     };
   }
 
+  private outputArtifacts(run: ResearchStageRun, output: ResearchStageOutput): ResearchArtifact[] {
+    if (run.outputKind === 'experiment_run' || run.outputKind === 'figure' || run.outputKind === 'export_package') {
+      const lineage = this.lineageRunIds(run);
+      const artifacts = this.ownedProductionArtifacts(run).filter((artifact) => {
+        const ownerRunId = this.ownerRunIdFor(artifact);
+        return ownerRunId !== null && lineage.has(ownerRunId);
+      });
+      if (artifacts.length === 0) throw new Error('research_stage_production_required');
+      return artifacts;
+    }
+    return [this.research.createArtifact({ projectId: run.projectId, stage: run.stage, kind: run.outputKind, title: output.title, path: null })];
+  }
+
+  private ownedProductionArtifacts(run: ResearchStageRun): ResearchArtifact[] {
+    const stage = this.research.getWorkflow(run.projectId).stages.find((entry) => entry.stage === run.stage);
+    if (stage === undefined) throw new Error('research_stage_not_found');
+    const artifacts: ResearchArtifact[] = [];
+    for (const id of stage.artifactIds) {
+      const artifact = this.research.getArtifact(id);
+      if (artifact.status !== 'draft' || artifact.kind !== run.outputKind) continue;
+      this.requireProductionArtifact(artifact);
+      artifacts.push(artifact);
+    }
+    return artifacts;
+  }
+
+  private requireProductionArtifact(artifact: ResearchArtifact): void {
+    if (artifact.kind === 'experiment_run') this.research.experiments.forArtifact(artifact);
+    else if (artifact.kind === 'figure') this.research.figures.forArtifact(artifact);
+    else if (artifact.kind === 'export_package') this.research.exports.forArtifact(artifact);
+    else throw new Error('research_stage_artifact_invalid');
+  }
+
+  private ownerRunIdFor(artifact: ResearchArtifact): string | null {
+    if (artifact.kind === 'experiment_run') return this.research.experiments.forArtifact(artifact).ownerRunId;
+    if (artifact.kind === 'figure') return this.research.experiments.get(artifact.projectId, this.research.figures.forArtifact(artifact).runId).ownerRunId;
+    if (artifact.kind === 'export_package') return this.research.exports.forArtifact(artifact).ownerRunId;
+    return null;
+  }
+
+  private lineageRunIds(run: ResearchStageRun): Set<string> {
+    const ids = new Set<string>([run.id]);
+    let current: ResearchStageRun | null = run;
+    while (current.retryOfRunId !== null) {
+      current = this.get(current.retryOfRunId, run.projectId);
+      ids.add(current.id);
+    }
+    return ids;
+  }
+
+  private attachOutput(run: ResearchStageRun, artifact: ResearchArtifact, output: ResearchStageOutput, timestamp: string): void {
+    const claims = output.claims.map((claim) => this.research.evidence.createClaim({ ...claim, projectId: run.projectId, artifactId: artifact.id }));
+    if (run.outputKind === 'manuscript') {
+      this.research.evidence.saveManuscript({
+        artifactId: artifact.id,
+        sections: output.sections.map((section) => ({ title: section.title, claimIds: section.claimIndexes.map((index) => {
+          const claim = claims[index];
+          if (claim === undefined) throw new Error('research_output_claim_index_invalid');
+          return claim.id;
+        }) }))
+      });
+    }
+    this.db.prepare('INSERT INTO research_artifact_contents (artifact_id, project_id, run_id, output_json, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(artifact.id, run.projectId, run.id, JSON.stringify(output), timestamp);
+    const locator = `provider:${run.providerId ?? 'unknown'}; model:${run.modelId ?? 'unknown'}; version:${run.modelVersion ?? 'unknown'}`;
+    for (const subject of [{ type: 'artifact' as const, id: artifact.id }, ...claims.map((claim) => ({
+      type: claim.subjectType === 'figure' ? 'figure_claim' as const : claim.subjectType, id: claim.id
+    }))]) {
+      this.research.addProvenance({ projectId: run.projectId, artifactId: artifact.id, subjectType: subject.type, subjectId: subject.id,
+        sourceType: 'model_run', sourceId: run.id, locator, excerpt: output.title });
+    }
+  }
+
   private retireDraftRunOutputs(projectId: string, stage: ResearchStageRun['stage'], artifactIds: string[]): void {
     const retired = new Set<string>();
     for (const id of artifactIds) {
       const generated = this.db.prepare('SELECT artifact_id FROM research_artifact_contents WHERE project_id = ? AND artifact_id = ?').get(projectId, id);
       if (generated === undefined || this.research.getArtifact(id).status !== 'draft') continue;
+      if (this.research.experiments.hasArtifact(id) || this.research.figures.hasArtifact(id) || this.research.exports.hasArtifact(id)) continue;
       this.db.prepare("UPDATE research_artifacts SET status = 'superseded', updated_at = ? WHERE project_id = ? AND id = ?")
         .run(this.now(), projectId, id);
       retired.add(id);

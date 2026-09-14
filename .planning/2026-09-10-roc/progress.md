@@ -232,3 +232,6 @@
 - 4g1 已提交 `892b6f8`。4g2 将生产写工具接到阶段运行：服务绑定项目/运行身份，脚本修改使用 expectedHash，实验/导出用 requestId 幂等，取消后拒绝迟到副作用。
 - 4g2 已实现：v14 回填 ownerRunId 并增加 workspace 文件版本表；角色工具不接受模型提供的 projectId；取消先 abort 在途实验/导出/模板编译，写回前再校验归属。新增 owned-effects 6 项回归。
 - 4g2 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g2-owned-effects.md，验收表只将 4g1/4g2 标为通过。最终相关回归 37 文件 / 268 项通过（34 项可选资源跳过），owned-effects 6/6，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 4g3。
+
+- 4g3 已实现：实验/绘图/导出阶段 complete() 绑定本次运行链已发布的真实工件；未发布则失败并保留模型版本。失败/重试留下已发布记录，重试成功后把模型 provenance 接到这些工件。人工批准和最终 ZIP 仍不向模型开放。
+- 4g3 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g3-production-role-results.md，验收表将 4g1–4g3 标为通过。最终相关回归 38 文件 / 274 项通过（34 项可选资源跳过），production-role-results 6/6，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Idea Canvas/项目语言。

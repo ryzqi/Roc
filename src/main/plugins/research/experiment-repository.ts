@@ -55,12 +55,14 @@ export class ResearchExperimentRepository {
 
   root(projectId: string, id: string): string { this.get(projectId, id); return this.row(id).root_path; }
   managed(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_experiment_executions WHERE run_id = ?').get(id) !== undefined; }
+  hasArtifact(id: string): boolean { return this.db.prepare("SELECT 1 FROM research_experiment_executions WHERE json_extract(snapshot_json, '$.artifactId') = ?").get(id) !== undefined; }
   forArtifact(artifact: ResearchArtifact): ResearchExperimentExecution {
     const row = this.db.prepare("SELECT run_id FROM research_experiment_executions WHERE json_extract(snapshot_json, '$.artifactId') = ? AND project_id = ?")
       .get(artifact.id, artifact.projectId) as { run_id: string } | undefined;
     if (row === undefined) throw new Error('research_experiment_execution_required');
     const run = this.get(artifact.projectId, row.run_id);
-    if (artifact.kind !== 'experiment_run' || run.status !== 'completed' || run.artifactId !== artifact.id) throw new Error('research_experiment_artifact_invalid');
+    if (artifact.kind !== 'experiment_run' || run.status !== 'completed' || run.artifactId !== artifact.id
+      || artifact.path !== join(this.root(artifact.projectId, run.id), 'manifest.json')) throw new Error('research_experiment_artifact_invalid');
     return run;
   }
   list(projectId: string, limit: number): ResearchExperimentExecution[] {
