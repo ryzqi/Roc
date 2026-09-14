@@ -52,7 +52,7 @@ describe('runDatabaseFastProbe', () => {
       task: 4,
       'plugin:@roc/plugin-workspace': 1,
       'plugin:@roc/plugin-diagnostics': 1,
-      'plugin:@roc/plugin-research': 1
+      'plugin:@roc/plugin-research': 15
     });
     expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(0);
   });

@@ -50,6 +50,8 @@ describe('ResearchRepository', () => {
     expect(project).toMatchObject({
       title: 'Evidence graph',
       status: 'active',
+      language: 'zh',
+      origin: null,
       currentStage: 'discovery'
     });
     const workflow = repository.getWorkflow(project.id);

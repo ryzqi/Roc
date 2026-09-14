@@ -16,6 +16,16 @@ export const researchStageSchema = z.enum([
 
 export const researchProjectStatusSchema = z.enum(['active', 'paused', 'completed', 'archived']);
 
+export const researchProjectLanguageSchema = z.enum(['zh', 'en']);
+
+export const researchProjectOriginSchema = z
+  .object({
+    projectId: z.string().min(1),
+    artifactId: z.string().min(1),
+    version: z.number().int().positive()
+  })
+  .strict();
+
 export const researchStageStatusSchema = z.enum([
   'locked',
   'ready',
@@ -48,6 +58,8 @@ export const researchProjectSchema = z
     description: z.string(),
     workspacePath: z.string().nullable(),
     status: researchProjectStatusSchema,
+    language: researchProjectLanguageSchema,
+    origin: researchProjectOriginSchema.nullable(),
     currentStage: researchStageSchema,
     createdAt: z.string(),
     updatedAt: z.string()
@@ -62,7 +74,8 @@ export const researchProjectCreateRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     description: z.string().trim().min(1).max(5000),
-    workspacePath: z.string().trim().min(1).nullable()
+    workspacePath: z.string().trim().min(1).nullable(),
+    language: researchProjectLanguageSchema.optional()
   })
   .strict();
 
@@ -72,7 +85,8 @@ export const researchProjectUpdateRequestSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().trim().min(1).max(5000).optional(),
     workspacePath: z.string().trim().min(1).nullable().optional(),
-    status: researchProjectStatusSchema.optional()
+    status: researchProjectStatusSchema.optional(),
+    language: researchProjectLanguageSchema.optional()
   })
   .strict();
 

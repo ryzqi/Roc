@@ -50,6 +50,7 @@ import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchFigureRepository } from './figure-repository';
 import { ResearchExportRepository } from './export-repository';
+import { ResearchIdeaRepository } from './idea-repository';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
 export const researchStages = [
@@ -91,11 +92,14 @@ export class ResearchRepository {
   readonly experiments: ResearchExperimentRepository;
   readonly figures: ResearchFigureRepository;
   readonly exports: ResearchExportRepository;
+  readonly ideas: ResearchIdeaRepository;
+  private readonly projectLanguageReady: boolean;
 
   constructor(
     private readonly db: DatabaseConnection,
     private readonly now: Clock = () => new Date().toISOString()
   ) {
+    this.projectLanguageReady = this.db.prepare("SELECT 1 FROM pragma_table_info('research_projects') WHERE name = 'language'").get() !== undefined;
     this.evidence = new ResearchEvidenceRepository(db, {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id)
@@ -108,12 +112,13 @@ export class ResearchRepository {
     this.experiments = new ResearchExperimentRepository(db, this, now);
     this.figures = new ResearchFigureRepository(db, this, now);
     this.exports = new ResearchExportRepository(db, this, now);
+    this.ideas = new ResearchIdeaRepository(db, this, now);
   }
 
   listProjects(): ResearchProject[] {
     const rows = this.db
       .prepare(
-        `SELECT id, title, description, workspace_path, status, current_stage, created_at, updated_at
+        `${this.projectSelectSql()}
          FROM research_projects
          ORDER BY updated_at DESC`
       )
@@ -124,7 +129,7 @@ export class ResearchRepository {
   getProject(id: string): ResearchProject {
     const row = this.db
       .prepare(
-        `SELECT id, title, description, workspace_path, status, current_stage, created_at, updated_at
+        `${this.projectSelectSql()}
          FROM research_projects WHERE id = ?`
       )
       .get(id) as ResearchProjectRow | undefined;
@@ -134,17 +139,31 @@ export class ResearchRepository {
     return toProject(row);
   }
 
-  createProject(request: ResearchProjectCreateRequest): ResearchProject {
+  createProject(request: ResearchProjectCreateRequest, origin: ResearchProject['origin'] = null): ResearchProject {
     const id = `research_${randomUUID()}`;
     const timestamp = this.now();
+    const language = request.language ?? 'zh';
+    if (!this.projectLanguageReady && (language !== 'zh' || origin !== null)) {
+      throw new Error('research_project_language_schema_required');
+    }
     const insert = this.db.transaction(() => {
-      this.db
-        .prepare(
-          `INSERT INTO research_projects
-           (id, title, description, workspace_path, status, current_stage, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?)`
-        )
-        .run(id, request.title, request.description, request.workspacePath, timestamp, timestamp);
+      if (this.projectLanguageReady) {
+        this.db
+          .prepare(
+            `INSERT INTO research_projects
+             (id, title, description, workspace_path, status, language, origin_project_id, origin_artifact_id, origin_version, current_stage, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, 'discovery', ?, ?)`
+          )
+          .run(id, request.title, request.description, request.workspacePath, language, origin?.projectId ?? null, origin?.artifactId ?? null, origin?.version ?? null, timestamp, timestamp);
+      } else {
+        this.db
+          .prepare(
+            `INSERT INTO research_projects
+             (id, title, description, workspace_path, status, current_stage, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?)`
+          )
+          .run(id, request.title, request.description, request.workspacePath, timestamp, timestamp);
+      }
       const insertStage = this.db.prepare(
         `INSERT INTO research_stage_states
          (project_id, stage, status, active_run_id, artifact_ids_json, entered_at, completed_at, gate_required, gate_approved, last_error)
@@ -161,7 +180,7 @@ export class ResearchRepository {
       });
       this.runs.initializeProject(id);
       this.indexing.initializeProject(id);
-      this.appendEvent(id, 'discovery', 'project_created', '研究项目已创建。', { title: request.title }, timestamp);
+      this.appendEvent(id, 'discovery', 'project_created', '研究项目已创建。', { title: request.title, language, origin }, timestamp);
     });
     insert();
     return this.getProject(id);
@@ -171,19 +190,21 @@ export class ResearchRepository {
     this.getProject(request.id);
     const current = this.getProject(request.id);
     const timestamp = this.now();
+    if (request.language !== undefined && !this.projectLanguageReady) throw new Error('research_project_language_schema_required');
     this.db
       .prepare(
-        `UPDATE research_projects SET
-         title = ?, description = ?, workspace_path = ?, status = ?, updated_at = ?
-         WHERE id = ?`
+        this.projectLanguageReady
+          ? `UPDATE research_projects SET title = ?, description = ?, workspace_path = ?, status = ?, language = ?, updated_at = ? WHERE id = ?`
+          : `UPDATE research_projects SET title = ?, description = ?, workspace_path = ?, status = ?, updated_at = ? WHERE id = ?`
       )
       .run(
-        request.title ?? current.title,
-        request.description ?? current.description,
-        request.workspacePath === undefined ? current.workspacePath : request.workspacePath,
-        request.status ?? current.status,
-        timestamp,
-        request.id
+        ...(this.projectLanguageReady
+          ? [request.title ?? current.title, request.description ?? current.description,
+            request.workspacePath === undefined ? current.workspacePath : request.workspacePath,
+            request.status ?? current.status, request.language ?? current.language, timestamp, request.id]
+          : [request.title ?? current.title, request.description ?? current.description,
+            request.workspacePath === undefined ? current.workspacePath : request.workspacePath,
+            request.status ?? current.status, timestamp, request.id])
       );
     return this.getProject(request.id);
   }
@@ -360,7 +381,7 @@ export class ResearchRepository {
     return state;
   }
 
-  private requireEditableArtifact(id: string): ResearchArtifact {
+  requireEditableArtifact(id: string): ResearchArtifact {
     const artifact = this.getArtifact(id);
     if (artifact.status !== 'draft') throw new Error('research_artifact_immutable');
     this.requireEditableStage(artifact.projectId, artifact.stage);
@@ -854,6 +875,7 @@ export class ResearchRepository {
         throw new Error('research_stage_artifact_invalid');
       }
       this.evidence.assertPublishable(artifact);
+      if (artifact.kind === 'idea_canvas') this.ideas.assertPublishable(artifact);
       if (artifact.kind === 'experiment_run') this.experiments.forArtifact(artifact);
       if (artifact.kind === 'figure') this.figures.forArtifact(artifact);
     }
@@ -965,6 +987,12 @@ export class ResearchRepository {
       .run(randomUUID(), projectId, stage, type, message, JSON.stringify(payload), createdAt);
   }
 
+  private projectSelectSql(): string {
+    return this.projectLanguageReady
+      ? `SELECT id, title, description, workspace_path, status, language, origin_project_id, origin_artifact_id, origin_version, current_stage, created_at, updated_at`
+      : `SELECT id, title, description, workspace_path, status, 'zh' AS language, NULL AS origin_project_id, NULL AS origin_artifact_id, NULL AS origin_version, current_stage, created_at, updated_at`;
+  }
+
   private requireStatus(current: ResearchStageState, allowed: ResearchStageState['status'][], code: string): void {
     if (!allowed.includes(current.status)) {
       throw new Error(`${code}:${current.stage}:${current.status}`);
@@ -978,6 +1006,10 @@ type ResearchProjectRow = {
   description: string;
   workspace_path: string | null;
   status: ResearchProject['status'];
+  language: ResearchProject['language'];
+  origin_project_id: string | null;
+  origin_artifact_id: string | null;
+  origin_version: number | null;
   current_stage: ResearchProject['currentStage'];
   created_at: string;
   updated_at: string;
@@ -1085,12 +1117,20 @@ type ArtifactRow = {
 };
 
 function toProject(row: ResearchProjectRow): ResearchProject {
+  const originFields = [row.origin_project_id, row.origin_artifact_id, row.origin_version];
+  const present = originFields.filter((value) => value !== null).length;
+  if (present !== 0 && present !== 3) throw new Error('research_project_origin_invalid');
+  const origin = present === 0
+    ? null
+    : { projectId: row.origin_project_id, artifactId: row.origin_artifact_id, version: row.origin_version };
   return researchProjectSchema.parse({
     id: row.id,
     title: row.title,
     description: row.description,
     workspacePath: row.workspace_path,
     status: row.status,
+    language: row.language,
+    origin,
     currentStage: row.current_stage,
     createdAt: row.created_at,
     updatedAt: row.updated_at

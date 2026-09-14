@@ -1463,6 +1463,56 @@ export const researchMigrations: RocDatabaseMigration[] = [
         PRIMARY KEY(project_id, path)
       );
     `
+  },
+  {
+    version: 15,
+    name: 'research_idea_canvas_and_project_language',
+    sql: `
+      ALTER TABLE research_projects ADD COLUMN language TEXT NOT NULL DEFAULT 'zh' CHECK(language IN ('zh','en'));
+      ALTER TABLE research_projects ADD COLUMN origin_project_id TEXT REFERENCES research_projects(id) ON DELETE SET NULL;
+      ALTER TABLE research_projects ADD COLUMN origin_artifact_id TEXT REFERENCES research_artifacts(id) ON DELETE SET NULL;
+      ALTER TABLE research_projects ADD COLUMN origin_version INTEGER;
+      CREATE TRIGGER research_projects_origin_complete
+        BEFORE INSERT ON research_projects
+        WHEN ((NEW.origin_project_id IS NULL) = 1) + ((NEW.origin_artifact_id IS NULL) = 1) + ((NEW.origin_version IS NULL) = 1) NOT IN (0, 3)
+        BEGIN SELECT RAISE(ABORT, 'research_project_origin_invalid'); END;
+      CREATE TRIGGER research_projects_origin_complete_update
+        BEFORE UPDATE OF origin_project_id, origin_artifact_id, origin_version ON research_projects
+        WHEN ((NEW.origin_project_id IS NULL) = 1) + ((NEW.origin_artifact_id IS NULL) = 1) + ((NEW.origin_version IS NULL) = 1) NOT IN (0, 3)
+        BEGIN SELECT RAISE(ABORT, 'research_project_origin_invalid'); END;
+      CREATE TABLE research_idea_canvases (
+        artifact_id TEXT PRIMARY KEY REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK(version >= 1),
+        snapshot_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE research_idea_canvas_revisions (
+        artifact_id TEXT NOT NULL REFERENCES research_idea_canvases(artifact_id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        PRIMARY KEY(artifact_id, version)
+      );
+      CREATE UNIQUE INDEX idx_research_projects_origin
+        ON research_projects(origin_artifact_id, origin_version)
+        WHERE origin_artifact_id IS NOT NULL AND origin_version IS NOT NULL;
+      UPDATE research_stage_runs
+        SET context_json = json_set(context_json, '$.project.language', 'zh')
+        WHERE json_extract(context_json, '$.project.language') IS NULL;
+      UPDATE research_stage_runs
+        SET context_json = json_set(context_json, '$.project.origin', json('null'))
+        WHERE json_extract(context_json, '$.project.origin') IS NULL;
+      UPDATE research_stage_runs
+        SET context_json = json_set(context_json, '$.inputs', (
+          SELECT json_group_array(json_set(value, '$.ideaCanvas', json('null')))
+          FROM json_each(context_json, '$.inputs')
+        ))
+        WHERE EXISTS (
+          SELECT 1 FROM json_each(context_json, '$.inputs') WHERE json_extract(value, '$.ideaCanvas') IS NULL
+        );
+    `
   }
 ];
 

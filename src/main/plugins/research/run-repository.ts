@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { researchArtifactSchema, researchProjectSchema, researchStageSchema } from '../../../shared/schemas/research';
 import { researchManuscriptSchema } from '../../../shared/schemas/research-evidence';
+import { researchIdeaCanvasSchema } from '../../../shared/schemas/research-ideas';
 import {
   researchArtifactContentSchema,
   researchStageOutputSchema,
@@ -26,7 +27,8 @@ const executionContextSchema = z.object({
   inputs: z.array(z.object({
     artifact: researchArtifactSchema,
     output: researchStageOutputSchema.nullable(),
-    manuscript: researchManuscriptSchema.nullable()
+    manuscript: researchManuscriptSchema.nullable(),
+    ideaCanvas: researchIdeaCanvasSchema.nullable()
   }).strict())
 }).strict();
 
@@ -310,7 +312,8 @@ export class ResearchRunRepository {
         .filter((artifact) => stage !== 'revision' || artifact.kind !== 'review_report' || cycle?.reportArtifactIds.includes(artifact.id))
         .map((artifact) => ({
         artifact, output: this.getArtifactContent(projectId, artifact.id)?.output ?? null,
-        manuscript: this.research.evidence.getManuscript(artifact.id)
+        manuscript: this.research.evidence.getManuscript(artifact.id),
+        ideaCanvas: this.research.ideas.get(artifact.id)
       }))
     };
   }
@@ -376,6 +379,10 @@ export class ResearchRunRepository {
           return claim.id;
         }) }))
       });
+    }
+    if (run.outputKind === 'idea_canvas') {
+      if (output.ideaCanvas === undefined) throw new Error('research_idea_canvas_required');
+      this.research.ideas.save({ ...output.ideaCanvas, artifactId: artifact.id, expectedVersion: null });
     }
     this.db.prepare('INSERT INTO research_artifact_contents (artifact_id, project_id, run_id, output_json, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(artifact.id, run.projectId, run.id, JSON.stringify(output), timestamp);

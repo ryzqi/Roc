@@ -235,3 +235,6 @@
 
 - 4g3 已实现：实验/绘图/导出阶段 complete() 绑定本次运行链已发布的真实工件；未发布则失败并保留模型版本。失败/重试留下已发布记录，重试成功后把模型 provenance 接到这些工件。人工批准和最终 ZIP 仍不向模型开放。
 - 4g3 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g3-production-role-results.md，验收表将 4g1–4g3 标为通过。最终相关回归 38 文件 / 274 项通过（34 项可选资源跳过），production-role-results 7/7，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Idea Canvas/项目语言。
+
+- 4h 已实现：项目语言、结构化 Idea Canvas、批准后晋升、构思角色输出绑定真实 Canvas。v15 回填旧运行上下文的 language/origin/ideaCanvas。
+- 4h 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04h-idea-canvas.md。最终相关回归 40 文件 / 288 项通过（34 项可选资源跳过），idea-canvas 9/9，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Renderer。

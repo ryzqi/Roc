@@ -221,6 +221,14 @@ import {
   researchManuscriptSaveRequestSchema,
   researchManuscriptSchema
 } from './schemas/research-evidence';
+import {
+  researchIdeaCanvasGetRequestSchema,
+  researchIdeaCanvasHistoryRequestSchema,
+  researchIdeaCanvasSaveRequestSchema,
+  researchIdeaCanvasSchema,
+  researchIdeaPromoteRequestSchema,
+  researchIdeaPromotionSchema
+} from './schemas/research-ideas';
 
 export type IpcInputTransform =
   | { readonly kind: 'none' }
@@ -389,6 +397,10 @@ export const ipcRegistry = {
     request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
     request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
     request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
+    request({ key: 'researchIdeasSave', channel: 'roc:research:ideas-save', domain: 'research', method: 'saveIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasSaveRequestSchema), researchIdeaCanvasSchema) }),
+    request({ key: 'researchIdeasGet', channel: 'roc:research:ideas-get', domain: 'research', method: 'getIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasGetRequestSchema), researchIdeaCanvasSchema.nullable()) }),
+    request({ key: 'researchIdeasHistory', channel: 'roc:research:ideas-history', domain: 'research', method: 'getIdeaCanvasHistory', kind: 'plugin', capabilityName: 'research.ideas.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasHistoryRequestSchema), researchIdeaCanvasSchema.array()) }),
+    request({ key: 'researchIdeasPromote', channel: 'roc:research:ideas-promote', domain: 'research', method: 'promoteIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.promote', inputTransform: first, contract: methodContract(oneArg(researchIdeaPromoteRequestSchema), researchIdeaPromotionSchema) }),
     request({ key: 'researchLiteratureSearch', channel: 'roc:research:literature-search', domain: 'research', method: 'searchLiterature', kind: 'plugin', capabilityName: 'research.literature.search', inputTransform: first, contract: methodContract(oneArg(researchLiteratureSearchRequestSchema), researchLiteratureSchema.array()) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),

@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a–4f 与 Integration 4g1–4g3 已完成；继续 Idea Canvas/项目语言、Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；继续 Renderer 与 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -26,7 +26,7 @@ Phase 3 — Implementation（Production）
 - [x] Foundation: research domain schema, migrations, IPC contracts
 - [x] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
 - [x] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
-- [ ] Production: LaTeX templates/live PDF, experiments, figures, exports
+- [x] Production: LaTeX templates/live PDF, experiments, figures, exports
 - [ ] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
 - [ ] Packaging: bundled toolchain, licenses, resource verification
 - **Status:** in_progress
@@ -41,7 +41,7 @@ Phase 3 — Implementation（Production）
 - [x] Workflow 2：证据片段、主张/段落/图稿关联、正文/导出数据包硬闸门；review 与定向验证通过。
 - [x] Workflow 3a：阶段模型策略、角色 Skill/工具隔离、持久运行、取消/重试/恢复；review、116 测试与 build 通过。
 - [x] Workflow 3b：多角色独立审稿、综合与最多两轮修订；review、124 测试与 build 通过。
-- [ ] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
+- [x] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [x] Production 4a：固定依赖/模型/TeX 资源、可恢复准备脚本、离线运行与搬迁验证；双轴 review、22 测试和真实离线 smoke 通过。
 - [x] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览；两轴 review 与真实链路通过。
 - [x] Production 4c：文献本地/DOI/BibTeX/Zotero 导入、文档解析、项目监听与增量索引。
@@ -54,11 +54,11 @@ Phase 3 — Implementation（Production）
 - [x] Production 4d2：R/Julia 项目环境探测与脚本执行；双轴 review、202 项相关回归、14 项真实运行/进程回归及构建通过。
 - [x] Production 4e：可复现科研绘图、PNG/SVG/PDF 输出和图稿审核；双轴 review、215 项相关回归、5 项真实绘图/审核/Electron 预览测试与构建通过。
 - [x] Production 4f：论文/参考文献/图稿最终导出及审核闸门接线；双轴 review、246 项相关回归、4 项真实 PDF/ZIP 链路、3 项 ZIP Python 回归与构建通过。
-- [ ] Integration 4g：科研 Agent 生产工具、项目/运行作用域、真实产物关联和取消/重试接线。
+- [x] Integration 4g：科研 Agent 生产工具、项目/运行作用域、真实产物关联和取消/重试接线。
 - [x] Integration 4g1：已批准生产输入的真实元数据和文本读取；双轴 review、262 项相关回归、真实图稿/PDF/ZIP 读取与构建通过。
 - [x] Integration 4g2：生产副作用的运行归属、版本、幂等与取消边界。
 - [x] Integration 4g3：阶段模型输出采用真实产物，连接模型 provenance 和重试/审核。
-- [ ] Integration 4h：结构化 Idea Canvas、项目晋升、项目级中英语言设置。
+- [x] Integration 4h：结构化 Idea Canvas、项目晋升、项目级中英语言设置。
 - [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 

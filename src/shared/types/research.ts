@@ -64,6 +64,14 @@ import type {
   researchReviewCycleSchema
 } from '../schemas/research-runs';
 import type {
+  researchIdeaCanvasSchema,
+  researchIdeaCanvasSaveRequestSchema,
+  researchIdeaCanvasGetRequestSchema,
+  researchIdeaCanvasHistoryRequestSchema,
+  researchIdeaPromoteRequestSchema,
+  researchIdeaPromotionSchema
+} from '../schemas/research-ideas';
+import type {
   researchEvidenceSchema,
   researchEvidenceCaptureRequestSchema,
   researchEvidenceListRequestSchema,
@@ -171,3 +179,9 @@ export type ResearchStageRunIdRequest = z.infer<typeof researchStageRunIdRequest
 export type ResearchStageRunRetryRequest = z.infer<typeof researchStageRunRetryRequestSchema>;
 export type ResearchStageRunsRequest = z.infer<typeof researchStageRunsRequestSchema>;
 export type ResearchReviewCycle = z.infer<typeof researchReviewCycleSchema>;
+export type ResearchIdeaCanvas = z.infer<typeof researchIdeaCanvasSchema>;
+export type ResearchIdeaCanvasSaveRequest = z.infer<typeof researchIdeaCanvasSaveRequestSchema>;
+export type ResearchIdeaCanvasGetRequest = z.infer<typeof researchIdeaCanvasGetRequestSchema>;
+export type ResearchIdeaCanvasHistoryRequest = z.infer<typeof researchIdeaCanvasHistoryRequestSchema>;
+export type ResearchIdeaPromoteRequest = z.infer<typeof researchIdeaPromoteRequestSchema>;
+export type ResearchIdeaPromotion = z.infer<typeof researchIdeaPromotionSchema>;

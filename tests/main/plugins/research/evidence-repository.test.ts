@@ -234,7 +234,7 @@ describe('research evidence and manuscript boundaries', () => {
       applyResearchDatabaseSchema(legacy);
       applyResearchDatabaseSchema(legacy);
       const upgraded = new ResearchRepository(legacy);
-      expect(upgraded.getProject(old.id)).toEqual(old);
+      expect(upgraded.getProject(old.id)).toEqual({ ...old, language: 'zh', origin: null });
       expect(upgraded.evidence.list(old.id)).toEqual([]);
       expect(upgraded.runs.listPolicies(old.id)).toMatchObject([{ stage: 'discovery', model: { kind: 'app_default' } }]);
     } finally {

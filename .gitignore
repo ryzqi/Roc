@@ -14,6 +14,7 @@ docs/*
 !docs/research-experiments.md
 !docs/research-figures.md
 !docs/research-exports.md
+!docs/research-ideas.md
 !docs/superpowers/
 !docs/release/
 !docs/release/release-candidate-checklist.md

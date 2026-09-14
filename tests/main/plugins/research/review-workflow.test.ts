@@ -225,7 +225,9 @@ describe('independent review and revision workflow', () => {
       applyResearchDatabaseSchema(legacy);
       const upgraded = new ResearchRepository(legacy);
       expect(upgraded.runs.get(run.id, project.id)).toMatchObject({ instruction: 'Original input.', reviewCycleId: null, revisionRound: 0, skillHash: run.skillHash });
+      expect(upgraded.runs.getContext(run.id).project).toMatchObject({ language: 'zh', origin: null });
       expect(upgraded.runs.getContext(run.id).reviewReports).toEqual([]);
+      expect(upgraded.runs.getContext(run.id).inputs.every((entry) => entry.ideaCanvas === null)).toBe(true);
       expect(upgraded.runs.recoverInterrupted()).toBe(1);
       expect(upgraded.runs.get(run.id, project.id).status).toBe('interrupted');
     } finally {
@@ -250,12 +252,12 @@ function createLegacyReviewFixture(legacy: Database.Database, stage: 'review' | 
   const manuscript = old.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
   legacy.prepare("UPDATE research_artifacts SET status = 'approved' WHERE id = ?").run(artifact.id);
   legacy.prepare("UPDATE research_stage_states SET status = 'completed', gate_approved = 1 WHERE project_id = ? AND stage = 'writing'").run(project.id);
-  const inputs: ResearchRoleExecution['context']['inputs'] = [{ artifact: old.getArtifact(artifact.id), output: null, manuscript }];
+  const inputs: ResearchRoleExecution['context']['inputs'] = [{ artifact: old.getArtifact(artifact.id), output: null, manuscript, ideaCanvas: null }];
   if (stage === 'revision') {
     legacy.prepare("INSERT INTO research_artifacts (id, project_id, stage, kind, title, path, status, created_at, updated_at) VALUES ('legacy-review', ?, 'review', 'review_report', 'Prior review', NULL, 'approved', ?, ?)")
       .run(project.id, queued.createdAt, queued.createdAt);
     legacy.prepare("UPDATE research_stage_states SET status = 'completed', gate_approved = 1, artifact_ids_json = '[\"legacy-review\"]' WHERE project_id = ? AND stage = 'review'").run(project.id);
-    inputs.push({ artifact: old.getArtifact('legacy-review'), output: null, manuscript: null });
+    inputs.push({ artifact: old.getArtifact('legacy-review'), output: null, manuscript: null, ideaCanvas: null });
   }
   legacy.prepare('UPDATE research_projects SET current_stage = ? WHERE id = ?').run(stage, project.id);
   legacy.prepare("UPDATE research_stage_states SET status = 'running', active_run_id = ? WHERE project_id = ? AND stage = ?").run(queued.id, project.id, stage);
