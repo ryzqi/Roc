@@ -256,3 +256,6 @@
 
 - 5e 已实现：文稿视图可导入模板、编辑源文件并编译 PDF 预览。
 - 5e 完成：Standards/Spec 未解决 0。审查记录 reviews/05e-latex-editor.md。research-view 7/7 与 typecheck 通过。状态 Verified passing；Phase 3 Renderer 完成。
+
+- Phase 4 已记录：typecheck、check:ipc、build 与科研相关 276 项回归通过。全量测试中的既有 chat/agent/backup 失败和完整安装包 smoke 列为已知限制。
+- Phase 4/5 完成：审查记录 reviews/07-phase4-verification.md。计划内科研增量全部交付。

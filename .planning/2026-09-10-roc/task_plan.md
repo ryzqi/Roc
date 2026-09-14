@@ -4,10 +4,10 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 与 Packaging 已完成；进入 Phase 4 验证与交付记录。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 与 Packaging 已完成；Phase 4 验证记录已完成；计划内科研增量全部交付。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
-Phase 3 — Implementation（Production）
+Phase 5 — Delivery
 
 ## Phases
 
@@ -29,12 +29,12 @@ Phase 3 — Implementation（Production）
 - [x] Production: LaTeX templates/live PDF, experiments, figures, exports
 - [x] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
 - [x] Packaging: bundled toolchain, licenses, resource verification
-- **Status:** in_progress
+- **Status:** complete
 
 ### Phase 4: Testing & Verification
-- [ ] Verify requirements met
-- [ ] Document test results
-- **Status:** pending
+- [x] Verify requirements met
+- [x] Document test results
+- **Status:** complete
 
 ## Implementation increments
 - [x] Workflow 1：阶段回退/中途进入、产物审批生命周期、项目归属、产物/事件 IPC；review 与定向验证通过。
@@ -68,9 +68,9 @@ Phase 3 — Implementation（Production）
 - [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery
-- [ ] Review outputs
-- [ ] Deliver to user
-- **Status:** pending
+- [x] Review outputs
+- [x] Deliver to user
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
