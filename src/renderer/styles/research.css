@@ -738,3 +738,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+.research-idea-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.research-idea-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-idea-form textarea,
+.research-idea-form select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.research-idea-form span {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+}

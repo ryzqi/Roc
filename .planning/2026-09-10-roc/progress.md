@@ -244,3 +244,6 @@
 
 - 5b 已实现：文献库视图支持检索导入、DOI 导入、项目关联，以及打开已解析全文。
 - 5b 完成：Standards/Spec 未解决 0。审查记录 reviews/05b-library-reader.md。research-view 4/4 与 typecheck 通过。状态 Verified passing；下一步 Idea Canvas 编辑器。
+
+- 5c 已实现：构思视图可创建/编辑 Idea Canvas，保存后晋升为新项目。
+- 5c 完成：Standards/Spec 未解决 0。审查记录 reviews/05c-idea-canvas-ui.md。research-view 5/5 与 typecheck 通过。状态 Verified passing；下一步图稿/导出编辑器。

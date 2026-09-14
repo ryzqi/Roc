@@ -6,6 +6,9 @@ import type {
   ResearchDocument,
   ResearchDocumentParse,
   ResearchEmbeddingConfig,
+  ResearchEvidence,
+  ResearchIdeaCanvas,
+  ResearchIdeaCanvasSaveRequest,
   ResearchKnowledgeSearchResult,
   ResearchLibraryItem,
   ResearchLiterature,
@@ -18,6 +21,7 @@ import type {
 import { unwrap } from '../../loaded-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdeaPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 import { researchStageLabels } from './research-workflow';
@@ -37,7 +41,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -46,6 +50,10 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [openLibraryItem, setOpenLibraryItem] = useState<ResearchLibraryItem | null>(null);
   const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
   const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
+  const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
+  const [ideaArtifactId, setIdeaArtifactId] = useState<string | null>(null);
+  const [ideaCanvas, setIdeaCanvas] = useState<ResearchIdeaCanvas | null>(null);
+  const [ideaDraft, setIdeaDraft] = useState<ResearchIdeaCanvasSaveRequest | null>(null);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [knowledgeResult, setKnowledgeResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const [embeddingConfigs, setEmbeddingConfigs] = useState<ResearchEmbeddingConfig[]>([]);
@@ -92,13 +100,15 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       client.api.research.getWorkflow({ id: selectedProjectId }),
       client.api.research.listWorkflowEvents({ projectId: selectedProjectId, limit: 40 }),
       client.api.research.listStageRuns({ projectId: selectedProjectId, limit: 40 }),
-      client.api.research.listArtifacts({ projectId: selectedProjectId })
-    ]).then(([workflowResult, eventResult, runResult, artifactResult]) => {
+      client.api.research.listArtifacts({ projectId: selectedProjectId }),
+      client.api.research.listEvidence({ projectId: selectedProjectId })
+    ]).then(([workflowResult, eventResult, runResult, artifactResult, evidenceResult]) => {
       if (cancelled) return;
       setWorkflow(unwrap('科研流程', workflowResult));
       setEvents(unwrap('科研事件', eventResult));
       setRuns(unwrap('阶段运行', runResult));
       setArtifacts(unwrap('阶段产物', artifactResult));
+      setEvidence(unwrap('证据', evidenceResult));
       setError(null);
     }).catch((loadError: unknown) => {
       if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研流程加载失败。');
@@ -141,17 +151,19 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   }
 
   async function refreshProject(projectId: string): Promise<void> {
-    const [workflowResult, eventResult, runResult, artifactResult] = await Promise.all([
+    const [workflowResult, eventResult, runResult, artifactResult, evidenceResult] = await Promise.all([
       client.api.research.getWorkflow({ id: projectId }),
       client.api.research.listWorkflowEvents({ projectId, limit: 40 }),
       client.api.research.listStageRuns({ projectId, limit: 40 }),
-      client.api.research.listArtifacts({ projectId })
+      client.api.research.listArtifacts({ projectId }),
+      client.api.research.listEvidence({ projectId })
     ]);
     const nextWorkflow = unwrap('科研流程', workflowResult);
     setWorkflow(nextWorkflow);
     setEvents(unwrap('科研事件', eventResult));
     setRuns(unwrap('阶段运行', runResult));
     setArtifacts(unwrap('阶段产物', artifactResult));
+    setEvidence(unwrap('证据', evidenceResult));
     setProjects((current) => current.map((project) => project.id === projectId
       ? { ...project, currentStage: nextWorkflow.currentStage, status: nextWorkflow.projectStatus, updatedAt: nextWorkflow.lastEvent?.createdAt ?? project.updatedAt }
       : project));
@@ -311,6 +323,69 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+
+  async function selectIdea(artifactId: string): Promise<void> {
+    setIdeaArtifactId(artifactId);
+    const canvas = unwrap('Idea Canvas', await client.api.research.getIdeaCanvas({ artifactId }));
+    setIdeaCanvas(canvas);
+    setIdeaDraft(canvas === null ? emptyIdeaDraft(artifactId) : canvasToDraft(canvas));
+  }
+
+  async function createIdea(): Promise<void> {
+    if (selectedProjectId === null || workflow === null) return;
+    setWorking(true);
+    try {
+      if (workflow.currentStage !== 'ideation') {
+        unwrap('进入构思阶段', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: workflow.currentStage, action: 'move', targetStage: 'ideation' }));
+      }
+      const current = unwrap('科研流程', await client.api.research.getWorkflow({ id: selectedProjectId }));
+      if (current.stages.find((stage) => stage.stage === 'ideation')?.status === 'ready') {
+        unwrap('开始构思', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: 'ideation', action: 'start' }));
+      }
+      const artifact = unwrap('创建画布', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'ideation', kind: 'idea_canvas', title: 'Idea Canvas', path: null }));
+      await refreshProject(selectedProjectId);
+      setIdeaArtifactId(artifact.id);
+      setIdeaCanvas(null);
+      setIdeaDraft(emptyIdeaDraft(artifact.id));
+      setError(null);
+    } catch (createError: unknown) {
+      setError(createError instanceof Error ? createError.message : '创建 Idea Canvas 失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function saveIdea(): Promise<void> {
+    if (ideaDraft === null) return;
+    setWorking(true);
+    try {
+      const saved = unwrap('保存画布', await client.api.research.saveIdeaCanvas(ideaDraft));
+      setIdeaCanvas(saved);
+      setIdeaDraft(canvasToDraft(saved));
+      if (selectedProjectId !== null) await refreshProject(selectedProjectId);
+      setError(null);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : '保存 Idea Canvas 失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function promoteIdea(): Promise<void> {
+    if (ideaCanvas === null) return;
+    setWorking(true);
+    try {
+      const promoted = unwrap('晋升画布', await client.api.research.promoteIdeaCanvas({ artifactId: ideaCanvas.artifactId, expectedVersion: ideaCanvas.version }));
+      setProjects((current) => [promoted.project, ...current.filter((item) => item.id !== promoted.project.id)]);
+      setSelectedProjectId(promoted.project.id);
+      setError(null);
+    } catch (promoteError: unknown) {
+      setError(promoteError instanceof Error ? promoteError.message : '晋升 Idea Canvas 失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function searchKnowledge(): Promise<void> {
     if (knowledgeQuery.trim().length === 0) return;
     setWorking(true);
@@ -394,6 +469,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         {([
           ['workflow', '流程'],
           ['library', '文献库'],
+          ['ideas', '构思'],
           ['knowledge', '知识库'],
           ['embedding', '嵌入配置']
         ] as const).map(([tab, label]) => (
@@ -501,6 +577,21 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         </div>
       ) : null}
 
+      {activeTab === 'ideas' ? (
+        <ResearchIdeaPanel
+          artifacts={artifacts}
+          canvas={ideaCanvas}
+          draft={ideaDraft}
+          evidence={evidence}
+          onChange={setIdeaDraft}
+          onCreate={() => void createIdea()}
+          onPromote={() => void promoteIdea()}
+          onSave={() => void saveIdea()}
+          onSelect={(artifactId) => void selectIdea(artifactId)}
+          selectedArtifactId={ideaArtifactId}
+          working={working}
+        />
+      ) : null}
       {activeTab === 'library' ? (
         <ResearchLibraryPanel
           doi={doi}

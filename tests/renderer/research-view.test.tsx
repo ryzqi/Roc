@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -81,6 +81,37 @@ describe('ResearchView project dashboard', () => {
     expect(text('research-reader-content')).toContain('Measured improvement.');
   });
 
+  it('saves an idea canvas and promotes the approved version', async () => {
+    const ideaArtifact = { ...artifact(), kind: 'idea_canvas' as const, title: 'Canvas', stage: 'ideation' as const, status: 'approved' as const };
+    const canvas: ResearchIdeaCanvas = {
+      artifactId: ideaArtifact.id, projectId: 'research_1', version: 1, problem: 'How to keep graphs inspectable?', hypothesis: 'Structured canvases help.',
+      novelty: 'Promotion keeps versions.', supportingEvidence: 'Prior work lacks records.', counterevidence: '', experiment: 'Promote and inspect origin.',
+      risks: 'Stale duplicates.', priority: 'high', rationale: 'Testable path.', contentHash: 'b'.repeat(64),
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z',
+      fields: [
+        { key: 'problem', content: 'How to keep graphs inspectable?', status: 'pending', evidenceIds: [] },
+        { key: 'hypothesis', content: 'Structured canvases help.', status: 'hypothesis', evidenceIds: [] },
+        { key: 'novelty', content: 'Promotion keeps versions.', status: 'pending', evidenceIds: [] },
+        { key: 'supportingEvidence', content: 'Prior work lacks records.', status: 'pending', evidenceIds: [] },
+        { key: 'counterevidence', content: '', status: 'pending', evidenceIds: [] },
+        { key: 'experiment', content: 'Promote and inspect origin.', status: 'hypothesis', evidenceIds: [] },
+        { key: 'risks', content: 'Stale duplicates.', status: 'pending', evidenceIds: [] }
+      ]
+    };
+    const api = createResearchApi({ artifacts: [ideaArtifact] });
+    api.getIdeaCanvas.mockResolvedValue({ ok: true, data: canvas });
+    api.saveIdeaCanvas.mockResolvedValue({ ok: true, data: { ...canvas, version: 2, rationale: 'Updated ranking.' } });
+    api.promoteIdeaCanvas.mockResolvedValue({ ok: true, data: { canvas, project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: null, status: 'active', language: 'zh', origin: { projectId: 'research_1', artifactId: ideaArtifact.id, version: 1 }, currentStage: 'discovery', createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } } });
+    await renderView(api);
+    await clickTab('构思');
+    await clickSelectIdea();
+    setArea('research-idea-rationale', 'Updated ranking.');
+    await click('research-idea-save');
+    expect(api.saveIdeaCanvas).toHaveBeenCalled();
+    await click('research-idea-promote');
+    expect(api.promoteIdeaCanvas).toHaveBeenCalledWith({ artifactId: ideaArtifact.id, expectedVersion: 2 });
+  });
+
   it('starts a stage role with the typed instruction', async () => {
     const api = createResearchApi({
       workflow: workflow({ status: 'running', gateRequired: false, artifactIds: [] }),
@@ -127,7 +158,12 @@ function createResearchApi(overrides: {
     importLibraryRecord: vi.fn(),
     linkLibraryItem: vi.fn(),
     listDocuments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-    getDocumentContent: vi.fn()
+    getDocumentContent: vi.fn(),
+    listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getIdeaCanvas: vi.fn().mockResolvedValue({ ok: true, data: null }),
+    saveIdeaCanvas: vi.fn(),
+    promoteIdeaCanvas: vi.fn(),
+    createArtifact: vi.fn()
   };
 }
 
@@ -222,4 +258,19 @@ function setInput(testId: string, value: string): void {
 
 function documentButtons(): HTMLButtonElement[] {
   return Array.from(document.querySelectorAll('button'));
+}
+
+async function clickSelectIdea(): Promise<void> {
+  const button = document.querySelector('[data-testid="research-idea-list"] button');
+  expect(button).not.toBeNull();
+  await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await act(async () => { await Promise.resolve(); });
+}
+
+function setArea(testId: string, value: string): void {
+  const textarea = document.querySelector<HTMLTextAreaElement>(`[data-testid="${testId}"]`);
+  expect(textarea).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+  setter?.call(textarea, value);
+  textarea?.dispatchEvent(new Event('input', { bubbles: true }));
 }
