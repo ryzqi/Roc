@@ -25,7 +25,7 @@
 - 工具面：导出角色有 prepare/get/publish，没有 write_export 或阶段批准。
 - 闸门：实验阶段 complete 校验真实执行；图稿仍要求证据后进入 waiting_approval。
 
-独立回归 6/6 通过：未发布失败、实验绑定/provenance、失败重试保留、拒绝外源发布、图稿绑定/provenance、导出工具面。
+独立回归 7/7 通过：未发布失败、实验绑定/provenance、失败后重试绑定原工件、拒绝外源发布、图稿绑定/provenance、导出未发布失败、导出工具面。
 
 ## 验证
 
@@ -36,4 +36,4 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc
 rtk git -C /Users/Apple_501/Desktop/Roc/Roc diff --check
 ```
 
-相关回归 38 文件、274 项通过，34 项可选资源跳过。production-role-results 6/6。typecheck、check:ipc 通过。
+相关回归 38 文件、274 项通过，34 项可选资源跳过。production-role-results 7/7。typecheck、check:ipc 通过。

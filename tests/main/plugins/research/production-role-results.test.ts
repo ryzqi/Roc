@@ -24,6 +24,7 @@ import type { ResearchRoleExecution } from '../../../../src/main/plugins/researc
 import type { ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
 import type { ResearchStageOutput } from '../../../../src/shared/types';
+import { approveExportManuscript } from './export-test-helpers';
 
 let db: Database.Database;
 let repository: ResearchRepository;
@@ -172,15 +173,13 @@ describe('production role results', () => {
 
   it('keeps a published experiment after failure and rebinds it on retry', async () => {
     enter('experiment');
-    let attempt = 0;
     const engine = createRuntime(async (input) => {
-      attempt += 1;
-      const start = input.tools.find((tool) => tool.name === 'start_experiment');
-      const publish = input.tools.find((tool) => tool.name === 'publish_experiment');
-      const started = await start?.invoke(experimentRequest({ requestId: `retry-${attempt}` }));
-      await vi.waitFor(() => expect(repository.experiments.get(projectId, started.experimentId).status).toBe('completed'), { timeout: 5000 });
-      const published = await publish?.invoke({ experimentId: started.experimentId });
-      if (attempt === 1) throw new Error('research_test_failure');
+      if (input.run.retryOfRunId === null) {
+        const started = await input.tools.find((tool) => tool.name === 'start_experiment')?.invoke(experimentRequest({ requestId: 'owned-once' }));
+        await vi.waitFor(() => expect(repository.experiments.get(projectId, started.experimentId).status).toBe('completed'), { timeout: 5000 });
+        await input.tools.find((tool) => tool.name === 'publish_experiment')?.invoke({ experimentId: started.experimentId });
+        throw new Error('research_test_failure');
+      }
       return { output: { ...notes, title: 'Retried results' }, modelVersion: 'retry-model' };
     });
     const run = engine.start({ projectId, expectedStage: 'experiment', instruction: 'Retry after publish.', requestId: 'first-fail' });
@@ -193,8 +192,8 @@ describe('production role results', () => {
     await engine.waitForIdle();
     const completed = repository.runs.get(retry.id, projectId);
     expect(completed.status).toBe('completed');
-    expect(completed.outputArtifactIds).toEqual(expect.arrayContaining([published[0].id]));
-    expect(repository.listArtifacts(projectId, 'experiment').map((artifact) => artifact.id)).toEqual(expect.arrayContaining([published[0].id]));
+    expect(completed).toMatchObject({ status: 'completed', outputArtifactIds: [published[0].id], modelVersion: 'retry-model' });
+    expect(repository.listArtifacts(projectId, 'experiment').map((artifact) => artifact.id)).toEqual([published[0].id]);
     expect(repository.runs.getArtifactContent(projectId, published[0].id)?.runId).toBe(retry.id);
   });
 
@@ -245,6 +244,19 @@ describe('production role results', () => {
     expect(repository.evidence.listClaims({ projectId, artifactId: artifact.id })).toMatchObject([{ subjectType: 'figure', evidenceIds: [evidence.id] }]);
     expect(repository.getWorkflow(projectId).stages.find((stage) => stage.stage === 'figure')?.status).toBe('waiting_approval');
     expect(figure.status).toBe('rendered');
+  });
+
+  it('fails an export stage without a published package and does not invent an empty artifact', async () => {
+    await approveExportManuscript(repository, projectId);
+    const engine = createRuntime(async () => ({
+      output: { title: 'Delivery', markdown: 'Prepared nothing.', claims: [], sections: [], verdict: 'ready' }, modelVersion: 'export-model'
+    }));
+    const run = engine.start({ projectId, expectedStage: 'export', instruction: 'Export the package.', requestId: 'export-none' });
+    await engine.waitForIdle();
+    expect(repository.runs.get(run.id, projectId)).toMatchObject({
+      status: 'failed', error: 'research_stage_production_required', outputArtifactIds: [], modelVersion: 'export-model'
+    });
+    expect(repository.listArtifacts(projectId, 'export')).toEqual([]);
   });
 
   it('does not expose final delivery or human approval tools on export roles', () => {
