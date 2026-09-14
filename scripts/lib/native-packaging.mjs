@@ -196,6 +196,44 @@ export function resolvePackagedBetterSqlite3RequireBase(resourcesDir) {
   return resolve(resourcesDir, 'app.asar', 'package.json');
 }
 
+export function researchToolchainResourcePath(resourcesDir, architecture = process.arch) {
+  return resolve(resourcesDir, 'research-toolchain');
+}
+
+export function verifyPackagedResearchToolchain({ resourcesDir, architecture = process.arch }) {
+  const root = researchToolchainResourcePath(resourcesDir, architecture);
+  const required = [
+    'manifest.json',
+    'worker.py',
+    'bibliography.py',
+    'bin/tectonic',
+    'bin/uv',
+    'python/bin/python3',
+    'tex/bundle.zip',
+    'licenses/README.md',
+    'licenses/sources.json',
+    'licenses/python-packages.json',
+    'licenses/tectonic-MIT.txt',
+    'licenses/uv-MIT.txt',
+    'licenses/uv-APACHE.txt',
+    'licenses/CDLA-Permissive-2.0.txt'
+  ];
+  for (const relativePath of required) {
+    const fullPath = resolve(root, relativePath);
+    if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
+      throw new Error(`Missing packaged research toolchain file: ${relativePath}`);
+    }
+  }
+  const manifest = JSON.parse(readFileSync(resolve(root, 'manifest.json'), 'utf8'));
+  if (manifest.platform !== 'darwin' || manifest.architecture !== architecture) {
+    throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
+  }
+  const licenses = JSON.parse(readFileSync(resolve(root, 'licenses/python-packages.json'), 'utf8'));
+  if (!Array.isArray(licenses) || licenses.length === 0) {
+    throw new Error('Packaged research toolchain is missing python license records.');
+  }
+}
+
 export function verifyPackagedFileLayout({ resourcesDir }) {
   const require = createRequire(import.meta.url);
   const builderRequire = createRequire(require.resolve('electron-builder'));

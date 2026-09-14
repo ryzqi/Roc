@@ -57,5 +57,7 @@ mac:
       to: rtk-binaries
       filter:
         - darwin-${arch}/**
+    - from: .runtime/research-toolchain/darwin-${arch}
+      to: research-toolchain
   identity: "-"
   hardenedRuntime: false

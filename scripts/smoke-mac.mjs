@@ -158,6 +158,8 @@ try {
     const rtkRoot = join(process.resourcesPath, 'rtk-binaries');
     const target = `darwin-${process.arch}`;
     const rtk = spawnSync(join(rtkRoot, target, 'rtk'), ['--version'], { encoding: 'utf8', timeout: 10000 });
+    const toolchainRoot = join(process.resourcesPath, 'research-toolchain');
+    const toolchainFiles = ['manifest.json', 'worker.py', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
     const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules');
     return {
       packaged: app.isPackaged,
@@ -167,6 +169,10 @@ try {
       terminal: terminalResult,
       rtk: { status: rtk.status, version: rtk.stdout.trim() },
       rtkTargets: fs.readdirSync(rtkRoot),
+      researchToolchain: {
+        missing: toolchainFiles.filter((file) => !fs.existsSync(join(toolchainRoot, file))),
+        architecture: JSON.parse(fs.readFileSync(join(toolchainRoot, 'manifest.json'), 'utf8')).architecture
+      },
       sqlitePrebuilds: fs.readdirSync(join(unpacked, 'better-sqlite3', 'prebuilds')),
       ptyPrebuilds: fs.readdirSync(join(unpacked, 'node-pty', 'prebuilds')),
       redundantPackages: ['react-dom', 'highlight.js', 'lucide-react', '@xterm/xterm', 'motion', '--frozen-lockfile']
@@ -181,6 +187,8 @@ try {
   assert.match(native.terminal.output, /ROC_MAC_PTY_OK/);
   assert.equal(native.rtk.status, 0);
   assert.deepEqual(native.rtkTargets, [`darwin-${native.arch}`]);
+  assert.deepEqual(native.researchToolchain.missing, []);
+  assert.equal(native.researchToolchain.architecture, native.arch);
   assert.deepEqual(native.sqlitePrebuilds, [`darwin-${native.arch}.node`]);
   assert.deepEqual(native.ptyPrebuilds, [`darwin-${native.arch}`]);
   assert.deepEqual(native.redundantPackages, []);

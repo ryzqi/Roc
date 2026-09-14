@@ -79,6 +79,12 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('to: rtk-binaries');
   });
 
+  it('packages the current-architecture research toolchain and its licenses', () => {
+    expect(electronBuilderConfig).toContain('from: .runtime/research-toolchain/darwin-${arch}');
+    expect(electronBuilderConfig).toContain('to: research-toolchain');
+    expect(afterPackHook).toContain('verifyPackagedResearchToolchain');
+  });
+
   it('limits macOS package resources to runtime files', () => {
     expect(electronBuilderConfig).toContain('electronLanguages:');
     expect(electronBuilderConfig).toContain('  - en-US');
@@ -185,6 +191,25 @@ describe('native packaging contract', () => {
       expect(statSync(helperPath).mode & 0o111).toBe(0o111);
       expect(() => accessSync(helperPath, constants.X_OK)).not.toThrow();
     }
+  });
+
+  it('requires packaged research toolchain binaries and license records', async () => {
+    const { verifyPackagedResearchToolchain } = await loadNativePackagingModule();
+    const resourcesDir = join(createTemporaryDirectory(), 'Roc.app', 'Contents', 'Resources');
+    const root = join(resourcesDir, 'research-toolchain');
+    mkdirSync(join(root, 'bin'), { recursive: true });
+    mkdirSync(join(root, 'python', 'bin'), { recursive: true });
+    mkdirSync(join(root, 'tex'), { recursive: true });
+    mkdirSync(join(root, 'licenses'), { recursive: true });
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify({ platform: 'darwin', architecture: process.arch }));
+    for (const relativePath of ['worker.py', 'bibliography.py', 'bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
+      'licenses/README.md', 'licenses/sources.json', 'licenses/tectonic-MIT.txt', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt', 'licenses/CDLA-Permissive-2.0.txt']) {
+      mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
+      writeFileSync(join(root, relativePath), 'license');
+    }
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).toThrow(/licenses\/python-packages\.json/);
+    writeFileSync(join(root, 'licenses/python-packages.json'), JSON.stringify([{ name: 'docling', licenseExpression: 'MIT' }]));
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).not.toThrow();
   });
 
   it('fails when a macOS packaged terminal helper is missing', async () => {

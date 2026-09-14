@@ -3,7 +3,8 @@ import {
   preparePackagedNodePty,
   runCommand,
   verifyPackagedFileLayout,
-  verifyPackagedBetterSqlite3
+  verifyPackagedBetterSqlite3,
+  verifyPackagedResearchToolchain
 } from '../lib/native-packaging.mjs';
 
 export default async function afterPack(context) {
@@ -17,5 +18,9 @@ export default async function afterPack(context) {
         ...options,
         env: createPackagingEnvironment(options?.env)
       })
+  });
+  verifyPackagedResearchToolchain({
+    resourcesDir,
+    architecture: process.arch
   });
 }

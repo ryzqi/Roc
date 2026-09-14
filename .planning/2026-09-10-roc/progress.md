@@ -250,3 +250,6 @@
 
 - 5d 已实现：图稿导出视图可选择已发布图稿、准备导出、发布审核并保存 ZIP。
 - 5d 完成：Standards/Spec 未解决 0。审查记录 reviews/05d-figures-exports.md。research-view 6/6 与 typecheck 通过。状态 Verified passing；下一步 Packaging。
+
+- Packaging 已实现：当前架构科研工具链随 extraResources 打包，afterPack 校验二进制和许可证记录。
+- Packaging 完成：Standards/Spec 未解决 0。审查记录 reviews/06-packaging.md。native-packaging 20/20 与 typecheck 通过。状态 Verified passing；下一步 Phase 4 验证记录。Intel 实机验证仍未做。

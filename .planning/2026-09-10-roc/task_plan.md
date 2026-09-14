@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 5a–5d 已完成；继续 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 与 Packaging 已完成；进入 Phase 4 验证与交付记录。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -28,7 +28,7 @@ Phase 3 — Implementation（Production）
 - [x] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
 - [x] Production: LaTeX templates/live PDF, experiments, figures, exports
 - [ ] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
-- [ ] Packaging: bundled toolchain, licenses, resource verification
+- [x] Packaging: bundled toolchain, licenses, resource verification
 - **Status:** in_progress
 
 ### Phase 4: Testing & Verification
@@ -64,7 +64,7 @@ Phase 3 — Implementation（Production）
 - [x] Renderer 5b：文献库、DOI/检索导入、项目关联和解析阅读器。
 - [x] Renderer 5c：Idea Canvas 编辑、证据引用和晋升。
 - [x] Renderer 5d：图稿列表、导出准备/发布和 ZIP 保存。
-- [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
+- [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery
 - [ ] Review outputs
