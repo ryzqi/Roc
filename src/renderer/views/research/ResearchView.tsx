@@ -1,53 +1,38 @@
-import { Check, ChevronRight, CircleAlert, Pause, Play, Plus, RotateCcw, Send, X } from 'lucide-react';
+import { CircleAlert, Plus, Send, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type {
+  ResearchArtifact,
   ResearchEmbeddingConfig,
   ResearchKnowledgeSearchResult,
   ResearchLiterature,
   ResearchProject,
+  ResearchStageRun,
+  ResearchWorkflowEvent,
   ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
 import { unwrap } from '../../loaded-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
-
-const stageLabels: Record<ResearchWorkflowSnapshot['currentStage'], string> = {
-  discovery: '发现',
-  retrieval: '检索',
-  reading: '阅读',
-  ideation: '构思',
-  planning: '方案',
-  experiment: '实验 / 数据',
-  figure: '绘图',
-  writing: '写作',
-  review: '审稿',
-  revision: '修订',
-  export: '导出'
-};
-
-const stageStatusLabels: Record<ResearchWorkflowSnapshot['stages'][number]['status'], string> = {
-  locked: '未开放',
-  ready: '待开始',
-  running: '进行中',
-  waiting_approval: '待审核',
-  paused: '已暂停',
-  blocked: '已阻塞',
-  completed: '已完成',
-  failed: '失败'
-};
+import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
+import { researchStageLabels } from './research-workflow';
 
 export function ResearchView({ client, state }: { client: RocClient; state: LoadedState }): React.JSX.Element {
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<ResearchWorkflowSnapshot | null>(null);
+  const [events, setEvents] = useState<ResearchWorkflowEvent[]>([]);
+  const [runs, setRuns] = useState<ResearchStageRun[]>([]);
+  const [artifacts, setArtifacts] = useState<ResearchArtifact[]>([]);
+  const [instruction, setInstruction] = useState('');
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [activeTab, setActiveTab] = useState<'workflow' | 'literature' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
@@ -87,17 +72,27 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   useEffect(() => {
     if (selectedProjectId === null) {
       setWorkflow(null);
+      setEvents([]);
+      setRuns([]);
+      setArtifacts([]);
       return;
     }
     let cancelled = false;
-    client.api.research
-      .getWorkflow({ id: selectedProjectId })
-      .then((result) => {
-        if (!cancelled) setWorkflow(unwrap('科研流程', result));
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研流程加载失败。');
-      });
+    Promise.all([
+      client.api.research.getWorkflow({ id: selectedProjectId }),
+      client.api.research.listWorkflowEvents({ projectId: selectedProjectId, limit: 40 }),
+      client.api.research.listStageRuns({ projectId: selectedProjectId, limit: 40 }),
+      client.api.research.listArtifacts({ projectId: selectedProjectId })
+    ]).then(([workflowResult, eventResult, runResult, artifactResult]) => {
+      if (cancelled) return;
+      setWorkflow(unwrap('科研流程', workflowResult));
+      setEvents(unwrap('科研事件', eventResult));
+      setRuns(unwrap('阶段运行', runResult));
+      setArtifacts(unwrap('阶段产物', artifactResult));
+      setError(null);
+    }).catch((loadError: unknown) => {
+      if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研流程加载失败。');
+    });
     return () => {
       cancelled = true;
     };
@@ -118,7 +113,8 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       const result = await client.api.research.createProject({
         title: title.trim(),
         description: description.trim(),
-        workspacePath: state.workspace?.path ?? null
+        workspacePath: state.workspace?.path ?? null,
+        language
       });
       const project = unwrap('创建科研项目', result);
       setProjects((current) => [project, ...current]);
@@ -134,28 +130,84 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
-  async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>): Promise<void> {
+  async function refreshProject(projectId: string): Promise<void> {
+    const [workflowResult, eventResult, runResult, artifactResult] = await Promise.all([
+      client.api.research.getWorkflow({ id: projectId }),
+      client.api.research.listWorkflowEvents({ projectId, limit: 40 }),
+      client.api.research.listStageRuns({ projectId, limit: 40 }),
+      client.api.research.listArtifacts({ projectId })
+    ]);
+    const nextWorkflow = unwrap('科研流程', workflowResult);
+    setWorkflow(nextWorkflow);
+    setEvents(unwrap('科研事件', eventResult));
+    setRuns(unwrap('阶段运行', runResult));
+    setArtifacts(unwrap('阶段产物', artifactResult));
+    setProjects((current) => current.map((project) => project.id === projectId
+      ? { ...project, currentStage: nextWorkflow.currentStage, status: nextWorkflow.projectStatus, updatedAt: nextWorkflow.lastEvent?.createdAt ?? project.updatedAt }
+      : project));
+  }
+
+  async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>, reviewDecision?: 'accept' | 'revise'): Promise<void> {
     if (workflow === null || selectedProjectId === null) return;
     setWorking(true);
     try {
-      const result = await client.api.research.transitionWorkflow({
+      unwrap('更新科研流程', await client.api.research.transitionWorkflow({
         projectId: selectedProjectId,
         action,
         expectedStage: workflow.currentStage,
-        note: action === 'reject' ? '请补充证据或修改阶段产物。' : undefined
-      });
-      const nextWorkflow = unwrap('更新科研流程', result);
-      setWorkflow(nextWorkflow);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === selectedProjectId
-            ? { ...project, currentStage: nextWorkflow.currentStage, status: nextWorkflow.projectStatus, updatedAt: new Date().toISOString() }
-            : project
-        )
-      );
+        note: action === 'reject' ? '请补充证据或修改阶段产物。' : undefined,
+        ...(reviewDecision === undefined ? {} : { reviewDecision })
+      }));
+      await refreshProject(selectedProjectId);
       setError(null);
     } catch (transitionError: unknown) {
       setError(transitionError instanceof Error ? transitionError.message : '科研流程更新失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function startRun(): Promise<void> {
+    if (workflow === null || selectedProjectId === null || instruction.trim().length === 0) return;
+    setWorking(true);
+    try {
+      unwrap('启动阶段角色', await client.api.research.startStageRun({
+        projectId: selectedProjectId, expectedStage: workflow.currentStage, instruction: instruction.trim(), requestId: crypto.randomUUID()
+      }));
+      await refreshProject(selectedProjectId);
+      setError(null);
+    } catch (runError: unknown) {
+      setError(runError instanceof Error ? runError.message : '阶段角色启动失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function cancelRun(): Promise<void> {
+    const run = runs.find((item) => item.parentRunId === null && ['queued', 'running'].includes(item.status));
+    if (run === undefined || selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('取消阶段角色', await client.api.research.cancelStageRun({ projectId: selectedProjectId, runId: run.id }));
+      await refreshProject(selectedProjectId);
+      setError(null);
+    } catch (runError: unknown) {
+      setError(runError instanceof Error ? runError.message : '取消阶段角色失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function retryRun(): Promise<void> {
+    const run = runs.find((item) => item.parentRunId === null && ['failed', 'cancelled', 'interrupted'].includes(item.status));
+    if (run === undefined || selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('重试阶段角色', await client.api.research.retryStageRun({ projectId: selectedProjectId, runId: run.id, requestId: crypto.randomUUID() }));
+      await refreshProject(selectedProjectId);
+      setError(null);
+    } catch (runError: unknown) {
+      setError(runError instanceof Error ? runError.message : '重试阶段角色失败。');
     } finally {
       setWorking(false);
     }
@@ -284,6 +336,13 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             研究目标
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="写下要解释的问题和预期贡献" rows={3} />
           </label>
+          <label>
+            项目语言
+            <select data-testid="research-create-language" value={language} onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')}>
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </label>
           <div className="research-form-actions">
             <button className="action-button" type="button" onClick={() => setCreateOpen(false)}>
               取消
@@ -331,7 +390,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
               >
                 <span className="research-project-row-title">{project.title}</span>
                 <span className="research-project-row-meta">
-                  {stageLabels[project.currentStage]} · {project.status === 'completed' ? '已完成' : '进行中'}
+                  {researchStageLabels[project.currentStage]} · {project.status === 'completed' ? '已完成' : '进行中'}
                 </span>
               </button>
             ))}
@@ -341,87 +400,21 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             {selectedProject === null || workflow === null ? (
               <div className="research-loading">选择项目以读取流程。</div>
             ) : (
-              <>
-                <div className="research-project-heading">
-                  <div>
-                    <div className="research-section-label">当前项目</div>
-                    <h2>{selectedProject.title}</h2>
-                    <p>{selectedProject.description}</p>
-                  </div>
-                  <div className="research-current-stage">
-                    <span>当前阶段</span>
-                    <strong>{stageLabels[workflow.currentStage]}</strong>
-                  </div>
-                </div>
-
-                <ol className="research-pipeline" aria-label="科研流程阶段">
-                  {workflow.stages.map((stage, index) => (
-                    <li className={stage.stage === workflow.currentStage ? 'research-pipeline-step research-pipeline-step--current' : 'research-pipeline-step'} key={stage.stage}>
-                      <span className="research-pipeline-number">{stage.status === 'completed' ? <Check aria-hidden="true" size={14} /> : index + 1}</span>
-                      <span className="research-pipeline-label">{stageLabels[stage.stage]}</span>
-                      {index < workflow.stages.length - 1 ? <ChevronRight aria-hidden="true" className="research-pipeline-chevron" size={14} /> : null}
-                    </li>
-                  ))}
-                </ol>
-
-                <section className="research-stage-panel">
-                  <div className="research-stage-panel-head">
-                    <div>
-                      <span className="research-section-label">阶段状态</span>
-                      <h3>{stageLabels[workflow.currentStage]}</h3>
-                    </div>
-                    <span className={`research-status research-status--${workflow.stages.find((stage) => stage.stage === workflow.currentStage)?.status ?? 'ready'}`}>
-                      {stageStatusLabels[workflow.stages.find((stage) => stage.stage === workflow.currentStage)?.status ?? 'ready']}
-                    </span>
-                  </div>
-                  <p className="research-stage-copy">{selectedProject.description}</p>
-                  <div className="research-stage-actions">
-                    {currentStageStatus(workflow) === 'ready' ? (
-                      <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void transition('start')}>
-                        <Play aria-hidden="true" size={15} />
-                        开始阶段
-                      </button>
-                    ) : null}
-                    {currentStageStatus(workflow) === 'running' ? (
-                      <>
-                        <button className="action-button" disabled={working} type="button" onClick={() => void transition('pause')}>
-                          <Pause aria-hidden="true" size={15} />
-                          暂停
-                        </button>
-                        <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void transition('complete')}>
-                          <Send aria-hidden="true" size={15} />
-                          提交审核
-                        </button>
-                      </>
-                    ) : null}
-                    {currentStageStatus(workflow) === 'paused' ? (
-                      <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void transition('resume')}>
-                        <Play aria-hidden="true" size={15} />
-                        恢复阶段
-                      </button>
-                    ) : null}
-                    {currentStageStatus(workflow) === 'waiting_approval' ? (
-                      <>
-                        <button className="action-button" disabled={working} type="button" onClick={() => void transition('reject')}>
-                          <RotateCcw aria-hidden="true" size={15} />
-                          退回修改
-                        </button>
-                        <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void transition('approve')}>
-                          <Check aria-hidden="true" size={15} />
-                          确认通过
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                  {workflow.lastEvent === null ? null : (
-                    <div className="research-last-event">
-                      <span>最近事件</span>
-                      <strong>{workflow.lastEvent.message}</strong>
-                      <time>{formatEventTime(workflow.lastEvent.createdAt)}</time>
-                    </div>
-                  )}
-                </section>
-              </>
+              <ResearchWorkflowPanel
+                artifacts={artifacts}
+                events={events}
+                instruction={instruction}
+                onApprove={(decision) => void transition('approve', decision)}
+                onCancelRun={() => void cancelRun()}
+                onInstructionChange={setInstruction}
+                onRetryRun={() => void retryRun()}
+                onStartRun={() => void startRun()}
+                onTransition={(action, decision) => void transition(action, decision)}
+                project={selectedProject}
+                runs={runs}
+                working={working}
+                workflow={workflow}
+              />
             )}
           </main>
         </div>
@@ -454,14 +447,6 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       ) : null}
     </section>
   );
-}
-
-function currentStageStatus(workflow: ResearchWorkflowSnapshot): ResearchWorkflowSnapshot['stages'][number]['status'] {
-  return workflow.stages.find((stage) => stage.stage === workflow.currentStage)?.status ?? 'ready';
-}
-
-function formatEventTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 function LiteraturePanel({

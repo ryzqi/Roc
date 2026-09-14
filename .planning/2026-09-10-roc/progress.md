@@ -238,3 +238,6 @@
 
 - 4h 已实现：项目语言、结构化 Idea Canvas、批准后晋升、构思角色输出绑定真实 Canvas。v15 回填旧运行上下文的 language/origin/ideaCanvas。
 - 4h 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04h-idea-canvas.md。最终相关回归 40 文件 / 288 项通过（34 项可选资源跳过），idea-canvas 9/9，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Renderer。
+
+- 5a 已实现：项目仪表盘显示流程轨道、下一步、产物、事件时间线和阶段角色启动/取消/重试；审稿批准需显式接受或修订。
+- 5a 完成：Standards/Spec 最终未解决 0。审查记录 reviews/05a-project-dashboard.md。research-view 3/3、导航/壳层回归与 typecheck 通过。状态 Verified passing；本地独立提交后继续文献库/阅读器。
