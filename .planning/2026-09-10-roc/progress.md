@@ -253,3 +253,6 @@
 
 - Packaging 已实现：当前架构科研工具链随 extraResources 打包，afterPack 校验二进制和许可证记录。
 - Packaging 完成：Standards/Spec 未解决 0。审查记录 reviews/06-packaging.md。native-packaging 20/20 与 typecheck 通过。状态 Verified passing；下一步 Phase 4 验证记录。Intel 实机验证仍未做。
+
+- 5e 已实现：文稿视图可导入模板、编辑源文件并编译 PDF 预览。
+- 5e 完成：Standards/Spec 未解决 0。审查记录 reviews/05e-latex-editor.md。research-view 7/7 与 typecheck 通过。状态 Verified passing；Phase 3 Renderer 完成。

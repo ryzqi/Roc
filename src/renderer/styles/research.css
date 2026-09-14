@@ -768,3 +768,17 @@
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 8px;
 }
+
+.research-editor {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.research-pdf-preview {
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}

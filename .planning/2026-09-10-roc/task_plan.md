@@ -27,7 +27,7 @@ Phase 3 — Implementation（Production）
 - [x] Knowledge base: source adapters, parsing, FTS5 + sqlite-vec, embeddings, RRF
 - [x] Workflow: 11-stage state machine, role-scoped multi-agent runs, provenance, gates
 - [x] Production: LaTeX templates/live PDF, experiments, figures, exports
-- [ ] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
+- [x] Renderer: project dashboard, pipeline rail, library, reader, ideas, editor, figures
 - [x] Packaging: bundled toolchain, licenses, resource verification
 - **Status:** in_progress
 
@@ -64,6 +64,7 @@ Phase 3 — Implementation（Production）
 - [x] Renderer 5b：文献库、DOI/检索导入、项目关联和解析阅读器。
 - [x] Renderer 5c：Idea Canvas 编辑、证据引用和晋升。
 - [x] Renderer 5d：图稿列表、导出准备/发布和 ZIP 保存。
+- [x] Renderer 5e：LaTeX 模板导入、源文件编辑、编译和 PDF 预览。
 - [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery

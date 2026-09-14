@@ -16,6 +16,9 @@ import type {
   ResearchLiterature,
   ResearchProject,
   ResearchStageRun,
+  ResearchTemplate,
+  ResearchTemplateFile,
+  ResearchTemplateFileContent,
   ResearchWorkflowEvent,
   ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest
@@ -24,6 +27,7 @@ import { unwrap } from '../../loaded-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdeaPanel';
+import { ResearchEditorPanel } from './ResearchEditorPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
@@ -44,7 +48,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'production' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -71,6 +75,10 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [selectedFigureIds, setSelectedFigureIds] = useState<string[]>([]);
   const [exportTitle, setExportTitle] = useState('');
   const [destinationPath, setDestinationPath] = useState('');
+  const [templates, setTemplates] = useState<ResearchTemplate[]>([]);
+  const [templateFiles, setTemplateFiles] = useState<ResearchTemplateFile[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [openTemplateFile, setOpenTemplateFile] = useState<ResearchTemplateFileContent | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -395,6 +403,91 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   }
 
 
+
+  async function loadTemplates(projectId = selectedProjectId, templateId = selectedTemplateId): Promise<void> {
+    if (projectId === null) {
+      setTemplates([]);
+      setTemplateFiles([]);
+      setSelectedTemplateId(null);
+      setOpenTemplateFile(null);
+      return;
+    }
+    const listed = unwrap('模板', await client.api.research.listTemplates({ projectId }));
+    setTemplates(listed);
+    const selected = listed.find((item) => item.id === templateId) ?? listed[0] ?? null;
+    if (selected === null) {
+      setSelectedTemplateId(null);
+      setTemplateFiles([]);
+      setOpenTemplateFile(null);
+      return;
+    }
+    setSelectedTemplateId(selected.id);
+    setTemplateFiles(unwrap('模板文件', await client.api.research.getTemplateFiles({ projectId, templateId: selected.id })));
+  }
+
+  async function importTemplate(): Promise<void> {
+    if (selectedProjectId === null) return;
+    const selection = unwrap('选择模板', await client.api.files.selectFromDialog());
+    const sourcePath = selection?.filePaths[0];
+    if (sourcePath === undefined) return;
+    setWorking(true);
+    try {
+      const imported = unwrap('导入模板', await client.api.research.importTemplate({ projectId: selectedProjectId, sourcePath }));
+      setSelectedTemplateId(imported.id);
+      await loadTemplates(selectedProjectId, imported.id);
+      setError(null);
+    } catch (importError: unknown) {
+      setError(importError instanceof Error ? importError.message : '导入模板失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function openTemplateFilePath(path: string): Promise<void> {
+    if (selectedProjectId === null || selectedTemplateId === null) return;
+    setWorking(true);
+    try {
+      setOpenTemplateFile(unwrap('读取模板文件', await client.api.research.readTemplateFile({ projectId: selectedProjectId, templateId: selectedTemplateId, path })));
+      setError(null);
+    } catch (readError: unknown) {
+      setError(readError instanceof Error ? readError.message : '读取模板文件失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function saveTemplateFile(): Promise<void> {
+    if (selectedProjectId === null || selectedTemplateId === null || openTemplateFile === null) return;
+    setWorking(true);
+    try {
+      const saved = unwrap('保存模板文件', await client.api.research.saveTemplateFile({
+        projectId: selectedProjectId, templateId: selectedTemplateId, path: openTemplateFile.path,
+        content: openTemplateFile.content, expectedHash: openTemplateFile.sha256
+      }));
+      setOpenTemplateFile(saved);
+      await loadTemplates(selectedProjectId, selectedTemplateId);
+      setError(null);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : '保存模板文件失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function compileTemplate(): Promise<void> {
+    if (selectedProjectId === null || selectedTemplateId === null) return;
+    setWorking(true);
+    try {
+      unwrap('编译模板', await client.api.research.compileTemplate({ projectId: selectedProjectId, templateId: selectedTemplateId }));
+      await loadTemplates(selectedProjectId, selectedTemplateId);
+      setError(null);
+    } catch (compileError: unknown) {
+      setError(compileError instanceof Error ? compileError.message : '编译模板失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function loadProduction(projectId = selectedProjectId): Promise<void> {
     if (projectId === null) {
       setFigures([]);
@@ -546,6 +639,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           ['workflow', '流程'],
           ['library', '文献库'],
           ['ideas', '构思'],
+          ['editor', '文稿'],
           ['production', '图稿导出'],
           ['knowledge', '知识库'],
           ['embedding', '嵌入配置']
@@ -555,6 +649,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             if (tab === 'embedding') void loadEmbeddingConfigs();
             if (tab === 'library') void loadLibrary();
             if (tab === 'production') void loadProduction();
+            if (tab === 'editor') void loadTemplates();
           }}>
             {label}
           </button>
@@ -690,6 +785,21 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           query={literatureQuery}
           results={literatureResults}
           scope={libraryScope}
+          working={working}
+        />
+      ) : null}
+      {activeTab === 'editor' ? (
+        <ResearchEditorPanel
+          files={templateFiles}
+          onChangeDraft={(value) => setOpenTemplateFile((current) => current === null ? current : { ...current, content: value })}
+          onCompile={() => void compileTemplate()}
+          onImport={() => void importTemplate()}
+          onOpenFile={(path) => void openTemplateFilePath(path)}
+          onSave={() => void saveTemplateFile()}
+          onSelect={(templateId) => { setSelectedTemplateId(templateId); setOpenTemplateFile(null); void loadTemplates(selectedProjectId, templateId); }}
+          openFile={openTemplateFile}
+          selectedTemplateId={selectedTemplateId}
+          templates={templates}
           working={working}
         />
       ) : null}

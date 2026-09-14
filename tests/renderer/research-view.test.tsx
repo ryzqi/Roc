@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -155,6 +155,34 @@ describe('ResearchView project dashboard', () => {
     expect(api.writeExport).toHaveBeenCalledWith({ projectId: 'research_1', exportId: 'export_1', destinationPath: '/tmp/study.zip' });
   });
 
+  it('imports a template, edits the entry, and compiles a preview', async () => {
+    const template: ResearchTemplate = {
+      id: 'template_1', projectId: 'research_1', rootPath: '/tmp/template', entryPath: 'main.tex', status: 'imported',
+      pdfPath: null, errors: [], diagnostics: [], revision: 1, compiledRevision: null, sourceDigest: 'a'.repeat(64),
+      compiledDigest: null, pdfHash: null, activeCompileId: null, lastCompiledAt: null, updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const ready = { ...template, status: 'ready' as const, pdfPath: '/tmp/template.pdf', pdfHash: 'b'.repeat(64), compiledRevision: 2, compiledDigest: 'a'.repeat(64) };
+    const api = createResearchApi();
+    api.listTemplates.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [ready] });
+    api.getTemplateFiles.mockResolvedValue({ ok: true, data: [{ path: 'main.tex', size: 12, sha256: 'c'.repeat(64), editable: true }] });
+    api.importTemplate.mockResolvedValue({ ok: true, data: template });
+    api.readTemplateFile.mockResolvedValue({ ok: true, data: { path: 'main.tex', size: 12, sha256: 'c'.repeat(64), editable: true, content: '\\documentclass{article}' } });
+    api.saveTemplateFile.mockResolvedValue({ ok: true, data: { path: 'main.tex', size: 13, sha256: 'd'.repeat(64), editable: true, content: '\\documentclass{article}\nHello' } });
+    api.compileTemplate.mockResolvedValue({ ok: true, data: ready });
+    const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/source'] } }) };
+    await renderView(api, files);
+    await clickTab('文稿');
+    await click('research-template-import');
+    expect(api.importTemplate).toHaveBeenCalledWith({ projectId: 'research_1', sourcePath: '/tmp/source' });
+    await clickFile('main.tex');
+    setArea('research-template-editor', '\\documentclass{article}\nHello');
+    await click('research-template-save');
+    expect(api.saveTemplateFile).toHaveBeenCalled();
+    await click('research-template-compile');
+    expect(api.compileTemplate).toHaveBeenCalledWith({ projectId: 'research_1', templateId: 'template_1' });
+    expect(document.querySelector('[data-testid="research-template-preview"]')).not.toBeNull();
+  });
+
   it('starts a stage role with the typed instruction', async () => {
     const api = createResearchApi({
       workflow: workflow({ status: 'running', gateRequired: false, artifactIds: [] }),
@@ -211,7 +239,13 @@ function createResearchApi(overrides: {
     listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     prepareExport: vi.fn(),
     publishExport: vi.fn(),
-    writeExport: vi.fn()
+    writeExport: vi.fn(),
+    listTemplates: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getTemplateFiles: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    importTemplate: vi.fn(),
+    readTemplateFile: vi.fn(),
+    saveTemplateFile: vi.fn(),
+    compileTemplate: vi.fn()
   };
 }
 
@@ -251,10 +285,10 @@ function run(): ResearchStageRun {
   };
 }
 
-async function renderView(research: ReturnType<typeof createResearchApi>): Promise<void> {
+async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchView, {
-      client: { api: { research } as never },
+      client: { api: { research, files: files ?? { selectFromDialog: vi.fn() } } as never },
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })
     }));
   });
@@ -321,4 +355,11 @@ function setArea(testId: string, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(textarea, value);
   textarea?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function clickFile(label: string): Promise<void> {
+  const button = Array.from(document.querySelectorAll('[data-testid="research-template-files"] button')).find((node) => node.textContent?.includes(label));
+  expect(button).not.toBeUndefined();
+  await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await act(async () => { await Promise.resolve(); });
 }
