@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -112,6 +112,49 @@ describe('ResearchView project dashboard', () => {
     expect(api.promoteIdeaCanvas).toHaveBeenCalledWith({ artifactId: ideaArtifact.id, expectedVersion: 2 });
   });
 
+  it('prepares an export from approved manuscript and figures then saves the zip', async () => {
+    const manuscript = { ...artifact(), status: 'approved' as const };
+    const figure: ResearchFigurePublication = {
+      id: 'figure_1', projectId: 'research_1', runId: 'exp_1', artifactId: 'figure_artifact', title: 'Comparison',
+      sourcePath: 'plot.py', inputPaths: ['data.csv'], replacesFigureId: null,
+      validation: { widthPixels: 600, heightPixels: 450, widthPoints: 288, heightPoints: 216, pageCount: 1,
+        files: [
+          { path: 'figure.png', sha256: 'c'.repeat(64), size: 10 },
+          { path: 'figure.svg', sha256: 'd'.repeat(64), size: 11 },
+          { path: 'figure.pdf', sha256: 'e'.repeat(64), size: 12 }
+        ], rendererHash: 'f'.repeat(64), options: { widthInches: 4, heightInches: 3, dpi: 150, seed: 1 } },
+      manifestHash: '1'.repeat(64), status: 'approved', createdAt: '2026-09-14T01:00:00.000Z'
+    };
+    const prepared: ResearchExportExecution = {
+      id: 'export_1', projectId: 'research_1',
+      request: { projectId: 'research_1', requestId: 'req_export', title: 'Verified study', manuscriptArtifactId: manuscript.id, figureIds: [figure.id], template: { kind: 'default', language: 'zh' } },
+      ownerRunId: null, status: 'ready', sources: null, sourceHash: '2'.repeat(64), toolchainHash: '3'.repeat(64),
+      files: [], archive: { path: 'paper.zip', sha256: '4'.repeat(64), size: 20 }, artifactId: 'export_artifact',
+      approval: 'unpublished', replacesExportId: null, error: null, createdAt: '2026-09-14T02:00:00.000Z', endedAt: '2026-09-14T02:01:00.000Z'
+    };
+    const api = createResearchApi({ artifacts: [manuscript] });
+    api.listFigures.mockResolvedValue({ ok: true, data: [figure] });
+    api.listExports.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [{ ...prepared, approval: 'approved' }] });
+    api.prepareExport.mockResolvedValue({ ok: true, data: prepared });
+    api.publishExport.mockResolvedValue({ ok: true, data: { ...prepared, approval: 'draft' } });
+    api.writeExport.mockResolvedValue({ ok: true, data: { exportId: prepared.id, projectId: 'research_1', destinationPath: '/tmp/study.zip', sha256: '4'.repeat(64), size: 20, createdAt: prepared.createdAt } });
+    await renderView(api);
+    await clickTab('图稿导出');
+    await act(async () => { await Promise.resolve(); });
+    const checkbox = document.querySelector<HTMLInputElement>('[data-testid="research-figure-toggle-figure_1"]');
+    expect(checkbox).not.toBeNull();
+    await act(async () => { checkbox?.click(); });
+    setInput('research-export-title', 'Verified study');
+    await click('research-export-prepare');
+    expect(api.prepareExport).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'research_1', title: 'Verified study', manuscriptArtifactId: manuscript.id, figureIds: [figure.id]
+    }));
+    await act(async () => { await Promise.resolve(); });
+    setInput('research-export-destination-export_1', '/tmp/study.zip');
+    await click('research-export-write-export_1');
+    expect(api.writeExport).toHaveBeenCalledWith({ projectId: 'research_1', exportId: 'export_1', destinationPath: '/tmp/study.zip' });
+  });
+
   it('starts a stage role with the typed instruction', async () => {
     const api = createResearchApi({
       workflow: workflow({ status: 'running', gateRequired: false, artifactIds: [] }),
@@ -163,7 +206,12 @@ function createResearchApi(overrides: {
     getIdeaCanvas: vi.fn().mockResolvedValue({ ok: true, data: null }),
     saveIdeaCanvas: vi.fn(),
     promoteIdeaCanvas: vi.fn(),
-    createArtifact: vi.fn()
+    createArtifact: vi.fn(),
+    listFigures: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    prepareExport: vi.fn(),
+    publishExport: vi.fn(),
+    writeExport: vi.fn()
   };
 }
 

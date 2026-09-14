@@ -247,3 +247,6 @@
 
 - 5c 已实现：构思视图可创建/编辑 Idea Canvas，保存后晋升为新项目。
 - 5c 完成：Standards/Spec 未解决 0。审查记录 reviews/05c-idea-canvas-ui.md。research-view 5/5 与 typecheck 通过。状态 Verified passing；下一步图稿/导出编辑器。
+
+- 5d 已实现：图稿导出视图可选择已发布图稿、准备导出、发布审核并保存 ZIP。
+- 5d 完成：Standards/Spec 未解决 0。审查记录 reviews/05d-figures-exports.md。research-view 6/6 与 typecheck 通过。状态 Verified passing；下一步 Packaging。

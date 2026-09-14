@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；继续编辑器/图稿/导出，以及 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 5a–5d 已完成；继续 Packaging。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 3 — Implementation（Production）
@@ -59,10 +59,11 @@ Phase 3 — Implementation（Production）
 - [x] Integration 4g2：生产副作用的运行归属、版本、幂等与取消边界。
 - [x] Integration 4g3：阶段模型输出采用真实产物，连接模型 provenance 和重试/审核。
 - [x] Integration 4h：结构化 Idea Canvas、项目晋升、项目级中英语言设置。
-- [ ] Renderer：科研各视图、流程轨道、时间线、审核交互。
+- [x] Renderer：科研各视图、流程轨道、时间线、审核交互。
 - [x] Renderer 5a：项目仪表盘、流程轨道、时间线、审核与阶段角色控制。
 - [x] Renderer 5b：文献库、DOI/检索导入、项目关联和解析阅读器。
 - [x] Renderer 5c：Idea Canvas 编辑、证据引用和晋升。
+- [x] Renderer 5d：图稿列表、导出准备/发布和 ZIP 保存。
 - [ ] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery

@@ -7,6 +7,8 @@ import type {
   ResearchDocumentParse,
   ResearchEmbeddingConfig,
   ResearchEvidence,
+  ResearchExportExecution,
+  ResearchFigurePublication,
   ResearchIdeaCanvas,
   ResearchIdeaCanvasSaveRequest,
   ResearchKnowledgeSearchResult,
@@ -23,6 +25,7 @@ import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdeaPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
+import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 import { researchStageLabels } from './research-workflow';
 
@@ -41,7 +44,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'production' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -63,6 +66,11 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-small');
   const [embeddingDimensions, setEmbeddingDimensions] = useState('1536');
   const [embeddingApiKey, setEmbeddingApiKey] = useState('');
+  const [figures, setFigures] = useState<ResearchFigurePublication[]>([]);
+  const [exports, setExports] = useState<ResearchExportExecution[]>([]);
+  const [selectedFigureIds, setSelectedFigureIds] = useState<string[]>([]);
+  const [exportTitle, setExportTitle] = useState('');
+  const [destinationPath, setDestinationPath] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -386,6 +394,74 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+
+  async function loadProduction(projectId = selectedProjectId): Promise<void> {
+    if (projectId === null) {
+      setFigures([]);
+      setExports([]);
+      return;
+    }
+    const [figureResult, exportResult] = await Promise.all([
+      client.api.research.listFigures({ projectId, limit: 100 }),
+      client.api.research.listExports({ projectId, limit: 40 })
+    ]);
+    setFigures(unwrap('图稿', figureResult));
+    setExports(unwrap('导出作业', exportResult));
+  }
+
+  async function prepareExport(): Promise<void> {
+    if (selectedProjectId === null) return;
+    const manuscript = artifacts.find((item) => item.kind === 'manuscript' && item.status === 'approved');
+    if (manuscript === undefined || exportTitle.trim().length === 0) return;
+    setWorking(true);
+    try {
+      unwrap('准备导出', await client.api.research.prepareExport({
+        projectId: selectedProjectId,
+        requestId: crypto.randomUUID(),
+        title: exportTitle.trim(),
+        manuscriptArtifactId: manuscript.id,
+        figureIds: selectedFigureIds,
+        template: { kind: 'default', language: projects.find((item) => item.id === selectedProjectId)?.language ?? 'zh' }
+      }));
+      await loadProduction(selectedProjectId);
+      setError(null);
+    } catch (prepareError: unknown) {
+      setError(prepareError instanceof Error ? prepareError.message : '准备导出失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function publishExport(exportId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('发布导出', await client.api.research.publishExport({ projectId: selectedProjectId, exportId, replacesExportId: null }));
+      await loadProduction(selectedProjectId);
+      setError(null);
+    } catch (publishError: unknown) {
+      setError(publishError instanceof Error ? publishError.message : '发布导出失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function writeExport(exportId: string): Promise<void> {
+    if (selectedProjectId === null || destinationPath.trim().length === 0) return;
+    setWorking(true);
+    try {
+      unwrap('保存 ZIP', await client.api.research.writeExport({
+        projectId: selectedProjectId, exportId, destinationPath: destinationPath.trim()
+      }));
+      await loadProduction(selectedProjectId);
+      setError(null);
+    } catch (writeError: unknown) {
+      setError(writeError instanceof Error ? writeError.message : '保存 ZIP 失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function searchKnowledge(): Promise<void> {
     if (knowledgeQuery.trim().length === 0) return;
     setWorking(true);
@@ -470,6 +546,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           ['workflow', '流程'],
           ['library', '文献库'],
           ['ideas', '构思'],
+          ['production', '图稿导出'],
           ['knowledge', '知识库'],
           ['embedding', '嵌入配置']
         ] as const).map(([tab, label]) => (
@@ -477,6 +554,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             setActiveTab(tab);
             if (tab === 'embedding') void loadEmbeddingConfigs();
             if (tab === 'library') void loadLibrary();
+            if (tab === 'production') void loadProduction();
           }}>
             {label}
           </button>
@@ -612,6 +690,23 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           query={literatureQuery}
           results={literatureResults}
           scope={libraryScope}
+          working={working}
+        />
+      ) : null}
+      {activeTab === 'production' ? (
+        <ResearchProductionPanel
+          destinationPath={destinationPath}
+          exports={exports}
+          figures={figures}
+          manuscripts={artifacts.filter((item) => item.kind === 'manuscript')}
+          onChangeDestination={setDestinationPath}
+          onChangeTitle={setExportTitle}
+          onPrepareExport={() => void prepareExport()}
+          onPublishExport={(exportId) => void publishExport(exportId)}
+          onToggleFigure={(figureId) => setSelectedFigureIds((current) => current.includes(figureId) ? current.filter((id) => id !== figureId) : [...current, figureId])}
+          onWriteExport={(exportId) => void writeExport(exportId)}
+          selectedFigureIds={selectedFigureIds}
+          title={exportTitle}
           working={working}
         />
       ) : null}
