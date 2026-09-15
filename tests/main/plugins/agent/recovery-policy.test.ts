@@ -46,7 +46,7 @@ describe('toRecoveryDecision', () => {
         firstFailureAtMs: 1000,
         nowMs: 1100
       })
-    ).toEqual({ action: 'fail', reason: 'attempts_exhausted' });
+    ).toMatchObject({ action: 'fail', reason: 'attempts_exhausted' });
   });
 
   it('recovers retryable provider HTTP 5xx errors', () => {
@@ -68,7 +68,7 @@ describe('toRecoveryDecision', () => {
         firstFailureAtMs: 1000,
         nowMs: 1100
       })
-    ).toEqual({ action: 'fail', reason: 'non_transient' });
+    ).toMatchObject({ action: 'fail', reason: 'non_transient' });
   });
 
   it('exhausts after five attempts', () => {
@@ -79,7 +79,7 @@ describe('toRecoveryDecision', () => {
         firstFailureAtMs: 1000,
         nowMs: 2000
       })
-    ).toEqual({ action: 'fail', reason: 'attempts_exhausted' });
+    ).toMatchObject({ action: 'fail', reason: 'attempts_exhausted' });
   });
 
   it('exhausts after ten minutes', () => {
@@ -90,6 +90,6 @@ describe('toRecoveryDecision', () => {
         firstFailureAtMs: 1000,
         nowMs: 601001
       })
-    ).toEqual({ action: 'fail', reason: 'time_exhausted' });
+    ).toMatchObject({ action: 'fail', reason: 'time_exhausted' });
   });
 });

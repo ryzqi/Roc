@@ -46,11 +46,9 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('cronExpression');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('nextRunAt');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('模型只填写 goal 和 trigger；workspacePath 由 runtime 注入。');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.description 可省略；runtime 会补齐展示说明。');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('缺少明确时间时不要改用 manual；应请求澄清。');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('只填写 goal 和 trigger；workspacePath 与策略字段由 runtime 注入。');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type 为 manual、once 或 cron；description 可省略。');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('时间不明确时请求澄清，不要改用 manual；manual 仅用于用户明确要求手动执行。');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('只填写 goal、trigger、workspacePath');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('无法确定触发方式时使用 manual');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();

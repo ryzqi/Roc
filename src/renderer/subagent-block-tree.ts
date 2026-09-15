@@ -23,14 +23,11 @@ export interface TaskToolFilterPolicy {
  * 默认过滤策略
  *
  * 规则:
- * - 有子节点时不过滤 (保留所有 blocks)
- * - 无子节点时过滤 task 工具调用 (kind === 'tool_call' && name === 'task')
+ * - 过滤 subagent 内部的 task 工具调用 (kind === 'tool_call' && name === 'task')
+ * - 有子节点时同样过滤：子 subagent 已经代表这次委派
  */
 export class DefaultTaskToolFilterPolicy implements TaskToolFilterPolicy {
-  shouldFilter(block: ChatTranscriptSubagentBlock, context: { hasChildren: boolean }): boolean {
-    if (context.hasChildren) {
-      return false;
-    }
+  shouldFilter(block: ChatTranscriptSubagentBlock, _context: { hasChildren: boolean }): boolean {
     return block.kind === 'tool_call' && block.name === 'task';
   }
 }

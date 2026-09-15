@@ -9,7 +9,7 @@ describe('ManifestBuilder', () => {
       .withRequestedCapabilities({ mcpServers: [], skills: [] })
       .build();
 
-    expect(compiled.manifest).toBeDefined();
+    expect(compiled.manifest.schemaVersion).toBe(1);
   });
 
   it('链式调用构建 manifest', () => {
@@ -50,7 +50,7 @@ describe('ManifestBuilder', () => {
       })
       .build();
 
-    expect(compiled.manifest).toBeDefined();
+    expect(compiled.manifest.schemaVersion).toBe(1);
     expect(compiled.toolCards.length).toBeGreaterThan(0);
     expect(compiled.skillCards.length).toBe(1);
     expect(compiled.skillCards[0].name).toBe('Test Skill');

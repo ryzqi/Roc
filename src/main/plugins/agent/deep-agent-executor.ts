@@ -57,14 +57,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
 
         switch (recovery.action) {
           case 'restart':
-            // 记录遥测后重新开始
-            if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
-              void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
-                name: 'agent.recovery.restart',
-                value: 1,
-                tags: { reason: 'no_checkpoint', run_id: input.run.id }
-              });
-            }
             break;
 
           case 'fail':
@@ -111,19 +103,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         if (event.type === 'assistant_block' && event.block.kind === 'tool_call' && event.block.phase === 'end') {
           const loopError = toolCallLoopDetector.recordToolCall(event.block.name, event.block.blockId);
           if (loopError !== null) {
-            // 记录遥测
-            if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
-              void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
-                name: 'agent.runtime_validation.tool_call_loop',
-                value: 1,
-                tags: {
-                  run_id: input.run.id,
-                  tool_name: loopError.diagnostics.toolName as string,
-                  diagnostics: JSON.stringify(loopError.diagnostics)
-                }
-              });
-            }
-
             // 不中断运行,仅记录警告(让 Agent 自行纠正)
             console.warn(`[ToolCallLoopDetector] ${loopError.message}`);
           }
@@ -240,18 +219,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               : undefined;
             const budgetError = validateTokenBudget(usageAccumulator, contextBudgetTokens);
             if (budgetError !== null) {
-              // 记录遥测
-              if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
-                void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
-                  name: 'agent.runtime_validation.token_budget_exceeded',
-                  value: 1,
-                  tags: {
-                    run_id: input.run.id,
-                    diagnostics: JSON.stringify(budgetError.diagnostics)
-                  }
-                });
-              }
-
               throw new Error(budgetError.code);
             }
 
@@ -265,19 +232,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             });
 
             if (validationError !== null) {
-              // 记录详细诊断到遥测
-              if (options.metricsService && typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
-                void (globalThis as any).electron.ipc.invoke('diagnostics:recordMetric', {
-                  name: 'agent.outcome.validation_failed',
-                  value: 1,
-                  tags: {
-                    run_id: input.run.id,
-                    error_code: validationError.code,
-                    diagnostics: JSON.stringify(validationError.diagnostics)
-                  }
-                });
-              }
-
               throw new Error(validationError.code);
             }
 

@@ -57,7 +57,12 @@ export class ResearchIndexService {
       try {
         const key = embeddingKey(this.embeddings.selectedConfiguration(settings.embeddingConfigId));
         if (key === this.repository.indexing.scope(project.id).embedding_key) continue;
-      } catch { /* 配置失效同样撤销在途任务，并在下一次扫描中记录失败。 */ }
+      } catch (error) {
+        this.logger.warn('research_embedding_config_invalid', {
+          projectId: project.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
       this.repository.indexing.invalidate(project.id);
       this.cancelProject(project.id);
       this.schedule(project.id, false, 0);

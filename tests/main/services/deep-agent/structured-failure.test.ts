@@ -14,7 +14,6 @@ describe('classifyFailure', () => {
     const classified = classifyFailure(error);
 
     expect(classified.category).toBe('provider');
-    expect(classified.retryStrategy).toBeDefined();
     expect(classified.retryStrategy?.maxAttempts).toBe(3);
     expect(classified.retryStrategy?.conditions.has('http_429')).toBe(true);
     expect(classified.diagnostic?.httpStatus).toBe(429);

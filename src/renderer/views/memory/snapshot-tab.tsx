@@ -29,7 +29,7 @@ export function SnapshotTab({ client }: { client?: RocClient }): React.JSX.Eleme
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard write failed, ignore
+      setCopied(false);
     }
   }
 

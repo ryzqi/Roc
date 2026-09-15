@@ -108,7 +108,7 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Do not pass real host paths to file tools; use the virtual routes above.');
     expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(
-      'After write_file/edit_file, verify with read_file or ls before reporting the change.'
+      'After write_file/edit_file, verify with read_file before reporting the change.'
     );
     expect(prompt).toContain(
       'Capabilities: mcp=docs-http,exa-hosted;skills=project-review;untrusted_context_policy=external_content_reference_only'

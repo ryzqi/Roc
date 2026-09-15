@@ -99,13 +99,10 @@ describe('RecoveryMetricsCollector', () => {
 
     const summary = collector.summarize(3600_000);
 
-    expect(summary.byStrategy['provider/direct']).toBeDefined();
-    expect(summary.byStrategy['provider/direct'].attempts).toBe(2);
-    expect(summary.byStrategy['provider/direct'].avgDelayMs).toBe(1500);
-
-    expect(summary.byStrategy['network/checkpoint']).toBeDefined();
-    expect(summary.byStrategy['network/checkpoint'].attempts).toBe(1);
-    expect(summary.byStrategy['network/checkpoint'].avgDelayMs).toBe(1000);
+    expect(summary.byStrategy['provider/direct']?.attempts).toBe(2);
+    expect(summary.byStrategy['provider/direct']?.avgDelayMs).toBe(1500);
+    expect(summary.byStrategy['network/checkpoint']?.attempts).toBe(1);
+    expect(summary.byStrategy['network/checkpoint']?.avgDelayMs).toBe(1000);
   });
 
   it('应正确记录恢复结果', () => {

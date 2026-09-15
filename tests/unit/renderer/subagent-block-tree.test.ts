@@ -22,9 +22,9 @@ function createSubagentIdentity(id: string, parentId: string | null = null): Sub
 describe('DefaultTaskToolFilterPolicy', () => {
   const policy = new DefaultTaskToolFilterPolicy();
 
-  it('有子节点时不过滤 task 工具', () => {
+  it('有子节点时也过滤 task 工具', () => {
     const block = { kind: 'tool_call' as const, name: 'task', id: 't1', status: 'end' as const, input: null, output: null, error: null };
-    expect(policy.shouldFilter(block, { hasChildren: true })).toBe(false);
+    expect(policy.shouldFilter(block, { hasChildren: true })).toBe(true);
   });
 
   it('无子节点时过滤 task 工具', () => {
@@ -104,7 +104,7 @@ describe('SubagentBlockTree.filterTaskToolsFromActivityBlocks', () => {
     expect(subagent.blocks[1]).toEqual({ kind: 'tool_call', name: 'bash', id: 't2', status: 'end', input: null, output: null, error: null });
   });
 
-  it('有子节点的 subagent 内部保留所有块', () => {
+  it('有子节点的 subagent 内部仍过滤 task 工具', () => {
     const blocks: ChatTranscriptActivityBlock[] = [
       {
         kind: 'subagent',
@@ -133,7 +133,10 @@ describe('SubagentBlockTree.filterTaskToolsFromActivityBlocks', () => {
     ];
     const result = SubagentBlockTree.filterTaskToolsFromActivityBlocks(blocks);
     const subagent = result[0] as Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }>;
-    expect(subagent.blocks.length).toBe(2); // task 工具没被过滤
+    expect(subagent.blocks).toEqual([
+      { kind: 'tool_call', name: 'bash', id: 't2', status: 'end', input: null, output: null, error: null }
+    ]);
+    expect(subagent.children).toHaveLength(1);
   });
 
   it('递归过滤嵌套 subagent', () => {

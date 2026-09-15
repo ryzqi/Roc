@@ -10,6 +10,7 @@ import {
   applyCoreDatabaseSchema,
   applyDiagnosticsDatabaseSchema,
   applyMemoryDatabaseSchema,
+  applyResearchDatabaseSchema,
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema
 } from '../../../src/main/infrastructure/database-schemas';
@@ -46,6 +47,7 @@ describe('checkRocDatabases', () => {
       'core',
       'memory',
       'plugin:@roc/plugin-diagnostics',
+      'plugin:@roc/plugin-research',
       'plugin:@roc/plugin-workspace',
       'task'
     ]);
@@ -56,10 +58,11 @@ describe('checkRocDatabases', () => {
       memory: 1,
       task: 4,
       'plugin:@roc/plugin-workspace': 1,
-      'plugin:@roc/plugin-diagnostics': 1
+      'plugin:@roc/plugin-diagnostics': 1,
+      'plugin:@roc/plugin-research': 15
     });
     expect(getCoreConnection).toHaveBeenCalled();
-    expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(6);
+    expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(7);
   });
 
   it('marks schema drift unhealthy when a required table is missing', () => {
@@ -109,4 +112,5 @@ function applyAllSchemas(targetPool: DatabasePool): void {
   applyTaskDatabaseSchema(targetPool.getConnection('@roc/plugin-task'), now);
   applyWorkspaceDatabaseSchema(targetPool.getConnection('@roc/plugin-workspace'), now);
   applyDiagnosticsDatabaseSchema(targetPool.getConnection('@roc/plugin-diagnostics'), now);
+  applyResearchDatabaseSchema(targetPool.getConnection('@roc/plugin-research'), now);
 }

@@ -43,6 +43,7 @@ import {
   applyCoreDatabaseSchema,
   applyDiagnosticsDatabaseSchema,
   applyMemoryDatabaseSchema,
+  applyResearchDatabaseSchema,
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema
 } from '../../../src/main/infrastructure/database-schemas';
@@ -105,7 +106,7 @@ describe('database backup and restore', () => {
 
     expect(manifest.id).toBe('manual-20260706');
     expect(manifest.status).toBe('complete');
-    expect(manifest.databases).toHaveLength(6);
+    expect(manifest.databases).toHaveLength(7);
     expect(existsSync(join(manifest.backupDir, 'manifest.json'))).toBe(true);
     expect(existsSync(join(manifest.backupDir, 'manifest.tmp'))).toBe(false);
     expect(existsSync(join(manifest.backupDir, 'core.db'))).toBe(true);
@@ -352,4 +353,5 @@ function applyAllSchemas(targetPool: DatabasePool): void {
   applyTaskDatabaseSchema(targetPool.getConnection('@roc/plugin-task'), now);
   applyWorkspaceDatabaseSchema(targetPool.getConnection('@roc/plugin-workspace'), now);
   applyDiagnosticsDatabaseSchema(targetPool.getConnection('@roc/plugin-diagnostics'), now);
+  applyResearchDatabaseSchema(targetPool.getConnection('@roc/plugin-research'), now);
 }

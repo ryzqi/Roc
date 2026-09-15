@@ -5,6 +5,7 @@ import type {
   McpServerSnapshot,
   SkillSnapshot
 } from '../../../shared/types';
+import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-tool-exposure';
 
 /**
  * 工具选择策略：决定哪些工具应该包含在 manifest 中
@@ -36,7 +37,7 @@ export type ToolSelectionContext = {
  * - delete_file: 总是包含
  * - self_config: 仅 normal mode 且 selfConfigAvailable 时包含
  * - MCP 工具: 根据 mcpServers 和 mcpApprovalMode 生成
- * - plan mode: 过滤只保留 plan mode 可见的工具
+ * - plan mode: 过滤掉 mutation/execution/task-commit 工具，保留 MCP 与只读工具
  */
 export class DefaultToolSelectionPolicy implements ToolSelectionPolicy {
   selectToolCards(context: ToolSelectionContext): AgentCapabilityCard[] {
@@ -74,19 +75,7 @@ export class DefaultToolSelectionPolicy implements ToolSelectionPolicy {
   }
 
   private isPlanModeVisible(toolName: string): boolean {
-    // 从 deep-agent/model-tool-exposure 导入的逻辑
-    // 这里暂时内联，后续可以注入依赖
-    const planModeAllowedTools = new Set([
-      'read_file',
-      'write_file',
-      'edit_file',
-      'ls',
-      'glob',
-      'grep',
-      'web_read',
-      'ask_user'
-    ]);
-    return planModeAllowedTools.has(toolName);
+    return isPlanModeModelVisibleToolName(toolName);
   }
 
   private createRunShellCommandCard(): AgentCapabilityCard {

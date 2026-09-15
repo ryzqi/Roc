@@ -38,27 +38,6 @@ export class RetryTelemetry {
     };
 
     this.events.push(retryEvent);
-
-    // 发送到 diagnostics 插件
-    if (typeof globalThis !== 'undefined' && (globalThis as any).electron?.ipc) {
-      void (globalThis as any).electron.ipc
-        .invoke('diagnostics:recordMetric', {
-          name: 'agent.retry',
-          value: 1,
-          tags: {
-            run_id: this.runId,
-            attempt: event.attempt.toString(),
-            layer: retryEvent.layer,
-            operation: event.operation,
-            error_code: retryEvent.errorCode,
-            category: retryEvent.category,
-            checkpoint_resume: event.useCheckpointResume.toString()
-          }
-        })
-        .catch(() => {
-          // 遥测失败不影响主流程
-        });
-    }
   }
 
   private inferLayer(failure: StructuredFailure): RetryEvent['layer'] {
@@ -108,5 +87,9 @@ export class RetryTelemetry {
 
   getEvents(): ReadonlyArray<Readonly<RetryEvent>> {
     return this.events;
+  }
+
+  getRunId(): string {
+    return this.runId;
   }
 }

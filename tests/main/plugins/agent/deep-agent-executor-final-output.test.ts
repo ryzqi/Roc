@@ -23,8 +23,8 @@ describe('createAgentDeepAgentExecutor', () => {
     });
     const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
-    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
+    await expect(firstEvent).rejects.toThrow('agent_run_produced_no_output');
+    await expect(execution.outcome).rejects.toThrow('agent_run_produced_no_output');
   });
 
 
@@ -43,8 +43,8 @@ describe('createAgentDeepAgentExecutor', () => {
     });
     const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
-    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
+    await expect(firstEvent).rejects.toThrow('agent_run_produced_no_output');
+    await expect(execution.outcome).rejects.toThrow('agent_run_produced_no_output');
   });
 
 
@@ -66,8 +66,8 @@ describe('createAgentDeepAgentExecutor', () => {
     });
     const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
-    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
+    await expect(firstEvent).rejects.toThrow('agent_run_produced_no_output');
+    await expect(execution.outcome).rejects.toThrow('agent_run_produced_no_output');
   });
 });
 
