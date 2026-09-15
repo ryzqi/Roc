@@ -169,6 +169,13 @@
   transform: var(--press-scale);
 }
 
+/* 窗口隐藏后停掉无限动画，避免托盘常驻空转 */
+html[data-window-hidden='true'] *,
+html[data-window-hidden='true'] *::before,
+html[data-window-hidden='true'] *::after {
+  animation-play-state: paused !important;
+}
+
 /* 系统级减弱动效兼容 */
 @media (prefers-reduced-motion: reduce) {
   :root {

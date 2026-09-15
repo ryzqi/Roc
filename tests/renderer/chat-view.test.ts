@@ -113,9 +113,10 @@ describe('chat view', () => {
     expect('behavior' in options).toBe(false);
   });
 
-  it('uses smooth scroll only for manual bottom jumps when motion is allowed', () => {
-    expect(buildManualScrollBottomOptions(1234, false)).toEqual({ top: 1234, behavior: 'smooth' });
+  it('keeps manual bottom jumps instant instead of JS smooth scrolling', () => {
+    expect(buildManualScrollBottomOptions(1234, false)).toEqual({ top: 1234 });
     expect(buildManualScrollBottomOptions(1234, true)).toEqual({ top: 1234 });
+    expect('behavior' in buildManualScrollBottomOptions(1234, false)).toBe(false);
   });
 
   it('keeps chat reasoning animation off layout-affecting max-height', () => {

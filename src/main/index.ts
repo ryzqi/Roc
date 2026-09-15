@@ -49,6 +49,7 @@ import {
 } from './electron-runtime-adapters';
 import { toLogError } from './services/errors';
 import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';
+import { applyChromiumRuntimeFlags } from './chromium-runtime-flags';
 
 const mainModuleDir = dirname(fileURLToPath(import.meta.url));
 const isDevelopment = !app.isPackaged;
@@ -61,6 +62,7 @@ let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
 
 registerPdfPreviewScheme();
+applyChromiumRuntimeFlags(app.commandLine);
 
 let mainWindow: BrowserWindow | null = null;
 let activeKernel: MainKernelBootstrap | null = null;

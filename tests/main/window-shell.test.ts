@@ -21,6 +21,8 @@ describe('immersive window shell', () => {
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
+    expect(options.webPreferences?.backgroundThrottling).toBe(true);
+    expect(options.webPreferences?.spellcheck).toBe(false);
   });
 
   it('applies restored main-window bounds after display-safe normalization', () => {

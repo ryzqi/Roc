@@ -22,18 +22,8 @@ export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): Scr
   return { top: scrollHeight };
 }
 
-export function buildManualScrollBottomOptions(scrollHeight: number, reducedMotion: boolean): ScrollToOptions {
-  if (reducedMotion) {
-    return { top: scrollHeight };
-  }
-  return { top: scrollHeight, behavior: 'smooth' };
-}
-
-function prefersReducedMotion(): boolean {
-  if (typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function buildManualScrollBottomOptions(scrollHeight: number, _reducedMotion: boolean): ScrollToOptions {
+  return { top: scrollHeight };
 }
 
 export type TranscriptVirtuosoWindow = {
@@ -96,7 +86,7 @@ export function ChatTranscriptPanel({
   function handleScrollBottomClick(): void {
     virtuosoRef.current?.scrollToIndex({
       index: 'LAST',
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth'
+      behavior: 'auto'
     });
   }
 

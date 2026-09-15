@@ -10,9 +10,8 @@ export const drawerSlideIn: Variants = {
 };
 
 export const drawerTransition: Transition = {
-  type: 'spring',
-  stiffness: 260,
-  damping: 30
+  duration: 0.18,
+  ease: EASING_STANDARD_TUPLE
 };
 
 export const modalBackdropFade: Variants = {
@@ -28,7 +27,7 @@ export const modalPop: Variants = {
 };
 
 export const modalPopTransition: Transition = {
-  duration: 0.2,
+  duration: 0.16,
   ease: EASING_STANDARD_TUPLE
 };
 
@@ -43,19 +42,18 @@ export const assistantBubbleEnter: Variants = {
 };
 
 export const bubbleEnterTransition: Transition = {
-  duration: 0.28,
+  duration: 0.16,
   ease: EASING_SOFT_TUPLE
 };
 
 export const approvalCardEnter: Variants = {
-  initial: { opacity: 0, scale: 0.97, y: 6 },
-  animate: { opacity: 1, scale: 1, y: 0 }
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0 }
 };
 
 export const approvalCardTransition: Transition = {
-  type: 'spring',
-  stiffness: 240,
-  damping: 24
+  duration: 0.16,
+  ease: EASING_STANDARD_TUPLE
 };
 
 export const scrollBottomFade: Variants = {
@@ -65,7 +63,7 @@ export const scrollBottomFade: Variants = {
 };
 
 export const scrollBottomTransition: Transition = {
-  duration: 0.18,
+  duration: 0.12,
   ease: EASING_STANDARD_TUPLE
 };
 

@@ -364,7 +364,7 @@ describe('chat transcript panel', () => {
 
     expect(virtuosoHarness.scrollToIndex).toHaveBeenCalledWith({
       index: 'LAST',
-      behavior: 'smooth'
+      behavior: 'auto'
     });
   });
 

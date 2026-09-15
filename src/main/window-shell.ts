@@ -41,7 +41,9 @@ export function buildMainWindowOptions(
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: true,
+      spellcheck: false
     }
   };
 }

@@ -7,6 +7,24 @@ describe('renderer animation configuration', () => {
 
     expect(entry).toContain("import { MotionConfig } from 'motion/react';");
     expect(entry).toContain('<MotionConfig reducedMotion="user">');
+    expect(entry).toContain("import { bindWindowVisibility } from './window-visibility';");
+    expect(entry).toContain('bindWindowVisibility();');
+  });
+
+  it('pauses infinite CSS animations while the hidden window stays resident', () => {
+    const css = readFileSync('src/renderer/styles/animations.css', 'utf8');
+
+    expect(css).toContain("html[data-window-hidden='true']");
+    expect(css).toContain('animation-play-state: paused !important;');
+  });
+
+  it('keeps overlay motion on a duration ease instead of spring overshoot', () => {
+    const motion = readFileSync('src/renderer/animations.ts', 'utf8');
+    const tokens = readFileSync('src/renderer/styles/tokens.css', 'utf8');
+
+    expect(motion).not.toContain("type: 'spring'");
+    expect(tokens).toContain('--lift-hover: none;');
+    expect(tokens).toContain('--easing-spring: var(--easing-standard);');
   });
 
   it('keeps CSS animations covered by reduced-motion media settings', () => {
