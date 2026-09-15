@@ -4,10 +4,10 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Renderer 5f–5l 已实现。对照确认需求的科研界面主路径已补齐。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+无。本计划已完成并归档。新工作另开计划，不要在本目录续作。
 
 ## Current Phase
-Phase 5 — Delivery
+Archived — 2026-09-15
 
 ## Phases
 
@@ -44,7 +44,7 @@ Phase 5 — Delivery
 - [x] Production：文献解析与增量索引、模板编辑/编译、实验环境/运行、图稿/导出。
 - [x] Production 4a：固定依赖/模型/TeX 资源、可恢复准备脚本、离线运行与搬迁验证；双轴 review、22 测试和真实离线 smoke 通过。
 - [x] Production 4b：主进程工具链接线、受限进程、模板安全导入/编辑/编译、PDF 预览；两轴 review 与真实链路通过。
-- [x] Production 4c：文献本地/DOI/BibTeX/Zotero 导入、文档解析、项目监听与增量索引。
+- [x] Production 4c：文献本地/DOI/BibTeX/BibLaTeX/CSL JSON 导入、文档解析、项目监听与增量索引。
 - [x] Production 4c1：全局文献库、跨项目关联、DOI 去重、BibTeX/BibLaTeX/CSL JSON 互操作；双轴 review、118 项 Node/44 项 Python、真实 IPC/公共 DOI 与构建通过。
 - [x] Production 4c2：全文附件/PDF/HTML 解析与阅读资源接入；双轴 review、140 项相关回归、真实 HTML/PDF 链路与构建通过。
 - [x] Production 4c3：项目监听、增量索引、重建/暂停/重试。
@@ -72,7 +72,7 @@ Phase 5 — Delivery
 - [x] Renderer 5j：文献阅读器导入 PDF/HTML 附件并解析定位文本。
 - [x] Renderer 5k：主张绑定证据并保存 LaTeX 正文。
 - [x] Renderer 5l：阶段模型档位与覆盖策略。
-- [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
+- [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建与 native-packaging 合同测试。
 
 ### Phase 5: Delivery
 - [x] Review outputs
@@ -82,7 +82,7 @@ Phase 5 — Delivery
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| 暂不编辑应用代码，先完成 grilling 访谈 | `grilling` 明确要求共享理解确认前不行动 |
+| grilling 访谈完成后再改应用代码 | `grilling` 要求共享理解确认前不行动；访谈结束后进入实现 |
 | 首要用户为个人研究者 | 用户已确认；默认单用户、本地优先，协作能力后置 |
 | 采用项目中心 + 全局文献库 | 用户确认；论文可跨项目复用，项目承载研究产物 |
 | 使用开放学术 API + DOI/PDF 本地导入 | 用户确认；首版检索边界清晰，避免依赖受限网站抓取 |
@@ -94,7 +94,7 @@ Phase 5 — Delivery
 | 关键产物设置人工审核闸门 | 用户确认；证据集、提纲、正文改写、图稿和最终导出需确认，低风险步骤可自动化 |
 | 全面开放联网，材料可发送给已配置模型 | 用户确认；不做默认本地材料外发限制，沿用已配置 Provider/密钥边界 |
 | 按阶段配置模型档位，支持默认与覆盖 | 用户确认；检索/阅读/写作/审稿/绘图可使用不同模型，并记录实际模型版本 |
-| 文献互操作采用 BibTeX/BibLaTeX、DOI 去重、Zotero 导入导出 | 用户确认；服务 LaTeX 引用并支持既有库迁移 |
+| 文献互操作采用 BibTeX/BibLaTeX、DOI 去重、Zotero 兼容文件导入导出 | 用户确认；服务 LaTeX 引用并支持既有库迁移。首版走文件格式，不接 Zotero API |
 | 阅读支持 PDF/扫描 PDF/HTML/DOI，含 OCR、图表公式抽取 | 用户确认；抽取结果进入带定位的证据链 |
 | 优先直接集成成熟开源项目 | 用户确认；减少自研解析、编译和绘图核心逻辑 |
 | 科研工具链依赖全部随应用打包 | 用户确认；LaTeX、OCR、Python 绘图及运行时开箱可用 |
@@ -108,7 +108,7 @@ Phase 5 — Delivery
 | 项目目录监听 + 增量索引，支持手动重建/暂停/重试 | 用户确认；索引状态纳入流程面板 |
 | 默认索引 tex/bib/md/pdf/csv/图片 OCR，支持 include/exclude | 用户确认；排除构建产物、缓存和敏感目录 |
 | 头脑风暴采用结构化 Idea Canvas，可晋升研究项目 | 用户确认；记录问题/假设/新颖性/证据/实验/风险并关联版本与来源 |
-| 仅提供通用学术写作，不内置期刊规范；支持导入用户模板 | 用户确认；Nature 能力仅作为可选阅读/质量/绘图 Skill，不自动施加期刊规则 |
+| 仅提供通用学术写作，不内置期刊规范；支持导入用户模板 | 用户确认；不自动施加 Nature 规则。参考仓库未原样内置，11 个原创阶段 Skill 随包 |
 | LaTeX 模板以目录/ZIP 导入，自动识别入口并实时编译 | 用户确认；支持 `.tex/.cls/.sty/.bib` 与图片资源 |
 | 标准流程为发现→检索→阅读→构思→方案→实验/数据→绘图→写作→审稿→修订→导出 | 用户确认；每阶段有专属 Agent、Skill、输入输出和审核状态 |
 | 实验/数据阶段纳入 Python/R/Julia 脚本或 Notebook，并记录 provenance | 用户确认；实验结果连接图稿、证据和论文段落 |
@@ -143,3 +143,10 @@ Phase 5 — Delivery
 | `mcporter list context7`：Unknown MCP server | 使用官方 `https://mcp.context7.com/mcp`，resolve-library-id 成功 |
 | GitHub CLI 未登录 | 改用 agent-reach 路由下的 GitHub REST/raw 只读访问 |
 | planning hook 拒绝 symlink/reparse-point context | 当前工作目录物理路径可读；继续使用显式 `.planning/2026-09-10-roc/` 路径 |
+
+## Archive
+- 归档日期：2026-09-15
+- 最终代码提交：`e37f4d66` feat(research): configure stage model policies
+- 计划内增量全部完成：Workflow 1–3b、Production 4a–4h、Renderer 5a–5l、Packaging、Phase 4/5。
+- 不在本计划验收：`package:mac` / `smoke:mac` / `smoke:electron` 实机安装包、Intel 实机、全量 `pnpm test` 中既有 chat/agent/backup 失败、Zotero 直连、原样内置 CC BY-NC / Nature / scipilot 仓库。
+- 归档路径：`.planning/archive/2026-09-10-roc/`

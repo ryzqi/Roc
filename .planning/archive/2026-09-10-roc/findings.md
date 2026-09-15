@@ -14,38 +14,38 @@
 - 人工审核：证据集、提纲、正文改写、图稿、最终导出等关键产物需要确认；元数据整理等低风险步骤可自动推进。
 - 隐私与联网：用户明确允许所有材料发送给已配置模型，全面开放联网。
 - 模型编排：按阶段配置模型档位，支持全局默认与手动覆盖，记录实际模型和版本。
-- 文献互操作：BibTeX/BibLaTeX、DOI 去重、Zotero 导入导出。
+- 文献互操作：BibTeX/BibLaTeX、DOI 去重、Zotero 兼容文件导入导出。首版不接 Zotero API。
 - 阅读输入：PDF、扫描 PDF、HTML、DOI 全支持，含 OCR、图表抽取和公式识别；抽取结果保留页码/段落/图表定位。
 - 实现原则：直接使用当前已有的成熟开源项目，避免重写解析、编译、OCR 和绘图核心能力。
 - 依赖分发：LaTeX、OCR、Python 绘图及其运行时全部随应用打包；需纳入体积、许可、签名、公证和升级治理。
-- 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
+- grilling 访谈已完成；后续按确认决策实现，不再处于“确认前不改代码”状态。
 
 ## Research Findings
 - Renderer 5f：实验运行 UI 复用现有 inspect/start/cancel/read/publish IPC；启动前先取环境哈希，Matplotlib 强制离线并带 figure 选项。Renderer 5g–5l 已接入文献互操作、项目索引、证据捕获、附件解析、主张/正文编辑和阶段模型策略。
 - Idea Canvas：构思阶段现在要求七字段结构化快照和证据引用；批准后才能晋升，来源三字段必须同时存在。晋升与来源事件同一事务，失败回滚。旧运行上下文在 v15 补 language/origin/ideaCanvas。
 - 科研 Agent 接线：4g3 已让实验/绘图/导出阶段 complete() 绑定本次运行链已发布的真实工件，并追加模型 provenance；未发布则失败并保留模型版本。失败/重试留下已发布记录，重试成功后把输出写到这些工件。人工批准和最终 ZIP 仍不向模型开放。
 - 最终导出实际发现：Tectonic 按嵌套入口目录解析 input/bibliography；只在 source 根层生成内容会成功编译旧占位正文。BibTeX crossref 父条目须随引用一起收集并位于子条目之后；Tectonic 可在 BibTeX 出错时仍返回 0。均有真实 PDF 先失败后通过的回归，导出边界另拦截“错误被忽略”的报告。
-- 最终导出预研：现有 evidence.exportBundle 返回已批准正文、主张和证据；正文是含内联 thebibliography 的 LaTeX 片段。review.requireForStage 对 export 要求 accepted 的审稿周期。模板服务会冻结源文件后编译并记录 PDF 哈希，但当前没有把批准正文、图稿、引用文件与最终交付文件绑定的导出作业；4f 需在这些既有边界上接线。
+- 最终导出：4f 已把批准正文、图稿、引用文件与最终交付 ZIP 绑定。Tectonic 按嵌套入口解析；crossref 父条目随引用收集；忽略 BibTeX 错误时即使退出码为 0 也拒绝交付。
 - 绘图：Context7 的 Matplotlib 官方文档确认 Figure.savefig 可对同一对象导出 PNG/SVG/PDF；PDF 使用 CreationDate=None 去掉时间戳，SVG 使用 Date=None 和固定 svg.hashsalt。当前固定 Matplotlib 3.11.1 已实际验证连续两次渲染的全部输出字节相同，PNG 为 600×450，PDF/SVG 为 288×216 pt；图稿内容正确性仍由关联证据和人工审核判断。
 - R/Julia 实际运行已验证：R 的 libc popen/system 经 fork/exec 适配后可保持 syscall 82/147/244 禁止，普通 popen 与 DARWIN_EXTSN 入口都需适配；R_LIBS_SITE 必须设为 NULL，空值会恢复系统库。Julia 按 Base.preferences_names 与 Pkg.Artifacts.artifact_names 收集冻结配置，避免丢失优先文件。两项环境差异均经真实 red-green 回归确认；项目环境不自动安装或改写。
 - Python 实验环境：uv 在查询解释器时会加载项目 `.pth`；仅 `-I/-B` 不能阻止它。当前流程在禁止脱离进程组的 Python 中探测真实包，再让固定 uv 检查独立的安装元数据副本；uv 环境必须共享内置 Python，且不继承系统包。实际 `.pth`、wheel、Notebook 取消和完整工具链验证均已通过。
 - R/Julia 预备验证：Julia 官方 versions.json 当前稳定版 1.13.0，arm64 TAR SHA-256 `c8546ad39de9df9edd74b8104066fb23be0ece60890bb2dbfffadd24e73ba2c2`；已下载并私有解包，Pkg 当前接口可用。CRAN R 4.6.1 arm64 pkg 官方 SHA1 `fc9f4ada15589e8e037b9bf05563d21e97181635`，下载后的 SHA-256 `67f6eea4ced4ce48f0a0d4fa3a1cac43d1859a05a88993ee3dff7c52e7edbc4b`，Apple 签名/公证通过；私有解包的 R 仍需处理硬编码 Framework 动态库路径。没有修改系统安装。
 - 实验环境接线：已安装 uv 的帮助明确支持 `sync --check`（环境与项目同步检查）和 `--locked`；Context7 官方 uv 文档确认 `lock --check` 对项目元数据过期返回错误。后续运行前需同时验证环境和锁文件，不能用 `--no-sync` 代替环境一致性验证。
-- 文献互操作：Context7 的 Zotero 官方文档确认 BibTeX、BibLaTeX 与 CSL JSON 均支持导入/导出。已安装 Bibtexparser 2.0.0 提供默认字符串宏展开、失败块、SeparateCoAuthors/SplitNameParts；名称拆分应在 LaTeX 解码之前，以保留机构作者。4c 优先完成文献库与互操作，再接文档/目录索引。
-- 下一增量的 macOS 进程隔离预检：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT；当前系统 `/System/Library/Sandbox/Profiles/system.sb` 包含必要 dyld/系统初始化规则。引入 system.sb 并允许 mach-bootstrap/syscall 后受限 Python 启动通过。应用接线时仍须验证项目外读写拒绝与子进程取消，尚未把该原型作为已完成能力。
+- 文献互操作：BibTeX、BibLaTeX 与 CSL JSON 已作为 Zotero 兼容文件格式接入。Bibtexparser 2.0.0 负责宏展开、失败块和作者拆分；名称拆分在 LaTeX 解码之前，以保留机构作者。不接 Zotero 直连。
+- macOS 进程隔离：手写 deny-default profile 即使放开文件读取仍使 Python 启动 SIGABRT。实现采用系统 `/System/Library/Sandbox/Profiles/system.sb`，并允许 mach-bootstrap/syscall；受限 Python 启动、项目外读写拒绝与子进程取消已在 4b 及后续生产增量验证。
 - 离线打包：Tectonic 0.17.0 `ZipBundle` 按文件名直接读取，bundle 内须包含 SHA256SUM；旧官方 TAR 本身是扁平资源布局。私有 Python 使用 standalone 基础解释器及由 `uv.lock` 导出的带哈希依赖，直接安装进私有 prefix，避免依赖开发 venv 的外部解释器路径。
 - Production 续作：Tectonic 最新正式发布为 0.17.0；官方 arm64 SHA-256 为 `a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667`，x64 为 `7c90ef5b6ddb1eb1937e4337add5237b79338e4b9676459fa91187d24d6cdf80`。来源：`https://api.github.com/repos/tectonic-typesetting/tectonic/releases/latest`（2026-09-11）。
-- Python 源包已核实：Docling 2.126.0（MIT）、PDFium2 5.13.0（BSD/Apache + dependency notices）、Matplotlib 3.11.1、RapidOCR 3.9.2（Apache-2.0）；需先核查 Intel wheel 及模型许可，再固定工具链锁文件。
+- Python 源包已核实并锁定：Docling 2.126.0（MIT）、PDFium2 5.13.0（BSD/Apache + dependency notices）、Matplotlib 3.11.1、RapidOCR 3.9.2（Apache-2.0）。Intel wheel 与模型许可已纳入工具链锁；Intel 实机运行未做。
 - Roc 是 macOS Electron 44 + React 19 桌面应用；Agent 层使用 DeepAgents/LangGraph，数据层使用 SQLite，renderer/preload/main 通过 Zod IPC 合同隔离。
-- 现有 ViewId 包含 chat、tasks-board、task-detail、workspace、git、terminal、preview、mcp、skills、memory、settings、diagnostics；适合在现有工作台扩展科研域视图，而非另起应用壳。
-- 现有插件职责包含 agent、workspace、mcp、skills、task、memory、app、diagnostics、runtime-tools；SkillService 已支持导入、启用/禁用、删除和文件树读取。
+- ViewId 已包含 research，以及 chat、tasks-board、task-detail、workspace、git、terminal、preview、mcp、skills、memory、settings、diagnostics。科研域在现有工作台扩展，未另起应用壳。
+- 插件职责包含 research、agent、workspace、mcp、skills、task、memory、app、diagnostics、runtime-tools。SkillService 支持导入、启用/禁用、删除和文件树读取。
 - Agent context 已支持显式 skill 注入：授权清单映射为 `/skills/{id}/SKILL.md`，prompt block、memory_search、session_search、remember、context artifact 均已有扩展点。
 - `academic-research-skills` 是大规模科研流程 Skill 集，仓库路径显示包含 `academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`，并配套 agents、references、templates、commands；公开描述为 research → write → review → revise → finalize。
 - `nature-skills` 是多组 Nature 风格科研能力，路径显示包含 `nature-reader`、`nature-writing`、`nature-polishing`、`nature-reviewer`、`nature-statistics`、`nature-response`、`nature-paper2ppt`、`nature-paper-to-patent` 等，并有共享规范与校验脚本。
 - `scipilot-figure-skill` 聚焦出版级科研绘图，包含数据 profiling、图表选择、plot recipes、期刊规格、视觉检查、导出和 QA 脚本。
 - `academic-paper/SKILL.md` 明确提供 12-agent、8 阶段流程：配置、检索、结构、论证、起草、引用/摘要、同行评审、格式化；支持 LaTeX/DOCX/PDF/Markdown、5 种引用格式，并包含 visualization agent（matplotlib/R）和 revision coach。
 - `academic-paper` 的阶段边界与用户确认的阶段化流水线高度匹配，可作为内置写作编排的来源规范；其 agent 角色不能直接全部暴露给每个阶段。
-- 当前 Roc 打包校验只允许 app.asar 中 `dist`、`node_modules`、`package.json`，原生模块放 `app.asar.unpacked`；完整打包 TeX/OCR/Python 需扩展资源布局、安装包校验、签名/公证和体积预算。
+- asar 仍只含 `dist`、`node_modules`、`package.json`；原生模块放 `app.asar.unpacked`。TeX/OCR/Python 走 extraResources `research-toolchain`，afterPack 校验清单、二进制和许可证。签名/公证与安装包实机 smoke 不在本计划验收。
 - 工具链治理：版本和校验哈希锁定，随应用发布，维护第三方许可证清单。
 - 语言与学科：中文界面、项目级中英双语、跨学科默认；Nature 风格为可选期刊规范。
 - 参考仓库许可：实际 LICENSE 核查确认 `academic-research-skills` 为 CC BY-NC 4.0（非商业），`nature-skills` 为 Apache-2.0，`scipilot-figure-skill` 为 MIT。`academic-research-skills` 不能直接随商业应用分发；原样内置前需遵守各仓库 LICENSE/NOTICE。
@@ -58,7 +58,7 @@
 - 索引触发：项目目录监听 + 增量索引，支持手动重建、暂停和失败重试；索引状态需在流程面板可见。
 - 索引材料：默认纳入 `.tex`、`.bib`、`.md`、`.pdf`、`.csv` 和图片 OCR；支持 include/exclude，构建产物、缓存和敏感目录排除。
 - 头脑风暴：使用结构化 Idea Canvas，记录问题、假设、新颖性、证据、实验、风险；可晋升为研究项目，版本与来源自动关联。
-- 写作规范：仅提供通用学术写作，不做期刊规范；支持导入用户模板。Nature 能力作为可选阅读、质量和绘图 Skill，不自动施加期刊规则。
+- 写作规范：仅提供通用学术写作，不做期刊规范；支持导入用户模板。Nature / academic-research-skills / scipilot 未原样内置；11 个原创阶段 Skill 随包，不自动施加期刊规则。
 - 模板导入：LaTeX 模板目录/ZIP，包含 `.tex`、`.cls`、`.sty`、`.bib` 和图片；自动识别入口并实时编译。
 - 标准科研流程：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出，共 11 阶段；每阶段有专属 Agent、Skill、输入输出和审核状态。
 - 实验与数据分析：纳入项目工作流，支持 Python/R/Julia 脚本或 Notebook；记录参数、环境、产物和 provenance，并连接图稿、证据、论文段落。
@@ -93,7 +93,7 @@
 | 关键产物人工审核 | 用户确认；在不可逆或高影响科研输出前保留明确的人类控制点 |
 | 全面开放联网 | 用户确认；联网检索和模型处理不再设置项目级默认阻断，仍使用已配置 Provider/密钥 |
 | 阶段模型策略 | 用户确认；模型能力与成本按工作流阶段匹配，并保留执行可追踪性 |
-| BibTeX/Zotero 互操作 | 用户确认；LaTeX 引用为主，同时支持既有文献库迁移和去重 |
+| BibTeX/Zotero 兼容文件互操作 | 用户确认；LaTeX 引用为主。首版用 BibTeX/BibLaTeX/CSL JSON 迁移和去重，不接 Zotero API |
 | 成熟开源集成优先 | 用户确认；核心科研能力基于现有成熟项目，Roc 负责编排、权限、状态和证据追踪 |
 | 全依赖随应用分发 | 用户确认；优先开箱即用和离线可执行，必须固定版本并保留第三方清单 |
 | 锁定并随应用分发工具链 | 用户确认；保证结果可复现，便于审核和升级回归 |
@@ -126,8 +126,8 @@
 | Context7 未注册到当前 MCP / mcporter | 尝试官方远程 MCP；已安装类型与仓库代码仍作为本地 API 依据 |
 | planning hook 拒绝 symlink/reparse-point context | 物理路径与计划文件可直接访问；记录并继续 |
 | 两个参考仓库 raw SKILL 请求超时 | 保留已成功的 REST 元数据/目录结果；后续改用分块 API 或本地浅克隆，避免重复超时请求 |
-| `academic-research-skills` 为 CC BY-NC 4.0 | 在分发性质确认前不原样打包；商业场景改为独立授权或仅实现兼容的原创流程 |
-| “全面开源”与 CC BY-NC 冲突 | 等待许可边界决策；核心许可、第三方技能许可和可选插件需分离 |
+| `academic-research-skills` 为 CC BY-NC 4.0 | 不原样打包进核心。11 个原创阶段 Skill 随包；NC 内容只能作为独立非商业插件 |
+| “全面开源”与 CC BY-NC 冲突 | 已决策：核心 Apache-2.0/MIT；NC 技能不进入标准开源核心分发 |
 | 许可边界已确认 | 核心与 Apache/MIT 能力可随包；NC 能力不进入标准开源核心分发 |
 | 底层到界面的六阶段交付 | 先稳定领域模型、索引、状态机和 provenance，再接入生产工具、UI 和打包，降低跨层返工 |
 | sqlite-vec + FTS5 + RRF 已实现 | `sqlite-vec` 0.1.9 可加载；知识库支持文献 API 归一化、关键词/向量召回和 RRF 结果 |

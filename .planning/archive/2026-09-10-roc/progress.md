@@ -3,8 +3,9 @@
 ## Session: 2026-09-10
 
 ### Current Status
-- **Phase:** 3 - Implementation（Production）
+- **Phase:** Archived — 2026-09-15
 - **Started:** 2026-09-10
+- **Closed:** 计划内增量全部完成；最终代码提交 `e37f4d66`
 
 ### Actions Taken
 - 按 `grill-with-docs` 读取并启用 grilling/domain-modeling 约束。
@@ -48,7 +49,7 @@
 - 用户确认无证据主张阻断正文写入和最终导出，降级为假设/待验证占位。
 - 核查参考仓库许可证：`nature-skills` Apache-2.0、`scipilot-figure-skill` MIT、`academic-research-skills` Other；原样分发前需读取 LICENSE/NOTICE。
 - 完成 LICENSE 实体核查：`academic-research-skills` CC BY-NC 4.0、`nature-skills` Apache-2.0、`scipilot-figure-skill` MIT；已运行 `agent-reach check-update`，当前版本 v1.5.0。
-- 用户要求全面开源；已识别 CC BY-NC 与标准开源/商业分发的许可冲突，等待边界决策。
+- 用户要求全面开源；已识别 CC BY-NC 与标准开源/商业分发的许可冲突，随后确认核心 Apache-2.0/MIT、NC 技能独立或重写。
 - 用户确认核心 Apache-2.0/MIT；NC 技能独立非商业插件或原创重写。
 - 用户确认从底层全面重构、完成全部功能，并按阶段提交；Phase 1 需求访谈完成，进入 Phase 2 规划与结构设计。
 - 创建 `CONTEXT.md` 和 `docs/adr/0001-research-workbench-architecture.md`，固化科研领域词汇与底层架构决策。
@@ -70,7 +71,7 @@
 | `zsh -f` 下 curl/head 不在 PATH | 后续使用绝对路径或非 login shell |
 | planning hook 拒绝 symlink/reparse-point context | 用显式物理工作区路径和计划文件继续 |
 | 两个参考仓库 raw SKILL 请求超时 | 后续使用分块 API 或本地浅克隆；不重复同一 raw 请求 |
-| `academic-research-skills` 非商业许可 | 等待分发性质决策；商业场景不原样打包该仓库内容 |
+| `academic-research-skills` 非商业许可 | 不原样打包；核心随包原创阶段 Skill |
 | 全面开源与 CC BY-NC 冲突 | 推荐核心许可与 NC 插件分离，或获取额外授权/原创重写 |
 | 许可边界决策完成 | 核心与 Apache/MIT 随包；NC 技能独立或重写 |
 
@@ -213,7 +214,7 @@
 - 4e 修复回归：图稿生命周期 12 项通过，包含两项审批 red-green；真实 SVG 文本/热图与外部链接拒绝 2 项通过。Electron 使用图稿及实验实际响应头，两个预览入口的热图像素均为红色，截图与像素 JSON 已保留。新增测试 helper 的环境对象推断丢失索引签名导致一次类型检查失败，已显式声明 NodeJS.ProcessEnv。Standards 子代理首轮中断，修复后重新请求完整规范审查和窄复核。
 - Spec 窄复核已关闭两项，未解决 0；最终相关回归 215 项通过。Playwright 的 env 合同要求纯字符串映射，NodeJS.ProcessEnv 仍含可选 undefined；已显式筛选环境项，保留测试独占的用户数据目录。继续最终 build 与完整 5 项真实绘图验证。
 - 4e 最终整组真实绘图 5 项通过（34.80 秒），build/typecheck 通过；两种 SVG 资源在独立 Electron 中均无 CSP 错误且热图像素正确。图稿修改/关闭竞态、文件变更、历史替换、v10→v11 保留旧记录及代码/数据/渲染入口快照均有回归。待 Standards 最终结论后完成审查记录并提交。
-- 4e 完成：Standards 最终硬违反 0、设计判断 0、未解决 0，独立定向 25 项通过；Spec 最终未解决 0。审查记录 `reviews/04e-reproducible-figures.md`，状态 Verified passing。最终 215 项相关回归、5 项真实绘图/审核/Electron 像素测试、build/typecheck、check:ipc 与差异检查均通过；本部分独立提交，继续 4f 最终导出。Production/Renderer/Packaging 整体仍未完成。
+- 4e 完成：Standards 最终硬违反 0、设计判断 0、未解决 0，独立定向 25 项通过；Spec 最终未解决 0。审查记录 `reviews/04e-reproducible-figures.md`，状态 Verified passing。最终 215 项相关回归、5 项真实绘图/审核/Electron 像素测试、build/typecheck、check:ipc 与差异检查均通过。当时后续增量是 4f。
 - 4e 已提交 `58821ca`，工作区干净。4f 目标：以已接受审稿的批准正文、批准图稿及引用来源构建冻结的 LaTeX/PDF/参考文献/图稿/追溯 ZIP，预览并经过最终人工闸门后才能写入用户选择的新文件。复用固定 Tectonic/Python 与现有文件边界；不覆盖已存在的交付文件。验证路径覆盖真实 PDF/ZIP、未批准或过期来源拒绝、取消/重启、并发变更与文件篡改。
 - 4f 已起草导出合同、来源快照、v12 持久作业、原子工件替换、固定 ZIP 归档和文件限额/哈希辅助层。正文 LaTeX 生成逻辑抽为共享函数，保持原批准正文内容；原证据/审稿 24 项回归通过。首次类型检查指出精确证据读取方法仍为 private，已按来源服务的实际用途开放已有的带项目/哈希验证读取，不增加另一路查询。当前 Changed, unverified，尚未接线导出执行服务与 IPC。
 - 4f 已接入准备/取消/中断恢复、发布/替换/批准、PDF 预览、只读文件和排他 ZIP 保存的 7 条 IPC。首次回归发现新导出准备检查掩盖旧审稿接受错误，已保留原接受检查的优先级；一次 schema 导入大小写笔误已修正。生命周期与审稿 16 项通过，随后图稿/导出/审稿/协议 45 项通过；ZIP 普通文件/Unicode/哈希/链接/越界/不覆盖的 3 项 Python 回归通过。
@@ -221,23 +222,23 @@
 - 4f 全相关回归（含数据库迁移）240 项、build/typecheck、check:ipc 和暂存差异检查通过。已基于 `58821cac5874f2cf64ff313233af5d443d4cfdd1` 启动 Standards/Spec 双轴 review；继续补关闭时等待审批结束、来源捕获后书目版本变化的边界验证。
 - 4f review 复现两项：嵌套入口使用 nested/ 下旧占位正文；crossref 父条目漏入导出，PDF 缺会议、编辑和年份。两项真实 PDF 回归先失败后通过（22.56 秒）：生成槽位与图稿改随入口目录；补齐父依赖、版本、依赖排序及引用键索引。追加缺父、循环、歧义和父版本变化测试。另复现 Tectonic 对 BibTeX 错误仍返回 0，已在导出边界拒绝该已知错误报告。关闭/迟到书目变化 2 项回归通过；Standards 其余审查及旧行为等价已通过，待修复复核。Spec 回合遇到临时限流，修复后再请求窄复核。
 - 4f 最终整组：246 项相关回归（含迁移）通过，34 项可选资源测试按环境跳过；4 项实际导出链路通过（47.73 秒），3 项 ZIP Python 回归通过，build/typecheck、check:ipc 与差异检查通过。Spec 最终未解决 0，Standards 已完成通用审查并正在最后窄复核。开始用 agent-development 技能核对后续生产工具/角色接线；当前只做源码盘点，未改该增量代码。
-- 4f 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 `reviews/04f-final-exports.md`，状态 Verified passing。最终验证与真实导出证据均已保留；独立提交后继续 Integration 4g。科研 Agent 真实工具接线、Idea Canvas/项目语言、完整 Renderer 和 Packaging 仍未完成。
+- 4f 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 `reviews/04f-final-exports.md`，状态 Verified passing。最终验证与真实导出证据均已保留。当时后续增量是 Integration 4g。
 - 4f 已提交 `c64e3fa`，工作区干净。4g 按可独立验证的读取、受控副作用、真实产物完成三个增量推进，机器可读验收见 `agent-integration-acceptance.json`。先做 4g1：现有 read_artifact 只能读取冻结的描述/正文，生产工件的实际运行记录和文件内容尚不可达；新增读取须绑定本次批准输入、验证哈希，并在取消或过期后拒绝返回。
 - 4g1 已实现读取服务、角色工具和两个 IPC；初步 33 项定向测试及类型检查通过。继续补真实 LangChain 写作工具循环、图稿/导出 IPC 读取与 v12→v13 迁移验证，随后双轴 review；当前状态 Changed, unverified。
 - 新增写作测试已完成 SDK 工具循环，但断言误用不存在的 manuscript.markdown；真实图稿读取通过，导出读取因测试误用未登记 manuscript.md 被正确拒绝。按当前 schema/导出清单改为 latex 与 source/roc-manuscript.tex 后复验。
 - 4g1 新增回归 3 文件 11 项通过；真实图稿、中文 PDF/ZIP 读取均通过。开始以 c64e3fa 为固定基点审查暂存增量，同时执行完整相关回归与构建。测试路径检索曾误含不存在的 tests/main/ipc（rg exit 2），已使用实际根目录下的 IPC 测试文件。
 - 4g1 首轮完整相关回归 246 项、build/typecheck、check:ipc 通过。补充检查复现 UTF-8 可解码的 NUL 二进制与纯 ASCII PDF 被误发为模型文本；沿用现有文件预览的 NUL/PDF 边界阻止文本返回，新增两项回归并纳入最终复核。
 - 4g1 最终 36 文件、262 项回归通过（34 项可选资源跳过），真实图稿和中文 PDF/ZIP 读取各 1 项通过；build/typecheck、check:ipc、diff check 通过。Spec 最终未解决 0，独立 9/9 回归通过；Standards 最终窄复核待返回。
-- 4g1 完成：Standards 最终硬违反 0、判断项 0、未解决 0，独立 12/12 回归通过；Spec 最终未解决 0。审查记录 reviews/04g1-production-inputs.md，验收表只将 4g1 标为通过，状态 Verified passing；本地独立提交后下一步为 4g2，整体 Production/Agent 接线/Renderer/Packaging 仍未完成。
+- 4g1 完成：Standards 最终硬违反 0、判断项 0、未解决 0，独立 12/12 回归通过；Spec 最终未解决 0。审查记录 reviews/04g1-production-inputs.md，验收表只将 4g1 标为通过，状态 Verified passing。当时后续增量是 4g2。
 - 4g1 已提交 `892b6f8`。4g2 将生产写工具接到阶段运行：服务绑定项目/运行身份，脚本修改使用 expectedHash，实验/导出用 requestId 幂等，取消后拒绝迟到副作用。
 - 4g2 已实现：v14 回填 ownerRunId 并增加 workspace 文件版本表；角色工具不接受模型提供的 projectId；取消先 abort 在途实验/导出/模板编译，写回前再校验归属。新增 owned-effects 6 项回归。
-- 4g2 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g2-owned-effects.md，验收表只将 4g1/4g2 标为通过。最终相关回归 37 文件 / 268 项通过（34 项可选资源跳过），owned-effects 6/6，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 4g3。
+- 4g2 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g2-owned-effects.md，验收表只将 4g1/4g2 标为通过。最终相关回归 37 文件 / 268 项通过（34 项可选资源跳过），owned-effects 6/6，typecheck、check:ipc、diff check 通过。状态 Verified passing。当时后续增量是 4g3。
 
 - 4g3 已实现：实验/绘图/导出阶段 complete() 绑定本次运行链已发布的真实工件；未发布则失败并保留模型版本。失败/重试留下已发布记录，重试成功后把模型 provenance 接到这些工件。人工批准和最终 ZIP 仍不向模型开放。
-- 4g3 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g3-production-role-results.md，验收表将 4g1–4g3 标为通过。最终相关回归 38 文件 / 274 项通过（34 项可选资源跳过），production-role-results 7/7，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Idea Canvas/项目语言。
+- 4g3 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04g3-production-role-results.md，验收表将 4g1–4g3 标为通过。最终相关回归 38 文件 / 274 项通过（34 项可选资源跳过），production-role-results 7/7，typecheck、check:ipc、diff check 通过。状态 Verified passing。当时后续增量是 Idea Canvas/项目语言。
 
 - 4h 已实现：项目语言、结构化 Idea Canvas、批准后晋升、构思角色输出绑定真实 Canvas。v15 回填旧运行上下文的 language/origin/ideaCanvas。
-- 4h 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04h-idea-canvas.md。最终相关回归 40 文件 / 288 项通过（34 项可选资源跳过），idea-canvas 9/9，typecheck、check:ipc、diff check 通过。状态 Verified passing；本地独立提交后下一步为 Renderer。
+- 4h 完成：Standards 最终硬违反 0、判断项 0、未解决 0；Spec 最终未解决 0。审查记录 reviews/04h-idea-canvas.md。最终相关回归 40 文件 / 288 项通过（34 项可选资源跳过），idea-canvas 9/9，typecheck、check:ipc、diff check 通过。状态 Verified passing。当时后续增量是 Renderer。
 
 - 5a 已实现：项目仪表盘显示流程轨道、下一步、产物、事件时间线和阶段角色启动/取消/重试；审稿批准需显式接受或修订。
 - 5a 完成：Standards/Spec 最终未解决 0。审查记录 reviews/05a-project-dashboard.md。research-view 3/3、导航/壳层回归与 typecheck 通过。状态 Verified passing；本地独立提交后继续文献库/阅读器。
@@ -249,34 +250,41 @@
 - 5c 完成：Standards/Spec 未解决 0。审查记录 reviews/05c-idea-canvas-ui.md。research-view 5/5 与 typecheck 通过。状态 Verified passing；下一步图稿/导出编辑器。
 
 - 5d 已实现：图稿导出视图可选择已发布图稿、准备导出、发布审核并保存 ZIP。
-- 5d 完成：Standards/Spec 未解决 0。审查记录 reviews/05d-figures-exports.md。research-view 6/6 与 typecheck 通过。状态 Verified passing；下一步 Packaging。
+- 5d 完成：Standards/Spec 未解决 0。审查记录 reviews/05d-figures-exports.md。research-view 6/6 与 typecheck 通过。状态 Verified passing。
 
 - Packaging 已实现：当前架构科研工具链随 extraResources 打包，afterPack 校验二进制和许可证记录。
-- Packaging 完成：Standards/Spec 未解决 0。审查记录 reviews/06-packaging.md。native-packaging 20/20 与 typecheck 通过。状态 Verified passing；下一步 Phase 4 验证记录。Intel 实机验证仍未做。
+- Packaging 完成：Standards/Spec 未解决 0。审查记录 reviews/06-packaging.md。native-packaging 20/20 与 typecheck 通过。状态 Verified passing。Intel 实机与安装包 smoke 不在本计划验收。
 
 - 5e 已实现：文稿视图可导入模板、编辑源文件并编译 PDF 预览。
 - 5e 完成：Standards/Spec 未解决 0。审查记录 reviews/05e-latex-editor.md。research-view 7/7 与 typecheck 通过。状态 Verified passing；Phase 3 Renderer 完成。
 
-- Phase 4 已记录：typecheck、check:ipc、build 与科研相关 276 项回归通过。全量测试中的既有 chat/agent/backup 失败和完整安装包 smoke 列为已知限制。
-- Phase 4/5 完成：审查记录 reviews/07-phase4-verification.md。计划内科研增量全部交付。
+- Phase 4 初记（基点 `058f44f`）：typecheck、check:ipc、build 与当时科研相关 276 项回归通过。全量测试中的既有 chat/agent/backup 失败和完整安装包 smoke 列为已知限制。
+- Phase 4 初记完成后继续 Renderer 5f–5l。最终归档时补齐交付记录：计划内科研增量全部交付。
 
 - 5f 已实现：实验视图可校验环境、启动 Python/Notebook/R/Julia/Matplotlib 运行、取消、读取日志并发布实验或图稿。
-- 5f 完成：Standards/Spec 未解决 0。审查记录 reviews/05f-experiment-runner.md。research-view 8/8 与 typecheck 通过。状态 Verified passing；下一步文献互操作/索引状态。
+- 5f 完成：Standards/Spec 未解决 0。审查记录 reviews/05f-experiment-runner.md。research-view 8/8 与 typecheck 通过。状态 Verified passing。
 
 - 5g 已实现：文献库可导入 BibTeX/BibLaTeX/CSL JSON，并导出选中记录预览。
-- 5g 完成：Standards/Spec 未解决 0。审查记录 reviews/05g-library-exchange.md。research-view 9/9 与 typecheck 通过。状态 Verified passing；下一步索引状态面板。
+- 5g 完成：Standards/Spec 未解决 0。审查记录 reviews/05g-library-exchange.md。research-view 9/9 与 typecheck 通过。状态 Verified passing。首版文献互操作为 BibTeX/BibLaTeX/CSL JSON，不接 Zotero 直连。
 
 - 5h 已实现：项目仪表盘显示索引阶段、文件计数，并支持暂停/恢复、重建和失败重试。
-- 5h 完成：Standards/Spec 未解决 0。审查记录 reviews/05h-index-status.md。research-view 10/10 与 typecheck 通过。状态 Verified passing；下一步证据捕获界面。
+- 5h 完成：Standards/Spec 未解决 0。审查记录 reviews/05h-index-status.md。research-view 10/10 与 typecheck 通过。状态 Verified passing。
 
 - 5i 已实现：知识库命中可捕获为当前项目证据，并列出已捕获摘录。
-- 5i 完成：Standards/Spec 未解决 0。审查记录 reviews/05i-evidence-capture.md。research-view 11/11 与 typecheck 通过。状态 Verified passing；下一步 PDF/HTML 附件导入。
+- 5i 完成：Standards/Spec 未解决 0。审查记录 reviews/05i-evidence-capture.md。research-view 11/11 与 typecheck 通过。状态 Verified passing。
 
 - 5j 已实现：打开文献后可导入 PDF/HTML 附件，解析完成后显示定位文本。
-- 5j 完成：Standards/Spec 未解决 0。审查记录 reviews/05j-document-import.md。research-view 12/12 与 typecheck 通过。状态 Verified passing；下一步主张/正文编辑。
+- 5j 完成：Standards/Spec 未解决 0。审查记录 reviews/05j-document-import.md。research-view 12/12 与 typecheck 通过。状态 Verified passing。
 
 - 5k 已实现：正文视图可创建 manuscript 产物、添加带证据的段落主张，并保存生成的 LaTeX。
 - 5k 完成：Standards/Spec 未解决 0。审查记录 reviews/05k-manuscript-claims.md。research-view 13/13 与 typecheck 通过。状态 Verified passing。
 
 - 5l 已实现：阶段模型策略可按档位保存，并覆盖为指定提供商/模型。
 - 5l 完成：Standards/Spec 未解决 0。审查记录 reviews/05l-stage-policies.md。research-view 14/14 与 typecheck 通过。状态 Verified passing。计划内科研界面主路径完成。
+
+## Archive: 2026-09-15
+
+- 清理过时“下一步/仍未完成/等待决策”表述。计划内增量已全部完成。
+- 补齐 Phase 4 交付记录：覆盖 Renderer 5a–5l 与 Packaging；基点 `e37f4d66`。
+- 目录迁到 `.planning/archive/2026-09-10-roc/`，清除 `.planning/.active_plan`。
+- 不在本计划验收：安装包实机 smoke、Intel 实机、既有全量测试失败、Zotero 直连、参考仓库原样内置。
