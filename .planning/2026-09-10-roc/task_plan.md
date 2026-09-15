@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Workflow、Production 4a–4f 与 Integration 4g1–4g3、4h 已完成；Renderer 5a/5b 已完成；Renderer 与 Packaging 已完成；Phase 4 验证记录已完成；计划内科研增量全部交付。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+计划内增量已交付后，对照确认需求继续补 Renderer 缺口。Renderer 5f 实验运行界面已实现；文献互操作、索引状态和证据捕获仍待后续增量。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 5 — Delivery
@@ -65,6 +65,7 @@ Phase 5 — Delivery
 - [x] Renderer 5c：Idea Canvas 编辑、证据引用和晋升。
 - [x] Renderer 5d：图稿列表、导出准备/发布和 ZIP 保存。
 - [x] Renderer 5e：LaTeX 模板导入、源文件编辑、编译和 PDF 预览。
+- [x] Renderer 5f：实验运行启动、环境校验、取消、日志读取和发布。
 - [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery

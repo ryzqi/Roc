@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -155,6 +155,42 @@ describe('ResearchView project dashboard', () => {
     expect(api.writeExport).toHaveBeenCalledWith({ projectId: 'research_1', exportId: 'export_1', destinationPath: '/tmp/study.zip' });
   });
 
+  it('inspects the environment then starts an experiment from the typed source path', async () => {
+    const execution: ResearchExperimentExecution = {
+      id: 'exp_1', projectId: 'research_1',
+      request: {
+        projectId: 'research_1', requestId: 'req_exp', label: 'Measure signal', engine: 'python',
+        runtime: { kind: 'bundled-python' }, sourcePath: 'run.py', inputPaths: ['data.csv'], arguments: [],
+        parameters: {}, expectedEnvironmentHash: 'a'.repeat(64), timeoutMs: 60000, network: 'disabled'
+      },
+      ownerRunId: null, workspacePath: '/tmp/roc', workspaceRoot: '/tmp/roc', status: 'completed',
+      environment: {
+        runtime: { kind: 'bundled-python' }, executable: '/tmp/python', prefix: '/tmp/python', basePrefix: '/tmp/python',
+        version: '3.12.14', platform: 'darwin', architecture: 'arm64', toolchainHash: 'b'.repeat(64), metadataHash: 'c'.repeat(64),
+        packages: [], lockFiles: [], hash: 'd'.repeat(64)
+      },
+      files: [{ area: 'log', path: 'stdout.txt', sha256: 'e'.repeat(64), size: 12 }],
+      inputHash: 'f'.repeat(64), exitCode: 0, error: null, artifactId: null,
+      createdAt: '2026-09-14T01:00:00.000Z', startedAt: '2026-09-14T01:00:01.000Z', endedAt: '2026-09-14T01:00:02.000Z'
+    };
+    const api = createResearchApi();
+    api.inspectExperimentEnvironment.mockResolvedValue({ ok: true, data: execution.environment });
+    api.startExperiment.mockResolvedValue({ ok: true, data: execution });
+    api.listExperiments.mockResolvedValue({ ok: true, data: [execution] });
+    await renderView(api);
+    await clickTab('实验');
+    setInput('research-experiment-label', 'Measure signal');
+    setInput('research-experiment-source', 'run.py');
+    setInput('research-experiment-inputs', 'data.csv');
+    await click('research-experiment-start');
+    expect(api.inspectExperimentEnvironment).toHaveBeenCalledWith({ projectId: 'research_1', runtime: { kind: 'bundled-python' } });
+    expect(api.startExperiment).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'research_1', label: 'Measure signal', engine: 'python', sourcePath: 'run.py', inputPaths: ['data.csv'],
+      expectedEnvironmentHash: 'd'.repeat(64), network: 'disabled'
+    }));
+    expect(text('research-experiment-list')).toContain('Measure signal');
+  });
+
   it('imports a template, edits the entry, and compiles a preview', async () => {
     const template: ResearchTemplate = {
       id: 'template_1', projectId: 'research_1', rootPath: '/tmp/template', entryPath: 'main.tex', status: 'imported',
@@ -237,6 +273,14 @@ function createResearchApi(overrides: {
     createArtifact: vi.fn(),
     listFigures: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listExperiments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    inspectExperimentEnvironment: vi.fn(),
+    startExperiment: vi.fn(),
+    getExperiment: vi.fn(),
+    cancelExperiment: vi.fn(),
+    publishExperiment: vi.fn(),
+    publishFigure: vi.fn(),
+    readExperimentFile: vi.fn(),
     prepareExport: vi.fn(),
     publishExport: vi.fn(),
     writeExport: vi.fn(),

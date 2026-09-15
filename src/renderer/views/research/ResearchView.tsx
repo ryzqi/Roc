@@ -7,6 +7,9 @@ import type {
   ResearchDocumentParse,
   ResearchEmbeddingConfig,
   ResearchEvidence,
+  ResearchExperimentExecution,
+  ResearchExperimentFileContent,
+  ResearchExperimentRuntime,
   ResearchExportExecution,
   ResearchFigurePublication,
   ResearchIdeaCanvas,
@@ -28,6 +31,7 @@ import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdeaPanel';
 import { ResearchEditorPanel } from './ResearchEditorPanel';
+import { emptyExperimentDraft, ResearchExperimentPanel, type ResearchExperimentDraft } from './ResearchExperimentPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
@@ -48,7 +52,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -72,6 +76,10 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [embeddingApiKey, setEmbeddingApiKey] = useState('');
   const [figures, setFigures] = useState<ResearchFigurePublication[]>([]);
   const [exports, setExports] = useState<ResearchExportExecution[]>([]);
+  const [experiments, setExperiments] = useState<ResearchExperimentExecution[]>([]);
+  const [experimentDraft, setExperimentDraft] = useState<ResearchExperimentDraft>(emptyExperimentDraft);
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
+  const [experimentLog, setExperimentLog] = useState<ResearchExperimentFileContent | null>(null);
   const [selectedFigureIds, setSelectedFigureIds] = useState<string[]>([]);
   const [exportTitle, setExportTitle] = useState('');
   const [destinationPath, setDestinationPath] = useState('');
@@ -488,6 +496,143 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+  async function loadExperiments(projectId = selectedProjectId): Promise<void> {
+    if (projectId === null) {
+      setExperiments([]);
+      setSelectedExperimentId(null);
+      setExperimentLog(null);
+      return;
+    }
+    setExperiments(unwrap('实验运行', await client.api.research.listExperiments({ projectId, limit: 100 })));
+  }
+
+  async function startExperiment(): Promise<void> {
+    if (selectedProjectId === null) return;
+    const sourcePath = experimentDraft.sourcePath.trim();
+    const timeoutMs = Number(experimentDraft.timeoutMs);
+    if (sourcePath.length === 0 || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3_600_000) {
+      setError('源文件必须填写，超时需在 1000 到 3600000 毫秒之间。');
+      return;
+    }
+    if (experimentDraft.engine === 'matplotlib') {
+      const widthInches = Number(experimentDraft.widthInches);
+      const heightInches = Number(experimentDraft.heightInches);
+      const dpi = Number(experimentDraft.dpi);
+      const seed = Number(experimentDraft.seed);
+      if (
+        !Number.isFinite(widthInches) || widthInches < 1 || widthInches > 24
+        || !Number.isFinite(heightInches) || heightInches < 1 || heightInches > 24
+        || !Number.isInteger(dpi) || dpi < 72 || dpi > 1200
+        || !Number.isInteger(seed) || seed < 0 || seed > 4294967295
+      ) {
+        setError('图稿尺寸需在 1–24 英寸，DPI 72–1200，随机种子为非负整数。');
+        return;
+      }
+    }
+    setWorking(true);
+    try {
+      const runtime = experimentRuntime(experimentDraft);
+      const environment = unwrap('实验环境', await client.api.research.inspectExperimentEnvironment({
+        projectId: selectedProjectId, runtime
+      }));
+      const figure = experimentDraft.engine === 'matplotlib' ? {
+        widthInches: Number(experimentDraft.widthInches),
+        heightInches: Number(experimentDraft.heightInches),
+        dpi: Number(experimentDraft.dpi),
+        seed: Number(experimentDraft.seed)
+      } : undefined;
+      const started = unwrap('启动实验', await client.api.research.startExperiment({
+        projectId: selectedProjectId,
+        requestId: crypto.randomUUID(),
+        label: experimentDraft.label.trim() || sourcePath,
+        engine: experimentDraft.engine,
+        runtime,
+        sourcePath,
+        inputPaths: parseRelativePaths(experimentDraft.inputPaths),
+        arguments: [],
+        parameters: {},
+        expectedEnvironmentHash: environment.hash,
+        timeoutMs,
+        network: experimentDraft.engine === 'matplotlib' ? 'disabled' : experimentDraft.network,
+        ...(figure === undefined ? {} : { figure })
+      }));
+      setSelectedExperimentId(started.id);
+      setExperimentLog(null);
+      await loadExperiments(selectedProjectId);
+      setError(null);
+    } catch (startError: unknown) {
+      setError(startError instanceof Error ? startError.message : '实验启动失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function cancelExperiment(runId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('取消实验', await client.api.research.cancelExperiment({ projectId: selectedProjectId, runId }));
+      await loadExperiments(selectedProjectId);
+      setError(null);
+    } catch (cancelError: unknown) {
+      setError(cancelError instanceof Error ? cancelError.message : '取消实验失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function publishExperiment(runId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('发布实验', await client.api.research.publishExperiment({ projectId: selectedProjectId, runId }));
+      await loadExperiments(selectedProjectId);
+      setError(null);
+    } catch (publishError: unknown) {
+      setError(publishError instanceof Error ? publishError.message : '发布实验失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function publishExperimentFigure(runId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      unwrap('发布图稿', await client.api.research.publishFigure({ projectId: selectedProjectId, runId, replacesFigureId: null }));
+      await loadExperiments(selectedProjectId);
+      setError(null);
+    } catch (publishError: unknown) {
+      setError(publishError instanceof Error ? publishError.message : '发布图稿失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function readExperimentLog(runId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setWorking(true);
+    try {
+      const run = unwrap('实验运行', await client.api.research.getExperiment({ projectId: selectedProjectId, runId }));
+      const logFile = run.files.find((file) => file.area === 'log' && file.path === 'stdout.txt')
+        ?? run.files.find((file) => file.area === 'log' && file.path === 'stderr.txt')
+        ?? run.files.find((file) => file.area === 'log');
+      if (logFile === undefined) {
+        setError('这次运行还没有日志。');
+        return;
+      }
+      setSelectedExperimentId(runId);
+      setExperimentLog(unwrap('实验日志', await client.api.research.readExperimentFile({
+        projectId: selectedProjectId, runId, area: logFile.area, path: logFile.path
+      })));
+      setError(null);
+    } catch (readError: unknown) {
+      setError(readError instanceof Error ? readError.message : '读取实验日志失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function loadProduction(projectId = selectedProjectId): Promise<void> {
     if (projectId === null) {
       setFigures([]);
@@ -639,6 +784,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           ['workflow', '流程'],
           ['library', '文献库'],
           ['ideas', '构思'],
+          ['experiments', '实验'],
           ['editor', '文稿'],
           ['production', '图稿导出'],
           ['knowledge', '知识库'],
@@ -648,6 +794,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             setActiveTab(tab);
             if (tab === 'embedding') void loadEmbeddingConfigs();
             if (tab === 'library') void loadLibrary();
+            if (tab === 'experiments') void loadExperiments();
             if (tab === 'production') void loadProduction();
             if (tab === 'editor') void loadTemplates();
           }}>
@@ -785,6 +932,24 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           query={literatureQuery}
           results={literatureResults}
           scope={libraryScope}
+          working={working}
+        />
+      ) : null}
+      {activeTab === 'experiments' ? (
+        <ResearchExperimentPanel
+          draft={experimentDraft}
+          experiments={experiments}
+          log={experimentLog}
+          onCancel={(runId) => void cancelExperiment(runId)}
+          onChange={setExperimentDraft}
+          onPublish={(runId) => void publishExperiment(runId)}
+          onPublishFigure={(runId) => void publishExperimentFigure(runId)}
+          onReadLog={(runId) => void readExperimentLog(runId)}
+          onRefresh={() => void loadExperiments()}
+          onSelect={setSelectedExperimentId}
+          onStart={() => void startExperiment()}
+          projectId={selectedProjectId}
+          selectedRunId={selectedExperimentId}
           working={working}
         />
       ) : null}
@@ -953,4 +1118,18 @@ function EmbeddingPanel({
       </div>
     </section>
   );
+}
+
+function parseRelativePaths(value: string): string[] {
+  return [...new Set(value.split(/[\n,]/u).map((item) => item.trim()).filter((item) => item.length > 0))];
+}
+
+function experimentRuntime(draft: ResearchExperimentDraft): ResearchExperimentRuntime {
+  if (draft.engine === 'r') {
+    return { kind: 'renv', rootPath: draft.rRootPath.trim(), libraryPath: draft.rLibraryPath.trim() };
+  }
+  if (draft.engine === 'julia') {
+    return { kind: 'julia', rootPath: draft.juliaRootPath.trim(), depotPath: draft.juliaDepotPath.trim() };
+  }
+  return { kind: draft.runtimeKind === 'uv' ? 'uv' : 'bundled-python' };
 }

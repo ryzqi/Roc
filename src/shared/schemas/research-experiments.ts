@@ -85,6 +85,7 @@ export type ResearchExperimentEnvironment = z.infer<typeof researchExperimentEnv
 export type ResearchExperimentStart = z.infer<typeof researchExperimentStartSchema>;
 export type ResearchExperimentExecution = z.infer<typeof researchExperimentExecutionSchema>;
 export type ResearchExperimentFile = z.infer<typeof researchExperimentFileSchema>;
+export type ResearchExperimentFileContent = z.infer<typeof researchExperimentFileContentSchema>;
 export type ResearchWorkspaceFile = z.infer<typeof researchWorkspaceFileSchema>;
 export type ResearchWorkspaceFileContent = z.infer<typeof researchWorkspaceFileContentSchema>;
 export type ResearchWorkspaceFileSaveRequest = z.infer<typeof researchWorkspaceFileSaveRequestSchema>;

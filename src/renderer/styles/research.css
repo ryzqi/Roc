@@ -782,3 +782,11 @@
   border-radius: var(--radius-sm);
   background: var(--bg);
 }
+
+pre.research-reader-content {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+}

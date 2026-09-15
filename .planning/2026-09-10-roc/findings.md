@@ -21,6 +21,7 @@
 - 当前按 `grill-with-docs` 执行：先逐题确认决策；共享理解确认前不改应用代码。
 
 ## Research Findings
+- Renderer 5f：实验运行 UI 复用现有 inspect/start/cancel/read/publish IPC；启动前先取环境哈希，Matplotlib 强制离线并带 figure 选项。文献 BibTeX/Zotero 互操作、索引状态面板和证据捕获仍未接入 renderer。
 - Idea Canvas：构思阶段现在要求七字段结构化快照和证据引用；批准后才能晋升，来源三字段必须同时存在。晋升与来源事件同一事务，失败回滚。旧运行上下文在 v15 补 language/origin/ideaCanvas。
 - 科研 Agent 接线：4g3 已让实验/绘图/导出阶段 complete() 绑定本次运行链已发布的真实工件，并追加模型 provenance；未发布则失败并保留模型版本。失败/重试留下已发布记录，重试成功后把输出写到这些工件。人工批准和最终 ZIP 仍不向模型开放。
 - 最终导出实际发现：Tectonic 按嵌套入口目录解析 input/bibliography；只在 source 根层生成内容会成功编译旧占位正文。BibTeX crossref 父条目须随引用一起收集并位于子条目之后；Tectonic 可在 BibTeX 出错时仍返回 0。均有真实 PDF 先失败后通过的回归，导出边界另拦截“错误被忽略”的报告。

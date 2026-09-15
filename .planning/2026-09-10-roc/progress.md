@@ -259,3 +259,6 @@
 
 - Phase 4 已记录：typecheck、check:ipc、build 与科研相关 276 项回归通过。全量测试中的既有 chat/agent/backup 失败和完整安装包 smoke 列为已知限制。
 - Phase 4/5 完成：审查记录 reviews/07-phase4-verification.md。计划内科研增量全部交付。
+
+- 5f 已实现：实验视图可校验环境、启动 Python/Notebook/R/Julia/Matplotlib 运行、取消、读取日志并发布实验或图稿。
+- 5f 完成：Standards/Spec 未解决 0。审查记录 reviews/05f-experiment-runner.md。research-view 8/8 与 typecheck 通过。状态 Verified passing；下一步文献互操作/索引状态。
