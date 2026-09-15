@@ -277,3 +277,6 @@
 
 - 5k 已实现：正文视图可创建 manuscript 产物、添加带证据的段落主张，并保存生成的 LaTeX。
 - 5k 完成：Standards/Spec 未解决 0。审查记录 reviews/05k-manuscript-claims.md。research-view 13/13 与 typecheck 通过。状态 Verified passing。
+
+- 5l 已实现：阶段模型策略可按档位保存，并覆盖为指定提供商/模型。
+- 5l 完成：Standards/Spec 未解决 0。审查记录 reviews/05l-stage-policies.md。research-view 14/14 与 typecheck 通过。状态 Verified passing。计划内科研界面主路径完成。

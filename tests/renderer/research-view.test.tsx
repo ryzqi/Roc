@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ProviderConfig, ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStagePolicy, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -134,6 +134,47 @@ describe('ResearchView project dashboard', () => {
       artifactId: manuscriptArtifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }]
     });
     expect(text('research-manuscript-latex')).toContain('The measured result is 42 units.');
+  });
+
+  it('saves a stage model override from the policy panel', async () => {
+    const policy: ResearchStagePolicy = {
+      projectId: 'research_1', stage: 'writing', tier: 'deep', model: { kind: 'app_default' }, maxSteps: 30, timeoutMs: 180000
+    };
+    const saved: ResearchStagePolicy = {
+      ...policy, model: { kind: 'model', providerId: 'openai', modelId: 'gpt-5' }, maxSteps: 40, timeoutMs: 240000
+    };
+    const api = createResearchApi();
+    api.listStagePolicies.mockResolvedValue({ ok: true, data: [policy] });
+    api.saveStagePolicy.mockResolvedValue({ ok: true, data: saved });
+    await renderView(api, undefined, [provider()]);
+    await clickTab('阶段模型');
+    expect(text('research-policy-list')).toContain('写作');
+    const kind = document.querySelector<HTMLSelectElement>('[data-testid="research-policy-model-kind"]');
+    expect(kind).not.toBeNull();
+    await act(async () => {
+      kind!.value = 'model';
+      kind!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const providerSelect = document.querySelector<HTMLSelectElement>('[data-testid="research-policy-provider"]');
+    expect(providerSelect).not.toBeNull();
+    await act(async () => {
+      providerSelect!.value = 'openai';
+      providerSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const model = document.querySelector<HTMLSelectElement>('[data-testid="research-policy-model"]');
+    expect(model).not.toBeNull();
+    await act(async () => {
+      model!.value = 'gpt-5';
+      model!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    setInput('research-policy-steps', '40');
+    setInput('research-policy-timeout', '240000');
+    await click('research-policy-save');
+    expect(api.saveStagePolicy).toHaveBeenCalledWith({
+      projectId: 'research_1', stage: 'writing', tier: 'deep',
+      model: { kind: 'model', providerId: 'openai', modelId: 'gpt-5' }, maxSteps: 40, timeoutMs: 240000
+    });
+    expect(text('research-policy-current')).toContain('写作');
   });
 
   it('requires an explicit review accept or revise decision', async () => {
@@ -432,6 +473,8 @@ function createResearchApi(overrides: {
     listClaims: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     getManuscript: vi.fn().mockResolvedValue({ ok: true, data: null }),
     saveManuscript: vi.fn(),
+    listStagePolicies: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    saveStagePolicy: vi.fn(),
     listEmbeddingConfigs: vi.fn(),
     saveEmbeddingConfig: vi.fn(),
     listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),
@@ -509,11 +552,11 @@ function run(): ResearchStageRun {
   };
 }
 
-async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }): Promise<void> {
+async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }, providers: ProviderConfig[] = []): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchView, {
       client: { api: { research, files: files ?? { selectFromDialog: vi.fn() } } as never },
-      state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })
+      state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never, providers })
     }));
   });
   await act(async () => { await Promise.resolve(); });
@@ -599,5 +642,13 @@ function indexStatus(overrides: Partial<ResearchIndexStatus> & { paused?: boolea
     generation: 1, workspacePath: '/tmp/roc', phase, error: null, lastScanAt: '2026-09-14T01:00:00.000Z',
     counts: { total: 2, queued: 0, running: 0, ready: 2, failed: 0 },
     ...overrides
+  };
+}
+
+function provider(): ProviderConfig {
+  return {
+    id: 'openai', name: 'OpenAI', type: 'openai_compatible', endpoint: 'https://api.openai.com/v1',
+    credentialRef: 'secret:openai', enabled: true,
+    models: [{ id: 'gpt-5', displayName: 'GPT-5', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false }]
   };
 }

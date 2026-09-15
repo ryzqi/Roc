@@ -23,6 +23,7 @@ import type {
   ResearchLiterature,
   ResearchManuscript,
   ResearchProject,
+  ResearchStagePolicy,
   ResearchStageRun,
   ResearchTemplate,
   ResearchTemplateFile,
@@ -39,6 +40,7 @@ import { ResearchEditorPanel } from './ResearchEditorPanel';
 import { emptyExperimentDraft, ResearchExperimentPanel, type ResearchExperimentDraft } from './ResearchExperimentPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { emptyManuscriptDraft, ResearchManuscriptPanel, type ResearchManuscriptDraft } from './ResearchManuscriptPanel';
+import { emptyPolicyDraft, policyToDraft, ResearchPolicyPanel, type ResearchPolicyDraft } from './ResearchPolicyPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 import { researchStageLabels } from './research-workflow';
@@ -58,7 +60,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'manuscript' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'manuscript' | 'editor' | 'production' | 'knowledge' | 'embedding' | 'policies'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -76,6 +78,8 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [manuscript, setManuscript] = useState<ResearchManuscript | null>(null);
   const [claims, setClaims] = useState<ResearchClaim[]>([]);
   const [manuscriptDraft, setManuscriptDraft] = useState<ResearchManuscriptDraft>(emptyManuscriptDraft);
+  const [policies, setPolicies] = useState<ResearchStagePolicy[]>([]);
+  const [policyDraft, setPolicyDraft] = useState<ResearchPolicyDraft>(emptyPolicyDraft('discovery'));
   const [ideaArtifactId, setIdeaArtifactId] = useState<string | null>(null);
   const [ideaCanvas, setIdeaCanvas] = useState<ResearchIdeaCanvas | null>(null);
   const [ideaDraft, setIdeaDraft] = useState<ResearchIdeaCanvasSaveRequest | null>(null);
@@ -669,6 +673,52 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
+  async function loadPolicies(projectId = selectedProjectId): Promise<void> {
+    if (projectId === null) {
+      setPolicies([]);
+      setPolicyDraft(emptyPolicyDraft('discovery'));
+      return;
+    }
+    const listed = unwrap('阶段策略', await client.api.research.listStagePolicies({ projectId }));
+    setPolicies(listed);
+    const current = listed.find((policy) => policy.stage === policyDraft.stage) ?? listed[0];
+    if (current !== undefined) setPolicyDraft(policyToDraft(current));
+  }
+
+  async function savePolicy(): Promise<void> {
+    if (selectedProjectId === null) return;
+    const maxSteps = Number(policyDraft.maxSteps);
+    const timeoutMs = Number(policyDraft.timeoutMs);
+    if (!Number.isInteger(maxSteps) || maxSteps < 2 || maxSteps > 100 || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
+      setError('最大步数需在 2 到 100，超时需在 1000 到 600000 毫秒之间。');
+      return;
+    }
+    if (policyDraft.modelKind === 'model' && (policyDraft.providerId.trim().length === 0 || policyDraft.modelId.trim().length === 0)) {
+      setError('指定模型时必须选择提供商和模型。');
+      return;
+    }
+    setWorking(true);
+    try {
+      const saved = unwrap('保存阶段策略', await client.api.research.saveStagePolicy({
+        projectId: selectedProjectId,
+        stage: policyDraft.stage,
+        tier: policyDraft.tier,
+        model: policyDraft.modelKind === 'app_default'
+          ? { kind: 'app_default' }
+          : { kind: 'model', providerId: policyDraft.providerId, modelId: policyDraft.modelId },
+        maxSteps,
+        timeoutMs
+      }));
+      setPolicies((current) => [saved, ...current.filter((policy) => policy.stage !== saved.stage)]);
+      setPolicyDraft(policyToDraft(saved));
+      setError(null);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : '保存阶段策略失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function loadExperiments(projectId = selectedProjectId): Promise<void> {
     if (projectId === null) {
       setExperiments([]);
@@ -976,7 +1026,8 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           ['editor', '文稿'],
           ['production', '图稿导出'],
           ['knowledge', '知识库'],
-          ['embedding', '嵌入配置']
+          ['embedding', '嵌入配置'],
+          ['policies', '阶段模型']
         ] as const).map(([tab, label]) => (
           <button className={activeTab === tab ? 'research-tab research-tab--active' : 'research-tab'} key={tab} type="button" onClick={() => {
             setActiveTab(tab);
@@ -985,6 +1036,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             if (tab === 'experiments') void loadExperiments();
             if (tab === 'production') void loadProduction();
             if (tab === 'editor') void loadTemplates();
+            if (tab === 'policies') void loadPolicies();
           }}>
             {label}
           </button>
@@ -1209,6 +1261,20 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onCapture={(chunkId) => void captureEvidence(chunkId)}
           onQueryChange={setKnowledgeQuery}
           onSearch={() => void searchKnowledge()}
+        />
+      ) : null}
+      {activeTab === 'policies' ? (
+        <ResearchPolicyPanel
+          draft={policyDraft}
+          onChange={setPolicyDraft}
+          onSave={() => void savePolicy()}
+          onSelect={(stage) => {
+            const current = policies.find((policy) => policy.stage === stage);
+            setPolicyDraft(current === undefined ? emptyPolicyDraft(stage) : policyToDraft(current));
+          }}
+          policies={policies}
+          providers={state.providers}
+          working={working}
         />
       ) : null}
       {activeTab === 'embedding' ? (
