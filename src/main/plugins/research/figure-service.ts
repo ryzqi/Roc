@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchFigurePublication, researchFigureSourceRequestSchema } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema } from '../../../shared/schemas/research-plotting';
-import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import { experimentFileLimit } from './experiment-files';
 import type { ResearchExperimentService } from './experiment-service';
 import { assertFigureRun, figureManifest, figureManifestPath } from './figure-repository';
@@ -48,23 +47,14 @@ export class ResearchFigureService {
   }
 
   async verifyStage(projectId: string): Promise<void> {
-    this.requireOpen();
-    const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'figure');
-    if (stage === undefined) throw new Error('research_stage_not_found');
-    for (const id of stage.artifactIds) {
-      const record = this.repository.figures.forArtifact(this.repository.getArtifact(id));
-      await this.verify(projectId, record.id);
-    }
-  }
-
-  async transition(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot> {
-    if (request.expectedStage !== 'figure' || (request.action !== 'complete' && request.action !== 'approve')) throw new Error('research_figure_transition_invalid');
-    return await this.task(async () => {
-      const signature = this.reviewSignature(request.projectId);
-      await this.verifyStage(request.projectId);
+    await this.task(async () => {
+      const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'figure');
+      if (stage === undefined) throw new Error('research_stage_not_found');
+      for (const id of stage.artifactIds) {
+        const record = this.repository.figures.forArtifact(this.repository.getArtifact(id));
+        await this.verify(projectId, record.id);
+      }
       this.requireOpen();
-      if (signature !== this.reviewSignature(request.projectId)) throw new Error('research_figure_review_changed');
-      return this.repository.transitionWorkflow(request);
     });
   }
 
@@ -91,14 +81,6 @@ export class ResearchFigureService {
     finally { this.operations.delete(pending); }
   }
 
-  private reviewSignature(projectId: string): string {
-    const workflow = this.repository.getWorkflow(projectId);
-    const stage = workflow.stages.find((entry) => entry.stage === 'figure');
-    if (stage === undefined) throw new Error('research_stage_not_found');
-    const artifacts = stage.artifactIds.map((id) => ({ artifact: this.repository.getArtifact(id),
-      claims: this.repository.evidence.listClaims({ projectId, artifactId: id }) }));
-    return researchContentHash(JSON.stringify({ currentStage: workflow.currentStage, projectStatus: workflow.projectStatus, stage, artifacts }));
-  }
   private async validation(projectId: string, runId: string) {
     const { bytes } = await this.experiments.source({ projectId, runId, area: 'output', path: figureValidationPath });
     return researchFigureValidationSchema.parse(JSON.parse(bytes.toString('utf8')));

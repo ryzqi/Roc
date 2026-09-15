@@ -12,6 +12,7 @@ import { ResearchFigureService } from '../../../../src/main/plugins/research/fig
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchExportSourceService } from '../../../../src/main/plugins/research/export-sources';
 import { ResearchExportService } from '../../../../src/main/plugins/research/export-service';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { type createExportArchive, type ExportToolchain } from '../../../../src/main/plugins/research/export-files';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import type { ResearchExportPrepare } from '../../../../src/shared/schemas/research-exports';
@@ -21,6 +22,7 @@ import { libraryEntry } from './library-fixtures';
 let db: Database.Database;
 let repository: ResearchRepository;
 let service: ResearchExportService;
+let gate: ReturnType<typeof createResearchHumanGate>;
 let sources: ResearchExportSourceService;
 let experiments: ResearchExperimentService;
 let figures: ResearchFigureService;
@@ -61,6 +63,7 @@ beforeEach(async () => {
     return { path: 'archive/export.zip', sha256: researchContentHash(content), size: Buffer.byteLength(content) };
   });
   service = new ResearchExportService(repository, sources, tools, join(root, 'exports'), logger, archive);
+  gate = createResearchHumanGate({ repository, figures, exports: service });
 });
 afterEach(async () => { await Promise.all([service.shutdown(), figures.shutdown(), experiments.shutdown(), templates.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 function request(): ResearchExportPrepare { return { projectId, requestId: randomUUID(), title: 'Verified study', manuscriptArtifactId, figureIds: [], template: { kind: 'default', language: 'en' } }; }
@@ -84,9 +87,9 @@ describe('final export lifecycle', () => {
     expect(published.approval).toBe('draft');
     expect(() => repository.updateArtifact({ id: published.artifactId!, path: '/other.pdf' })).toThrow('research_export_publication_immutable');
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'start' });
-    await service.transition({ projectId, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId, expectedStage: 'export', action: 'complete' });
     expect(repository.exports.get(projectId, record.id).approval).toBe('draft');
-    await service.transition({ projectId, expectedStage: 'export', action: 'approve' });
+    await gate.approve({ projectId, expectedStage: 'export', action: 'approve' });
     const delivered = await service.write({ projectId, exportId: record.id, destinationPath });
     expect(delivered.sha256).toBe(researchContentHash(await readFile(destinationPath)));
     await expect(service.write({ projectId, exportId: record.id, destinationPath })).rejects.toThrow('research_export_destination_exists');
@@ -110,9 +113,9 @@ describe('final export lifecycle', () => {
     await writeFile(join(bundle, 'paper.pdf'), pdf);
     await service.publish(projectId, record.id, null);
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'start' });
-    await service.transition({ projectId, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId, expectedStage: 'export', action: 'complete' });
     await writeFile(join(repository.exports.root(projectId, record.id), 'archive/export.zip'), 'modified archive');
-    await expect(service.transition({ projectId, expectedStage: 'export', action: 'approve' })).rejects.toThrow('research_export_snapshot_changed');
+    await expect(gate.approve({ projectId, expectedStage: 'export', action: 'approve' })).rejects.toThrow('research_export_snapshot_changed');
     expect(repository.exports.get(projectId, record.id).approval).toBe('draft');
   });
 
@@ -247,15 +250,15 @@ describe('final export lifecycle', () => {
     const first = await prepared(); const second = await prepared();
     await service.publish(projectId, first.id, null);
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'start' });
-    await service.transition({ projectId, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId, expectedStage: 'export', action: 'complete' });
     const entered = deferred(); const release = deferred(); const capture = sources.capture.bind(sources);
     vi.spyOn(sources, 'capture').mockImplementationOnce(async (...args) => { const result = await capture(...args); entered.resolve(); await release.promise; return result; });
-    const approving = service.transition({ projectId, expectedStage: 'export', action: 'approve' });
+    const approving = gate.approve({ projectId, expectedStage: 'export', action: 'approve' });
     const assertion = expect(approving).rejects.toThrow('research_export_review_changed');
     await entered.promise;
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'reject' });
     const replacement = await service.publish(projectId, second.id, first.id);
-    await service.transition({ projectId, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId, expectedStage: 'export', action: 'complete' });
     release.resolve(); await assertion;
     expect(repository.exports.get(projectId, first.id).approval).toBe('superseded');
     expect(repository.getWorkflow(projectId).stages.find((stage) => stage.stage === 'export')?.artifactIds).toEqual([replacement.artifactId]);
@@ -265,10 +268,10 @@ describe('final export lifecycle', () => {
   it('waits for a pending approval on shutdown and leaves the prepared version unapproved', async () => {
     const record = await prepared(); await service.publish(projectId, record.id, null);
     repository.transitionWorkflow({ projectId, expectedStage: 'export', action: 'start' });
-    await service.transition({ projectId, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId, expectedStage: 'export', action: 'complete' });
     const entered = deferred(); const release = deferred(); const capture = sources.capture.bind(sources);
     vi.spyOn(sources, 'capture').mockImplementationOnce(async (...args) => { const value = await capture(...args); entered.resolve(); await release.promise; return value; });
-    const approving = service.transition({ projectId, expectedStage: 'export', action: 'approve' });
+    const approving = gate.approve({ projectId, expectedStage: 'export', action: 'approve' });
     const assertion = expect(approving).rejects.toThrow('research_export_closed');
     await entered.promise;
     let closed = false;
@@ -286,10 +289,10 @@ describe('final export lifecycle', () => {
     const record = await prepared({ ...request(), projectId: other.id, manuscriptArtifactId: manuscript });
     await service.publish(other.id, record.id, null);
     repository.transitionWorkflow({ projectId: other.id, expectedStage: 'export', action: 'start' });
-    await service.transition({ projectId: other.id, expectedStage: 'export', action: 'complete' });
+    await gate.complete({ projectId: other.id, expectedStage: 'export', action: 'complete' });
     const entered = deferred(); const release = deferred(); const capture = sources.capture.bind(sources);
     vi.spyOn(sources, 'capture').mockImplementationOnce(async (...args) => { const value = await capture(...args); entered.resolve(); await release.promise; return value; });
-    const approving = service.transition({ projectId: other.id, expectedStage: 'export', action: 'approve' });
+    const approving = gate.approve({ projectId: other.id, expectedStage: 'export', action: 'approve' });
     const assertion = expect(approving).rejects.toThrow('research_export_sources_changed');
     await entered.promise;
     repository.library.setCitationKey(paper.id, paper.revision, 'late-change');

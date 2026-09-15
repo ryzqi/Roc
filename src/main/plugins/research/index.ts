@@ -77,6 +77,7 @@ import { registerResearchIdeaCapabilities, researchIdeaCapabilities } from './id
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
 import { ResearchStageRuntime } from './stage-runtime';
+import { createResearchHumanGate } from './human-gate';
 
 const pluginId = '@roc/plugin-research';
 const capabilityVersion = '1.0.0';
@@ -187,6 +188,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         researchExperiments, researchFigures, researchTemplates, researchExports);
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, effects);
       stageRuntime = runtime;
+      const humanGate = createResearchHumanGate({ repository: researchRepository, figures: researchFigures, exports: researchExports });
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
@@ -219,9 +221,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       context.capabilities.register(pluginId, researchCapabilityDescriptors[4], async (input) => repository!.getWorkflow((input as { id: string }).id));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[5], async (input) => {
         const request = researchWorkflowTransitionRequestSchema.parse(input);
-        const gated = request.action === 'complete' || request.action === 'approve';
-        const snapshot = request.expectedStage === 'figure' && gated ? await researchFigures.transition(request)
-          : request.expectedStage === 'export' && gated ? await researchExports.transition(request) : runtime.transition(request);
+        const snapshot = request.action === 'complete' || request.action === 'approve' || request.action === 'reject'
+          ? await humanGate[request.action](request)
+          : runtime.transition(request);
         researchExports.projectChanged(request.projectId);
         return snapshot;
       });

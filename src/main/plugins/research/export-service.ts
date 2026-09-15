@@ -4,7 +4,6 @@ import { basename, dirname, join } from 'node:path';
 import type { z } from 'zod';
 import { researchExportPrepareSchema, researchExportWriteRequestSchema, type ResearchExportDelivery, type ResearchExportExecution,
   type ResearchExportFile, type researchExportFileContentSchema, type ResearchExportPrepare, type ResearchExportSources } from '../../../shared/schemas/research-exports';
-import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import type { RocPluginContext } from '../../kernel/types';
 import { buildExportFiles } from './export-builder';
 import { archiveSource, createExportArchive, exportFileLimit, exportStorage, hashExportArchive, ResearchExportFiles, type ExportToolchain } from './export-files';
@@ -65,11 +64,9 @@ export class ResearchExportService {
     });
   }
 
-  async transition(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot> {
-    if (request.expectedStage !== 'export' || (request.action !== 'complete' && request.action !== 'approve')) throw new Error('research_export_transition_invalid');
-    return await this.task(async (signal) => {
-      const signature = this.reviewSignature(request.projectId);
-      const stage = this.repository.getWorkflow(request.projectId).stages.find((entry) => entry.stage === 'export');
+  async verifyStage(projectId: string): Promise<void> {
+    await this.task(async (signal) => {
+      const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'export');
       if (stage === undefined) throw new Error('research_stage_not_found');
       const records = stage.artifactIds.map((id) => this.repository.exports.forArtifact(this.repository.getArtifact(id)));
       for (const record of records) await this.verify(record, signal);
@@ -78,8 +75,6 @@ export class ResearchExportService {
         if (record.sources === null) throw new Error('research_export_sources_required');
         this.sources.assertCurrent(record.request, record.sources);
       }
-      if (signature !== this.reviewSignature(request.projectId)) throw new Error('research_export_review_changed');
-      return this.repository.transitionWorkflow(request);
     });
   }
 
@@ -219,13 +214,6 @@ export class ResearchExportService {
     return record;
   }
 
-  private reviewSignature(projectId: string): string {
-    const workflow = this.repository.getWorkflow(projectId);
-    const stage = workflow.stages.find((entry) => entry.stage === 'export');
-    if (stage === undefined) throw new Error('research_stage_not_found');
-    return researchContentHash(JSON.stringify({ currentStage: workflow.currentStage, projectStatus: workflow.projectStatus, stage,
-      artifacts: stage.artifactIds.map((id) => this.repository.getArtifact(id)) }));
-  }
 
   private projectScope(projectId: string): string {
     const project = this.repository.getProject(projectId);

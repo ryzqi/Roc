@@ -1,8 +1,7 @@
 import { CircleAlert, Plus, Send, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
-  ResearchArtifact,
   ResearchDocument,
   ResearchDocumentParse,
   ResearchEmbeddingConfig,
@@ -14,7 +13,6 @@ import type {
   ResearchFigurePublication,
   ResearchIdeaCanvas,
   ResearchIdeaCanvasSaveRequest,
-  ResearchIndexStatus,
   ResearchKnowledgeSearchResult,
   ResearchBibliographyFormat,
   ResearchLibraryExport,
@@ -22,14 +20,10 @@ import type {
   ResearchLibraryItem,
   ResearchLiterature,
   ResearchManuscript,
-  ResearchProject,
   ResearchStagePolicy,
-  ResearchStageRun,
   ResearchTemplate,
   ResearchTemplateFile,
   ResearchTemplateFileContent,
-  ResearchWorkflowEvent,
-  ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
 import { unwrap } from '../../loaded-state';
@@ -43,17 +37,30 @@ import { emptyManuscriptDraft, ResearchManuscriptPanel, type ResearchManuscriptD
 import { emptyPolicyDraft, policyToDraft, ResearchPolicyPanel, type ResearchPolicyDraft } from './ResearchPolicyPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
+import { createResearchWorkbench, createResearchWorkbenchAdapter } from './research-workbench';
 import { researchStageLabels } from './research-workflow';
 
 export function ResearchView({ client, state }: { client: RocClient; state: LoadedState }): React.JSX.Element {
-  const [projects, setProjects] = useState<ResearchProject[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [workflow, setWorkflow] = useState<ResearchWorkflowSnapshot | null>(null);
-  const [events, setEvents] = useState<ResearchWorkflowEvent[]>([]);
-  const [runs, setRuns] = useState<ResearchStageRun[]>([]);
-  const [artifacts, setArtifacts] = useState<ResearchArtifact[]>([]);
-  const [instruction, setInstruction] = useState('');
-  const [loading, setLoading] = useState(true);
+  const workbenchRef = useRef<{ client: RocClient; workbench: ReturnType<typeof createResearchWorkbench> } | null>(null);
+  if (workbenchRef.current === null || workbenchRef.current.client !== client) {
+    workbenchRef.current = { client, workbench: createResearchWorkbench(createResearchWorkbenchAdapter(client)) };
+  }
+  const workbench = workbenchRef.current.workbench;
+  const [workbenchSnapshot, setWorkbenchSnapshot] = useState(workbench.getSnapshot());
+  const {
+    projects,
+    project: selectedProject,
+    workflow,
+    events,
+    runs,
+    artifacts,
+    indexStatus,
+    instruction,
+    loading,
+    working: workbenchWorking,
+    error: workbenchError
+  } = workbenchSnapshot;
+  const selectedProjectId = selectedProject?.id ?? null;
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -73,7 +80,6 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
   const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
   const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
-  const [indexStatus, setIndexStatus] = useState<ResearchIndexStatus | null>(null);
   const [manuscriptArtifactId, setManuscriptArtifactId] = useState<string | null>(null);
   const [manuscript, setManuscript] = useState<ResearchManuscript | null>(null);
   const [claims, setClaims] = useState<ResearchClaim[]>([]);
@@ -107,195 +113,71 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [openTemplateFile, setOpenTemplateFile] = useState<ResearchTemplateFileContent | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    client.api.research
-      .listProjects()
-      .then((result) => {
-        const nextProjects = unwrap('科研项目', result);
-        if (cancelled) return;
-        setProjects(nextProjects);
-        setSelectedProjectId((current) => current ?? nextProjects[0]?.id ?? null);
-        setError(null);
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研项目加载失败。');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
+    return workbench.subscribe(setWorkbenchSnapshot);
+  }, [workbench]);
+
+  useEffect(() => {
+    void workbench.load();
+  }, [workbench]);
 
   useEffect(() => {
     if (selectedProjectId === null) {
-      setWorkflow(null);
-      setEvents([]);
-      setRuns([]);
-      setArtifacts([]);
-      setIndexStatus(null);
+      setEvidence([]);
       return;
     }
     let cancelled = false;
-    Promise.all([
-      client.api.research.getWorkflow({ id: selectedProjectId }),
-      client.api.research.listWorkflowEvents({ projectId: selectedProjectId, limit: 40 }),
-      client.api.research.listStageRuns({ projectId: selectedProjectId, limit: 40 }),
-      client.api.research.listArtifacts({ projectId: selectedProjectId }),
-      client.api.research.listEvidence({ projectId: selectedProjectId }),
-      client.api.research.getIndexStatus({ projectId: selectedProjectId })
-    ]).then(([workflowResult, eventResult, runResult, artifactResult, evidenceResult, indexResult]) => {
+    client.api.research.listEvidence({ projectId: selectedProjectId }).then((result) => {
       if (cancelled) return;
-      setWorkflow(unwrap('科研流程', workflowResult));
-      setEvents(unwrap('科研事件', eventResult));
-      setRuns(unwrap('阶段运行', runResult));
-      setArtifacts(unwrap('阶段产物', artifactResult));
-      setEvidence(unwrap('证据', evidenceResult));
-      setIndexStatus(unwrap('项目索引', indexResult));
-      setError(null);
+      setEvidence(unwrap('证据', result));
     }).catch((loadError: unknown) => {
-      if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研流程加载失败。');
+      if (!cancelled) setError(loadError instanceof Error ? loadError.message : '证据加载失败。');
     });
     return () => {
       cancelled = true;
     };
   }, [client, selectedProjectId]);
 
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId]
-  );
-
   async function createProject(): Promise<void> {
-    if (title.trim().length === 0 || description.trim().length === 0) {
-      setError('项目标题和研究目标不能为空。');
-      return;
-    }
-    setWorking(true);
-    try {
-      const result = await client.api.research.createProject({
-        title: title.trim(),
-        description: description.trim(),
-        workspacePath: state.workspace?.path ?? null,
-        language
-      });
-      const project = unwrap('创建科研项目', result);
-      setProjects((current) => [project, ...current]);
-      setSelectedProjectId(project.id);
+    await workbench.createProject({
+      title,
+      description,
+      workspacePath: state.workspace?.path ?? null,
+      language
+    });
+    if (workbench.getSnapshot().error === null) {
       setTitle('');
       setDescription('');
       setCreateOpen(false);
-      setError(null);
-    } catch (createError: unknown) {
-      setError(createError instanceof Error ? createError.message : '科研项目创建失败。');
-    } finally {
-      setWorking(false);
     }
   }
 
-  async function refreshProject(projectId: string): Promise<void> {
-    const [workflowResult, eventResult, runResult, artifactResult, evidenceResult, indexResult] = await Promise.all([
-      client.api.research.getWorkflow({ id: projectId }),
-      client.api.research.listWorkflowEvents({ projectId, limit: 40 }),
-      client.api.research.listStageRuns({ projectId, limit: 40 }),
-      client.api.research.listArtifacts({ projectId }),
-      client.api.research.listEvidence({ projectId }),
-      client.api.research.getIndexStatus({ projectId })
-    ]);
-    const nextWorkflow = unwrap('科研流程', workflowResult);
-    setWorkflow(nextWorkflow);
-    setEvents(unwrap('科研事件', eventResult));
-    setRuns(unwrap('阶段运行', runResult));
-    setArtifacts(unwrap('阶段产物', artifactResult));
-    setEvidence(unwrap('证据', evidenceResult));
-    setIndexStatus(unwrap('项目索引', indexResult));
-    setProjects((current) => current.map((project) => project.id === projectId
-      ? { ...project, currentStage: nextWorkflow.currentStage, status: nextWorkflow.projectStatus, updatedAt: nextWorkflow.lastEvent?.createdAt ?? project.updatedAt }
-      : project));
+  async function refreshProject(): Promise<void> {
+    await workbench.refresh();
+    if (selectedProjectId === null) {
+      setEvidence([]);
+      return;
+    }
+    setEvidence(unwrap('证据', await client.api.research.listEvidence({ projectId: selectedProjectId })));
   }
 
   async function controlIndex(action: 'pause' | 'resume' | 'rebuild' | 'retry'): Promise<void> {
-    if (selectedProjectId === null || indexStatus === null) return;
-    setWorking(true);
-    try {
-      const request = action === 'retry'
-        ? { projectId: selectedProjectId, action, expectedRevision: indexStatus.settings.revision, fileId: null }
-        : { projectId: selectedProjectId, action, expectedRevision: indexStatus.settings.revision };
-      setIndexStatus(unwrap('控制索引', await client.api.research.controlIndex(request)));
-      setError(null);
-    } catch (indexError: unknown) {
-      setError(indexError instanceof Error ? indexError.message : '索引控制失败。');
-    } finally {
-      setWorking(false);
-    }
+    await workbench.controlIndex(action);
   }
 
   async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>, reviewDecision?: 'accept' | 'revise'): Promise<void> {
-    if (workflow === null || selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('更新科研流程', await client.api.research.transitionWorkflow({
-        projectId: selectedProjectId,
-        action,
-        expectedStage: workflow.currentStage,
-        note: action === 'reject' ? '请补充证据或修改阶段产物。' : undefined,
-        ...(reviewDecision === undefined ? {} : { reviewDecision })
-      }));
-      await refreshProject(selectedProjectId);
-      setError(null);
-    } catch (transitionError: unknown) {
-      setError(transitionError instanceof Error ? transitionError.message : '科研流程更新失败。');
-    } finally {
-      setWorking(false);
-    }
+    await workbench.transition(action, reviewDecision === undefined ? undefined : { reviewDecision });
   }
 
   async function startRun(): Promise<void> {
-    if (workflow === null || selectedProjectId === null || instruction.trim().length === 0) return;
-    setWorking(true);
-    try {
-      unwrap('启动阶段角色', await client.api.research.startStageRun({
-        projectId: selectedProjectId, expectedStage: workflow.currentStage, instruction: instruction.trim(), requestId: crypto.randomUUID()
-      }));
-      await refreshProject(selectedProjectId);
-      setError(null);
-    } catch (runError: unknown) {
-      setError(runError instanceof Error ? runError.message : '阶段角色启动失败。');
-    } finally {
-      setWorking(false);
-    }
+    await workbench.startRun();
   }
 
   async function cancelRun(): Promise<void> {
-    const run = runs.find((item) => item.parentRunId === null && ['queued', 'running'].includes(item.status));
-    if (run === undefined || selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('取消阶段角色', await client.api.research.cancelStageRun({ projectId: selectedProjectId, runId: run.id }));
-      await refreshProject(selectedProjectId);
-      setError(null);
-    } catch (runError: unknown) {
-      setError(runError instanceof Error ? runError.message : '取消阶段角色失败。');
-    } finally {
-      setWorking(false);
-    }
+    await workbench.cancelRun();
   }
 
   async function retryRun(): Promise<void> {
-    const run = runs.find((item) => item.parentRunId === null && ['failed', 'cancelled', 'interrupted'].includes(item.status));
-    if (run === undefined || selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('重试阶段角色', await client.api.research.retryStageRun({ projectId: selectedProjectId, runId: run.id, requestId: crypto.randomUUID() }));
-      await refreshProject(selectedProjectId);
-      setError(null);
-    } catch (runError: unknown) {
-      setError(runError instanceof Error ? runError.message : '重试阶段角色失败。');
-    } finally {
-      setWorking(false);
-    }
+    await workbench.retryRun();
   }
 
   async function searchLiterature(): Promise<void> {
@@ -456,14 +338,13 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     setWorking(true);
     try {
       if (workflow.currentStage !== 'ideation') {
-        unwrap('进入构思阶段', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: workflow.currentStage, action: 'move', targetStage: 'ideation' }));
+        await workbench.transition('move', { targetStage: 'ideation' });
       }
-      const current = unwrap('科研流程', await client.api.research.getWorkflow({ id: selectedProjectId }));
-      if (current.stages.find((stage) => stage.stage === 'ideation')?.status === 'ready') {
-        unwrap('开始构思', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: 'ideation', action: 'start' }));
+      if (workbench.getSnapshot().workflow?.stages.find((stage) => stage.stage === 'ideation')?.status === 'ready') {
+        await workbench.transition('start');
       }
       const artifact = unwrap('创建画布', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'ideation', kind: 'idea_canvas', title: 'Idea Canvas', path: null }));
-      await refreshProject(selectedProjectId);
+      await refreshProject();
       setIdeaArtifactId(artifact.id);
       setIdeaCanvas(null);
       setIdeaDraft(emptyIdeaDraft(artifact.id));
@@ -497,14 +378,13 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     setWorking(true);
     try {
       if (workflow.currentStage !== 'writing') {
-        unwrap('进入写作阶段', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: workflow.currentStage, action: 'move', targetStage: 'writing' }));
+        await workbench.transition('move', { targetStage: 'writing' });
       }
-      const current = unwrap('科研流程', await client.api.research.getWorkflow({ id: selectedProjectId }));
-      if (current.stages.find((stage) => stage.stage === 'writing')?.status === 'ready') {
-        unwrap('开始写作', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: 'writing', action: 'start' }));
+      if (workbench.getSnapshot().workflow?.stages.find((stage) => stage.stage === 'writing')?.status === 'ready') {
+        await workbench.transition('start');
       }
       const artifact = unwrap('创建正文', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'writing', kind: 'manuscript', title: 'Manuscript', path: null }));
-      await refreshProject(selectedProjectId);
+      await refreshProject();
       setManuscriptArtifactId(artifact.id);
       setManuscript(null);
       setClaims([]);
@@ -563,7 +443,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       const saved = unwrap('保存画布', await client.api.research.saveIdeaCanvas(ideaDraft));
       setIdeaCanvas(saved);
       setIdeaDraft(canvasToDraft(saved));
-      if (selectedProjectId !== null) await refreshProject(selectedProjectId);
+      if (selectedProjectId !== null) await refreshProject();
       setError(null);
     } catch (saveError: unknown) {
       setError(saveError instanceof Error ? saveError.message : '保存 Idea Canvas 失败。');
@@ -577,8 +457,8 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     setWorking(true);
     try {
       const promoted = unwrap('晋升画布', await client.api.research.promoteIdeaCanvas({ artifactId: ideaCanvas.artifactId, expectedVersion: ideaCanvas.version }));
-      setProjects((current) => [promoted.project, ...current.filter((item) => item.id !== promoted.project.id)]);
-      setSelectedProjectId(promoted.project.id);
+      await workbench.load();
+      await workbench.selectProject(promoted.project.id);
       setError(null);
     } catch (promoteError: unknown) {
       setError(promoteError instanceof Error ? promoteError.message : '晋升 Idea Canvas 失败。');
@@ -1064,18 +944,18 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             <button className="action-button" type="button" onClick={() => setCreateOpen(false)}>
               取消
             </button>
-            <button className="action-button action-button--primary" type="button" disabled={working} onClick={() => void createProject()}>
+            <button className="action-button action-button--primary" type="button" disabled={working || workbenchWorking} onClick={() => void createProject()}>
               创建项目
             </button>
           </div>
         </section>
       ) : null}
 
-      {error === null ? null : (
+      {error === null && workbenchError === null ? null : (
         <div className="research-alert" role="alert">
           <CircleAlert aria-hidden="true" size={16} />
-          <span>{error}</span>
-          <button type="button" title="关闭错误" aria-label="关闭错误" onClick={() => setError(null)}>
+          <span>{error ?? workbenchError}</span>
+          <button type="button" title="关闭错误" aria-label="关闭错误" onClick={() => { setError(null); workbench.clearError(); }}>
             <X aria-hidden="true" size={15} />
           </button>
         </div>
@@ -1103,7 +983,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
                 className={project.id === selectedProjectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
                 key={project.id}
                 type="button"
-                onClick={() => setSelectedProjectId(project.id)}
+                onClick={() => void workbench.selectProject(project.id)}
               >
                 <span className="research-project-row-title">{project.title}</span>
                 <span className="research-project-row-meta">
@@ -1125,13 +1005,13 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
                 onApprove={(decision) => void transition('approve', decision)}
                 onCancelRun={() => void cancelRun()}
                 onControlIndex={(action) => void controlIndex(action)}
-                onInstructionChange={setInstruction}
+                onInstructionChange={(value) => workbench.setInstruction(value)}
                 onRetryRun={() => void retryRun()}
                 onStartRun={() => void startRun()}
                 onTransition={(action, decision) => void transition(action, decision)}
                 project={selectedProject}
                 runs={runs}
-                working={working}
+                working={working || workbenchWorking}
                 workflow={workflow}
               />
             )}
@@ -1151,7 +1031,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onSave={() => void saveIdea()}
           onSelect={(artifactId) => void selectIdea(artifactId)}
           selectedArtifactId={ideaArtifactId}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'library' ? (
@@ -1182,7 +1062,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           results={literatureResults}
           scope={libraryScope}
           selectedIds={selectedLibraryIds}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'experiments' ? (
@@ -1200,7 +1080,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onStart={() => void startExperiment()}
           projectId={selectedProjectId}
           selectedRunId={selectedExperimentId}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'manuscript' ? (
@@ -1216,7 +1096,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onSave={() => void saveManuscript()}
           onSelect={(artifactId) => void selectManuscript(artifactId)}
           selectedArtifactId={manuscriptArtifactId}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'editor' ? (
@@ -1231,7 +1111,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           openFile={openTemplateFile}
           selectedTemplateId={selectedTemplateId}
           templates={templates}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'production' ? (
@@ -1248,7 +1128,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onWriteExport={(exportId) => void writeExport(exportId)}
           selectedFigureIds={selectedFigureIds}
           title={exportTitle}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'knowledge' ? (
@@ -1257,7 +1137,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           projectId={selectedProjectId}
           query={knowledgeQuery}
           result={knowledgeResult}
-          working={working}
+          working={working || workbenchWorking}
           onCapture={(chunkId) => void captureEvidence(chunkId)}
           onQueryChange={setKnowledgeQuery}
           onSearch={() => void searchKnowledge()}
@@ -1274,7 +1154,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           }}
           policies={policies}
           providers={state.providers}
-          working={working}
+          working={working || workbenchWorking}
         />
       ) : null}
       {activeTab === 'embedding' ? (
@@ -1286,7 +1166,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           model={embeddingModel}
           dimensions={embeddingDimensions}
           apiKey={embeddingApiKey}
-          working={working}
+          working={working || workbenchWorking}
           onIdChange={setEmbeddingId}
           onNameChange={setEmbeddingName}
           onBaseUrlChange={setEmbeddingBaseUrl}

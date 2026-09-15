@@ -38,6 +38,9 @@ export class ResearchStageRuntime {
   }
 
   transition(request: ResearchWorkflowTransitionRequest) {
+    if (request.action === 'complete' || request.action === 'approve' || request.action === 'reject') {
+      throw new Error('research_gate_required');
+    }
     const workflow = this.repository.getWorkflow(request.projectId);
     if (workflow.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
     const current = workflow.stages.find((stage) => stage.stage === workflow.currentStage);

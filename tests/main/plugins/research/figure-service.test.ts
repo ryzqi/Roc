@@ -9,6 +9,7 @@ import { applyResearchDatabaseSchema, researchMigrations } from '../../../../src
 import { ResearchExperimentService } from '../../../../src/main/plugins/research/experiment-service';
 import { snapshotExperimentInputs } from '../../../../src/main/plugins/research/experiment-files';
 import { ResearchFigureService } from '../../../../src/main/plugins/research/figure-service';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { figureManifestPath } from '../../../../src/main/plugins/research/figure-repository';
 import { figureRenderer, figureRendererPath, figureValidationPath } from '../../../../src/main/plugins/research/figure-runner';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
@@ -20,6 +21,7 @@ let db: Database.Database;
 let repository: ResearchRepository;
 let experiments: ResearchExperimentService;
 let figures: ResearchFigureService;
+let gate: ReturnType<typeof createResearchHumanGate>;
 let root: string;
 let workspace: string;
 let projectId: string;
@@ -36,6 +38,7 @@ beforeEach(async () => {
   experiments = new ResearchExperimentService(repository, { inspect: async () => { throw new Error('unexpected_environment_probe'); } }, join(root, 'runs'),
     { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
   figures = new ResearchFigureService(repository, experiments);
+  gate = createResearchHumanGate({ repository, figures });
 });
 afterEach(async () => { await Promise.all([figures.shutdown(), experiments.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 
@@ -200,7 +203,7 @@ describe('figure publication and review boundaries', () => {
     repository.transitionWorkflow({ projectId, expectedStage: 'figure', action: 'complete' });
     const reached = deferred(); const release = deferred(); const verify = figures.verify.bind(figures);
     vi.spyOn(figures, 'verify').mockImplementationOnce(async (...args) => { const result = await verify(...args); reached.resolve(); await release.promise; return result; });
-    const pending = figures.transition({ projectId, expectedStage: 'figure', action: 'approve' });
+    const pending = gate.approve({ projectId, expectedStage: 'figure', action: 'approve' });
     const assertion = expect(pending).rejects.toThrow('research_figure_review_changed');
     await reached.promise;
     repository.transitionWorkflow({ projectId, expectedStage: 'figure', action: 'reject', note: 'Replace the reviewed plot.' });
@@ -217,7 +220,7 @@ describe('figure publication and review boundaries', () => {
     repository.transitionWorkflow({ projectId, expectedStage: 'figure', action: 'complete' });
     const reached = deferred(); const release = deferred(); const verify = figures.verify.bind(figures);
     vi.spyOn(figures, 'verify').mockImplementationOnce(async (...args) => { const result = await verify(...args); reached.resolve(); await release.promise; return result; });
-    const pending = figures.transition({ projectId, expectedStage: 'figure', action: 'approve' });
+    const pending = gate.approve({ projectId, expectedStage: 'figure', action: 'approve' });
     const assertion = expect(pending).rejects.toThrow('research_figure_service_closed');
     await reached.promise;
     const closing = figures.shutdown();

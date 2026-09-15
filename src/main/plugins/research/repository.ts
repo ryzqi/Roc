@@ -41,6 +41,7 @@ import type {
   ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
 import { getResearchStageRoleProfile } from './role-profiles';
+import { assertResearchStageArtifacts } from './stage-artifacts';
 import { ResearchEvidenceRepository } from './evidence-repository';
 import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
@@ -867,23 +868,7 @@ export class ResearchRepository {
   }
 
   private requireStageArtifacts(projectId: string, state: ResearchStageState): void {
-    if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
-    for (const id of state.artifactIds) {
-      const artifact = this.getArtifact(id);
-      if (artifact.projectId !== projectId || artifact.stage !== state.stage || artifact.status !== 'draft' ||
-          artifact.kind !== getResearchStageRoleProfile(state.stage).outputKind) {
-        throw new Error('research_stage_artifact_invalid');
-      }
-      this.evidence.assertPublishable(artifact);
-      if (artifact.kind === 'idea_canvas') this.ideas.assertPublishable(artifact);
-      if (artifact.kind === 'experiment_run') this.experiments.forArtifact(artifact);
-      if (artifact.kind === 'figure') this.figures.forArtifact(artifact);
-    }
-    if (state.stage === 'review') this.runs.requireReviewPanel(projectId, state.artifactIds);
-    if (state.stage === 'export') {
-      this.reviews.requireForStage(projectId, 'export');
-      for (const id of state.artifactIds) this.exports.forArtifact(this.getArtifact(id));
-    }
+    assertResearchStageArtifacts(this, projectId, state);
   }
 
   private moveStage(
