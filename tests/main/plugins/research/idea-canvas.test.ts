@@ -28,7 +28,7 @@ function project(language: 'zh' | 'en' = 'zh') {
 }
 
 function document(projectId: string, input: Partial<ResearchKnowledgeDocumentUpsertRequest> = {}) {
-  repository.upsertKnowledgeDocument({
+  repository.knowledge.upsertKnowledgeDocument({
     id: 'paper', projectId, sourceType: 'file', sourceId: 'paper.pdf', title: 'Prior work',
     content: 'Existing method lacks a falsifiable prediction.', chunks: [{ content: 'Existing method lacks a falsifiable prediction.', locator: 'page 2' }],
     embeddingConfigId: null, ...input
@@ -220,7 +220,7 @@ describe('research idea canvas IPC', () => {
       const artifactResult = await adapter.invoke('research.createArtifact', [{ projectId: project.id, stage: 'ideation', kind: 'idea_canvas', title: 'IPC idea', path: null }]);
       if (!artifactResult.ok) throw new Error(artifactResult.error.message);
       const artifactId = (artifactResult.data as { id: string }).id;
-      repository.upsertKnowledgeDocument({
+      repository.knowledge.upsertKnowledgeDocument({
         id: 'ipc-paper', projectId: project.id, sourceType: 'file', sourceId: 'paper.pdf', title: 'Prior work',
         content: 'Existing method lacks a falsifiable prediction.', chunks: [{ content: 'Existing method lacks a falsifiable prediction.', locator: 'page 2' }],
         embeddingConfigId: null

@@ -68,7 +68,7 @@ beforeEach(async () => {
     const body = JSON.parse(String(init.body)) as { input: string[] };
     return Response.json({ data: body.input.map((_, index) => ({ index, embedding: [1, 0, 0] })) });
   });
-  embeddings = new ResearchEmbeddingService(repository, new OpenAICompatibleEmbeddingClient(fetchEmbedding), {
+  embeddings = new ResearchEmbeddingService(repository.knowledge, new OpenAICompatibleEmbeddingClient(fetchEmbedding), {
     logger, secrets: { get: (key) => secrets.get(key) ?? null, set: (key, value) => { secrets.set(key, value); }, clear: (key) => { secrets.delete(key); } }
   });
   parse.mockReset().mockImplementation(parsed);
@@ -90,7 +90,7 @@ describe('research project index', () => {
     await writeFile(join(workspace, 'study.md'), 'Measured result: 50.');
     watches.at(-1)?.notify('change', 'study.md');
     await idle();
-    expect(repository.knowledgeChunks(knowledgeId(first.id))[0].content).toContain('50');
+    expect(repository.knowledge.knowledgeChunks(knowledgeId(first.id))[0].content).toContain('50');
     await rm(join(workspace, 'study.md'));
     watches.at(-1)?.notify('rename', 'study.md');
     await idle();
@@ -267,6 +267,6 @@ describe('research project index', () => {
     await mkdir(workspace);
     await writeFile(join(workspace, 'study.md'), 'Measured result: 50.');
     act('scan'); await idle();
-    expect(repository.knowledgeChunks(knowledgeId(files()[0].id))[0].content).toContain('50');
+    expect(repository.knowledge.knowledgeChunks(knowledgeId(files()[0].id))[0].content).toContain('50');
   });
 });

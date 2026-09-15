@@ -12,16 +12,16 @@ import { runRExperimentProcess } from './experiment-native-process';
 import { figureRenderer, figureRendererPath, validateFigureOutput } from './figure-runner';
 import { indexText, indexLocatedText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
+import { writeFrozenManifest } from './research-frozen-manifest';
+import { ResearchJobSession, type ResearchJobTask } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 
-type Task = { controller: AbortController; promise: Promise<unknown> };
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 
 export class ResearchExperimentService {
-  private closed = false;
-  private readonly tasks = new Set<Task>();
-  private readonly executions = new Map<string, Task & { projectId: string }>();
+  private readonly session = new ResearchJobSession('research_experiment_closed');
+  private readonly executions = new Map<string, ResearchJobTask & { projectId: string }>();
 
   constructor(private readonly repository: ResearchRepository, private readonly environments: Pick<ResearchExperimentEnvironmentService, 'inspect'>,
     private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
@@ -30,7 +30,7 @@ export class ResearchExperimentService {
   recover(): void { this.repository.experiments.recover(); }
 
   async inspect(projectId: string, runtime: ResearchExperimentRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);
       const job = await mkdtemp(join(storage, '.environment-'));
@@ -41,7 +41,7 @@ export class ResearchExperimentService {
 
   async start(input: ResearchExperimentStart): Promise<ResearchExperimentExecution> {
     const request = researchExperimentStartSchema.parse(input);
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const project = this.repository.getProject(request.projectId);
       if (project.status === 'archived') throw new Error('research_project_archived');
       const workspace = await researchWorkspace(project.workspacePath);
@@ -57,7 +57,7 @@ export class ResearchExperimentService {
   abort(id: string): void { this.executions.get(id)?.controller.abort(); }
 
   async cancel(projectId: string, id: string): Promise<ResearchExperimentExecution> {
-    this.requireOpen();
+    this.session.requireOpen();
     const run = this.repository.experiments.get(projectId, id);
     if (!['preparing', 'running'].includes(run.status)) return run;
     const task = this.executions.get(id);
@@ -97,18 +97,18 @@ export class ResearchExperimentService {
   }
 
   async snapshot(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const run = this.repository.experiments.get(projectId, runId);
       if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
       for (const file of run.files) { signal.throwIfAborted(); await this.source({ projectId, runId, area: file.area, path: file.path }); }
       const { artifactId: _artifactId, ...manifest } = run;
-      const content = JSON.stringify(manifest, null, 2);
-      const root = this.repository.experiments.root(projectId, runId);
-      try { await writeFile(join(root, 'manifest.json'), content, { flag: 'wx', mode: 0o400 }); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        if (researchContentHash(await readResearchFile(root, 'manifest.json', experimentFileLimit)) !== researchContentHash(content)) throw new Error('research_experiment_manifest_changed');
-      }
+      await writeFrozenManifest({
+        root: this.repository.experiments.root(projectId, runId),
+        path: 'manifest.json',
+        content: JSON.stringify(manifest, null, 2),
+        limit: experimentFileLimit,
+        changedCode: 'research_experiment_manifest_changed'
+      });
       signal.throwIfAborted();
       return run;
     });
@@ -116,7 +116,7 @@ export class ResearchExperimentService {
 
   async publish(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
     await this.snapshot(projectId, runId);
-    this.requireOpen();
+    this.session.requireOpen();
     return this.repository.experiments.publish(projectId, runId);
   }
 
@@ -131,19 +131,17 @@ export class ResearchExperimentService {
   }
 
   async shutdown(): Promise<void> {
-    this.closed = true;
-    for (const task of this.tasks) task.controller.abort();
-    await Promise.allSettled([...this.tasks].map((task) => task.promise));
+    await this.session.shutdown();
   }
 
   private schedule(run: ResearchExperimentExecution): void {
     const controller = new AbortController();
     const promise = Promise.resolve().then(() => this.execute(run, controller.signal));
     const task = { controller, promise, projectId: run.projectId };
-    this.tasks.add(task);
+    this.session.track(task);
     this.executions.set(run.id, task);
     void promise.catch((error: unknown) => this.logger.error('Research experiment could not persist its final state.', { runId: run.id, error: errorCode(error) }))
-      .finally(() => { this.tasks.delete(task); this.executions.delete(run.id); });
+      .finally(() => { this.session.untrack(task); this.executions.delete(run.id); });
   }
 
   private async execute(initial: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {
@@ -191,13 +189,13 @@ export class ResearchExperimentService {
         files.push(...await collectExperimentFiles(join(root, 'output'), 'output'));
         files.push(...await collectExperimentFiles(join(root, 'notebook'), 'notebook'));
       }
-      const status = signal.aborted ? this.closed ? 'interrupted' : 'cancelled' : failure === undefined ? 'completed' : 'failed';
-      const error = signal.aborted ? this.closed ? 'research_experiment_interrupted' : 'research_experiment_cancelled' : failure === undefined ? null : errorCode(failure);
+      const status = signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : failure === undefined ? 'completed' : 'failed';
+      const error = signal.aborted ? this.session.isClosed ? 'research_experiment_interrupted' : 'research_experiment_cancelled' : failure === undefined ? null : errorCode(failure);
       const documents = status === 'completed' ? await this.indexDocuments(initial, files) : [];
       if (status === 'completed') await this.verifyProject(initial, signal);
       this.repository.experiments.finish(initial.projectId, initial.id, { status, files, exitCode: prepared === null ? null : output.exitCode, error }, documents);
     } catch (error) {
-      this.repository.experiments.finish(initial.projectId, initial.id, { status: signal.aborted ? this.closed ? 'interrupted' : 'cancelled' : 'failed',
+      this.repository.experiments.finish(initial.projectId, initial.id, { status: signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : 'failed',
         files, exitCode: output.exitCode, error: errorCode(error) });
     } finally {
       await rm(join(root, 'scratch'), { recursive: true, force: true });
@@ -257,16 +255,6 @@ export class ResearchExperimentService {
     if (root !== run.workspaceRoot) throw new Error('research_experiment_workspace_changed');
     return root;
   }
-  private async task<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    this.requireOpen();
-    const controller = new AbortController();
-    const promise = Promise.resolve().then(() => operation(controller.signal));
-    const task = { controller, promise };
-    this.tasks.add(task);
-    try { return await promise; }
-    finally { this.tasks.delete(task); }
-  }
-  private requireOpen(): void { if (this.closed) throw new Error('research_experiment_closed'); }
 }
 
 function errorCode(error: unknown): string {

@@ -5,7 +5,7 @@ import type { RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
 import type { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { vectorToBlob } from './embedding-vectors';
-import type { EmbeddingConfigRow, ResearchRepository } from './repository';
+import type { EmbeddingConfigRow, ResearchKnowledgeRepository } from './knowledge-repository';
 
 type EmbeddingTask = { configId: string | null; controller: AbortController; promise: Promise<unknown> };
 export type ResearchEmbeddingReceipt = { configId: string; revision: number } | null;
@@ -14,21 +14,21 @@ export class ResearchEmbeddingService {
   private readonly tasks = new Set<EmbeddingTask>();
   private closed = false;
 
-  constructor(private readonly repository: ResearchRepository, private readonly client: OpenAICompatibleEmbeddingClient,
+  constructor(private readonly knowledge: ResearchKnowledgeRepository, private readonly client: OpenAICompatibleEmbeddingClient,
     private readonly context: Pick<RocPluginContext, 'secrets' | 'logger'>) {}
 
   listConfigs(): ResearchEmbeddingConfig[] {
-    return this.repository.listEmbeddingConfigRows().map((row) => this.config(row));
+    return this.knowledge.listEmbeddingConfigRows().map((row) => this.config(row));
   }
 
   saveConfig(request: ResearchEmbeddingConfigSaveRequest): ResearchEmbeddingConfig {
     this.requireOpen();
-    const previous = this.repository.listEmbeddingConfigRows().find((row) => row.id === request.id);
+    const previous = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === request.id);
     const reuse = previous !== undefined && this.context.secrets.get(previous.api_key_secret_key) === request.apiKey;
     const key = reuse ? previous.api_key_secret_key : `research.embedding.${randomUUID()}`;
     try {
       if (!reuse) this.context.secrets.set(key, request.apiKey);
-      this.repository.saveEmbeddingConfig(request, key);
+      this.knowledge.saveEmbeddingConfig(request, key);
     } catch (error) {
       if (!reuse) {
         try { this.context.secrets.clear(key); }
@@ -36,7 +36,7 @@ export class ResearchEmbeddingService {
       }
       throw error;
     }
-    const saved = this.repository.listEmbeddingConfigRows().find((row) => row.id === request.id);
+    const saved = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === request.id);
     if (saved === undefined) throw new Error('research_embedding_config_missing_after_save');
     if (previous !== undefined && saved.revision !== previous.revision) {
       for (const task of this.tasks) if (task.configId === request.id) task.controller.abort();
@@ -53,8 +53,8 @@ export class ResearchEmbeddingService {
     const row = this.select(request.embeddingConfigId);
     return await this.task(row?.id ?? null, signal, async (active) => {
       this.requireActive(active);
-      if (row !== null) this.repository.requireEmbeddingConfig(row.id, row.revision);
-      const document = this.repository.upsertKnowledgeDocument(request);
+      if (row !== null) this.knowledge.requireEmbeddingConfig(row.id, row.revision);
+      const document = this.knowledge.upsertKnowledgeDocument(request);
       if (row !== null) await this.embedChunks(request.id, row, active);
       return document;
     });
@@ -70,7 +70,7 @@ export class ResearchEmbeddingService {
     const row = this.select(configId);
     return await this.task(row?.id ?? null, signal, async (active) => {
       this.requireActive(active);
-      this.repository.knowledgeDocument(documentId);
+      this.knowledge.knowledgeDocument(documentId);
       if (row === null) return null;
       await this.embedChunks(documentId, row, active);
       return { configId: row.id, revision: row.revision };
@@ -78,17 +78,17 @@ export class ResearchEmbeddingService {
   }
 
   private async embedChunks(documentId: string, row: EmbeddingConfigRow, signal: AbortSignal): Promise<void> {
-    const chunks = this.repository.knowledgeChunks(documentId);
+    const chunks = this.knowledge.knowledgeChunks(documentId);
     const vectors: Buffer[] = [];
     for (let offset = 0; offset < chunks.length; offset += 32) {
       this.requireActive(signal);
-      this.repository.requireEmbeddingConfig(row.id, row.revision);
+      this.knowledge.requireEmbeddingConfig(row.id, row.revision);
       const values = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row),
         texts: chunks.slice(offset, offset + 32).map((chunk) => chunk.content), signal });
       vectors.push(...values.map(vectorToBlob));
     }
     this.requireActive(signal);
-    this.repository.storeChunkEmbeddings({ configId: row.id, configRevision: row.revision, chunks, vectors });
+    this.knowledge.storeChunkEmbeddings({ configId: row.id, configRevision: row.revision, chunks, vectors });
   }
 
   async search(request: ResearchKnowledgeSearchRequest, signal?: AbortSignal): Promise<ResearchKnowledgeSearchResult> {
@@ -96,11 +96,11 @@ export class ResearchEmbeddingService {
     const row = this.select(request.embeddingConfigId);
     return await this.task(row?.id ?? null, signal, async (active) => {
       this.requireActive(active);
-      if (row === null) return this.repository.searchKnowledge({ request, vector: null });
-      this.repository.requireEmbeddingConfig(row.id, row.revision);
+      if (row === null) return this.knowledge.searchKnowledge({ request, vector: null });
+      this.knowledge.requireEmbeddingConfig(row.id, row.revision);
       const [value] = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row), texts: [request.query], signal: active });
       this.requireActive(active);
-      return this.repository.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(value) } });
+      return this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(value) } });
     });
   }
 
@@ -129,13 +129,13 @@ export class ResearchEmbeddingService {
   }
 
   private select(id: string | null): EmbeddingConfigRow | null {
-    const rows = this.repository.listEmbeddingConfigRows();
+    const rows = this.knowledge.listEmbeddingConfigRows();
     const row = id === null ? rows.find((entry) => entry.enabled === 1) : rows.find((entry) => entry.id === id);
     if (row === undefined) {
       if (id !== null) throw new Error('research_embedding_config_not_found');
       return null;
     }
-    return this.repository.requireEmbeddingConfig(row.id, row.revision);
+    return this.knowledge.requireEmbeddingConfig(row.id, row.revision);
   }
 
   private apiKey(row: EmbeddingConfigRow): string {

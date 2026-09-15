@@ -139,12 +139,12 @@ describe('research embedding consistency', () => {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 7) });
       legacy.exec("INSERT INTO research_embedding_configs VALUES ('first','First','https://first.test/v1','same-model',3,'old-reference',1,'2026-09-11T00:00:00.000Z','2026-09-11T00:00:00.000Z')");
       const repository = new ResearchRepository(legacy);
-      repository.upsertKnowledgeDocument({ ...document('Preserved source'), sourceType: 'file' });
+      repository.knowledge.upsertKnowledgeDocument({ ...document('Preserved source'), sourceType: 'file' });
       legacy.prepare('INSERT INTO research_knowledge_embeddings VALUES (?,?,?,?,?)').run('document:chunk:0', 'same-model', 3, vectorToBlob([1, 0, 0]), '2026-09-11T00:00:00.000Z');
       applyResearchDatabaseSchema(legacy);
       applyResearchDatabaseSchema(legacy);
-      expect(repository.listEmbeddingConfigRows()[0].revision).toBe(1);
-      expect(repository.knowledgeChunks('document')[0].content).toBe('Preserved source');
+      expect(repository.knowledge.listEmbeddingConfigRows()[0].revision).toBe(1);
+      expect(repository.knowledge.knowledgeChunks('document')[0].content).toBe('Preserved source');
       const row = legacy.prepare('SELECT space_key,vector_blob FROM research_knowledge_embeddings').get() as { space_key: string; vector_blob: Buffer };
       expect(row.space_key).toMatch(/^legacy:/u);
       expect(row.vector_blob).toEqual(vectorToBlob([1, 0, 0]));

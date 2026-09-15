@@ -172,7 +172,7 @@ export class ResearchLibraryRepository {
       .get(`library:${item.id}`) as { title: string; content: string; project_id: string | null; source_id: string; source_type: string } | undefined;
     if (existing !== undefined && existing.project_id === null && existing.source_id === item.id
         && existing.source_type === 'literature' && existing.title === item.metadata.title && existing.content === content) return;
-    this.research.upsertKnowledgeDocument({ id: `library:${item.id}`, projectId: null, sourceType: 'literature', sourceId: item.id,
+    this.research.knowledge.upsertKnowledgeDocument({ id: `library:${item.id}`, projectId: null, sourceType: 'literature', sourceId: item.id,
       title: item.metadata.title, content, chunks, embeddingConfigId: null });
   }
 }

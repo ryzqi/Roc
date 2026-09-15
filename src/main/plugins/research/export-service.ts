@@ -9,15 +9,13 @@ import { buildExportFiles } from './export-builder';
 import { archiveSource, createExportArchive, exportFileLimit, exportStorage, hashExportArchive, ResearchExportFiles, type ExportToolchain } from './export-files';
 import { exportSourceHash, type ResearchExportSourceService } from './export-sources';
 import { ResearchProcessError } from './process-runner';
+import { ResearchJobSession, type ResearchJobTask } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 
-type Task = { controller: AbortController; promise: Promise<unknown> };
-
 export class ResearchExportService {
-  private readonly tasks = new Set<Task>();
-  private readonly preparing = new Map<string, Task & { projectId: string; scope: string }>();
-  private closed = false;
+  private readonly session = new ResearchJobSession('research_export_closed');
+  private readonly preparing = new Map<string, ResearchJobTask & { projectId: string; scope: string }>();
 
   constructor(private readonly repository: ResearchRepository, private readonly sources: Pick<ResearchExportSourceService, 'capture' | 'assertCurrent'>,
     private readonly tools: ExportToolchain, private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
@@ -27,7 +25,7 @@ export class ResearchExportService {
 
   async prepare(input: ResearchExportPrepare): Promise<ResearchExportExecution> {
     const request = researchExportPrepareSchema.parse(input);
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const storage = await exportStorage(this.rootPath);
       this.requireActive(signal);
       const record = this.repository.exports.create(request, storage);
@@ -39,7 +37,7 @@ export class ResearchExportService {
   abort(id: string): void { this.preparing.get(id)?.controller.abort(); }
 
   async cancel(projectId: string, id: string): Promise<ResearchExportExecution> {
-    this.requireOpen();
+    this.session.requireOpen();
     const record = this.repository.exports.get(projectId, id);
     if (record.status !== 'preparing') return record;
     const task = this.preparing.get(id);
@@ -48,13 +46,13 @@ export class ResearchExportService {
   }
 
   projectChanged(projectId: string): void {
-    if (this.closed) return;
+    if (this.session.isClosed) return;
     const scope = this.projectScope(projectId);
     for (const task of this.preparing.values()) if (task.projectId === projectId && task.scope !== scope) task.controller.abort();
   }
 
   async publish(projectId: string, id: string, replacesExportId: string | null): Promise<ResearchExportExecution> {
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const record = this.repository.exports.get(projectId, id);
       await this.verify(record, signal);
       this.requireActive(signal);
@@ -65,7 +63,7 @@ export class ResearchExportService {
   }
 
   async verifyStage(projectId: string): Promise<void> {
-    await this.task(async (signal) => {
+    await this.session.run(async (signal) => {
       const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'export');
       if (stage === undefined) throw new Error('research_stage_not_found');
       const records = stage.artifactIds.map((id) => this.repository.exports.forArtifact(this.repository.getArtifact(id)));
@@ -87,7 +85,7 @@ export class ResearchExportService {
   }
 
   async inspect(projectId: string, id: string): Promise<ResearchExportExecution> {
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const record = this.repository.exports.get(projectId, id);
       await this.verifyContent(record, signal);
       return record;
@@ -105,7 +103,7 @@ export class ResearchExportService {
 
   async write(input: z.infer<typeof researchExportWriteRequestSchema>): Promise<ResearchExportDelivery> {
     const request = researchExportWriteRequestSchema.parse(input);
-    return await this.task(async (signal) => {
+    return await this.session.run(async (signal) => {
       const record = this.requireApproved(request.projectId, request.exportId);
       await this.verify(record, signal);
       if (record.archive === null || record.sources === null) throw new Error('research_export_sources_required');
@@ -131,18 +129,16 @@ export class ResearchExportService {
   }
 
   async shutdown(): Promise<void> {
-    this.closed = true;
-    for (const task of this.tasks) task.controller.abort();
-    await Promise.allSettled([...this.tasks].map((task) => task.promise));
+    await this.session.shutdown();
   }
 
   private schedule(record: ResearchExportExecution): void {
     const controller = new AbortController();
     const promise = Promise.resolve().then(() => this.execute(record, controller.signal));
     const task = { controller, promise, projectId: record.projectId, scope: this.projectScope(record.projectId) };
-    this.tasks.add(task); this.preparing.set(record.id, task);
+    this.session.track(task); this.preparing.set(record.id, task);
     void promise.catch((error: unknown) => this.logger.error('Research export could not persist its final state.', { exportId: record.id, error: exportError(error) }))
-      .finally(() => { this.tasks.delete(task); this.preparing.delete(record.id); });
+      .finally(() => { this.session.untrack(task); this.preparing.delete(record.id); });
   }
 
   private async execute(record: ResearchExportExecution, signal: AbortSignal): Promise<void> {
@@ -177,9 +173,9 @@ export class ResearchExportService {
         try { await writer.write('logs/export-error.txt', diagnostics); }
         catch (failure) { this.logger.warn('Research export diagnostic file could not be saved.', { exportId: record.id, error: exportError(failure) }); }
       }
-      this.repository.exports.finish(record.projectId, record.id, { status: signal.aborted ? this.closed ? 'interrupted' : 'cancelled' : 'failed',
+      this.repository.exports.finish(record.projectId, record.id, { status: signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : 'failed',
         sources, sourceHash, toolchainHash, files: writer === null ? [] : writer.list(), archive,
-        error: signal.aborted ? this.closed ? 'research_export_interrupted' : 'research_export_cancelled' : exportError(error) });
+        error: signal.aborted ? this.session.isClosed ? 'research_export_interrupted' : 'research_export_cancelled' : exportError(error) });
     } finally { if (scratch !== null) await rm(scratch, { recursive: true, force: true }); }
   }
 
@@ -221,16 +217,7 @@ export class ResearchExportService {
       stage: project.currentStage, status: project.status, review: this.repository.reviews.get(projectId) });
   }
 
-  private async task<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    this.requireOpen();
-    const controller = new AbortController();
-    const promise = Promise.resolve().then(() => { this.requireActive(controller.signal); return operation(controller.signal); });
-    const task = { controller, promise }; this.tasks.add(task);
-    try { return await promise; }
-    finally { this.tasks.delete(task); }
-  }
-  private requireOpen(): void { if (this.closed) throw new Error('research_export_closed'); }
-  private requireActive(signal: AbortSignal): void { this.requireOpen(); signal.throwIfAborted(); }
+  private requireActive(signal: AbortSignal): void { this.session.requireOpen(); signal.throwIfAborted(); }
 }
 
 function exportError(error: unknown): string {

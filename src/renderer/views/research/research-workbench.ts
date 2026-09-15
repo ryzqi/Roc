@@ -109,7 +109,7 @@ export function createResearchWorkbench(
 
   async function runExclusive(action: (token: number) => Promise<void>, messages: { busy: string; failed: string }): Promise<void> {
     if (snapshot.working) {
-      fail(messages.busy);
+      assign({ error: messages.busy });
       return;
     }
     const token = ++generation;

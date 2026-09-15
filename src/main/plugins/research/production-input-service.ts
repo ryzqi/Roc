@@ -2,27 +2,27 @@ import type { ResearchProductionInput, ResearchProductionInputContent, ResearchP
 import type { ResearchExperimentService } from './experiment-service';
 import type { ResearchFigureService } from './figure-service';
 import type { ResearchExportService } from './export-service';
+import { ResearchJobSession } from './research-job-session';
 import type { ResearchRepository } from './repository';
 
 export class ResearchProductionInputService {
-  private readonly operations = new Set<Promise<unknown>>();
-  private closed = false;
+  private readonly session = new ResearchJobSession('research_production_input_closed');
   constructor(private readonly repository: ResearchRepository, private readonly experiments: Pick<ResearchExperimentService, 'snapshot' | 'read'>,
     private readonly figures: Pick<ResearchFigureService, 'verify'>, private readonly exports: Pick<ResearchExportService, 'inspect' | 'read'>) {}
 
   async inspect(projectId: string, artifactId: string): Promise<ResearchProductionInput> {
-    return await this.task(async () => {
+    return await this.session.guard(async () => {
       const input = this.resolve(projectId, artifactId);
       if (input.source.kind === 'experiment') await this.experiments.snapshot(projectId, input.source.execution.id);
       else if (input.source.kind === 'figure') await this.figures.verify(projectId, input.source.figure.id);
       else await this.exports.inspect(projectId, input.source.execution.id);
-      this.requireOpen();
+      this.session.requireOpen();
       return this.resolve(projectId, artifactId);
     });
   }
 
   async read(request: ResearchProductionInputRead): Promise<ResearchProductionInputContent> {
-    return await this.task(() => this.readFile(request));
+    return await this.session.guard(async () => this.readFile(request));
   }
 
   private async readFile(request: ResearchProductionInputRead): Promise<ResearchProductionInputContent> {
@@ -38,7 +38,7 @@ export class ResearchProductionInputService {
       if (request.area === 'bundle') throw new Error('research_production_file_not_found');
       content = await this.experiments.read({ projectId: request.projectId, runId: input.source.execution.id, area: request.area, path: request.path });
     }
-    this.requireOpen();
+    this.session.requireOpen();
     this.resolve(request.projectId, request.artifactId);
     if (content.file.sha256 !== file.sha256 || content.file.size !== file.size) throw new Error('research_production_snapshot_changed');
     return { file, content: content.content, encoding: content.encoding };
@@ -64,14 +64,5 @@ export class ResearchProductionInputService {
     throw new Error('research_production_artifact_required');
   }
 
-  async shutdown(): Promise<void> { this.closed = true; await Promise.allSettled([...this.operations]); }
-
-  private async task<T>(operation: () => Promise<T>): Promise<T> {
-    this.requireOpen();
-    const pending = Promise.resolve().then(() => { this.requireOpen(); return operation(); });
-    this.operations.add(pending);
-    try { return await pending; }
-    finally { this.operations.delete(pending); }
-  }
-  private requireOpen(): void { if (this.closed) throw new Error('research_production_input_closed'); }
+  async shutdown(): Promise<void> { await this.session.shutdown(); }
 }

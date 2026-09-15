@@ -54,7 +54,7 @@ describe('persistent research index boundaries', () => {
     const second = job(true);
     repository.indexing.publishText(second, payload('New extraction'), 'sources/source.md');
     repository.indexing.finishJob(second, null);
-    expect(repository.knowledgeDocument(knowledgeId(second.fileId)).content).toBe('New extraction');
+    expect(repository.knowledge.knowledgeDocument(knowledgeId(second.fileId)).content).toBe('New extraction');
     expect(repository.indexing.cached(second.fileId).payload?.content).toBe('New extraction');
   });
 
@@ -92,13 +92,13 @@ describe('persistent research index boundaries', () => {
   it('snapshots source metadata into evidence and rolls back evidence when snapshot persistence fails', () => {
     const request = { id: 'metadata-source', projectId, sourceType: 'file' as const, sourceId: 'source.md', title: 'Source', content: 'Evidence',
       chunks: [{ content: 'Evidence', locator: 'line 1' }], embeddingConfigId: null };
-    repository.upsertKnowledgeDocument(request, { version: 'first' });
+    repository.knowledge.upsertKnowledgeDocument(request, { version: 'first' });
     db.exec("CREATE TRIGGER fail_snapshot BEFORE INSERT ON research_evidence_source_metadata BEGIN SELECT RAISE(ABORT, 'snapshot_failed'); END;");
     expect(() => repository.evidence.capture({ projectId, chunkId: 'metadata-source:chunk:0' })).toThrow('snapshot_failed');
     expect(repository.evidence.list(projectId)).toEqual([]);
     db.exec('DROP TRIGGER fail_snapshot');
     const first = repository.evidence.capture({ projectId, chunkId: 'metadata-source:chunk:0' });
-    repository.upsertKnowledgeDocument(request, { version: 'second' });
+    repository.knowledge.upsertKnowledgeDocument(request, { version: 'second' });
     const second = repository.evidence.capture({ projectId, chunkId: 'metadata-source:chunk:0' });
     expect(second.sourceVersion).not.toBe(first.sourceVersion);
     expect(repository.evidence.sourceMetadata(projectId, first.id)).toEqual({ version: 'first' });
@@ -112,7 +112,7 @@ describe('persistent research index boundaries', () => {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 8) });
       legacy.exec("INSERT INTO research_projects VALUES ('legacy','Legacy','Old project','/project','active','discovery','2026-09-11T00:00:00.000Z','2026-09-11T00:00:00.000Z')");
       const old = new ResearchRepository(legacy);
-      old.upsertKnowledgeDocument({ id: 'old-source', projectId: 'legacy', sourceType: 'file', sourceId: 'source.md', title: 'Source', content: 'Evidence',
+      old.knowledge.upsertKnowledgeDocument({ id: 'old-source', projectId: 'legacy', sourceType: 'file', sourceId: 'source.md', title: 'Source', content: 'Evidence',
         chunks: [{ content: 'Evidence', locator: 'line 1' }], embeddingConfigId: null });
       const evidence = old.evidence.capture({ projectId: 'legacy', chunkId: 'old-source:chunk:0' });
       applyResearchDatabaseSchema(legacy);

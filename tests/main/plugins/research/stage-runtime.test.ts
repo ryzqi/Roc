@@ -38,7 +38,7 @@ function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ outp
   const capabilities = new CapabilityRegistry();
   const descriptor = { name: 'research.knowledge.search', version: '1.0.0', inputSchema: researchKnowledgeSearchRequestSchema, outputSchema: researchKnowledgeSearchResultSchema };
   capabilities.declare('research', descriptor);
-  capabilities.register('research', descriptor, async (input) => repository.searchKnowledge({ request: researchKnowledgeSearchRequestSchema.parse(input), vector: null }));
+  capabilities.register('research', descriptor, async (input) => repository.knowledge.searchKnowledge({ request: researchKnowledgeSearchRequestSchema.parse(input), vector: null }));
   runtime = new ResearchStageRuntime(repository, capabilities, {
     prepare: async (selection) => {
       selections.push(selection);
@@ -80,7 +80,7 @@ describe('research stage runtime', () => {
     const first = project();
     const second = project();
     for (const [documentId, projectId] of [['own', first.id], ['global', null], ['foreign', second.id]] as const) {
-      repository.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: `${documentId}.md`, title: documentId,
+      repository.knowledge.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: `${documentId}.md`, title: documentId,
         content: 'evidence result', chunks: [{ content: 'evidence result', locator: 'line 1' }], embeddingConfigId: null });
     }
     const foreign = repository.createArtifact({ projectId: second.id, stage: 'discovery', kind: 'search_strategy', title: 'Private', path: null });

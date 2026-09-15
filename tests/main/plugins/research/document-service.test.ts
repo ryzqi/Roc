@@ -111,7 +111,7 @@ describe('research document lifecycle', () => {
     expect(service.parsed(document.id, first.currentParseId)).toEqual(content);
     expect(repository.evidence.list(projectId)).toEqual([evidence]);
     expect(db.prepare('SELECT id FROM research_knowledge_documents WHERE id = ?').get(`document:${first.currentParseId}`)).toBeUndefined();
-    expect(repository.searchKnowledge({ request: { query: 'Corrected', projectId, limit: 10, embeddingConfigId: null }, vector: null }).hits[0].content).toContain('45');
+    expect(repository.knowledge.searchKnowledge({ request: { query: 'Corrected', projectId, limit: 10, embeddingConfigId: null }, vector: null }).hits[0].content).toContain('45');
   });
 
   it('preserves the last successful parse and index when a retry or index transaction fails', async () => {

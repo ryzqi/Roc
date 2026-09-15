@@ -31,7 +31,7 @@ function readyForReview() {
   const { id } = repository.createProject({ title: 'Review study', description: 'An evidence-based manuscript.', workspacePath: null });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'writing' });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'start' });
-  repository.upsertKnowledgeDocument({ id: `data:${id}`, projectId: id, sourceType: 'file', sourceId: 'data.csv', title: 'Measured data',
+  repository.knowledge.upsertKnowledgeDocument({ id: `data:${id}`, projectId: id, sourceType: 'file', sourceId: 'data.csv', title: 'Measured data',
     content: 'Measured improvement: 20%.', chunks: [{ content: 'Measured improvement: 20%.', locator: 'row 2' }], embeddingConfigId: null });
   const evidence = repository.evidence.capture({ projectId: id, chunkId: `data:${id}:chunk:0` });
   const artifact = repository.createArtifact({ projectId: id, stage: 'writing', kind: 'manuscript', title: 'Original manuscript', path: null });
@@ -244,7 +244,7 @@ function createLegacyReviewFixture(legacy: Database.Database, stage: 'review' | 
   legacy.prepare("UPDATE research_stage_states SET active_run_id = NULL, status = 'completed' WHERE project_id = ? AND stage = 'discovery'").run(project.id);
   legacy.prepare("UPDATE research_projects SET current_stage = 'writing' WHERE id = ?").run(project.id);
   legacy.prepare("UPDATE research_stage_states SET status = 'running' WHERE project_id = ? AND stage = 'writing'").run(project.id);
-  old.upsertKnowledgeDocument({ id: 'legacy-data', projectId: project.id, sourceType: 'file', sourceId: 'data.csv', title: 'Measured data',
+  old.knowledge.upsertKnowledgeDocument({ id: 'legacy-data', projectId: project.id, sourceType: 'file', sourceId: 'data.csv', title: 'Measured data',
     content: 'Measured improvement: 20%.', chunks: [{ content: 'Measured improvement: 20%.', locator: 'row 2' }], embeddingConfigId: null });
   const evidence = old.evidence.capture({ projectId: project.id, chunkId: 'legacy-data:chunk:0' });
   const artifact = old.createArtifact({ projectId: project.id, stage: 'writing', kind: 'manuscript', title: 'Saved manuscript', path: null });

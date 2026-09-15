@@ -47,25 +47,25 @@ describe('research human gate', () => {
 
   it('rejects without verifying production snapshots', async () => {
     const { id } = project();
-    const figures = { verifyStage: vi.fn(async () => { throw new Error('should_not_verify'); }) };
-    const gate = createResearchHumanGate({ repository, figures });
+    const production = { verifyStage: vi.fn(async () => { throw new Error('should_not_verify'); }) };
+    const gate = createResearchHumanGate({ repository, production });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'retrieval' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'retrieval', action: 'start' });
     repository.createArtifact({ projectId: id, stage: 'retrieval', kind: 'source_corpus', title: 'Sources', path: null });
     await gate.complete({ projectId: id, expectedStage: 'retrieval', action: 'complete' });
     const rejected = await gate.reject({ projectId: id, expectedStage: 'retrieval', action: 'reject', note: 'Add sources.' });
     expect(rejected.stages.find((stage) => stage.stage === 'retrieval')?.status).toBe('running');
-    expect(figures.verifyStage).not.toHaveBeenCalled();
+    expect(production.verifyStage).not.toHaveBeenCalled();
   });
 
   it('does not verify figures outside the figure stage', async () => {
     const { id } = project();
-    const figures = { verifyStage: vi.fn(async () => undefined) };
-    const gate = createResearchHumanGate({ repository, figures });
+    const production = { verifyStage: vi.fn(async () => undefined) };
+    const gate = createResearchHumanGate({ repository, production });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'retrieval' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'retrieval', action: 'start' });
     repository.createArtifact({ projectId: id, stage: 'retrieval', kind: 'source_corpus', title: 'Sources', path: null });
     await gate.complete({ projectId: id, expectedStage: 'retrieval', action: 'complete' });
-    expect(figures.verifyStage).not.toHaveBeenCalled();
+    expect(production.verifyStage).not.toHaveBeenCalled();
   });
 });

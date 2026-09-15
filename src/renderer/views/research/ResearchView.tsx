@@ -2,51 +2,113 @@ import { CircleAlert, Plus, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type {
-  ResearchDocument,
-  ResearchDocumentParse,
   ResearchEmbeddingConfig,
   ResearchEvidence,
-  ResearchExperimentExecution,
-  ResearchExperimentFileContent,
-  ResearchExperimentRuntime,
-  ResearchExportExecution,
-  ResearchFigurePublication,
-  ResearchIdeaCanvas,
-  ResearchIdeaCanvasSaveRequest,
-  ResearchKnowledgeSearchResult,
-  ResearchBibliographyFormat,
-  ResearchLibraryExport,
-  ResearchClaim,
-  ResearchLibraryItem,
-  ResearchLiterature,
-  ResearchManuscript,
-  ResearchStagePolicy,
-  ResearchTemplate,
-  ResearchTemplateFile,
-  ResearchTemplateFileContent,
-  ResearchWorkflowTransitionRequest
+  ResearchKnowledgeSearchResult
 } from '../../../shared/types';
-import { unwrap } from '../../loaded-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
-import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdeaPanel';
 import { ResearchEditorPanel } from './ResearchEditorPanel';
-import { emptyExperimentDraft, ResearchExperimentPanel, type ResearchExperimentDraft } from './ResearchExperimentPanel';
+import { ResearchExperimentPanel } from './ResearchExperimentPanel';
+import { ResearchIdeaPanel } from './ResearchIdeaPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
-import { emptyManuscriptDraft, ResearchManuscriptPanel, type ResearchManuscriptDraft } from './ResearchManuscriptPanel';
-import { emptyPolicyDraft, policyToDraft, ResearchPolicyPanel, type ResearchPolicyDraft } from './ResearchPolicyPanel';
+import { ResearchManuscriptPanel } from './ResearchManuscriptPanel';
+import { ResearchPolicyPanel } from './ResearchPolicyPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
+import { createResearchExperimentAdapter, createResearchExperimentProjection } from './research-experiments';
+import { createResearchIdeaAdapter, createResearchIdeaProjection } from './research-ideas';
+import { createResearchKnowledgeAdapter, createResearchKnowledgeProjection } from './research-knowledge';
+import { createResearchLibraryAdapter, createResearchLibraryProjection } from './research-library';
+import { createResearchManuscriptAdapter, createResearchManuscriptProjection } from './research-manuscript';
+import { createResearchPolicyAdapter, createResearchPolicyProjection } from './research-policies';
+import { createResearchProductionAdapter, createResearchProductionProjection } from './research-production';
+import { createResearchTemplateAdapter, createResearchTemplateProjection } from './research-templates';
 import { createResearchWorkbench, createResearchWorkbenchAdapter } from './research-workbench';
 import { researchStageLabels } from './research-workflow';
 
-export function ResearchView({ client, state }: { client: RocClient; state: LoadedState }): React.JSX.Element {
-  const workbenchRef = useRef<{ client: RocClient; workbench: ReturnType<typeof createResearchWorkbench> } | null>(null);
-  if (workbenchRef.current === null || workbenchRef.current.client !== client) {
-    workbenchRef.current = { client, workbench: createResearchWorkbench(createResearchWorkbenchAdapter(client)) };
+type ResearchSurfaces = ReturnType<typeof createResearchSurfaces>;
+
+function createResearchSurfaces(client: RocClient) {
+  const workbench = createResearchWorkbench(createResearchWorkbenchAdapter(client));
+  const library = createResearchLibraryProjection(createResearchLibraryAdapter(client));
+  const knowledge = createResearchKnowledgeProjection(createResearchKnowledgeAdapter(client));
+  const experiments = createResearchExperimentProjection(createResearchExperimentAdapter(client));
+  const policies = createResearchPolicyProjection(createResearchPolicyAdapter(client));
+  const templates = createResearchTemplateProjection(createResearchTemplateAdapter(client));
+  function stageStatus(stage: 'writing' | 'ideation') {
+    return workbench.getSnapshot().workflow?.stages.find((entry) => entry.stage === stage)?.status;
   }
-  const workbench = workbenchRef.current.workbench;
+  const manuscript = createResearchManuscriptProjection(createResearchManuscriptAdapter(client), {
+    projectId() {
+      return workbench.getSnapshot().project?.id ?? null;
+    },
+    currentStage() {
+      return workbench.getSnapshot().workflow?.currentStage ?? null;
+    },
+    stageStatus,
+    moveToWriting() {
+      return workbench.transition('move', { targetStage: 'writing' });
+    },
+    startWriting() {
+      return workbench.transition('start');
+    },
+    refresh() {
+      return workbench.refresh();
+    }
+  });
+  const ideas = createResearchIdeaProjection(createResearchIdeaAdapter(client), {
+    projectId() {
+      return workbench.getSnapshot().project?.id ?? null;
+    },
+    currentStage() {
+      return workbench.getSnapshot().workflow?.currentStage ?? null;
+    },
+    stageStatus,
+    moveToIdeation() {
+      return workbench.transition('move', { targetStage: 'ideation' });
+    },
+    startIdeation() {
+      return workbench.transition('start');
+    },
+    refresh() {
+      return workbench.refresh();
+    },
+    async selectProject(projectId) {
+      await workbench.load();
+      await workbench.selectProject(projectId);
+    }
+  });
+  const production = createResearchProductionProjection(createResearchProductionAdapter(client), {
+    projectId() {
+      return workbench.getSnapshot().project?.id ?? null;
+    },
+    language() {
+      return workbench.getSnapshot().project?.language ?? 'zh';
+    },
+    approvedManuscript() {
+      return workbench.getSnapshot().artifacts.find((item) => item.kind === 'manuscript' && item.status === 'approved');
+    }
+  });
+  return { workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production };
+}
+
+export function ResearchView({ client, state }: { client: RocClient; state: LoadedState }): React.JSX.Element {
+  const surfacesRef = useRef<{ client: RocClient; surfaces: ResearchSurfaces } | null>(null);
+  if (surfacesRef.current === null || surfacesRef.current.client !== client) {
+    surfacesRef.current = { client, surfaces: createResearchSurfaces(client) };
+  }
+  const surfaces = surfacesRef.current.surfaces;
+  const { workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production } = surfaces;
   const [workbenchSnapshot, setWorkbenchSnapshot] = useState(workbench.getSnapshot());
+  const [librarySnapshot, setLibrarySnapshot] = useState(library.getSnapshot());
+  const [knowledgeSnapshot, setKnowledgeSnapshot] = useState(knowledge.getSnapshot());
+  const [experimentSnapshot, setExperimentSnapshot] = useState(experiments.getSnapshot());
+  const [policySnapshot, setPolicySnapshot] = useState(policies.getSnapshot());
+  const [templateSnapshot, setTemplateSnapshot] = useState(templates.getSnapshot());
+  const [manuscriptSnapshot, setManuscriptSnapshot] = useState(manuscript.getSnapshot());
+  const [ideaSnapshot, setIdeaSnapshot] = useState(ideas.getSnapshot());
+  const [productionSnapshot, setProductionSnapshot] = useState(production.getSnapshot());
   const {
     projects,
     project: selectedProject,
@@ -61,81 +123,42 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     error: workbenchError
   } = workbenchSnapshot;
   const selectedProjectId = selectedProject?.id ?? null;
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'manuscript' | 'editor' | 'production' | 'knowledge' | 'embedding' | 'policies'>('workflow');
-  const [literatureQuery, setLiteratureQuery] = useState('');
-  const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
-  const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
-  const [libraryScope, setLibraryScope] = useState<'project' | 'all'>('project');
-  const [doi, setDoi] = useState('');
-  const [bibliographyFormat, setBibliographyFormat] = useState<ResearchBibliographyFormat>('bibtex');
-  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
-  const [libraryExport, setLibraryExport] = useState<ResearchLibraryExport | null>(null);
-  const [openLibraryItem, setOpenLibraryItem] = useState<ResearchLibraryItem | null>(null);
-  const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
-  const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
-  const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
-  const [manuscriptArtifactId, setManuscriptArtifactId] = useState<string | null>(null);
-  const [manuscript, setManuscript] = useState<ResearchManuscript | null>(null);
-  const [claims, setClaims] = useState<ResearchClaim[]>([]);
-  const [manuscriptDraft, setManuscriptDraft] = useState<ResearchManuscriptDraft>(emptyManuscriptDraft);
-  const [policies, setPolicies] = useState<ResearchStagePolicy[]>([]);
-  const [policyDraft, setPolicyDraft] = useState<ResearchPolicyDraft>(emptyPolicyDraft('discovery'));
-  const [ideaArtifactId, setIdeaArtifactId] = useState<string | null>(null);
-  const [ideaCanvas, setIdeaCanvas] = useState<ResearchIdeaCanvas | null>(null);
-  const [ideaDraft, setIdeaDraft] = useState<ResearchIdeaCanvasSaveRequest | null>(null);
-  const [knowledgeQuery, setKnowledgeQuery] = useState('');
-  const [knowledgeResult, setKnowledgeResult] = useState<ResearchKnowledgeSearchResult | null>(null);
-  const [embeddingConfigs, setEmbeddingConfigs] = useState<ResearchEmbeddingConfig[]>([]);
-  const [embeddingId, setEmbeddingId] = useState('default');
-  const [embeddingName, setEmbeddingName] = useState('默认嵌入模型');
-  const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState('https://api.openai.com/v1');
-  const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-small');
-  const [embeddingDimensions, setEmbeddingDimensions] = useState('1536');
-  const [embeddingApiKey, setEmbeddingApiKey] = useState('');
-  const [figures, setFigures] = useState<ResearchFigurePublication[]>([]);
-  const [exports, setExports] = useState<ResearchExportExecution[]>([]);
-  const [experiments, setExperiments] = useState<ResearchExperimentExecution[]>([]);
-  const [experimentDraft, setExperimentDraft] = useState<ResearchExperimentDraft>(emptyExperimentDraft);
-  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
-  const [experimentLog, setExperimentLog] = useState<ResearchExperimentFileContent | null>(null);
-  const [selectedFigureIds, setSelectedFigureIds] = useState<string[]>([]);
-  const [exportTitle, setExportTitle] = useState('');
-  const [destinationPath, setDestinationPath] = useState('');
-  const [templates, setTemplates] = useState<ResearchTemplate[]>([]);
-  const [templateFiles, setTemplateFiles] = useState<ResearchTemplateFile[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [openTemplateFile, setOpenTemplateFile] = useState<ResearchTemplateFileContent | null>(null);
 
   useEffect(() => {
-    return workbench.subscribe(setWorkbenchSnapshot);
-  }, [workbench]);
+    const unsubscribers = [
+      workbench.subscribe(setWorkbenchSnapshot),
+      library.subscribe(setLibrarySnapshot),
+      knowledge.subscribe(setKnowledgeSnapshot),
+      experiments.subscribe(setExperimentSnapshot),
+      policies.subscribe(setPolicySnapshot),
+      templates.subscribe(setTemplateSnapshot),
+      manuscript.subscribe(setManuscriptSnapshot),
+      ideas.subscribe(setIdeaSnapshot),
+      production.subscribe(setProductionSnapshot)
+    ];
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
+  }, [workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production]);
 
   useEffect(() => {
     void workbench.load();
   }, [workbench]);
 
   useEffect(() => {
-    if (selectedProjectId === null) {
-      setEvidence([]);
-      return;
-    }
-    let cancelled = false;
-    client.api.research.listEvidence({ projectId: selectedProjectId }).then((result) => {
-      if (cancelled) return;
-      setEvidence(unwrap('证据', result));
-    }).catch((loadError: unknown) => {
-      if (!cancelled) setError(loadError instanceof Error ? loadError.message : '证据加载失败。');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [client, selectedProjectId]);
+    library.setProject(selectedProjectId);
+    knowledge.setProject(selectedProjectId);
+    experiments.setProject(selectedProjectId);
+    policies.setProject(selectedProjectId);
+    templates.setProject(selectedProjectId);
+    production.setProject(selectedProjectId);
+    void knowledge.loadEvidence();
+  }, [experiments, knowledge, library, policies, production, selectedProjectId, templates]);
 
   async function createProject(): Promise<void> {
     await workbench.createProject({
@@ -151,735 +174,35 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     }
   }
 
-  async function refreshProject(): Promise<void> {
-    await workbench.refresh();
-    if (selectedProjectId === null) {
-      setEvidence([]);
-      return;
-    }
-    setEvidence(unwrap('证据', await client.api.research.listEvidence({ projectId: selectedProjectId })));
-  }
+  const surfaceError = librarySnapshot.error
+    ?? knowledgeSnapshot.error
+    ?? experimentSnapshot.error
+    ?? policySnapshot.error
+    ?? templateSnapshot.error
+    ?? manuscriptSnapshot.error
+    ?? ideaSnapshot.error
+    ?? productionSnapshot.error
+    ?? workbenchError;
+  const working = workbenchWorking
+    || librarySnapshot.working
+    || knowledgeSnapshot.working
+    || experimentSnapshot.working
+    || policySnapshot.working
+    || templateSnapshot.working
+    || manuscriptSnapshot.working
+    || ideaSnapshot.working
+    || productionSnapshot.working;
 
-  async function controlIndex(action: 'pause' | 'resume' | 'rebuild' | 'retry'): Promise<void> {
-    await workbench.controlIndex(action);
-  }
-
-  async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>, reviewDecision?: 'accept' | 'revise'): Promise<void> {
-    await workbench.transition(action, reviewDecision === undefined ? undefined : { reviewDecision });
-  }
-
-  async function startRun(): Promise<void> {
-    await workbench.startRun();
-  }
-
-  async function cancelRun(): Promise<void> {
-    await workbench.cancelRun();
-  }
-
-  async function retryRun(): Promise<void> {
-    await workbench.retryRun();
-  }
-
-  async function searchLiterature(): Promise<void> {
-    if (literatureQuery.trim().length === 0) return;
-    setWorking(true);
-    try {
-      const result = await client.api.research.searchLiterature({
-        query: literatureQuery.trim(),
-        sources: ['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc'],
-        limit: 20
-      });
-      setLiteratureResults(unwrap('论文检索', result));
-      setError(null);
-    } catch (searchError: unknown) {
-      setError(searchError instanceof Error ? searchError.message : '论文检索失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadLibrary(projectId = selectedProjectId, scope = libraryScope, query = literatureQuery): Promise<void> {
-    const result = await client.api.research.listLibrary({
-      projectId: scope === 'project' ? projectId : null,
-      query: query.trim(),
-      includeArchived: false,
-      limit: 100
-    });
-    setLibraryItems(unwrap('文献库', result));
-  }
-
-  async function importDoi(): Promise<void> {
-    if (doi.trim().length === 0) return;
-    setWorking(true);
-    try {
-      unwrap('导入 DOI', await client.api.research.importLibraryDoi({ doi: doi.trim(), projectId: selectedProjectId }));
-      await loadLibrary();
-      setError(null);
-    } catch (importError: unknown) {
-      setError(importError instanceof Error ? importError.message : 'DOI 导入失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function importBibliography(): Promise<void> {
-    const selection = unwrap('选择参考文献', await client.api.files.selectFromDialog());
-    const sourcePath = selection?.filePaths[0];
-    if (sourcePath === undefined) return;
-    setWorking(true);
-    try {
-      unwrap('导入参考文献', await client.api.research.importBibliography({
-        sourcePath, format: bibliographyFormat, projectId: selectedProjectId
-      }));
-      await loadLibrary();
-      setError(null);
-    } catch (importError: unknown) {
-      setError(importError instanceof Error ? importError.message : '参考文献导入失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function exportBibliography(): Promise<void> {
-    if (selectedLibraryIds.length === 0) return;
-    setWorking(true);
-    try {
-      setLibraryExport(unwrap('导出参考文献', await client.api.research.exportBibliography({
-        ids: selectedLibraryIds, format: bibliographyFormat
-      })));
-      setError(null);
-    } catch (exportError: unknown) {
-      setError(exportError instanceof Error ? exportError.message : '参考文献导出失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function importRecord(record: ResearchLiterature): Promise<void> {
-    setWorking(true);
-    try {
-      unwrap('导入文献', await client.api.research.importLibraryRecord({
-        record, citationKey: (record.doi ?? record.externalId).replace(/[^A-Za-z0-9]+/g, '').slice(0, 40) || 'cite', projectId: selectedProjectId
-      }));
-      await loadLibrary();
-      setError(null);
-    } catch (importError: unknown) {
-      setError(importError instanceof Error ? importError.message : '文献导入失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function linkItem(item: ResearchLibraryItem, linked: boolean): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('关联文献', await client.api.research.linkLibraryItem({ id: item.id, projectId: selectedProjectId, linked }));
-      await loadLibrary();
-      setError(null);
-    } catch (linkError: unknown) {
-      setError(linkError instanceof Error ? linkError.message : '文献关联失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function openItem(item: ResearchLibraryItem): Promise<void> {
-    setWorking(true);
-    try {
-      await loadReader(item);
-      setError(null);
-    } catch (openError: unknown) {
-      setError(openError instanceof Error ? openError.message : '文献阅读失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadReader(item: ResearchLibraryItem): Promise<void> {
-    const documents = unwrap('文献附件', await client.api.research.listDocuments({ libraryItemId: item.id }));
-    setOpenLibraryItem(item);
-    setOpenDocuments(documents);
-    const ready = documents.find((document) => document.status === 'ready' && document.currentParseId !== null);
-    if (ready?.currentParseId === null || ready === undefined) setOpenContent(null);
-    else setOpenContent(unwrap('文献全文', await client.api.research.getDocumentContent({ documentId: ready.id, parseId: ready.currentParseId })));
-  }
-
-  async function importDocument(): Promise<void> {
-    if (openLibraryItem === null) return;
-    const selection = unwrap('选择附件', await client.api.files.selectFromDialog());
-    const sourcePath = selection?.filePaths[0];
-    if (sourcePath === undefined) return;
-    setWorking(true);
-    try {
-      const imported = unwrap('导入附件', await client.api.research.importDocument({
-        target: 'library-item', sourcePath, libraryItemId: openLibraryItem.id, projectId: selectedProjectId
-      }));
-      unwrap('解析附件', await client.api.research.parseDocument({ documentId: imported.id }));
-      await loadReader(openLibraryItem);
-      setError(null);
-    } catch (importError: unknown) {
-      setError(importError instanceof Error ? importError.message : '附件导入失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-
-  async function selectIdea(artifactId: string): Promise<void> {
-    setIdeaArtifactId(artifactId);
-    const canvas = unwrap('Idea Canvas', await client.api.research.getIdeaCanvas({ artifactId }));
-    setIdeaCanvas(canvas);
-    setIdeaDraft(canvas === null ? emptyIdeaDraft(artifactId) : canvasToDraft(canvas));
-  }
-
-  async function createIdea(): Promise<void> {
-    if (selectedProjectId === null || workflow === null) return;
-    setWorking(true);
-    try {
-      if (workflow.currentStage !== 'ideation') {
-        await workbench.transition('move', { targetStage: 'ideation' });
-      }
-      if (workbench.getSnapshot().workflow?.stages.find((stage) => stage.stage === 'ideation')?.status === 'ready') {
-        await workbench.transition('start');
-      }
-      const artifact = unwrap('创建画布', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'ideation', kind: 'idea_canvas', title: 'Idea Canvas', path: null }));
-      await refreshProject();
-      setIdeaArtifactId(artifact.id);
-      setIdeaCanvas(null);
-      setIdeaDraft(emptyIdeaDraft(artifact.id));
-      setError(null);
-    } catch (createError: unknown) {
-      setError(createError instanceof Error ? createError.message : '创建 Idea Canvas 失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function selectManuscript(artifactId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setManuscriptArtifactId(artifactId);
-    const [loaded, listed] = await Promise.all([
-      client.api.research.getManuscript({ artifactId }),
-      client.api.research.listClaims({ projectId: selectedProjectId, artifactId })
-    ]);
-    const next = unwrap('正文', loaded);
-    setManuscript(next);
-    setClaims(unwrap('主张', listed));
-    setManuscriptDraft({
-      ...emptyManuscriptDraft,
-      sectionTitle: next?.sections[0]?.title ?? 'Results',
-      selectedClaimIds: next?.sections[0]?.claimIds ?? []
-    });
-  }
-
-  async function createManuscript(): Promise<void> {
-    if (selectedProjectId === null || workflow === null) return;
-    setWorking(true);
-    try {
-      if (workflow.currentStage !== 'writing') {
-        await workbench.transition('move', { targetStage: 'writing' });
-      }
-      if (workbench.getSnapshot().workflow?.stages.find((stage) => stage.stage === 'writing')?.status === 'ready') {
-        await workbench.transition('start');
-      }
-      const artifact = unwrap('创建正文', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'writing', kind: 'manuscript', title: 'Manuscript', path: null }));
-      await refreshProject();
-      setManuscriptArtifactId(artifact.id);
-      setManuscript(null);
-      setClaims([]);
-      setManuscriptDraft(emptyManuscriptDraft);
-      setError(null);
-    } catch (createError: unknown) {
-      setError(createError instanceof Error ? createError.message : '创建正文失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function createClaim(): Promise<void> {
-    if (selectedProjectId === null || manuscriptArtifactId === null) return;
-    setWorking(true);
-    try {
-      unwrap('创建主张', await client.api.research.createClaim({
-        projectId: selectedProjectId,
-        artifactId: manuscriptArtifactId,
-        subjectType: 'paragraph',
-        content: manuscriptDraft.content.trim(),
-        status: manuscriptDraft.status,
-        evidenceIds: manuscriptDraft.evidenceIds
-      }));
-      setClaims(unwrap('主张', await client.api.research.listClaims({ projectId: selectedProjectId, artifactId: manuscriptArtifactId })));
-      setManuscriptDraft({ ...manuscriptDraft, content: '' });
-      setError(null);
-    } catch (createError: unknown) {
-      setError(createError instanceof Error ? createError.message : '创建主张失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function saveManuscript(): Promise<void> {
-    if (manuscriptArtifactId === null) return;
-    setWorking(true);
-    try {
-      const saved = unwrap('保存正文', await client.api.research.saveManuscript({
-        artifactId: manuscriptArtifactId,
-        sections: [{ title: manuscriptDraft.sectionTitle.trim(), claimIds: manuscriptDraft.selectedClaimIds }]
-      }));
-      setManuscript(saved);
-      setError(null);
-    } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : '保存正文失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function saveIdea(): Promise<void> {
-    if (ideaDraft === null) return;
-    setWorking(true);
-    try {
-      const saved = unwrap('保存画布', await client.api.research.saveIdeaCanvas(ideaDraft));
-      setIdeaCanvas(saved);
-      setIdeaDraft(canvasToDraft(saved));
-      if (selectedProjectId !== null) await refreshProject();
-      setError(null);
-    } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : '保存 Idea Canvas 失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function promoteIdea(): Promise<void> {
-    if (ideaCanvas === null) return;
-    setWorking(true);
-    try {
-      const promoted = unwrap('晋升画布', await client.api.research.promoteIdeaCanvas({ artifactId: ideaCanvas.artifactId, expectedVersion: ideaCanvas.version }));
-      await workbench.load();
-      await workbench.selectProject(promoted.project.id);
-      setError(null);
-    } catch (promoteError: unknown) {
-      setError(promoteError instanceof Error ? promoteError.message : '晋升 Idea Canvas 失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-
-
-  async function loadTemplates(projectId = selectedProjectId, templateId = selectedTemplateId): Promise<void> {
-    if (projectId === null) {
-      setTemplates([]);
-      setTemplateFiles([]);
-      setSelectedTemplateId(null);
-      setOpenTemplateFile(null);
-      return;
-    }
-    const listed = unwrap('模板', await client.api.research.listTemplates({ projectId }));
-    setTemplates(listed);
-    const selected = listed.find((item) => item.id === templateId) ?? listed[0] ?? null;
-    if (selected === null) {
-      setSelectedTemplateId(null);
-      setTemplateFiles([]);
-      setOpenTemplateFile(null);
-      return;
-    }
-    setSelectedTemplateId(selected.id);
-    setTemplateFiles(unwrap('模板文件', await client.api.research.getTemplateFiles({ projectId, templateId: selected.id })));
-  }
-
-  async function importTemplate(): Promise<void> {
-    if (selectedProjectId === null) return;
-    const selection = unwrap('选择模板', await client.api.files.selectFromDialog());
-    const sourcePath = selection?.filePaths[0];
-    if (sourcePath === undefined) return;
-    setWorking(true);
-    try {
-      const imported = unwrap('导入模板', await client.api.research.importTemplate({ projectId: selectedProjectId, sourcePath }));
-      setSelectedTemplateId(imported.id);
-      await loadTemplates(selectedProjectId, imported.id);
-      setError(null);
-    } catch (importError: unknown) {
-      setError(importError instanceof Error ? importError.message : '导入模板失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function openTemplateFilePath(path: string): Promise<void> {
-    if (selectedProjectId === null || selectedTemplateId === null) return;
-    setWorking(true);
-    try {
-      setOpenTemplateFile(unwrap('读取模板文件', await client.api.research.readTemplateFile({ projectId: selectedProjectId, templateId: selectedTemplateId, path })));
-      setError(null);
-    } catch (readError: unknown) {
-      setError(readError instanceof Error ? readError.message : '读取模板文件失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function saveTemplateFile(): Promise<void> {
-    if (selectedProjectId === null || selectedTemplateId === null || openTemplateFile === null) return;
-    setWorking(true);
-    try {
-      const saved = unwrap('保存模板文件', await client.api.research.saveTemplateFile({
-        projectId: selectedProjectId, templateId: selectedTemplateId, path: openTemplateFile.path,
-        content: openTemplateFile.content, expectedHash: openTemplateFile.sha256
-      }));
-      setOpenTemplateFile(saved);
-      await loadTemplates(selectedProjectId, selectedTemplateId);
-      setError(null);
-    } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : '保存模板文件失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function compileTemplate(): Promise<void> {
-    if (selectedProjectId === null || selectedTemplateId === null) return;
-    setWorking(true);
-    try {
-      unwrap('编译模板', await client.api.research.compileTemplate({ projectId: selectedProjectId, templateId: selectedTemplateId }));
-      await loadTemplates(selectedProjectId, selectedTemplateId);
-      setError(null);
-    } catch (compileError: unknown) {
-      setError(compileError instanceof Error ? compileError.message : '编译模板失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadPolicies(projectId = selectedProjectId): Promise<void> {
-    if (projectId === null) {
-      setPolicies([]);
-      setPolicyDraft(emptyPolicyDraft('discovery'));
-      return;
-    }
-    const listed = unwrap('阶段策略', await client.api.research.listStagePolicies({ projectId }));
-    setPolicies(listed);
-    const current = listed.find((policy) => policy.stage === policyDraft.stage) ?? listed[0];
-    if (current !== undefined) setPolicyDraft(policyToDraft(current));
-  }
-
-  async function savePolicy(): Promise<void> {
-    if (selectedProjectId === null) return;
-    const maxSteps = Number(policyDraft.maxSteps);
-    const timeoutMs = Number(policyDraft.timeoutMs);
-    if (!Number.isInteger(maxSteps) || maxSteps < 2 || maxSteps > 100 || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
-      setError('最大步数需在 2 到 100，超时需在 1000 到 600000 毫秒之间。');
-      return;
-    }
-    if (policyDraft.modelKind === 'model' && (policyDraft.providerId.trim().length === 0 || policyDraft.modelId.trim().length === 0)) {
-      setError('指定模型时必须选择提供商和模型。');
-      return;
-    }
-    setWorking(true);
-    try {
-      const saved = unwrap('保存阶段策略', await client.api.research.saveStagePolicy({
-        projectId: selectedProjectId,
-        stage: policyDraft.stage,
-        tier: policyDraft.tier,
-        model: policyDraft.modelKind === 'app_default'
-          ? { kind: 'app_default' }
-          : { kind: 'model', providerId: policyDraft.providerId, modelId: policyDraft.modelId },
-        maxSteps,
-        timeoutMs
-      }));
-      setPolicies((current) => [saved, ...current.filter((policy) => policy.stage !== saved.stage)]);
-      setPolicyDraft(policyToDraft(saved));
-      setError(null);
-    } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : '保存阶段策略失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadExperiments(projectId = selectedProjectId): Promise<void> {
-    if (projectId === null) {
-      setExperiments([]);
-      setSelectedExperimentId(null);
-      setExperimentLog(null);
-      return;
-    }
-    setExperiments(unwrap('实验运行', await client.api.research.listExperiments({ projectId, limit: 100 })));
-  }
-
-  async function startExperiment(): Promise<void> {
-    if (selectedProjectId === null) return;
-    const sourcePath = experimentDraft.sourcePath.trim();
-    const timeoutMs = Number(experimentDraft.timeoutMs);
-    if (sourcePath.length === 0 || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3_600_000) {
-      setError('源文件必须填写，超时需在 1000 到 3600000 毫秒之间。');
-      return;
-    }
-    if (experimentDraft.engine === 'matplotlib') {
-      const widthInches = Number(experimentDraft.widthInches);
-      const heightInches = Number(experimentDraft.heightInches);
-      const dpi = Number(experimentDraft.dpi);
-      const seed = Number(experimentDraft.seed);
-      if (
-        !Number.isFinite(widthInches) || widthInches < 1 || widthInches > 24
-        || !Number.isFinite(heightInches) || heightInches < 1 || heightInches > 24
-        || !Number.isInteger(dpi) || dpi < 72 || dpi > 1200
-        || !Number.isInteger(seed) || seed < 0 || seed > 4294967295
-      ) {
-        setError('图稿尺寸需在 1–24 英寸，DPI 72–1200，随机种子为非负整数。');
-        return;
-      }
-    }
-    setWorking(true);
-    try {
-      const runtime = experimentRuntime(experimentDraft);
-      const environment = unwrap('实验环境', await client.api.research.inspectExperimentEnvironment({
-        projectId: selectedProjectId, runtime
-      }));
-      const figure = experimentDraft.engine === 'matplotlib' ? {
-        widthInches: Number(experimentDraft.widthInches),
-        heightInches: Number(experimentDraft.heightInches),
-        dpi: Number(experimentDraft.dpi),
-        seed: Number(experimentDraft.seed)
-      } : undefined;
-      const started = unwrap('启动实验', await client.api.research.startExperiment({
-        projectId: selectedProjectId,
-        requestId: crypto.randomUUID(),
-        label: experimentDraft.label.trim() || sourcePath,
-        engine: experimentDraft.engine,
-        runtime,
-        sourcePath,
-        inputPaths: parseRelativePaths(experimentDraft.inputPaths),
-        arguments: [],
-        parameters: {},
-        expectedEnvironmentHash: environment.hash,
-        timeoutMs,
-        network: experimentDraft.engine === 'matplotlib' ? 'disabled' : experimentDraft.network,
-        ...(figure === undefined ? {} : { figure })
-      }));
-      setSelectedExperimentId(started.id);
-      setExperimentLog(null);
-      await loadExperiments(selectedProjectId);
-      setError(null);
-    } catch (startError: unknown) {
-      setError(startError instanceof Error ? startError.message : '实验启动失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function cancelExperiment(runId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('取消实验', await client.api.research.cancelExperiment({ projectId: selectedProjectId, runId }));
-      await loadExperiments(selectedProjectId);
-      setError(null);
-    } catch (cancelError: unknown) {
-      setError(cancelError instanceof Error ? cancelError.message : '取消实验失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function publishExperiment(runId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('发布实验', await client.api.research.publishExperiment({ projectId: selectedProjectId, runId }));
-      await loadExperiments(selectedProjectId);
-      setError(null);
-    } catch (publishError: unknown) {
-      setError(publishError instanceof Error ? publishError.message : '发布实验失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function publishExperimentFigure(runId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('发布图稿', await client.api.research.publishFigure({ projectId: selectedProjectId, runId, replacesFigureId: null }));
-      await loadExperiments(selectedProjectId);
-      setError(null);
-    } catch (publishError: unknown) {
-      setError(publishError instanceof Error ? publishError.message : '发布图稿失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function readExperimentLog(runId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      const run = unwrap('实验运行', await client.api.research.getExperiment({ projectId: selectedProjectId, runId }));
-      const logFile = run.files.find((file) => file.area === 'log' && file.path === 'stdout.txt')
-        ?? run.files.find((file) => file.area === 'log' && file.path === 'stderr.txt')
-        ?? run.files.find((file) => file.area === 'log');
-      if (logFile === undefined) {
-        setError('这次运行还没有日志。');
-        return;
-      }
-      setSelectedExperimentId(runId);
-      setExperimentLog(unwrap('实验日志', await client.api.research.readExperimentFile({
-        projectId: selectedProjectId, runId, area: logFile.area, path: logFile.path
-      })));
-      setError(null);
-    } catch (readError: unknown) {
-      setError(readError instanceof Error ? readError.message : '读取实验日志失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadProduction(projectId = selectedProjectId): Promise<void> {
-    if (projectId === null) {
-      setFigures([]);
-      setExports([]);
-      return;
-    }
-    const [figureResult, exportResult] = await Promise.all([
-      client.api.research.listFigures({ projectId, limit: 100 }),
-      client.api.research.listExports({ projectId, limit: 40 })
-    ]);
-    setFigures(unwrap('图稿', figureResult));
-    setExports(unwrap('导出作业', exportResult));
-  }
-
-  async function prepareExport(): Promise<void> {
-    if (selectedProjectId === null) return;
-    const manuscript = artifacts.find((item) => item.kind === 'manuscript' && item.status === 'approved');
-    if (manuscript === undefined || exportTitle.trim().length === 0) return;
-    setWorking(true);
-    try {
-      unwrap('准备导出', await client.api.research.prepareExport({
-        projectId: selectedProjectId,
-        requestId: crypto.randomUUID(),
-        title: exportTitle.trim(),
-        manuscriptArtifactId: manuscript.id,
-        figureIds: selectedFigureIds,
-        template: { kind: 'default', language: projects.find((item) => item.id === selectedProjectId)?.language ?? 'zh' }
-      }));
-      await loadProduction(selectedProjectId);
-      setError(null);
-    } catch (prepareError: unknown) {
-      setError(prepareError instanceof Error ? prepareError.message : '准备导出失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function publishExport(exportId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('发布导出', await client.api.research.publishExport({ projectId: selectedProjectId, exportId, replacesExportId: null }));
-      await loadProduction(selectedProjectId);
-      setError(null);
-    } catch (publishError: unknown) {
-      setError(publishError instanceof Error ? publishError.message : '发布导出失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function writeExport(exportId: string): Promise<void> {
-    if (selectedProjectId === null || destinationPath.trim().length === 0) return;
-    setWorking(true);
-    try {
-      unwrap('保存 ZIP', await client.api.research.writeExport({
-        projectId: selectedProjectId, exportId, destinationPath: destinationPath.trim()
-      }));
-      await loadProduction(selectedProjectId);
-      setError(null);
-    } catch (writeError: unknown) {
-      setError(writeError instanceof Error ? writeError.message : '保存 ZIP 失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function searchKnowledge(): Promise<void> {
-    if (knowledgeQuery.trim().length === 0) return;
-    setWorking(true);
-    try {
-      const result = await client.api.research.searchKnowledge({
-        query: knowledgeQuery.trim(),
-        projectId: selectedProjectId,
-        limit: 20,
-        embeddingConfigId: null
-      });
-      setKnowledgeResult(unwrap('知识库检索', result));
-      setError(null);
-    } catch (searchError: unknown) {
-      setError(searchError instanceof Error ? searchError.message : '知识库检索失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function captureEvidence(chunkId: string): Promise<void> {
-    if (selectedProjectId === null) return;
-    setWorking(true);
-    try {
-      unwrap('捕获证据', await client.api.research.captureEvidence({ projectId: selectedProjectId, chunkId }));
-      setEvidence(unwrap('证据', await client.api.research.listEvidence({ projectId: selectedProjectId })));
-      setError(null);
-    } catch (captureError: unknown) {
-      setError(captureError instanceof Error ? captureError.message : '证据捕获失败。');
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function loadEmbeddingConfigs(): Promise<void> {
-    try {
-      const result = await client.api.research.listEmbeddingConfigs();
-      const configs = unwrap('嵌入配置', result);
-      setEmbeddingConfigs(configs);
-      const active = configs.find((config) => config.enabled) ?? configs[0];
-      if (active !== undefined) {
-        setEmbeddingId(active.id);
-        setEmbeddingName(active.name);
-        setEmbeddingBaseUrl(active.baseUrl);
-        setEmbeddingModel(active.model);
-        setEmbeddingDimensions(String(active.dimensions));
-      }
-    } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : '嵌入配置读取失败。');
-    }
-  }
-
-  async function saveEmbeddingConfig(): Promise<void> {
-    const dimensions = Number(embeddingDimensions);
-    if (!Number.isInteger(dimensions) || dimensions <= 0 || embeddingApiKey.trim().length === 0) {
-      setError('嵌入维度必须为正整数，API Key 不能为空。');
-      return;
-    }
-    setWorking(true);
-    try {
-      const result = await client.api.research.saveEmbeddingConfig({
-        id: embeddingId.trim(),
-        name: embeddingName.trim(),
-        baseUrl: embeddingBaseUrl.trim(),
-        model: embeddingModel.trim(),
-        dimensions,
-        apiKey: embeddingApiKey.trim(),
-        enabled: true
-      });
-      const config = unwrap('保存嵌入配置', result);
-      setEmbeddingConfigs((current) => [config, ...current.filter((item) => item.id !== config.id)]);
-      setEmbeddingApiKey('');
-      setError(null);
-    } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : '嵌入配置保存失败。');
-    } finally {
-      setWorking(false);
-    }
+  function clearErrors(): void {
+    library.clearError();
+    knowledge.clearError();
+    experiments.clearError();
+    policies.clearError();
+    templates.clearError();
+    manuscript.clearError();
+    ideas.clearError();
+    production.clearError();
+    workbench.clearError();
   }
 
   return (
@@ -911,12 +234,12 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         ] as const).map(([tab, label]) => (
           <button className={activeTab === tab ? 'research-tab research-tab--active' : 'research-tab'} key={tab} type="button" onClick={() => {
             setActiveTab(tab);
-            if (tab === 'embedding') void loadEmbeddingConfigs();
-            if (tab === 'library') void loadLibrary();
-            if (tab === 'experiments') void loadExperiments();
-            if (tab === 'production') void loadProduction();
-            if (tab === 'editor') void loadTemplates();
-            if (tab === 'policies') void loadPolicies();
+            if (tab === 'embedding') void knowledge.loadEmbeddingConfigs();
+            if (tab === 'library') void library.load();
+            if (tab === 'experiments') void experiments.load();
+            if (tab === 'production') void production.load();
+            if (tab === 'editor') void templates.load();
+            if (tab === 'policies') void policies.load();
           }}>
             {label}
           </button>
@@ -944,18 +267,18 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
             <button className="action-button" type="button" onClick={() => setCreateOpen(false)}>
               取消
             </button>
-            <button className="action-button action-button--primary" type="button" disabled={working || workbenchWorking} onClick={() => void createProject()}>
+            <button className="action-button action-button--primary" type="button" disabled={working} onClick={() => void createProject()}>
               创建项目
             </button>
           </div>
         </section>
       ) : null}
 
-      {error === null && workbenchError === null ? null : (
+      {surfaceError === null ? null : (
         <div className="research-alert" role="alert">
           <CircleAlert aria-hidden="true" size={16} />
-          <span>{error ?? workbenchError}</span>
-          <button type="button" title="关闭错误" aria-label="关闭错误" onClick={() => { setError(null); workbench.clearError(); }}>
+          <span>{surfaceError}</span>
+          <button type="button" title="关闭错误" aria-label="关闭错误" onClick={clearErrors}>
             <X aria-hidden="true" size={15} />
           </button>
         </div>
@@ -1002,16 +325,16 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
                 events={events}
                 indexStatus={indexStatus}
                 instruction={instruction}
-                onApprove={(decision) => void transition('approve', decision)}
-                onCancelRun={() => void cancelRun()}
-                onControlIndex={(action) => void controlIndex(action)}
+                onApprove={(decision) => void workbench.transition('approve', { reviewDecision: decision })}
+                onCancelRun={() => void workbench.cancelRun()}
+                onControlIndex={(action) => void workbench.controlIndex(action)}
                 onInstructionChange={(value) => workbench.setInstruction(value)}
-                onRetryRun={() => void retryRun()}
-                onStartRun={() => void startRun()}
-                onTransition={(action, decision) => void transition(action, decision)}
+                onRetryRun={() => void workbench.retryRun()}
+                onStartRun={() => void workbench.startRun()}
+                onTransition={(action, decision) => void workbench.transition(action, decision === undefined ? undefined : { reviewDecision: decision })}
                 project={selectedProject}
                 runs={runs}
-                working={working || workbenchWorking}
+                working={working}
                 workflow={workflow}
               />
             )}
@@ -1022,158 +345,154 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       {activeTab === 'ideas' ? (
         <ResearchIdeaPanel
           artifacts={artifacts}
-          canvas={ideaCanvas}
-          draft={ideaDraft}
-          evidence={evidence}
-          onChange={setIdeaDraft}
-          onCreate={() => void createIdea()}
-          onPromote={() => void promoteIdea()}
-          onSave={() => void saveIdea()}
-          onSelect={(artifactId) => void selectIdea(artifactId)}
-          selectedArtifactId={ideaArtifactId}
-          working={working || workbenchWorking}
+          canvas={ideaSnapshot.canvas}
+          draft={ideaSnapshot.draft}
+          evidence={knowledgeSnapshot.evidence}
+          onChange={(draft) => ideas.setDraft(draft)}
+          onCreate={() => void ideas.create()}
+          onPromote={() => void ideas.promote()}
+          onSave={() => void ideas.save()}
+          onSelect={(artifactId) => void ideas.select(artifactId)}
+          selectedArtifactId={ideaSnapshot.selectedArtifactId}
+          working={working}
         />
       ) : null}
       {activeTab === 'library' ? (
         <ResearchLibraryPanel
-          bibliographyFormat={bibliographyFormat}
-          doi={doi}
-          exportPreview={libraryExport}
-          items={libraryItems}
-          onChangeDoi={setDoi}
-          onChangeFormat={setBibliographyFormat}
-          onExport={() => void exportBibliography()}
-          onImportDoi={() => void importDoi()}
-          onImportFile={() => void importBibliography()}
-          onImportRecord={(record) => void importRecord(record)}
-          onImportDocument={() => void importDocument()}
-          onLink={(item, linked) => void linkItem(item, linked)}
-          onOpen={(item) => void openItem(item)}
-          onQueryChange={setLiteratureQuery}
-          onSearch={() => void searchLiterature()}
-          onSearchLibrary={() => void loadLibrary()}
-          onScopeChange={(value) => { setLibraryScope(value); void loadLibrary(selectedProjectId, value); }}
-          onToggleSelected={(id) => setSelectedLibraryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
-          openContent={openContent}
-          openDocuments={openDocuments}
-          openItem={openLibraryItem}
+          bibliographyFormat={librarySnapshot.bibliographyFormat}
+          doi={librarySnapshot.doi}
+          exportPreview={librarySnapshot.exportPreview}
+          items={librarySnapshot.items}
+          onChangeDoi={(value) => library.setDoi(value)}
+          onChangeFormat={(value) => library.setFormat(value)}
+          onExport={() => void library.exportBibliography()}
+          onImportDoi={() => void library.importDoi()}
+          onImportFile={() => void library.importBibliography()}
+          onImportRecord={(record) => void library.importRecord(record)}
+          onImportDocument={() => void library.importDocument()}
+          onLink={(item, linked) => void library.link(item, linked)}
+          onOpen={(item) => void library.open(item)}
+          onQueryChange={(value) => library.setQuery(value)}
+          onSearch={() => void library.search()}
+          onScopeChange={(value) => { void library.setScope(value); }}
+          onToggleSelected={(id) => library.toggleSelected(id)}
+          openContent={librarySnapshot.openContent}
+          openDocuments={librarySnapshot.openDocuments}
+          openItem={librarySnapshot.openItem}
           projectId={selectedProjectId}
-          query={literatureQuery}
-          results={literatureResults}
-          scope={libraryScope}
-          selectedIds={selectedLibraryIds}
-          working={working || workbenchWorking}
+          query={librarySnapshot.query}
+          results={librarySnapshot.results}
+          scope={librarySnapshot.scope}
+          selectedIds={librarySnapshot.selectedIds}
+          working={working}
         />
       ) : null}
       {activeTab === 'experiments' ? (
         <ResearchExperimentPanel
-          draft={experimentDraft}
-          experiments={experiments}
-          log={experimentLog}
-          onCancel={(runId) => void cancelExperiment(runId)}
-          onChange={setExperimentDraft}
-          onPublish={(runId) => void publishExperiment(runId)}
-          onPublishFigure={(runId) => void publishExperimentFigure(runId)}
-          onReadLog={(runId) => void readExperimentLog(runId)}
-          onRefresh={() => void loadExperiments()}
-          onSelect={setSelectedExperimentId}
-          onStart={() => void startExperiment()}
+          draft={experimentSnapshot.draft}
+          experiments={experimentSnapshot.experiments}
+          log={experimentSnapshot.log}
+          onCancel={(runId) => void experiments.cancel(runId)}
+          onChange={(draft) => experiments.setDraft(draft)}
+          onPublish={(runId) => void experiments.publish(runId)}
+          onPublishFigure={(runId) => void experiments.publishFigure(runId)}
+          onReadLog={(runId) => void experiments.readLog(runId)}
+          onRefresh={() => void experiments.load()}
+          onSelect={(runId) => experiments.select(runId)}
+          onStart={() => void experiments.start()}
           projectId={selectedProjectId}
-          selectedRunId={selectedExperimentId}
-          working={working || workbenchWorking}
+          selectedRunId={experimentSnapshot.selectedRunId}
+          working={working}
         />
       ) : null}
       {activeTab === 'manuscript' ? (
         <ResearchManuscriptPanel
           artifacts={artifacts}
-          claims={claims}
-          draft={manuscriptDraft}
-          evidence={evidence}
-          manuscript={manuscript}
-          onChange={setManuscriptDraft}
-          onCreate={() => void createManuscript()}
-          onCreateClaim={() => void createClaim()}
-          onSave={() => void saveManuscript()}
-          onSelect={(artifactId) => void selectManuscript(artifactId)}
-          selectedArtifactId={manuscriptArtifactId}
-          working={working || workbenchWorking}
+          claims={manuscriptSnapshot.claims}
+          draft={manuscriptSnapshot.draft}
+          evidence={knowledgeSnapshot.evidence}
+          manuscript={manuscriptSnapshot.manuscript}
+          onChange={(draft) => manuscript.setDraft(draft)}
+          onCreate={() => void manuscript.create()}
+          onCreateClaim={() => void manuscript.createClaim()}
+          onSave={() => void manuscript.save()}
+          onSelect={(artifactId) => void manuscript.select(artifactId)}
+          selectedArtifactId={manuscriptSnapshot.selectedArtifactId}
+          working={working}
         />
       ) : null}
       {activeTab === 'editor' ? (
         <ResearchEditorPanel
-          files={templateFiles}
-          onChangeDraft={(value) => setOpenTemplateFile((current) => current === null ? current : { ...current, content: value })}
-          onCompile={() => void compileTemplate()}
-          onImport={() => void importTemplate()}
-          onOpenFile={(path) => void openTemplateFilePath(path)}
-          onSave={() => void saveTemplateFile()}
-          onSelect={(templateId) => { setSelectedTemplateId(templateId); setOpenTemplateFile(null); void loadTemplates(selectedProjectId, templateId); }}
-          openFile={openTemplateFile}
-          selectedTemplateId={selectedTemplateId}
-          templates={templates}
-          working={working || workbenchWorking}
+          files={templateSnapshot.files}
+          onChangeDraft={(value) => templates.setOpenContent(value)}
+          onCompile={() => void templates.compile()}
+          onImport={() => void templates.importTemplate()}
+          onOpenFile={(path) => void templates.openFile(path)}
+          onSave={() => void templates.save()}
+          onSelect={(templateId) => { void templates.select(templateId); }}
+          openFile={templateSnapshot.openFile}
+          selectedTemplateId={templateSnapshot.selectedTemplateId}
+          templates={templateSnapshot.templates}
+          working={working}
         />
       ) : null}
       {activeTab === 'production' ? (
         <ResearchProductionPanel
-          destinationPath={destinationPath}
-          exports={exports}
-          figures={figures}
+          destinationPath={productionSnapshot.destinationPath}
+          exports={productionSnapshot.exports}
+          figures={productionSnapshot.figures}
           manuscripts={artifacts.filter((item) => item.kind === 'manuscript')}
-          onChangeDestination={setDestinationPath}
-          onChangeTitle={setExportTitle}
-          onPrepareExport={() => void prepareExport()}
-          onPublishExport={(exportId) => void publishExport(exportId)}
-          onToggleFigure={(figureId) => setSelectedFigureIds((current) => current.includes(figureId) ? current.filter((id) => id !== figureId) : [...current, figureId])}
-          onWriteExport={(exportId) => void writeExport(exportId)}
-          selectedFigureIds={selectedFigureIds}
-          title={exportTitle}
-          working={working || workbenchWorking}
+          onChangeDestination={(value) => production.setDestination(value)}
+          onChangeTitle={(value) => production.setTitle(value)}
+          onPrepareExport={() => void production.prepare()}
+          onPublishExport={(exportId) => void production.publish(exportId)}
+          onToggleFigure={(figureId) => production.toggleFigure(figureId)}
+          onWriteExport={(exportId) => void production.write(exportId)}
+          selectedFigureIds={productionSnapshot.selectedFigureIds}
+          title={productionSnapshot.title}
+          working={working}
         />
       ) : null}
       {activeTab === 'knowledge' ? (
         <KnowledgePanel
-          evidence={evidence}
+          evidence={knowledgeSnapshot.evidence}
           projectId={selectedProjectId}
-          query={knowledgeQuery}
-          result={knowledgeResult}
-          working={working || workbenchWorking}
-          onCapture={(chunkId) => void captureEvidence(chunkId)}
-          onQueryChange={setKnowledgeQuery}
-          onSearch={() => void searchKnowledge()}
+          query={knowledgeSnapshot.query}
+          result={knowledgeSnapshot.result}
+          working={working}
+          onCapture={(chunkId) => void knowledge.capture(chunkId)}
+          onQueryChange={(value) => knowledge.setQuery(value)}
+          onSearch={() => void knowledge.search()}
         />
       ) : null}
       {activeTab === 'policies' ? (
         <ResearchPolicyPanel
-          draft={policyDraft}
-          onChange={setPolicyDraft}
-          onSave={() => void savePolicy()}
-          onSelect={(stage) => {
-            const current = policies.find((policy) => policy.stage === stage);
-            setPolicyDraft(current === undefined ? emptyPolicyDraft(stage) : policyToDraft(current));
-          }}
-          policies={policies}
+          draft={policySnapshot.draft}
+          onChange={(draft) => policies.setDraft(draft)}
+          onSave={() => void policies.save()}
+          onSelect={(stage) => policies.select(stage)}
+          policies={policySnapshot.policies}
           providers={state.providers}
-          working={working || workbenchWorking}
+          working={working}
         />
       ) : null}
       {activeTab === 'embedding' ? (
         <EmbeddingPanel
-          configs={embeddingConfigs}
-          id={embeddingId}
-          name={embeddingName}
-          baseUrl={embeddingBaseUrl}
-          model={embeddingModel}
-          dimensions={embeddingDimensions}
-          apiKey={embeddingApiKey}
-          working={working || workbenchWorking}
-          onIdChange={setEmbeddingId}
-          onNameChange={setEmbeddingName}
-          onBaseUrlChange={setEmbeddingBaseUrl}
-          onModelChange={setEmbeddingModel}
-          onDimensionsChange={setEmbeddingDimensions}
-          onApiKeyChange={setEmbeddingApiKey}
-          onSave={() => void saveEmbeddingConfig()}
+          configs={knowledgeSnapshot.embedding.configs}
+          id={knowledgeSnapshot.embedding.id}
+          name={knowledgeSnapshot.embedding.name}
+          baseUrl={knowledgeSnapshot.embedding.baseUrl}
+          model={knowledgeSnapshot.embedding.model}
+          dimensions={knowledgeSnapshot.embedding.dimensions}
+          apiKey={knowledgeSnapshot.embedding.apiKey}
+          working={working}
+          onIdChange={(value) => knowledge.setEmbeddingField('id', value)}
+          onNameChange={(value) => knowledge.setEmbeddingField('name', value)}
+          onBaseUrlChange={(value) => knowledge.setEmbeddingField('baseUrl', value)}
+          onModelChange={(value) => knowledge.setEmbeddingField('model', value)}
+          onDimensionsChange={(value) => knowledge.setEmbeddingField('dimensions', value)}
+          onApiKeyChange={(value) => knowledge.setEmbeddingField('apiKey', value)}
+          onSave={() => void knowledge.saveEmbeddingConfig()}
         />
       ) : null}
     </section>
@@ -1312,18 +631,4 @@ function EmbeddingPanel({
       </div>
     </section>
   );
-}
-
-function parseRelativePaths(value: string): string[] {
-  return [...new Set(value.split(/[\n,]/u).map((item) => item.trim()).filter((item) => item.length > 0))];
-}
-
-function experimentRuntime(draft: ResearchExperimentDraft): ResearchExperimentRuntime {
-  if (draft.engine === 'r') {
-    return { kind: 'renv', rootPath: draft.rRootPath.trim(), libraryPath: draft.rLibraryPath.trim() };
-  }
-  if (draft.engine === 'julia') {
-    return { kind: 'julia', rootPath: draft.juliaRootPath.trim(), depotPath: draft.juliaDepotPath.trim() };
-  }
-  return { kind: draft.runtimeKind === 'uv' ? 'uv' : 'bundled-python' };
 }

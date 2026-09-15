@@ -1,5 +1,3 @@
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchFigurePublication, researchFigureSourceRequestSchema } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema } from '../../../shared/schemas/research-plotting';
@@ -7,36 +5,38 @@ import { experimentFileLimit } from './experiment-files';
 import type { ResearchExperimentService } from './experiment-service';
 import { assertFigureRun, figureManifest, figureManifestPath } from './figure-repository';
 import { figureValidationPath } from './figure-runner';
+import { writeFrozenManifest } from './research-frozen-manifest';
+import { ResearchJobSession } from './research-job-session';
 import { readResearchFile, researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
 export class ResearchFigureService {
-  private closed = false;
-  private readonly operations = new Set<Promise<unknown>>();
+  private readonly session = new ResearchJobSession('research_figure_service_closed');
   constructor(private readonly repository: ResearchRepository, private readonly experiments: ResearchExperimentService) {}
 
   async publish(projectId: string, runId: string, replacesFigureId: string | null): Promise<ResearchFigurePublication> {
-    return await this.task(() => this.publishRun(projectId, runId, replacesFigureId));
+    return await this.session.guard(async () => this.publishRun(projectId, runId, replacesFigureId));
   }
 
   private async publishRun(projectId: string, runId: string, replacesFigureId: string | null): Promise<ResearchFigurePublication> {
-    this.requireOpen();
+    this.session.requireOpen();
     const run = await this.experiments.snapshot(projectId, runId);
     const validation = await this.validation(projectId, runId);
     assertFigureRun(run, validation);
     const content = figureManifest(run, validation);
-    const root = this.repository.experiments.root(projectId, runId);
-    try { await writeFile(join(root, figureManifestPath), content, { flag: 'wx', mode: 0o400 }); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (researchContentHash(await readResearchFile(root, figureManifestPath, experimentFileLimit)) !== researchContentHash(content)) throw new Error('research_figure_manifest_changed');
-    }
-    this.requireOpen();
-    return this.repository.figures.publish(projectId, runId, replacesFigureId, validation, researchContentHash(content));
+    const hash = await writeFrozenManifest({
+      root: this.repository.experiments.root(projectId, runId),
+      path: figureManifestPath,
+      content,
+      limit: experimentFileLimit,
+      changedCode: 'research_figure_manifest_changed'
+    });
+    this.session.requireOpen();
+    return this.repository.figures.publish(projectId, runId, replacesFigureId, validation, hash);
   }
 
   async verify(projectId: string, figureId: string): Promise<ResearchFigurePublication> {
-    this.requireOpen();
+    this.session.requireOpen();
     const record = this.repository.figures.get(projectId, figureId);
     const run = await this.experiments.snapshot(projectId, record.runId);
     const validation = await this.validation(projectId, record.runId);
@@ -47,19 +47,19 @@ export class ResearchFigureService {
   }
 
   async verifyStage(projectId: string): Promise<void> {
-    await this.task(async () => {
+    await this.session.guard(async () => {
       const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'figure');
       if (stage === undefined) throw new Error('research_stage_not_found');
       for (const id of stage.artifactIds) {
         const record = this.repository.figures.forArtifact(this.repository.getArtifact(id));
         await this.verify(projectId, record.id);
       }
-      this.requireOpen();
+      this.session.requireOpen();
     });
   }
 
   async source(input: z.infer<typeof researchFigureSourceRequestSchema>): Promise<Buffer> {
-    this.requireOpen();
+    this.session.requireOpen();
     const figure = this.repository.figures.get(input.projectId, input.figureId);
     const expected = figure.validation.files.find((file) => file.path === `figure.${input.format}`);
     if (expected === undefined || expected.sha256 !== input.sha256) throw new Error('research_figure_output_changed');
@@ -70,16 +70,7 @@ export class ResearchFigureService {
     return bytes;
   }
 
-  async shutdown(): Promise<void> { this.closed = true; await Promise.allSettled([...this.operations]); }
-  private requireOpen(): void { if (this.closed) throw new Error('research_figure_service_closed'); }
-
-  private async task<T>(operation: () => Promise<T>): Promise<T> {
-    this.requireOpen();
-    const pending = Promise.resolve().then(() => { this.requireOpen(); return operation(); });
-    this.operations.add(pending);
-    try { return await pending; }
-    finally { this.operations.delete(pending); }
-  }
+  async shutdown(): Promise<void> { await this.session.shutdown(); }
 
   private async validation(projectId: string, runId: string) {
     const { bytes } = await this.experiments.source({ projectId, runId, area: 'output', path: figureValidationPath });

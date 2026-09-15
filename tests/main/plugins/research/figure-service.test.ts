@@ -10,6 +10,7 @@ import { ResearchExperimentService } from '../../../../src/main/plugins/research
 import { snapshotExperimentInputs } from '../../../../src/main/plugins/research/experiment-files';
 import { ResearchFigureService } from '../../../../src/main/plugins/research/figure-service';
 import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
+import { createResearchProductionJob } from '../../../../src/main/plugins/research/research-production-job';
 import { figureManifestPath } from '../../../../src/main/plugins/research/figure-repository';
 import { figureRenderer, figureRendererPath, figureValidationPath } from '../../../../src/main/plugins/research/figure-runner';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
@@ -38,7 +39,15 @@ beforeEach(async () => {
   experiments = new ResearchExperimentService(repository, { inspect: async () => { throw new Error('unexpected_environment_probe'); } }, join(root, 'runs'),
     { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
   figures = new ResearchFigureService(repository, experiments);
-  gate = createResearchHumanGate({ repository, figures });
+  gate = createResearchHumanGate({
+    repository,
+    production: createResearchProductionJob({
+      repository,
+      experiments,
+      figures,
+      exports: { recover() {}, async verifyStage() { throw new Error('unexpected_export_verify'); }, async shutdown() {} }
+    })
+  });
 });
 afterEach(async () => { await Promise.all([figures.shutdown(), experiments.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 
@@ -72,7 +81,7 @@ async function completedRun() {
 }
 
 function support(artifactId: string) {
-  repository.upsertKnowledgeDocument({ id: randomUUID(), projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Measurements', content: 'Measured response 42.',
+  repository.knowledge.upsertKnowledgeDocument({ id: randomUUID(), projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Measurements', content: 'Measured response 42.',
     chunks: [{ content: 'Measured response 42.', locator: 'row 2' }], embeddingConfigId: null });
   const row = db.prepare('SELECT id FROM research_knowledge_chunks ORDER BY rowid DESC LIMIT 1').get() as { id: string };
   const evidence = repository.evidence.capture({ projectId, chunkId: row.id });

@@ -13,6 +13,7 @@ import { ResearchTemplateService } from '../../../../src/main/plugins/research/t
 import { ResearchExportSourceService } from '../../../../src/main/plugins/research/export-sources';
 import { ResearchExportService } from '../../../../src/main/plugins/research/export-service';
 import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
+import { createResearchProductionJob } from '../../../../src/main/plugins/research/research-production-job';
 import { type createExportArchive, type ExportToolchain } from '../../../../src/main/plugins/research/export-files';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import type { ResearchExportPrepare } from '../../../../src/shared/schemas/research-exports';
@@ -63,7 +64,15 @@ beforeEach(async () => {
     return { path: 'archive/export.zip', sha256: researchContentHash(content), size: Buffer.byteLength(content) };
   });
   service = new ResearchExportService(repository, sources, tools, join(root, 'exports'), logger, archive);
-  gate = createResearchHumanGate({ repository, figures, exports: service });
+  gate = createResearchHumanGate({
+    repository,
+    production: createResearchProductionJob({
+      repository,
+      experiments,
+      figures,
+      exports: service
+    })
+  });
 });
 afterEach(async () => { await Promise.all([service.shutdown(), figures.shutdown(), experiments.shutdown(), templates.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 function request(): ResearchExportPrepare { return { projectId, requestId: randomUUID(), title: 'Verified study', manuscriptArtifactId, figureIds: [], template: { kind: 'default', language: 'en' } }; }

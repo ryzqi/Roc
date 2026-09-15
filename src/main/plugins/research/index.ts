@@ -78,6 +78,7 @@ import { registerResearchRunCapabilities, researchRunCapabilities } from './run-
 import type { ResearchRoleExecutor } from './role-executor';
 import { ResearchStageRuntime } from './stage-runtime';
 import { createResearchHumanGate } from './human-gate';
+import { createResearchProductionJob } from './research-production-job';
 
 const pluginId = '@roc/plugin-research';
 const capabilityVersion = '1.0.0';
@@ -155,14 +156,13 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       sqliteVec.load(db);
       repository = new ResearchRepository(db);
       const researchRepository = repository;
-      const researchEmbeddings = new ResearchEmbeddingService(researchRepository, embeddingClient, context);
+      const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
       embeddings = researchEmbeddings;
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;
       registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
-      researchExperiments.recover();
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
       const researchFigures = new ResearchFigureService(researchRepository, researchExperiments);
       figures = researchFigures;
@@ -175,8 +175,14 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchExports = new ResearchExportService(researchRepository,
         new ResearchExportSourceService(researchRepository, researchFigures, researchExperiments, researchTemplates), toolchain, options.exportRoot ?? null, context.logger);
       exports = researchExports;
-      researchExports.recover();
       registerResearchExportCapabilities(context, researchRepository.exports, researchExports);
+      const productionJob = createResearchProductionJob({
+        repository: researchRepository,
+        experiments: researchExperiments,
+        figures: researchFigures,
+        exports: researchExports
+      });
+      productionJob.recover();
       productionInputs = new ResearchProductionInputService(researchRepository, researchExperiments, researchFigures, researchExports);
       registerResearchProductionInputCapabilities(context, productionInputs);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
@@ -188,7 +194,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         researchExperiments, researchFigures, researchTemplates, researchExports);
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, effects);
       stageRuntime = runtime;
-      const humanGate = createResearchHumanGate({ repository: researchRepository, figures: researchFigures, exports: researchExports });
+      const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
@@ -233,7 +239,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         for (const record of records) {
           repository!.upsertLiterature(record);
           if (record.abstract !== null && record.abstract.trim().length > 0) {
-            repository!.upsertKnowledgeDocument({
+            repository!.knowledge.upsertKnowledgeDocument({
               id: `literature:${record.id}`,
               projectId: null,
               sourceType: 'literature',

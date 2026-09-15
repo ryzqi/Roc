@@ -198,7 +198,7 @@ export class ResearchIndexRepository {
       const current = this.fileRow(job.fileId);
       const changed = job.input.force || current.indexed_hash !== payload.sourceHash || current.parser_key !== payload.parserKey || current.payload_json !== JSON.stringify(payload) || !this.hasPublishedText(current);
       if (changed) {
-        this.research.upsertKnowledgeDocument({ id: knowledgeId(job.fileId), projectId: job.projectId, sourceType: 'file', sourceId: job.path,
+        this.research.knowledge.upsertKnowledgeDocument({ id: knowledgeId(job.fileId), projectId: job.projectId, sourceType: 'file', sourceId: job.path,
           title: job.path, content: payload.content, chunks: payload.chunks, embeddingConfigId: null }, metadata);
       }
       this.db.prepare(`INSERT INTO research_index_sources (file_id,source_hash,cache_path,size,kind,created_at) VALUES (?,?,?,?,?,?)

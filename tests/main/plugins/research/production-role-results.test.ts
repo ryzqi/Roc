@@ -100,7 +100,7 @@ function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ outp
 
 function captureEvidence(content = 'Measured signal 42.') {
   const documentId = randomUUID();
-  repository.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Measurements',
+  repository.knowledge.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Measurements',
     content, chunks: [{ content, locator: 'row 2' }], embeddingConfigId: null });
   return repository.evidence.capture({ projectId, chunkId: `${documentId}:chunk:0` });
 }

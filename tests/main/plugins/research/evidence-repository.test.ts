@@ -22,7 +22,7 @@ function project() {
 }
 
 function document(projectId: string | null, input: Partial<ResearchKnowledgeDocumentUpsertRequest> = {}) {
-  repository.upsertKnowledgeDocument({
+  repository.knowledge.upsertKnowledgeDocument({
     id: 'paper', projectId, sourceType: 'file', sourceId: 'paper.pdf', title: 'Published result',
     content: '  Measured improvement: 20%.  ', chunks: [{ content: '  Measured improvement: 20%.  ', locator: 'page 4, paragraph 2' }],
     embeddingConfigId: null, ...input

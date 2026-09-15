@@ -120,7 +120,7 @@ describe('ResearchRepository', () => {
   });
 
   it('combines FTS5 and sqlite-vec results with RRF ordering', () => {
-    repository.upsertKnowledgeDocument({
+    repository.knowledge.upsertKnowledgeDocument({
       id: 'doc-a',
       projectId: null,
       sourceType: 'literature',
@@ -130,7 +130,7 @@ describe('ResearchRepository', () => {
       chunks: [{ content: 'evidence graph retrieval', locator: 'p. 1' }],
       embeddingConfigId: null
     });
-    repository.upsertKnowledgeDocument({
+    repository.knowledge.upsertKnowledgeDocument({
       id: 'doc-b',
       projectId: null,
       sourceType: 'note',
@@ -140,14 +140,14 @@ describe('ResearchRepository', () => {
       chunks: [{ content: 'retrieval methods', locator: 'line 2' }],
       embeddingConfigId: null
     });
-    repository.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test-embedding', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
-    repository.storeChunkEmbeddings({
+    repository.knowledge.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test/v1', model: 'test-embedding', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
+    repository.knowledge.storeChunkEmbeddings({
       configId: 'test', configRevision: 1,
-      chunks: [...repository.knowledgeChunks('doc-a'), ...repository.knowledgeChunks('doc-b')],
+      chunks: [...repository.knowledge.knowledgeChunks('doc-a'), ...repository.knowledge.knowledgeChunks('doc-b')],
       vectors: [vectorToBlob([1, 0, 0]), vectorToBlob([0, 1, 0])]
     });
 
-    const result = repository.searchKnowledge({
+    const result = repository.knowledge.searchKnowledge({
       request: { query: 'evidence', projectId: null, limit: 10, embeddingConfigId: 'test' },
       vector: { configId: 'test', configRevision: 1, blob: vectorToBlob([1, 0, 0]) }
     });

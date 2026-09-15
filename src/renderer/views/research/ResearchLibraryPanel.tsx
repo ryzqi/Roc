@@ -19,7 +19,6 @@ export function ResearchLibraryPanel({
   onOpen,
   onQueryChange,
   onSearch,
-  onSearchLibrary,
   onScopeChange,
   onToggleSelected,
   openContent,
@@ -47,7 +46,6 @@ export function ResearchLibraryPanel({
   onOpen: (item: ResearchLibraryItem) => void;
   onQueryChange: (value: string) => void;
   onSearch: () => void;
-  onSearchLibrary: () => void;
   onScopeChange: (value: 'project' | 'all') => void;
   onToggleSelected: (id: string) => void;
   openContent: ResearchDocumentParse | null;
@@ -66,7 +64,7 @@ export function ResearchLibraryPanel({
           <h2>文献库</h2>
           <p>检索开放论文，导入 DOI 或参考文献文件，阅读已解析全文，并关联到当前项目。</p>
         </div>
-        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); onSearchLibrary(); }}>
+        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
           <input aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
           <button className="action-button action-button--primary" disabled={working} type="submit">
             <Send aria-hidden="true" size={15} />

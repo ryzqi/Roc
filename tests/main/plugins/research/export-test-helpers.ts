@@ -19,7 +19,7 @@ export async function approveExportManuscript(repository: ResearchRepository, pr
   repository.transitionWorkflow({ projectId, expectedStage: 'writing', action: 'start' });
   if (evidenceId === undefined) {
     const documentId = randomUUID();
-    repository.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Recorded measurements',
+    repository.knowledge.upsertKnowledgeDocument({ id: documentId, projectId, sourceType: 'file', sourceId: 'data.csv', title: 'Recorded measurements',
       content: 'Measured improvement: 20%.', chunks: [{ content: 'Measured improvement: 20%.', locator: 'row 2' }], embeddingConfigId: null });
     evidenceId = repository.evidence.capture({ projectId, chunkId: `${documentId}:chunk:0` }).id;
   }

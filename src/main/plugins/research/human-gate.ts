@@ -2,11 +2,7 @@ import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
-export type ResearchHumanGateFigures = {
-  verifyStage(projectId: string): Promise<void>;
-};
-
-export type ResearchHumanGateExports = {
+export type ResearchProductionVerifier = {
   verifyStage(projectId: string): Promise<void>;
 };
 
@@ -18,8 +14,7 @@ export type ResearchHumanGate = {
 
 export function createResearchHumanGate(input: {
   repository: ResearchRepository;
-  figures?: ResearchHumanGateFigures;
-  exports?: ResearchHumanGateExports;
+  production?: ResearchProductionVerifier;
 }): ResearchHumanGate {
   async function submit(request: ResearchWorkflowTransitionRequest, action: 'complete' | 'approve' | 'reject'): Promise<ResearchWorkflowSnapshot> {
     if (request.action !== action) throw new Error('research_gate_action_invalid');
@@ -28,17 +23,16 @@ export function createResearchHumanGate(input: {
     if (workflow.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
     const current = workflow.stages.find((stage) => stage.stage === workflow.currentStage);
     if (current === undefined) throw new Error('research_stage_not_found');
-    if (current.stage === 'figure') {
-      if (input.figures === undefined) throw new Error('research_figure_verify_unavailable');
-      const signature = figureSignature(input.repository, request.projectId);
-      await input.figures.verifyStage(request.projectId);
-      if (signature !== figureSignature(input.repository, request.projectId)) throw new Error('research_figure_review_changed');
-    }
-    if (current.stage === 'export') {
-      if (input.exports === undefined) throw new Error('research_export_verify_unavailable');
-      const signature = exportSignature(input.repository, request.projectId);
-      await input.exports.verifyStage(request.projectId);
-      if (signature !== exportSignature(input.repository, request.projectId)) throw new Error('research_export_review_changed');
+    if (current.stage === 'figure' || current.stage === 'export') {
+      if (input.production === undefined) throw new Error(current.stage === 'figure' ? 'research_figure_verify_unavailable' : 'research_export_verify_unavailable');
+      const signature = current.stage === 'figure'
+        ? figureSignature(input.repository, request.projectId)
+        : exportSignature(input.repository, request.projectId);
+      await input.production.verifyStage(request.projectId);
+      const next = current.stage === 'figure'
+        ? figureSignature(input.repository, request.projectId)
+        : exportSignature(input.repository, request.projectId);
+      if (signature !== next) throw new Error(current.stage === 'figure' ? 'research_figure_review_changed' : 'research_export_review_changed');
     }
     return input.repository.transitionWorkflow(request);
   }
@@ -49,7 +43,6 @@ export function createResearchHumanGate(input: {
     reject(request) { return submit(request, 'reject'); }
   };
 }
-
 
 function figureSignature(repository: ResearchRepository, projectId: string): string {
   const workflow = repository.getWorkflow(projectId);

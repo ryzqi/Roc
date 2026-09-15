@@ -32,16 +32,16 @@ describe('embedding cosine representation', () => {
       sqliteVec.load(db);
       applyResearchDatabaseSchema(db);
       const repository = new ResearchRepository(db);
-      repository.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test', model: 'test', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
-      for (const id of ['large', 'small', 'other']) repository.upsertKnowledgeDocument({ id, projectId: null, sourceType: 'file', sourceId: id, title: id,
+      repository.knowledge.saveEmbeddingConfig({ id: 'test', name: 'Test', baseUrl: 'https://embedding.test', model: 'test', dimensions: 3, apiKey: 'sample-key', enabled: true }, 'sample-reference');
+      for (const id of ['large', 'small', 'other']) repository.knowledge.upsertKnowledgeDocument({ id, projectId: null, sourceType: 'file', sourceId: id, title: id,
         content: id, chunks: [{ content: id, locator: 'line 1' }], embeddingConfigId: null });
       const large = Buffer.alloc(12);
       large.writeFloatLE(1e30, 0);
       const small = Buffer.alloc(12);
       small.writeFloatLE(1e-30, 0);
-      repository.storeChunkEmbeddings({ configId: 'test', configRevision: 1, chunks: ['large', 'small', 'other'].flatMap((id) => repository.knowledgeChunks(id)),
+      repository.knowledge.storeChunkEmbeddings({ configId: 'test', configRevision: 1, chunks: ['large', 'small', 'other'].flatMap((id) => repository.knowledge.knowledgeChunks(id)),
         vectors: [large, small, vectorToBlob([0, 1, 0])] });
-      const result = repository.searchKnowledge({ request: { query: 'unmatched', projectId: null, limit: 3, embeddingConfigId: 'test' },
+      const result = repository.knowledge.searchKnowledge({ request: { query: 'unmatched', projectId: null, limit: 3, embeddingConfigId: 'test' },
         vector: { configId: 'test', configRevision: 1, blob: large } });
       expect(result.hits.slice(0, 2).map((hit) => hit.documentId).sort()).toEqual(['large', 'small']);
       expect(result.hits[2].documentId).toBe('other');
