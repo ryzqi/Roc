@@ -4,7 +4,7 @@
 在保留 Roc 本地 Agent、插件、IPC 与安全边界的前提下，形成并实现覆盖论文检索/阅读、文献管理、头脑风暴、论文写作、评审修订和科研绘图的科研工作台。
 
 ## Next Step
-Renderer 5f 实验运行与 5g 文献互操作已实现；索引状态和证据捕获仍待后续增量。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
+Renderer 5f–5h 已实现；证据捕获仍待后续增量。每个独立增量完成后执行 Standards/Spec review、相关验证，再单独提交。
 
 ## Current Phase
 Phase 5 — Delivery
@@ -67,6 +67,7 @@ Phase 5 — Delivery
 - [x] Renderer 5e：LaTeX 模板导入、源文件编辑、编译和 PDF 预览。
 - [x] Renderer 5f：实验运行启动、环境校验、取消、日志读取和发布。
 - [x] Renderer 5g：BibTeX/BibLaTeX/CSL JSON 导入导出。
+- [x] Renderer 5h：项目索引状态、暂停/恢复、重建和失败重试。
 - [x] Packaging & Delivery：固定工具链、许可证、资源校验、构建/测试/smoke。
 
 ### Phase 5: Delivery

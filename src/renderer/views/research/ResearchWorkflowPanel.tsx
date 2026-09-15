@@ -2,6 +2,7 @@ import { Check, ChevronRight, Pause, Play, RotateCcw, Send, Square } from 'lucid
 
 import type {
   ResearchArtifact,
+  ResearchIndexStatus,
   ResearchProject,
   ResearchStageRun,
   ResearchWorkflowEvent,
@@ -26,9 +27,11 @@ import {
 export function ResearchWorkflowPanel({
   artifacts,
   events,
+  indexStatus,
   instruction,
   onApprove,
   onCancelRun,
+  onControlIndex,
   onInstructionChange,
   onRetryRun,
   onStartRun,
@@ -40,9 +43,11 @@ export function ResearchWorkflowPanel({
 }: {
   artifacts: ResearchArtifact[];
   events: ResearchWorkflowEvent[];
+  indexStatus: ResearchIndexStatus | null;
   instruction: string;
   onApprove: (decision?: 'accept' | 'revise') => void;
   onCancelRun: () => void;
+  onControlIndex: (action: 'pause' | 'resume' | 'rebuild' | 'retry') => void;
   onInstructionChange: (value: string) => void;
   onRetryRun: () => void;
   onStartRun: () => void;
@@ -159,6 +164,46 @@ export function ResearchWorkflowPanel({
         )}
       </section>
 
+      <section className="research-stage-panel" data-testid="research-index-panel">
+        <div className="research-stage-panel-head">
+          <div>
+            <span className="research-section-label">项目索引</span>
+            <h3>知识库状态</h3>
+          </div>
+          <span className={`research-status research-status--${indexPhaseTone(indexStatus)}`} data-testid="research-index-phase">
+            {indexPhaseLabel(indexStatus)}
+          </span>
+        </div>
+        <p className="research-stage-copy" data-testid="research-index-counts">
+          {indexStatus === null
+            ? '正在读取索引状态。'
+            : `共 ${indexStatus.counts.total} 个文件，已就绪 ${indexStatus.counts.ready}，排队 ${indexStatus.counts.queued}，失败 ${indexStatus.counts.failed}。`}
+        </p>
+        {indexStatus?.error === null || indexStatus === null ? null : <p className="research-stage-error" data-testid="research-index-error">{indexStatus.error}</p>}
+        <div className="research-stage-actions">
+          {indexStatus?.phase === 'paused' ? (
+            <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-index-resume" onClick={() => onControlIndex('resume')}>
+              <Play aria-hidden="true" size={15} />
+              恢复索引
+            </button>
+          ) : (
+            <button className="action-button" disabled={working || indexStatus === null} type="button" data-testid="research-index-pause" onClick={() => onControlIndex('pause')}>
+              <Pause aria-hidden="true" size={15} />
+              暂停索引
+            </button>
+          )}
+          <button className="action-button" disabled={working || indexStatus === null || indexStatus.phase === 'paused'} type="button" data-testid="research-index-rebuild" onClick={() => onControlIndex('rebuild')}>
+            <RotateCcw aria-hidden="true" size={15} />
+            重建索引
+          </button>
+          {indexStatus !== null && indexStatus.counts.failed > 0 ? (
+            <button className="action-button action-button--primary" disabled={working || indexStatus.phase === 'paused'} type="button" data-testid="research-index-retry" onClick={() => onControlIndex('retry')}>
+              重试失败文件
+            </button>
+          ) : null}
+        </div>
+      </section>
+
       <section className="research-run-panel" data-testid="research-run-panel">
         <div className="research-stage-panel-head">
           <div>
@@ -215,4 +260,24 @@ export function ResearchWorkflowPanel({
       </section>
     </>
   );
+}
+
+function indexPhaseLabel(status: ResearchIndexStatus | null): string {
+  if (status === null) return '读取中';
+  if (status.phase === 'unavailable') return '不可用';
+  if (status.phase === 'idle') return '空闲';
+  if (status.phase === 'queued') return '排队中';
+  if (status.phase === 'scanning') return '扫描中';
+  if (status.phase === 'indexing') return '索引中';
+  if (status.phase === 'paused') return '已暂停';
+  return '失败';
+}
+
+function indexPhaseTone(status: ResearchIndexStatus | null): string {
+  if (status === null) return 'ready';
+  if (status.phase === 'failed') return 'failed';
+  if (status.phase === 'paused') return 'waiting_approval';
+  if (status.phase === 'scanning' || status.phase === 'indexing' || status.phase === 'queued') return 'running';
+  if (status.phase === 'idle') return 'completed';
+  return 'ready';
 }

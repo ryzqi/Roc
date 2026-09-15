@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -28,8 +28,22 @@ describe('ResearchView project dashboard', () => {
     expect(text('research-next-action')).toContain('审核当前产物');
     expect(text('research-timeline')).toContain('阶段产物等待用户审核。');
     expect(text('research-artifacts')).toContain('Results');
+    expect(text('research-index-phase')).toBe('空闲');
+    expect(text('research-index-counts')).toContain('已就绪 2');
     await click('research-approve');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve' }));
+  });
+
+  it('pauses and rebuilds the project index from the dashboard', async () => {
+    const api = createResearchApi();
+    api.controlIndex.mockResolvedValueOnce({ ok: true, data: indexStatus({ phase: 'queued' }) });
+    api.controlIndex.mockResolvedValueOnce({ ok: true, data: indexStatus({ phase: 'paused', paused: true }) });
+    await renderView(api);
+    await click('research-index-rebuild');
+    expect(api.controlIndex).toHaveBeenCalledWith({ projectId: 'research_1', action: 'rebuild', expectedRevision: 1 });
+    await click('research-index-pause');
+    expect(api.controlIndex).toHaveBeenCalledWith({ projectId: 'research_1', action: 'pause', expectedRevision: 1 });
+    expect(text('research-index-phase')).toBe('已暂停');
   });
 
   it('requires an explicit review accept or revise decision', async () => {
@@ -297,6 +311,8 @@ function createResearchApi(overrides: {
     listDocuments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     getDocumentContent: vi.fn(),
     listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getIndexStatus: vi.fn().mockResolvedValue({ ok: true, data: indexStatus() }),
+    controlIndex: vi.fn(),
     getIdeaCanvas: vi.fn().mockResolvedValue({ ok: true, data: null }),
     saveIdeaCanvas: vi.fn(),
     promoteIdeaCanvas: vi.fn(),
@@ -436,4 +452,18 @@ async function clickFile(label: string): Promise<void> {
   expect(button).not.toBeUndefined();
   await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   await act(async () => { await Promise.resolve(); });
+}
+
+function indexStatus(overrides: Partial<ResearchIndexStatus> & { paused?: boolean; phase?: ResearchIndexStatus['phase'] } = {}): ResearchIndexStatus {
+  const phase = overrides.phase ?? 'idle';
+  const paused = overrides.paused ?? false;
+  return {
+    settings: {
+      projectId: 'research_1', revision: paused ? 2 : 1, kinds: ['markdown', 'latex', 'bibliography', 'csv', 'pdf', 'image'],
+      include: ['**/*'], exclude: ['**/node_modules/**'], watch: true, paused, embeddingConfigId: null
+    },
+    generation: 1, workspacePath: '/tmp/roc', phase, error: null, lastScanAt: '2026-09-14T01:00:00.000Z',
+    counts: { total: 2, queued: 0, running: 0, ready: 2, failed: 0 },
+    ...overrides
+  };
 }

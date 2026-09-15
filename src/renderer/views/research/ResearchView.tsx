@@ -14,6 +14,7 @@ import type {
   ResearchFigurePublication,
   ResearchIdeaCanvas,
   ResearchIdeaCanvasSaveRequest,
+  ResearchIndexStatus,
   ResearchKnowledgeSearchResult,
   ResearchBibliographyFormat,
   ResearchLibraryExport,
@@ -67,6 +68,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
   const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
   const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
+  const [indexStatus, setIndexStatus] = useState<ResearchIndexStatus | null>(null);
   const [ideaArtifactId, setIdeaArtifactId] = useState<string | null>(null);
   const [ideaCanvas, setIdeaCanvas] = useState<ResearchIdeaCanvas | null>(null);
   const [ideaDraft, setIdeaDraft] = useState<ResearchIdeaCanvasSaveRequest | null>(null);
@@ -122,6 +124,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       setEvents([]);
       setRuns([]);
       setArtifacts([]);
+      setIndexStatus(null);
       return;
     }
     let cancelled = false;
@@ -130,14 +133,16 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       client.api.research.listWorkflowEvents({ projectId: selectedProjectId, limit: 40 }),
       client.api.research.listStageRuns({ projectId: selectedProjectId, limit: 40 }),
       client.api.research.listArtifacts({ projectId: selectedProjectId }),
-      client.api.research.listEvidence({ projectId: selectedProjectId })
-    ]).then(([workflowResult, eventResult, runResult, artifactResult, evidenceResult]) => {
+      client.api.research.listEvidence({ projectId: selectedProjectId }),
+      client.api.research.getIndexStatus({ projectId: selectedProjectId })
+    ]).then(([workflowResult, eventResult, runResult, artifactResult, evidenceResult, indexResult]) => {
       if (cancelled) return;
       setWorkflow(unwrap('科研流程', workflowResult));
       setEvents(unwrap('科研事件', eventResult));
       setRuns(unwrap('阶段运行', runResult));
       setArtifacts(unwrap('阶段产物', artifactResult));
       setEvidence(unwrap('证据', evidenceResult));
+      setIndexStatus(unwrap('项目索引', indexResult));
       setError(null);
     }).catch((loadError: unknown) => {
       if (!cancelled) setError(loadError instanceof Error ? loadError.message : '科研流程加载失败。');
@@ -180,12 +185,13 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   }
 
   async function refreshProject(projectId: string): Promise<void> {
-    const [workflowResult, eventResult, runResult, artifactResult, evidenceResult] = await Promise.all([
+    const [workflowResult, eventResult, runResult, artifactResult, evidenceResult, indexResult] = await Promise.all([
       client.api.research.getWorkflow({ id: projectId }),
       client.api.research.listWorkflowEvents({ projectId, limit: 40 }),
       client.api.research.listStageRuns({ projectId, limit: 40 }),
       client.api.research.listArtifacts({ projectId }),
-      client.api.research.listEvidence({ projectId })
+      client.api.research.listEvidence({ projectId }),
+      client.api.research.getIndexStatus({ projectId })
     ]);
     const nextWorkflow = unwrap('科研流程', workflowResult);
     setWorkflow(nextWorkflow);
@@ -193,9 +199,26 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     setRuns(unwrap('阶段运行', runResult));
     setArtifacts(unwrap('阶段产物', artifactResult));
     setEvidence(unwrap('证据', evidenceResult));
+    setIndexStatus(unwrap('项目索引', indexResult));
     setProjects((current) => current.map((project) => project.id === projectId
       ? { ...project, currentStage: nextWorkflow.currentStage, status: nextWorkflow.projectStatus, updatedAt: nextWorkflow.lastEvent?.createdAt ?? project.updatedAt }
       : project));
+  }
+
+  async function controlIndex(action: 'pause' | 'resume' | 'rebuild' | 'retry'): Promise<void> {
+    if (selectedProjectId === null || indexStatus === null) return;
+    setWorking(true);
+    try {
+      const request = action === 'retry'
+        ? { projectId: selectedProjectId, action, expectedRevision: indexStatus.settings.revision, fileId: null }
+        : { projectId: selectedProjectId, action, expectedRevision: indexStatus.settings.revision };
+      setIndexStatus(unwrap('控制索引', await client.api.research.controlIndex(request)));
+      setError(null);
+    } catch (indexError: unknown) {
+      setError(indexError instanceof Error ? indexError.message : '索引控制失败。');
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function transition(action: Exclude<ResearchWorkflowTransitionRequest['action'], 'move'>, reviewDecision?: 'accept' | 'revise'): Promise<void> {
@@ -918,9 +941,11 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
               <ResearchWorkflowPanel
                 artifacts={artifacts}
                 events={events}
+                indexStatus={indexStatus}
                 instruction={instruction}
                 onApprove={(decision) => void transition('approve', decision)}
                 onCancelRun={() => void cancelRun()}
+                onControlIndex={(action) => void controlIndex(action)}
                 onInstructionChange={setInstruction}
                 onRetryRun={() => void retryRun()}
                 onStartRun={() => void startRun()}

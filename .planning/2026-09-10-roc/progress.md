@@ -265,3 +265,6 @@
 
 - 5g 已实现：文献库可导入 BibTeX/BibLaTeX/CSL JSON，并导出选中记录预览。
 - 5g 完成：Standards/Spec 未解决 0。审查记录 reviews/05g-library-exchange.md。research-view 9/9 与 typecheck 通过。状态 Verified passing；下一步索引状态面板。
+
+- 5h 已实现：项目仪表盘显示索引阶段、文件计数，并支持暂停/恢复、重建和失败重试。
+- 5h 完成：Standards/Spec 未解决 0。审查记录 reviews/05h-index-status.md。research-view 10/10 与 typecheck 通过。状态 Verified passing；下一步证据捕获界面。
