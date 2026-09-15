@@ -268,3 +268,6 @@
 
 - 5h 已实现：项目仪表盘显示索引阶段、文件计数，并支持暂停/恢复、重建和失败重试。
 - 5h 完成：Standards/Spec 未解决 0。审查记录 reviews/05h-index-status.md。research-view 10/10 与 typecheck 通过。状态 Verified passing；下一步证据捕获界面。
+
+- 5i 已实现：知识库命中可捕获为当前项目证据，并列出已捕获摘录。
+- 5i 完成：Standards/Spec 未解决 0。审查记录 reviews/05i-evidence-capture.md。research-view 11/11 与 typecheck 通过。状态 Verified passing；下一步 PDF/HTML 附件导入。

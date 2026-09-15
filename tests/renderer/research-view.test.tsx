@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -44,6 +44,34 @@ describe('ResearchView project dashboard', () => {
     await click('research-index-pause');
     expect(api.controlIndex).toHaveBeenCalledWith({ projectId: 'research_1', action: 'pause', expectedRevision: 1 });
     expect(text('research-index-phase')).toBe('已暂停');
+  });
+
+  it('captures a knowledge hit as project evidence', async () => {
+    const captured: ResearchEvidence = {
+      id: 'evidence_1', projectId: 'research_1', documentId: 'doc_1', chunkId: 'chunk_1',
+      sourceType: 'file', sourceId: 'note.md', sourceVersion: 'a'.repeat(64), title: 'Measured note',
+      locator: 'lines 1-1', excerpt: 'Measured result: 42 units.', contentHash: 'b'.repeat(64),
+      createdAt: '2026-09-14T01:00:00.000Z'
+    };
+    const api = createResearchApi();
+    api.searchKnowledge.mockResolvedValue({
+      ok: true,
+      data: {
+        query: 'Measured', hits: [{
+          chunkId: captured.chunkId, documentId: captured.documentId, title: captured.title, content: captured.excerpt,
+          locator: captured.locator, sourceType: captured.sourceType, sourceId: captured.sourceId, keywordRank: 1, vectorRank: null, rrfScore: 0.5
+        }], keywordCount: 1, vectorCount: 0, embeddingModel: null, generatedAt: captured.createdAt
+      }
+    });
+    api.captureEvidence.mockResolvedValue({ ok: true, data: captured });
+    api.listEvidence.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [captured] });
+    await renderView(api);
+    await clickTab('知识库');
+    setInput('research-knowledge-query', 'Measured');
+    await click('research-knowledge-search');
+    await click(`research-evidence-capture-${captured.chunkId}`);
+    expect(api.captureEvidence).toHaveBeenCalledWith({ projectId: 'research_1', chunkId: captured.chunkId });
+    expect(text('research-evidence-list')).toContain('Measured result: 42 units.');
   });
 
   it('requires an explicit review accept or revise decision', async () => {
@@ -300,6 +328,7 @@ function createResearchApi(overrides: {
     createProject: vi.fn(),
     searchLiterature: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     searchKnowledge: vi.fn(),
+    captureEvidence: vi.fn(),
     listEmbeddingConfigs: vi.fn(),
     saveEmbeddingConfig: vi.fn(),
     listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),
