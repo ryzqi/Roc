@@ -262,3 +262,6 @@
 
 - 5f 已实现：实验视图可校验环境、启动 Python/Notebook/R/Julia/Matplotlib 运行、取消、读取日志并发布实验或图稿。
 - 5f 完成：Standards/Spec 未解决 0。审查记录 reviews/05f-experiment-runner.md。research-view 8/8 与 typecheck 通过。状态 Verified passing；下一步文献互操作/索引状态。
+
+- 5g 已实现：文献库可导入 BibTeX/BibLaTeX/CSL JSON，并导出选中记录预览。
+- 5g 完成：Standards/Spec 未解决 0。审查记录 reviews/05g-library-exchange.md。research-view 9/9 与 typecheck 通过。状态 Verified passing；下一步索引状态面板。

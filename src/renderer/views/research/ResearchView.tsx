@@ -15,6 +15,8 @@ import type {
   ResearchIdeaCanvas,
   ResearchIdeaCanvasSaveRequest,
   ResearchKnowledgeSearchResult,
+  ResearchBibliographyFormat,
+  ResearchLibraryExport,
   ResearchLibraryItem,
   ResearchLiterature,
   ResearchProject,
@@ -58,6 +60,9 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
   const [libraryScope, setLibraryScope] = useState<'project' | 'all'>('project');
   const [doi, setDoi] = useState('');
+  const [bibliographyFormat, setBibliographyFormat] = useState<ResearchBibliographyFormat>('bibtex');
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
+  const [libraryExport, setLibraryExport] = useState<ResearchLibraryExport | null>(null);
   const [openLibraryItem, setOpenLibraryItem] = useState<ResearchLibraryItem | null>(null);
   const [openDocuments, setOpenDocuments] = useState<ResearchDocument[]>([]);
   const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
@@ -296,6 +301,39 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       setError(null);
     } catch (importError: unknown) {
       setError(importError instanceof Error ? importError.message : 'DOI 导入失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function importBibliography(): Promise<void> {
+    const selection = unwrap('选择参考文献', await client.api.files.selectFromDialog());
+    const sourcePath = selection?.filePaths[0];
+    if (sourcePath === undefined) return;
+    setWorking(true);
+    try {
+      unwrap('导入参考文献', await client.api.research.importBibliography({
+        sourcePath, format: bibliographyFormat, projectId: selectedProjectId
+      }));
+      await loadLibrary();
+      setError(null);
+    } catch (importError: unknown) {
+      setError(importError instanceof Error ? importError.message : '参考文献导入失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function exportBibliography(): Promise<void> {
+    if (selectedLibraryIds.length === 0) return;
+    setWorking(true);
+    try {
+      setLibraryExport(unwrap('导出参考文献', await client.api.research.exportBibliography({
+        ids: selectedLibraryIds, format: bibliographyFormat
+      })));
+      setError(null);
+    } catch (exportError: unknown) {
+      setError(exportError instanceof Error ? exportError.message : '参考文献导出失败。');
     } finally {
       setWorking(false);
     }
@@ -914,10 +952,15 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       ) : null}
       {activeTab === 'library' ? (
         <ResearchLibraryPanel
+          bibliographyFormat={bibliographyFormat}
           doi={doi}
+          exportPreview={libraryExport}
           items={libraryItems}
           onChangeDoi={setDoi}
+          onChangeFormat={setBibliographyFormat}
+          onExport={() => void exportBibliography()}
           onImportDoi={() => void importDoi()}
+          onImportFile={() => void importBibliography()}
           onImportRecord={(record) => void importRecord(record)}
           onLink={(item, linked) => void linkItem(item, linked)}
           onOpen={(item) => void openItem(item)}
@@ -925,6 +968,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onSearch={() => void searchLiterature()}
           onSearchLibrary={() => void loadLibrary()}
           onScopeChange={(value) => { setLibraryScope(value); void loadLibrary(selectedProjectId, value); }}
+          onToggleSelected={(id) => setSelectedLibraryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
           openContent={openContent}
           openDocuments={openDocuments}
           openItem={openLibraryItem}
@@ -932,6 +976,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           query={literatureQuery}
           results={literatureResults}
           scope={libraryScope}
+          selectedIds={selectedLibraryIds}
           working={working}
         />
       ) : null}

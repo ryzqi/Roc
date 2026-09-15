@@ -81,6 +81,34 @@ describe('ResearchView project dashboard', () => {
     expect(text('research-reader-content')).toContain('Measured improvement.');
   });
 
+  it('imports a bibliography file and exports the selected records', async () => {
+    const record: ResearchLiterature = {
+      id: 'local:1', source: 'local', externalId: '1', doi: '10.1234/paper', title: 'Measured study',
+      authors: ['Jane Doe'], abstract: 'Measured improvement.', publishedYear: 2026, citationCount: 1,
+      url: null, openAccessUrl: null, importedAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z'
+    };
+    const item: ResearchLibraryItem = {
+      id: 'lib_1', metadata: record, bibliography: { citationKey: 'doe2026', entryType: 'article', fields: { title: record.title }, preambles: [], csl: null,
+        title: record.title, authors: record.authors, doi: record.doi, publishedYear: 2026, abstract: record.abstract, url: null },
+      sources: [], projectIds: ['research_1'], revision: 1, archived: false, createdAt: record.importedAt, updatedAt: record.updatedAt
+    };
+    const api = createResearchApi();
+    api.importBibliography.mockResolvedValue({ ok: true, data: { items: [item], createdCount: 1, duplicateCount: 0 } });
+    api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
+    api.exportBibliography.mockResolvedValue({ ok: true, data: { format: 'bibtex', filename: 'library.bib', content: '@article{doe2026,title={Measured study}}' } });
+    const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/library.bib'] } }) };
+    await renderView(api, files);
+    await clickTab('文献库');
+    await click('research-library-import-file');
+    expect(api.importBibliography).toHaveBeenCalledWith({ sourcePath: '/tmp/library.bib', format: 'bibtex', projectId: 'research_1' });
+    const checkbox = document.querySelector<HTMLInputElement>('[data-testid="research-library-select-lib_1"]');
+    expect(checkbox).not.toBeNull();
+    await act(async () => { checkbox?.click(); });
+    await click('research-library-export');
+    expect(api.exportBibliography).toHaveBeenCalledWith({ ids: ['lib_1'], format: 'bibtex' });
+    expect(text('research-library-export-preview')).toContain('@article{doe2026,title={Measured study}}');
+  });
+
   it('saves an idea canvas and promotes the approved version', async () => {
     const ideaArtifact = { ...artifact(), kind: 'idea_canvas' as const, title: 'Canvas', stage: 'ideation' as const, status: 'approved' as const };
     const canvas: ResearchIdeaCanvas = {
@@ -263,6 +291,8 @@ function createResearchApi(overrides: {
     listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     importLibraryDoi: vi.fn(),
     importLibraryRecord: vi.fn(),
+    importBibliography: vi.fn(),
+    exportBibliography: vi.fn(),
     linkLibraryItem: vi.fn(),
     listDocuments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     getDocumentContent: vi.fn(),

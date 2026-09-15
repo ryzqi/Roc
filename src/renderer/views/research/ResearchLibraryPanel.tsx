@@ -1,12 +1,18 @@
 import { BookOpen, Link2, Send, Unlink } from 'lucide-react';
-import type { ResearchDocument, ResearchDocumentParse, ResearchLibraryItem, ResearchLiterature } from '../../../shared/types';
+import type { ResearchBibliographyFormat, ResearchDocument, ResearchDocumentParse, ResearchLibraryExport, ResearchLibraryItem, ResearchLiterature } from '../../../shared/types';
 
 export function ResearchLibraryPanel({
+  bibliographyFormat,
   doi,
+  exportPreview,
   items,
   projectId,
+  selectedIds,
   onChangeDoi,
+  onChangeFormat,
+  onExport,
   onImportDoi,
+  onImportFile,
   onImportRecord,
   onLink,
   onOpen,
@@ -14,6 +20,7 @@ export function ResearchLibraryPanel({
   onSearch,
   onSearchLibrary,
   onScopeChange,
+  onToggleSelected,
   openContent,
   openDocuments,
   openItem,
@@ -22,11 +29,17 @@ export function ResearchLibraryPanel({
   scope,
   working
 }: {
+  bibliographyFormat: ResearchBibliographyFormat;
   doi: string;
+  exportPreview: ResearchLibraryExport | null;
   items: ResearchLibraryItem[];
   projectId: string | null;
+  selectedIds: string[];
   onChangeDoi: (value: string) => void;
+  onChangeFormat: (value: ResearchBibliographyFormat) => void;
+  onExport: () => void;
   onImportDoi: () => void;
+  onImportFile: () => void;
   onImportRecord: (record: ResearchLiterature) => void;
   onLink: (item: ResearchLibraryItem, linked: boolean) => void;
   onOpen: (item: ResearchLibraryItem) => void;
@@ -34,6 +47,7 @@ export function ResearchLibraryPanel({
   onSearch: () => void;
   onSearchLibrary: () => void;
   onScopeChange: (value: 'project' | 'all') => void;
+  onToggleSelected: (id: string) => void;
   openContent: ResearchDocumentParse | null;
   openDocuments: ResearchDocument[];
   openItem: ResearchLibraryItem | null;
@@ -48,7 +62,7 @@ export function ResearchLibraryPanel({
         <div>
           <div className="research-section-label">Literature Library</div>
           <h2>文献库</h2>
-          <p>检索开放论文，导入 DOI，阅读已解析全文，并关联到当前项目。</p>
+          <p>检索开放论文，导入 DOI 或参考文献文件，阅读已解析全文，并关联到当前项目。</p>
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); onSearchLibrary(); }}>
           <input aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
@@ -71,6 +85,16 @@ export function ResearchLibraryPanel({
           <input aria-label="导入 DOI" data-testid="research-library-doi" value={doi} onChange={(event) => onChangeDoi(event.target.value)} placeholder="10.xxxx/xxxx" />
           <button className="action-button" disabled={working || doi.trim().length === 0} type="submit">导入 DOI</button>
         </form>
+        <label>
+          参考文献格式
+          <select data-testid="research-library-format" value={bibliographyFormat} onChange={(event) => onChangeFormat(readFormat(event.target.value))}>
+            <option value="bibtex">BibTeX</option>
+            <option value="biblatex">BibLaTeX</option>
+            <option value="csl-json">CSL JSON</option>
+          </select>
+        </label>
+        <button className="action-button" disabled={working} type="button" data-testid="research-library-import-file" onClick={onImportFile}>导入文件</button>
+        <button className="action-button" disabled={working || selectedIds.length === 0} type="button" data-testid="research-library-export" onClick={onExport}>导出选中</button>
       </div>
 
       {results.length === 0 ? null : (
@@ -92,9 +116,12 @@ export function ResearchLibraryPanel({
 
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-library-list">
-          {items.length === 0 ? <div className="research-loading">文献库为空。检索或导入 DOI 后会出现在这里。</div> : items.map((item) => (
+          {items.length === 0 ? <div className="research-loading">文献库为空。检索、导入 DOI 或参考文献文件后会出现在这里。</div> : items.map((item) => (
             <article className={openItem?.id === item.id ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={item.id}>
-              <div className="research-literature-source">{item.bibliography.citationKey}{item.archived ? ' · 已归档' : ''}</div>
+              <label className="research-literature-source">
+                <input type="checkbox" data-testid={`research-library-select-${item.id}`} checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} />
+                {item.bibliography.citationKey}{item.archived ? ' · 已归档' : ''}
+              </label>
               <h3>{item.metadata.title}</h3>
               <p>{item.metadata.abstract ?? '暂无摘要'}</p>
               <div className="research-literature-meta">
@@ -130,8 +157,16 @@ export function ResearchLibraryPanel({
               )}
             </>
           )}
+          {exportPreview === null ? null : (
+            <pre className="research-reader-content" data-testid="research-library-export-preview">{[exportPreview.filename, exportPreview.content].join(String.fromCharCode(10))}</pre>
+          )}
         </aside>
       </div>
     </section>
   );
+}
+
+function readFormat(value: string): ResearchBibliographyFormat {
+  if (value === 'biblatex' || value === 'csl-json') return value;
+  return 'bibtex';
 }
