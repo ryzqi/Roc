@@ -274,3 +274,6 @@
 
 - 5j 已实现：打开文献后可导入 PDF/HTML 附件，解析完成后显示定位文本。
 - 5j 完成：Standards/Spec 未解决 0。审查记录 reviews/05j-document-import.md。research-view 12/12 与 typecheck 通过。状态 Verified passing；下一步主张/正文编辑。
+
+- 5k 已实现：正文视图可创建 manuscript 产物、添加带证据的段落主张，并保存生成的 LaTeX。
+- 5k 完成：Standards/Spec 未解决 0。审查记录 reviews/05k-manuscript-claims.md。research-view 13/13 与 typecheck 通过。状态 Verified passing。

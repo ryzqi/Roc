@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchView } from '../../src/renderer/views/research/ResearchView';
 import { createLoadedState } from './view-test-helpers';
-import type { ResearchArtifact, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -72,6 +72,68 @@ describe('ResearchView project dashboard', () => {
     await click(`research-evidence-capture-${captured.chunkId}`);
     expect(api.captureEvidence).toHaveBeenCalledWith({ projectId: 'research_1', chunkId: captured.chunkId });
     expect(text('research-evidence-list')).toContain('Measured result: 42 units.');
+  });
+
+  it('creates a supported claim and saves the manuscript latex', async () => {
+    const evidenceItem: ResearchEvidence = {
+      id: 'evidence_1', projectId: 'research_1', documentId: 'doc_1', chunkId: 'chunk_1',
+      sourceType: 'file', sourceId: 'note.md', sourceVersion: 'a'.repeat(64), title: 'Measured note',
+      locator: 'lines 1-1', excerpt: 'Measured result: 42 units.', contentHash: 'b'.repeat(64),
+      createdAt: '2026-09-14T01:00:00.000Z'
+    };
+    const manuscriptArtifact = { ...artifact(), title: 'Manuscript' };
+    const claim: ResearchClaim = {
+      id: 'claim_1', projectId: 'research_1', artifactId: manuscriptArtifact.id, subjectType: 'paragraph',
+      content: 'The measured result is 42 units.', status: 'supported', evidenceIds: [evidenceItem.id],
+      version: 1, createdAt: evidenceItem.createdAt, updatedAt: evidenceItem.createdAt
+    };
+    const saved: ResearchManuscript = {
+      artifactId: manuscriptArtifact.id, projectId: 'research_1',
+      sections: [{ title: 'Results', claimIds: [claim.id] }],
+      latex: '\\section{Results}\nThe measured result is 42 units.',
+      contentHash: 'c'.repeat(64), claimsHash: 'd'.repeat(64), updatedAt: evidenceItem.createdAt
+    };
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'writing', status: 'running', gateRequired: true, artifactIds: [] }),
+      artifacts: [],
+      events: [event('stage_started', '阶段已开始。')]
+    });
+    api.listEvidence.mockResolvedValue({ ok: true, data: [evidenceItem] });
+    api.createArtifact.mockResolvedValue({ ok: true, data: manuscriptArtifact });
+    api.listArtifacts.mockResolvedValue({ ok: true, data: [manuscriptArtifact] });
+    api.createClaim.mockResolvedValue({ ok: true, data: claim });
+    api.listClaims.mockResolvedValue({ ok: true, data: [claim] });
+    api.getManuscript.mockResolvedValue({ ok: true, data: null });
+    api.saveManuscript.mockResolvedValue({ ok: true, data: saved });
+    await renderView(api);
+    await clickTab('正文');
+    await click('research-manuscript-create');
+    expect(api.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ stage: 'writing', kind: 'manuscript' }));
+    setArea('research-claim-content', claim.content);
+    const status = document.querySelector<HTMLSelectElement>('[data-testid="research-claim-status"]');
+    expect(status).not.toBeNull();
+    await act(async () => {
+      status!.value = 'supported';
+      status!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const evidenceSelect = document.querySelector<HTMLSelectElement>('[data-testid="research-claim-evidence"]');
+    expect(evidenceSelect).not.toBeNull();
+    await act(async () => {
+      Array.from(evidenceSelect!.options).forEach((option) => { option.selected = option.value === evidenceItem.id; });
+      evidenceSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await click('research-claim-create');
+    expect(api.createClaim).toHaveBeenCalledWith(expect.objectContaining({
+      artifactId: manuscriptArtifact.id, content: claim.content, status: 'supported', evidenceIds: [evidenceItem.id]
+    }));
+    await act(async () => {
+      document.querySelector<HTMLInputElement>(`[data-testid="research-claim-toggle-${claim.id}"]`)?.click();
+    });
+    await click('research-manuscript-save');
+    expect(api.saveManuscript).toHaveBeenCalledWith({
+      artifactId: manuscriptArtifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }]
+    });
+    expect(text('research-manuscript-latex')).toContain('The measured result is 42 units.');
   });
 
   it('requires an explicit review accept or revise decision', async () => {
@@ -366,6 +428,10 @@ function createResearchApi(overrides: {
     searchLiterature: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     searchKnowledge: vi.fn(),
     captureEvidence: vi.fn(),
+    createClaim: vi.fn(),
+    listClaims: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getManuscript: vi.fn().mockResolvedValue({ ok: true, data: null }),
+    saveManuscript: vi.fn(),
     listEmbeddingConfigs: vi.fn(),
     saveEmbeddingConfig: vi.fn(),
     listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),

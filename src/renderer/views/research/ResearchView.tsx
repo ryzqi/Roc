@@ -18,8 +18,10 @@ import type {
   ResearchKnowledgeSearchResult,
   ResearchBibliographyFormat,
   ResearchLibraryExport,
+  ResearchClaim,
   ResearchLibraryItem,
   ResearchLiterature,
+  ResearchManuscript,
   ResearchProject,
   ResearchStageRun,
   ResearchTemplate,
@@ -36,6 +38,7 @@ import { canvasToDraft, emptyIdeaDraft, ResearchIdeaPanel } from './ResearchIdea
 import { ResearchEditorPanel } from './ResearchEditorPanel';
 import { emptyExperimentDraft, ResearchExperimentPanel, type ResearchExperimentDraft } from './ResearchExperimentPanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
+import { emptyManuscriptDraft, ResearchManuscriptPanel, type ResearchManuscriptDraft } from './ResearchManuscriptPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 import { researchStageLabels } from './research-workflow';
@@ -55,7 +58,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
-  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'library' | 'ideas' | 'experiments' | 'manuscript' | 'editor' | 'production' | 'knowledge' | 'embedding'>('workflow');
   const [literatureQuery, setLiteratureQuery] = useState('');
   const [literatureResults, setLiteratureResults] = useState<ResearchLiterature[]>([]);
   const [libraryItems, setLibraryItems] = useState<ResearchLibraryItem[]>([]);
@@ -69,6 +72,10 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [openContent, setOpenContent] = useState<ResearchDocumentParse | null>(null);
   const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
   const [indexStatus, setIndexStatus] = useState<ResearchIndexStatus | null>(null);
+  const [manuscriptArtifactId, setManuscriptArtifactId] = useState<string | null>(null);
+  const [manuscript, setManuscript] = useState<ResearchManuscript | null>(null);
+  const [claims, setClaims] = useState<ResearchClaim[]>([]);
+  const [manuscriptDraft, setManuscriptDraft] = useState<ResearchManuscriptDraft>(emptyManuscriptDraft);
   const [ideaArtifactId, setIdeaArtifactId] = useState<string | null>(null);
   const [ideaCanvas, setIdeaCanvas] = useState<ResearchIdeaCanvas | null>(null);
   const [ideaDraft, setIdeaDraft] = useState<ResearchIdeaCanvasSaveRequest | null>(null);
@@ -459,6 +466,87 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
       setError(null);
     } catch (createError: unknown) {
       setError(createError instanceof Error ? createError.message : '创建 Idea Canvas 失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function selectManuscript(artifactId: string): Promise<void> {
+    if (selectedProjectId === null) return;
+    setManuscriptArtifactId(artifactId);
+    const [loaded, listed] = await Promise.all([
+      client.api.research.getManuscript({ artifactId }),
+      client.api.research.listClaims({ projectId: selectedProjectId, artifactId })
+    ]);
+    const next = unwrap('正文', loaded);
+    setManuscript(next);
+    setClaims(unwrap('主张', listed));
+    setManuscriptDraft({
+      ...emptyManuscriptDraft,
+      sectionTitle: next?.sections[0]?.title ?? 'Results',
+      selectedClaimIds: next?.sections[0]?.claimIds ?? []
+    });
+  }
+
+  async function createManuscript(): Promise<void> {
+    if (selectedProjectId === null || workflow === null) return;
+    setWorking(true);
+    try {
+      if (workflow.currentStage !== 'writing') {
+        unwrap('进入写作阶段', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: workflow.currentStage, action: 'move', targetStage: 'writing' }));
+      }
+      const current = unwrap('科研流程', await client.api.research.getWorkflow({ id: selectedProjectId }));
+      if (current.stages.find((stage) => stage.stage === 'writing')?.status === 'ready') {
+        unwrap('开始写作', await client.api.research.transitionWorkflow({ projectId: selectedProjectId, expectedStage: 'writing', action: 'start' }));
+      }
+      const artifact = unwrap('创建正文', await client.api.research.createArtifact({ projectId: selectedProjectId, stage: 'writing', kind: 'manuscript', title: 'Manuscript', path: null }));
+      await refreshProject(selectedProjectId);
+      setManuscriptArtifactId(artifact.id);
+      setManuscript(null);
+      setClaims([]);
+      setManuscriptDraft(emptyManuscriptDraft);
+      setError(null);
+    } catch (createError: unknown) {
+      setError(createError instanceof Error ? createError.message : '创建正文失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function createClaim(): Promise<void> {
+    if (selectedProjectId === null || manuscriptArtifactId === null) return;
+    setWorking(true);
+    try {
+      unwrap('创建主张', await client.api.research.createClaim({
+        projectId: selectedProjectId,
+        artifactId: manuscriptArtifactId,
+        subjectType: 'paragraph',
+        content: manuscriptDraft.content.trim(),
+        status: manuscriptDraft.status,
+        evidenceIds: manuscriptDraft.evidenceIds
+      }));
+      setClaims(unwrap('主张', await client.api.research.listClaims({ projectId: selectedProjectId, artifactId: manuscriptArtifactId })));
+      setManuscriptDraft({ ...manuscriptDraft, content: '' });
+      setError(null);
+    } catch (createError: unknown) {
+      setError(createError instanceof Error ? createError.message : '创建主张失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function saveManuscript(): Promise<void> {
+    if (manuscriptArtifactId === null) return;
+    setWorking(true);
+    try {
+      const saved = unwrap('保存正文', await client.api.research.saveManuscript({
+        artifactId: manuscriptArtifactId,
+        sections: [{ title: manuscriptDraft.sectionTitle.trim(), claimIds: manuscriptDraft.selectedClaimIds }]
+      }));
+      setManuscript(saved);
+      setError(null);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : '保存正文失败。');
     } finally {
       setWorking(false);
     }
@@ -884,6 +972,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           ['library', '文献库'],
           ['ideas', '构思'],
           ['experiments', '实验'],
+          ['manuscript', '正文'],
           ['editor', '文稿'],
           ['production', '图稿导出'],
           ['knowledge', '知识库'],
@@ -1059,6 +1148,22 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onStart={() => void startExperiment()}
           projectId={selectedProjectId}
           selectedRunId={selectedExperimentId}
+          working={working}
+        />
+      ) : null}
+      {activeTab === 'manuscript' ? (
+        <ResearchManuscriptPanel
+          artifacts={artifacts}
+          claims={claims}
+          draft={manuscriptDraft}
+          evidence={evidence}
+          manuscript={manuscript}
+          onChange={setManuscriptDraft}
+          onCreate={() => void createManuscript()}
+          onCreateClaim={() => void createClaim()}
+          onSave={() => void saveManuscript()}
+          onSelect={(artifactId) => void selectManuscript(artifactId)}
+          selectedArtifactId={manuscriptArtifactId}
           working={working}
         />
       ) : null}
