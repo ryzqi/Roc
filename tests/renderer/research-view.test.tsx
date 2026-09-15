@@ -123,6 +123,43 @@ describe('ResearchView project dashboard', () => {
     expect(text('research-reader-content')).toContain('Measured improvement.');
   });
 
+  it('imports a PDF attachment into the open library item and shows parsed text', async () => {
+    const record: ResearchLiterature = {
+      id: 'openalex:1', source: 'openalex', externalId: '1', doi: '10.1234/paper', title: 'Measured study',
+      authors: ['Jane Doe'], abstract: 'Measured improvement.', publishedYear: 2026, citationCount: 1,
+      url: null, openAccessUrl: null, importedAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z'
+    };
+    const item: ResearchLibraryItem = {
+      id: 'lib_1', metadata: record, bibliography: { citationKey: 'doe2026', entryType: 'article', fields: { title: record.title }, preambles: [], csl: null,
+        title: record.title, authors: record.authors, doi: record.doi, publishedYear: 2026, abstract: record.abstract, url: null },
+      sources: [], projectIds: ['research_1'], revision: 1, archived: false, createdAt: record.importedAt, updatedAt: record.updatedAt
+    };
+    const imported: ResearchDocument = {
+      id: 'doc_1', libraryItemId: item.id, filename: 'paper.pdf', mediaType: 'application/pdf', sourceHash: 'a'.repeat(64),
+      size: 12, status: 'imported', currentParseId: null, activeParseId: null, error: null, createdAt: record.importedAt, updatedAt: record.updatedAt
+    };
+    const ready: ResearchDocument = { ...imported, status: 'ready', currentParseId: 'parse_1' };
+    const parse: ResearchDocumentParse = {
+      run: { id: 'parse_1', documentId: 'doc_1', status: 'ready', error: null, createdAt: record.importedAt, finishedAt: record.updatedAt },
+      content: { sourceHash: imported.sourceHash, parserVersion: 'roc-pdf-1', pageCount: 1, content: 'Measured improvement.', warnings: [],
+        assets: [], blocks: [{ id: 'b1', kind: 'paragraph', label: 'Body', text: 'Measured improvement.', locator: 'page 1', imageAssetId: null, locations: [] }] }
+    };
+    const api = createResearchApi();
+    api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
+    api.listDocuments.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [ready] });
+    api.importDocument.mockResolvedValue({ ok: true, data: imported });
+    api.parseDocument.mockResolvedValue({ ok: true, data: ready });
+    api.getDocumentContent.mockResolvedValue({ ok: true, data: parse });
+    const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/paper.pdf'] } }) };
+    await renderView(api, files);
+    await clickTab('文献库');
+    await click(`research-library-open-${item.id}`);
+    await click('research-document-import');
+    expect(api.importDocument).toHaveBeenCalledWith({ target: 'library-item', sourcePath: '/tmp/paper.pdf', libraryItemId: item.id, projectId: 'research_1' });
+    expect(api.parseDocument).toHaveBeenCalledWith({ documentId: imported.id });
+    expect(text('research-reader-content')).toContain('Measured improvement.');
+  });
+
   it('imports a bibliography file and exports the selected records', async () => {
     const record: ResearchLiterature = {
       id: 'local:1', source: 'local', externalId: '1', doi: '10.1234/paper', title: 'Measured study',
@@ -338,6 +375,8 @@ function createResearchApi(overrides: {
     exportBibliography: vi.fn(),
     linkLibraryItem: vi.fn(),
     listDocuments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    importDocument: vi.fn(),
+    parseDocument: vi.fn(),
     getDocumentContent: vi.fn(),
     listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     getIndexStatus: vi.fn().mockResolvedValue({ ok: true, data: indexStatus() }),

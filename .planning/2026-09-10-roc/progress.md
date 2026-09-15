@@ -271,3 +271,6 @@
 
 - 5i 已实现：知识库命中可捕获为当前项目证据，并列出已捕获摘录。
 - 5i 完成：Standards/Spec 未解决 0。审查记录 reviews/05i-evidence-capture.md。research-view 11/11 与 typecheck 通过。状态 Verified passing；下一步 PDF/HTML 附件导入。
+
+- 5j 已实现：打开文献后可导入 PDF/HTML 附件，解析完成后显示定位文本。
+- 5j 完成：Standards/Spec 未解决 0。审查记录 reviews/05j-document-import.md。research-view 12/12 与 typecheck 通过。状态 Verified passing；下一步主张/正文编辑。

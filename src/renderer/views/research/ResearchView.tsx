@@ -394,15 +394,39 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   async function openItem(item: ResearchLibraryItem): Promise<void> {
     setWorking(true);
     try {
-      const documents = unwrap('文献附件', await client.api.research.listDocuments({ libraryItemId: item.id }));
-      setOpenLibraryItem(item);
-      setOpenDocuments(documents);
-      const ready = documents.find((document) => document.status === 'ready' && document.currentParseId !== null);
-      if (ready?.currentParseId === null || ready === undefined) setOpenContent(null);
-      else setOpenContent(unwrap('文献全文', await client.api.research.getDocumentContent({ documentId: ready.id, parseId: ready.currentParseId })));
+      await loadReader(item);
       setError(null);
     } catch (openError: unknown) {
       setError(openError instanceof Error ? openError.message : '文献阅读失败。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function loadReader(item: ResearchLibraryItem): Promise<void> {
+    const documents = unwrap('文献附件', await client.api.research.listDocuments({ libraryItemId: item.id }));
+    setOpenLibraryItem(item);
+    setOpenDocuments(documents);
+    const ready = documents.find((document) => document.status === 'ready' && document.currentParseId !== null);
+    if (ready?.currentParseId === null || ready === undefined) setOpenContent(null);
+    else setOpenContent(unwrap('文献全文', await client.api.research.getDocumentContent({ documentId: ready.id, parseId: ready.currentParseId })));
+  }
+
+  async function importDocument(): Promise<void> {
+    if (openLibraryItem === null) return;
+    const selection = unwrap('选择附件', await client.api.files.selectFromDialog());
+    const sourcePath = selection?.filePaths[0];
+    if (sourcePath === undefined) return;
+    setWorking(true);
+    try {
+      const imported = unwrap('导入附件', await client.api.research.importDocument({
+        target: 'library-item', sourcePath, libraryItemId: openLibraryItem.id, projectId: selectedProjectId
+      }));
+      unwrap('解析附件', await client.api.research.parseDocument({ documentId: imported.id }));
+      await loadReader(openLibraryItem);
+      setError(null);
+    } catch (importError: unknown) {
+      setError(importError instanceof Error ? importError.message : '附件导入失败。');
     } finally {
       setWorking(false);
     }
@@ -1001,6 +1025,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onImportDoi={() => void importDoi()}
           onImportFile={() => void importBibliography()}
           onImportRecord={(record) => void importRecord(record)}
+          onImportDocument={() => void importDocument()}
           onLink={(item, linked) => void linkItem(item, linked)}
           onOpen={(item) => void openItem(item)}
           onQueryChange={setLiteratureQuery}

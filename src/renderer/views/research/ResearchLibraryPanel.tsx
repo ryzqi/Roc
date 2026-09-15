@@ -14,6 +14,7 @@ export function ResearchLibraryPanel({
   onImportDoi,
   onImportFile,
   onImportRecord,
+  onImportDocument,
   onLink,
   onOpen,
   onQueryChange,
@@ -41,6 +42,7 @@ export function ResearchLibraryPanel({
   onImportDoi: () => void;
   onImportFile: () => void;
   onImportRecord: (record: ResearchLiterature) => void;
+  onImportDocument: () => void;
   onLink: (item: ResearchLibraryItem, linked: boolean) => void;
   onOpen: (item: ResearchLibraryItem) => void;
   onQueryChange: (value: string) => void;
@@ -145,6 +147,14 @@ export function ResearchLibraryPanel({
               <div className="research-section-label">阅读器</div>
               <h3>{openItem.metadata.title}</h3>
               <p>{openDocuments.length === 0 ? '还没有解析附件。导入 PDF/HTML 后可在这里阅读定位文本。' : `${openDocuments.length} 个附件`}</p>
+              <div className="research-stage-actions">
+                <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-document-import" onClick={onImportDocument}>导入附件</button>
+              </div>
+              {openDocuments.map((document) => (
+                <p className={document.status === 'failed' ? 'research-stage-error' : 'research-stage-copy'} key={document.id} data-testid={`research-document-status-${document.id}`}>
+                  {document.filename} · {documentStatusLabel(document.status)}{document.error === null ? '' : ` · ${document.error}`}
+                </p>
+              ))}
               {openContent === null ? null : (
                 <div className="research-reader-content" data-testid="research-reader-content">
                   {openContent.content.blocks.map((block) => (
@@ -169,4 +179,12 @@ export function ResearchLibraryPanel({
 function readFormat(value: string): ResearchBibliographyFormat {
   if (value === 'biblatex' || value === 'csl-json') return value;
   return 'bibtex';
+}
+
+function documentStatusLabel(status: ResearchDocument['status']): string {
+  if (status === 'ready') return '已解析';
+  if (status === 'parsing') return '解析中';
+  if (status === 'failed') return '解析失败';
+  if (status === 'cancelled') return '已取消';
+  return '已导入';
 }
