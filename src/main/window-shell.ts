@@ -1,6 +1,6 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 import { CHAT_WINDOW_MIN_WIDTH } from '../shared/chat-layout';
-import type { WindowBoundsSnapshot, WindowStateSnapshot } from '../shared/types';
+import type { WindowBoundsSnapshot, WindowHiddenSnapshot, WindowStateSnapshot } from '../shared/types';
 
 type DisplayLike = {
   workArea: WindowBoundsSnapshot;
@@ -42,8 +42,7 @@ export function buildMainWindowOptions(
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: true,
-      spellcheck: false
+      backgroundThrottling: true
     }
   };
 }
@@ -70,6 +69,34 @@ export function getWindowState(window: Pick<BrowserWindow, 'isMaximized' | 'isMi
     minimized: window.isMinimized(),
     fullscreen: window.isFullScreen()
   };
+}
+
+export function getWindowHiddenState(
+  window: Pick<BrowserWindow, 'isVisible' | 'isMinimized'>
+): WindowHiddenSnapshot {
+  return {
+    hidden: window.isMinimized() || !window.isVisible()
+  };
+}
+
+export type HiddenBroadcastWindow = {
+  on: (event: 'hide' | 'show' | 'minimize' | 'restore', listener: () => void) => unknown;
+  isVisible: () => boolean;
+  isMinimized: () => boolean;
+};
+
+export function bindWindowHiddenBroadcast(
+  window: HiddenBroadcastWindow,
+  send: (snapshot: WindowHiddenSnapshot) => void
+): void {
+  const emit = (): void => {
+    send(getWindowHiddenState(window));
+  };
+  window.on('hide', emit);
+  window.on('show', emit);
+  window.on('minimize', emit);
+  window.on('restore', emit);
+  emit();
 }
 
 export function getWindowBounds(

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   applyChatRunEventBatch,
@@ -358,5 +359,18 @@ describe('clearPendingChatRunEvents', () => {
     expect(cancelledFrames).toEqual([42]);
     expect(rafHandleRef.current).toBeNull();
     expect(pendingEventsRef.current).toEqual([]);
+  });
+});
+
+describe('hidden-window chat run flushing', () => {
+  it('gates rAF flush on host hide/show instead of Page Visibility', () => {
+    const source = readFileSync('src/renderer/chat/use-chat-run.ts', 'utf8');
+
+    expect(source).toContain('client.api.window.onHidden');
+    expect(source).toContain('hiddenRef.current = snapshot.hidden');
+    expect(source).toContain('if (hiddenRef.current || rafHandleRef.current !== null)');
+    expect(source).toContain('flush();');
+    expect(source).not.toContain('visibilitychange');
+    expect(source).not.toContain('document.hidden');
   });
 });

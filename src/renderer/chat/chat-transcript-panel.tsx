@@ -22,10 +22,6 @@ export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): Scr
   return { top: scrollHeight };
 }
 
-export function buildManualScrollBottomOptions(scrollHeight: number, _reducedMotion: boolean): ScrollToOptions {
-  return { top: scrollHeight };
-}
-
 export type TranscriptVirtuosoWindow = {
   firstItemIndex: number;
   initialTopMostItemIndex?: number;

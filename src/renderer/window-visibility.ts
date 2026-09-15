@@ -1,25 +1,25 @@
-type VisibilityDocumentElement = {
-  dataset: DOMStringMap;
+type WindowHiddenSnapshot = {
+  hidden: boolean;
 };
 
 type VisibilityRoot = {
-  documentElement: VisibilityDocumentElement;
-  visibilityState: DocumentVisibilityState;
-  addEventListener(type: 'visibilitychange', listener: () => void): void;
-  removeEventListener(type: 'visibilitychange', listener: () => void): void;
+  dataset: DOMStringMap;
 };
 
-export function syncWindowHiddenState(root: Pick<VisibilityRoot, 'documentElement' | 'visibilityState'>): void {
-  root.documentElement.dataset.windowHidden = String(root.visibilityState === 'hidden');
+type WindowHiddenClient = {
+  api: {
+    window: {
+      onHidden: (callback: (snapshot: WindowHiddenSnapshot) => void) => () => void;
+    };
+  };
+};
+
+export function applyWindowHiddenState(hidden: boolean, root: VisibilityRoot): void {
+  root.dataset.windowHidden = String(hidden);
 }
 
-export function bindWindowVisibility(root: VisibilityRoot = document): () => void {
-  const sync = (): void => {
-    syncWindowHiddenState(root);
-  };
-  sync();
-  root.addEventListener('visibilitychange', sync);
-  return () => {
-    root.removeEventListener('visibilitychange', sync);
-  };
+export function bindWindowVisibility(client: WindowHiddenClient, root: VisibilityRoot = document.documentElement): () => void {
+  return client.api.window.onHidden((snapshot) => {
+    applyWindowHiddenState(snapshot.hidden, root);
+  });
 }

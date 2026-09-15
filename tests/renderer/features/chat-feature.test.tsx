@@ -313,6 +313,9 @@ function createChatClient(input: { agentStatus?: AgentRuntimeStatus; settingsSna
     files: {
       selectFromDialog: vi.fn()
     },
+    window: {
+      onHidden: vi.fn().mockReturnValue(() => {})
+    },
     settings: {
       save: vi.fn().mockResolvedValue({ ok: true, data: input.settingsSnapshot })
     },

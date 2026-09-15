@@ -55,6 +55,7 @@ import {
   traySummarySchema,
   updateBackgroundTaskRequestSchema,
   windowBoundsSnapshotSchema,
+  windowHiddenSnapshotSchema,
   windowStateSnapshotSchema
 } from './schemas/ipc-core';
 import {
@@ -502,6 +503,7 @@ export const ipcRegistry = {
   events: [
     event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),
     event({ key: 'navigate', channel: 'roc:navigate', domain: 'app', method: 'onNavigate', contract: eventContract(z.string()) }),
+    event({ key: 'windowHidden', channel: 'roc:window:hidden', domain: 'window', method: 'onHidden', contract: eventContract(windowHiddenSnapshotSchema) }),
     event({ key: 'tasksUpdated', channel: 'roc:tasks:updated', domain: 'tasks', method: 'onUpdated', contract: eventContract(taskUpdateEventSchema.nullable()) }),
     event({ key: 'workspaceChanged', channel: 'roc:workspace:changed', domain: 'workspace', method: 'onChanged', contract: eventContract(workspaceChangedEventSchema) }),
     event({ key: 'terminalOutput', channel: 'roc:terminal:output', domain: 'terminal', method: 'onOutput', contract: eventContract(terminalSessionOutputEventSchema) }),

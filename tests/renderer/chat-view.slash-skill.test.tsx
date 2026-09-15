@@ -35,6 +35,9 @@ describe('chat view slash skill command', () => {
         onRunEvent: () => () => {},
         resumeRun: async () => ({ ok: true })
       },
+      window: {
+        onHidden: () => () => {}
+      },
       tasks: {
         getThreadMessages: async () => ({ ok: true, data: [] })
       },

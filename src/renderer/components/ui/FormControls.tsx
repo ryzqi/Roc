@@ -13,8 +13,8 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
   return <input className={classNames('ui-input', className)} {...props} />;
 }
 
-export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea({ className, ...props }, ref): React.JSX.Element {
-  return <textarea className={classNames('ui-textarea', className)} ref={ref} {...props} />;
+export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea({ className, spellCheck = true, ...props }, ref): React.JSX.Element {
+  return <textarea className={classNames('ui-textarea', className)} ref={ref} spellCheck={spellCheck} {...props} />;
 });
 
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>): React.JSX.Element {

@@ -8,7 +8,7 @@ import {
   ChatView,
   selectPendingQuestion
 } from '../../src/renderer/chat/chat-view';
-import { buildManualScrollBottomOptions, buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
+import { buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
 import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
@@ -27,6 +27,9 @@ beforeAll(() => {
       chat: {
         onRunEvent: () => () => {},
         resumeRun: async () => ({ ok: true })
+      },
+      window: {
+        onHidden: () => () => {}
       },
       tasks: {
         getThreadMessages: async () => ({ ok: true, data: [] })
@@ -113,10 +116,11 @@ describe('chat view', () => {
     expect('behavior' in options).toBe(false);
   });
 
-  it('keeps manual bottom jumps instant instead of JS smooth scrolling', () => {
-    expect(buildManualScrollBottomOptions(1234, false)).toEqual({ top: 1234 });
-    expect(buildManualScrollBottomOptions(1234, true)).toEqual({ top: 1234 });
-    expect('behavior' in buildManualScrollBottomOptions(1234, false)).toBe(false);
+  it('keeps the transcript source free of JS smooth-scroll helpers', () => {
+    const source = readFileSync('src/renderer/chat/chat-transcript-panel.tsx', 'utf8');
+    expect(source).not.toContain("behavior: 'smooth'");
+    expect(source).toContain("behavior: 'auto'");
+    expect(source).not.toContain('buildManualScrollBottomOptions');
   });
 
   it('keeps chat reasoning animation off layout-affecting max-height', () => {

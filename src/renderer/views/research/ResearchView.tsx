@@ -931,7 +931,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           </label>
           <label>
             研究目标
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="写下要解释的问题和预期贡献" rows={3} />
+            <textarea spellCheck={true} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="写下要解释的问题和预期贡献" rows={3} />
           </label>
           <label>
             项目语言

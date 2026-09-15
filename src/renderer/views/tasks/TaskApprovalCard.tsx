@@ -35,6 +35,7 @@ export function TaskApprovalCard({
             <label className="task-form-field">
               <span>原因</span>
               <textarea
+                spellCheck={true}
                 data-testid="task-approval-edit-reason"
                 rows={3}
                 value={draft.reason}
@@ -46,6 +47,7 @@ export function TaskApprovalCard({
               <label className="task-form-field">
                 <span>目标</span>
                 <textarea
+                  spellCheck={true}
                   data-testid="task-approval-edit-goal"
                   rows={3}
                   value={draft.goal}
@@ -112,6 +114,7 @@ export function TaskApprovalCard({
               <label className="task-form-field">
                 <span>允许动作</span>
                 <textarea
+                  spellCheck={true}
                   data-testid="task-approval-edit-allowed-actions"
                   rows={3}
                   value={draft.allowedActionsText}
@@ -121,6 +124,7 @@ export function TaskApprovalCard({
               <label className="task-form-field">
                 <span>禁止动作</span>
                 <textarea
+                  spellCheck={true}
                   data-testid="task-approval-edit-forbidden-actions"
                   rows={3}
                   value={draft.forbiddenActionsText}
@@ -131,6 +135,7 @@ export function TaskApprovalCard({
                 <label className="task-form-field">
                   <span>修改原因</span>
                   <textarea
+                  spellCheck={true}
                     data-testid="task-approval-edit-reason"
                     rows={3}
                     value={draft.reason}

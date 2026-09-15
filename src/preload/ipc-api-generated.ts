@@ -26,7 +26,12 @@ export const rocApi: RocPreloadApi = {
     getBounds: (...args) => ipcRenderer.invoke(ipcChannels.windowGetBounds, ...args),
     minimize: (...args) => ipcRenderer.invoke(ipcChannels.windowMinimize, ...args),
     toggleMaximize: (...args) => ipcRenderer.invoke(ipcChannels.windowToggleMaximize, ...args),
-    close: (...args) => ipcRenderer.invoke(ipcChannels.windowClose, ...args)
+    close: (...args) => ipcRenderer.invoke(ipcChannels.windowClose, ...args),
+    onHidden: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.windowHidden, listener);
+      return () => ipcRenderer.off(ipcChannels.windowHidden, listener);
+    }
   },
   tasks: {
     getSnapshot: (...args) => ipcRenderer.invoke(ipcChannels.tasksGetSnapshot, ...args),

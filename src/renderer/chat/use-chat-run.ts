@@ -127,6 +127,7 @@ export function useChatRun(client: RocClient): ChatRunController {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const pendingEventsRef = useRef<ChatRunEvent[]>([]);
   const rafHandleRef = useRef<number | null>(null);
+  const hiddenRef = useRef(false);
   const seenSequenceByRunIdRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -141,6 +142,25 @@ export function useChatRun(client: RocClient): ChatRunController {
         setState((current) => applyChatRunEventBatch(current, buffered));
       });
     }
+
+    function scheduleFlush(): void {
+      if (hiddenRef.current || rafHandleRef.current !== null) {
+        return;
+      }
+      rafHandleRef.current = requestAnimationFrame(flush);
+    }
+
+    const unsubscribeHidden = client.api.window.onHidden((snapshot) => {
+      hiddenRef.current = snapshot.hidden;
+      if (snapshot.hidden) {
+        if (rafHandleRef.current !== null) {
+          cancelAnimationFrame(rafHandleRef.current);
+          rafHandleRef.current = null;
+        }
+        return;
+      }
+      flush();
+    });
 
     const unsubscribe = client.api.chat.onRunEvent((rawEvent) => {
       if (isSequencedChatRunEvent(rawEvent)) {
@@ -166,12 +186,11 @@ export function useChatRun(client: RocClient): ChatRunController {
         return;
       }
 
-      if (rafHandleRef.current === null) {
-        rafHandleRef.current = requestAnimationFrame(flush);
-      }
+      scheduleFlush();
     });
 
     return () => {
+      unsubscribeHidden();
       unsubscribe();
       clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     };

@@ -219,7 +219,7 @@ export function ResearchWorkflowPanel({
         {(current.status === 'ready' || current.status === 'running' || current.status === 'paused' || current.status === 'failed' || current.status === 'blocked') && (run === null || !['queued', 'running'].includes(run.status)) ? (
           <label className="research-run-instruction">
             角色指令
-            <textarea data-testid="research-run-input" value={instruction} onChange={(event) => onInstructionChange(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
+            <textarea data-testid="research-run-input" spellCheck={true} value={instruction} onChange={(event) => onInstructionChange(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
           </label>
         ) : null}
         <div className="research-stage-actions">

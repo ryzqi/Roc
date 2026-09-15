@@ -197,6 +197,7 @@ export const ipcChannels = {
   shellConfirm: 'roc:shell:confirm',
   appearanceUpdated: 'roc:appearance:updated',
   navigate: 'roc:navigate',
+  windowHidden: 'roc:window:hidden',
   tasksUpdated: 'roc:tasks:updated',
   workspaceChanged: 'roc:workspace:changed',
   terminalOutput: 'roc:terminal:output',
@@ -402,6 +403,7 @@ export const ipcRequestChannelKeys = [
 export const ipcEventChannelKeys = [
   'appearanceUpdated',
   'navigate',
+  'windowHidden',
   'tasksUpdated',
   'workspaceChanged',
   'terminalOutput',
@@ -607,6 +609,7 @@ export const ipcRequestDefinitions = [
 export const ipcEventDefinitions = [
   { key: 'appearanceUpdated', channel: ipcChannels.appearanceUpdated, domain: 'app', method: 'onAppearanceUpdated' },
   { key: 'navigate', channel: ipcChannels.navigate, domain: 'app', method: 'onNavigate' },
+  { key: 'windowHidden', channel: ipcChannels.windowHidden, domain: 'window', method: 'onHidden' },
   { key: 'tasksUpdated', channel: ipcChannels.tasksUpdated, domain: 'tasks', method: 'onUpdated' },
   { key: 'workspaceChanged', channel: ipcChannels.workspaceChanged, domain: 'workspace', method: 'onChanged' },
   { key: 'terminalOutput', channel: ipcChannels.terminalOutput, domain: 'terminal', method: 'onOutput' },

@@ -434,6 +434,7 @@ export function ChatComposer({
           placeholder="输入消息..."
           ref={textareaRef}
           rows={3}
+          spellCheck={true}
           value={chatInput}
           onChange={(event) => {
             syncCaretFromEvent(event.currentTarget);

@@ -75,7 +75,8 @@ export function createShellClient(): RocClient {
       toggleMaximize: vi.fn().mockResolvedValue({
         ok: true,
         data: { maximized: true, minimized: false, fullscreen: false }
-      })
+      }),
+      onHidden: vi.fn().mockReturnValue(() => {})
     },
     files: {
       selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })

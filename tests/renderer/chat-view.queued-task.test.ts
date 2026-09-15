@@ -276,6 +276,9 @@ function createMockPreloadApi(
       startRun: vi.fn(),
       cancelRun: vi.fn()
     },
+    window: {
+      onHidden: vi.fn().mockReturnValue(() => {})
+    },
     tasks: {
       getThreadMessages: overrides.getThreadMessages ?? vi.fn().mockResolvedValue({
         ok: true as const,

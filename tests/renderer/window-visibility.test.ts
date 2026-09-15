@@ -1,54 +1,53 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bindWindowVisibility, syncWindowHiddenState } from '../../src/renderer/window-visibility';
+import { applyWindowHiddenState, bindWindowVisibility } from '../../src/renderer/window-visibility';
 
 describe('window visibility', () => {
-  it('marks the document hidden while the resident window is occluded', () => {
-    const root = {
-      documentElement: { dataset: {} as DOMStringMap },
-      visibilityState: 'hidden' as DocumentVisibilityState
-    };
+  it('marks the document hidden from the host hide/show event', () => {
+    const root = { dataset: {} as DOMStringMap };
 
-    syncWindowHiddenState(root);
+    applyWindowHiddenState(true, root);
 
-    expect(root.documentElement.dataset.windowHidden).toBe('true');
+    expect(root.dataset.windowHidden).toBe('true');
   });
 
-  it('clears the hidden marker when the window is visible again', () => {
-    const root = {
-      documentElement: { dataset: { windowHidden: 'true' } as DOMStringMap },
-      visibilityState: 'visible' as DocumentVisibilityState
-    };
+  it('clears the hidden marker when the host shows the window', () => {
+    const root = { dataset: { windowHidden: 'true' } as DOMStringMap };
 
-    syncWindowHiddenState(root);
+    applyWindowHiddenState(false, root);
 
-    expect(root.documentElement.dataset.windowHidden).toBe('false');
+    expect(root.dataset.windowHidden).toBe('false');
   });
 
-  it('binds visibilitychange and unbinds on dispose', () => {
-    const listeners = new Map<string, () => void>();
-    const root = {
-      documentElement: { dataset: {} as DOMStringMap },
-      visibilityState: 'visible' as DocumentVisibilityState,
-      addEventListener: vi.fn((type: 'visibilitychange', listener: () => void) => {
-        listeners.set(type, listener);
-      }),
-      removeEventListener: vi.fn((type: 'visibilitychange', listener: () => void) => {
-        if (listeners.get(type) === listener) {
-          listeners.delete(type);
+  it('binds host hide/show events and unbinds on dispose', () => {
+    const listeners: Array<(snapshot: { hidden: boolean }) => void> = [];
+    const root = { dataset: {} as DOMStringMap };
+    const client = {
+      api: {
+        window: {
+          onHidden: vi.fn((callback: (snapshot: { hidden: boolean }) => void) => {
+            listeners.push(callback);
+            return () => {
+              const index = listeners.indexOf(callback);
+              if (index !== -1) {
+                listeners.splice(index, 1);
+              }
+            };
+          })
         }
-      })
+      }
     };
 
-    const dispose = bindWindowVisibility(root);
-    expect(root.documentElement.dataset.windowHidden).toBe('false');
-    expect(listeners.has('visibilitychange')).toBe(true);
+    const dispose = bindWindowVisibility(client, root);
+    expect(client.api.window.onHidden).toHaveBeenCalledTimes(1);
+    expect(listeners).toHaveLength(1);
 
-    root.visibilityState = 'hidden';
-    listeners.get('visibilitychange')?.();
-    expect(root.documentElement.dataset.windowHidden).toBe('true');
+    listeners[0]?.({ hidden: true });
+    expect(root.dataset.windowHidden).toBe('true');
+
+    listeners[0]?.({ hidden: false });
+    expect(root.dataset.windowHidden).toBe('false');
 
     dispose();
-    expect(root.removeEventListener).toHaveBeenCalledTimes(1);
-    expect(listeners.has('visibilitychange')).toBe(false);
+    expect(listeners).toHaveLength(0);
   });
 });

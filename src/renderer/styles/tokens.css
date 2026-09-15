@@ -109,7 +109,6 @@
   --duration-base: 180ms;
   --duration-slow: 320ms;
   --easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --easing-spring: var(--easing-standard);
   --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-base: var(--duration-base) var(--easing-standard);
   --transition-fast: var(--duration-fast) var(--easing-standard);

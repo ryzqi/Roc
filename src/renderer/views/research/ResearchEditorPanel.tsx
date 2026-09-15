@@ -62,7 +62,7 @@ export function ResearchEditorPanel({
             {openFile === null ? <div className="research-loading">选择一个源文件。</div> : (
               <label className="research-run-instruction">
                 {openFile.path}
-                <textarea data-testid="research-template-editor" value={openFile.content} onChange={(event) => onChangeDraft(event.target.value)} rows={16} />
+                <textarea data-testid="research-template-editor" spellCheck={true} value={openFile.content} onChange={(event) => onChangeDraft(event.target.value)} rows={16} />
               </label>
             )}
             <div className="research-stage-actions">

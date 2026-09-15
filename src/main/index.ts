@@ -29,9 +29,11 @@ import { PerformanceObserverService } from './services/performance-observer-serv
 import { MacOSHostService } from './macos-host-service';
 import { initializeMacOSPath } from './macos-environment';
 import {
+  bindWindowHiddenBroadcast,
   buildMainWindowOptions,
   getWindowBounds,
-  resolveMainWindowBounds
+  resolveMainWindowBounds,
+  type HiddenBroadcastWindow
 } from './window-shell';
 import {
   bindWindowPlacementPersistence,
@@ -273,6 +275,9 @@ async function createWindow(): Promise<void> {
     mainWindow.maximize();
   }
   bindWindowPlacementPersistence(mainWindow, windowStateFilePath);
+  bindWindowHiddenBroadcast(mainWindow as HiddenBroadcastWindow, (snapshot) => {
+    sendToWindow(mainWindow, ipcChannels.windowHidden, snapshot);
+  });
   bindDisplayBoundsCorrection();
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);

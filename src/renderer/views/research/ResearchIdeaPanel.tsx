@@ -84,7 +84,7 @@ export function ResearchIdeaPanel({
               return (
                 <label key={key}>
                   {fieldLabels[key]}
-                  <textarea data-testid={`research-idea-field-${key}`} value={field.content} onChange={(event) => onChange(updateField(draft, key, event.target.value))} rows={key === 'counterevidence' ? 2 : 3} />
+                  <textarea data-testid={`research-idea-field-${key}`} spellCheck={true} value={field.content} onChange={(event) => onChange(updateField(draft, key, event.target.value))} rows={key === 'counterevidence' ? 2 : 3} />
                   <span>
                     <select value={field.status} onChange={(event) => onChange(updateFieldStatus(draft, key, event.target.value as typeof field.status))}>
                       <option value="supported">已支持</option>
@@ -108,7 +108,7 @@ export function ResearchIdeaPanel({
             </label>
             <label>
               优先级依据
-              <textarea data-testid="research-idea-rationale" value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
+              <textarea data-testid="research-idea-rationale" spellCheck={true} value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
             </label>
             <div className="research-form-actions">
               <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-idea-save">

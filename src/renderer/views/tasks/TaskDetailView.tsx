@@ -187,6 +187,7 @@ export function TaskDetailView({
                 <textarea
                   data-testid="task-detail-followup-input"
                   placeholder="继续说明任务需要的信息..."
+                  spellCheck={true}
                   value={followupInput}
                   onChange={(event) => setFollowupInput(event.target.value)}
                 />

@@ -75,7 +75,7 @@
     border-color var(--transition-fast),
     color var(--transition-fast),
     box-shadow var(--transition-fast),
-    transform var(--duration-fast) var(--easing-spring);
+    transform var(--duration-fast) var(--easing-standard);
 }
 
 .row:active,
@@ -118,7 +118,7 @@
     border-color var(--transition-fast),
     color var(--transition-fast),
     box-shadow var(--transition-fast),
-    transform var(--duration-fast) var(--easing-spring);
+    transform var(--duration-fast) var(--easing-standard);
 }
 
 .ui-button:hover:not(:disabled),

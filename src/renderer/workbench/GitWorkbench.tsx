@@ -361,6 +361,7 @@ export function GitWorkbench({
               data-testid="workbench-git-commit-message"
               disabled={actionBusy}
               placeholder="Commit message..."
+              spellCheck={true}
               value={commitMessage}
               onChange={(event) => setCommitMessage(event.target.value)}
             />

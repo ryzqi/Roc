@@ -129,6 +129,7 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
               data-testid="memory-file-editor"
               disabled={loading}
               onChange={(event) => setBuffer(event.currentTarget.value)}
+              spellCheck={true}
               value={buffer}
             />
             <div className="memory-file-actions">

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHAT_WINDOW_MIN_WIDTH } from '../../src/shared/chat-layout';
 import {
+  bindWindowHiddenBroadcast,
   buildMainWindowOptions,
   getWindowBounds,
+  getWindowHiddenState,
   getWindowState,
   resolveMainWindowBounds
 } from '../../src/main/window-shell';
@@ -22,7 +24,7 @@ describe('immersive window shell', () => {
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
     expect(options.webPreferences?.backgroundThrottling).toBe(true);
-    expect(options.webPreferences?.spellcheck).toBe(false);
+    expect(options.webPreferences).not.toHaveProperty('spellcheck');
   });
 
   it('applies restored main-window bounds after display-safe normalization', () => {
@@ -101,6 +103,51 @@ describe('immersive window shell', () => {
       minimized: false,
       fullscreen: false
     });
+  });
+
+  it('treats minimized or invisible windows as hidden', () => {
+    expect(
+      getWindowHiddenState({
+        isVisible: () => false,
+        isMinimized: () => false
+      })
+    ).toEqual({ hidden: true });
+    expect(
+      getWindowHiddenState({
+        isVisible: () => true,
+        isMinimized: () => true
+      })
+    ).toEqual({ hidden: true });
+    expect(
+      getWindowHiddenState({
+        isVisible: () => true,
+        isMinimized: () => false
+      })
+    ).toEqual({ hidden: false });
+  });
+
+  it('broadcasts host hide and show events without waiting on Page Visibility', () => {
+    const handlers = new Map<string, () => void>();
+    const snapshots: Array<{ hidden: boolean }> = [];
+    let visible = true;
+    const window = {
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+      },
+      isVisible: () => visible,
+      isMinimized: () => false
+    };
+
+    bindWindowHiddenBroadcast(window, (snapshot) => {
+      snapshots.push(snapshot);
+    });
+
+    visible = false;
+    handlers.get('hide')?.();
+    visible = true;
+    handlers.get('show')?.();
+
+    expect(snapshots).toEqual([{ hidden: false }, { hidden: true }, { hidden: false }]);
   });
 
   it('maps BrowserWindow bounds into renderer-safe bounds snapshot', () => {

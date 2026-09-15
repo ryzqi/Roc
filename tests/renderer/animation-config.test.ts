@@ -4,18 +4,32 @@ import { describe, expect, it } from 'vitest';
 describe('renderer animation configuration', () => {
   it('configures motion components to respect the system reduced-motion preference', () => {
     const entry = readFileSync('src/renderer/main.tsx', 'utf8');
+    const app = readFileSync('src/renderer/App.tsx', 'utf8');
 
     expect(entry).toContain("import { MotionConfig } from 'motion/react';");
     expect(entry).toContain('<MotionConfig reducedMotion="user">');
-    expect(entry).toContain("import { bindWindowVisibility } from './window-visibility';");
-    expect(entry).toContain('bindWindowVisibility();');
+    expect(app).toContain("import { bindWindowVisibility } from './window-visibility';");
+    expect(app).toContain('bindWindowVisibility(client)');
   });
 
   it('pauses infinite CSS animations while the hidden window stays resident', () => {
     const css = readFileSync('src/renderer/styles/animations.css', 'utf8');
+    const visibility = readFileSync('src/renderer/window-visibility.ts', 'utf8');
 
     expect(css).toContain("html[data-window-hidden='true']");
     expect(css).toContain('animation-play-state: paused !important;');
+    expect(visibility).toContain('client.api.window.onHidden');
+    expect(visibility).not.toContain('visibilitychange');
+  });
+
+  it('keeps Chromium spellcheck for writing surfaces while chrome stays unchecked', () => {
+    const html = readFileSync('index.html', 'utf8');
+    const composer = readFileSync('src/renderer/chat/chat-composer.tsx', 'utf8');
+    const windowShell = readFileSync('src/main/window-shell.ts', 'utf8');
+
+    expect(html).toContain('spellcheck="false"');
+    expect(composer).toContain('spellCheck={true}');
+    expect(windowShell).not.toContain('spellcheck: false');
   });
 
   it('keeps overlay motion on a duration ease instead of spring overshoot', () => {
@@ -24,7 +38,8 @@ describe('renderer animation configuration', () => {
 
     expect(motion).not.toContain("type: 'spring'");
     expect(tokens).toContain('--lift-hover: none;');
-    expect(tokens).toContain('--easing-spring: var(--easing-standard);');
+    expect(tokens).toContain('--easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);');
+    expect(tokens).not.toContain('--easing-spring');
   });
 
   it('keeps CSS animations covered by reduced-motion media settings', () => {

@@ -220,6 +220,8 @@ describe('main kernel bootstrap integration', () => {
     expect(source).toContain('registerPdfPreviewProtocol(() => pdfPreviewKernel);');
     expect(pdfPreviewProtocolSource).toContain('protocol.handle(pdfPreviewScheme');
     expect(source).toContain('hostService.bindMainWindow');
+    expect(source).toContain('bindWindowHiddenBroadcast');
+    expect(source).toContain('ipcChannels.windowHidden');
     expect(source).toContain('kernel.subscribeEvent<TerminalSessionOutputEvent>');
     expect(source).toContain('kernel.subscribeEvent<ChatRunEvent>');
     expect(source).toContain('agentChatRunEventType');

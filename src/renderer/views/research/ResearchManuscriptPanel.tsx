@@ -75,7 +75,7 @@ export function ResearchManuscriptPanel({
           <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
             <label>
               主张内容
-              <textarea data-testid="research-claim-content" value={draft.content} onChange={(event) => onChange({ ...draft, content: event.target.value })} rows={4} />
+              <textarea data-testid="research-claim-content" spellCheck={true} value={draft.content} onChange={(event) => onChange({ ...draft, content: event.target.value })} rows={4} />
             </label>
             <label>
               状态

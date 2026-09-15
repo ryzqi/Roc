@@ -512,7 +512,7 @@
   border-radius: 999px;
   color: var(--fill-strong-text);
   background: var(--fill-strong);
-  transition: background var(--transition-fast), transform var(--duration-fast) var(--easing-spring);
+  transition: background var(--transition-fast), transform var(--duration-fast) var(--easing-standard);
 }
 
 .send-button .icon-svg {
