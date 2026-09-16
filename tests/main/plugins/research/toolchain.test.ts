@@ -2,7 +2,6 @@ import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
@@ -11,6 +10,7 @@ import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchToolchain } from '../../../../src/main/plugins/research/toolchain';
+import { LATEX, PLOT } from '../../../../scripts/research/smoke';
 
 it('reports missing research resources without using host tools', async () => {
   await expect(new ResearchToolchain(null).status()).resolves.toEqual({ available: false, versions: null, error: 'research_toolchain_unavailable' });
@@ -36,10 +36,14 @@ describe.skipIf(toolchainRoot === undefined)('bundled research toolchain integra
     try {
       expect(await tools.status()).toMatchObject({ available: true, error: null });
       const zip = join(root, 'template.zip');
-      const sample = fileURLToPath(new URL('../../../../scripts/research/smoke.py', import.meta.url));
-      await promisify(execFile)(join(toolchainRoot, 'python/bin/python3'), ['-I', '-B', '-c',
-        'import sys,zipfile,runpy\nfrom pathlib import Path\nsys.path.insert(0,str(Path(sys.argv[2]).parent))\nsample=runpy.run_path(sys.argv[2])\nexec(sample["PLOT"],{})\nwith zipfile.ZipFile(sys.argv[1],"w") as archive:\n archive.writestr("template/main.tex",sample["LATEX"])\n archive.write("figure.png","template/figure.png")', zip, sample],
+      await writeFile(join(root, 'plot.py'), PLOT);
+      await writeFile(join(root, 'paper.tex'), LATEX);
+      await promisify(execFile)(join(toolchainRoot, 'python/bin/python3'), ['-I', '-B', join(root, 'plot.py')],
         { cwd: root, env: { PATH: '/usr/bin:/bin', MPLCONFIGDIR: join(root, 'plot-cache') } });
+      await promisify(execFile)(join(toolchainRoot, 'python/bin/python3'), ['-I', '-B', '-c',
+        'import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as archive:\n archive.writestr("template/main.tex",open(sys.argv[2],encoding="utf-8").read())\n archive.write("figure.png","template/figure.png")',
+        zip, join(root, 'paper.tex')],
+        { cwd: root, env: { PATH: '/usr/bin:/bin' } });
       const project = repository.createProject({ title: 'Runtime smoke', description: 'Real bundled runtime', workspacePath: root });
       const imported = await templates.importTemplate({ projectId: project.id, sourcePath: zip });
       expect(imported.entryPath).toBe('template/main.tex');
