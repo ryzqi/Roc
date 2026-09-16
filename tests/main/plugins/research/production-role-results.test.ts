@@ -265,6 +265,9 @@ describe('production role results', () => {
     expect(stage).toMatchObject({ status: 'running', activeRunId: null });
     expect(repository.listArtifacts(projectId, 'figure')).toHaveLength(1);
     expect(figures.verifyStage).toHaveBeenCalledWith(projectId);
+    expect(() => engine.start({ projectId, expectedStage: 'figure', instruction: 'Publish the figure again.', requestId: 'figure-stale-2' }))
+      .toThrow('research_stage_awaiting_gate');
+    expect(() => engine.retry({ projectId, runId: run.id, requestId: 'figure-stale-retry' })).toThrow('research_run_not_retryable');
   });
 
   it('fails an export stage without a published package and does not invent an empty artifact', async () => {

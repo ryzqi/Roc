@@ -80,6 +80,9 @@ export class ResearchRunRepository {
       const stage = workflow.stages.find((state) => state.stage === request.expectedStage);
       if (stage === undefined) throw new Error('research_stage_not_found');
       if (stage.activeRunId !== null) throw new Error('research_stage_run_active');
+      if (stage.status === 'running' && this.hasCompletedParent(request.projectId, stage.stage)) {
+        throw new Error('research_stage_awaiting_gate');
+      }
       if (!['ready', 'running', 'paused', 'failed', 'blocked'].includes(stage.status)) throw new Error('research_stage_not_runnable');
       const cycle = this.research.reviews.requireForStage(request.projectId, stage.stage);
       const revisionRound = stage.stage === 'revision' && cycle !== null ? cycle.revisionRound + 1 : cycle?.revisionRound ?? 0;
@@ -299,6 +302,11 @@ export class ResearchRunRepository {
       throw new Error('research_run_not_current');
     }
     return run;
+  }
+
+  private hasCompletedParent(projectId: string, stage: ResearchStageRun['stage']): boolean {
+    return this.db.prepare("SELECT 1 FROM research_stage_runs WHERE project_id = ? AND stage = ? AND parent_run_id IS NULL AND status = 'completed' LIMIT 1")
+      .get(projectId, stage) !== undefined;
   }
 
   private captureContext(projectId: string, stage: ResearchStageRun['stage']): ResearchExecutionContext {
