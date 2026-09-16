@@ -40,7 +40,7 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
             format: figure[3], sha256: figure[4] }).catch(() => new Response('Preview unavailable', { status: 404 }));
         } catch { return new Response('Invalid path', { status: 400 }); }
       }
-      const experiment = /^\/experiments\/([^/]+)\/([^/]+)\/(input|output|log|notebook)\/([^/]+)\/([a-f0-9]{64})$/u.exec(url.pathname);
+      const experiment = /^\/experiments\/([^/]+)\/([^/]+)\/(input|output|log)\/([^/]+)\/([a-f0-9]{64})$/u.exec(url.pathname);
       if (experiment !== null) {
         try {
           return kernel.invokeCapability<unknown, Response>('research.experiment.source', { projectId: decodeURIComponent(experiment[1]), runId: decodeURIComponent(experiment[2]),

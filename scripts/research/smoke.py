@@ -12,9 +12,6 @@ from manifest import verify_manifest
 
 
 OFFLINE_PROFILE = "(version 1)(allow default)(deny network*)"
-NOTEBOOK_PROFILE = ('(version 1)(allow default)(deny network*)'
-                    '(allow network-outbound (remote ip "localhost:*"))'
-                    '(allow network-inbound (local ip "localhost:*"))')
 
 LATEX = r"""\documentclass[fontset=fandol]{ctexart}
 \usepackage{amsmath,booktabs,graphicx}
@@ -54,18 +51,6 @@ for extension in ['png', 'svg', 'pdf']:
 plt.close(fig)
 """
 
-NOTEBOOK = """import json
-from pathlib import Path
-import nbformat
-from nbclient import NotebookClient
-notebook = nbformat.v4.new_notebook(cells=[nbformat.v4.new_code_cell('print(sum([12, 18]))')])
-NotebookClient(notebook, timeout=45, kernel_name='python3').execute()
-nbformat.write(notebook, 'executed.ipynb')
-assert notebook.cells[0].outputs[0].text.strip() == '30'
-print(json.dumps({'notebookResult': 30}))
-"""
-
-
 def smoke(toolchain: Path, output: Path) -> None:
     toolchain = toolchain.resolve(strict=True)
     manifest = verify_manifest(toolchain)
@@ -83,13 +68,10 @@ def smoke(toolchain: Path, output: Path) -> None:
                         "TMPDIR": str(temporary), "XDG_CACHE_HOME": str(cache), "MPLCONFIGDIR": str(cache / "matplotlib"),
                         "TECTONIC_CACHE_DIR": str(cache / "tectonic"), "HF_HOME": str(cache / "huggingface"),
                         "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
-                        "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1",
-                        "JUPYTER_CONFIG_DIR": str(cache / "jupyter-config"), "JUPYTER_DATA_DIR": str(cache / "jupyter-data"),
-                        "JUPYTER_RUNTIME_DIR": str(cache / "jupyter-runtime"),
-                        "JUPYTER_PATH": str(toolchain / "python/share/jupyter")})
+                        "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"})
 
-    def run(label: str, command: list, *, request: dict | None = None, notebook: bool = False, timeout: int = 300) -> str:
-        profile = NOTEBOOK_PROFILE if notebook else OFFLINE_PROFILE
+    def run(label: str, command: list, *, request: dict | None = None, timeout: int = 300) -> str:
+        profile = OFFLINE_PROFILE
         result = subprocess.run(["/usr/bin/sandbox-exec", "-p", profile, *command], cwd=output, env=environment,
                                 input=json.dumps(request) if request is not None else None,
                                 capture_output=True, text=True, timeout=timeout)
@@ -148,13 +130,12 @@ def smoke(toolchain: Path, output: Path) -> None:
         "outputDir": str(output / "parsed-html"), "modelsPath": str(toolchain / "models")}))
     if not parsed_html["ok"] or "研究方法" not in parsed_html["result"]["content"] or "18" not in parsed_html["result"]["content"]:
         raise RuntimeError("research_smoke_html_incomplete")
-    run("notebook", [python, "-I", "-B", "-c", NOTEBOOK], notebook=True, timeout=90)
-    run("relocated-console-script", [toolchain / "python/bin/ipython", "--version"], timeout=30)
+    run("relocated-interpreter", [python, "-I", "-B", "-c", "print('relocated')"], timeout=30)
     verify_manifest(toolchain)
     result = {"architecture": manifest["architecture"], "versions": manifest["versions"],
-              "network": "denied except notebook loopback", "pageCount": rendered["pageCount"],
+              "network": "denied", "pageCount": rendered["pageCount"],
               "blockKinds": sorted(kinds), "blockCount": len(parsed["result"]["blocks"]),
-              "warnings": parsed["result"]["warnings"], "notebookResult": 30,
+              "warnings": parsed["result"]["warnings"],
               "nativePdfBlocks": len(native["result"]["blocks"]), "htmlBlocks": len(parsed_html["result"]["blocks"]),
               "figures": ["png", "svg", "pdf"], "integrity": "passed"}
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

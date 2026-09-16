@@ -13,7 +13,7 @@ export const researchExperimentRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
 ]);
 export const researchExperimentFileSchema = z.object({
-  area: z.enum(['input', 'output', 'log', 'notebook']), path: researchExperimentPathSchema,
+  area: z.enum(['input', 'output', 'log']), path: researchExperimentPathSchema,
   sha256: digest, size: z.number().int().nonnegative()
 }).strict();
 export const researchExperimentEnvironmentSchema = z.object({
@@ -27,7 +27,7 @@ export const researchExperimentEnvironmentRequestSchema = z.object({
   projectId: z.string().min(1), runtime: researchExperimentRuntimeSchema
 }).strict();
 const researchExperimentStartFields = {
-  requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'notebook', 'r', 'julia', 'matplotlib']),
+  requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256), engine: z.enum(['python', 'r', 'julia', 'matplotlib']),
   runtime: researchExperimentRuntimeSchema, sourcePath: researchExperimentPathSchema,
   inputPaths: z.array(researchExperimentPathSchema).max(1000),
   arguments: z.array(z.string().max(8192).refine((value) => !value.includes('\u0000'))).max(100),
@@ -35,13 +35,12 @@ const researchExperimentStartFields = {
   expectedEnvironmentHash: digest, timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled']),
   figure: researchFigureOptionsSchema.optional()
 } as const;
-function refineExperimentStart(value: { engine: 'python' | 'notebook' | 'r' | 'julia' | 'matplotlib'; sourcePath: string; inputPaths: string[]; arguments: string[]; runtime: { kind: string }; figure?: unknown; network: string }, context: z.RefinementCtx): void {
-  const extensions = { python: '.py', notebook: '.ipynb', r: '.r', julia: '.jl', matplotlib: '.py' };
+function refineExperimentStart(value: { engine: 'python' | 'r' | 'julia' | 'matplotlib'; sourcePath: string; inputPaths: string[]; arguments: string[]; runtime: { kind: string }; figure?: unknown; network: string }, context: z.RefinementCtx): void {
+  const extensions = { python: '.py', r: '.r', julia: '.jl', matplotlib: '.py' };
   if (!value.sourcePath.toLowerCase().endsWith(extensions[value.engine])) {
     context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
   }
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
-  if (value.engine === 'notebook' && value.arguments.length > 0) context.addIssue({ code: 'custom', message: 'research_notebook_arguments_unsupported', path: ['arguments'] });
   const expectedRuntime = value.engine === 'r' ? 'renv' : value.engine === 'julia' ? 'julia' : null;
   if (expectedRuntime === null ? !['bundled-python', 'uv'].includes(value.runtime.kind) : value.runtime.kind !== expectedRuntime) {
     context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });

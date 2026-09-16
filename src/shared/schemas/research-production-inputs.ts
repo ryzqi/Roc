@@ -6,7 +6,7 @@ import { researchExportExecutionSchema } from './research-exports';
 
 export const researchProductionInputRequestSchema = z.object({ projectId: z.string().min(1), artifactId: z.string().min(1) }).strict();
 export const researchProductionInputFileSchema = z.object({
-  area: z.enum(['input', 'output', 'log', 'notebook', 'bundle']), path: researchExperimentPathSchema,
+  area: z.enum(['input', 'output', 'log', 'bundle']), path: researchExperimentPathSchema,
   sha256: z.string().regex(/^[a-f0-9]{64}$/u), size: z.number().int().nonnegative()
 }).strict();
 export const researchProductionInputSchema = z.object({

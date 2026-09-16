@@ -111,7 +111,7 @@ export class ResearchExperimentRepository {
       const value = { ...run, ...next, endedAt: this.now() };
       this.save(value);
       this.db.prepare('UPDATE research_experiment_runs SET status = ?,outputs_json = ?,ended_at = ? WHERE id = ?')
-        .run(next.status === 'interrupted' ? 'failed' : next.status, JSON.stringify(next.files.filter((file) => file.area === 'output' || file.area === 'notebook').map((file) => `${file.area}/${file.path}`)), value.endedAt, id);
+        .run(next.status === 'interrupted' ? 'failed' : next.status, JSON.stringify(next.files.filter((file) => file.area === 'output').map((file) => `${file.area}/${file.path}`)), value.endedAt, id);
       this.event(value, `experiment_${next.status}`, next.status === 'completed' ? '实验完成，输出与日志已保存。' : '实验已结束，详情见运行记录。');
       return value;
     })();

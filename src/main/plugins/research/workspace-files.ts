@@ -9,7 +9,7 @@ import {
 import { createResearchDirectory, readResearchFile, researchAbsolutePath, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 
-const editable = new Set(['.py', '.r', '.jl', '.ipynb', '.csv', '.tsv', '.txt', '.md', '.json']);
+const editable = new Set(['.py', '.r', '.jl', '.csv', '.tsv', '.txt', '.md', '.json']);
 const blocked = new Set(['.roc-research', '.roc-build', '.git', '.venv', 'node_modules', '__MACOSX']);
 
 type Row = { path: string; sha256: string; size: number; revision: number; owner_run_id: string | null; updated_at: string };

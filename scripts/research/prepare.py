@@ -46,11 +46,6 @@ def portable_python(prefix: Path) -> None:
             body = content.split("\n", 3)[3] if second else content.split("\n", 1)[1]
             wrapper = '#!/bin/sh\n\'\'\'exec\' "$(dirname "$0")/python3" "$0" "$@"\n\' \'\'\'\n'
             script.write_text(wrapper + body, encoding="utf-8")
-    kernel = prefix / "share/jupyter/kernels/python3/kernel.json"
-    if kernel.is_file():
-        value = json.loads(kernel.read_text(encoding="utf-8"))
-        value["argv"][0] = "python3"
-        kernel.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     for bytecode in prefix.rglob("*.pyc"):
         if bytecode.is_symlink() or not bytecode.resolve().is_relative_to(prefix.resolve()):
             raise ValueError("research_python_bytecode_path_invalid")

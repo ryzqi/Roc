@@ -44,7 +44,7 @@ beforeEach(async () => {
     try { return await capabilities.invoke<TInput, TOutput>(name, input); }
     catch (error) { failure = error; throw error; }
   } });
-  projectId = (await call('createProject', { title: 'Experiment integration', description: 'Actual Python and Notebook processes.', workspacePath: workspace }, researchProjectSchema)).id;
+  projectId = (await call('createProject', { title: 'Experiment integration', description: 'Actual Python processes.', workspacePath: workspace }, researchProjectSchema)).id;
 });
 afterEach(async () => { await plugin.shutdown(); db.close(); if (artifacts === undefined) await rm(root, { recursive: true, force: true }); });
 async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Promise<T> {
@@ -53,7 +53,7 @@ async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Pr
   if (!result.ok) throw new Error(`${method}: ${result.error.message}`, { cause: failure });
   return schema.parse(result.data);
 }
-async function run(sourcePath: string, engine: 'python' | 'notebook', runtime: ResearchExperimentRuntime, timeoutMs = 30000) {
+async function run(sourcePath: string, engine: 'python', runtime: ResearchExperimentRuntime, timeoutMs = 30000) {
   const environment = await call('inspectExperimentEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
   const initial = await call('startExperiment', { projectId, requestId: randomUUID(), label: sourcePath, sourcePath, engine, runtime, inputPaths: ['data.csv'],
     arguments: [], parameters: { scale: '2' }, expectedEnvironmentHash: environment.hash, timeoutMs, network: 'disabled' }, researchExperimentExecutionSchema);
@@ -167,41 +167,4 @@ describe.skipIf(tools === undefined)('actual research experiment IPC and private
     expect(await readFile(join(workspace, 'uv.lock'), 'utf8')).toBe(lock);
   }, 90000);
 
-  it('executes the selected Notebook kernel and retains cell errors in failed notebooks', async () => {
-    await writeFile(join(workspace, 'data.csv'), '21\n');
-    const notebook = (code: string) => JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: { language_info: { name: 'python' },
-      kernelspec: { name: 'not-installed', display_name: 'Ignored user kernel', language: 'python' } },
-      cells: [{ cell_type: 'code', id: 'result', execution_count: null, metadata: {}, source: code, outputs: [] }] });
-    await writeFile(join(workspace, 'success.ipynb'), notebook("import json, os, sys\nfrom pathlib import Path\nassert sys.version_info[:2] == (3, 12)\nprint(int(Path('data.csv').read_text()) * int(json.loads(os.environ['ROC_PARAMETERS_JSON'])['scale']))"));
-    const success = await run('success.ipynb', 'notebook', { kind: 'bundled-python' });
-    expect(success).toMatchObject({ status: 'completed', exitCode: 0 });
-    const executed = await call('readExperimentFile', { projectId, runId: success.id, area: 'notebook', path: 'executed.ipynb' }, researchExperimentFileContentSchema);
-    expect(JSON.parse(executed.content).cells[0].outputs[0].text.join('')).toBe('42\n');
-    await writeFile(join(workspace, 'failure.ipynb'), notebook("print('before failure')\nraise ValueError('measurement invalid')"));
-    const failed = await run('failure.ipynb', 'notebook', { kind: 'bundled-python' });
-    expect(failed).toMatchObject({ status: 'failed', error: 'research_experiment_process_failed' });
-    const failureNotebook = await call('readExperimentFile', { projectId, runId: failed.id, area: 'notebook', path: 'executed.ipynb' }, researchExperimentFileContentSchema);
-    expect(JSON.parse(failureNotebook.content).cells[0].outputs.some((output: { ename?: string }) => output.ename === 'ValueError')).toBe(true);
-  }, 120000);
-
-  it('cancels a Notebook kernel and its child without allowing new sessions or posix_spawn process groups', async () => {
-    await writeFile(join(workspace, 'data.csv'), '21\n');
-    const code = `import json, os, signal, sys, time\nfrom pathlib import Path\ntry:\n    spawned = os.posix_spawn(sys.executable, [sys.executable, '-B', '-c', 'pass'], os.environ, setpgroup=0)\nexcept PermissionError:\n    pass\nelse:\n    os.waitpid(spawned, 0)\n    raise AssertionError('posix_spawn was allowed')\nchild = os.fork()\nif child == 0:\n    try:\n        os.setsid()\n    except PermissionError:\n        pass\n    else:\n        raise AssertionError('new session was allowed')\n    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n    while True:\n        time.sleep(1)\nelse:\n    Path(os.environ['ROC_OUTPUT_DIR'], 'pids.json').write_text(json.dumps([os.getpid(), child]))\n    while True:\n        time.sleep(1)\n`;
-    await writeFile(join(workspace, 'cancel.ipynb'), JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: { language_info: { name: 'python' } },
-      cells: [{ cell_type: 'code', id: 'blocking', execution_count: null, metadata: {}, source: code, outputs: [] }] }));
-    const environment = await call('inspectExperimentEnvironment', { projectId, runtime: { kind: 'bundled-python' } }, researchExperimentEnvironmentSchema);
-    const initial = await call('startExperiment', { projectId, requestId: randomUUID(), label: 'Cancellation', sourcePath: 'cancel.ipynb', engine: 'notebook', runtime: { kind: 'bundled-python' }, inputPaths: ['data.csv'],
-      arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, network: 'disabled' }, researchExperimentExecutionSchema);
-    let pids: number[] = [];
-    try {
-      await vi.waitFor(async () => { pids = JSON.parse(await readFile(join(root, 'runs', initial.id, 'output/pids.json'), 'utf8')) as number[]; expect(pids).toHaveLength(2); }, { timeout: 15000 });
-      const cancelled = await call('cancelExperiment', { projectId, runId: initial.id }, researchExperimentExecutionSchema);
-      expect(cancelled.status).toBe('cancelled');
-      for (const pid of pids) await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })), { timeout: 5000 });
-      expect(cancelled.files.some((file) => file.area === 'log')).toBe(true);
-    } finally {
-      await call('cancelExperiment', { projectId, runId: initial.id }, researchExperimentExecutionSchema);
-      for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
-    }
-  }, 60000);
 });

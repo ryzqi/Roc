@@ -1,6 +1,5 @@
 import hashlib
 import importlib.util
-import json
 import os
 from email.message import Message
 from pathlib import Path
@@ -102,16 +101,12 @@ class RelocationTests(unittest.TestCase):
             script = prefix / "bin/example"
             script.write_text(f"#!{prefix}/bin/python3\nimport sys\nprint(sys.argv[1])\n", encoding="utf-8")
             script.chmod(0o755)
-            kernel = prefix / "share/jupyter/kernels/python3/kernel.json"
-            kernel.parent.mkdir(parents=True)
-            kernel.write_text(json.dumps({"argv": [str(prefix / "bin/python3"), "-m", "ipykernel_launcher"]}), encoding="utf-8")
             portable_python(prefix)
             moved = root / "moved python"
             prefix.rename(moved)
             result = subprocess.run([moved / "bin/example", "works with spaces"], text=True, capture_output=True, check=True,
                                     env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
             self.assertEqual(result.stdout.strip(), "works with spaces")
-            self.assertEqual(json.loads((moved / "share/jupyter/kernels/python3/kernel.json").read_text())["argv"][0], "python3")
 
 
 if __name__ == "__main__":

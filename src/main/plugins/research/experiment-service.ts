@@ -6,11 +6,10 @@ import { researchExperimentFileRequestSchema, researchExperimentStartSchema, typ
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
-import { executePythonNotebook } from './experiment-python';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
 import { runRExperimentProcess } from './experiment-native-process';
 import { figureRenderer, figureRendererPath, validateFigureOutput } from './figure-runner';
-import { indexText, indexLocatedText } from './index-files';
+import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
 import { ResearchJobSession, type ResearchJobTask } from './research-job-session';
@@ -157,17 +156,15 @@ export class ResearchExperimentService {
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      await createResearchDirectory(root, 'notebook');
       prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      if (initial.request.engine === 'notebook' && !prepared.snapshot.packages.some((entry) => entry.name.toLowerCase() === 'ipykernel')) throw new Error('research_experiment_ipykernel_required');
       if (initial.request.engine === 'matplotlib' && !prepared.snapshot.packages.some((entry) => entry.name.toLowerCase() === 'matplotlib')) throw new Error('research_figure_matplotlib_required');
       const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal,
         initial.request.engine === 'matplotlib' ? { [figureRendererPath]: figureRenderer } : {});
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
-      output = await this.executeProcess(initial, prepared, root, input, out, scratch, signal);
+      output = await this.executeProcess(initial, prepared, input, out, scratch, signal);
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       if (initial.request.engine === 'matplotlib') {
         if (initial.request.figure === undefined) throw new Error('research_figure_options_invalid');
@@ -187,7 +184,6 @@ export class ResearchExperimentService {
       files.push(...await collectExperimentFiles(join(root, 'log'), 'log'));
       if (prepared !== null) {
         files.push(...await collectExperimentFiles(join(root, 'output'), 'output'));
-        files.push(...await collectExperimentFiles(join(root, 'notebook'), 'notebook'));
       }
       const status = signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : failure === undefined ? 'completed' : 'failed';
       const error = signal.aborted ? this.session.isClosed ? 'research_experiment_interrupted' : 'research_experiment_cancelled' : failure === undefined ? null : errorCode(failure);
@@ -202,29 +198,21 @@ export class ResearchExperimentService {
     }
   }
 
-  private async executeProcess(run: ResearchExperimentExecution, prepared: PreparedExperimentEnvironment, root: string, input: string, output: string, scratch: string, signal: AbortSignal): Promise<ResearchProcessResult> {
+  private async executeProcess(run: ResearchExperimentExecution, prepared: PreparedExperimentEnvironment, input: string, output: string, scratch: string, signal: AbortSignal): Promise<ResearchProcessResult> {
     const request = run.request;
     const executable = prepared.snapshot.executable;
-    const notebook = request.engine === 'notebook';
     const environment = { ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
-      ROC_PARAMETERS_JSON: JSON.stringify(request.parameters), IPYTHONDIR: join(scratch, 'ipython'), JUPYTER_CONFIG_DIR: join(scratch, 'jupyter-config'),
-      JUPYTER_RUNTIME_DIR: join(scratch, 'jupyter-runtime'), JUPYTER_PATH: join(scratch, 'jupyter'),
+      ROC_PARAMETERS_JSON: JSON.stringify(request.parameters),
       ...(request.engine === 'matplotlib' ? { SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' } : {}) };
-    if (notebook) {
-      const kernel = await createResearchDirectory(scratch, 'jupyter/kernels/roc-experiment');
-      await writeFile(join(kernel, 'kernel.json'), JSON.stringify({ argv: [executable, '-B', '-s', '-m', 'ipykernel_launcher', '-f', '{connection_file}'],
-        display_name: 'Roc experiment', language: 'python' }), { flag: 'wx', mode: 0o400 });
-    }
     const source = join(input, request.sourcePath);
     const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
       : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
-      : notebook ? { command: prepared.python, args: ['-I', '-B', '-c', executePythonNotebook, source, join(root, 'notebook/executed.ipynb'), executable, String(Math.ceil(request.timeoutMs / 1000))] }
       : request.engine === 'matplotlib' ? { command: executable, args: ['-B', '-s', join(input, figureRendererPath), 'render', source, output, JSON.stringify(request.figure), ...request.arguments] }
       : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
-      writablePaths: [output, scratch, ...notebook ? [join(root, 'notebook')] : []], environment,
-      timeoutMs: request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : notebook ? 'loopback' : 'none' };
+      writablePaths: [output, scratch], environment,
+      timeoutMs: request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }
 
@@ -232,10 +220,10 @@ export class ResearchExperimentService {
     const documents = [];
     for (const file of files) {
       if (file.area === 'input' || file.size === 0) continue;
-      if (file.area !== 'notebook' && (file.size > 4 * 1024 * 1024 || file.area !== 'log' && !['.txt', '.md', '.csv', '.json', '.tsv'].includes(extname(file.path).toLowerCase()))) continue;
+      if (file.size > 4 * 1024 * 1024 || file.area !== 'log' && !['.txt', '.md', '.csv', '.json', '.tsv'].includes(extname(file.path).toLowerCase())) continue;
       const bytes = await readResearchFile(this.repository.experiments.root(run.projectId, run.id), `${file.area}/${file.path}`, experimentFileLimit);
       if (researchContentHash(bytes) !== file.sha256) throw new Error('research_experiment_snapshot_changed');
-      const parsed = file.area === 'notebook' ? indexNotebookOutput(bytes) : indexText(bytes);
+      const parsed = indexText(bytes);
       if (parsed.chunks.length === 0) continue;
       documents.push({ id: `experiment:${run.id}:${file.area}:${file.path}`, title: `${run.request.label}: ${file.path}`, content: parsed.content,
         chunks: parsed.chunks.map((chunk) => ({ ...chunk, locator: `${file.area}/${file.path}; ${chunk.locator}` })),
@@ -261,21 +249,3 @@ function errorCode(error: unknown): string {
   return error instanceof Error && /^research_[a-z0-9_]+$/u.test(error.message) ? error.message : 'research_experiment_failed';
 }
 
-function indexNotebookOutput(bytes: Buffer): { content: string; chunks: Array<{ content: string; locator: string }> } {
-  const text = z.union([z.string(), z.array(z.string())]).transform((value) => typeof value === 'string' ? value : value.join(''));
-  const outputSchema = z.discriminatedUnion('output_type', [
-    z.object({ output_type: z.literal('stream'), text }),
-    z.object({ output_type: z.enum(['execute_result', 'display_data']), data: z.record(z.string(), z.unknown()) }),
-    z.object({ output_type: z.literal('error') })
-  ]);
-  const notebook = z.object({ cells: z.array(z.object({ cell_type: z.string(), outputs: z.array(outputSchema).optional() })) }).parse(JSON.parse(bytes.toString('utf8')));
-  const chunks = notebook.cells.flatMap((cell, cellIndex) => {
-    if (cell.cell_type !== 'code') return [];
-    if (cell.outputs === undefined) throw new Error('research_notebook_outputs_required');
-    return cell.outputs.flatMap((output, outputIndex) => {
-      const content = output.output_type === 'stream' ? output.text : output.output_type === 'error' || output.data['text/plain'] === undefined ? '' : text.parse(output.data['text/plain']);
-      return indexLocatedText(content, `cell ${cellIndex + 1}; output ${outputIndex + 1}`);
-    });
-  });
-  return { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks };
-}

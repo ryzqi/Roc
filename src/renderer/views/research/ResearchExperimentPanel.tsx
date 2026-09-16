@@ -41,7 +41,6 @@ export const emptyExperimentDraft: ResearchExperimentDraft = {
 
 const engineLabels: Record<ResearchExperimentEngine, string> = {
   python: 'Python',
-  notebook: 'Notebook',
   r: 'R / renv',
   julia: 'Julia',
   matplotlib: 'Matplotlib 图稿'
@@ -95,7 +94,7 @@ export function ResearchExperimentPanel({
         <div>
           <div className="research-section-label">Experiments</div>
           <h2>实验运行</h2>
-          <p>校验项目环境后启动脚本或 Notebook，查看日志，完成后再发布为阶段产物。</p>
+          <p>校验项目环境后启动脚本，查看日志，完成后再发布为阶段产物。</p>
         </div>
         <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-experiment-refresh" onClick={onRefresh}>刷新</button>
       </div>
@@ -240,7 +239,6 @@ function changeEngine(draft: ResearchExperimentDraft, engine: ResearchExperiment
 }
 
 function sourcePlaceholder(engine: ResearchExperimentEngine): string {
-  if (engine === 'notebook') return 'analysis.ipynb';
   if (engine === 'r') return 'analysis.r';
   if (engine === 'julia') return 'analysis.jl';
   return engine === 'matplotlib' ? 'plot.py' : 'run.py';

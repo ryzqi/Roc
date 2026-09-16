@@ -11,9 +11,6 @@ dependencies = [
   "matplotlib==3.11.1",
   "pandas>=2.2,<3",
   "scipy>=1.13,<2",
-  "nbclient==0.11.0",
-  "nbformat==5.11.1",
-  "ipykernel==7.3.0",
   "torch==2.14.0; platform_machine == 'arm64'",
   "torch==2.2.2; platform_machine == 'x86_64'",
   "torchvision==0.17.2; platform_machine == 'x86_64'",
@@ -24,7 +21,10 @@ dependencies = [
 [tool.uv]
 package = false
 build-constraint-dependencies = ["setuptools==84.0.0"]
-environments = ["sys_platform == 'darwin'"]
+environments = [
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
 required-environments = [
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
   "sys_platform == 'darwin' and platform_machine == 'x86_64'",

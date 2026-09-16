@@ -22,7 +22,7 @@ const runProcess = vi.fn<(input: ResearchProcessRequest) => Promise<ResearchProc
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 const environment: PreparedExperimentEnvironment = {
   snapshot: { runtime: { kind: 'bundled-python' }, executable: '/python/bin/python', prefix: '/python', basePrefix: '/python', version: '3.12.14',
-    platform: 'darwin', architecture: 'arm64', toolchainHash: 'a'.repeat(64), metadataHash: 'a'.repeat(64), packages: [{ name: 'ipykernel', version: '7.3.0' }], lockFiles: [], hash: 'b'.repeat(64) },
+    platform: 'darwin', architecture: 'arm64', toolchainHash: 'a'.repeat(64), metadataHash: 'a'.repeat(64), packages: [{ name: 'matplotlib', version: '3.11.1' }], lockFiles: [], hash: 'b'.repeat(64) },
   readablePaths: ['/python'], environment: { PATH: '/python/bin:/usr/bin' }, python: '/python/bin/python'
 };
 function request(input: Partial<ResearchExperimentStart> = {}): ResearchExperimentStart {
@@ -183,20 +183,6 @@ describe('research experiment lifecycle', () => {
     await expect(readFile(join(repository.experiments.root(projectId, started.id), 'manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('indexes notebook text outputs with cell locators as experiment evidence', async () => {
-    await writeFile(join(workspace, 'run.ipynb'), '{}');
-    runProcess.mockImplementationOnce(async (input) => {
-      const output = input.writablePaths.find((path) => path.endsWith('/notebook'));
-      if (output === undefined) throw new Error('notebook_output_required');
-      await writeFile(join(output, 'executed.ipynb'), JSON.stringify({ cells: [{ cell_type: 'code', outputs: [{ output_type: 'stream', name: 'stdout', text: ['Measured signal ', '42.\n'] }] }] }));
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
-    const started = await service.start(request({ sourcePath: 'run.ipynb', engine: 'notebook' }));
-    expect(await finished(started.id)).toMatchObject({ status: 'completed' });
-    const evidence = repository.evidence.capture({ projectId, chunkId: `experiment:${started.id}:notebook:executed.ipynb:chunk:0` });
-    expect(evidence).toMatchObject({ excerpt: 'Measured signal 42.\n', locator: expect.stringContaining('cell 1; output 1') });
-    expect(service.evidenceSource(projectId, evidence.id)).toMatchObject({ runId: started.id, area: 'notebook', path: 'executed.ipynb' });
-  });
 
   it('generates a manifest from committed state before publication and rejects a modified manifest', async () => {
     const started = await service.start(request()); await finished(started.id);
