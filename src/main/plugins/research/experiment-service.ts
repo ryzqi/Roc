@@ -8,7 +8,7 @@ import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironmen
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
 import { runRExperimentProcess } from './experiment-native-process';
-import { figureRenderer, figureRendererPath, validateFigureOutput } from './figure-runner';
+import { assertFigureEnvironment, figureGeneratedInputs, figureProcessCommand, finishFigureOutput } from './figure-runner';
 import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
@@ -158,18 +158,15 @@ export class ResearchExperimentService {
       await createResearchDirectory(root, 'log');
       prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      if (initial.request.engine === 'matplotlib' && !prepared.snapshot.packages.some((entry) => entry.name.toLowerCase() === 'matplotlib')) throw new Error('research_figure_matplotlib_required');
+      if (initial.request.engine === 'matplotlib') assertFigureEnvironment(prepared.snapshot.packages);
       const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal,
-        initial.request.engine === 'matplotlib' ? { [figureRendererPath]: figureRenderer } : {});
+        initial.request.engine === 'matplotlib' ? figureGeneratedInputs() : {});
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
       output = await this.executeProcess(initial, prepared, input, out, scratch, signal);
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
-      if (initial.request.engine === 'matplotlib') {
-        if (initial.request.figure === undefined) throw new Error('research_figure_options_invalid');
-        await validateFigureOutput(out, initial.request.figure, signal);
-      }
+      if (initial.request.engine === 'matplotlib') await finishFigureOutput(initial, out, signal);
       await this.verifyProject(initial, signal);
       const current = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
@@ -201,13 +198,14 @@ export class ResearchExperimentService {
   private async executeProcess(run: ResearchExperimentExecution, prepared: PreparedExperimentEnvironment, input: string, output: string, scratch: string, signal: AbortSignal): Promise<ResearchProcessResult> {
     const request = run.request;
     const executable = prepared.snapshot.executable;
+    const figure = request.engine === 'matplotlib' ? figureProcessCommand(run, prepared, input, output) : null;
     const environment = { ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
       ROC_PARAMETERS_JSON: JSON.stringify(request.parameters),
-      ...(request.engine === 'matplotlib' ? { SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' } : {}) };
+      ...(figure === null ? {} : figure.environment) };
     const source = join(input, request.sourcePath);
     const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
       : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
-      : request.engine === 'matplotlib' ? { command: executable, args: ['-B', '-s', join(input, figureRendererPath), 'render', source, output, JSON.stringify(request.figure), ...request.arguments] }
+      : figure !== null ? { command: figure.command, args: figure.args }
       : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
