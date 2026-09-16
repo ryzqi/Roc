@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
+import type { ResearchRepository } from './repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -19,6 +20,13 @@ export class LiteratureSearchService {
       throw failure?.reason instanceof Error ? failure.reason : new Error('literature_search_empty');
     }
     return dedupeLiterature(records).slice(0, request.limit);
+  }
+
+  searchAndStore(repository: ResearchRepository, request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
+    return this.search(request).then((records) => {
+      for (const record of records) ingestLiteratureRecord(repository, record);
+      return records;
+    });
   }
 
   private async searchSource(
@@ -191,3 +199,18 @@ type CrossrefPayload = { message?: { items?: Array<{ DOI?: string; URL?: string;
 type SemanticScholarPayload = { data?: Array<{ paperId: string; title?: string; authors?: Array<{ name: string }>; abstract?: string | null; year?: number | null; citationCount?: number | null; externalIds?: { DOI?: string }; openAccessPdf?: { url?: string | null }; url?: string | null }> };
 type ArxivEntry = { id?: string; title?: string; summary?: string; published?: string; author?: { name?: string } | Array<{ name?: string }> };
 type EuropePmcPayload = { resultList?: { result?: Array<{ id?: string; pmid?: string; doi?: string; title?: string; authorString?: string; abstractText?: string; pubYear?: string; citedByCount?: number; isOpenAccess?: string; source?: string }> } };
+
+export function ingestLiteratureRecord(repository: ResearchRepository, record: ResearchLiterature): void {
+  repository.upsertLiterature(record);
+  if (record.abstract === null || record.abstract.trim().length === 0) return;
+  repository.knowledge.upsertKnowledgeDocument({
+    id: `literature:${record.id}`,
+    projectId: null,
+    sourceType: 'literature',
+    sourceId: record.id,
+    title: record.title,
+    content: record.abstract,
+    chunks: [{ content: record.abstract, locator: 'abstract' }],
+    embeddingConfigId: null
+  });
+}

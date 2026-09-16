@@ -1,9 +1,12 @@
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
 
+import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { OpenAICompatibleEmbeddingClient } from '../../../../src/main/plugins/research/embedding-client';
 import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 import { LiteratureSearchService } from '../../../../src/main/plugins/research/literature-service';
+import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 
 describe('research adapters', () => {
   it('sends float embeddings over HTTP and aborts a pending transport', async () => {
@@ -124,5 +127,27 @@ describe('research adapters', () => {
       expect.objectContaining({ source: 'openalex', doi: '10.1000/test', title: 'Evidence graph', publishedYear: 2024 }),
       expect.objectContaining({ source: 'arxiv', title: 'A figure', publishedYear: 2023 })
     ]));
+  });
+
+  it('stores searched literature and indexes non-empty abstracts in one module', async () => {
+    const service = new LiteratureSearchService(async () => new Response(JSON.stringify({
+      results: [{
+        id: 'https://openalex.org/W2', doi: '10.1000/stored', title: 'Stored evidence',
+        authorships: [{ author: { display_name: 'Ada Researcher' } }],
+        abstract_inverted_index: { stored: [0], evidence: [1] }, publication_year: 2025, cited_by_count: 1
+      }]
+    }), { status: 200 }));
+    const db = new Database(':memory:');
+    try {
+      db.pragma('foreign_keys = ON');
+      applyResearchDatabaseSchema(db);
+      const repository = new ResearchRepository(db);
+      const records = await service.searchAndStore(repository, { query: 'stored', sources: ['openalex'], limit: 5 });
+      expect(records).toHaveLength(1);
+      expect(repository.listLiterature({ query: 'Stored', sources: ['openalex'], limit: 5 })[0]).toMatchObject({ title: 'Stored evidence', doi: '10.1000/stored' });
+      expect(repository.knowledge.knowledgeDocument(`literature:${records[0].id}`)).toMatchObject({
+        sourceType: 'literature', sourceId: records[0].id, title: 'Stored evidence'
+      });
+    } finally { db.close(); }
   });
 });
