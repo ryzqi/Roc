@@ -13,6 +13,7 @@ import { ResearchFigureService } from '../../../../src/main/plugins/research/fig
 import { figureManifestPath } from '../../../../src/main/plugins/research/figure-repository';
 import { figureRenderer, figureRendererPath, figureValidationPath } from '../../../../src/main/plugins/research/figure-runner';
 import { ResearchProductionEffectService } from '../../../../src/main/plugins/research/production-effects';
+import { createResearchProductionJob } from '../../../../src/main/plugins/research/research-production-job';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { getResearchStageRoleProfile, researchCapabilityToolNames } from '../../../../src/main/plugins/research/role-profiles';
 import { createResearchRoleTools } from '../../../../src/main/plugins/research/role-tools';
@@ -94,7 +95,7 @@ function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<R
 function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ output: unknown; modelVersion: string | null }>) {
   runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), {
     prepare: async () => ({ providerId: 'test-provider', modelId: 'test-model', execute })
-  }, effects);
+  }, effects, createResearchProductionJob({ repository, experiments, figures, exports }));
   return runtime;
 }
 
@@ -244,6 +245,26 @@ describe('production role results', () => {
     expect(repository.evidence.listClaims({ projectId, artifactId: artifact.id })).toMatchObject([{ subjectType: 'figure', evidenceIds: [evidence.id] }]);
     expect(repository.getWorkflow(projectId).stages.find((stage) => stage.stage === 'figure')?.status).toBe('waiting_approval');
     expect(figure.status).toBe('rendered');
+  });
+
+  it('keeps a completed figure run from advancing when snapshot verification fails', async () => {
+    enter('figure');
+    const evidence = captureEvidence();
+    vi.spyOn(figures, 'verifyStage').mockRejectedValue(new Error('research_figure_manifest_changed'));
+    const engine = createRuntime(async (input) => {
+      const plot = await completedFigureRun(input.run.id);
+      await input.tools.find((tool) => tool.name === 'publish_figure')?.invoke({ experimentId: plot.id, replacesFigureId: null });
+      return { output: { title: 'Measured response', markdown: 'Rendered the recorded figure.', verdict: 'ready',
+        claims: [{ subjectType: 'figure', content: 'Measured signal 42.', status: 'supported', evidenceIds: [evidence.id] }],
+        sections: [] }, modelVersion: 'figure-model-stale' };
+    });
+    const run = engine.start({ projectId, expectedStage: 'figure', instruction: 'Publish the figure.', requestId: 'figure-stale' });
+    await engine.waitForIdle();
+    expect(repository.runs.get(run.id, projectId)).toMatchObject({ status: 'completed', modelVersion: 'figure-model-stale' });
+    const stage = repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'figure');
+    expect(stage).toMatchObject({ status: 'running', activeRunId: null });
+    expect(repository.listArtifacts(projectId, 'figure')).toHaveLength(1);
+    expect(figures.verifyStage).toHaveBeenCalledWith(projectId);
   });
 
   it('fails an export stage without a published package and does not invent an empty artifact', async () => {

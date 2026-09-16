@@ -6,18 +6,24 @@ import type { ResearchRepository } from './repository';
 import type { PreparedResearchRole, ResearchRoleExecutor } from './role-executor';
 import { createResearchRoleTools } from './role-tools';
 import type { ResearchProductionEffectService } from './production-effects';
+import { createResearchHumanGate, type ResearchHumanGate, type ResearchProductionVerifier } from './human-gate';
 
 type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string };
 
 export class ResearchStageRuntime {
   private readonly active = new Map<string, ActiveRole>();
 
+  private readonly gate: ResearchHumanGate;
+
   constructor(
     private readonly repository: ResearchRepository,
     private readonly capabilities: RocCapabilityRegistry,
     private readonly executor: ResearchRoleExecutor | undefined,
-    private readonly effects?: ResearchProductionEffectService
-  ) {}
+    private readonly effects?: ResearchProductionEffectService,
+    production?: ResearchProductionVerifier
+  ) {
+    this.gate = createResearchHumanGate({ repository, production });
+  }
 
   start(request: ResearchStageRunStartRequest): ResearchStageRun {
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
@@ -102,6 +108,7 @@ export class ResearchStageRuntime {
     } catch (error) {
       controller.abort(error);
       await Promise.allSettled(children);
+      if (this.repository.runs.get(queued.id, queued.projectId).status === 'completed') return;
       this.repository.runs.terminate(queued.id, queued.projectId, 'failed', executionErrorCode(error));
       await this.effects?.cancelOwned(queued.projectId, queued.id);
     } finally {
@@ -123,7 +130,12 @@ export class ResearchStageRuntime {
     const result = await withAbort(prepared.execute({ run, context, tools, signal }), signal);
     signal.throwIfAborted();
     this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);
-    return this.repository.runs.complete(run.id, run.projectId, result.output);
+    const completed = this.repository.runs.complete(run.id, run.projectId, result.output);
+    if (completed.parentRunId === null) {
+      signal.throwIfAborted();
+      await this.gate.complete({ projectId: completed.projectId, expectedStage: completed.stage, action: 'complete' });
+    }
+    return completed;
   }
 
   private async executeChild(queued: ResearchStageRun, signal: AbortSignal): Promise<ResearchStageRun> {

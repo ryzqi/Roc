@@ -192,7 +192,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
       const effects = new ResearchProductionEffectService(researchRepository, new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString()),
         researchExperiments, researchFigures, researchTemplates, researchExports);
-      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, effects);
+      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, effects, productionJob);
       stageRuntime = runtime;
       const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);

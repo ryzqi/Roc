@@ -76,6 +76,17 @@ describe('research stage runtime', () => {
     expect(engine.start(request).id).toBe(run.id);
   });
 
+  it('sends a gated parent run through the human gate into waiting_approval', async () => {
+    const { id } = project();
+    repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'retrieval' });
+    const engine = createRuntime(async () => ({ output, modelVersion: null }));
+    const run = engine.start({ projectId: id, expectedStage: 'retrieval', instruction: 'Collect sources.', requestId: 'retrieval-1' });
+    await engine.waitForIdle();
+    expect(repository.runs.get(run.id, id).status).toBe('completed');
+    expect(repository.getWorkflow(id).stages.find((stage) => stage.stage === 'retrieval')?.status).toBe('waiting_approval');
+    expect(repository.getWorkflow(id).currentStage).toBe('retrieval');
+  });
+
   it('binds tools to project/global material and rejects foreign artifact access', async () => {
     const first = project();
     const second = project();

@@ -260,7 +260,6 @@ export class ResearchRunRepository {
       this.recordEvent(completed, 'role_completed', '阶段角色已生成产物。');
       if (run.parentRunId === null) {
         this.db.prepare('UPDATE research_stage_states SET active_run_id = NULL WHERE project_id = ? AND stage = ?').run(projectId, run.stage);
-        this.research.transitionWorkflow({ projectId, expectedStage: run.stage, action: 'complete' });
       }
       return completed;
     })();
