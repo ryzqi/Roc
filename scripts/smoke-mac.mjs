@@ -159,7 +159,7 @@ try {
     const target = `darwin-${process.arch}`;
     const rtk = spawnSync(join(rtkRoot, target, 'rtk'), ['--version'], { encoding: 'utf8', timeout: 10000 });
     const toolchainRoot = join(process.resourcesPath, 'research-toolchain');
-    const toolchainFiles = ['manifest.json', 'worker.py', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
+    const toolchainFiles = ['manifest.json', 'worker.py', 'figure.py', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
     const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules');
     return {
       packaged: app.isPackaged,

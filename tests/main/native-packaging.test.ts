@@ -205,7 +205,7 @@ describe('native packaging contract', () => {
     mkdirSync(join(root, 'tex'), { recursive: true });
     mkdirSync(join(root, 'licenses'), { recursive: true });
     writeFileSync(join(root, 'manifest.json'), JSON.stringify({ platform: 'darwin', architecture: process.arch }));
-    for (const relativePath of ['worker.py', 'bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
+    for (const relativePath of ['worker.py', 'figure.py', 'bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
       'licenses/README.md', 'licenses/sources.json', 'licenses/tectonic-MIT.txt', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt', 'licenses/CDLA-Permissive-2.0.txt']) {
       mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
       writeFileSync(join(root, relativePath), 'license');

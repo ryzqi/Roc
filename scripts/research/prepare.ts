@@ -19,6 +19,8 @@ const SCRIPT_FILES = [
   'download-asset.ts',
   'fetch-models.ts',
   'manifest.ts',
+  'smoke.ts',
+  'build-r-process.ts',
   'collect_licenses.py'
 ] as const;
 const DARWIN_O_EXLOCK = 0x20;

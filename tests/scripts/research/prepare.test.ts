@@ -73,6 +73,8 @@ describe('research prepare', () => {
     const hashes = await computeLockHashes();
     expect(hashes['scripts/prepare.ts']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/download-asset.ts']).toMatch(/^[0-9a-f]{64}$/u);
+    expect(hashes['scripts/smoke.ts']).toMatch(/^[0-9a-f]{64}$/u);
+    expect(hashes['scripts/build-r-process.ts']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/collect_licenses.py']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/prepare.py']).toBeUndefined();
   });

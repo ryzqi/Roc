@@ -2,7 +2,6 @@ import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/pro
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { convertTexBundle, extractToolArchive } from '../../../scripts/research/archive-utils';
 
@@ -62,16 +61,6 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
   return JSON.parse(result.stdout) as Record<string, string>;
 }
 
-function pythonConvert(archive: string, destination: string): void {
-  python(`
-import sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[3])
-from archive_utils import convert_tex_bundle
-convert_tex_bundle(Path(sys.argv[1]), Path(sys.argv[2]))
-`, [archive, destination, fileURLToPath(new URL('../../../scripts/research', import.meta.url))], dirnameSafe(destination));
-}
-
 describe('research archive utils', () => {
   it('converts a tex bundle without changing contents', async () => {
     const root = await workspace();
@@ -88,9 +77,9 @@ describe('research archive utils', () => {
       'tectonic-format-latex.tex': '\\input latex.ltx',
       'example.sty': 'license and contents'
     });
-    const pythonZip = join(root, 'python.zip');
-    pythonConvert(archive, pythonZip);
-    expect(await readFile(target)).toEqual(await readFile(pythonZip));
+    const second = join(root, 'second.zip');
+    await convertTexBundle(archive, second);
+    expect(await readFile(target)).toEqual(await readFile(second));
     await expect(convertTexBundle(archive, target))
       .rejects.toMatchObject({ message: 'research_tex_bundle_destination_exists' });
   });

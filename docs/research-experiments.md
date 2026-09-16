@@ -45,5 +45,5 @@ R 的标准库会执行系统命令。应用附带带源码和哈希的 arm64/x6
 修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令重建两个架构、合并为通用库并更新源码/二进制哈希。应用运行时直接使用已构建资源。
 
 ```bash
-rtk proxy python3 -B /Users/Apple_501/Desktop/Roc/Roc/scripts/research/build-r-process.py
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/build-r-process.ts
 ```
