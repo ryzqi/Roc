@@ -77,6 +77,7 @@ describe('research prepare', () => {
     expect(hashes['scripts/build-r-process.ts']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/collect_licenses.py']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/prepare.py']).toBeUndefined();
+    expect(hashes['tex-bundle-files.txt']).toMatch(/^[0-9a-f]{64}$/u);
   });
 
   it('collects named files in license directories', async () => {

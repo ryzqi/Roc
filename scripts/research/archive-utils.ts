@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { link, lstat, mkdir, mkdtemp, open, rm, symlink, type FileHandle } from 'node:fs/promises';
 import { dirname, join, posix as posixPath, resolve } from 'node:path';
@@ -467,8 +468,58 @@ function assertBundleName(name: string, names: Set<string>): void {
   }
 }
 
-export async function convertTexBundle(source: string, destination: string): Promise<void> {
+export function parseTexBundleFileList(text: string): string[] {
+  const names = new Set<string>();
+  for (const raw of text.split(/\r?\n/u)) {
+    const name = raw.trim();
+    if (name === '' || name.startsWith('#')) continue;
+    assertBundleName(name, names);
+    names.add(name);
+  }
+  if (names.size === 0) fail('research_tex_bundle_file_list_empty');
+  if (names.has('SHA256SUM')) fail('research_tex_bundle_file_list_invalid');
+  if (!names.has('tectonic-format-latex.tex')) fail('research_tex_bundle_metadata_missing');
+  return [...names].sort();
+}
+
+function digestHex(data: Buffer): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+function appendZipMember(members: ZipMember[], names: Set<string>, offset: number, name: string, data: Buffer): { record: ZipMember; header: Buffer; compressed: Buffer; nextOffset: number } {
+  assertBundleName(name, names);
+  names.add(name);
+  const utf8 = !isAscii(name);
+  const compressed = deflateRawSync(data, { level: 6 });
+  const zip64 = data.length >= 0xffffffff || compressed.length >= 0xffffffff || offset >= 0xffffffff;
+  const record: ZipMember = {
+    name: Buffer.from(name, 'utf8'),
+    flags: utf8 ? 0x800 : 0,
+    crc: crc32(data),
+    compressedSize: compressed.length,
+    uncompressedSize: data.length,
+    localOffset: offset,
+    zip64
+  };
+  const header = localHeader(record);
+  members.push(record);
+  return { record, header, compressed, nextOffset: offset + header.length + compressed.length };
+}
+
+export async function convertTexBundle(
+  source: string,
+  destination: string,
+  fileList: readonly string[]
+): Promise<void> {
   if (await pathInfo(destination) !== null) fail('research_tex_bundle_destination_exists');
+  if (fileList.length === 0) fail('research_tex_bundle_file_list_empty');
+  const keep = new Set<string>();
+  for (const name of fileList) {
+    assertBundleName(name, keep);
+    keep.add(name);
+  }
+  if (keep.has('SHA256SUM')) fail('research_tex_bundle_file_list_invalid');
+  if (!keep.has('tectonic-format-latex.tex')) fail('research_tex_bundle_metadata_missing');
   await mkdir(dirname(destination), { recursive: true });
   const staging = await mkdtemp(join(dirname(destination), '.tex-bundle-'));
   try {
@@ -476,35 +527,36 @@ export async function convertTexBundle(source: string, destination: string): Pro
     const handle = await open(zipPath, 'wx');
     const members: ZipMember[] = [];
     const names = new Set<string>();
+    const selected = new Map<string, Buffer>();
     let offset = 0;
     let total = 0;
     try {
       await readTarMembers(source, async (member) => {
         if (member.type !== 'file') fail('research_tex_bundle_entry_invalid');
+        if (member.name === 'SHA256SUM' || !keep.has(member.name)) return;
         assertBundleName(member.name, names);
         names.add(member.name);
         total += member.size;
-        if (total > MAX_BUNDLE_BYTES || member.size > MAX_BUNDLE_FILE || names.size >= MAX_BUNDLE_MEMBERS) {
+        if (total > MAX_BUNDLE_BYTES || member.size > MAX_BUNDLE_FILE || selected.size + 1 >= MAX_BUNDLE_MEMBERS) {
           fail('research_tex_bundle_too_large');
         }
-        const utf8 = !isAscii(member.name);
-        const compressed = deflateRawSync(member.data, { level: 6 });
-        const zip64 = member.data.length >= 0xffffffff || compressed.length >= 0xffffffff || offset >= 0xffffffff;
-        const record: ZipMember = {
-          name: Buffer.from(member.name, 'utf8'),
-          flags: utf8 ? 0x800 : 0,
-          crc: crc32(member.data),
-          compressedSize: compressed.length,
-          uncompressedSize: member.data.length,
-          localOffset: offset,
-          zip64
-        };
-        const header = localHeader(record);
-        await writeAll(handle, header);
-        await writeAll(handle, compressed);
-        offset += header.length + compressed.length;
-        members.push(record);
+        selected.set(member.name, member.data);
       }, { maxMembers: MAX_BUNDLE_MEMBERS, maxBytes: MAX_BUNDLE_BYTES, sanitize: false, tooLarge: 'research_tex_bundle_too_large' });
+      const missing = [...keep].filter((name) => !selected.has(name));
+      if (missing.length > 0) fail('research_tex_bundle_file_list_missing');
+      const digestLines = [...keep].sort().map((name) => `${name} ${digestHex(selected.get(name)!)}`);
+      const digest = `${createHash('sha256').update(digestLines.join('\n')).digest('hex')}\n`;
+      names.clear();
+      for (const name of [...keep].sort()) {
+        const next = appendZipMember(members, names, offset, name, selected.get(name)!);
+        await writeAll(handle, next.header);
+        await writeAll(handle, next.compressed);
+        offset = next.nextOffset;
+      }
+      const digestRecord = appendZipMember(members, names, offset, 'SHA256SUM', Buffer.from(digest, 'ascii'));
+      await writeAll(handle, digestRecord.header);
+      await writeAll(handle, digestRecord.compressed);
+      offset = digestRecord.nextOffset;
       if (!names.has('SHA256SUM') || !names.has('tectonic-format-latex.tex')) fail('research_tex_bundle_metadata_missing');
       const centralStart = offset;
       for (const member of members) {

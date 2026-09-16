@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { convertTexBundle, extractToolArchive } from './archive-utils.ts';
+import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
 import { fetchModels } from './fetch-models.ts';
 import { verifyManifest, writeManifest } from './manifest.ts';
@@ -12,7 +12,7 @@ import { verifyManifest, writeManifest } from './manifest.ts';
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
 const SCRIPTS = fileURLToPath(new URL('.', import.meta.url));
-const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'models.lock.json'] as const;
+const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'models.lock.json', 'tex-bundle-files.txt'] as const;
 const SCRIPT_FILES = [
   'prepare.ts',
   'archive-utils.ts',
@@ -294,8 +294,12 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
         expectedSize: bundle.size
       });
+      const fileList = parseTexBundleFileList(await readFile(join(SOURCES, 'tex-bundle-files.txt'), 'utf8'));
       const cachedZip = join(cache, 'tex-bundle.zip');
-      if (await pathInfo(cachedZip) === null) await convertTexBundle(archive, cachedZip);
+      if (await pathInfo(cachedZip) !== null && await fileSha256(cachedZip) !== bundle.zipSha256) {
+        await rm(cachedZip);
+      }
+      if (await pathInfo(cachedZip) === null) await convertTexBundle(archive, cachedZip, fileList);
       if (await fileSha256(cachedZip) !== bundle.zipSha256) fail('research_tex_zip_hash_mismatch');
       await mkdir(join(root, 'tex'));
       await copyPreservingMode(cachedZip, join(root, 'tex/bundle.zip'));

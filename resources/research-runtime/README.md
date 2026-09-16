@@ -19,7 +19,7 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --tool
 
 `prepare.ts` 按工具归档 SHA-256、`uv.lock` 和全部模型文件哈希组装环境，生成逐文件完整性清单及实际 Python 包许可证索引。解释器和 console script 不依赖开发机 venv。下载缓存位于 `.runtime/research-downloads`；中断后重复命令会使用已完成分块及部分字节。相同输出已存在时执行完整校验；源文件或锁文件变化后需选择新输出目录，避免覆盖已有工具链。
 
-TeX 资源从固定 TAR 转为保留全部 134,980 个文件的 ZIP，原始与转换后的哈希均在 `tools.lock.json`。冷缓存构建需要数 GB 下载及额外解压空间。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
+TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离线编译子集 ZIP。保留原始文件字节，并重写 `SHA256SUM`。源 TAR 哈希、子集 ZIP 哈希均在 `tools.lock.json`。运行时 `tectonic --only-cached`，不下载其余 TeX Live 包。缺包即编译失败。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
 
 `smoke.ts` 使用空缓存和 macOS sandbox 禁止外网，执行中英文 LaTeX 编译、PDF 渲染、扫描图 OCR、表格/公式/图稿提取，以及 Matplotlib 的 PNG/SVG/PDF 输出。输出目录必须不存在；成功后写入 `result.json`，并保留 PDF、页面图、解析结果和日志。验证搬迁时将完整工具链复制或移到含空格的新路径后执行同一命令。
 

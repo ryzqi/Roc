@@ -10,6 +10,6 @@
 | Python 科研依赖 | `locks/uv.lock`；构建时生成的 `python-packages.json` 记录实际版本、元数据与随包许可证文件路径，原文保留在各包中 |
 | Docling 布局模型 | `locks/models.lock.json`；Apache-2.0，版权及模型说明保留在对应模型 README 中 |
 | Docling 表格与公式模型 | `locks/models.lock.json`；`CDLA-Permissive-2.0.txt` 与对应模型 README |
-| TeX/字体资源 | `tex/bundle.zip` 为官方 tlextras-2022.0r0 的完整格式转换，保留全部文件和文件内原有版权/许可声明；源地址和完整哈希记录在 `locks/tools.lock.json` |
+| TeX/字体资源 | `tex/bundle.zip` 为官方 tlextras-2022.0r0 的编译子集，文件名单锁定在 `tex-bundle-files.txt`；保留入选文件原有版权/许可声明；源 TAR 与子集 ZIP 哈希记录在 `locks/tools.lock.json` |
 
-TeX bundle 与各 Python 包属于多许可证集合，不能用 Roc 核心许可证替代其各自声明。分发时同时携带本目录、模型说明、Python 包许可证与完整 TeX bundle；工具链完整性清单覆盖这些资源。
+TeX bundle 与各 Python 包属于多许可证集合，不能用 Roc 核心许可证替代其各自声明。分发时同时携带本目录、模型说明、Python 包许可证与入选 TeX 文件；工具链完整性清单覆盖这些资源。

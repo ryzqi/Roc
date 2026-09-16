@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { convertTexBundle, extractToolArchive } from '../../../scripts/research/archive-utils';
+import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from '../../../scripts/research/archive-utils';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -62,33 +62,69 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
 }
 
 describe('research archive utils', () => {
-  it('converts a tex bundle without changing contents', async () => {
+  it('converts a locked tex bundle subset and rewrites SHA256SUM', async () => {
     const root = await workspace();
     const archive = join(root, 'source.tar');
     const target = join(root, 'bundle.zip');
+    const files = ['example.sty', 'tectonic-format-latex.tex'] as const;
     writeTar(archive, {
       SHA256SUM: 'a'.repeat(64),
       'tectonic-format-latex.tex': '\\input latex.ltx',
-      'example.sty': 'license and contents'
+      'example.sty': 'license and contents',
+      'drop.sty': 'unused'
     });
-    await convertTexBundle(archive, target);
-    expect(zipEntries(target)).toEqual({
-      SHA256SUM: 'a'.repeat(64),
-      'tectonic-format-latex.tex': '\\input latex.ltx',
-      'example.sty': 'license and contents'
-    });
+    await convertTexBundle(archive, target, files);
+    const entries = zipEntries(target);
+    expect(entries['tectonic-format-latex.tex']).toBe('\\input latex.ltx');
+    expect(entries['example.sty']).toBe('license and contents');
+    expect(entries['drop.sty']).toBeUndefined();
+    expect(entries.SHA256SUM).toMatch(/^[a-f0-9]{64}\n$/u);
+    expect(Object.keys(entries).sort()).toEqual(['SHA256SUM', 'example.sty', 'tectonic-format-latex.tex']);
     const second = join(root, 'second.zip');
-    await convertTexBundle(archive, second);
+    await convertTexBundle(archive, second, files);
     expect(await readFile(target)).toEqual(await readFile(second));
-    await expect(convertTexBundle(archive, target))
+    await expect(convertTexBundle(archive, target, files))
       .rejects.toMatchObject({ message: 'research_tex_bundle_destination_exists' });
+  });
+
+  it('rejects a subset list that omits a declared file', async () => {
+    const root = await workspace();
+    const archive = join(root, 'source.tar');
+    writeTar(archive, {
+      SHA256SUM: 'a'.repeat(64),
+      'tectonic-format-latex.tex': '\\input latex.ltx'
+    });
+    await expect(convertTexBundle(archive, join(root, 'bundle.zip'), ['tectonic-format-latex.tex', 'missing.sty']))
+      .rejects.toMatchObject({ message: 'research_tex_bundle_file_list_missing' });
+    await expect(readFile(join(root, 'bundle.zip'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects an empty tex bundle file list', async () => {
+    const root = await workspace();
+    const archive = join(root, 'source.tar');
+    writeTar(archive, {
+      SHA256SUM: 'a'.repeat(64),
+      'tectonic-format-latex.tex': '\\input latex.ltx'
+    });
+    await expect(convertTexBundle(archive, join(root, 'bundle.zip'), []))
+      .rejects.toMatchObject({ message: 'research_tex_bundle_file_list_empty' });
+    await expect(readFile(join(root, 'bundle.zip'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('parses a locked tex file list and rejects SHA256SUM', () => {
+    expect(parseTexBundleFileList('# comment\nkeep.sty\ntectonic-format-latex.tex\n')).toEqual([
+      'keep.sty',
+      'tectonic-format-latex.tex'
+    ]);
+    expect(() => parseTexBundleFileList('SHA256SUM\ntectonic-format-latex.tex\n'))
+      .toThrow('research_tex_bundle_file_list_invalid');
   });
 
   it('rejects bundle paths and leaves no final output', async () => {
     const root = await workspace();
     const archive = join(root, 'source.tar');
     writeTar(archive, { '../escape': 'bad' });
-    await expect(convertTexBundle(archive, join(root, 'bundle.zip')))
+    await expect(convertTexBundle(archive, join(root, 'bundle.zip'), ['../escape', 'tectonic-format-latex.tex']))
       .rejects.toMatchObject({ message: 'research_tex_bundle_entry_invalid' });
     await expect(readFile(join(root, 'bundle.zip'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readFile(join(root, '..', 'escape'))).rejects.toMatchObject({ code: 'ENOENT' });
