@@ -12,7 +12,7 @@ import { assertFigureEnvironment, figureGeneratedInputs, figureProcessCommand, f
 import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
-import { ResearchJobSession, type ResearchJobTask } from './research-job-session';
+import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 
@@ -20,7 +20,9 @@ type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 
 export class ResearchExperimentService {
   private readonly session = new ResearchJobSession('research_experiment_closed');
-  private readonly executions = new Map<string, ResearchJobTask & { projectId: string }>();
+  private readonly executions = new ResearchBackgroundJobs<{ projectId: string }>(this.session, (runId, error) => {
+    this.logger.error('Research experiment could not persist its final state.', { runId, error: errorCode(error) });
+  });
 
   constructor(private readonly repository: ResearchRepository, private readonly environments: Pick<ResearchExperimentEnvironmentService, 'inspect'>,
     private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
@@ -53,7 +55,7 @@ export class ResearchExperimentService {
     });
   }
 
-  abort(id: string): void { this.executions.get(id)?.controller.abort(); }
+  abort(id: string): void { this.executions.abort(id); }
 
   async cancel(projectId: string, id: string): Promise<ResearchExperimentExecution> {
     this.session.requireOpen();
@@ -61,8 +63,8 @@ export class ResearchExperimentService {
     if (!['preparing', 'running'].includes(run.status)) return run;
     const task = this.executions.get(id);
     if (task !== undefined) {
-      task.controller.abort();
-      await task.promise;
+      this.executions.abort(id);
+      await this.executions.wait(id);
       return this.repository.experiments.get(projectId, id);
     }
     return this.repository.experiments.finish(projectId, id, { status: 'cancelled', files: run.files, exitCode: null, error: 'research_experiment_cancelled' });
@@ -70,11 +72,11 @@ export class ResearchExperimentService {
 
   projectChanged(projectId: string): void {
     const project = this.repository.getProject(projectId);
-    for (const [id, task] of this.executions) {
-      if (task.projectId !== projectId) continue;
+    this.executions.abortMatching((id, task) => {
+      if (task.projectId !== projectId) return false;
       const run = this.repository.experiments.get(projectId, id);
-      if (project.status === 'archived' || project.workspacePath !== run.workspacePath) task.controller.abort();
-    }
+      return project.status === 'archived' || project.workspacePath !== run.workspacePath;
+    });
   }
 
   async source(input: FileRequest): Promise<{ bytes: Buffer; file: ResearchExperimentFile }> {
@@ -134,13 +136,7 @@ export class ResearchExperimentService {
   }
 
   private schedule(run: ResearchExperimentExecution): void {
-    const controller = new AbortController();
-    const promise = Promise.resolve().then(() => this.execute(run, controller.signal));
-    const task = { controller, promise, projectId: run.projectId };
-    this.session.track(task);
-    this.executions.set(run.id, task);
-    void promise.catch((error: unknown) => this.logger.error('Research experiment could not persist its final state.', { runId: run.id, error: errorCode(error) }))
-      .finally(() => { this.session.untrack(task); this.executions.delete(run.id); });
+    this.executions.start(run.id, { projectId: run.projectId }, (signal) => this.execute(run, signal));
   }
 
   private async execute(initial: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {

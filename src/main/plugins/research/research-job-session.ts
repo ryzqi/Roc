@@ -3,6 +3,8 @@ export type ResearchJobTask = {
   promise: Promise<unknown>;
 };
 
+export type ResearchBackgroundJob<TMeta> = ResearchJobTask & TMeta;
+
 export class ResearchJobSession {
   private closed = false;
   private readonly tasks = new Set<ResearchJobTask>();
@@ -52,5 +54,46 @@ export class ResearchJobSession {
     this.closed = true;
     for (const task of this.tasks) task.controller.abort();
     await Promise.allSettled([...this.tasks].map((task) => task.promise));
+  }
+}
+
+export class ResearchBackgroundJobs<TMeta> {
+  private readonly jobs = new Map<string, ResearchBackgroundJob<TMeta>>();
+
+  constructor(
+    private readonly session: ResearchJobSession,
+    private readonly onLost: (id: string, error: unknown) => void
+  ) {}
+
+  has(id: string): boolean {
+    return this.jobs.has(id);
+  }
+
+  get(id: string): ResearchBackgroundJob<TMeta> | undefined {
+    return this.jobs.get(id);
+  }
+
+  start(id: string, meta: TMeta, work: (signal: AbortSignal) => Promise<void>): void {
+    if (this.jobs.has(id)) return;
+    const controller = new AbortController();
+    const promise = Promise.resolve().then(() => work(controller.signal));
+    const task = { controller, promise, ...meta };
+    this.session.track(task);
+    this.jobs.set(id, task);
+    void promise.catch((error: unknown) => this.onLost(id, error))
+      .finally(() => { this.session.untrack(task); this.jobs.delete(id); });
+  }
+
+  abort(id: string): void {
+    this.jobs.get(id)?.controller.abort();
+  }
+
+  abortMatching(match: (id: string, job: ResearchBackgroundJob<TMeta>) => boolean): void {
+    for (const [id, job] of this.jobs) if (match(id, job)) job.controller.abort();
+  }
+
+  async wait(id: string): Promise<void> {
+    const task = this.jobs.get(id);
+    if (task !== undefined) await task.promise;
   }
 }
