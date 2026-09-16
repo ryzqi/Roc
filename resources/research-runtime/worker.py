@@ -10,14 +10,11 @@ import json
 import math
 import mimetypes
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import shutil
-import stat
 import sys
 import traceback
 from typing import TypedDict
-import unicodedata
-import zipfile
 
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
@@ -27,8 +24,6 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 mimetypes.knownfiles = []
 mimetypes.init(files=[])
 MAX_PAGE_PIXELS = 25_000_000
-# 附属模块只从已校验的运行时目录加载，不加入项目目录。
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 class Location(TypedDict):
@@ -53,10 +48,7 @@ class DocumentRequest:
     project_root: Path
     source: Path
     output: Path
-    models: Path | None = None
-    page: int | None = None
-    scale: float | None = None
-    bibliography_format: str | None = None
+    models: Path
 
 
 def absolute_path(value: object, *, must_exist: bool) -> Path:
@@ -78,17 +70,9 @@ def within(root: Path, value: object, *, must_exist: bool) -> Path:
 def parse_request(value: object) -> DocumentRequest:
     if not isinstance(value, dict):
         raise ValueError("research_request_invalid")
-    operation = value.get("operation")
-    fields = {"operation", "projectRoot", "sourcePath", "outputDir"}
-    if operation == "parse_document":
-        fields.add("modelsPath")
-    elif operation == "render_pdf":
-        fields.update({"page", "scale"})
-    elif operation in {"read_bibliography", "write_bibliography"}:
-        fields.add("format")
-    elif operation not in {"extract_template", "normalize_bibliography"}:
+    if value.get("operation") != "parse_document":
         raise ValueError("research_operation_unknown")
-    if set(value) != fields:
+    if set(value) != {"operation", "projectRoot", "sourcePath", "outputDir", "modelsPath"}:
         raise ValueError("research_request_fields_invalid")
     root = absolute_path(value["projectRoot"], must_exist=True)
     if not root.is_dir():
@@ -101,101 +85,17 @@ def parse_request(value: object) -> DocumentRequest:
     output = within(root, value["outputDir"], must_exist=False)
     if output.exists():
         raise ValueError("research_output_already_exists")
-    if operation in {"read_bibliography", "write_bibliography"}:
-        format_name = value["format"]
-        if not isinstance(format_name, str) or format_name not in {"bibtex", "biblatex", "csl-json"}:
-            raise ValueError("research_bibliography_format_invalid")
-        return DocumentRequest(operation, root, source, output, bibliography_format=format_name)
-    if operation == "normalize_bibliography":
-        return DocumentRequest(operation, root, source, output)
-    if operation == "extract_template":
-        if source.suffix.lower() != ".zip":
-            raise ValueError("research_template_zip_required")
-        return DocumentRequest(operation, root, source, output)
-    if operation == "parse_document":
-        if source.suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".html", ".htm"}:
-            raise ValueError("research_source_format_unsupported")
-        models = absolute_path(value["modelsPath"], must_exist=True)
-        if not models.is_dir():
-            raise ValueError("research_models_directory_required")
-        return DocumentRequest(operation, root, source, output, models=models)
-    page, scale = value["page"], value["scale"]
-    if type(page) is not int or page < 1 or type(scale) not in {float, int} or not 0.5 <= scale <= 4:
-        raise ValueError("research_pdf_render_options_invalid")
-    if source.suffix.lower() != ".pdf":
-        raise ValueError("research_pdf_source_required")
-    return DocumentRequest(operation, root, source, output, page=page, scale=float(scale))
+    if source.suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".html", ".htm"}:
+        raise ValueError("research_source_format_unsupported")
+    models = absolute_path(value["modelsPath"], must_exist=True)
+    if not models.is_dir():
+        raise ValueError("research_models_directory_required")
+    return DocumentRequest("parse_document", root, source, output, models)
 
 
 def file_hash(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
-def extract_template(request: DocumentRequest) -> dict:
-    with zipfile.ZipFile(request.source) as archive:
-        members = archive.infolist()
-        if len(members) > 5000 or sum(member.file_size for member in members) > 256 * 1024 * 1024:
-            raise ValueError("research_template_archive_too_large")
-        names: dict[str, str] = {}
-        files: set[str] = set()
-        for member in members:
-            name = member.orig_filename
-            path = PurePosixPath(name)
-            mode = member.external_attr >> 16
-            if (path.is_absolute() or not path.parts or ".." in path.parts or "\\" in name
-                    or any(ord(char) < 32 for char in name) or stat.S_ISLNK(mode)
-                    or stat.S_IFMT(mode) not in {0, stat.S_IFDIR, stat.S_IFREG} or member.flag_bits & 1):
-                raise ValueError("research_template_archive_entry_invalid")
-            if member.file_size > 64 * 1024 * 1024:
-                raise ValueError("research_template_archive_too_large")
-            for index in range(1, len(path.parts) + 1):
-                part = PurePosixPath(*path.parts[:index]).as_posix()
-                folded = unicodedata.normalize("NFC", part).casefold()
-                if folded in names and names[folded] != part:
-                    raise ValueError("research_template_archive_path_collision")
-                names[folded] = part
-            if not member.is_dir():
-                if path.as_posix() in files:
-                    raise ValueError("research_template_archive_path_collision")
-                files.add(path.as_posix())
-        extracted = 0
-        for member in members:
-            path = PurePosixPath(member.filename)
-            if any(part in {"__MACOSX", ".git", ".DS_Store", ".roc-research", ".roc-build"} for part in path.parts):
-                continue
-            target = request.output.joinpath(*path.parts)
-            if member.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(member) as source, target.open("xb") as destination:
-                    shutil.copyfileobj(source, destination)
-                extracted += 1
-        return {"fileCount": extracted}
-
-
-def render_pdf(request: DocumentRequest) -> dict:
-    import pypdfium2 as pdfium
-
-    source, output = request.source, request.output
-    page_number, scale = request.page, request.scale
-    if page_number is None or scale is None:
-        raise ValueError("research_pdf_render_options_invalid")
-    with pdfium.PdfDocument(source) as pdf:
-        if page_number > len(pdf):
-            raise ValueError("research_pdf_page_out_of_range")
-        with contextlib.closing(pdf[page_number - 1]) as page:
-            pixels = page.get_width() * page.get_height() * scale * scale
-            if not math.isfinite(pixels) or pixels <= 0 or pixels > MAX_PAGE_PIXELS:
-                raise ValueError("research_pdf_page_too_large")
-            target = output / f"page-{page_number}.png"
-            with contextlib.closing(page.render(scale=scale)) as bitmap, bitmap.to_pil() as image:
-                image.save(target)
-                width, height = image.size
-            with contextlib.closing(page.get_textpage()) as text_page:
-                text = text_page.get_text_bounded().replace("\r\n", "\n")
-        return {"path": str(target), "page": page_number, "pageCount": len(pdf), "width": width, "height": height, "text": text}
 
 
 def validate_document_dimensions(source: Path) -> None:
@@ -228,8 +128,6 @@ def parse_document(request: DocumentRequest) -> dict:
     from docling_core.types.doc import PictureItem, TableItem, TextItem
 
     source, output, models = request.source, request.output, request.models
-    if models is None:
-        raise ValueError("research_models_directory_required")
     options = PdfPipelineOptions(
         artifacts_path=models,
         enable_remote_services=False,
@@ -305,19 +203,7 @@ def execute(request: DocumentRequest) -> dict:
     before = file_hash(request.source)
     request.output.mkdir(parents=True, exist_ok=False)
     try:
-        if request.operation in {"read_bibliography", "write_bibliography", "normalize_bibliography"}:
-            from bibliography import normalize_file, read_file, write_file
-
-            if request.operation == "normalize_bibliography":
-                result = normalize_file(request.source)
-            elif request.bibliography_format is None:
-                raise ValueError("research_bibliography_format_required")
-            else:
-                result = (read_file(request.source, request.bibliography_format) if request.operation == "read_bibliography"
-                          else write_file(request.source, request.output, request.bibliography_format))
-        else:
-            operation = {"parse_document": parse_document, "render_pdf": render_pdf, "extract_template": extract_template}[request.operation]
-            result = operation(request)
+        result = parse_document(request)
         if file_hash(request.source) != before:
             raise ValueError("research_source_changed_during_parse")
         return {**result, "sourceHash": before}

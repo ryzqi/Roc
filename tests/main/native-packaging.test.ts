@@ -106,6 +106,9 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).not.toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/!(darwin-${arch})/**');
     expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/**');
+    expect(electronBuilderConfig).toContain('node_modules/@napi-rs/canvas/**');
+    expect(electronBuilderConfig).toContain('node_modules/@napi-rs/canvas-darwin-${arch}/**');
+    expect(electronBuilderConfig).toContain('node_modules/pdfjs-dist/**');
   });
 
   it('verifies workspace better-sqlite3 under Electron without rebuilding it', async () => {
@@ -202,7 +205,7 @@ describe('native packaging contract', () => {
     mkdirSync(join(root, 'tex'), { recursive: true });
     mkdirSync(join(root, 'licenses'), { recursive: true });
     writeFileSync(join(root, 'manifest.json'), JSON.stringify({ platform: 'darwin', architecture: process.arch }));
-    for (const relativePath of ['worker.py', 'bibliography.py', 'bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
+    for (const relativePath of ['worker.py', 'bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
       'licenses/README.md', 'licenses/sources.json', 'licenses/tectonic-MIT.txt', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt', 'licenses/CDLA-Permissive-2.0.txt']) {
       mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
       writeFileSync(join(root, relativePath), 'license');

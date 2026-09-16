@@ -45,9 +45,10 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          'database-maintenance-cli': resolve(__dirname, 'src/main/infrastructure/database-maintenance-cli.ts')
+          'database-maintenance-cli': resolve(__dirname, 'src/main/infrastructure/database-maintenance-cli.ts'),
+          'research-job-cli': resolve(__dirname, 'src/main/plugins/research/research-job-cli.ts')
         },
-        external: ['better-sqlite3', 'electron', 'node-pty']
+        external: ['better-sqlite3', 'electron', 'node-pty', '@napi-rs/canvas', 'pdfjs-dist']
       }
     }
   },

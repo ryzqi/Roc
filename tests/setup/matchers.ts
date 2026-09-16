@@ -1,4 +1,5 @@
 import '../_matchers/contract';
+import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 
 if (typeof document !== 'undefined') {
@@ -40,7 +41,7 @@ vi.mock('react-virtuoso', async () => {
               typeof item === 'object' && item !== null && 'key' in item && typeof item.key === 'string'
                 ? item.key
                 : String(start + offset);
-            return ReactModule.createElement(ReactModule.Fragment, { key }, itemContent(start + offset, item));
+            return ReactModule.createElement(ReactModule.Fragment, { key }, itemContent(start + offset, item) as ReactNode);
           })
     );
   });

@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { lstat, readFile, readdir, readlink, realpath } from 'node:fs/promises';
-import { isAbsolute, join, relative } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, isAbsolute, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
 import modelsLock from '../../../../resources/research-runtime/models.lock.json';
 import workerSource from '../../../../resources/research-runtime/worker.py?raw';
-import bibliographySource from '../../../../resources/research-runtime/bibliography.py?raw';
 import { researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
@@ -57,28 +58,28 @@ export class ResearchToolchain {
   }
 
   async renderPdf(input: WorkerInput & { page: number; scale: number }): Promise<z.infer<typeof researchRenderedPdfSchema>> {
-    return await this.worker(input, { operation: 'render_pdf', page: input.page, scale: input.scale }, researchRenderedPdfSchema, 60_000);
+    return await this.job(input, { operation: 'render_pdf', page: input.page, scale: input.scale }, researchRenderedPdfSchema);
   }
 
   async extractTemplate(input: WorkerInput): Promise<void> {
-    await this.worker(input, { operation: 'extract_template' }, z.object({ sourceHash: digestSchema, fileCount: z.number().int().nonnegative() }).strict(), 60_000);
+    await this.job(input, { operation: 'extract_template' }, z.object({ sourceHash: z.string(), fileCount: z.number().int().nonnegative() }).strict());
   }
 
   async readBibliography(input: WorkerInput & { format: z.infer<typeof researchBibliographyFormatSchema> }): Promise<z.infer<typeof researchBibliographyEntrySchema>[]> {
-    const result = await this.worker(input, { operation: 'read_bibliography', format: input.format },
-      z.object({ sourceHash: digestSchema, entries: z.array(researchBibliographyEntrySchema) }).strict(), 60_000);
+    const result = await this.job(input, { operation: 'read_bibliography', format: input.format },
+      z.object({ sourceHash: z.string(), entries: z.array(researchBibliographyEntrySchema) }).strict());
     return result.entries;
   }
 
   async normalizeBibliography(input: WorkerInput): Promise<z.infer<typeof researchBibliographyEntrySchema>[]> {
-    const result = await this.worker(input, { operation: 'normalize_bibliography' },
-      z.object({ sourceHash: digestSchema, entries: z.array(researchBibliographyEntrySchema) }).strict(), 60_000);
+    const result = await this.job(input, { operation: 'normalize_bibliography' },
+      z.object({ sourceHash: z.string(), entries: z.array(researchBibliographyEntrySchema) }).strict());
     return result.entries;
   }
 
   async writeBibliography(input: WorkerInput & { format: z.infer<typeof researchBibliographyFormatSchema> }): Promise<{ filename: string; content: string }> {
-    const result = await this.worker(input, { operation: 'write_bibliography', format: input.format },
-      z.object({ sourceHash: digestSchema, filename: z.string(), content: z.string() }).strict(), 60_000);
+    const result = await this.job(input, { operation: 'write_bibliography', format: input.format },
+      z.object({ sourceHash: z.string(), filename: z.string(), content: z.string() }).strict());
     return { filename: result.filename, content: result.content };
   }
 
@@ -89,6 +90,72 @@ export class ResearchToolchain {
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
       timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+  }
+
+  private async job<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
+    const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir };
+    const packagedCli = fileURLToPath(new URL('./research-job-cli.js', import.meta.url));
+    if (!existsSync(packagedCli)) {
+      return await this.jobInProcess(input, operation, schema);
+    }
+    const require = createRequire(import.meta.url);
+    const optionalNative = (specifier: string): string[] => {
+      try { return [dirname(require.resolve(`${specifier}/package.json`))]; }
+      catch { return []; }
+    };
+    const readablePaths = [
+      dirname(packagedCli),
+      dirname(require.resolve('pdfjs-dist/package.json')),
+      dirname(require.resolve('@napi-rs/canvas/package.json')),
+      ...optionalNative('@napi-rs/canvas-darwin-arm64'),
+      ...optionalNative('@napi-rs/canvas-darwin-x64'),
+      process.execPath,
+      join(dirname(process.execPath), '..'),
+      input.sourcePath,
+      input.projectRoot
+    ];
+    const result = await runResearchProcess({
+      command: process.execPath,
+      args: [packagedCli],
+      cwd: input.jobDir,
+      readablePaths,
+      writablePaths: [input.jobDir],
+      environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+      timeoutMs: 60_000,
+      signal: input.signal,
+      input: JSON.stringify(request),
+      allowOcrAcceleration: false,
+      networkAccess: 'none',
+      allowPosixSpawn: false
+    });
+    const envelope = z.discriminatedUnion('ok', [
+      z.object({ ok: z.literal(true), result: schema }).strict(),
+      z.object({ ok: z.literal(false), error: z.object({ code: z.string(), type: z.string() }).strict() }).strict()
+    ]).safeParse(parseJson(result.stdout));
+    if (!envelope.success) throw new ResearchProcessError('research_worker_response_invalid', '', result.stderr);
+    if (!envelope.data.ok) throw new ResearchProcessError(envelope.data.error.code, '', result.stderr);
+    if (result.exitCode !== 0) throw new ResearchProcessError('research_worker_failed', '', result.stderr);
+    return envelope.data.result;
+  }
+
+  private async jobInProcess<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
+    const { extractResearchTemplate } = await import('./template-archive');
+    const { normalizeResearchBibliography, readResearchBibliography, writeResearchBibliography } = await import('./bibliography');
+    const { renderResearchPdf } = await import('./pdf-render');
+    const base = { projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir, signal: input.signal, timeoutMs: 60_000 };
+    const name = operation.operation;
+    if (name === 'extract_template') return schema.parse(await extractResearchTemplate(base));
+    if (name === 'render_pdf') {
+      return schema.parse(await renderResearchPdf({ ...base, page: Number(operation.page), scale: Number(operation.scale) }));
+    }
+    if (name === 'read_bibliography') {
+      return schema.parse(await readResearchBibliography({ ...base, format: operation.format as 'bibtex' | 'biblatex' | 'csl-json' }));
+    }
+    if (name === 'normalize_bibliography') return schema.parse(await normalizeResearchBibliography(base));
+    if (name === 'write_bibliography') {
+      return schema.parse(await writeResearchBibliography({ ...base, format: operation.format as 'bibtex' | 'biblatex' | 'csl-json' }));
+    }
+    throw new ResearchProcessError('research_operation_unknown');
   }
 
   private async worker<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>, timeoutMs: number): Promise<T> {
@@ -145,7 +212,6 @@ export class ResearchToolchain {
       if (entry?.type !== 'file' || entry.sha256 !== hash) throw new ResearchProcessError('research_toolchain_source_mismatch');
     };
     requireHash('worker.py', researchContentHash(workerSource));
-    requireHash('bibliography.py', researchContentHash(bibliographySource));
     requireHash('tex/bundle.zip', toolsLock.texBundle.zipSha256);
     for (const model of modelsLock.models) {
       for (const [path, digest] of Object.entries(model.files)) requireHash(`models/${model.directory}/${path}`, digest);

@@ -115,13 +115,16 @@ def smoke(toolchain: Path, output: Path) -> None:
     pdf = compiled / "paper.pdf"
     if not pdf.read_bytes().startswith(b"%PDF"):
         raise RuntimeError("research_smoke_pdf_invalid")
-    rendered = json.loads(run("render", [python, "-I", "-B", toolchain / "worker.py"], request={
-        "operation": "render_pdf", "projectRoot": str(output), "sourcePath": str(pdf),
-        "outputDir": str(output / "rendered"), "page": 1, "scale": 2}))
-    if not rendered["ok"] or "研究数据与方法" not in rendered["result"]["text"]:
+    rendered_dir = output / "rendered"
+    rendered_dir.mkdir()
+    run("render", [python, "-I", "-B", "-c",
+                   "import json,sys,pypdfium2 as pdfium\nfrom pathlib import Path\npdf=pdfium.PdfDocument(sys.argv[1])\npage=pdf[0]\nimage=page.render(scale=2).to_pil()\npath=Path(sys.argv[2])/'page-1.png'\nimage.save(path)\ntext=page.get_textpage().get_text_bounded()\nprint(json.dumps({'path':str(path),'text':text,'pageCount':len(pdf)}))",
+                   pdf, rendered_dir])
+    rendered = json.loads((output / "render.stdout.log").read_text(encoding="utf-8"))
+    if "研究数据与方法" not in rendered["text"]:
         raise RuntimeError("research_smoke_pdf_text_missing")
     parsed = json.loads(run("ocr-table-formula", [python, "-I", "-B", toolchain / "worker.py"], request={
-        "operation": "parse_document", "projectRoot": str(output), "sourcePath": rendered["result"]["path"],
+        "operation": "parse_document", "projectRoot": str(output), "sourcePath": rendered["path"],
         "outputDir": str(output / "parsed"), "modelsPath": str(toolchain / "models")}))
     if not parsed["ok"]:
         raise RuntimeError("research_smoke_parse_failed")
@@ -149,7 +152,7 @@ def smoke(toolchain: Path, output: Path) -> None:
     run("relocated-console-script", [toolchain / "python/bin/ipython", "--version"], timeout=30)
     verify_manifest(toolchain)
     result = {"architecture": manifest["architecture"], "versions": manifest["versions"],
-              "network": "denied except notebook loopback", "pageCount": rendered["result"]["pageCount"],
+              "network": "denied except notebook loopback", "pageCount": rendered["pageCount"],
               "blockKinds": sorted(kinds), "blockCount": len(parsed["result"]["blocks"]),
               "warnings": parsed["result"]["warnings"], "notebookResult": 30,
               "nativePdfBlocks": len(native["result"]["blocks"]), "htmlBlocks": len(parsed_html["result"]["blocks"]),

@@ -205,7 +205,6 @@ export function verifyPackagedResearchToolchain({ resourcesDir, architecture = p
   const required = [
     'manifest.json',
     'worker.py',
-    'bibliography.py',
     'bin/tectonic',
     'bin/uv',
     'python/bin/python3',

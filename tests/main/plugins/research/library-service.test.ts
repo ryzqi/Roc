@@ -68,7 +68,7 @@ describe('research library service', () => {
     expect(await readFile(source, 'utf8')).toBe(content);
   });
 
-  it('rejects symlink sources and invalid project destinations before invoking Python', async () => {
+  it('rejects symlink sources and invalid project destinations before invoking bibliography tools', async () => {
     const source = join(root, 'real.bib');
     const link = join(root, 'link.bib');
     await writeFile(source, '@article{key,title={Title}}');
@@ -134,7 +134,7 @@ describe('research library service', () => {
     expect(await readdir(join(root, 'library'))).toEqual([]);
   });
 
-  it('never commits a late Python result after shutdown and refuses later operations', async () => {
+  it('never commits a late bibliography result after shutdown and refuses later operations', async () => {
     let finish!: (entries: Awaited<ReturnType<LibraryTools['normalizeBibliography']>>) => void;
     normalize.mockImplementationOnce(async () => await new Promise((resolve) => { finish = resolve; }));
     const pending = service.importRecord(record());

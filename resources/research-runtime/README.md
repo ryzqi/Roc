@@ -2,7 +2,7 @@
 
 Python 3.12.14 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
 
-Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。模型资源必须随工具链提供，运行时禁止自动下载。Matplotlib、BibTeX 和 Notebook 依赖也由此锁文件管理。
+Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。模型资源必须随工具链提供，运行时禁止自动下载。Matplotlib 和 Notebook 依赖也由此锁文件管理。模板 ZIP、文献和 PDF 单页渲染由主进程 TypeScript 实现。
 
 本目录保存源文件和依赖声明。构建得到的解释器、环境与模型位于项目 `.runtime/`，不提交生成的第三方二进制。此增量提供可供应用打包的完整工具链；主进程接线与 Electron 打包校验在后续增量完成。
 
@@ -25,14 +25,9 @@ TeX 资源从固定 TAR 转为保留全部 134,980 个文件的 ZIP，原始与�
 
 ## Worker 协议
 
-`worker.py` 每次从 stdin 接收一条 JSON 请求，在 stdout 返回 `{"ok":true,"result":...}` 或 `{"ok":false,"error":{"code":...,"type":...}}`；库日志走 stderr。成功退出码为 0，失败为 1。调用时使用私有 Python 的 `-I -B` 参数，外层负责超时、取消、缓存目录和进程权限。
+`worker.py` 只处理 `parse_document`。每次从 stdin 接收一条 JSON 请求，在 stdout 返回 `{"ok":true,"result":...}` 或 `{"ok":false,"error":{"code":...,"type":...}}`；库日志走 stderr。成功退出码为 0，失败为 1。调用时使用私有 Python 的 `-I -B` 参数，外层负责超时、取消、缓存目录和进程权限。
 
-- `render_pdf`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、从 1 开始的 `page`、0.5–4 的 `scale`。
 - `parse_document`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、固定的 `modelsPath`。
-- `extract_template`：必填 `projectRoot`、项目内的 ZIP `sourcePath`、新的 `outputDir`。拒绝越界、链接、加密条目及大小写路径冲突；最多 5,000 条目、256 MiB 解压总量、64 MiB 单文件。
-- `read_bibliography`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、`format`（`bibtex`、`biblatex` 或 `csl-json`）；最多 16 MiB、5,000 条。保留保护大小写标题、机构作者、日期/日期范围、preamble 和原格式扩展字段；有语法错误时整批失败。
-- `normalize_bibliography`：将学术 API 元数据与指定引用键转换成同一文献契约。仅有显示名的作者保持为完整字面名称，不推测姓氏或拆分机构。
-- `write_bibliography`：将同一契约导出为指定 `format`，返回文件名和 UTF-8 内容。引用键冲突和无法映射的条目类型明确失败；CSL 原始扩展字段与 Bib 原始字段分别在其原格式往返中保留。
 
 路径必须为绝对路径，输入与输出都必须处于项目内；拒绝覆盖已有输出。解析返回带源文件摘要、页码、边界框坐标原点和节点定位的文本/表格/公式/图稿，生成页面图及 Docling 原始结构。任何失败都清理本次新建的输出目录，来源在处理期间变化也会失败。
 

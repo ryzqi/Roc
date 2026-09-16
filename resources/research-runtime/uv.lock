@@ -114,18 +114,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bibtexparser"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pylatexenc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/88/1fbb799766aed95a310676f0c44ab65d89ccaa2535517059744dede848ec/bibtexparser-2.0.0.tar.gz", hash = "sha256:7f1e1d989282836a0ba39caf88ecc8982dfd924a4f49de58167d7effe99768e8", size = 88017, upload-time = "2026-09-08T10:22:50.275Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/e2/161a0ee841d23bcf97f3d04cd1a05ab8cd412e3d86640c24ee6a1345b83c/bibtexparser-2.0.0-py3-none-any.whl", hash = "sha256:e5e6df506d53e354874240c7f7fbd98a36db4b725e139f30e175f710a72a68b7", size = 49691, upload-time = "2026-09-08T10:22:49.051Z" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -1413,7 +1401,6 @@ name = "roc-research-runtime"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "bibtexparser" },
     { name = "docling" },
     { name = "docling-ibm-models" },
     { name = "ipykernel" },
@@ -1423,7 +1410,6 @@ dependencies = [
     { name = "numpy", marker = "platform_machine == 'x86_64'" },
     { name = "ocrmac" },
     { name = "pandas" },
-    { name = "pylatexenc" },
     { name = "pypdfium2" },
     { name = "scipy" },
     { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64'" },
@@ -1434,7 +1420,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bibtexparser", specifier = "==2.0.0" },
     { name = "docling", specifier = "==2.126.0" },
     { name = "docling-ibm-models", specifier = "==4.0.2" },
     { name = "ipykernel", specifier = "==7.3.0" },
@@ -1444,7 +1429,6 @@ requires-dist = [
     { name = "numpy", marker = "platform_machine == 'x86_64'", specifier = "==1.26.4" },
     { name = "ocrmac", specifier = "==1.0.1" },
     { name = "pandas", specifier = ">=2.2,<3" },
-    { name = "pylatexenc", specifier = "==2.11" },
     { name = "pypdfium2", specifier = "==5.13.0" },
     { name = "scipy", specifier = ">=1.13,<2" },
     { name = "torch", marker = "platform_machine == 'arm64'", specifier = "==2.14.0" },
