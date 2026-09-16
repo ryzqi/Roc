@@ -7,6 +7,7 @@ export function createProjectionController<T extends ProjectionStatus>(input: {
   empty(): T;
   copy(value: T): T;
   same?(left: T, right: T): boolean;
+  onError?(token: number): Promise<void>;
 }): ProjectionController<T> {
   let snapshot = input.empty();
   let generation = 0;
@@ -63,6 +64,7 @@ export function createProjectionController<T extends ProjectionStatus>(input: {
         if (token !== generation) return;
         const message = error instanceof Error ? error.message : messages.failed;
         assign({ working: false, error: message } as Partial<T>);
+        if (input.onError !== undefined) await input.onError(token);
       }
     },
     clearError() {

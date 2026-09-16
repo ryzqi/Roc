@@ -9,6 +9,7 @@ import type {
 } from '../../../shared/types';
 import { unwrap } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { createProjectionController } from './research-projection';
 
 export type ResearchWorkbenchAdapter = {
   listProjects(): Promise<ResearchProject[]>;
@@ -77,59 +78,28 @@ export function createResearchWorkbench(
   options: { createId?: () => string } = {}
 ): ResearchWorkbench {
   const createId = options.createId ?? (() => crypto.randomUUID());
-  let snapshot = emptySnapshot();
-  let generation = 0;
-  const listeners = new Set<(snapshot: ResearchWorkbenchSnapshot) => void>();
-
-  function copy(value: ResearchWorkbenchSnapshot): ResearchWorkbenchSnapshot {
-    return {
-      ...value,
-      projects: [...value.projects],
-      events: [...value.events],
-      runs: [...value.runs],
-      artifacts: [...value.artifacts]
-    };
-  }
-
-  function emit(): void {
-    const next = copy(snapshot);
-    for (const listener of listeners) listener(copy(next));
-  }
-
-  function assign(patch: Partial<ResearchWorkbenchSnapshot>): void {
-    const next = { ...snapshot, ...patch };
-    if (sameSnapshot(snapshot, next)) return;
-    snapshot = next;
-    emit();
-  }
-
-  function fail(message: string): void {
-    assign({ error: message, loading: false, working: false });
-  }
-
-  async function runExclusive(action: (token: number) => Promise<void>, messages: { busy: string; failed: string }): Promise<void> {
-    if (snapshot.working) {
-      assign({ error: messages.busy });
-      return;
-    }
-    const token = ++generation;
-    assign({ working: true, error: null });
-    try {
-      await action(token);
-      if (token !== generation) return;
-      assign({ working: false });
-    } catch (error) {
-      if (token !== generation) return;
-      const message = error instanceof Error ? error.message : messages.failed;
-      assign({ working: false, error: message });
+  const projection = createProjectionController<ResearchWorkbenchSnapshot>({
+    empty: emptySnapshot,
+    copy(value) {
+      return {
+        ...value,
+        projects: [...value.projects],
+        events: [...value.events],
+        runs: [...value.runs],
+        artifacts: [...value.artifacts]
+      };
+    },
+    same: sameSnapshot,
+    async onError(token) {
       await refreshInternal(token, { keepError: true });
     }
-  }
+  });
 
   async function refreshInternal(token: number, flags: { keepError?: boolean; resetInstruction?: boolean } = {}): Promise<void> {
+    const snapshot = projection.peek();
     const projectId = snapshot.project?.id;
     if (projectId === undefined) {
-      assign({
+      projection.assign({
         workflow: null,
         events: [],
         runs: [],
@@ -147,14 +117,15 @@ export function createResearchWorkbench(
       adapter.listArtifacts({ projectId }),
       adapter.getIndexStatus({ projectId })
     ]);
-    if (token !== generation) return;
-    assign({
+    if (!projection.isCurrent(token)) return;
+    const current = projection.peek();
+    projection.assign({
       workflow,
       events,
       runs,
       artifacts,
       indexStatus,
-      projects: snapshot.projects.map((project) => project.id === projectId
+      projects: current.projects.map((project) => project.id === projectId
         ? {
           ...project,
           currentStage: workflow.currentStage,
@@ -162,11 +133,11 @@ export function createResearchWorkbench(
           updatedAt: workflow.lastEvent?.createdAt ?? project.updatedAt
         }
         : project),
-      project: snapshot.project === null ? null : {
-        ...snapshot.project,
+      project: current.project === null ? null : {
+        ...current.project,
         currentStage: workflow.currentStage,
         status: workflow.projectStatus,
-        updatedAt: workflow.lastEvent?.createdAt ?? snapshot.project.updatedAt
+        updatedAt: workflow.lastEvent?.createdAt ?? current.project.updatedAt
       },
       ...(flags.resetInstruction ? { instruction: '' } : {}),
       ...(flags.keepError ? {} : { error: null })
@@ -174,81 +145,80 @@ export function createResearchWorkbench(
   }
 
   async function selectInternal(projectId: string, token: number): Promise<void> {
-    const project = snapshot.projects.find((item) => item.id === projectId) ?? null;
-    assign({ project, instruction: '', error: null });
+    const project = projection.peek().projects.find((item) => item.id === projectId) ?? null;
+    projection.assign({ project, instruction: '', error: null });
     await refreshInternal(token, { resetInstruction: false });
   }
 
   return {
     getSnapshot() {
-      return copy(snapshot);
+      return projection.getSnapshot();
     },
     subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
+      return projection.subscribe(listener);
     },
     async load() {
-      const token = ++generation;
-      assign({ loading: true, error: null });
+      const token = projection.bump();
+      projection.assign({ loading: true, error: null });
       try {
         const projects = await adapter.listProjects();
-        if (token !== generation) return;
-        const currentId = snapshot.project?.id;
+        if (!projection.isCurrent(token)) return;
+        const currentId = projection.peek().project?.id;
         const project = projects.find((item) => item.id === currentId) ?? projects[0] ?? null;
-        assign({ projects, project, loading: false, error: null, ...(project?.id === currentId ? {} : { instruction: '' }) });
+        projection.assign({ projects, project, loading: false, error: null, ...(project?.id === currentId ? {} : { instruction: '' }) });
         if (project !== null) await refreshInternal(token);
       } catch (error) {
-        if (token !== generation) return;
-        fail(error instanceof Error ? error.message : '科研项目加载失败。');
+        if (!projection.isCurrent(token)) return;
+        projection.fail(error instanceof Error ? error.message : '科研项目加载失败。', { loading: false });
       }
     },
     async selectProject(projectId) {
-      const token = ++generation;
-      assign({ working: true, error: null });
+      const token = projection.bump();
+      projection.assign({ working: true, error: null });
       try {
         await selectInternal(projectId, token);
-        if (token !== generation) return;
-        assign({ working: false });
+        if (!projection.isCurrent(token)) return;
+        projection.assign({ working: false });
       } catch (error) {
-        if (token !== generation) return;
-        fail(error instanceof Error ? error.message : '科研流程加载失败。');
+        if (!projection.isCurrent(token)) return;
+        projection.fail(error instanceof Error ? error.message : '科研流程加载失败。');
       }
     },
     async createProject(request) {
       if (request.title.trim().length === 0 || request.description.trim().length === 0) {
-        fail('项目标题和研究目标不能为空。');
+        projection.fail('项目标题和研究目标不能为空。');
         return;
       }
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
         const created = await adapter.createProject({
           title: request.title.trim(),
           description: request.description.trim(),
           workspacePath: request.workspacePath,
           language: request.language
         });
-        if (token !== generation) return;
-        assign({ projects: [created, ...snapshot.projects.filter((item) => item.id !== created.id)], project: created, instruction: '' });
+        if (!projection.isCurrent(token)) return;
+        const snapshot = projection.peek();
+        projection.assign({ projects: [created, ...snapshot.projects.filter((item) => item.id !== created.id)], project: created, instruction: '' });
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '科研项目创建失败。' });
     },
     async refresh() {
-      await runExclusive(async (token) => {
-        if (snapshot.project === null) {
+      await projection.runExclusive(async (token) => {
+        if (projection.peek().project === null) {
           throw new Error('请先选择研究项目。');
         }
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '科研流程加载失败。' });
     },
     setInstruction(value) {
-      assign({ instruction: value });
+      projection.assign({ instruction: value });
     },
     clearError() {
-      if (snapshot.error !== null) assign({ error: null });
+      projection.clearError();
     },
     async transition(action, options = {}) {
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
+        const snapshot = projection.peek();
         const project = snapshot.project;
         const workflow = snapshot.workflow;
         if (project === null || workflow === null) throw new Error('请先选择研究项目。');
@@ -269,12 +239,13 @@ export function createResearchWorkbench(
             ...(options.reviewDecision === undefined ? {} : { reviewDecision: options.reviewDecision })
           });
         }
-        if (token !== generation) return;
+        if (!projection.isCurrent(token)) return;
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '科研流程更新失败。' });
     },
     async startRun() {
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
+        const snapshot = projection.peek();
         if (snapshot.instruction.trim().length === 0) {
           throw new Error('阶段指令不能为空。');
         }
@@ -287,34 +258,37 @@ export function createResearchWorkbench(
           instruction: snapshot.instruction.trim(),
           requestId: createId()
         });
-        if (token !== generation) return;
+        if (!projection.isCurrent(token)) return;
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '阶段角色启动失败。' });
     },
     async cancelRun() {
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
+        const snapshot = projection.peek();
         const project = snapshot.project;
         if (project === null) throw new Error('请先选择研究项目。');
         const run = snapshot.runs.find((item) => item.parentRunId === null && ['queued', 'running'].includes(item.status));
         if (run === undefined) throw new Error('没有可取消的阶段运行。');
         await adapter.cancelStageRun({ projectId: project.id, runId: run.id });
-        if (token !== generation) return;
+        if (!projection.isCurrent(token)) return;
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '取消阶段角色失败。' });
     },
     async retryRun() {
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
+        const snapshot = projection.peek();
         const project = snapshot.project;
         if (project === null) throw new Error('请先选择研究项目。');
         const run = snapshot.runs.find((item) => item.parentRunId === null && ['failed', 'cancelled', 'interrupted'].includes(item.status));
         if (run === undefined) throw new Error('没有可重试的阶段运行。');
         await adapter.retryStageRun({ projectId: project.id, runId: run.id, requestId: createId() });
-        if (token !== generation) return;
+        if (!projection.isCurrent(token)) return;
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '重试阶段角色失败。' });
     },
     async controlIndex(action) {
-      await runExclusive(async (token) => {
+      await projection.runExclusive(async (token) => {
+        const snapshot = projection.peek();
         const project = snapshot.project;
         const indexStatus = snapshot.indexStatus;
         if (project === null || indexStatus === null) throw new Error('请先选择研究项目。');
@@ -330,8 +304,8 @@ export function createResearchWorkbench(
             action,
             expectedRevision: indexStatus.settings.revision
           });
-        if (token !== generation) return;
-        assign({ indexStatus: next, error: null });
+        if (!projection.isCurrent(token)) return;
+        projection.assign({ indexStatus: next, error: null });
       }, { busy: '当前命令仍在进行。', failed: '索引控制失败。' });
     }
   };

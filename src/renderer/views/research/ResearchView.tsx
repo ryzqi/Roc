@@ -16,87 +16,13 @@ import { ResearchManuscriptPanel } from './ResearchManuscriptPanel';
 import { ResearchPolicyPanel } from './ResearchPolicyPanel';
 import { ResearchProductionPanel } from './ResearchProductionPanel';
 import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
-import { createResearchExperimentAdapter, createResearchExperimentProjection } from './research-experiments';
-import { createResearchIdeaAdapter, createResearchIdeaProjection } from './research-ideas';
-import { createResearchKnowledgeAdapter, createResearchKnowledgeProjection } from './research-knowledge';
-import { createResearchLibraryAdapter, createResearchLibraryProjection } from './research-library';
-import { createResearchManuscriptAdapter, createResearchManuscriptProjection } from './research-manuscript';
-import { createResearchPolicyAdapter, createResearchPolicyProjection } from './research-policies';
-import { createResearchProductionAdapter, createResearchProductionProjection } from './research-production';
-import { createResearchTemplateAdapter, createResearchTemplateProjection } from './research-templates';
-import { createResearchWorkbench, createResearchWorkbenchAdapter } from './research-workbench';
+import { createResearchSession, type ResearchSession } from './research-session';
 import { researchStageLabels } from './research-workflow';
 
-type ResearchSurfaces = ReturnType<typeof createResearchSurfaces>;
-
-function createResearchSurfaces(client: RocClient) {
-  const workbench = createResearchWorkbench(createResearchWorkbenchAdapter(client));
-  const library = createResearchLibraryProjection(createResearchLibraryAdapter(client));
-  const knowledge = createResearchKnowledgeProjection(createResearchKnowledgeAdapter(client));
-  const experiments = createResearchExperimentProjection(createResearchExperimentAdapter(client));
-  const policies = createResearchPolicyProjection(createResearchPolicyAdapter(client));
-  const templates = createResearchTemplateProjection(createResearchTemplateAdapter(client));
-  function stageStatus(stage: 'writing' | 'ideation') {
-    return workbench.getSnapshot().workflow?.stages.find((entry) => entry.stage === stage)?.status;
-  }
-  const manuscript = createResearchManuscriptProjection(createResearchManuscriptAdapter(client), {
-    projectId() {
-      return workbench.getSnapshot().project?.id ?? null;
-    },
-    currentStage() {
-      return workbench.getSnapshot().workflow?.currentStage ?? null;
-    },
-    stageStatus,
-    moveToWriting() {
-      return workbench.transition('move', { targetStage: 'writing' });
-    },
-    startWriting() {
-      return workbench.transition('start');
-    },
-    refresh() {
-      return workbench.refresh();
-    }
-  });
-  const ideas = createResearchIdeaProjection(createResearchIdeaAdapter(client), {
-    projectId() {
-      return workbench.getSnapshot().project?.id ?? null;
-    },
-    currentStage() {
-      return workbench.getSnapshot().workflow?.currentStage ?? null;
-    },
-    stageStatus,
-    moveToIdeation() {
-      return workbench.transition('move', { targetStage: 'ideation' });
-    },
-    startIdeation() {
-      return workbench.transition('start');
-    },
-    refresh() {
-      return workbench.refresh();
-    },
-    async selectProject(projectId) {
-      await workbench.load();
-      await workbench.selectProject(projectId);
-    }
-  });
-  const production = createResearchProductionProjection(createResearchProductionAdapter(client), {
-    projectId() {
-      return workbench.getSnapshot().project?.id ?? null;
-    },
-    language() {
-      return workbench.getSnapshot().project?.language ?? 'zh';
-    },
-    approvedManuscript() {
-      return workbench.getSnapshot().artifacts.find((item) => item.kind === 'manuscript' && item.status === 'approved');
-    }
-  });
-  return { workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production };
-}
-
 export function ResearchView({ client, state }: { client: RocClient; state: LoadedState }): React.JSX.Element {
-  const surfacesRef = useRef<{ client: RocClient; surfaces: ResearchSurfaces } | null>(null);
+  const surfacesRef = useRef<{ client: RocClient; surfaces: ResearchSession } | null>(null);
   if (surfacesRef.current === null || surfacesRef.current.client !== client) {
-    surfacesRef.current = { client, surfaces: createResearchSurfaces(client) };
+    surfacesRef.current = { client, surfaces: createResearchSession(client) };
   }
   const surfaces = surfacesRef.current.surfaces;
   const { workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production } = surfaces;
@@ -151,14 +77,9 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   }, [workbench]);
 
   useEffect(() => {
-    library.setProject(selectedProjectId);
-    knowledge.setProject(selectedProjectId);
-    experiments.setProject(selectedProjectId);
-    policies.setProject(selectedProjectId);
-    templates.setProject(selectedProjectId);
-    production.setProject(selectedProjectId);
+    surfaces.bindProject(selectedProjectId);
     void knowledge.loadEvidence();
-  }, [experiments, knowledge, library, policies, production, selectedProjectId, templates]);
+  }, [knowledge, selectedProjectId, surfaces]);
 
   async function createProject(): Promise<void> {
     await workbench.createProject({
