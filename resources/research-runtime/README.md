@@ -2,7 +2,7 @@
 
 Python 3.12.14 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
 
-Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。模型资源必须随工具链提供，运行时禁止自动下载。Matplotlib 和 Notebook 依赖也由此锁文件管理。模板 ZIP、文献和 PDF 单页渲染由主进程 TypeScript 实现。
+Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。模型资源必须随工具链提供，运行时禁止自动下载。Matplotlib 渲染和 Notebook 执行仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
 
 本目录保存源文件和依赖声明。构建得到的解释器、环境与模型位于项目 `.runtime/`，不提交生成的第三方二进制。此增量提供可供应用打包的完整工具链；主进程接线与 Electron 打包校验在后续增量完成。
 

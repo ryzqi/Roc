@@ -32,7 +32,7 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   await writer.write(join('source', entryDirectory, 'roc-manuscript.tex'), renderExportBody(sources));
   await writer.write('provenance/approved-manuscript.tex', sources.manuscript.latex);
   await writer.write('provenance/sources.json', JSON.stringify(sources, null, 2));
-  await writer.write('provenance/export-archive.py', archiveSource);
+  await writer.write('provenance/export-archive.ts', archiveSource);
   const bibliography = join(scratch, 'bibliography.json');
   await writeFile(bibliography, JSON.stringify(sources.bibliography), { flag: 'wx', mode: 0o400 });
   const references = await tools.writeBibliography({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: bibliography,

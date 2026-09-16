@@ -171,7 +171,7 @@ export class ResearchExperimentService {
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       if (initial.request.engine === 'matplotlib') {
         if (initial.request.figure === undefined) throw new Error('research_figure_options_invalid');
-        await validateFigureOutput(prepared, initial.request.figure, out, scratch, signal, this.run);
+        await validateFigureOutput(out, initial.request.figure, signal);
       }
       await this.verifyProject(initial, signal);
       const current = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);

@@ -35,7 +35,7 @@ await research.prepareExport({
 
 准备过程冻结批准正文及其主张/证据、批准图稿、引用的文献元数据、模型与实验运行、原始代码/数据和来源定位。文献引用键取自文献库；BibTeX crossref 父条目递归纳入快照及版本检查，并排在引用它的条目之后。父键优先匹配当前项目，未匹配时只接受全局唯一的有效条目。缺失、歧义、循环、版本变化或引用键冲突都会失败；文件与实验来源生成保留实际标题和定位的 misc 条目。正文和图稿的证据 ID 与 BibTeX 引用键之间的映射保存在追溯数据中。
 
-原批准正文的 LaTeX 保持原样存档。交付源文件采用同一段落内容与版本，合入批准图稿及统一的 BibTeX 引用。编译使用固定 Tectonic、本地 TeX bundle 和受限进程；Tectonic 报告忽略了 BibTeX 错误时，即使退出码为 0 也拒绝交付。生成 PDF 后由 PDFium 打开并渲染验证。归档只读取清单登记且哈希一致的普通文件，拒绝链接、越界和已有归档。
+原批准正文的 LaTeX 保持原样存档。交付源文件采用同一段落内容与版本，合入批准图稿及统一的 BibTeX 引用。编译使用固定 Tectonic、本地 TeX bundle 和受限进程；Tectonic 报告忽略了 BibTeX 错误时，即使退出码为 0 也拒绝交付。生成 PDF 后由 PDFium 打开并渲染验证。归档由主进程 TypeScript 读取清单登记且哈希一致的普通文件，拒绝链接、越界和已有归档。
 
 ZIP 包含：
 
@@ -72,7 +72,7 @@ await research.writeExport({ projectId, exportId, destinationPath: '/absolute/de
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-service.test.ts /Users/Apple_501/Desktop/Roc/Roc/tests/main/pdf-preview-protocol.test.ts
-rtk proxy /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64/python/bin/python3 -B -m unittest discover -s /Users/Apple_501/Desktop/Roc/Roc/scripts/research/tests -p test_export_archive.py -v
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-archive.test.ts
 rtk proxy env PYTHONDONTWRITEBYTECODE=1 ROC_RESEARCH_TOOLCHAIN=/Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 ROC_RESEARCH_ARTIFACT_ROOT=/Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-export-integration pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-ipc.test.ts
 ```
 

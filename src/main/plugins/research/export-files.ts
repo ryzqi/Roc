@@ -2,19 +2,15 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, realpath, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { z } from 'zod';
-import archiveSource from '../../../../resources/research-runtime/export-archive.py?raw';
+import archiveSource from './export-archive.ts?raw';
 import type { ResearchExportFile } from '../../../shared/schemas/research-exports';
-import { runResearchProcess, ResearchProcessError } from './process-runner';
+import { createExportZipArchive, exportArchiveLimit, exportFileLimit, exportTotalLimit } from './export-archive';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchToolchain } from './toolchain';
 
 export type ExportToolchain = Pick<ResearchToolchain, 'status' | 'identity' | 'experimentRuntime' | 'writeBibliography' | 'compile' | 'renderPdf'>;
 
-export const exportFileLimit = 64 * 1024 * 1024;
-export const exportTotalLimit = 512 * 1024 * 1024;
-export const exportArchiveLimit = 600 * 1024 * 1024;
-export { archiveSource };
+export { archiveSource, exportArchiveLimit, exportFileLimit, exportTotalLimit };
 
 export async function exportStorage(path: string | null): Promise<string> {
   if (path === null || !isAbsolute(path)) throw new Error('research_export_storage_unavailable');
@@ -74,16 +70,9 @@ export async function hashExportArchive(root: string, entry: ResearchExportFile,
 }
 
 export async function createExportArchive(input: { root: string; bundle: ResearchExportFiles; scratch: string; tools: ExportToolchain; signal: AbortSignal }): Promise<ResearchExportFile> {
-  const output = await createResearchDirectory(input.root, 'archive');
-  const manifest = join(input.scratch, 'archive-files.json');
-  await writeFile(manifest, JSON.stringify(input.bundle.list()), { flag: 'wx', mode: 0o400 });
-  const tools = await input.tools.experimentRuntime(input.scratch);
+  await createResearchDirectory(input.root, 'archive');
   const path = 'archive/export.zip';
-  const result = await runResearchProcess({ command: tools.python, args: ['-I', '-B', '-c', archiveSource, input.bundle.root, join(input.root, path), manifest],
-    cwd: input.scratch, readablePaths: [tools.root, input.bundle.root, manifest], writablePaths: [input.scratch, output], environment: tools.environment,
-    timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: 'none' });
-  if (result.exitCode !== 0) throw new ResearchProcessError('research_export_archive_failed', result.stdout, result.stderr);
-  const metadata = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/u), size: z.number().int().positive().max(exportArchiveLimit) }).strict().parse(JSON.parse(result.stdout));
+  const metadata = await createExportZipArchive(input.bundle.root, join(input.root, path), input.bundle.list(), input.signal);
   const file = { path, ...metadata };
   await hashExportArchive(input.root, file, input.signal);
   return file;
