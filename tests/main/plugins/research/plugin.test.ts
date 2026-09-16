@@ -93,6 +93,16 @@ describe('research plugin IPC integration', () => {
     expect(bundle.claims).toEqual([claim]);
   });
 
+  it('does not expose experiment or figure record writes through IPC', async () => {
+    const names = plugin.manifest.capabilities.map((capability) => capability.name);
+    expect(names).not.toContain('research.experiment.record');
+    expect(names).not.toContain('research.figure.record');
+    expect(names).toContain('research.experiment.start');
+    expect(names).toContain('research.figure.publish');
+    expect((await adapter.invoke('research.recordExperimentRun', [{ id: 'forged' }])).ok).toBe(false);
+    expect((await adapter.invoke('research.recordFigure', [{ id: 'forged' }])).ok).toBe(false);
+  });
+
   it('rejects forged snapshot fields and direct artifact self-approval at the capability boundary', async () => {
     const project = await call('createProject', { title: 'Boundary', description: 'Reject forged input.', workspacePath: null }, researchProjectSchema);
     const artifact = await call('createArtifact', { projectId: project.id, stage: 'discovery', kind: 'search_strategy', title: 'Strategy', path: null }, researchArtifactSchema);

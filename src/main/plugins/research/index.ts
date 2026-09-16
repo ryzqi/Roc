@@ -14,10 +14,6 @@ import {
   researchProjectUpdateRequestSchema,
   researchEmbeddingConfigSaveRequestSchema,
   researchEmbeddingConfigSchema,
-  researchExperimentRunRecordRequestSchema,
-  researchExperimentRunSchema,
-  researchFigureRecordRequestSchema,
-  researchFigureSchema,
   researchKnowledgeDocumentSchema,
   researchKnowledgeDocumentUpsertRequestSchema,
   researchKnowledgeSearchRequestSchema,
@@ -36,14 +32,12 @@ import {
 } from '../../../shared/schemas/research';
 import type {
   ResearchEmbeddingConfigSaveRequest,
-  ResearchExperimentRunRecordRequest,
-  ResearchFigureRecordRequest,
   ResearchKnowledgeDocumentUpsertRequest,
   ResearchKnowledgeSearchRequest,
-  ResearchLiteratureSearchRequest
-  ,ResearchStageRoleRequest
-  ,ResearchProvenanceCreateRequest
-  ,ResearchProvenanceListRequest
+  ResearchLiteratureSearchRequest,
+  ResearchStageRoleRequest,
+  ResearchProvenanceCreateRequest,
+  ResearchProvenanceListRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { OpenAICompatibleEmbeddingClient } from './embedding-client';
@@ -96,8 +90,6 @@ const researchCapabilityDescriptors = [
   descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
   descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
   descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema),
-  descriptor('research.experiment.record', researchExperimentRunRecordRequestSchema, researchExperimentRunSchema),
-  descriptor('research.figure.record', researchFigureRecordRequestSchema, researchFigureSchema),
   descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema),
   descriptor('research.provenance.add', researchProvenanceCreateRequestSchema, researchProvenanceSchema),
   descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array()),
@@ -234,24 +226,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         return snapshot;
       });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[6], async (input) => {
-        const request = input as ResearchLiteratureSearchRequest;
-        const records = await literatureService.search(request);
-        for (const record of records) {
-          repository!.upsertLiterature(record);
-          if (record.abstract !== null && record.abstract.trim().length > 0) {
-            repository!.knowledge.upsertKnowledgeDocument({
-              id: `literature:${record.id}`,
-              projectId: null,
-              sourceType: 'literature',
-              sourceId: record.id,
-              title: record.title,
-              content: record.abstract,
-              chunks: [{ content: record.abstract, locator: 'abstract' }],
-              embeddingConfigId: null
-            });
-          }
-        }
-        return records;
+        return literatureService.searchAndStore(researchRepository, input as ResearchLiteratureSearchRequest);
       });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[7], async () => researchEmbeddings.listConfigs());
       context.capabilities.register(pluginId, researchCapabilityDescriptors[8], async (input) => {
@@ -261,13 +236,11 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       });
       context.capabilities.register(pluginId, researchCapabilityDescriptors[9], async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
       context.capabilities.register(pluginId, researchCapabilityDescriptors[10], async (input) => await researchEmbeddings.search(input as ResearchKnowledgeSearchRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[11], async (input) => repository!.recordExperimentRun(input as ResearchExperimentRunRecordRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[12], async (input) => repository!.recordFigure(input as ResearchFigureRecordRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[13], async (input) =>
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[11], async (input) =>
         getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
       );
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[14], async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[15], async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[12], async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
+      context.capabilities.register(pluginId, researchCapabilityDescriptors[13], async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
       researchIndexer.start();
     },
     shutdown: async () => {
