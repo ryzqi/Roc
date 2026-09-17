@@ -86,6 +86,8 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('"!models/**"');
     expect(electronBuilderConfig).toContain('"!bibliography.py"');
     expect(electronBuilderConfig).toContain('"!**/PyObjCTest"');
+    expect(electronBuilderConfig).toContain('"!**/debugpy"');
+    expect(electronBuilderConfig).toContain('"!**/jedi"');
     expect(electronBuilderConfig).toContain('"!**/*.pyc"');
     expect(electronBuilderConfig).not.toContain('from: resources/research-runtime/worker.py');
     expect(beforePackHook).toContain('assertLiveResearchToolchainForPackaging');
@@ -259,6 +261,8 @@ describe('native packaging contract', () => {
     mkdirSync(join(root, 'bin'), { recursive: true });
     mkdirSync(join(root, 'python/bin'), { recursive: true });
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/debugpy'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info'), { recursive: true });
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'), { recursive: true });
     mkdirSync(join(root, 'tex'), { recursive: true });
     mkdirSync(join(root, 'licenses'), { recursive: true });
@@ -266,6 +270,8 @@ describe('native packaging contract', () => {
     writeFileSync(join(root, 'worker.py'), 'stale-worker');
     writeFileSync(join(root, 'bibliography.py'), 'legacy-bib');
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest/test.py'), 'legacy-test');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/debugpy/__init__.py'), 'legacy-debug');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info/METADATA'), 'legacy-meta');
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__/mod.cpython-312.pyc'), 'pyc');
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'keep');
     for (const relativePath of ['bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
@@ -289,6 +295,8 @@ describe('native packaging contract', () => {
     expect(existsSync(join(root, 'bibliography.py'))).toBe(false);
     expect(existsSync(join(root, 'models'))).toBe(false);
     expect(existsSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/debugpy'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info'))).toBe(false);
     expect(existsSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'))).toBe(false);
     expect(readFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'utf8')).toBe('keep');
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));

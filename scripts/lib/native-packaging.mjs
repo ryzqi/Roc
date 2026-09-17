@@ -225,12 +225,60 @@ function packagedToolchainSha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+const packagedResearchLeftoverNames = new Set([
+  'PyObjCTest',
+  'pip',
+  'debugpy',
+  'pydevd_plugins',
+  'jedi',
+  'parso',
+  'IPython',
+  'ipykernel',
+  'ipykernel_launcher.py',
+  'ipython_pygments_lexers.py',
+  'matplotlib_inline',
+  'jupyter.py',
+  'jupyter_client',
+  'jupyter_core',
+  'nbclient',
+  'nbformat',
+  'tornado',
+  'zmq',
+  'prompt_toolkit',
+  'wcwidth',
+  'pexpect',
+  'ptyprocess',
+  'appnope',
+  'asttokens',
+  'executing',
+  'stack_data',
+  'pure_eval',
+  'traitlets',
+  'comm',
+  'fastjsonschema',
+  'nest_asyncio2.py'
+]);
+
+function isPackagedResearchLeftoverPart(part) {
+  const lower = part.toLowerCase();
+  if (lower === '__pycache__') return true;
+  for (const name of packagedResearchLeftoverNames) {
+    const leftover = name.toLowerCase();
+    if (
+      lower === leftover
+      || (lower.startsWith(`${leftover}-`) && (lower.endsWith('.dist-info') || lower.endsWith('.egg-info')))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isExcludedPackagedResearchPath(relativePath) {
   if (relativePath === 'models' || relativePath.startsWith('models/')) return true;
   if (relativePath === 'bibliography.py') return true;
-  const parts = relativePath.split('/');
-  if (parts.includes('PyObjCTest') || parts.includes('__pycache__')) return true;
-  return relativePath.endsWith('.pyc');
+  if (relativePath.endsWith('.pyc')) return true;
+  return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
 }
 
 export function assertLiveResearchToolchainForPackaging({
@@ -411,8 +459,9 @@ export function verifyPackagedResearchToolchain({
   if (existsSync(resolve(root, 'bibliography.py'))) {
     throw new Error('Packaged research toolchain must not include bibliography.py.');
   }
-  if (packagedPythonSiteHas(root, 'PyObjCTest')) {
-    throw new Error('Packaged research toolchain must not include PyObjCTest.');
+  const leftover = packagedPythonSiteLeftover(root);
+  if (leftover !== null) {
+    throw new Error(`Packaged research toolchain must not include ${leftover}.`);
   }
   for (const name of ['worker.py', 'figure.py']) {
     const source = resolve(sources, name);
@@ -423,15 +472,18 @@ export function verifyPackagedResearchToolchain({
   }
 }
 
-function packagedPythonSiteHas(root, name) {
+function packagedPythonSiteLeftover(root) {
   const lib = resolve(root, 'python/lib');
-  if (!existsSync(lib)) return false;
+  if (!existsSync(lib)) return null;
   for (const entry of readdirSync(lib, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.isSymbolicLink() || !entry.name.startsWith('python')) continue;
-    const candidate = resolve(lib, entry.name, 'site-packages', name);
-    if (existsSync(candidate)) return true;
+    const site = resolve(lib, entry.name, 'site-packages');
+    if (!existsSync(site)) continue;
+    for (const installed of readdirSync(site)) {
+      if (isPackagedResearchLeftoverPart(installed)) return installed;
+    }
   }
-  return false;
+  return null;
 }
 
 export function verifyPackagedFileLayout({ resourcesDir }) {
