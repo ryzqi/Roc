@@ -216,7 +216,7 @@ Forge 模块说明见 `src/main/services/forge-guardrails/`。目标是把“模
 
 - SQLite 连接策略、migration ledger、backup/restore/rebuild
 - retention cleanup / health probe
-- 打包脚本处理 `better-sqlite3` / `node-pty` ABI 与 asarUnpack
+- 打包脚本校验 `better-sqlite3` / `node-pty` 能在 Electron 下加载，并 asarUnpack 当前架构预编译文件
 
 ---
 
@@ -353,7 +353,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 - Apple Silicon：`release/mac-arm64/Roc.app`、`release/Roc-0.1.0-mac-arm64.dmg`、同名 ZIP。
 - Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app` 和带 `mac-x64` 的归档。
 - 包内只保留当前 macOS 架构的 SQLite、PTY 和 RTK，前端依赖已编入 renderer，不重复携带其源码。
-- 科研工具链随包分发 Python / Tectonic / TeX 子集；Docling 解析模型不进安装包。打开应用后在科研工作台下载到 `~/.roc/research-models`。
+- 科研工具链随包分发 Python / Tectonic / TeX 子集；Docling 解析模型不进安装包。打开应用后在科研工作台下载到 `~/.roc/research-models`。打包前校验 live 工具链，并用当前 `worker.py` / `figure.py` 覆盖过期副本，同时排除 `bibliography.py` 与 `PyObjCTest`。
 - 当前使用 ad-hoc 本地签名，未进行 Developer ID 签名或 Apple 公证；跨机器公开分发前需配置发布证书和公证。
 - macOS 关闭窗口后保留后台任务，点击 Dock 图标恢复；通过菜单或 `Cmd+Q` 完全退出。
 - macOS 终端使用用户登录 Shell，命令执行使用 zsh；工作区文件和 Git 使用系统路径边界，支持 POSIX 目录。

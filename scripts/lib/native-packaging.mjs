@@ -1,5 +1,18 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { packageJsonPath, projectRoot } from './electron-version.mjs';
@@ -200,8 +213,168 @@ export function researchToolchainResourcePath(resourcesDir, architecture = proce
   return resolve(resourcesDir, 'research-toolchain');
 }
 
-export function verifyPackagedResearchToolchain({ resourcesDir, architecture = process.arch }) {
+export function liveResearchToolchainPath(architecture = process.arch, targetProjectRoot = projectRoot) {
+  return resolve(targetProjectRoot, '.runtime', 'research-toolchain', `darwin-${architecture}`);
+}
+
+export function researchRuntimeSourcePath(targetProjectRoot = projectRoot) {
+  return resolve(targetProjectRoot, 'resources', 'research-runtime');
+}
+
+function packagedToolchainSha256(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+export function isExcludedPackagedResearchPath(relativePath) {
+  if (relativePath === 'models' || relativePath.startsWith('models/')) return true;
+  if (relativePath === 'bibliography.py') return true;
+  const parts = relativePath.split('/');
+  if (parts.includes('PyObjCTest') || parts.includes('__pycache__')) return true;
+  return relativePath.endsWith('.pyc');
+}
+
+export function assertLiveResearchToolchainForPackaging({
+  architecture = process.arch,
+  projectRoot: targetProjectRoot = projectRoot
+} = {}) {
+  const root = liveResearchToolchainPath(architecture, targetProjectRoot);
+  const required = [
+    'manifest.json',
+    'bin/tectonic',
+    'bin/uv',
+    'python/bin/python3',
+    'tex/bundle.zip',
+    'licenses/python-packages.json'
+  ];
+  for (const relativePath of required) {
+    const fullPath = resolve(root, relativePath);
+    if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
+      throw new Error(
+        `Missing research toolchain for packaging: ${relativePath}. Prepare ${root} before package:mac.`
+      );
+    }
+  }
+  const sources = researchRuntimeSourcePath(targetProjectRoot);
+  for (const name of ['worker.py', 'figure.py']) {
+    const fullPath = resolve(sources, name);
+    if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
+      throw new Error(`Missing research runtime source for packaging: ${name}`);
+    }
+  }
+}
+
+function removeExcludedPackagedResearchPaths(root) {
+  const queue = [''];
+  while (queue.length > 0) {
+    const relativeDir = queue.pop();
+    const directory = relativeDir === '' ? root : join(root, relativeDir);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const relativePath = relativeDir === '' ? entry.name : `${relativeDir}/${entry.name}`;
+      const fullPath = join(directory, entry.name);
+      if (isExcludedPackagedResearchPath(relativePath)) {
+        rmSync(fullPath, { recursive: true, force: true });
+        continue;
+      }
+      if (entry.isDirectory() && !entry.isSymbolicLink()) queue.push(relativePath);
+    }
+  }
+}
+
+function collectPackagedResearchEntries(root, previousEntries) {
+  const previous = new Map(previousEntries.map((entry) => [entry.path, entry]));
+  const entries = [];
+  const visit = (relativeDir) => {
+    const directory = relativeDir === '' ? root : join(root, relativeDir);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const relativePath = relativeDir === '' ? entry.name : `${relativeDir}/${entry.name}`;
+      if (relativePath === 'manifest.json' || isExcludedPackagedResearchPath(relativePath)) continue;
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        visit(relativePath);
+        continue;
+      }
+      const info = lstatSync(fullPath);
+      if (info.isSymbolicLink()) {
+        const previousEntry = previous.get(relativePath);
+        if (previousEntry?.type === 'symlink') {
+          entries.push(previousEntry);
+          continue;
+        }
+        const target = readlinkSync(fullPath);
+        if (target.startsWith('/')) {
+          throw new Error(`Packaged research toolchain symlink must be relative: ${relativePath}`);
+        }
+        entries.push({ path: relativePath, type: 'symlink', target });
+        continue;
+      }
+      if (!info.isFile()) {
+        throw new Error(`Packaged research toolchain file type invalid: ${relativePath}`);
+      }
+      const previousEntry = previous.get(relativePath);
+      const executable = (info.mode & 0o100) !== 0;
+      const reuse =
+        previousEntry?.type === 'file' &&
+        previousEntry.size === info.size &&
+        previousEntry.executable === executable &&
+        relativePath !== 'worker.py' &&
+        relativePath !== 'figure.py';
+      entries.push(
+        reuse
+          ? previousEntry
+          : {
+              path: relativePath,
+              type: 'file',
+              size: info.size,
+              sha256: packagedToolchainSha256(fullPath),
+              executable
+            }
+      );
+    }
+  };
+  visit('');
+  entries.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  return entries;
+}
+
+export function finalizePackagedResearchToolchain({
+  resourcesDir,
+  architecture = process.arch,
+  projectRoot: targetProjectRoot = projectRoot
+}) {
   const root = researchToolchainResourcePath(resourcesDir, architecture);
+  const sources = researchRuntimeSourcePath(targetProjectRoot);
+  for (const name of ['worker.py', 'figure.py']) {
+    const source = resolve(sources, name);
+    if (!existsSync(source) || !statSync(source).isFile()) {
+      throw new Error(`Missing research runtime source for packaging: ${name}`);
+    }
+    copyFileSync(source, resolve(root, name));
+  }
+  removeExcludedPackagedResearchPaths(root);
+  const manifestPath = resolve(root, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (manifest.platform !== 'darwin' || manifest.architecture !== architecture) {
+    throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
+  }
+  const lockHashes = { ...manifest.lockHashes };
+  lockHashes['worker.py'] = packagedToolchainSha256(resolve(root, 'worker.py'));
+  lockHashes['figure.py'] = packagedToolchainSha256(resolve(root, 'figure.py'));
+  delete lockHashes['bibliography.py'];
+  const next = {
+    ...manifest,
+    lockHashes,
+    entries: collectPackagedResearchEntries(root, Array.isArray(manifest.entries) ? manifest.entries : [])
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+}
+
+export function verifyPackagedResearchToolchain({
+  resourcesDir,
+  architecture = process.arch,
+  projectRoot: targetProjectRoot = projectRoot
+}) {
+  const root = researchToolchainResourcePath(resourcesDir, architecture);
+  const sources = researchRuntimeSourcePath(targetProjectRoot);
   const required = [
     'manifest.json',
     'worker.py',
@@ -235,6 +408,30 @@ export function verifyPackagedResearchToolchain({ resourcesDir, architecture = p
   if (existsSync(resolve(root, 'models'))) {
     throw new Error('Packaged research toolchain must not include models.');
   }
+  if (existsSync(resolve(root, 'bibliography.py'))) {
+    throw new Error('Packaged research toolchain must not include bibliography.py.');
+  }
+  if (packagedPythonSiteHas(root, 'PyObjCTest')) {
+    throw new Error('Packaged research toolchain must not include PyObjCTest.');
+  }
+  for (const name of ['worker.py', 'figure.py']) {
+    const source = resolve(sources, name);
+    const packaged = resolve(root, name);
+    if (packagedToolchainSha256(packaged) !== packagedToolchainSha256(source)) {
+      throw new Error(`Packaged research toolchain ${name} does not match current source.`);
+    }
+  }
+}
+
+function packagedPythonSiteHas(root, name) {
+  const lib = resolve(root, 'python/lib');
+  if (!existsSync(lib)) return false;
+  for (const entry of readdirSync(lib, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || !entry.name.startsWith('python')) continue;
+    const candidate = resolve(lib, entry.name, 'site-packages', name);
+    if (existsSync(candidate)) return true;
+  }
+  return false;
 }
 
 export function verifyPackagedFileLayout({ resourcesDir }) {

@@ -1,5 +1,6 @@
 import {
   createPackagingEnvironment,
+  finalizePackagedResearchToolchain,
   preparePackagedNodePty,
   runCommand,
   verifyPackagedFileLayout,
@@ -18,6 +19,10 @@ export default async function afterPack(context) {
         ...options,
         env: createPackagingEnvironment(options?.env)
       })
+  });
+  finalizePackagedResearchToolchain({
+    resourcesDir,
+    architecture: process.arch
   });
   verifyPackagedResearchToolchain({
     resourcesDir,

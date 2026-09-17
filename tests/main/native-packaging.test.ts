@@ -84,6 +84,12 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('to: research-toolchain');
     expect(electronBuilderConfig).toContain('"!models"');
     expect(electronBuilderConfig).toContain('"!models/**"');
+    expect(electronBuilderConfig).toContain('"!bibliography.py"');
+    expect(electronBuilderConfig).toContain('"!**/PyObjCTest"');
+    expect(electronBuilderConfig).toContain('"!**/*.pyc"');
+    expect(electronBuilderConfig).not.toContain('from: resources/research-runtime/worker.py');
+    expect(beforePackHook).toContain('assertLiveResearchToolchainForPackaging');
+    expect(afterPackHook).toContain('finalizePackagedResearchToolchain');
     expect(afterPackHook).toContain('verifyPackagedResearchToolchain');
   });
 
@@ -200,6 +206,10 @@ describe('native packaging contract', () => {
 
   it('requires packaged research toolchain binaries and license records', async () => {
     const { verifyPackagedResearchToolchain } = await loadNativePackagingModule();
+    const projectRoot = createTemporaryDirectory();
+    mkdirSync(join(projectRoot, 'resources/research-runtime'), { recursive: true });
+    writeFileSync(join(projectRoot, 'resources/research-runtime/worker.py'), 'license');
+    writeFileSync(join(projectRoot, 'resources/research-runtime/figure.py'), 'license');
     const resourcesDir = join(createTemporaryDirectory(), 'Roc.app', 'Contents', 'Resources');
     const root = join(resourcesDir, 'research-toolchain');
     mkdirSync(join(root, 'bin'), { recursive: true });
@@ -212,11 +222,84 @@ describe('native packaging contract', () => {
       mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
       writeFileSync(join(root, relativePath), 'license');
     }
-    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).toThrow(/licenses\/python-packages\.json/);
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/licenses\/python-packages\.json/);
     writeFileSync(join(root, 'licenses/python-packages.json'), JSON.stringify([{ name: 'docling', licenseExpression: 'MIT' }]));
-    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).not.toThrow();
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).not.toThrow();
     mkdirSync(join(root, 'models'), { recursive: true });
-    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).toThrow(/must not include models/);
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/must not include models/);
+    rmSync(join(root, 'models'), { recursive: true, force: true });
+    writeFileSync(join(root, 'bibliography.py'), 'legacy');
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/must not include bibliography.py/);
+    rmSync(join(root, 'bibliography.py'));
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'), { recursive: true });
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest/test.py'), 'legacy');
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/must not include PyObjCTest/);
+  });
+
+  it('fails before packing when the live research toolchain is missing', async () => {
+    const { assertLiveResearchToolchainForPackaging } = await loadNativePackagingModule();
+    const projectRoot = createTemporaryDirectory();
+    mkdirSync(join(projectRoot, 'resources/research-runtime'), { recursive: true });
+    writeFileSync(join(projectRoot, 'resources/research-runtime/worker.py'), 'worker');
+    writeFileSync(join(projectRoot, 'resources/research-runtime/figure.py'), 'figure');
+    expect(() => assertLiveResearchToolchainForPackaging({
+      architecture: process.arch,
+      projectRoot
+    })).toThrow(/Missing research toolchain for packaging: manifest.json/);
+  });
+
+  it('overlays current research sources and drops leftover files from the packaged toolchain', async () => {
+    const { finalizePackagedResearchToolchain, verifyPackagedResearchToolchain } = await loadNativePackagingModule();
+    const projectRoot = createTemporaryDirectory();
+    const resourcesDir = join(createTemporaryDirectory(), 'Roc.app', 'Contents', 'Resources');
+    const root = join(resourcesDir, 'research-toolchain');
+    mkdirSync(join(projectRoot, 'resources/research-runtime'), { recursive: true });
+    writeFileSync(join(projectRoot, 'resources/research-runtime/worker.py'), 'current-worker');
+    writeFileSync(join(projectRoot, 'resources/research-runtime/figure.py'), 'current-figure');
+    mkdirSync(join(root, 'bin'), { recursive: true });
+    mkdirSync(join(root, 'python/bin'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'), { recursive: true });
+    mkdirSync(join(root, 'tex'), { recursive: true });
+    mkdirSync(join(root, 'licenses'), { recursive: true });
+    mkdirSync(join(root, 'models'), { recursive: true });
+    writeFileSync(join(root, 'worker.py'), 'stale-worker');
+    writeFileSync(join(root, 'bibliography.py'), 'legacy-bib');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest/test.py'), 'legacy-test');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__/mod.cpython-312.pyc'), 'pyc');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'keep');
+    for (const relativePath of ['bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
+      'licenses/README.md', 'licenses/sources.json', 'licenses/tectonic-MIT.txt', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt', 'licenses/CDLA-Permissive-2.0.txt']) {
+      mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
+      writeFileSync(join(root, relativePath), 'license');
+    }
+    writeFileSync(join(root, 'licenses/python-packages.json'), JSON.stringify([{ name: 'docling', licenseExpression: 'MIT' }]));
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify({
+      platform: 'darwin',
+      architecture: process.arch,
+      lockHashes: { 'worker.py': 'stale', 'bibliography.py': 'legacy' },
+      entries: [
+        { path: 'bibliography.py', type: 'file', size: 10, sha256: 'aa', executable: false },
+        { path: 'worker.py', type: 'file', size: 12, sha256: 'bb', executable: false }
+      ]
+    }));
+    finalizePackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot });
+    expect(readFileSync(join(root, 'worker.py'), 'utf8')).toBe('current-worker');
+    expect(readFileSync(join(root, 'figure.py'), 'utf8')).toBe('current-figure');
+    expect(existsSync(join(root, 'bibliography.py'))).toBe(false);
+    expect(existsSync(join(root, 'models'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'))).toBe(false);
+    expect(readFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'utf8')).toBe('keep');
+    const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+    expect(manifest.lockHashes['bibliography.py']).toBeUndefined();
+    expect(manifest.lockHashes['worker.py']).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifest.lockHashes['figure.py']).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifest.entries.some((entry: { path: string }) => entry.path === 'bibliography.py')).toBe(false);
+    expect(manifest.entries.some((entry: { path: string }) => entry.path === 'figure.py')).toBe(true);
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).not.toThrow();
+    writeFileSync(join(root, 'worker.py'), 'stale-again');
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/worker\.py does not match current source/);
   });
 
   it('fails when a macOS packaged terminal helper is missing', async () => {

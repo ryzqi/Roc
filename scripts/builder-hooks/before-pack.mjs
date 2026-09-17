@@ -1,4 +1,5 @@
 import {
+  assertLiveResearchToolchainForPackaging,
   createPackagingEnvironment,
   runCommand,
   sanitizeLanggraphSdkForPackaging,
@@ -19,4 +20,5 @@ export default async function beforePack() {
         env: createPackagingEnvironment(options?.env)
       })
   });
+  assertLiveResearchToolchainForPackaging();
 }

@@ -70,5 +70,11 @@ mac:
         - "**/*"
         - "!models"
         - "!models/**"
+        - "!bibliography.py"
+        - "!**/PyObjCTest"
+        - "!**/PyObjCTest/**"
+        - "!**/__pycache__"
+        - "!**/__pycache__/**"
+        - "!**/*.pyc"
   identity: "-"
   hardenedRuntime: false
