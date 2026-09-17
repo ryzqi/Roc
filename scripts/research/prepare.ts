@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
+import { collectPythonLicenses } from './collect-licenses.ts';
 import { fetchModels } from './fetch-models.ts';
 import { verifyManifest, writeManifest } from './manifest.ts';
 
@@ -21,7 +22,7 @@ const SCRIPT_FILES = [
   'manifest.ts',
   'smoke.ts',
   'build-r-process.ts',
-  'collect_licenses.py'
+  'collect-licenses.ts'
 ] as const;
 const DARWIN_O_EXLOCK = 0x20;
 const PROXY_KEYS = [
@@ -309,11 +310,8 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       await mkdir(join(root, 'locks'));
       for (const name of LOCK_FILES) await copyPreservingMode(join(SOURCES, name), join(root, 'locks', name));
       await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
-      const collected = await runCommand(python, [join(SCRIPTS, 'collect_licenses.py'), root], {
-        env: environment,
-        capture: true
-      });
-      await writeFile(join(root, 'licenses/python-packages.json'), collected, 'utf8');
+      const collected = await collectPythonLicenses(root);
+      await writeFile(join(root, 'licenses/python-packages.json'), `${JSON.stringify(collected, null, 2)}\n`, 'utf8');
       await portablePython(join(root, 'python'));
       const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion };
       const manifest = await writeManifest(root, { architecture, versions, lockHashes });

@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process';
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { createRequire } from 'node:module';
+import { createCanvas } from '@napi-rs/canvas';
+import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { verifyManifest, type Manifest } from './manifest.ts';
 
 export const OFFLINE_PROFILE = '(version 1)(allow default)(deny network*)';
@@ -33,6 +36,43 @@ async function pathInfo(path: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
+  }
+}
+
+const require = createRequire(import.meta.url);
+const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
+const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot, directory)).href}/`;
+
+async function renderSmokePdf(sourcePath: string, outputDir: string): Promise<{ path: string; text: string; pageCount: number }> {
+  const bytes = await readFile(sourcePath);
+  const pdf = await getDocument({
+    data: new Uint8Array(bytes),
+    disableFontFace: true,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    useWorkerFetch: false,
+    cMapUrl: assetUrl('cmaps'),
+    cMapPacked: true,
+    standardFontDataUrl: assetUrl('standard_fonts'),
+    wasmUrl: assetUrl('wasm')
+  }).promise;
+  try {
+    const page: PDFPageProxy = await pdf.getPage(1);
+    try {
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = createCanvas(Math.round(viewport.width), Math.round(viewport.height));
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport, canvas } as never).promise;
+      const target = join(outputDir, 'page-1.png');
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(target, await canvas.encode('png'));
+      const textContent = await page.getTextContent();
+      const text = textContent.items.map((item) => 'str' in item ? String(item.str) : '').join('').replaceAll('\r\n', '\n');
+      return { path: target, text, pageCount: pdf.numPages };
+    } finally {
+      page.cleanup();
+    }
+  } finally {
+    await pdf.destroy();
   }
 }
 
@@ -141,12 +181,9 @@ export async function smoke(toolchainPath: string, outputPath: string): Promise<
   ], { timeoutMs: 180_000 });
   const pdf = join(compiled, 'paper.pdf');
   if (!(await readFile(pdf)).subarray(0, 4).equals(Buffer.from('%PDF'))) fail('research_smoke_pdf_invalid');
-  const renderedDir = join(output, 'rendered');
-  await mkdir(renderedDir);
-  await run('render', [python, '-I', '-B', '-c',
-    "import json,sys,pypdfium2 as pdfium\nfrom pathlib import Path\npdf=pdfium.PdfDocument(sys.argv[1])\npage=pdf[0]\nimage=page.render(scale=2).to_pil()\npath=Path(sys.argv[2])/'page-1.png'\nimage.save(path)\ntext=page.get_textpage().get_text_bounded()\nprint(json.dumps({'path':str(path),'text':text,'pageCount':len(pdf)}))",
-    pdf, renderedDir]);
-  const rendered = JSON.parse(await readFile(join(output, 'render.stdout.log'), 'utf8')) as { path: string; text: string; pageCount: number };
+  const rendered = await renderSmokePdf(pdf, join(output, 'rendered'));
+  await writeFile(join(output, 'render.stdout.log'), `${JSON.stringify({ path: rendered.path, text: rendered.text, pageCount: rendered.pageCount })}\n`, 'utf8');
+  console.log('通过：render');
   if (!rendered.text.includes('研究数据与方法')) fail('research_smoke_pdf_text_missing');
   const parsed = JSON.parse(await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
     request: {

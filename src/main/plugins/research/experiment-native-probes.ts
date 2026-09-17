@@ -18,8 +18,12 @@ for (index in seq_len(nrow(packages))) {
 write.csv(report, Sys.getenv("ROC_ENVIRONMENT_REPORT"), row.names = FALSE, fileEncoding = "UTF-8")
 `;
 
-export const juliaEnvironmentProbe = `using Pkg, TOML, SHA
+export const juliaEnvironmentProbe = String.raw`using Pkg, TOML, SHA
 Pkg.offline(true)
+json_string(value::AbstractString) = string('"', replace(replace(replace(replace(value, "\\" => "\\\\"), "\"" => "\\\""), '\n' => "\\n"), '\r' => "\\r"), '"')
+json_value(value::AbstractString) = json_string(value)
+json_value(value::AbstractVector) = string("[", join(map(json_value, value), ","), "]")
+json_value(value::AbstractDict) = string("{", join((string(json_string(string(key)), ":", json_value(item)) for (key, item) in value), ","), "}")
 function project_files(environment)
     paths = Set([environment.project_file, environment.manifest_file, collect(keys(environment.workspace))...])
     for path in collect(paths), name in (Base.preferences_names..., Pkg.Artifacts.artifact_names...)
@@ -56,7 +60,7 @@ for (uuid, information) in Pkg.dependencies(environment)
     if version !== nothing && information.version !== nothing
         VersionNumber(version) == information.version || error("research_experiment_environment_outdated")
     end
-    push!(packages, Dict("name" => information.name, "versions" => version === nothing ? String[] : [version]))
+    push!(packages, Dict("name" => information.name, "versions" => version === nothing ? String[] : [string(version)]))
     push!(metadata, project)
 end
 after = Dict(path => file_hash(path) for path in files)
@@ -65,24 +69,78 @@ report = Dict("version" => string(VERSION), "platform" => string(Sys.KERNEL), "a
     "prefix" => realpath(ENV["ROC_JULIA_DEPOT"]), "basePrefix" => realpath(joinpath(Sys.BINDIR, "..")),
     "packages" => packages, "metadataPaths" => sort!(unique(metadata)),
     "controls" => [Dict("path" => path, "sha256" => before[path]) for path in files])
-open(ENV["ROC_ENVIRONMENT_REPORT"], "w") do output
-    TOML.print(output, report)
-end
+write(ENV["ROC_ENVIRONMENT_REPORT"], json_value(report))
 `;
 
-export const normalizeNativeEnvironmentReport = `import csv, io, json, sys, tomllib
-if sys.argv[1] == "renv":
-    rows = list(csv.DictReader(io.StringIO(sys.stdin.read())))
-    value = {row["name"]: row["value"] for row in rows if row["type"] == "runtime"}
-    value["packages"] = [{"name": row["name"], "versions": [row["value"]]} for row in rows if row["type"] == "package"]
-    value["metadataPaths"] = [row["name"] for row in rows if row["type"] == "metadata"]
-    value["controls"] = []
-elif sys.argv[1] == "julia":
-    value = tomllib.loads(sys.stdin.read())
-else:
-    raise ValueError("research_experiment_runtime_invalid")
-print(json.dumps(value))
-`;
+function parseCsvRow(line: string): string[] {
+  const fields: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (quoted) {
+      if (character === '"' && line[index + 1] === '"') {
+        field += '"';
+        index += 1;
+        continue;
+      }
+      if (character === '"') {
+        quoted = false;
+        continue;
+      }
+      field += character;
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+      continue;
+    }
+    if (character === ',') {
+      fields.push(field);
+      field = '';
+      continue;
+    }
+    field += character;
+  }
+  if (quoted) throw new Error('research_experiment_environment_report_invalid');
+  fields.push(field);
+  return fields;
+}
+
+function parseRenvCsv(text: string): Record<string, unknown> {
+  const lines = text.replace(/^\uFEFF/u, '').split(/\r?\n/u).filter((line) => line.length > 0);
+  if (lines.length === 0) throw new Error('research_experiment_environment_report_invalid');
+  const header = parseCsvRow(lines[0]);
+  const typeIndex = header.indexOf('type');
+  const nameIndex = header.indexOf('name');
+  const valueIndex = header.indexOf('value');
+  if (typeIndex < 0 || nameIndex < 0 || valueIndex < 0) throw new Error('research_experiment_environment_report_invalid');
+  const runtime: Record<string, string> = {};
+  const packages: Array<{ name: string; versions: string[] }> = [];
+  const metadataPaths: string[] = [];
+  for (const line of lines.slice(1)) {
+    const row = parseCsvRow(line);
+    const type = row[typeIndex] ?? '';
+    const name = row[nameIndex] ?? '';
+    const value = row[valueIndex] ?? '';
+    if (type === 'runtime') runtime[name] = value;
+    else if (type === 'package') packages.push({ name, versions: [value] });
+    else if (type === 'metadata') metadataPaths.push(name);
+  }
+  return { ...runtime, packages, metadataPaths, controls: [] };
+}
+
+export function normalizeNativeEnvironmentReport(kind: 'renv' | 'julia', text: string): unknown {
+  if (kind === 'julia') {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error('research_experiment_environment_report_invalid');
+    }
+  }
+  if (kind !== 'renv') throw new Error('research_experiment_runtime_invalid');
+  return parseRenvCsv(text);
+}
 
 export const juliaExperimentFlags = ['--startup-file=no', '--history-file=no', '--compiled-modules=existing', '--pkgimages=existing'] as const;
 

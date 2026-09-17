@@ -2,8 +2,8 @@ import { chmod, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from 
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { collectPythonLicenses } from '../../../scripts/research/collect-licenses';
 import { computeLockHashes, portablePython, prepare } from '../../../scripts/research/prepare';
 import { writeManifest } from '../../../scripts/research/manifest';
 
@@ -75,35 +75,42 @@ describe('research prepare', () => {
     expect(hashes['scripts/download-asset.ts']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/smoke.ts']).toMatch(/^[0-9a-f]{64}$/u);
     expect(hashes['scripts/build-r-process.ts']).toMatch(/^[0-9a-f]{64}$/u);
-    expect(hashes['scripts/collect_licenses.py']).toMatch(/^[0-9a-f]{64}$/u);
+    expect(hashes['scripts/collect-licenses.ts']).toMatch(/^[0-9a-f]{64}$/u);
+    expect(hashes['scripts/collect_licenses.py']).toBeUndefined();
     expect(hashes['scripts/prepare.py']).toBeUndefined();
     expect(hashes['tex-bundle-files.txt']).toMatch(/^[0-9a-f]{64}$/u);
   });
 
   it('collects named files in license directories', async () => {
     const root = await workspace();
-    const script = fileURLToPath(new URL('../../../scripts/research/collect_licenses.py', import.meta.url));
-    const helper = `
-import json, sys
-from email.message import Message
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
-sys.path.insert(0, str(Path(sys.argv[1]).parent))
-from collect_licenses import collect
-root = Path(sys.argv[2]).resolve()
-relative = Path('example.dist-info/licenses/BUILD_LICENSES/icu.txt')
-target = root / relative
-target.parent.mkdir(parents=True)
-target.write_text('Upstream copyright and license', encoding='utf-8')
-metadata = Message()
-metadata['Name'] = 'example'
-distribution = SimpleNamespace(metadata=metadata, version='1.0', files=[relative], locate_file=lambda file: root / file)
-with patch('collect_licenses.importlib.metadata.distributions', return_value=[distribution]):
-    print(json.dumps(collect(root)))
-`;
-    const result = spawnSync('python3', ['-c', helper, script, root], { encoding: 'utf8' });
-    expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)[0].licenseFiles).toEqual(['example.dist-info/licenses/BUILD_LICENSES/icu.txt']);
+    const site = join(root, 'python/lib/python3.12/site-packages');
+    const dist = join(site, 'example.dist-info');
+    const license = join(dist, 'licenses/BUILD_LICENSES/icu.txt');
+    await mkdir(join(dist, 'licenses/BUILD_LICENSES'), { recursive: true });
+    await writeFile(join(dist, 'METADATA'), 'Name: example\nVersion: 1.0\nLicense-Expression: MIT\nClassifier: License :: OSI Approved :: MIT License\nProject-URL: Homepage, https://example.test\n');
+    await writeFile(license, 'Upstream copyright and license');
+    await writeFile(join(dist, 'RECORD'), 'example.dist-info/licenses/BUILD_LICENSES/icu.txt,,\n');
+    const records = await collectPythonLicenses(root);
+    expect(records).toEqual([{
+      name: 'example',
+      version: '1.0',
+      licenseExpression: 'MIT',
+      license: null,
+      licenseClassifiers: ['License :: OSI Approved :: MIT License'],
+      projectUrls: ['Homepage, https://example.test'],
+      licenseFiles: ['python/lib/python3.12/site-packages/example.dist-info/licenses/BUILD_LICENSES/icu.txt']
+    }]);
+  });
+
+  it('ignores RECORD paths that leave site-packages', async () => {
+    const root = await workspace();
+    const site = join(root, 'python/lib/python3.12/site-packages');
+    const dist = join(site, 'example.dist-info');
+    await mkdir(dist, { recursive: true });
+    await writeFile(join(dist, 'METADATA'), 'Name: example\nVersion: 1.0\n');
+    await writeFile(join(dist, 'RECORD'), '../outside.txt,,\n');
+    await writeFile(join(root, 'python/lib/python3.12/outside.txt'), 'nope');
+    const records = await collectPythonLicenses(root);
+    expect(records[0]?.licenseFiles).toEqual([]);
   });
 });

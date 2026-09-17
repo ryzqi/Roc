@@ -21,7 +21,7 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --tool
 
 TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离线编译子集 ZIP。保留原始文件字节，并重写 `SHA256SUM`。源 TAR 哈希、子集 ZIP 哈希均在 `tools.lock.json`。运行时 `tectonic --only-cached`，不下载其余 TeX Live 包。缺包即编译失败。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
 
-`smoke.ts` 使用空缓存和 macOS sandbox 禁止外网，执行中英文 LaTeX 编译、PDF 渲染、扫描图 OCR、表格/公式/图稿提取，以及 Matplotlib 的 PNG/SVG/PDF 输出。输出目录必须不存在；成功后写入 `result.json`，并保留 PDF、页面图、解析结果和日志。验证搬迁时将完整工具链复制或移到含空格的新路径后执行同一命令。
+`smoke.ts` 使用空缓存和 macOS sandbox 禁止外网，执行中英文 LaTeX 编译、TypeScript PDF 渲染、扫描图 OCR、表格/公式/图稿提取，以及 Matplotlib 的 PNG/SVG/PDF 输出。输出目录必须不存在；成功后写入 `result.json`，并保留 PDF、页面图、解析结果和日志。验证搬迁时将完整工具链复制或移到含空格的新路径后执行同一命令。
 
 ## Worker 协议
 
@@ -33,4 +33,4 @@ TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离
 
 Worker 使用内置 MIME 类型表；不读取开发机的 Apache 或用户 MIME 配置。异常 traceback 输出至 stderr，便于主进程诊断，JSON stdout 不混入日志。
 
-`figure.py` 仍由随包解释器渲染 Matplotlib 图稿；主进程只负责校验输出。许可证采集 `scripts/research/collect_licenses.py` 也必须在该解释器内执行。
+`figure.py` 仍由随包解释器渲染 Matplotlib 图稿；主进程只负责校验输出。许可证采集由 `scripts/research/collect-licenses.ts` 读取已安装包的 METADATA/RECORD，不再进入目标解释器。

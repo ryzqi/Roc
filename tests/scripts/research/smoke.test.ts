@@ -20,6 +20,7 @@ describe('research smoke', () => {
   it('exports the latex and plot samples used by the live toolchain test', () => {
     expect(LATEX).toContain('研究数据与方法');
     expect(PLOT).toContain("matplotlib.use('Agg')");
+    expect(LATEX).toContain('ctexart');
   });
 
   it('rejects an existing output directory before running the toolchain', async () => {

@@ -48,7 +48,7 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
   }
   const probe = await mkdtemp(join(jobDir, `${runtime.kind}-probe-`));
   try {
-    const reportPath = join(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.toml');
+    const reportPath = join(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json');
     const command = runtime.kind === 'renv'
       ? rExperimentCommand(root, executable, ['--vanilla', '--slave', '-e', rEnvironmentProbe])
       : { command: executable, args: [...juliaExperimentFlags, `--project=${workspace}`, '-e', juliaEnvironmentProbe] };
@@ -57,12 +57,12 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
       timeoutMs: 60000, signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);
-    const bytes = await readResearchFile(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.toml', 4 * 1024 * 1024);
-    const converted = await run({ command: tools.python, args: ['-I', '-B', '-c', normalizeNativeEnvironmentReport, runtime.kind], input: bytes.toString('utf8'),
-      cwd: probe, readablePaths: [tools.root], writablePaths: [probe], environment: tools.environment,
-      timeoutMs: 30000, signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
-    if (converted.exitCode !== 0) throw new ResearchProcessError('research_experiment_environment_report_invalid', converted.stdout, converted.stderr);
-    const report = reportSchema.parse(JSON.parse(converted.stdout) as unknown);
+    const bytes = await readResearchFile(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json', 4 * 1024 * 1024);
+    let report;
+    try { report = reportSchema.parse(normalizeNativeEnvironmentReport(runtime.kind, bytes.toString('utf8'))); }
+    catch {
+      throw new ResearchProcessError('research_experiment_environment_report_invalid', bytes.toString('utf8'));
+    }
     if (await realpath(report.prefix) !== prefix || await realpath(report.basePrefix) !== root) throw new Error('research_experiment_runtime_changed');
     if (runtime.kind === 'julia') {
       for (const file of report.controls) {
