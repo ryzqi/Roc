@@ -150,7 +150,7 @@ export function ResearchLibraryPanel({
               </div>
               {openDocuments.map((document) => (
                 <p className={document.status === 'failed' ? 'research-stage-error' : 'research-stage-copy'} key={document.id} data-testid={`research-document-status-${document.id}`}>
-                  {document.filename} · {documentStatusLabel(document.status)}{document.error === null ? '' : ` · ${document.error}`}
+                  {document.filename} · {documentStatusLabel(document.status)}{document.error === null ? '' : ` · ${researchRuntimeErrorLabel(document.error)}`}
                 </p>
               ))}
               {openContent === null ? null : (
@@ -185,4 +185,9 @@ function documentStatusLabel(status: ResearchDocument['status']): string {
   if (status === 'failed') return '解析失败';
   if (status === 'cancelled') return '已取消';
   return '已导入';
+}
+
+function researchRuntimeErrorLabel(code: string): string {
+  if (code === 'research_models_unavailable') return '解析模型尚未下载';
+  return code;
 }

@@ -30,6 +30,15 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
         if (error instanceof Error && error.message === 'research_document_parse_stale') {
           throw new RocDomainError({ code: error.message, message: '文档解析状态已变化，请刷新后重试。', category: 'conflict', retryable: false });
         }
+        const code = error instanceof Error ? error.message.split(':', 1)[0] : '';
+        if (code === 'research_models_unavailable') {
+          throw new RocDomainError({
+            code,
+            message: '解析模型尚未下载，请先在科研工作台下载。',
+            category: 'degraded',
+            retryable: false
+          });
+        }
         throw error;
       }
     });

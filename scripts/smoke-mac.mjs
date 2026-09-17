@@ -171,7 +171,8 @@ try {
       rtkTargets: fs.readdirSync(rtkRoot),
       researchToolchain: {
         missing: toolchainFiles.filter((file) => !fs.existsSync(join(toolchainRoot, file))),
-        architecture: JSON.parse(fs.readFileSync(join(toolchainRoot, 'manifest.json'), 'utf8')).architecture
+        architecture: JSON.parse(fs.readFileSync(join(toolchainRoot, 'manifest.json'), 'utf8')).architecture,
+        modelsPresent: fs.existsSync(join(toolchainRoot, 'models'))
       },
       sqlitePrebuilds: fs.readdirSync(join(unpacked, 'better-sqlite3', 'prebuilds')),
       ptyPrebuilds: fs.readdirSync(join(unpacked, 'node-pty', 'prebuilds')),
@@ -189,6 +190,7 @@ try {
   assert.deepEqual(native.rtkTargets, [`darwin-${native.arch}`]);
   assert.deepEqual(native.researchToolchain.missing, []);
   assert.equal(native.researchToolchain.architecture, native.arch);
+  assert.equal(native.researchToolchain.modelsPresent, false);
   assert.deepEqual(native.sqlitePrebuilds, [`darwin-${native.arch}.node`]);
   assert.deepEqual(native.ptyPrebuilds, [`darwin-${native.arch}`]);
   assert.deepEqual(native.redundantPackages, []);

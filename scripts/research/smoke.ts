@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -148,11 +148,17 @@ async function runLabeled(
 }
 
 export async function smoke(toolchainPath: string, outputPath: string): Promise<SmokeResult> {
+  return await smokeWithModels(toolchainPath, outputPath, join(toolchainPath, 'models'));
+}
+
+export async function smokeWithModels(toolchainPath: string, outputPath: string, modelsPath: string): Promise<SmokeResult> {
   const toolchain = await realpath(toolchainPath);
   const manifest = await verifyManifest(toolchain);
   if (await pathInfo(outputPath) !== null) fail('research_smoke_output_exists');
   await mkdir(outputPath, { recursive: true });
   const output = await realpath(outputPath);
+  const models = join(output, 'models');
+  await cp(await realpath(modelsPath), models, { recursive: true, preserveTimestamps: true });
   const cache = join(output, 'cache');
   const temporary = join(cache, 'tmp');
   await mkdir(temporary, { recursive: true });
@@ -188,7 +194,7 @@ export async function smoke(toolchainPath: string, outputPath: string): Promise<
   const parsed = JSON.parse(await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
     request: {
       operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
-      outputDir: join(output, 'parsed'), modelsPath: join(toolchain, 'models')
+      outputDir: join(output, 'parsed'), modelsPath: models
     }
   })) as { ok: boolean; result: { content: string; blocks: Array<{ kind: string }>; warnings: unknown } };
   if (!parsed.ok) fail('research_smoke_parse_failed');
@@ -202,7 +208,7 @@ export async function smoke(toolchainPath: string, outputPath: string): Promise<
   const native = JSON.parse(await run('native-pdf', [python, '-I', '-B', join(toolchain, 'worker.py')], {
     request: {
       operation: 'parse_document', projectRoot: output, sourcePath: pdf,
-      outputDir: join(output, 'parsed-pdf'), modelsPath: join(toolchain, 'models')
+      outputDir: join(output, 'parsed-pdf'), modelsPath: models
     }
   })) as { ok: boolean; result: { content: string; pageCount: number; blocks: unknown[] } };
   if (!native.ok || !native.result.content.includes('Treatment') || native.result.pageCount !== 1) {
@@ -215,7 +221,7 @@ export async function smoke(toolchainPath: string, outputPath: string): Promise<
   const parsedHtml = JSON.parse(await run('html', [python, '-I', '-B', join(toolchain, 'worker.py')], {
     request: {
       operation: 'parse_document', projectRoot: output, sourcePath: html,
-      outputDir: join(output, 'parsed-html'), modelsPath: join(toolchain, 'models')
+      outputDir: join(output, 'parsed-html'), modelsPath: models
     }
   })) as { ok: boolean; result: { content: string; blocks: unknown[] } };
   if (!parsedHtml.ok || !parsedHtml.result.content.includes('研究方法') || !parsedHtml.result.content.includes('18')) {
@@ -243,13 +249,14 @@ export async function smoke(toolchainPath: string, outputPath: string): Promise<
 
 async function main(): Promise<void> {
   const { values } = parseArgs({
-    options: { toolchain: { type: 'string' }, output: { type: 'string' } },
+    options: { toolchain: { type: 'string' }, output: { type: 'string' }, models: { type: 'string' } },
     strict: true
   });
   if (values.toolchain === undefined || values.toolchain === '' || values.output === undefined || values.output === '') {
     fail('research_smoke_arguments_required');
   }
-  await smoke(values.toolchain, values.output);
+  const models = values.models === undefined || values.models === '' ? join(values.toolchain, 'models') : values.models;
+  await smokeWithModels(values.toolchain, values.output, models);
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

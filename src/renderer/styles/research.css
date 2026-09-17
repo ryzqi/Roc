@@ -301,6 +301,16 @@
   color: inherit;
 }
 
+.research-alert .action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
 .research-loading,
 .research-empty {
   color: var(--muted);

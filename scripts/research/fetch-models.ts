@@ -2,8 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
-import { pathToFileURL } from 'node:url';
-import { downloadVerified, fileSha256 } from './download-asset.ts';
+import { downloadVerified, fileSha256 } from './download-asset';
 
 export type ModelSource = {
   repoId: string;
@@ -128,6 +127,65 @@ export async function verifyFiles(root: string, source: ModelSource): Promise<vo
   }
 }
 
+async function verifyInstalledModel(root: string, source: ModelSource): Promise<void> {
+  if ((await pathInfo(root))?.isSymbolicLink()) fail('research_model_symlink');
+  const markerPath = join(root, 'roc-source.json');
+  const markerInfo = await pathInfo(markerPath);
+  const marker = markerInfo !== null && markerInfo.isFile() && !markerInfo.isSymbolicLink()
+    ? JSON.parse(await readFile(markerPath, 'utf8')) as unknown
+    : null;
+  const expectedMarker: ModelMarker = { repoId: source.repoId, revision: source.revision, license: source.license };
+  if (!sameMarker(marker, expectedMarker)) fail('research_models_unavailable');
+  for (const filename of Object.keys(source.files)) {
+    const path = join(root, filename);
+    const info = await pathInfo(path);
+    if (info === null || info.isSymbolicLink() || !info.isFile() || info.size < 1) fail('research_models_unavailable');
+  }
+}
+
+export type InstalledModelStatus = {
+  directory: string;
+  repoId: string;
+  ready: boolean;
+};
+
+export async function inspectInstalledModels(rootPath: string | null, lock: unknown, options: { verifyHashes?: boolean } = {}): Promise<{
+  available: boolean;
+  ready: boolean;
+  error: string | null;
+  models: InstalledModelStatus[];
+}> {
+  if (rootPath === null || !isAbsolute(rootPath)) {
+    return { available: false, ready: false, error: 'research_models_unavailable', models: [] };
+  }
+  if ((await pathInfo(rootPath))?.isSymbolicLink()) fail('research_model_output_symlink');
+  const models: InstalledModelStatus[] = [];
+  for (const source of readSources(lock)) {
+    const destination = join(rootPath, source.directory);
+    const info = await pathInfo(destination);
+    if (info === null) {
+      models.push({ directory: source.directory, repoId: source.repoId, ready: false });
+      continue;
+    }
+    try {
+      if (options.verifyHashes === true) await verifyFiles(destination, source);
+      else await verifyInstalledModel(destination, source);
+      models.push({ directory: source.directory, repoId: source.repoId, ready: true });
+    } catch (error) {
+      const code = error instanceof Error ? error.message.split(':', 1)[0] : 'research_models_invalid';
+      models.push({ directory: source.directory, repoId: source.repoId, ready: false });
+      return { available: true, ready: false, error: code, models };
+    }
+  }
+  const ready = models.length > 0 && models.every((model) => model.ready);
+  return {
+    available: true,
+    ready,
+    error: ready ? null : 'research_models_unavailable',
+    models
+  };
+}
+
 const DARWIN_O_EXLOCK = 0x20;
 
 async function withDownloadLock(lockPath: string, work: () => Promise<void>): Promise<void> {
@@ -231,8 +289,21 @@ export async function fetchModels(
   if ((await pathInfo(outputPath))?.isSymbolicLink()) fail('research_model_output_symlink');
   const output = resolve(outputPath);
   await mkdir(output, { recursive: true });
-  const sources = readSources(JSON.parse(await readFile(lockPath, 'utf8')) as unknown);
-  for (const source of sources) await fetchModel(source, output, options);
+  await installModels(JSON.parse(await readFile(lockPath, 'utf8')) as unknown, output, options);
+}
+
+export async function installModels(
+  lock: unknown,
+  outputPath: string,
+  options: {
+    resolveUrl?: (source: ModelSource, filename: string) => string;
+    download?: DownloadFn;
+  } = {}
+): Promise<void> {
+  if ((await pathInfo(outputPath))?.isSymbolicLink()) fail('research_model_output_symlink');
+  const output = resolve(outputPath);
+  await mkdir(output, { recursive: true });
+  for (const source of readSources(lock)) await fetchModel(source, output, options);
 }
 
 async function main(): Promise<void> {
@@ -246,6 +317,6 @@ async function main(): Promise<void> {
   await fetchModels(values.lock, values.output);
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (process.argv[1] !== undefined && /(?:^|\/)fetch-models\.[cm]?[jt]s$/u.test(process.argv[1].replaceAll('\\', '/'))) {
   await main();
 }

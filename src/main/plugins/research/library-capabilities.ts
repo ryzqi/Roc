@@ -43,6 +43,7 @@ const libraryFailures: Record<string, { message: string; category: RocErrorCateg
   research_csl_type_unsupported: { message: 'CSL JSON 中包含不支持的文献类型。', category: 'validation' },
   research_csl_date_invalid: { message: 'CSL JSON 中包含无效日期。', category: 'validation' },
   research_toolchain_unavailable: { message: '科研工具链不可用，请检查应用资源。', category: 'degraded' },
+  research_models_unavailable: { message: '解析模型尚未下载，请先在科研工作台下载。', category: 'degraded' },
   research_toolchain_source_mismatch: { message: '科研工具链与当前应用版本不匹配。', category: 'degraded' }
 };
 

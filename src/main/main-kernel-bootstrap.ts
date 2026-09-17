@@ -43,6 +43,7 @@ import { SelfConfigService } from './services/self-config';
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
   researchToolchainRoot?: string;
+  researchModelsRoot?: string;
   safeStorage: SafeStorageBackend;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
   plugins?: readonly RocPlugin[];
@@ -124,7 +125,8 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
         version: requireMainKernelVersion(options.version),
         isPackaged: options.isPackaged,
         getAppearance: options.getAppearance,
-        researchToolchainRoot: options.researchToolchainRoot
+        researchToolchainRoot: options.researchToolchainRoot,
+        researchModelsRoot: options.researchModelsRoot
       }),
     safeStorage: options.safeStorage
   });
@@ -172,6 +174,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 
 function createDefaultMainKernelPlugins(input: {
   researchToolchainRoot?: string;
+  researchModelsRoot?: string;
   databasePool: DatabasePool;
   paths: RocPaths;
   configService: ConfigService;
@@ -250,6 +253,7 @@ function createDefaultMainKernelPlugins(input: {
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
     createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
+      modelsRoot: input.researchModelsRoot,
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
       exportRoot: join(input.paths.root, 'research-exports') }),
     createMcpPlugin({ configService }),

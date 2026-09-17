@@ -6,12 +6,12 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
-import modelsLock from '../../../../resources/research-runtime/models.lock.json';
 import workerSource from '../../../../resources/research-runtime/worker.py?raw';
 import { researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
+import { ResearchModelStore, type ResearchModelsStatus } from './model-store';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const manifestSchema = z.object({
@@ -30,8 +30,11 @@ type ResolvedToolchain = { root: string; manifest: Manifest };
 
 export class ResearchToolchain {
   private verification: Promise<ResolvedToolchain> | null = null;
+  private readonly models: ResearchModelStore;
 
-  constructor(private readonly rootPath: string | null) {}
+  constructor(private readonly rootPath: string | null, modelsRoot: string | null = null) {
+    this.models = new ResearchModelStore(modelsRoot);
+  }
 
   async status(): Promise<z.infer<typeof researchToolchainStatusSchema>> {
     try {
@@ -90,6 +93,14 @@ export class ResearchToolchain {
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
       timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+  }
+
+  async modelsStatus(): Promise<ResearchModelsStatus> {
+    return await this.models.status();
+  }
+
+  async downloadModels(): Promise<ResearchModelsStatus> {
+    return await this.models.downloadAll();
   }
 
   private async job<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
@@ -160,10 +171,11 @@ export class ResearchToolchain {
 
   private async worker<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>, timeoutMs: number): Promise<T> {
     const { root } = await this.resolve();
+    const modelsPath = operation.operation === 'parse_document' ? await this.models.requireReady() : null;
     const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
-      ...(operation.operation === 'parse_document' ? { modelsPath: join(root, 'models') } : {}) };
+      ...(modelsPath === null ? {} : { modelsPath }) };
     const result = await runResearchProcess({ command: join(root, 'python/bin/python3'), args: ['-I', '-B', join(root, 'worker.py')],
-      cwd: input.jobDir, readablePaths: [root, input.sourcePath], writablePaths: [input.jobDir],
+      cwd: input.jobDir, readablePaths: [root, input.sourcePath, ...(modelsPath === null ? [] : [modelsPath])], writablePaths: [input.jobDir],
       environment: await this.environment(root, input.jobDir), input: JSON.stringify(request), timeoutMs, signal: input.signal,
       allowOcrAcceleration: operation.operation === 'parse_document', networkAccess: 'none', allowPosixSpawn: false });
     const envelope = z.discriminatedUnion('ok', [
@@ -213,25 +225,26 @@ export class ResearchToolchain {
     };
     requireHash('worker.py', researchContentHash(workerSource));
     requireHash('tex/bundle.zip', toolsLock.texBundle.zipSha256);
-    for (const model of modelsLock.models) {
-      for (const [path, digest] of Object.entries(model.files)) requireHash(`models/${model.directory}/${path}`, digest);
-    }
     const actual: string[] = [];
     const visit = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         const path = join(directory, entry.name);
+        const relativePath = relative(root, path);
+        if (isPackagedModelPath(relativePath)) continue;
         if (entry.isDirectory()) await visit(path);
-        else if (relative(root, path) !== 'manifest.json') actual.push(relative(root, path));
+        else if (relativePath !== 'manifest.json') actual.push(relativePath);
       }
     };
     await visit(root);
-    if (actual.length !== entries.size || actual.some((path) => !entries.has(path))) {
+    const tracked = [...entries.keys()].filter((path) => !isPackagedModelPath(path));
+    if (actual.length !== tracked.length || actual.some((path) => !entries.has(path) || isPackagedModelPath(path))) {
       throw new ResearchProcessError('research_toolchain_integrity_mismatch');
     }
     let index = 0;
     await Promise.all(Array.from({ length: 4 }, async () => {
       while (index < manifest.entries.length) {
         const entry = manifest.entries[index++];
+        if (isPackagedModelPath(entry.path)) continue;
         const path = join(root, entry.path);
         const info = await lstat(path);
         if (entry.type === 'symlink') {
@@ -257,4 +270,8 @@ export class ResearchToolchain {
 function parseJson(value: string): unknown {
   try { return JSON.parse(value) as unknown; }
   catch { throw new ResearchProcessError('research_json_invalid'); }
+}
+
+function isPackagedModelPath(path: string): boolean {
+  return path === 'models' || path.startsWith('models/');
 }

@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -79,6 +80,12 @@ describe('research prepare', () => {
     expect(hashes['scripts/collect_licenses.py']).toBeUndefined();
     expect(hashes['scripts/prepare.py']).toBeUndefined();
     expect(hashes['tex-bundle-files.txt']).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('does not copy fetched models into the toolchain output', () => {
+    const source = readFileSync(new URL('../../../scripts/research/prepare.ts', import.meta.url), 'utf8');
+    expect(source).toContain('await fetchModels(');
+    expect(source).not.toContain("join(root, 'models')");
   });
 
   it('collects named files in license directories', async () => {

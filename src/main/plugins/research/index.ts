@@ -111,6 +111,7 @@ export type ResearchPluginOptions = {
   libraryRoot?: string;
   libraryFetch?: ConstructorParameters<typeof ResearchLibraryService>[3];
   toolchainRoot?: string;
+  modelsRoot?: string;
   roleExecutor?: ResearchRoleExecutor;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
@@ -128,7 +129,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let figures: ResearchFigureService | null = null;
   let exports: ResearchExportService | null = null;
   let productionInputs: ResearchProductionInputService | null = null;
-  const toolchain = new ResearchToolchain(options.toolchainRoot ?? null);
+  const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
   return {

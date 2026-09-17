@@ -2,7 +2,7 @@
 
 Python 3.12.14 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
 
-Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。模型资源必须随工具链提供，运行时禁止自动下载。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
+Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。解析模型不随安装包分发：开发机使用 `.runtime/research-models`，打包后下载到 `~/.roc/research-models`。运行时禁止自动联网拉取。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
 
 本目录保存源文件和依赖声明。构建得到的解释器、环境与模型位于项目 `.runtime/`，不提交生成的第三方二进制。此增量提供可供应用打包的完整工具链；主进程接线与 Electron 打包校验在后续增量完成。
 
@@ -14,10 +14,11 @@ Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识�
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --arch arm64 --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/manifest.ts --root /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run tests/scripts/research tests/main/native-packaging.test.ts
-rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/fetch-models.ts --lock /Users/Apple_501/Desktop/Roc/Roc/resources/research-runtime/models.lock.json --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```
 
-`prepare.ts` 按工具归档 SHA-256、`uv.lock` 和全部模型文件哈希组装环境，生成逐文件完整性清单及实际 Python 包许可证索引。解释器和 console script 不依赖开发机 venv。下载缓存位于 `.runtime/research-downloads`；中断后重复命令会使用已完成分块及部分字节。相同输出已存在时执行完整校验；源文件或锁文件变化后需选择新输出目录，避免覆盖已有工具链。
+`prepare.ts` 按工具归档 SHA-256 与 `uv.lock` 组装 Python / Tectonic / TeX 环境，生成逐文件完整性清单及实际 Python 包许可证索引。模型只写入 `--models` 缓存（默认 `.runtime/research-models`），不复制进 toolchain 输出。解释器和 console script 不依赖开发机 venv。下载缓存位于 `.runtime/research-downloads`；中断后重复命令会使用已完成分块及部分字节。相同输出已存在时执行完整校验；源文件或锁文件变化后需选择新输出目录，避免覆盖已有工具链。
 
 TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离线编译子集 ZIP。保留原始文件字节，并重写 `SHA256SUM`。源 TAR 哈希、子集 ZIP 哈希均在 `tools.lock.json`。运行时 `tectonic --only-cached`，不下载其余 TeX Live 包。缺包即编译失败。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
 

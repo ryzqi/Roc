@@ -34,6 +34,25 @@ describe('ResearchView project dashboard', () => {
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve' }));
   });
 
+  it('downloads parse models from the research banner', async () => {
+    const api = createResearchApi();
+    api.getModelsStatus.mockResolvedValue({
+      ok: true,
+      data: { ready: false, downloading: false, error: 'research_models_unavailable', models: [] }
+    });
+    api.downloadModels.mockResolvedValue({
+      ok: true,
+      data: { ready: true, downloading: false, error: null, models: [] }
+    });
+    await renderView(api);
+    await act(async () => { await Promise.resolve(); });
+    expect(text('research-models-banner')).toContain('解析模型未安装');
+    await click('research-models-download');
+    expect(api.downloadModels).toHaveBeenCalled();
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('[data-testid="research-models-banner"]')).toBeNull();
+  });
+
   it('pauses and rebuilds the project index from the dashboard', async () => {
     const api = createResearchApi();
     api.controlIndex.mockResolvedValueOnce({ ok: true, data: indexStatus({ phase: 'queued' }) });
@@ -512,7 +531,9 @@ function createResearchApi(overrides: {
     importTemplate: vi.fn(),
     readTemplateFile: vi.fn(),
     saveTemplateFile: vi.fn(),
-    compileTemplate: vi.fn()
+    compileTemplate: vi.fn(),
+    getModelsStatus: vi.fn().mockResolvedValue({ ok: true, data: { ready: true, downloading: false, error: null, models: [] } }),
+    downloadModels: vi.fn().mockResolvedValue({ ok: true, data: { ready: true, downloading: false, error: null, models: [] } })
   };
 }
 
@@ -559,6 +580,7 @@ async function renderView(research: ReturnType<typeof createResearchApi>, files?
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never, providers })
     }));
   });
+  await act(async () => { await Promise.resolve(); });
   await act(async () => { await Promise.resolve(); });
 }
 

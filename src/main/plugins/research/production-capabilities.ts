@@ -3,14 +3,17 @@ import { researchTemplateCompileRequestSchema, researchTemplateImportRequestSche
 import {
   researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
-  researchTemplatePreviewRequestSchema, researchToolchainStatusSchema
+  researchTemplatePreviewRequestSchema, researchToolchainStatusSchema, researchModelsStatusSchema
 } from '../../../shared/schemas/research-production';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
+import { RocDomainError } from '../../services/errors';
 import type { ResearchTemplateService } from './template-service';
 import type { ResearchToolchain } from './toolchain';
 
 const capabilities = {
   status: descriptor('research.toolchain.status', z.object({}).strict(), researchToolchainStatusSchema),
+  modelsStatus: descriptor('research.models.status', z.object({}).strict(), researchModelsStatusSchema),
+  modelsDownload: descriptor('research.models.download', z.object({}).strict(), researchModelsStatusSchema),
   import: descriptor('research.template.import', researchTemplateImportRequestSchema, researchTemplateSchema),
   compile: descriptor('research.template.compile', researchTemplateCompileRequestSchema, researchTemplateSchema),
   get: descriptor('research.template.get', researchTemplateCompileRequestSchema, researchTemplateSchema),
@@ -26,9 +29,19 @@ export const researchProductionCapabilities = Object.values(capabilities);
 
 export function registerResearchProductionCapabilities(context: RocPluginContext, templates: ResearchTemplateService, tools: ResearchToolchain): void {
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (input: TInput) => TOutput | Promise<TOutput>): void {
-    context.capabilities.register(context.pluginId, capability, async (input) => await run(capability.inputSchema.parse(input)));
+    context.capabilities.register(context.pluginId, capability, async (input) => {
+      return await run(capability.inputSchema.parse(input));
+    });
+  }
+  function registerModels<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (input: TInput) => TOutput | Promise<TOutput>): void {
+    context.capabilities.register(context.pluginId, capability, async (input) => {
+      try { return await run(capability.inputSchema.parse(input)); }
+      catch (error) { throw mapResearchModelError(error); }
+    });
   }
   register(capabilities.status, () => tools.status());
+  registerModels(capabilities.modelsStatus, () => tools.modelsStatus());
+  registerModels(capabilities.modelsDownload, () => tools.downloadModels());
   register(capabilities.import, (input) => templates.importTemplate(input));
   register(capabilities.compile, (input) => templates.compile(input));
   register(capabilities.get, (input) => templates.get(input));
@@ -46,4 +59,26 @@ export function registerResearchProductionCapabilities(context: RocPluginContext
 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {
   return { name, version: '1.0.0', inputSchema, outputSchema };
+}
+
+function mapResearchModelError(error: unknown): never {
+  if (error instanceof RocDomainError) throw error;
+  const code = error instanceof Error ? error.message.split(':', 1)[0] : '';
+  if (code === 'research_models_unavailable') {
+    throw new RocDomainError({
+      code,
+      message: '解析模型尚未下载，请先在科研工作台下载。',
+      category: 'degraded',
+      retryable: false
+    });
+  }
+  if (code.startsWith('research_model_') || code.startsWith('research_download_')) {
+    throw new RocDomainError({
+      code,
+      message: '解析模型下载失败，请检查网络后重试。',
+      category: 'external',
+      retryable: true
+    });
+  }
+  throw error;
 }

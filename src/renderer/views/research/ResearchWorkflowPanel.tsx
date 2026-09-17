@@ -179,7 +179,7 @@ export function ResearchWorkflowPanel({
             ? '正在读取索引状态。'
             : `共 ${indexStatus.counts.total} 个文件，已就绪 ${indexStatus.counts.ready}，排队 ${indexStatus.counts.queued}，失败 ${indexStatus.counts.failed}。`}
         </p>
-        {indexStatus?.error === null || indexStatus === null ? null : <p className="research-stage-error" data-testid="research-index-error">{indexStatus.error}</p>}
+        {indexStatus?.error === null || indexStatus === null ? null : <p className="research-stage-error" data-testid="research-index-error">{indexStatus.error === 'research_models_unavailable' ? '解析模型尚未下载' : indexStatus.error}</p>}
         <div className="research-stage-actions">
           {indexStatus?.phase === 'paused' ? (
             <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-index-resume" onClick={() => onControlIndex('resume')}>

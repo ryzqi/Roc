@@ -19,6 +19,7 @@ import type { ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalS
 import { registerIpc } from './ipc/register-ipc';
 import { confirmShellRequestWithDialog } from './ipc/shell-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
+import { RocPaths } from './services/paths';
 import { agentChatRunEventType } from './plugins/agent/runtime';
 import { workspaceChangedEventType } from './plugins/workspace';
 import {
@@ -244,6 +245,9 @@ async function createWindow(): Promise<void> {
     isPackaged: app.isPackaged,
     researchToolchainRoot: app.isPackaged ? join(process.resourcesPath, 'research-toolchain')
       : join(mainModuleDir, `../../.runtime/research-toolchain/darwin-${process.arch}`),
+    researchModelsRoot: app.isPackaged
+      ? join(new RocPaths(process.env.ROC_DATA_ROOT).root, 'research-models')
+      : join(mainModuleDir, '../../.runtime/research-models'),
     performanceObserverService,
     safeStorage: safeStorageBackend,
     runtimeMetricsProvider,

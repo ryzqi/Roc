@@ -10,7 +10,9 @@ import { applyResearchDatabaseSchema } from '../../../../src/main/infrastructure
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchToolchain } from '../../../../src/main/plugins/research/toolchain';
-import { LATEX, PLOT } from '../../../../scripts/research/smoke';
+
+const LATEX = '\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{研究数据与方法 Research methods}\nThis experiment compares control and treatment groups.\n\\end{document}\n';
+const PLOT = "import matplotlib\nmatplotlib.use('Agg')\nfrom matplotlib import pyplot as plt\nfig, ax = plt.subplots()\nax.bar(['Control', 'Treatment'], [10, 50])\nfig.savefig('figure.png', dpi=180)\nplt.close(fig)\n";
 
 it('reports missing research resources without using host tools', async () => {
   await expect(new ResearchToolchain(null).status()).resolves.toEqual({ available: false, versions: null, error: 'research_toolchain_unavailable' });
@@ -31,7 +33,10 @@ describe.skipIf(toolchainRoot === undefined)('bundled research toolchain integra
     sqliteVec.load(db);
     applyResearchDatabaseSchema(db);
     const repository = new ResearchRepository(db);
-    const tools = new ResearchToolchain(toolchainRoot);
+    const tools = new ResearchToolchain(
+      toolchainRoot,
+      process.env.ROC_RESEARCH_MODELS ?? join(toolchainRoot, 'models')
+    );
     const templates = new ResearchTemplateService(repository, tools);
     try {
       expect(await tools.status()).toMatchObject({ available: true, error: null });

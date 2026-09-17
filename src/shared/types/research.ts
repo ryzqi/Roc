@@ -41,7 +41,7 @@ export type ResearchLibraryExport = z.infer<typeof researchLibraryExportSchema>;
 import type {
   researchTemplateFileSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateEntryRequestSchema, researchTemplateListRequestSchema,
-  researchToolchainStatusSchema, researchParsedDocumentSchema, researchRenderedPdfSchema
+  researchToolchainStatusSchema, researchModelsStatusSchema, researchParsedDocumentSchema, researchRenderedPdfSchema
 } from '../schemas/research-production';
 
 export type ResearchTemplateFile = z.infer<typeof researchTemplateFileSchema>;
@@ -51,6 +51,7 @@ export type ResearchTemplateFileSaveRequest = z.infer<typeof researchTemplateFil
 export type ResearchTemplateEntryRequest = z.infer<typeof researchTemplateEntryRequestSchema>;
 export type ResearchTemplateListRequest = z.infer<typeof researchTemplateListRequestSchema>;
 export type ResearchToolchainStatus = z.infer<typeof researchToolchainStatusSchema>;
+export type ResearchModelsStatus = z.infer<typeof researchModelsStatusSchema>;
 export type ResearchParsedDocument = z.infer<typeof researchParsedDocumentSchema>;
 export type ResearchRenderedPdf = z.infer<typeof researchRenderedPdfSchema>;
 import type {

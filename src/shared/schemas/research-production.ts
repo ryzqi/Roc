@@ -7,6 +7,17 @@ export const researchToolchainStatusSchema = z.object({
   error: z.string().nullable()
 }).strict();
 
+export const researchModelsStatusSchema = z.object({
+  ready: z.boolean(),
+  downloading: z.boolean(),
+  error: z.string().nullable(),
+  models: z.array(z.object({
+    directory: z.string(),
+    repoId: z.string(),
+    ready: z.boolean()
+  }).strict())
+}).strict();
+
 export const researchTemplateListRequestSchema = z.object({ projectId: z.string().min(1) }).strict();
 export const researchTemplateFileSchema = z.object({
   path: z.string(), size: z.number().int().nonnegative(), sha256: z.string().regex(/^[a-f0-9]{64}$/u), editable: z.boolean()

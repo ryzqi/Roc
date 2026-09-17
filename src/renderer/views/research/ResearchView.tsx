@@ -35,6 +35,9 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   const [manuscriptSnapshot, setManuscriptSnapshot] = useState(manuscript.getSnapshot());
   const [ideaSnapshot, setIdeaSnapshot] = useState(ideas.getSnapshot());
   const [productionSnapshot, setProductionSnapshot] = useState(production.getSnapshot());
+  const [modelsReady, setModelsReady] = useState<boolean | null>(null);
+  const [modelsDownloading, setModelsDownloading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const {
     projects,
     project: selectedProject,
@@ -75,6 +78,25 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
   useEffect(() => {
     void workbench.load();
   }, [workbench]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await client.api.research.getModelsStatus();
+      if (cancelled) return;
+      if (!result.ok) {
+        setModelsReady(false);
+        setModelsError(result.error.message);
+        return;
+      }
+      setModelsReady(result.data.ready);
+      setModelsDownloading(result.data.downloading);
+      setModelsError(result.data.error);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   useEffect(() => {
     surfaces.bindProject(selectedProjectId);
@@ -126,6 +148,21 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
     workbench.clearError();
   }
 
+  async function downloadModels(): Promise<void> {
+    setModelsDownloading(true);
+    setModelsError(null);
+    const result = await client.api.research.downloadModels();
+    if (!result.ok) {
+      setModelsReady(false);
+      setModelsDownloading(false);
+      setModelsError(result.error.message);
+      return;
+    }
+    setModelsReady(result.data.ready);
+    setModelsDownloading(result.data.downloading);
+    setModelsError(result.data.error);
+  }
+
   return (
     <section className="canvas-stage research-page" data-testid="research-view">
       <header className="research-header">
@@ -139,6 +176,22 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           新建项目
         </button>
       </header>
+
+      {modelsReady === false ? (
+        <div className="research-alert" role="status" data-testid="research-models-banner">
+          <CircleAlert aria-hidden="true" size={16} />
+          <span>{modelsDownloading ? '正在下载解析模型…' : '解析模型未安装。文档解析需要先下载模型。'}</span>
+          <button className="action-button action-button--primary" type="button" disabled={modelsDownloading} data-testid="research-models-download" onClick={() => void downloadModels()}>
+            {modelsDownloading ? '下载中' : '下载模型'}
+          </button>
+        </div>
+      ) : null}
+      {modelsError === null || modelsDownloading || modelsError === 'research_models_unavailable' ? null : (
+        <div className="research-alert" role="alert" data-testid="research-models-error">
+          <CircleAlert aria-hidden="true" size={16} />
+          <span>{modelsError}</span>
+        </div>
+      )}
 
       <nav className="research-tabs" aria-label="科研工作台视图">
         {([

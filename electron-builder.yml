@@ -66,5 +66,9 @@ mac:
         - darwin-${arch}/**
     - from: .runtime/research-toolchain/darwin-${arch}
       to: research-toolchain
+      filter:
+        - "**/*"
+        - "!models"
+        - "!models/**"
   identity: "-"
   hardenedRuntime: false

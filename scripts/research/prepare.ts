@@ -282,15 +282,6 @@ export async function prepare(architecture: string, outputPath: string, cachePat
         '--default-index', 'https://pypi.org/simple', '--build-constraints', constraints, requirements
       ], { env: environment });
       await fetchModels(join(SOURCES, 'models.lock.json'), modelCache);
-      await mkdir(join(root, 'models'));
-      const models = JSON.parse(await readFile(join(SOURCES, 'models.lock.json'), 'utf8')) as { models: Array<{ directory: string }> };
-      for (const model of models.models) {
-        await cp(join(modelCache, model.directory), join(root, 'models', model.directory), {
-          recursive: true,
-          verbatimSymlinks: true,
-          preserveTimestamps: true
-        });
-      }
       const bundle = tools.texBundle;
       const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
         expectedSize: bundle.size

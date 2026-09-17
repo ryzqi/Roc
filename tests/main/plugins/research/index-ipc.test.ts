@@ -35,7 +35,12 @@ beforeEach(async () => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   applyResearchDatabaseSchema(db);
-  plugin = createResearchPlugin({ indexRoot: join(root, 'index'), libraryRoot: join(root, 'library'), toolchainRoot });
+  plugin = createResearchPlugin({
+    indexRoot: join(root, 'index'),
+    libraryRoot: join(root, 'library'),
+    toolchainRoot,
+    modelsRoot: process.env.ROC_RESEARCH_MODELS ?? (toolchainRoot === undefined ? undefined : join(toolchainRoot, 'models'))
+  });
   capabilities = new CapabilityRegistry();
   for (const capability of plugin.manifest.capabilities) capabilities.declare(plugin.manifest.id, capability);
   await plugin.initialize({ pluginId: plugin.manifest.id, capabilities, database: { getConnection: () => db },

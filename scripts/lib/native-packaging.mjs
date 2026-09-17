@@ -232,6 +232,9 @@ export function verifyPackagedResearchToolchain({ resourcesDir, architecture = p
   if (!Array.isArray(licenses) || licenses.length === 0) {
     throw new Error('Packaged research toolchain is missing python license records.');
   }
+  if (existsSync(resolve(root, 'models'))) {
+    throw new Error('Packaged research toolchain must not include models.');
+  }
 }
 
 export function verifyPackagedFileLayout({ resourcesDir }) {

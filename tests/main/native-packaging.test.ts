@@ -82,6 +82,8 @@ describe('native packaging contract', () => {
   it('packages the current-architecture research toolchain and its licenses', () => {
     expect(electronBuilderConfig).toContain('from: .runtime/research-toolchain/darwin-${arch}');
     expect(electronBuilderConfig).toContain('to: research-toolchain');
+    expect(electronBuilderConfig).toContain('"!models"');
+    expect(electronBuilderConfig).toContain('"!models/**"');
     expect(afterPackHook).toContain('verifyPackagedResearchToolchain');
   });
 
@@ -213,6 +215,8 @@ describe('native packaging contract', () => {
     expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).toThrow(/licenses\/python-packages\.json/);
     writeFileSync(join(root, 'licenses/python-packages.json'), JSON.stringify([{ name: 'docling', licenseExpression: 'MIT' }]));
     expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).not.toThrow();
+    mkdirSync(join(root, 'models'), { recursive: true });
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch })).toThrow(/must not include models/);
   });
 
   it('fails when a macOS packaged terminal helper is missing', async () => {

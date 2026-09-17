@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   fetchModel,
   huggingfaceResolveUrl,
+  inspectInstalledModels,
   readSources,
   verifyFiles,
   type ModelSource
@@ -147,5 +148,49 @@ describe('research fetch models', () => {
     await rm(join(root, 'extra'));
     await symlink('model', join(root, 'link'));
     await expect(verifyFiles(root, model)).rejects.toMatchObject({ message: 'research_model_symlink' });
+  });
+
+  it('reports missing model directories as unavailable', async () => {
+    const root = await workspace();
+    const lock = {
+      schemaVersion: 1,
+      models: [{
+        repoId: 'owner/model',
+        revision: 'a'.repeat(40),
+        directory: 'model',
+        license: 'Apache-2.0',
+        files: { 'model.safetensors': digest('weights') }
+      }]
+    };
+    await expect(inspectInstalledModels(null, lock)).resolves.toMatchObject({
+      available: false, ready: false, error: 'research_models_unavailable', models: []
+    });
+    await expect(inspectInstalledModels(root, lock)).resolves.toMatchObject({
+      available: true, ready: false, error: 'research_models_unavailable',
+      models: [{ directory: 'model', repoId: 'owner/model', ready: false }]
+    });
+  });
+
+  it('treats a matching marker and present files as ready without hashing', async () => {
+    const root = await workspace();
+    const model = source({ 'model.safetensors': digest('weights') });
+    await mkdir(join(root, 'model'));
+    await writeFile(join(root, 'model/model.safetensors'), 'wrong-bytes');
+    await writeFile(join(root, 'model/roc-source.json'), JSON.stringify({
+      repoId: model.repoId, revision: model.revision, license: model.license
+    }));
+    await expect(inspectInstalledModels(root, {
+      schemaVersion: 1,
+      models: [model]
+    })).resolves.toMatchObject({
+      available: true, ready: true, error: null,
+      models: [{ directory: 'model', repoId: 'owner/model', ready: true }]
+    });
+    await expect(inspectInstalledModels(root, {
+      schemaVersion: 1,
+      models: [model]
+    }, { verifyHashes: true })).resolves.toMatchObject({
+      available: true, ready: false, error: 'research_model_hash_mismatch'
+    });
   });
 });

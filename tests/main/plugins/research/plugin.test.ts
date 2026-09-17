@@ -10,7 +10,7 @@ import { createPluginCapabilityAdapter } from '../../../../src/main/ipc/plugin-c
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import { createResearchPlugin } from '../../../../src/main/plugins/research';
 import { researchArtifactSchema, researchProjectSchema, researchTemplateSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
-import { researchTemplateFileContentSchema, researchTemplateFileSchema } from '../../../../src/shared/schemas/research-production';
+import { researchModelsStatusSchema, researchTemplateFileContentSchema, researchTemplateFileSchema } from '../../../../src/shared/schemas/research-production';
 import { researchClaimSchema, researchEvidenceSchema, researchExportBundleSchema, researchManuscriptSchema } from '../../../../src/shared/schemas/research-evidence';
 
 let db: Database.Database;
@@ -67,6 +67,9 @@ describe('research plugin IPC integration', () => {
       expect(compiled).toMatchObject({ status: 'failed', activeCompileId: null, pdfPath: null, errors: ['research_toolchain_unavailable'] });
       const status = await adapter.invoke('research.getToolchainStatus', []);
       expect(status).toMatchObject({ ok: true, data: { available: false, error: 'research_toolchain_unavailable' } });
+      const models = await adapter.invoke('research.getModelsStatus', []);
+      expect(models).toMatchObject({ ok: true, data: { ready: false, downloading: false, error: 'research_models_unavailable' } });
+      expect(researchModelsStatusSchema.parse((models as { data: unknown }).data).models).toEqual([]);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
