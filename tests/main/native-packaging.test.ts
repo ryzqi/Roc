@@ -89,6 +89,11 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('"!**/debugpy"');
     expect(electronBuilderConfig).toContain('"!**/jedi"');
     expect(electronBuilderConfig).toContain('"!**/*.pyc"');
+    expect(electronBuilderConfig).toContain('"!**/faker"');
+    expect(electronBuilderConfig).toContain('"!**/polyfactory"');
+    expect(electronBuilderConfig).toContain('"!**/rapidocr"');
+    expect(electronBuilderConfig).toContain('"!**/torch/include"');
+    expect(electronBuilderConfig).toContain('"!python/include"');
     expect(electronBuilderConfig).not.toContain('from: resources/research-runtime/worker.py');
     expect(beforePackHook).toContain('assertLiveResearchToolchainForPackaging');
     expect(afterPackHook).toContain('finalizePackagedResearchToolchain');
@@ -119,6 +124,10 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('node_modules/@napi-rs/canvas/**');
     expect(electronBuilderConfig).toContain('node_modules/@napi-rs/canvas-darwin-${arch}/**');
     expect(electronBuilderConfig).toContain('node_modules/pdfjs-dist/**');
+    expect(electronBuilderConfig).toContain('!node_modules/pdfjs-dist/build/**');
+    expect(electronBuilderConfig).toContain('!node_modules/pdfjs-dist/web/**');
+    expect(electronBuilderConfig).toContain('!node_modules/pdfjs-dist/types/**');
+    expect(electronBuilderConfig).toContain('!node_modules/pdfjs-dist/legacy/web/**');
   });
 
   it('verifies workspace better-sqlite3 under Electron without rebuilding it', async () => {
@@ -236,6 +245,10 @@ describe('native packaging contract', () => {
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'), { recursive: true });
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest/test.py'), 'legacy');
     expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/must not include PyObjCTest/);
+    rmSync(join(root, 'python/lib/python3.12/site-packages/PyObjCTest'), { recursive: true, force: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/torch/include'), { recursive: true });
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/torch/include/torch.h'), 'headers');
+    expect(() => verifyPackagedResearchToolchain({ resourcesDir, architecture: process.arch, projectRoot })).toThrow(/must not include python\/lib\/python3\.12\/site-packages\/torch\/include/);
   });
 
   it('fails before packing when the live research toolchain is missing', async () => {
@@ -264,6 +277,11 @@ describe('native packaging contract', () => {
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/debugpy'), { recursive: true });
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info'), { recursive: true });
     mkdirSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/faker'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/rapidocr'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/torch/include'), { recursive: true });
+    mkdirSync(join(root, 'python/lib/python3.12/site-packages/torch/lib'), { recursive: true });
+    mkdirSync(join(root, 'python/include/python3.12'), { recursive: true });
     mkdirSync(join(root, 'tex'), { recursive: true });
     mkdirSync(join(root, 'licenses'), { recursive: true });
     mkdirSync(join(root, 'models'), { recursive: true });
@@ -274,6 +292,11 @@ describe('native packaging contract', () => {
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info/METADATA'), 'legacy-meta');
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__/mod.cpython-312.pyc'), 'pyc');
     writeFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'keep');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/faker/__init__.py'), 'legacy-faker');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/rapidocr/__init__.py'), 'legacy-rapidocr');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/torch/include/torch.h'), 'headers');
+    writeFileSync(join(root, 'python/lib/python3.12/site-packages/torch/lib/libtorch.dylib'), 'lib');
+    writeFileSync(join(root, 'python/include/python3.12/Python.h'), 'headers');
     for (const relativePath of ['bin/tectonic', 'bin/uv', 'python/bin/python3', 'tex/bundle.zip',
       'licenses/README.md', 'licenses/sources.json', 'licenses/tectonic-MIT.txt', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt', 'licenses/CDLA-Permissive-2.0.txt']) {
       mkdirSync(resolve(join(root, relativePath), '..'), { recursive: true });
@@ -299,6 +322,11 @@ describe('native packaging contract', () => {
     expect(existsSync(join(root, 'python/lib/python3.12/site-packages/debugpy-1.8.0.dist-info'))).toBe(false);
     expect(existsSync(join(root, 'python/lib/python3.12/site-packages/ocrmac/__pycache__'))).toBe(false);
     expect(readFileSync(join(root, 'python/lib/python3.12/site-packages/keep.py'), 'utf8')).toBe('keep');
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/faker'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/rapidocr'))).toBe(false);
+    expect(existsSync(join(root, 'python/lib/python3.12/site-packages/torch/include'))).toBe(false);
+    expect(existsSync(join(root, 'python/include'))).toBe(false);
+    expect(readFileSync(join(root, 'python/lib/python3.12/site-packages/torch/lib/libtorch.dylib'), 'utf8')).toBe('lib');
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
     expect(manifest.lockHashes['bibliography.py']).toBeUndefined();
     expect(manifest.lockHashes['worker.py']).toMatch(/^[a-f0-9]{64}$/);

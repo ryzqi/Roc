@@ -256,7 +256,11 @@ const packagedResearchLeftoverNames = new Set([
   'traitlets',
   'comm',
   'fastjsonschema',
-  'nest_asyncio2.py'
+  'nest_asyncio2.py',
+  'faker',
+  'polyfactory',
+  'rapidocr',
+  'torchgen'
 ]);
 
 function isPackagedResearchLeftoverPart(part) {
@@ -278,6 +282,8 @@ export function isExcludedPackagedResearchPath(relativePath) {
   if (relativePath === 'models' || relativePath.startsWith('models/')) return true;
   if (relativePath === 'bibliography.py') return true;
   if (relativePath.endsWith('.pyc')) return true;
+  if (relativePath === 'python/include' || relativePath.startsWith('python/include/')) return true;
+  if (/(?:^|\/)torch\/(?:include|bin|testing)(?:\/|$)/.test(relativePath)) return true;
   return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
 }
 
@@ -459,7 +465,7 @@ export function verifyPackagedResearchToolchain({
   if (existsSync(resolve(root, 'bibliography.py'))) {
     throw new Error('Packaged research toolchain must not include bibliography.py.');
   }
-  const leftover = packagedPythonSiteLeftover(root);
+  const leftover = packagedResearchLeftover(root);
   if (leftover !== null) {
     throw new Error(`Packaged research toolchain must not include ${leftover}.`);
   }
@@ -481,6 +487,22 @@ function packagedPythonSiteLeftover(root) {
     if (!existsSync(site)) continue;
     for (const installed of readdirSync(site)) {
       if (isPackagedResearchLeftoverPart(installed)) return installed;
+    }
+  }
+  return null;
+}
+
+function packagedResearchLeftover(root) {
+  const siteLeftover = packagedPythonSiteLeftover(root);
+  if (siteLeftover !== null) return siteLeftover;
+  const queue = [''];
+  while (queue.length > 0) {
+    const relativeDir = queue.pop();
+    const directory = relativeDir === '' ? root : join(root, relativeDir);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const relativePath = relativeDir === '' ? entry.name : `${relativeDir}/${entry.name}`;
+      if (isExcludedPackagedResearchPath(relativePath)) return relativePath;
+      if (entry.isDirectory() && !entry.isSymbolicLink()) queue.push(relativePath);
     }
   }
   return null;
