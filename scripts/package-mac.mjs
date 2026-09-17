@@ -17,6 +17,8 @@ const env = createPackagingEnvironment();
 const { version } = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 const releaseDir = join(projectRoot, 'release');
 const appPath = join(releaseDir, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app');
+const zipPath = join(releaseDir, `Roc-${version}-mac-${process.arch}.zip`);
+const dmgPath = join(releaseDir, `Roc-${version}-mac-${process.arch}.dmg`);
 
 function run(command, args) {
   const status = runCommand(command, args, { cwd: projectRoot, env });
@@ -27,11 +29,13 @@ function run(command, args) {
 
 run('pnpm', ['build']);
 run('pnpm', ['check:renderer-chunks']);
-run('pnpm', ['exec', 'electron-builder', '--mac', 'zip', `--${process.arch}`, '--publish', 'never', '--config', join(projectRoot, 'electron-builder.yml')]);
+run('pnpm', ['exec', 'electron-builder', '--mac', '--dir', `--${process.arch}`, '--publish', 'never', '--config', join(projectRoot, 'electron-builder.yml')]);
 run(process.execPath, [join(projectRoot, 'scripts', 'smoke-mac.mjs'), appPath]);
 
+rmSync(zipPath, { force: true });
+run('/usr/bin/ditto', ['-c', '-k', '--keepParent', '--norsrc', '--noextattr', '--noqtn', appPath, zipPath]);
+
 const stagingDir = mkdtempSync(join(projectRoot, '.runtime', 'mac-dmg-'));
-const dmgPath = join(releaseDir, `Roc-${version}-mac-${process.arch}.dmg`);
 try {
   run('/usr/bin/ditto', ['--noqtn', appPath, join(stagingDir, 'Roc.app')]);
   symlinkSync('/Applications', join(stagingDir, 'Applications'));
@@ -45,8 +49,7 @@ try {
 }
 
 const artifacts = [];
-for (const extension of ['dmg', 'zip']) {
-  const artifactPath = join(releaseDir, `Roc-${version}-mac-${process.arch}.${extension}`);
+for (const artifactPath of [dmgPath, zipPath]) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(artifactPath)) {
     hash.update(chunk);

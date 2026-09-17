@@ -88,6 +88,18 @@ describe('package scripts', () => {
     expect(electronSmokeScript).not.toContain("backgroundTaskApiEvidence.tray.nextRunAt === '2026-05-22T01:00:00.000Z'");
   });
 
+  it('builds a directory app before smoke, then archives zip and dmg once', () => {
+    const packageMac = readFileSync(new URL('../../scripts/package-mac.mjs', import.meta.url), 'utf8');
+    expect(packageMac).toContain("'--mac', '--dir'");
+    expect(packageMac).not.toContain("'--mac', 'zip'");
+    expect(packageMac).toContain("scripts', 'smoke-mac.mjs");
+    expect(packageMac.indexOf("'--mac', '--dir'")).toBeLessThan(packageMac.indexOf("smoke-mac.mjs"));
+    expect(packageMac.indexOf("smoke-mac.mjs")).toBeLessThan(packageMac.indexOf("'/usr/bin/ditto'"));
+    expect(packageMac).toContain("rmSync(zipPath, { force: true })");
+    expect(packageMac).toContain("'/usr/bin/ditto', ['-c', '-k', '--keepParent'");
+    expect(packageMac).toContain("'/usr/bin/hdiutil', ['create'");
+  });
+
   it('keeps release checklist commands aligned with package scripts', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     const releaseChecklist = readFileSync(

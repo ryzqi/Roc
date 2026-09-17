@@ -348,7 +348,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install --frozen-lockfile
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 ```
 
-`package:mac` 依次完成类型检查、构建、首屏代码体积检查、ZIP 打包、签名验证和包内启动验证，再用系统自带 `hdiutil` 生成含 Applications 链接的 DMG，最后生成 SHA-256 校验文件。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
+`package:mac` 依次完成类型检查、构建、首屏代码体积检查、当前架构目录包、签名验证和包内启动验证，再用 `ditto` 生成 ZIP、`hdiutil` 生成含 Applications 链接的 DMG，最后生成 SHA-256 校验文件。目录包先过 smoke，避免 electron-builder 先压缩一遍科研工具链。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
 
 - Apple Silicon：`release/mac-arm64/Roc.app`、`release/Roc-0.1.0-mac-arm64.dmg`、同名 ZIP。
 - Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app` 和带 `mac-x64` 的归档。
