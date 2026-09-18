@@ -30,4 +30,14 @@ describe('proxy runtime bootstrap', () => {
     expect(process.env.NODE_USE_ENV_PROXY).toBe('custom');
     expect(setGlobalProxyFromEnv).toHaveBeenCalledTimes(1);
   });
+
+  it('can reapply the global proxy dispatcher after environment variables change', async () => {
+    const runtime = await import('../../src/main/proxy-runtime');
+    expect(setGlobalProxyFromEnv).toHaveBeenCalledTimes(1);
+
+    runtime.applyNodeEnvProxy();
+
+    expect(process.env.NODE_USE_ENV_PROXY).toBe('1');
+    expect(setGlobalProxyFromEnv).toHaveBeenCalledTimes(2);
+  });
 });
