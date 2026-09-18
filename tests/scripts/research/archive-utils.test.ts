@@ -87,6 +87,13 @@ describe('research archive utils', () => {
       .rejects.toMatchObject({ message: 'research_tex_bundle_destination_exists' });
   });
 
+  it('pins zip deflate options for reproducible tex-bundle bytes', async () => {
+    const source = await readFile(new URL('../../../scripts/research/archive-utils.ts', import.meta.url), 'utf8');
+    expect(source).toContain('memLevel: 8');
+    expect(source).toContain('strategy: 0');
+    expect(source).toContain('level: 6');
+  });
+
   it('rejects a subset list that omits a declared file', async () => {
     const root = await workspace();
     const archive = join(root, 'source.tar');

@@ -8,8 +8,8 @@ import { researchJobError, runResearchJob, type ResearchJobPaths } from './resea
 
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SOURCE = 512 * 1024 * 1024;
-const require = createRequire(import.meta.url);
-const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
+const pdfRequire = createRequire(import.meta.url);
+const pdfjsRoot = dirname(pdfRequire.resolve('pdfjs-dist/package.json'));
 const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot, directory)).href}/`;
 
 export async function renderResearchPdf(input: {

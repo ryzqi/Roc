@@ -52,6 +52,10 @@
     "sqlite-vec": "0.1.9",
     "zod": "4.5.4"
   },
+  "optionalDependencies": {
+    "sqlite-vec-darwin-arm64": "0.1.9",
+    "sqlite-vec-darwin-x64": "0.1.9"
+  },
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "9.6.0",

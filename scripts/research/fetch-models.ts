@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
-import { downloadVerified, fileSha256 } from './download-asset';
+import { downloadVerified, fileSha256 } from './download-asset.ts';
 
 export type ModelSource = {
   repoId: string;

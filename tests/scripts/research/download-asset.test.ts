@@ -81,6 +81,12 @@ describe('research download asset', () => {
     }
   });
 
+  it('uses 36 default range-download attempts for flaky proxies', async () => {
+    const source = await readFile(new URL('../../../scripts/research/download-asset.ts', import.meta.url), 'utf8');
+    expect(source).toContain('const DEFAULT_ATTEMPTS = 36;');
+    expect(source).not.toContain('const DEFAULT_ATTEMPTS = 12;');
+  });
+
   it('rejects a changed etag before writing content', async () => {
     const root = await workspace();
     const server = await rangeServer(Buffer.from('12345'), { changed: true });

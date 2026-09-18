@@ -17,7 +17,7 @@ const TIMEOUT_MS = 45_000;
 const COPY_CHUNK = 1024 * 1024;
 const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
 const DEFAULT_WORKERS = 4;
-const DEFAULT_ATTEMPTS = 12;
+const DEFAULT_ATTEMPTS = 36;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export type RemoteFile = {

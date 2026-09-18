@@ -21,6 +21,7 @@ describe('chromium runtime flags', () => {
       'disable-features',
       'MediaRouter,DialMediaRouteProvider,TranslateUI,HardwareMediaKeyHandling,SpareRendererForSitePerProcess'
     );
+    expect(commandLine.appendSwitch).not.toHaveBeenCalledWith('remote-debugging-port', expect.anything());
   });
 
   it('applies the flags at main-process startup before the window is created', () => {
@@ -28,5 +29,25 @@ describe('chromium runtime flags', () => {
     expect(source).toContain("import { applyChromiumRuntimeFlags } from './chromium-runtime-flags';");
     expect(source).toContain('applyChromiumRuntimeFlags(app.commandLine);');
     expect(source.indexOf('applyChromiumRuntimeFlags(app.commandLine);')).toBeLessThan(source.indexOf('app.whenReady()'));
+  });
+
+  it('forwards Playwright remote debugging into Chromium before app ready', () => {
+    const commandLine = {
+      appendSwitch: vi.fn()
+    };
+
+    applyChromiumRuntimeFlags(commandLine, {}, ['node', 'app', '--remote-debugging-port=0']);
+
+    expect(commandLine.appendSwitch).toHaveBeenCalledWith('remote-debugging-port', '0');
+  });
+
+  it('enables Chromium remote debugging during packaged smoke even if argv is stripped', () => {
+    const commandLine = {
+      appendSwitch: vi.fn()
+    };
+
+    applyChromiumRuntimeFlags(commandLine, { ROC_SMOKE: '1' }, ['/Applications/Roc.app/Contents/MacOS/Roc']);
+
+    expect(commandLine.appendSwitch).toHaveBeenCalledWith('remote-debugging-port', '0');
   });
 });

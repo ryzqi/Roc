@@ -22,6 +22,11 @@ const ZIP64_VERSION = 45;
 const CREATE_SYSTEM = 3;
 const EXTERNAL_ATTR = (0o100644 << 16) >>> 0;
 const DEFLATE = 8;
+const ZIP_DEFLATE_OPTIONS = {
+  level: 6,
+  memLevel: 8,
+  strategy: 0
+} as const;
 
 type TarKind = 'file' | 'dir' | 'symlink';
 
@@ -490,7 +495,7 @@ function appendZipMember(members: ZipMember[], names: Set<string>, offset: numbe
   assertBundleName(name, names);
   names.add(name);
   const utf8 = !isAscii(name);
-  const compressed = deflateRawSync(data, { level: 6 });
+  const compressed = deflateRawSync(data, ZIP_DEFLATE_OPTIONS);
   const zip64 = data.length >= 0xffffffff || compressed.length >= 0xffffffff || offset >= 0xffffffff;
   const record: ZipMember = {
     name: Buffer.from(name, 'utf8'),

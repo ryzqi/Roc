@@ -253,18 +253,6 @@ async function createWindow(): Promise<void> {
     runtimeMetricsProvider,
     version: app.getVersion()
   });
-  await kernel.start();
-  activeKernel = kernel;
-  pdfPreviewKernel = kernel;
-  kernel.performanceObserverService.record({
-    phase: 'main_ready',
-    label: 'app.whenReady',
-    startedAtMs: mainReadyStartedAtMs,
-    durationMs: performance.now() - mainReadyStartedAtMs,
-    metadata: {
-      packaged: app.isPackaged
-    }
-  });
   const windowStateFilePath = join(kernel.paths.configDir, 'window-state.json');
   const restoredPlacement = readWindowPlacementSnapshot(windowStateFilePath);
   const restoredBounds = resolveMainWindowBounds(
@@ -285,12 +273,69 @@ async function createWindow(): Promise<void> {
   bindDisplayBoundsCorrection();
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
-  hostService.syncSettings(kernel.configService.getSettings());
-  Menu.setApplicationMenu(Menu.buildFromTemplate(buildApplicationMenuTemplate(showMainPage)));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  const kernelStarted = kernel.start().then(() => {
+    activeKernel = kernel;
+    pdfPreviewKernel = kernel;
+    kernel.performanceObserverService.record({
+      phase: 'main_ready',
+      label: 'app.whenReady',
+      startedAtMs: mainReadyStartedAtMs,
+      durationMs: performance.now() - mainReadyStartedAtMs,
+      metadata: {
+        packaged: app.isPackaged
+      }
+    });
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildApplicationMenuTemplate(showMainPage)));
 
+  const externalNavigationInput = {
+    shell,
+    logService: kernel.logService
+  };
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    return handleExternalNavigation(url, externalNavigationInput);
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    handleExternalNavigation(url, externalNavigationInput);
+  });
+  bindNativeContextMenu(mainWindow.webContents);
+
+  let mainWindowShown = false;
+  function showMainWindowOnce(label: string): void {
+    if (mainWindowShown) {
+      return;
+    }
+    mainWindowShown = true;
+    if (activeKernel !== null) {
+      kernel.startDatabaseMaintenance();
+    }
+    kernel.performanceObserverService.record({
+      phase: 'ready_to_show',
+      label,
+      startedAtMs: mainReadyStartedAtMs,
+      durationMs: performance.now() - mainReadyStartedAtMs,
+      metadata: {
+        window: 'main'
+      }
+    });
+    mainWindow?.show();
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    showMainWindowOnce('mainWindow.ready-to-show');
+  });
+  mainWindow.webContents.once('did-finish-load', () => {
+    showMainWindowOnce('mainWindow.did-finish-load');
+  });
+
+  const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+  await kernelStarted;
+  await rendererLoaded;
+  hostService.syncSettings(kernel.configService.getSettings());
   registerIpc(kernel, mainWindow, {
     openMainPage: showMainPage,
     closeMainWindow: () => {
@@ -347,64 +392,26 @@ async function createWindow(): Promise<void> {
   if (!powerResumeBound) {
     powerResumeBound = true;
     powerMonitor.on('resume', () => {
-      const kernel = activeKernel;
-      if (kernel === null) {
+      const currentKernel = activeKernel;
+      if (currentKernel === null) {
         return;
       }
-      void kernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {})
+      void currentKernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {})
         .then(() => {
           hostService.refreshTray();
           broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
         })
         .catch((error: unknown) => {
-          kernel.logService.error('Task scheduler power resume handling failed.', toLogError(error), {
+          currentKernel.logService.error('Task scheduler power resume handling failed.', toLogError(error), {
             service: 'main',
             component: 'powerMonitor.resume'
           });
         });
     });
   }
-
-  const externalNavigationInput = {
-    shell,
-    logService: kernel.logService
-  };
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return handleExternalNavigation(url, externalNavigationInput);
-  });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    event.preventDefault();
-    handleExternalNavigation(url, externalNavigationInput);
-  });
-  bindNativeContextMenu(mainWindow.webContents);
-
-  let mainWindowShown = false;
-  function showMainWindowOnce(label: string): void {
-    if (mainWindowShown) {
-      return;
-    }
-    mainWindowShown = true;
+  if (mainWindowShown) {
     kernel.startDatabaseMaintenance();
-    kernel.performanceObserverService.record({
-      phase: 'ready_to_show',
-      label,
-      startedAtMs: mainReadyStartedAtMs,
-      durationMs: performance.now() - mainReadyStartedAtMs,
-      metadata: {
-        window: 'main'
-      }
-    });
-    mainWindow?.show();
   }
-
-  mainWindow.once('ready-to-show', () => {
-    showMainWindowOnce('mainWindow.ready-to-show');
-  });
-  mainWindow.webContents.once('did-finish-load', () => {
-    showMainWindowOnce('mainWindow.did-finish-load');
-  });
-
-  await kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
 }
 
 function shouldBroadcastTaskRefresh(event: ChatRunEvent): boolean {

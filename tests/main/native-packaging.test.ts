@@ -7,6 +7,7 @@ const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml',
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
 const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
 const packageDirScript = readFileSync(new URL('../../scripts/package-dir.mjs', import.meta.url), 'utf8');
+const packageMacScript = readFileSync(new URL('../../scripts/package-mac.mjs', import.meta.url), 'utf8');
 const verifyNativePackagingScript = readFileSync(new URL('../../scripts/verify-native-packaging.mjs', import.meta.url), 'utf8');
 const temporaryDirectories: string[] = [];
 
@@ -71,6 +72,8 @@ describe('native packaging contract', () => {
 
   it('no longer restores better-sqlite3 after the package-dir command exits', () => {
     expect(packageDirScript).not.toContain('restoreBetterSqlite3ForNode');
+    expect(packageDirScript).toContain('assertLiveResearchToolchainForPackaging');
+    expect(packageMacScript).toContain('assertLiveResearchToolchainForPackaging');
   });
 
   it('packages bundled RTK binaries as external resources', () => {
@@ -260,7 +263,7 @@ describe('native packaging contract', () => {
     expect(() => assertLiveResearchToolchainForPackaging({
       architecture: process.arch,
       projectRoot
-    })).toThrow(/Missing research toolchain for packaging: manifest.json/);
+    })).toThrow(/Missing research toolchain for packaging: manifest.json[\s\S]*prepare\.ts --arch [\s\S]* --output /);
   });
 
   it('overlays current research sources and drops leftover files from the packaged toolchain', async () => {

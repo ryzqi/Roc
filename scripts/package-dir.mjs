@@ -2,6 +2,7 @@
 
 import { projectRoot } from './lib/electron-version.mjs';
 import {
+  assertLiveResearchToolchainForPackaging,
   createPackagingEnvironment,
   runCommand
 } from './lib/native-packaging.mjs';
@@ -10,6 +11,7 @@ if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) {
   throw new Error('package:dir requires an arm64 or x64 macOS host.');
 }
 const packagingEnvironment = createPackagingEnvironment();
+assertLiveResearchToolchainForPackaging();
 let exitCode = 0;
 
 function run(command, args, options = { exitOnFailure: true }) {

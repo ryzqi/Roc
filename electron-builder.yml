@@ -42,6 +42,8 @@ asarUnpack:
   - node_modules/@napi-rs/canvas/**
   - node_modules/@napi-rs/canvas-darwin-${arch}/**
   - node_modules/pdfjs-dist/**
+  - node_modules/sqlite-vec-darwin-arm64/**
+  - node_modules/sqlite-vec-darwin-x64/**
 beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterExtract: ./scripts/builder-hooks/after-extract.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs

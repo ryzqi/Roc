@@ -303,8 +303,9 @@ export function assertLiveResearchToolchainForPackaging({
   for (const relativePath of required) {
     const fullPath = resolve(root, relativePath);
     if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
+      const prepareScript = resolve(targetProjectRoot, 'scripts/research/prepare.ts');
       throw new Error(
-        `Missing research toolchain for packaging: ${relativePath}. Prepare ${root} before package:mac.`
+        `Missing research toolchain for packaging: ${relativePath}. Prepare ${root} before package:mac with: rtk proxy node ${prepareScript} --arch ${architecture} --output ${root}`
       );
     }
   }

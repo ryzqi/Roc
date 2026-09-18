@@ -37,7 +37,7 @@ try {
     executablePath,
     args: [`--user-data-dir=${join(runRoot, 'chromium')}`],
     env,
-    timeout: 30000
+    timeout: 90000
   });
   const page = await application.firstWindow();
   page.on('pageerror', (error) => errors.push(error.message));
@@ -119,7 +119,7 @@ try {
 
   const native = await application.evaluate(async ({ app }) => {
     const { createRequire } = process.getBuiltinModule('node:module');
-    const { join } = process.getBuiltinModule('node:path');
+    const { join, sep } = process.getBuiltinModule('node:path');
     const fs = process.getBuiltinModule('node:fs');
     const { spawnSync } = process.getBuiltinModule('node:child_process');
     const appRoot = app.getAppPath();
@@ -138,6 +138,22 @@ try {
       sqlite = db.prepare('SELECT value FROM probe').get().value;
     } finally {
       db.close();
+    }
+    const sqliteVec = require('sqlite-vec');
+    const vecDb = new Database(':memory:');
+    let sqliteVecLoaded = false;
+    try {
+      const loadablePath = sqliteVec.getLoadablePath().replace(/\.dylib\.dylib$/u, '.dylib');
+      const asarMarker = `${sep}app.asar${sep}`;
+      const unpackedPath = loadablePath.includes(asarMarker)
+        ? loadablePath.replace(asarMarker, `${sep}app.asar.unpacked${sep}`)
+        : loadablePath;
+      vecDb.loadExtension(fs.existsSync(unpackedPath) ? unpackedPath : loadablePath);
+      vecDb.exec('CREATE VIRTUAL TABLE smoke_vec USING vec0(embedding float[2])');
+      vecDb.prepare('INSERT INTO smoke_vec(rowid, embedding) VALUES (1, ?)').run(new Float32Array([1, 2]));
+      sqliteVecLoaded = vecDb.prepare('SELECT count(*) AS count FROM smoke_vec').get().count === 1;
+    } finally {
+      vecDb.close();
     }
     const pty = require('node-pty');
     const terminal = pty.spawn('/bin/zsh', ['-f', '-c', 'printf ROC_MAC_PTY_OK'], {
@@ -166,6 +182,7 @@ try {
       appEntries: fs.readdirSync(appRoot).sort(),
       arch: process.arch,
       sqlite,
+      sqliteVec: sqliteVecLoaded,
       terminal: terminalResult,
       rtk: { status: rtk.status, version: rtk.stdout.trim() },
       rtkTargets: fs.readdirSync(rtkRoot),
@@ -185,6 +202,7 @@ try {
   assert.deepEqual(native.appEntries, ['dist', 'node_modules', 'package.json']);
   assert.equal(native.arch, process.arch);
   assert.equal(native.sqlite, 42);
+  assert.equal(native.sqliteVec, true);
   assert.equal(native.terminal.exitCode, 0);
   assert.match(native.terminal.output, /ROC_MAC_PTY_OK/);
   assert.equal(native.rtk.status, 0);

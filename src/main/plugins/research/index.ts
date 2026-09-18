@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import * as sqliteVec from 'sqlite-vec';
+import type { Database } from 'better-sqlite3';
+import { existsSync } from 'node:fs';
+import { sep } from 'node:path';
 
 import {
   researchArtifactCreateRequestSchema,
@@ -146,7 +149,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
-      sqliteVec.load(db);
+      loadResearchVectorExtension(db);
       repository = new ResearchRepository(db);
       const researchRepository = repository;
       const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
@@ -270,4 +273,15 @@ function descriptor<TInput, TOutput>(
   outputSchema: z.ZodType<TOutput>
 ): CapabilityDescriptor<TInput, TOutput> {
   return { name, version: capabilityVersion, inputSchema, outputSchema };
+}
+function loadResearchVectorExtension(db: Database): void {
+  const loadablePath = sqliteVec.getLoadablePath().replace(/\.dylib\.dylib$/u, '.dylib');
+  const asarMarker = `${sep}app.asar${sep}`;
+  if (!loadablePath.includes(asarMarker)) {
+    sqliteVec.load(db);
+    return;
+  }
+
+  const unpackedPath = loadablePath.replace(asarMarker, `${sep}app.asar.unpacked${sep}`);
+  db.loadExtension(existsSync(unpackedPath) ? unpackedPath : loadablePath);
 }

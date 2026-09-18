@@ -345,13 +345,14 @@ Roc 默认把敏感状态放在用户本机：
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install --frozen-lockfile
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --arch arm64 --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 ```
 
-`package:mac` 依次完成类型检查、构建、首屏代码体积检查、当前架构目录包、签名验证和包内启动验证，再用 `ditto` 生成 ZIP、`hdiutil` 生成含 Applications 链接的 DMG，最后生成 SHA-256 校验文件。目录包先过 smoke，避免 electron-builder 先压缩一遍科研工具链。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
+`package:mac` 依次完成类型检查、构建、首屏代码体积检查、当前架构目录包、签名验证和包内启动验证，只生成可直接运行的 `.app` 目录包。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
 
-- Apple Silicon：`release/mac-arm64/Roc.app`、`release/Roc-0.1.0-mac-arm64.dmg`、同名 ZIP。
-- Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app` 和带 `mac-x64` 的归档。
+- Apple Silicon：`release/mac-arm64/Roc.app`。
+- Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app`。
 - 包内只保留当前 macOS 架构的 SQLite、PTY 和 RTK，前端依赖已编入 renderer，不重复携带其源码。
 - 科研工具链随包分发 Python / Tectonic / TeX 子集；Docling 解析模型不进安装包。打开应用后在科研工作台下载到 `~/.roc/research-models`。打包前校验 live 工具链，并用当前 `worker.py` / `figure.py` 覆盖过期副本，同时排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。
 - 当前使用 ad-hoc 本地签名，未进行 Developer ID 签名或 Apple 公证；跨机器公开分发前需配置发布证书和公证。

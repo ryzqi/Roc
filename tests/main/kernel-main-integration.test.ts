@@ -231,6 +231,9 @@ describe('main kernel bootstrap integration', () => {
     expect(source).toContain('const performanceObserverService = new PerformanceObserverService();');
     expect(source).toContain('performanceObserverService,');
     expect(source).toContain('kernel.startDatabaseMaintenance();');
+    expect(source.indexOf('new BrowserWindow(buildMainWindowOptions')).toBeLessThan(source.indexOf('const kernelStarted = kernel.start()'));
+    expect(source.indexOf('hostService.bindMainWindow(mainWindow);')).toBeLessThan(source.indexOf('const kernelStarted = kernel.start()'));
+    expect(source.indexOf("const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded'")).toBeLessThan(source.indexOf('await kernelStarted;'));
     expect(source).not.toContain('services.terminalSessionService.onOutput');
   });
 

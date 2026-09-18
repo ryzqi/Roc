@@ -82,10 +82,23 @@ describe('research prepare', () => {
     expect(hashes['tex-bundle-files.txt']).toMatch(/^[0-9a-f]{64}$/u);
   });
 
+  it('locks the current tex-bundle zip hash for this Node zlib', async () => {
+    const lock = JSON.parse(readFileSync(new URL('../../../resources/research-runtime/tools.lock.json', import.meta.url), 'utf8')) as {
+      texBundle: { zipSha256: string };
+    };
+    expect(lock.texBundle.zipSha256).toBe('658f7598c28451fcfa4bd0213e5e2f4dbddb5e652bc99f861b22110af7febf99');
+  });
+
   it('does not copy fetched models into the toolchain output', () => {
     const source = readFileSync(new URL('../../../scripts/research/prepare.ts', import.meta.url), 'utf8');
     expect(source).toContain('await fetchModels(');
     expect(source).not.toContain("join(root, 'models')");
+  });
+
+  it('keeps Node ESM imports in fetch-models resolvable from prepare.ts', () => {
+    const source = readFileSync(new URL('../../../scripts/research/fetch-models.ts', import.meta.url), 'utf8');
+    expect(source).toContain("from './download-asset.ts'");
+    expect(source).not.toContain("from './download-asset'");
   });
 
   it('collects named files in license directories', async () => {
