@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import {
+  DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_MAX_OUTPUT_TOKENS,
   createFixedOpenRouterModelConfigs,
   fixedLlamaCppBaseUrl,
   fixedLlamaCppProviderId,
@@ -92,14 +94,18 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     apiKey: '', enabled: provider.enabled, models: provider.models, ...connectionFields(provider) };
 }
 
-function emptyProviderModel(): ProviderModel {
+export function emptyProviderModel(): ProviderModel {
   return {
     id: '',
     displayName: '',
     enabled: true,
     supportsStreaming: true,
     supportsToolCalls: true,
-    supportsImages: false
+    supportsImages: false,
+    options: {
+      maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+      contextBudgetTokens: DEFAULT_CONTEXT_BUDGET_TOKENS
+    }
   };
 }
 

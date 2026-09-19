@@ -2,10 +2,22 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEnabledModelOptions,
   buildProviderConfigFromDraft,
-  createProviderDraft
+  createProviderDraft,
+  emptyProviderModel
 } from '../../src/renderer/settings/provider-draft-model';
 
 describe('model-level provider drafts', () => {
+  it('defaults new models to 500k context and 128k max output', () => {
+    expect(emptyProviderModel().options).toEqual({
+      maxTokens: 128_000,
+      contextBudgetTokens: 500_000
+    });
+    expect(createProviderDraft('openai_compatible').models[0]?.options).toEqual({
+      maxTokens: 128_000,
+      contextBudgetTokens: 500_000
+    });
+  });
+
   it('serializes card models independently and keeps connection options at provider scope', () => {
     const draft = createProviderDraft('openai_compatible');
     const provider = buildProviderConfigFromDraft({

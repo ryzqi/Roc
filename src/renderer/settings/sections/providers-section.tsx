@@ -5,6 +5,7 @@ import type { ProviderConfig, ProviderModel, ProviderSecretStatus, ProviderTestR
 import { isFixedProvider, isFixedProviderType } from '../../../shared/provider-defaults';
 import { Button, Checkbox, ConfirmDialog, Drawer, IconButton, Switch, TextArea, TextInput } from '../../components/ui';
 import {
+  emptyProviderModel,
   providerTypeMeta,
   type CreatableProviderType,
   type EditableProviderType,
@@ -13,10 +14,6 @@ import {
 } from '../../settings-model';
 import { FieldLabel } from './provider-field-label';
 import { ProviderModelOptionsFields } from './provider-model-options-fields';
-
-function emptyModel(): ProviderModel {
-  return { id: '', displayName: '', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false };
-}
 
 function providerHasReadyModel(provider: ProviderConfig): boolean {
   return provider.enabled && provider.models.some((model) => model.enabled);
@@ -196,7 +193,7 @@ export function ProvidersSection({
 
   function addModel(): void {
     const index = draft.models.length;
-    onUpdateDraft({ models: [...draft.models, emptyModel()] });
+    onUpdateDraft({ models: [...draft.models, emptyProviderModel()] });
     setSelectedModelIndex(index);
   }
 

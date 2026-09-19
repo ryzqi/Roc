@@ -212,11 +212,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             }
             const finalMessage = outcomeText.finish().trim();
 
-            // Token budget 校验 (从 provider options 读取)
-            const providerOptions = input.modelHandle.langChainHandle?.provider.options;
-            const contextBudgetTokens = providerOptions && 'contextBudgetTokens' in providerOptions
-              ? (providerOptions as { contextBudgetTokens?: number }).contextBudgetTokens
-              : undefined;
+            // Token budget 校验：与工厂 runtime 同一来源，未手动填的已有模型也走默认 500K。
+            const contextBudgetTokens = input.modelHandle.langChainHandle?.runtime.contextBudgetTokens;
             const budgetError = validateTokenBudget(usageAccumulator, contextBudgetTokens);
             if (budgetError !== null) {
               throw new Error(budgetError.code);

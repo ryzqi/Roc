@@ -20,7 +20,8 @@ beforeEach(() => {
       models: [
         { id: 'a', displayName: 'A', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false, options: { temperature: 0.1, maxTokens: 100, contextBudgetTokens: 4096 } },
         { id: 'b', displayName: 'B', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false, options: { temperature: 0.8, maxTokens: 200, contextBudgetTokens: 8192 } },
-        { id: 'c', displayName: 'C', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false }
+        { id: 'c', displayName: 'C', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false },
+        { id: 'd', displayName: 'D', enabled: true, supportsStreaming: true, supportsToolCalls: true, supportsImages: false, options: { temperature: 0.3 } }
       ]
     }]
   });
@@ -41,9 +42,17 @@ describe('LangChainModelFactory model options v2', () => {
     expect(b.runtime.contextBudgetTokens).toBe(8192);
   });
 
-  it('uses 32768 when the selected model omits context budget', async () => {
+  it('uses 500000 when the selected model omits context budget', async () => {
     const factory = new LangChainModelFactory(services.configService, services.secretService);
     const result = await factory.createChatModelByProviderAndModel('p', 'c', { streaming: false });
-    expect(result.runtime.contextBudgetTokens).toBe(32_768);
+    expect(result.runtime.contextBudgetTokens).toBe(500_000);
+    expect(result.model).toMatchObject({ maxTokens: 128_000 });
+  });
+
+  it('uses 500000 for an existing configured model that only omitted context budget', async () => {
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createChatModelByProviderAndModel('p', 'd', { streaming: false });
+    expect(result.runtime.contextBudgetTokens).toBe(500_000);
+    expect(result.model).toMatchObject({ temperature: 0.3, maxTokens: 128_000 });
   });
 });

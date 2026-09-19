@@ -2,7 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
 import { ChatOpenAI, type ChatOpenAIFields } from '@langchain/openai';
-import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { DEFAULT_CONTEXT_BUDGET_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import { toTypedProviderConfig } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
@@ -35,8 +35,6 @@ type LangChainModelRuntime = {
   modelKwargs: Record<string, unknown>;
   contextBudgetTokens: number;
 };
-
-const DEFAULT_CONTEXT_BUDGET_TOKENS = 32_768;
 
 export type LangChainChatModelHandle = {
   provider: ProviderConfig;
@@ -191,7 +189,10 @@ export class LangChainModelFactory {
       streamUsage: resolveStreamUsage(provider, modelOptions, options.streaming),
       clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
     };
-    this.applyAnthropicSamplingParams(config, providerOptions);
+    this.applyAnthropicSamplingParams(config, {
+      ...providerOptions,
+      maxTokens: providerOptions.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS
+    });
     const thinking = resolveAnthropicThinking(providerOptions);
     if (thinking !== undefined) {
       config.thinking = thinking;
@@ -248,7 +249,7 @@ export class LangChainModelFactory {
       provider.type === 'llama_cpp'
         ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
         : modelOptions.temperature;
-    const maxTokens = modelOptions.maxTokens;
+    const maxTokens = modelOptions.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
