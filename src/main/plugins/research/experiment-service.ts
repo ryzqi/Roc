@@ -8,7 +8,6 @@ import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironmen
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
 import { runRExperimentProcess } from './experiment-native-process';
-import { assertFigureEnvironment, figureGeneratedInputs, figureProcessCommand, finishFigureOutput } from './figure-runner';
 import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
@@ -40,8 +39,23 @@ export class ResearchExperimentService {
     });
   }
 
+  inspectWorkspace(workspace: string, runtime: ResearchExperimentRuntime, scratch: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
+    return this.environments.inspect(workspace, runtime, scratch, signal);
+  }
+
+  async verifyRun(run: ResearchExperimentExecution, signal: AbortSignal): Promise<string> {
+    return this.verifyProject(run, signal);
+  }
+
   async start(input: ResearchExperimentStart): Promise<ResearchExperimentExecution> {
-    const request = researchExperimentStartSchema.parse(input);
+    if (input.engine === 'matplotlib') throw new Error('research_experiment_engine_invalid');
+    return await this.enqueue(researchExperimentStartSchema.parse(input), (run, signal) => this.execute(run, signal));
+  }
+
+  async enqueue(
+    request: ResearchExperimentStart,
+    worker: (run: ResearchExperimentExecution, signal: AbortSignal) => Promise<void>
+  ): Promise<ResearchExperimentExecution> {
     return await this.session.run(async (signal) => {
       const project = this.repository.getProject(request.projectId);
       if (project.status === 'archived') throw new Error('research_project_archived');
@@ -50,9 +64,15 @@ export class ResearchExperimentService {
       signal.throwIfAborted();
       if (project.workspacePath === null) throw new Error('research_project_workspace_required');
       const run = this.repository.experiments.create(request, project.workspacePath, workspace, storage);
-      if (run.status === 'preparing' && !this.executions.has(run.id)) this.schedule(run);
+      if (run.status === 'preparing' && !this.executions.has(run.id)) {
+        this.executions.start(run.id, { projectId: run.projectId }, (jobSignal) => worker(run, jobSignal));
+      }
       return run;
     });
+  }
+
+  runProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
+    return this.run(request);
   }
 
   abort(id: string): void { this.executions.abort(id); }
@@ -135,10 +155,6 @@ export class ResearchExperimentService {
     await this.session.shutdown();
   }
 
-  private schedule(run: ResearchExperimentExecution): void {
-    this.executions.start(run.id, { projectId: run.projectId }, (signal) => this.execute(run, signal));
-  }
-
   private async execute(initial: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {
     const root = this.repository.experiments.root(initial.projectId, initial.id);
     let files: ResearchExperimentFile[] = [];
@@ -154,15 +170,12 @@ export class ResearchExperimentService {
       await createResearchDirectory(root, 'log');
       prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      if (initial.request.engine === 'matplotlib') assertFigureEnvironment(prepared.snapshot.packages);
-      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal,
-        initial.request.engine === 'matplotlib' ? figureGeneratedInputs() : {});
+      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal);
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
       output = await this.executeProcess(initial, prepared, input, out, scratch, signal);
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
-      if (initial.request.engine === 'matplotlib') await finishFigureOutput(initial, out, signal);
       await this.verifyProject(initial, signal);
       const current = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
@@ -194,14 +207,11 @@ export class ResearchExperimentService {
   private async executeProcess(run: ResearchExperimentExecution, prepared: PreparedExperimentEnvironment, input: string, output: string, scratch: string, signal: AbortSignal): Promise<ResearchProcessResult> {
     const request = run.request;
     const executable = prepared.snapshot.executable;
-    const figure = request.engine === 'matplotlib' ? figureProcessCommand(run, prepared, input, output) : null;
     const environment = { ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
-      ROC_PARAMETERS_JSON: JSON.stringify(request.parameters),
-      ...(figure === null ? {} : figure.environment) };
+      ROC_PARAMETERS_JSON: JSON.stringify(request.parameters) };
     const source = join(input, request.sourcePath);
     const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
       : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
-      : figure !== null ? { command: figure.command, args: figure.args }
       : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],

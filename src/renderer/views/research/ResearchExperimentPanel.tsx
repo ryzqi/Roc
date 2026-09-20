@@ -3,7 +3,7 @@ import { Play, Send, Square } from 'lucide-react';
 import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
 import { usePagedItems } from './research-list-page';
 
-export type ResearchExperimentEngine = ResearchExperimentExecution['request']['engine'];
+export type ResearchExperimentEngine = 'python' | 'r' | 'julia';
 export type ResearchExperimentDraft = {
   label: string;
   engine: ResearchExperimentEngine;
@@ -16,10 +16,6 @@ export type ResearchExperimentDraft = {
   inputPaths: string;
   network: 'disabled' | 'enabled';
   timeoutMs: string;
-  widthInches: string;
-  heightInches: string;
-  dpi: string;
-  seed: string;
 };
 
 export const emptyExperimentDraft: ResearchExperimentDraft = {
@@ -33,18 +29,19 @@ export const emptyExperimentDraft: ResearchExperimentDraft = {
   sourcePath: '',
   inputPaths: '',
   network: 'disabled',
-  timeoutMs: '60000',
-  widthInches: '4',
-  heightInches: '3',
-  dpi: '150',
-  seed: '1'
+  timeoutMs: '60000'
 };
 
-const engineLabels: Record<ResearchExperimentEngine, string> = {
+const engineLabels: Record<ResearchExperimentExecution['request']['engine'], string> = {
   python: 'Python',
   r: 'R / renv',
   julia: 'Julia',
-  matplotlib: 'Matplotlib 图稿'
+  matplotlib: '历史图稿运行'
+};
+const draftEngineLabels: Record<ResearchExperimentEngine, string> = {
+  python: 'Python',
+  r: 'R / renv',
+  julia: 'Julia'
 };
 
 const statusLabels: Record<ResearchExperimentExecution['status'], string> = {
@@ -63,7 +60,6 @@ export function ResearchExperimentPanel({
   onCancel,
   onChange,
   onPublish,
-  onPublishFigure,
   onReadLog,
   onRefresh,
   onSelect,
@@ -79,7 +75,6 @@ export function ResearchExperimentPanel({
   onCancel: (runId: string) => void;
   onChange: (draft: ResearchExperimentDraft) => void;
   onPublish: (runId: string) => void;
-  onPublishFigure: (runId: string) => void;
   onReadLog: (runId: string) => void;
   onRefresh: () => void;
   onSelect: (runId: string) => void;
@@ -109,7 +104,7 @@ export function ResearchExperimentPanel({
           <label>
             引擎
             <select data-testid="research-experiment-engine" value={draft.engine} onChange={(event) => onChange(changeEngine(draft, event.target.value as ResearchExperimentEngine))}>
-              {Object.entries(engineLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(draftEngineLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           {runtimeLocked ? null : (
@@ -159,7 +154,7 @@ export function ResearchExperimentPanel({
           </label>
           <label>
             网络
-            <select data-testid="research-experiment-network" disabled={draft.engine === 'matplotlib'} value={draft.network} onChange={(event) => onChange({ ...draft, network: event.target.value === 'enabled' ? 'enabled' : 'disabled' })}>
+            <select data-testid="research-experiment-network" value={draft.network} onChange={(event) => onChange({ ...draft, network: event.target.value === 'enabled' ? 'enabled' : 'disabled' })}>
               <option value="disabled">禁用</option>
               <option value="enabled">允许</option>
             </select>
@@ -168,14 +163,6 @@ export function ResearchExperimentPanel({
             超时（毫秒）
             <input data-testid="research-experiment-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
-          {draft.engine === 'matplotlib' ? (
-            <div className="research-config-grid">
-              <label>宽度（英寸）<input data-testid="research-experiment-width" value={draft.widthInches} onChange={(event) => onChange({ ...draft, widthInches: event.target.value })} /></label>
-              <label>高度（英寸）<input data-testid="research-experiment-height" value={draft.heightInches} onChange={(event) => onChange({ ...draft, heightInches: event.target.value })} /></label>
-              <label>DPI<input data-testid="research-experiment-dpi" value={draft.dpi} onChange={(event) => onChange({ ...draft, dpi: event.target.value })} /></label>
-              <label>随机种子<input data-testid="research-experiment-seed" value={draft.seed} onChange={(event) => onChange({ ...draft, seed: event.target.value })} /></label>
-            </div>
-          ) : null}
           <div className="research-form-actions">
             <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
               <Play aria-hidden="true" size={15} />
@@ -197,12 +184,6 @@ export function ResearchExperimentPanel({
                   <button className="action-button" disabled={writeBlocked} type="button" data-testid={`research-experiment-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
                     <Square aria-hidden="true" size={14} />
                     取消
-                  </button>
-                ) : null}
-                {run.status === 'completed' && run.request.engine === 'matplotlib' ? (
-                  <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-figure-${run.id}`} onClick={() => onPublishFigure(run.id)}>
-                    <Send aria-hidden="true" size={14} />
-                    发布图稿
                   </button>
                 ) : null}
                 {run.status === 'completed' && run.request.engine !== 'matplotlib' ? (
@@ -244,12 +225,12 @@ function changeEngine(draft: ResearchExperimentDraft, engine: ResearchExperiment
     ...draft,
     engine,
     runtimeKind: engine === 'r' ? 'renv' : engine === 'julia' ? 'julia' : draft.runtimeKind === 'renv' || draft.runtimeKind === 'julia' ? 'bundled-python' : draft.runtimeKind,
-    network: engine === 'matplotlib' ? 'disabled' : draft.network
+    network: draft.network
   };
 }
 
 function sourcePlaceholder(engine: ResearchExperimentEngine): string {
   if (engine === 'r') return 'analysis.r';
   if (engine === 'julia') return 'analysis.jl';
-  return engine === 'matplotlib' ? 'plot.py' : 'run.py';
+  return 'run.py';
 }

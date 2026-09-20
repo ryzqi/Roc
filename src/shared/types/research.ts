@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 export type { ResearchExperimentRuntime, ResearchExperimentEnvironment, ResearchExperimentStart, ResearchExperimentExecution, ResearchExperimentFile, ResearchExperimentFileContent } from '../schemas/research-experiments';
-export type { ResearchFigurePublication } from '../schemas/research-figures';
+export type { ResearchFigurePublication, ResearchFigureStart } from '../schemas/research-figures';
 export type { ResearchExportExecution, ResearchExportDelivery } from '../schemas/research-exports';
 import type { researchIndexedFileSchema, researchIndexedSourceSchema, researchIndexJobSchema, researchIndexSettingsSchema, researchIndexStatusSchema,
   researchIndexSettingsSaveSchema, researchIndexControlRequestSchema } from '../schemas/research-index';

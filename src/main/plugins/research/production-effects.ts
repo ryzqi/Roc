@@ -1,6 +1,6 @@
 import type { ResearchExperimentExecution, ResearchExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
 import type { ResearchExportExecution, ResearchExportPrepare } from '../../../shared/schemas/research-exports';
-import type { ResearchFigurePublication } from '../../../shared/schemas/research-figures';
+import type { ResearchFigurePublication, ResearchFigureStart } from '../../../shared/schemas/research-figures';
 import type { ResearchTemplate, ResearchTemplateFileContent } from '../../../shared/types';
 import type { ResearchExperimentService } from './experiment-service';
 import type { ResearchExportService } from './export-service';
@@ -66,6 +66,16 @@ export class ResearchProductionEffectService {
     try { this.requireOwner(ownerRunId, projectId); return started; }
     catch (error) {
       if (['preparing', 'running'].includes(started.status)) await this.experiments.cancel(projectId, started.id);
+      throw error;
+    }
+  }
+
+  async startFigure(ownerRunId: string, projectId: string, request: Omit<ResearchFigureStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
+    this.requireOwner(ownerRunId, projectId);
+    const started = await this.figures.start({ ...request, projectId, ownerRunId });
+    try { this.requireOwner(ownerRunId, projectId); return started; }
+    catch (error) {
+      if (['preparing', 'running'].includes(started.status)) await this.figures.cancel(projectId, started.id);
       throw error;
     }
   }

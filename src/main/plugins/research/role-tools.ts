@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { researchLiteratureSearchRequestSchema } from '../../../shared/schemas/research';
 import { researchOwnedExperimentStartSchema } from '../../../shared/schemas/research-experiments';
+import { researchOwnedFigureStartSchema } from '../../../shared/schemas/research-figures';
 import { researchOwnedExportPrepareSchema } from '../../../shared/schemas/research-exports';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputSchema,
   type ResearchProductionInput } from '../../../shared/schemas/research-production-inputs';
@@ -116,12 +117,15 @@ export function createResearchRoleTools(input: {
     }, { name: 'save_workspace_file', description: '按 expectedHash 写入当前项目脚本或数据。新建传 null；冲突或取消后的迟到写入会被拒绝。',
       schema: z.object({ path: z.string().min(1), content: z.string().max(1024 * 1024), expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
     start_experiment: () => tool(async (request) => {
-      if (input.run.stage === 'figure' && request.engine !== 'matplotlib') throw new Error('research_figure_engine_required');
-      if (input.run.stage === 'experiment' && request.engine === 'matplotlib') throw new Error('research_experiment_engine_invalid');
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的实验或绘图运行。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
       schema: researchOwnedExperimentStartSchema }),
+    start_figure: () => tool(async (request) => {
+      const started = await effects().startFigure(input.run.id, input.run.projectId, request);
+      return after(summarizeExperiment(started));
+    }, { name: 'start_figure', description: '启动当前项目的图稿渲染。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
+      schema: researchOwnedFigureStartSchema }),
     get_experiment: () => tool(async ({ experimentId }) => {
       return after(summarizeExperiment(effects().getExperiment(input.run.id, input.run.projectId, experimentId)));
     }, { name: 'get_experiment', description: '读取本次运行创建的实验或绘图执行状态，不含二进制内容。',

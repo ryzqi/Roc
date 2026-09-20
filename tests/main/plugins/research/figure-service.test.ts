@@ -15,7 +15,8 @@ import { figureManifestPath } from '../../../../src/main/plugins/research/figure
 import { figureRenderer, figureRendererPath, figureValidationPath } from '../../../../src/main/plugins/research/figure-runner';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
-import { researchExperimentStartSchema, type ResearchExperimentEnvironment, type ResearchExperimentFile, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import { type ResearchExperimentEnvironment, type ResearchExperimentFile, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import { researchFigureStartSchema } from '../../../../src/shared/schemas/research-figures';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
 
 let db: Database.Database;
@@ -89,12 +90,34 @@ function support(artifactId: string) {
 }
 
 describe('figure publication and review boundaries', () => {
-  it('requires explicit valid plotting settings and rejects network-dependent renders', () => {
-    const value = request();
-    expect(researchExperimentStartSchema.safeParse({ ...value, figure: undefined }).success).toBe(false);
-    expect(researchExperimentStartSchema.safeParse({ ...value, engine: 'python' }).success).toBe(false);
-    expect(researchExperimentStartSchema.safeParse({ ...value, network: 'enabled' }).success).toBe(false);
-    expect(researchExperimentStartSchema.safeParse({ ...value, figure: { ...options, dpi: 1200, widthInches: 24 } }).success).toBe(false);
+  it('keeps matplotlib environment and renderer rules inside the figure runner', async () => {
+    const inspect = vi.fn();
+    const runProcess = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    const liveExperiments = new ResearchExperimentService(repository, { inspect }, join(root, 'runs'), { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, runProcess);
+    const liveFigures = new ResearchFigureService(repository, liveExperiments);
+    inspect.mockResolvedValueOnce({ snapshot: { ...environment, packages: [] }, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
+    await writeFile(join(workspace, 'plot.py'), 'figure = make_figure()');
+    const figureRequest = { projectId, requestId: randomUUID(), label: 'Measured response', runtime: { kind: 'bundled-python' as const }, sourcePath: 'plot.py',
+      inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 10000, figure: options };
+    const missing = await liveFigures.start(figureRequest);
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, missing.id).status));
+    expect(repository.experiments.get(projectId, missing.id)).toMatchObject({ status: 'failed', error: 'research_figure_matplotlib_required' });
+    inspect.mockResolvedValue({ snapshot: environment, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
+    const started = await liveFigures.start({ ...figureRequest, requestId: randomUUID() });
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, started.id).status));
+    expect(repository.experiments.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
+    expect(runProcess.mock.calls[0][0].args).toEqual(expect.arrayContaining(['render', expect.stringContaining('.roc/figure.py')]));
+    expect(runProcess.mock.calls[0][0].environment).toMatchObject({ SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' });
+    await Promise.all([liveFigures.shutdown(), liveExperiments.shutdown()]);
+  });
+
+  it('requires explicit valid plotting settings and rejects oversized renders', () => {
+    const value = { projectId, requestId: request().requestId, label: 'Measured response', runtime: { kind: 'bundled-python' as const },
+      sourcePath: 'plot.py', inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 10000, figure: options };
+    expect(researchFigureStartSchema.safeParse({ ...value, figure: undefined }).success).toBe(false);
+    expect(researchFigureStartSchema.safeParse({ ...value, sourcePath: 'plot.r' }).success).toBe(false);
+    expect(researchFigureStartSchema.safeParse({ ...value, runtime: { kind: 'renv', rootPath: '/r', libraryPath: 'renv/library' } }).success).toBe(false);
+    expect(researchFigureStartSchema.safeParse({ ...value, figure: { ...options, dpi: 1200, widthInches: 24 } }).success).toBe(false);
   });
 
   it('freezes the renderer, includes render settings in input identity and rejects a colliding user input', async () => {

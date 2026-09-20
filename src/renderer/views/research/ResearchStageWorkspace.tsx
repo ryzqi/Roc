@@ -227,7 +227,6 @@ export function ResearchStageWorkspace({
             onCancel={(runId) => void session.experiments.cancel(runId)}
             onChange={(draft) => session.experiments.setDraft(draft)}
             onPublish={(runId) => void session.experiments.publish(runId)}
-            onPublishFigure={(runId) => void session.experiments.publishFigure(runId)}
             onReadLog={(runId) => void session.experiments.readLog(runId)}
             onRefresh={() => void session.experiments.load()}
             onSelect={(runId) => session.experiments.select(runId)}

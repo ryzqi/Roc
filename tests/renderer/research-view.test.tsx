@@ -563,7 +563,6 @@ function createResearchApi(overrides: {
     getExperiment: vi.fn(),
     cancelExperiment: vi.fn(),
     publishExperiment: vi.fn(),
-    publishFigure: vi.fn(),
     readExperimentFile: vi.fn(),
     prepareExport: vi.fn(),
     publishExport: vi.fn(),

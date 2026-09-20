@@ -87,6 +87,16 @@ function toolsFor(run = runningOwner()) {
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; }
 
 describe('owned production effects', () => {
+  it('exposes start_figure on the figure stage and withholds start_experiment', () => {
+    expect(getResearchStageRoleProfile('figure').allowedCapabilities).toEqual(expect.arrayContaining([
+      'research.figure.startOwned', 'research.figure.publishOwned'
+    ]));
+    expect(getResearchStageRoleProfile('figure').allowedCapabilities).not.toContain('research.experiment.startOwned');
+    const { get } = toolsFor(runningOwner('figure'));
+    expect(get('start_figure').name).toBe('start_figure');
+    expect(() => get('start_experiment')).toThrow('tool_required:start_experiment');
+  });
+
   it('binds experiment start, versioned script edits and publication to the current stage run', async () => {
     const { run, get } = toolsFor();
     expect(getResearchStageRoleProfile('experiment').allowedCapabilities).toEqual(expect.arrayContaining([

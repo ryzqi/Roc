@@ -1,14 +1,14 @@
 # 可复现科研绘图
 
-绘图复用实验执行服务：代码、声明的输入、环境文件和应用的渲染入口均保存为不可变快照。选择 `engine: "matplotlib"`，使用内置 Python 或已校验的 uv 环境；uv 环境须安装并锁定 Matplotlib。先调用 `inspectExperimentEnvironment`，再将其 `hash` 传给 `startExperiment.expectedEnvironmentHash`。
+图稿有自己的 `startFigure` / `inspectFigureEnvironment`。代码、声明的输入、环境文件和应用的渲染入口均保存为不可变快照；内部复用进程沙箱，不走实验执行合同。使用内置 Python 或已校验的 uv 环境；uv 环境须安装并锁定 Matplotlib。Agent 可把 `inspectFigureEnvironment` 的 `hash` 传给 `startFigure.expectedEnvironmentHash`。旧 `startExperiment({ engine: "matplotlib" })` 会返回 `research_experiment_engine_invalid`。
 
-绘图请求沿用实验合同，另须显式指定 `figure` 和 `network: "disabled"`：
+绘图请求须显式指定 `figure`，网络固定关闭：
 
 ```json
 {"widthInches": 6, "heightInches": 4, "dpi": 300, "seed": 42}
 ```
 
-宽高范围为 1–24 英寸，DPI 为 72–1200，种子为 0–4294967295 的整数；总像素不得超过 32,000,000。所有辅助脚本和数据文件都要加入 `inputPaths`。`.roc/figure.py` 为本次冻结的渲染入口，不可与声明的输入重名。参数、命令行参数、日志、取消、中断恢复和文件上限沿用[实验合同](research-experiments.md)。
+宽高范围为 1–24 英寸，DPI 为 72–1200，种子为 0–4294967295 的整数；总像素不得超过 32,000,000。所有辅助脚本和数据文件都要加入 `inputPaths`。`.roc/figure.py` 为本次冻结的渲染入口，不可与声明的输入重名。参数、命令行参数、日志、取消、中断恢复和文件上限与实验运行共用沙箱实现，公开合同分开。
 
 源文件必须将一个 Matplotlib `Figure` 赋给变量 `figure`。可以包含多个子图；应用将同一对象导出为 `figure.png`、`figure.svg` 和单页 `figure.pdf`，无需在源码中调用 `savefig`。例如，声明 `data.csv` 为输入后：
 
@@ -28,7 +28,7 @@ axes.set(xlabel="Input", ylabel="Response", title="Measured response")
 
 ## 发布和人工审核
 
-`startExperiment` 返回可轮询的运行记录。使用 `getExperiment` 查询完成状态、`cancelExperiment` 取消，使用已登记的实验资源预览输出。每次重绘使用新的 `requestId`；修改代码、数据、参数或选项都会形成独立运行。
+`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查询完成状态、`cancelFigure` 取消。每次重绘使用新的 `requestId`；修改代码、数据、参数或选项都会形成独立运行。
 
 运行成功后，在可编辑的绘图阶段调用：
 

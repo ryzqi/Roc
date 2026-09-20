@@ -89,11 +89,11 @@ axes.set_ylabel('Improvement (%)')
 Path(os.environ['ROC_OUTPUT_DIR'], 'measurements.json').write_text(json.dumps({'improvement': value}), encoding='utf-8')
 `);
   const runtime = { kind: 'bundled-python' };
-  const environment = await call('inspectExperimentEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
-  let run = await call('startExperiment', { projectId, requestId: randomUUID(), label: 'Measured improvement', engine: 'matplotlib', runtime, sourcePath: 'plot.py',
-    inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, network: 'disabled',
+  const environment = await call('inspectFigureEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
+  let run = await call('startFigure', { projectId, requestId: randomUUID(), label: 'Measured improvement', runtime, sourcePath: 'plot.py',
+    inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000,
     figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } }, researchExperimentExecutionSchema);
-  await vi.waitFor(async () => { run = await call('getExperiment', { projectId, runId: run.id }, researchExperimentExecutionSchema); expect(['preparing', 'running']).not.toContain(run.status); }, { timeout: 45000, interval: 100 });
+  await vi.waitFor(async () => { run = await call('getFigureRun', { projectId, runId: run.id }, researchExperimentExecutionSchema); expect(['preparing', 'running']).not.toContain(run.status); }, { timeout: 45000, interval: 100 });
   expect(run.status).toBe('completed');
   const evidence = repository.evidence.capture({ projectId, chunkId: `experiment:${run.id}:output:measurements.json:chunk:0` });
   repository.transitionWorkflow({ projectId, expectedStage: 'discovery', action: 'move', targetStage: 'figure' });

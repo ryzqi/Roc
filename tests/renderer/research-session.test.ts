@@ -38,7 +38,6 @@ describe('research session', () => {
       startExperiment: vi.fn(),
       cancelExperiment: vi.fn(),
       publishExperiment: vi.fn(),
-      publishFigure: vi.fn(),
       getExperiment: vi.fn(),
       readExperimentFile: vi.fn(),
       listStagePolicies: vi.fn(),

@@ -1,11 +1,17 @@
 import { z } from 'zod';
+import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentExecutionSchema,
+  researchExperimentIdRequestSchema } from '../../../shared/schemas/research-experiments';
 import { researchFigureIdRequestSchema, researchFigureListRequestSchema, researchFigurePublicationSchema,
-  researchFigurePublishRequestSchema, researchFigureSourceRequestSchema } from '../../../shared/schemas/research-figures';
+  researchFigurePublishRequestSchema, researchFigureSourceRequestSchema, researchFigureStartSchema } from '../../../shared/schemas/research-figures';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchFigureRepository } from './figure-repository';
 import type { ResearchFigureService } from './figure-service';
 
 const capabilities = {
+  environment: descriptor('research.figure.environment', researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema),
+  start: descriptor('research.figure.start', researchFigureStartSchema, researchExperimentExecutionSchema),
+  getRun: descriptor('research.figure.getRun', researchExperimentIdRequestSchema, researchExperimentExecutionSchema),
+  cancel: descriptor('research.figure.cancel', researchExperimentIdRequestSchema, researchExperimentExecutionSchema),
   get: descriptor('research.figure.get', researchFigureIdRequestSchema, researchFigurePublicationSchema),
   list: descriptor('research.figure.list', researchFigureListRequestSchema, researchFigurePublicationSchema.array()),
   publish: descriptor('research.figure.publish', researchFigurePublishRequestSchema, researchFigurePublicationSchema),
@@ -17,6 +23,10 @@ export function registerResearchFigureCapabilities(context: RocPluginContext, re
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (input: TInput) => TOutput | Promise<TOutput>): void {
     context.capabilities.register(context.pluginId, capability, async (input) => await run(capability.inputSchema.parse(input)));
   }
+  register(capabilities.environment, (input) => service.inspect(input.projectId, input.runtime));
+  register(capabilities.start, (input) => service.start(input));
+  register(capabilities.getRun, (input) => service.getRun(input.projectId, input.runId));
+  register(capabilities.cancel, (input) => service.cancel(input.projectId, input.runId));
   register(capabilities.get, (input) => repository.get(input.projectId, input.figureId));
   register(capabilities.list, (input) => repository.list(input.projectId, input.limit));
   register(capabilities.publish, (input) => service.publish(input.projectId, input.runId, input.replacesFigureId));

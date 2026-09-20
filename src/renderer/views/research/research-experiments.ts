@@ -7,10 +7,9 @@ import { createProjectionController } from './research-projection';
 export type ResearchExperimentAdapter = {
   list(request: { projectId: string; limit: number }): Promise<ResearchExperimentExecution[]>;
   inspect(request: { projectId: string; runtime: ResearchExperimentRuntime }): Promise<{ hash: string }>;
-  start(request: ResearchExperimentExecution['request'] & { projectId: string }): Promise<ResearchExperimentExecution>;
+  start(request: Omit<ResearchExperimentExecution['request'], 'engine' | 'figure'> & { projectId: string; engine: 'python' | 'r' | 'julia' }): Promise<ResearchExperimentExecution>;
   cancel(request: { projectId: string; runId: string }): Promise<unknown>;
   publish(request: { projectId: string; runId: string }): Promise<unknown>;
-  publishFigure(request: { projectId: string; runId: string; replacesFigureId: null }): Promise<unknown>;
   get(request: { projectId: string; runId: string }): Promise<ResearchExperimentExecution>;
   readFile(request: { projectId: string; runId: string; area: ResearchExperimentExecution['files'][number]['area']; path: string }): Promise<ResearchExperimentFileContent>;
 };
@@ -34,7 +33,6 @@ export type ResearchExperimentProjection = {
   start(): Promise<void>;
   cancel(runId: string): Promise<void>;
   publish(runId: string): Promise<void>;
-  publishFigure(runId: string): Promise<void>;
   readLog(runId: string): Promise<void>;
   clearError(): void;
 };
@@ -104,30 +102,9 @@ export function createResearchExperimentProjection(
         projection.fail('源文件必须填写，超时需在 1000 到 3600000 毫秒之间。');
         return;
       }
-      if (draft.engine === 'matplotlib') {
-        const widthInches = Number(draft.widthInches);
-        const heightInches = Number(draft.heightInches);
-        const dpi = Number(draft.dpi);
-        const seed = Number(draft.seed);
-        if (
-          !Number.isFinite(widthInches) || widthInches < 1 || widthInches > 24
-          || !Number.isFinite(heightInches) || heightInches < 1 || heightInches > 24
-          || !Number.isInteger(dpi) || dpi < 72 || dpi > 1200
-          || !Number.isInteger(seed) || seed < 0 || seed > 4294967295
-        ) {
-          projection.fail('图稿尺寸需在 1–24 英寸，DPI 72–1200，随机种子为非负整数。');
-          return;
-        }
-      }
       await projection.runExclusive(async (token) => {
         const runtime = experimentRuntime(draft);
         const environment = await adapter.inspect({ projectId: currentProjectId, runtime });
-        const figure = draft.engine === 'matplotlib' ? {
-          widthInches: Number(draft.widthInches),
-          heightInches: Number(draft.heightInches),
-          dpi: Number(draft.dpi),
-          seed: Number(draft.seed)
-        } : undefined;
         const started = await adapter.start({
           projectId: currentProjectId,
           requestId: createId(),
@@ -140,8 +117,7 @@ export function createResearchExperimentProjection(
           parameters: {},
           expectedEnvironmentHash: environment.hash,
           timeoutMs,
-          network: draft.engine === 'matplotlib' ? 'disabled' : draft.network,
-          ...(figure === undefined ? {} : { figure })
+          network: draft.network
         });
         if (!projection.isCurrent(token)) return;
         projection.assign({ selectedRunId: started.id, log: null });
@@ -165,15 +141,6 @@ export function createResearchExperimentProjection(
         if (!projection.isCurrent(token)) return;
         await load(token);
       }, { busy: '当前命令仍在进行。', failed: '发布实验失败。' });
-    },
-    async publishFigure(runId) {
-      if (projectId === null) return;
-      const currentProjectId = projectId;
-      await projection.runExclusive(async (token) => {
-        await adapter.publishFigure({ projectId: currentProjectId, runId, replacesFigureId: null });
-        if (!projection.isCurrent(token)) return;
-        await load(token);
-      }, { busy: '当前命令仍在进行。', failed: '发布图稿失败。' });
     },
     async readLog(runId) {
       if (projectId === null) return;
@@ -203,7 +170,6 @@ export function createResearchExperimentAdapter(client: RocClient): ResearchExpe
     async start(request) { return unwrap('启动实验', await research.startExperiment(request)); },
     async cancel(request) { return unwrap('取消实验', await research.cancelExperiment(request)); },
     async publish(request) { return unwrap('发布实验', await research.publishExperiment(request)); },
-    async publishFigure(request) { return unwrap('发布图稿', await research.publishFigure(request)); },
     async get(request) { return unwrap('实验运行', await research.getExperiment(request)); },
     async readFile(request) { return unwrap('实验日志', await research.readExperimentFile(request)); }
   };

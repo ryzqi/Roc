@@ -101,6 +101,7 @@ describe('research plugin IPC integration', () => {
     expect(names).not.toContain('research.experiment.record');
     expect(names).not.toContain('research.figure.record');
     expect(names).toContain('research.experiment.start');
+    expect(names).toContain('research.figure.start');
     expect(names).toContain('research.figure.publish');
     expect((await adapter.invoke('research.recordExperimentRun', [{ id: 'forged' }])).ok).toBe(false);
     expect((await adapter.invoke('research.recordFigure', [{ id: 'forged' }])).ok).toBe(false);

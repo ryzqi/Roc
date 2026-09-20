@@ -59,12 +59,12 @@ async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Pr
 }
 async function render() {
   const runtime = { kind: 'bundled-python' };
-  const environment = await call('inspectExperimentEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
-  const initial = await call('startExperiment', { projectId, requestId: randomUUID(), label: 'Measured response', sourcePath: 'plot.py', engine: 'matplotlib',
-    runtime, inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, network: 'disabled', figure: options }, researchExperimentExecutionSchema);
+  const environment = await call('inspectFigureEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
+  const initial = await call('startFigure', { projectId, requestId: randomUUID(), label: 'Measured response', sourcePath: 'plot.py',
+    runtime, inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, figure: options }, researchExperimentExecutionSchema);
   let latest = initial;
   await vi.waitFor(async () => {
-    latest = await call('getExperiment', { projectId, runId: initial.id }, researchExperimentExecutionSchema);
+    latest = await call('getFigureRun', { projectId, runId: initial.id }, researchExperimentExecutionSchema);
     expect(['preparing', 'running']).not.toContain(latest.status);
   }, { timeout: 45000, interval: 50 });
   await writeFile(join(root, `${initial.id}-result.json`), JSON.stringify(latest, null, 2));

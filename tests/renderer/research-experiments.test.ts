@@ -29,7 +29,6 @@ describe('research experiment projection', () => {
       start: vi.fn(async () => execution),
       cancel: vi.fn(),
       publish: vi.fn(),
-      publishFigure: vi.fn(),
       get: vi.fn(),
       readFile: vi.fn()
     };

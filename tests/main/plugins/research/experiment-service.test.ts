@@ -184,15 +184,10 @@ describe('research experiment lifecycle', () => {
   });
 
 
-  it('keeps matplotlib environment and renderer rules inside the figure runner', async () => {
-    inspect.mockResolvedValueOnce({ ...environment, snapshot: { ...environment.snapshot, packages: [] } });
-    const missing = await service.start(request({ engine: 'matplotlib', figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } }));
-    expect(await finished(missing.id)).toMatchObject({ status: 'failed', error: 'research_figure_matplotlib_required' });
+  it('rejects matplotlib starts instead of running them as experiments', async () => {
+    await expect(service.start(request({ engine: 'matplotlib', figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } })))
+      .rejects.toThrow('research_experiment_engine_invalid');
     expect(runProcess).not.toHaveBeenCalled();
-    const started = await service.start(request({ engine: 'matplotlib', figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } }));
-    expect(await finished(started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
-    expect(runProcess.mock.calls[0][0].args).toEqual(expect.arrayContaining(['render', expect.stringContaining('.roc/figure.py')]));
-    expect(runProcess.mock.calls[0][0].environment).toMatchObject({ SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' });
   });
 
   it('generates a manifest from committed state before publication and rejects a modified manifest', async () => {
