@@ -46,13 +46,16 @@ describe('LangChainModelFactory model options v2', () => {
     const factory = new LangChainModelFactory(services.configService, services.secretService);
     const result = await factory.createChatModelByProviderAndModel('p', 'c', { streaming: false });
     expect(result.runtime.contextBudgetTokens).toBe(500_000);
-    expect(result.model).toMatchObject({ maxTokens: 128_000 });
+    expect((result.model as { maxTokens?: number }).maxTokens).toBeUndefined();
+    expect((result.model as { invocationParams: () => Record<string, unknown> }).invocationParams().max_tokens).toBeUndefined();
   });
 
   it('uses 500000 for an existing configured model that only omitted context budget', async () => {
     const factory = new LangChainModelFactory(services.configService, services.secretService);
     const result = await factory.createChatModelByProviderAndModel('p', 'd', { streaming: false });
     expect(result.runtime.contextBudgetTokens).toBe(500_000);
-    expect(result.model).toMatchObject({ temperature: 0.3, maxTokens: 128_000 });
+    expect(result.model).toMatchObject({ temperature: 0.3 });
+    expect((result.model as { maxTokens?: number }).maxTokens).toBeUndefined();
+    expect((result.model as { invocationParams: () => Record<string, unknown> }).invocationParams().max_tokens).toBeUndefined();
   });
 });

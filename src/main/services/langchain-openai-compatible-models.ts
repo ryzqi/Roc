@@ -41,8 +41,12 @@ import {
   ProviderStreamIdleError,
   ProviderStreamTerminatedError
 } from './provider-request-retry';
+import {
+  sanitizeOpenAiCompatibleTools,
+  sanitizeProviderToolJsonSchema,
+  type JsonObject
+} from './provider-tool-json-schema';
 
-type JsonObject = Record<string, unknown>;
 const EMPTY_TOOL_CONTENT_PLACEHOLDER = 'Task completed';
 
 export class ReasoningAwareChatOpenAI extends ChatOpenAI {
@@ -51,7 +55,11 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun
   ): Promise<ChatResult> {
-    return await super._generate(stripRawReasoningContentBlocks(messages), options, runManager);
+    return await super._generate(
+      stripRawReasoningContentBlocks(messages),
+      sanitizeOpenAiCompatibleToolOptions(options),
+      runManager
+    );
   }
 
   async *_streamChatModelEvents(
@@ -82,7 +90,7 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
     const source = normalizeOpenAiStreamingChunks(
       super._streamResponseChunks(
         stripRawReasoningContentBlocks(messages),
-        { ...options, signal: streamAbortController.signal },
+        { ...sanitizeOpenAiCompatibleToolOptions(options), signal: streamAbortController.signal },
         runManager
       )
     );
@@ -371,6 +379,14 @@ export class LlamaCppCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
     });
   }
 
+  override async _generate(
+    messages: BaseMessage[],
+    options: this['ParsedCallOptions'],
+    runManager?: CallbackManagerForLLMRun
+  ): Promise<ChatResult> {
+    return await super._generate(messages, sanitizeLlamaCppToolOptions(options), runManager);
+  }
+
   override async *_streamResponseChunks(
     messages: BaseMessage[],
     options: this['ParsedCallOptions'],
@@ -424,7 +440,7 @@ function sanitizeNvidiaToolOptions<TOptions extends ChatOpenAICallOptions>(
 ): TOptions {
   const next = {
     ...options,
-    tools: Array.isArray(options.tools) ? options.tools.map((tool) => sanitizeNvidiaTool(tool)) : options.tools
+    tools: Array.isArray(options.tools) ? sanitizeOpenAiCompatibleTools(options.tools) : options.tools
   };
   if (typeof providerOptions?.parallelToolCalls === 'boolean') {
     (next as unknown as Record<string, unknown>).parallel_tool_calls = providerOptions.parallelToolCalls;
@@ -432,52 +448,6 @@ function sanitizeNvidiaToolOptions<TOptions extends ChatOpenAICallOptions>(
     delete (next as unknown as Record<string, unknown>).parallel_tool_calls;
   }
   return next;
-}
-
-function sanitizeNvidiaTool<TTool>(tool: TTool): TTool {
-  if (!isRecord(tool) || tool.type !== 'function' || !isRecord(tool.function)) {
-    return tool;
-  }
-  const parameters = tool.function.parameters;
-  if (!isRecord(parameters)) {
-    return tool;
-  }
-
-  return {
-    ...tool,
-    function: {
-      ...tool.function,
-      parameters: sanitizeNvidiaJsonSchema(parameters)
-    }
-  };
-}
-
-function sanitizeNvidiaJsonSchema(schema: JsonObject): JsonObject {
-  const sanitized: JsonObject = {};
-  const type = sanitizeSchemaType(schema.type) ?? sanitizeSchemaTypeFromCompositions(schema);
-  if (type !== undefined) {
-    sanitized.type = type;
-  }
-  if (typeof schema.description === 'string' && schema.description.length > 0) {
-    sanitized.description = schema.description;
-  }
-  if (Array.isArray(schema.enum) && schema.enum.every((item) => isJsonScalar(item))) {
-    sanitized.enum = [...schema.enum];
-  }
-  if (Array.isArray(schema.required) && schema.required.every((item) => typeof item === 'string')) {
-    sanitized.required = [...schema.required];
-  }
-  if (isRecord(schema.properties)) {
-    sanitized.properties = Object.fromEntries(
-      Object.entries(schema.properties)
-        .filter((entry): entry is [string, JsonObject] => isRecord(entry[1]))
-        .map(([key, value]) => [key, sanitizeNvidiaJsonSchema(value)])
-    );
-  }
-  if (isRecord(schema.items)) {
-    sanitized.items = sanitizeNvidiaJsonSchema(schema.items);
-  }
-  return sanitized;
 }
 
 function sanitizeLlamaCppToolOptions<TOptions extends ChatOpenAICallOptions>(options: TOptions): TOptions {
@@ -502,58 +472,41 @@ function sanitizeLlamaCppTool<TTool>(tool: TTool): TTool {
     ...tool,
     function: {
       ...tool.function,
-      parameters: sanitizeLlamaCppJsonSchema(parameters)
+      parameters: appendLlamaCppDateTimeHint(sanitizeProviderToolJsonSchema(parameters))
     }
   };
 }
 
-function sanitizeLlamaCppJsonSchema(schema: JsonObject): JsonObject {
-  const resolved = resolveLlamaCppSchemaComposition(schema);
-  const sanitized: JsonObject = {};
-  const type = sanitizeSchemaType(resolved.type) ?? sanitizeSchemaTypeFromCompositions(resolved);
-  if (type !== undefined) {
-    sanitized.type = type;
+function sanitizeOpenAiCompatibleToolOptions<TOptions extends ChatOpenAICallOptions>(options: TOptions): TOptions {
+  if (!Array.isArray(options.tools)) {
+    return options;
   }
-  if (typeof resolved.description === 'string' && resolved.description.length > 0) {
-    sanitized.description = resolved.description;
-  }
-  if (Array.isArray(resolved.enum) && resolved.enum.every((item) => isJsonScalar(item))) {
-    sanitized.enum = [...resolved.enum];
-  }
-  if (Array.isArray(resolved.required) && resolved.required.every((item) => typeof item === 'string')) {
-    sanitized.required = [...resolved.required];
-  }
-  if (isRecord(resolved.properties)) {
-    sanitized.properties = Object.fromEntries(
-      Object.entries(resolved.properties)
-        .filter((entry): entry is [string, JsonObject] => isRecord(entry[1]))
-        .map(([key, value]) => [key, sanitizeLlamaCppJsonSchema(value)])
+  return {
+    ...options,
+    tools: sanitizeOpenAiCompatibleTools(options.tools)
+  };
+}
+
+function appendLlamaCppDateTimeHint(schema: JsonObject): JsonObject {
+  const next: JsonObject = { ...schema };
+  if (isRecord(schema.properties)) {
+    next.properties = Object.fromEntries(
+      Object.entries(schema.properties).map(([key, value]) => [
+        key,
+        isRecord(value) ? appendLlamaCppDateTimeHint(value) : value
+      ])
     );
   }
-  if (isRecord(resolved.items)) {
-    sanitized.items = sanitizeLlamaCppJsonSchema(resolved.items);
+  if (isRecord(schema.items)) {
+    next.items = appendLlamaCppDateTimeHint(schema.items);
   }
-  if (sanitized.type === 'string' && hasDateTimeConstraint(resolved)) {
-    sanitized.description = appendDescription(
-      typeof sanitized.description === 'string' ? sanitized.description : undefined,
+  if (schema.type === 'string' && hasDateTimeConstraint(schema)) {
+    next.description = appendDescription(
+      typeof schema.description === 'string' ? schema.description : undefined,
       'Use an ISO 8601 UTC timestamp such as 2026-05-24T10:30:00Z.'
     );
   }
-  return sanitized;
-}
-
-function resolveLlamaCppSchemaComposition(schema: JsonObject): JsonObject {
-  for (const key of ['anyOf', 'oneOf'] as const) {
-    const variants = schema[key];
-    if (!Array.isArray(variants)) {
-      continue;
-    }
-    const nonNullVariant = variants.find((item) => isRecord(item) && sanitizeSchemaType(item.type) !== 'null');
-    if (isRecord(nonNullVariant)) {
-      return nonNullVariant;
-    }
-  }
-  return schema;
+  return next;
 }
 
 function hasDateTimeConstraint(schema: JsonObject): boolean {
@@ -571,40 +524,6 @@ function appendDescription(current: string | undefined, addition: string): strin
     return current;
   }
   return `${current} ${addition}`;
-}
-
-function sanitizeSchemaType(type: unknown): string | undefined {
-  if (typeof type === 'string') {
-    return type;
-  }
-  if (Array.isArray(type)) {
-    const firstType = type.find((item) => typeof item === 'string' && item !== 'null');
-    return typeof firstType === 'string' ? firstType : undefined;
-  }
-  return undefined;
-}
-
-function sanitizeSchemaTypeFromCompositions(schema: JsonObject): string | undefined {
-  for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
-    const variants = schema[key];
-    if (!Array.isArray(variants)) {
-      continue;
-    }
-    for (const variant of variants) {
-      if (!isRecord(variant)) {
-        continue;
-      }
-      const type = sanitizeSchemaType(variant.type);
-      if (type !== undefined && type !== 'null') {
-        return type;
-      }
-    }
-  }
-  return undefined;
-}
-
-function isJsonScalar(value: unknown): boolean {
-  return value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
 function isRecord(value: unknown): value is JsonObject {

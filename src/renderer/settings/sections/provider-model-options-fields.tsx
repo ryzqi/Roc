@@ -75,7 +75,7 @@ export function ProviderModelOptionsFields({ index, options, providerType, onCha
 
   return <div className="provider-model-options-fields" data-testid={`provider-model-options-fields-${index}`}>
     <div className="form-grid">
-      {number('随机性', 'temperature', false, 'temperature', '越高输出越发散，0 最确定')}{number('单次最大输出', 'maxTokens', true, 'max_tokens', '未填时默认 128000')}{number('上下文预算', 'contextBudgetTokens', true, 'context_budget', '未填时默认 500000')}{number('核采样阈值', 'topP', false, 'top_p', '与随机性二选一，一般只调其中一个')}
+      {number('随机性', 'temperature', false, 'temperature', '越高输出越发散，0 最确定')}{number('单次最大输出', 'maxTokens', true, 'max_tokens', '未填时不发送，由上游模型默认')}{number('上下文预算', 'contextBudgetTokens', true, 'context_budget', '未填时默认 500000')}{number('核采样阈值', 'topP', false, 'top_p', '与随机性二选一，一般只调其中一个')}
       <TextOption apiName="stop" full hint="命中即截断，多个用逗号或换行分隔" label="停止序列" onChange={(value) => set('stop', list(value))} value={current.stop?.join(', ')} />
     </div>
     {providerType === 'openai_compatible' ? <div className="form-grid">

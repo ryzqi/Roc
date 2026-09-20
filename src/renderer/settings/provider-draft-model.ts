@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import {
   DEFAULT_CONTEXT_BUDGET_TOKENS,
-  DEFAULT_MAX_OUTPUT_TOKENS,
   createFixedOpenRouterModelConfigs,
   fixedLlamaCppBaseUrl,
   fixedLlamaCppProviderId,
@@ -103,7 +102,6 @@ export function emptyProviderModel(): ProviderModel {
     supportsToolCalls: true,
     supportsImages: false,
     options: {
-      maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
       contextBudgetTokens: DEFAULT_CONTEXT_BUDGET_TOKENS
     }
   };

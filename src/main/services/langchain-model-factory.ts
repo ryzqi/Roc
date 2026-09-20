@@ -1,8 +1,8 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
-import { ChatOpenAI, type ChatOpenAIFields } from '@langchain/openai';
-import { DEFAULT_CONTEXT_BUDGET_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { type ChatOpenAIFields } from '@langchain/openai';
+import { DEFAULT_CONTEXT_BUDGET_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import { toTypedProviderConfig } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
@@ -27,6 +27,7 @@ import {
 } from './langchain-provider-options';
 import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
+import { sanitizeAnthropicCompatibleTools } from './provider-tool-json-schema';
 
 type LangChainModelRuntime = {
   providerType: ProviderType;
@@ -189,15 +190,12 @@ export class LangChainModelFactory {
       streamUsage: resolveStreamUsage(provider, modelOptions, options.streaming),
       clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
     };
-    this.applyAnthropicSamplingParams(config, {
-      ...providerOptions,
-      maxTokens: providerOptions.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS
-    });
+    this.applyAnthropicSamplingParams(config, providerOptions);
     const thinking = resolveAnthropicThinking(providerOptions);
     if (thinking !== undefined) {
       config.thinking = thinking;
     }
-    const model = new ChatAnthropic(config);
+    const model = new ProviderCompatibleChatAnthropic(config);
     warnIfAnthropicCacheControlConfigured(model, this.logService);
     return {
       provider,
@@ -249,7 +247,7 @@ export class LangChainModelFactory {
       provider.type === 'llama_cpp'
         ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
         : modelOptions.temperature;
-    const maxTokens = modelOptions.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+    const maxTokens = modelOptions.maxTokens;
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
@@ -345,18 +343,16 @@ export class LangChainModelFactory {
       presencePenalty: openAiPresencePenalty,
       frequencyPenalty: openAiFrequencyPenalty,
       stop: openAiStop,
-      maxTokens,
       timeout: openAiRequestTimeoutMs,
       configuration: openAiConfiguration,
+      ...(maxTokens === undefined ? {} : { maxTokens }),
       ...(openAiReasoning === undefined ? {} : { reasoning: openAiReasoning }),
       modelKwargs
     };
     const chatModel =
       provider.type === 'nvidia'
         ? new NvidiaCompatibleChatOpenAI(chatModelFields, { modelId, providerOptions: modelOptions })
-        : streaming
-          ? new OpenAiChatModelClass(chatModelFields)
-          : new ChatOpenAI(chatModelFields);
+        : new OpenAiChatModelClass(chatModelFields);
     applyOpenAiCompatibleDefaultOptions(chatModel, openAiDefaultOptions);
 
     return {
@@ -505,5 +501,18 @@ export class LangChainModelFactory {
       });
     }
     return value;
+  }
+}
+
+class ProviderCompatibleChatAnthropic extends ChatAnthropic {
+  override formatStructuredToolToAnthropic(
+    tools: Parameters<ChatAnthropic['formatStructuredToolToAnthropic']>[0],
+    fields?: Parameters<ChatAnthropic['formatStructuredToolToAnthropic']>[1]
+  ): ReturnType<ChatAnthropic['formatStructuredToolToAnthropic']> {
+    const formatted = super.formatStructuredToolToAnthropic(tools, fields);
+    if (formatted === undefined) {
+      return formatted;
+    }
+    return sanitizeAnthropicCompatibleTools(formatted);
   }
 }
