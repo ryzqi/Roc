@@ -26,7 +26,7 @@ export async function approveExportManuscript(repository: ResearchRepository, pr
   }
   const artifact = repository.createArtifact({ projectId, stage: 'writing', kind: 'manuscript', title: 'Verified result', path: null });
   const claim = repository.evidence.createClaim({ projectId, artifactId: artifact.id, subjectType: 'paragraph', content: 'Measured improvement: 20%.', status: 'supported', evidenceIds: [evidenceId] });
-  repository.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
+  repository.manuscripts.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
   repository.transitionWorkflow({ projectId, expectedStage: 'writing', action: 'complete' });
   repository.transitionWorkflow({ projectId, expectedStage: 'writing', action: 'approve' });
   const runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), {

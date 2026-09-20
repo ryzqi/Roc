@@ -1,14 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
-import { renderManuscriptLatex } from './latex-source';
 
 import {
   researchClaimCreateRequestSchema,
   researchClaimSchema,
   researchClaimUpdateRequestSchema,
-  researchEvidenceSchema,
-  researchManuscriptSaveRequestSchema,
-  researchManuscriptSchema
+  researchEvidenceSchema
 } from '../../../shared/schemas/research-evidence';
 import type {
   ResearchArtifact,
@@ -17,11 +14,7 @@ import type {
   ResearchClaimListRequest,
   ResearchClaimUpdateRequest,
   ResearchEvidence,
-  ResearchEvidenceCaptureRequest,
-  ResearchExportBundle,
-  ResearchExportBundleRequest,
-  ResearchManuscript,
-  ResearchManuscriptSaveRequest
+  ResearchEvidenceCaptureRequest
 } from '../../../shared/types';
 
 type ArtifactAccess = {
@@ -165,95 +158,20 @@ export class ResearchEvidenceRepository {
     return rows.map(parseClaimRow);
   }
 
-  saveManuscript(input: ResearchManuscriptSaveRequest): ResearchManuscript {
-    const request = researchManuscriptSaveRequestSchema.parse(input);
-    const artifact = this.artifacts.requireEditable(request.artifactId);
-    if (artifact.kind !== 'manuscript') throw new Error('research_manuscript_artifact_required');
-    const claims = this.resolveManuscriptClaims(artifact, request.sections);
-    const latex = renderManuscriptLatex(request.sections, claims, this.evidenceForClaims(claims, artifact.projectId));
-    const record: ResearchManuscript = {
-      ...request, projectId: artifact.projectId, latex,
-      contentHash: hash(latex), claimsHash: hashClaims(claims), updatedAt: this.now()
-    };
-    this.db.transaction(() => {
-      this.db.prepare(
-        `INSERT INTO research_manuscripts (artifact_id, project_id, sections_json, latex, content_hash, claims_hash, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(artifact_id) DO UPDATE SET
-         sections_json = excluded.sections_json, latex = excluded.latex, content_hash = excluded.content_hash,
-         claims_hash = excluded.claims_hash, updated_at = excluded.updated_at`
-      ).run(record.artifactId, record.projectId, JSON.stringify(record.sections), record.latex,
-        record.contentHash, record.claimsHash, record.updatedAt);
-      this.recordChange(artifact, artifact.id, 'manuscript_saved', record.updatedAt);
-    })();
-    return record;
-  }
-
-  getManuscript(artifactId: string): ResearchManuscript | null {
-    this.artifacts.get(artifactId);
-    const row = this.db.prepare(
-      `SELECT artifact_id AS artifactId, project_id AS projectId, sections_json,
-       latex, content_hash AS contentHash, claims_hash AS claimsHash, updated_at AS updatedAt
-       FROM research_manuscripts WHERE artifact_id = ?`
-    ).get(artifactId) as { sections_json: string } | undefined;
-    if (row === undefined) return null;
-    const { sections_json, ...fields } = row;
-    return researchManuscriptSchema.parse({ ...fields, sections: JSON.parse(sections_json) });
-  }
-
   assertPublishable(artifact: ResearchArtifact): void {
-    if (artifact.kind === 'manuscript') this.requireCurrentManuscript(artifact);
-    if (artifact.kind === 'figure') {
-      const claims = this.listClaims({ projectId: artifact.projectId, artifactId: artifact.id });
-      if (!claims.some((claim) => claim.subjectType === 'figure')) throw new Error('research_figure_evidence_required');
-      for (const claim of claims) this.requireSupported(claim);
-    }
+    if (artifact.kind !== 'figure') return;
+    const claims = this.listClaims({ projectId: artifact.projectId, artifactId: artifact.id });
+    if (!claims.some((claim) => claim.subjectType === 'figure')) throw new Error('research_figure_evidence_required');
+    for (const claim of claims) this.assertSupported(claim);
   }
 
-  exportBundle(request: ResearchExportBundleRequest): ResearchExportBundle {
-    const artifact = this.artifacts.get(request.artifactId);
-    if (artifact.projectId !== request.projectId) throw new Error('research_manuscript_project_mismatch');
-    if (artifact.status !== 'approved') throw new Error('research_manuscript_approval_required');
-    const { manuscript, claims } = this.requireCurrentManuscript(artifact);
-    return {
-      ...request, manuscript, claims,
-      evidence: this.evidenceForClaims(claims, request.projectId), generatedAt: this.now()
-    };
-  }
-
-  private requireCurrentManuscript(artifact: ResearchArtifact): { manuscript: ResearchManuscript; claims: ResearchClaim[] } {
-    if (artifact.kind !== 'manuscript') throw new Error('research_manuscript_artifact_required');
-    const manuscript = this.getManuscript(artifact.id);
-    if (manuscript === null) throw new Error('research_manuscript_required');
-    const claims = this.resolveManuscriptClaims(artifact, manuscript.sections);
-    if (manuscript.projectId !== artifact.projectId || manuscript.claimsHash !== hashClaims(claims) ||
-        manuscript.contentHash !== hash(manuscript.latex) ||
-        manuscript.latex !== renderManuscriptLatex(manuscript.sections, claims, this.evidenceForClaims(claims, artifact.projectId))) {
-      throw new Error('research_manuscript_stale');
-    }
-    return { manuscript, claims };
-  }
-
-  private resolveManuscriptClaims(artifact: ResearchArtifact, sections: ResearchManuscript['sections']): ResearchClaim[] {
-    return sections.flatMap((section) => section.claimIds).map((id) => {
-      const claim = this.getClaim(id);
-      if (claim.artifactId !== artifact.id || claim.projectId !== artifact.projectId) throw new Error('research_claim_artifact_mismatch');
-      this.requireSupported(claim);
-      return claim;
-    });
-  }
-
-  private requireSupported(claim: ResearchClaim): void {
+  assertSupported(claim: ResearchClaim): void {
     if (claim.status !== 'supported') throw new Error(`research_claim_unverified:${claim.id}`);
     this.validateSupport(claim);
   }
 
-  private evidenceForClaims(claims: ResearchClaim[], projectId: string): ResearchEvidence[] {
+  evidenceForClaims(claims: ResearchClaim[], projectId: string): ResearchEvidence[] {
     return [...new Set(claims.flatMap((claim) => claim.evidenceIds))].map((id) => this.getEvidence(id, projectId));
-  }
-
-  private validateSupport(claim: Pick<ResearchClaim, 'projectId' | 'status' | 'evidenceIds'>): void {
-    if (claim.status === 'supported' && claim.evidenceIds.length === 0) throw new Error('research_claim_evidence_required');
-    for (const id of claim.evidenceIds) this.getEvidence(id, claim.projectId);
   }
 
   getEvidence(id: string, projectId: string): ResearchEvidence {
@@ -263,6 +181,11 @@ export class ResearchEvidenceRepository {
     if (evidence.projectId !== projectId) throw new Error('research_evidence_project_mismatch');
     if (evidence.contentHash !== hash(evidence.excerpt)) throw new Error('research_evidence_integrity_invalid');
     return evidence;
+  }
+
+  private validateSupport(claim: Pick<ResearchClaim, 'projectId' | 'status' | 'evidenceIds'>): void {
+    if (claim.status === 'supported' && claim.evidenceIds.length === 0) throw new Error('research_claim_evidence_required');
+    for (const id of claim.evidenceIds) this.getEvidence(id, claim.projectId);
   }
 
   private requireProject(id: string): void {
@@ -313,8 +236,4 @@ function parseClaimRow(value: unknown): ResearchClaim {
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
-}
-
-function hashClaims(claims: ResearchClaim[]): string {
-  return hash(JSON.stringify(claims.map(({ id, version, content, status, evidenceIds }) => ({ id, version, content, status, evidenceIds }))));
 }

@@ -12,6 +12,7 @@ export function assertResearchStageArtifacts(repository: ResearchRepository, pro
       throw new Error('research_stage_artifact_invalid');
     }
     repository.evidence.assertPublishable(artifact);
+    if (artifact.kind === 'manuscript') repository.manuscripts.assertPublishable(artifact);
     if (artifact.kind === 'idea_canvas') repository.ideas.assertPublishable(artifact);
     if (artifact.kind === 'experiment_run') repository.experiments.forArtifact(artifact);
     if (artifact.kind === 'figure') repository.figures.forArtifact(artifact);

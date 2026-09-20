@@ -43,7 +43,7 @@ export class ResearchExportSourceService {
     if (project.status === 'archived') throw new Error('research_project_archived');
     const review = this.repository.reviews.requireForStage(project.id, 'export');
     if (review === null || review.manuscriptArtifactId !== request.manuscriptArtifactId) throw new Error('research_export_manuscript_changed');
-    const bundle = this.repository.evidence.exportBundle({ projectId: project.id, artifactId: request.manuscriptArtifactId });
+    const bundle = this.repository.manuscripts.exportBundle({ projectId: project.id, artifactId: request.manuscriptArtifactId });
     const figures = [];
     const claims = [...bundle.claims];
     for (const id of request.figureIds) {

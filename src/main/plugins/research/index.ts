@@ -70,6 +70,7 @@ import { registerResearchProductionInputCapabilities, researchProductionInputCap
 import { ResearchProductionEffectService } from './production-effects';
 import { ResearchWorkspaceFileService } from './workspace-files';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
+import { registerResearchManuscriptCapabilities, researchManuscriptCapabilities } from './manuscript-capabilities';
 import { registerResearchIdeaCapabilities, researchIdeaCapabilities } from './idea-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -145,7 +146,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -193,6 +194,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       stageRuntime = runtime;
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
+      registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
       context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
         researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));

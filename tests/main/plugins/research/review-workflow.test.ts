@@ -37,7 +37,7 @@ function readyForReview() {
   const evidence = repository.evidence.capture({ projectId: id, chunkId: `data:${id}:chunk:0` });
   const artifact = repository.createArtifact({ projectId: id, stage: 'writing', kind: 'manuscript', title: 'Original manuscript', path: null });
   const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph', content: 'Measured improvement: 20%.', status: 'supported', evidenceIds: [evidence.id] });
-  repository.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
+  repository.manuscripts.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'approve' });
   return { id, evidence, artifact };
@@ -250,7 +250,7 @@ function createLegacyReviewFixture(legacy: Database.Database, stage: 'review' | 
   const evidence = old.evidence.capture({ projectId: project.id, chunkId: 'legacy-data:chunk:0' });
   const artifact = old.createArtifact({ projectId: project.id, stage: 'writing', kind: 'manuscript', title: 'Saved manuscript', path: null });
   const claim = old.evidence.createClaim({ projectId: project.id, artifactId: artifact.id, subjectType: 'paragraph', content: 'Measured improvement: 20%.', status: 'supported', evidenceIds: [evidence.id] });
-  const manuscript = old.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
+  const manuscript = old.manuscripts.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
   legacy.prepare("UPDATE research_artifacts SET status = 'approved' WHERE id = ?").run(artifact.id);
   legacy.prepare("UPDATE research_stage_states SET status = 'completed', gate_approved = 1 WHERE project_id = ? AND stage = 'writing'").run(project.id);
   const inputs: ResearchRoleExecution['context']['inputs'] = [{ artifact: old.getArtifact(artifact.id), output: null, manuscript, ideaCanvas: null }];

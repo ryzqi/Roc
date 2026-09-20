@@ -39,7 +39,7 @@ function manuscriptProject() {
   return { id, artifact, evidence };
 }
 
-describe('research evidence and manuscript boundaries', () => {
+describe('research evidence and claim boundaries', () => {
   it('captures an immutable, deduplicated excerpt that survives source reindexing and deletion', () => {
     const { id } = project();
     document(null);
@@ -97,24 +97,6 @@ describe('research evidence and manuscript boundaries', () => {
       sourceType: 'model_run', sourceId: 'run-1', locator: null, excerpt: null })).toThrow('research_provenance_subject_mismatch');
   });
 
-  it('keeps a hypothesis as a draft and blocks its inclusion in manuscript prose', () => {
-    const { id, artifact, evidence } = manuscriptProject();
-    const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph',
-      content: 'Improvement may reach 20%.', status: 'hypothesis', evidenceIds: [] });
-    const request = { artifactId: artifact.id, sections: [{ title: 'Results & analysis', claimIds: [claim.id] }] };
-    expect(() => repository.evidence.saveManuscript(request)).toThrow('research_claim_unverified');
-    expect(repository.evidence.getManuscript(artifact.id)).toBeNull();
-    repository.evidence.updateClaim({ id: claim.id, expectedVersion: claim.version, content: 'Measured improvement: 20%.', status: 'supported', evidenceIds: [evidence.id] });
-    const manuscript = repository.evidence.saveManuscript(request);
-    expect(manuscript.latex).toContain('Results \\& analysis');
-    expect(manuscript.latex).toContain('Measured improvement: 20\\%.');
-    expect(manuscript.latex).toContain(`\\cite{${evidence.id}}`);
-    expect(manuscript.latex).toContain('page 4, paragraph 2');
-    expect(repository.listProvenance({ projectId: id, subjectId: claim.id })).toMatchObject([
-      { artifactId: artifact.id, locator: 'page 4, paragraph 2', excerpt: evidence.excerpt }
-    ]);
-  });
-
   it('preserves audit edges and prior evidence when a claim is revised', () => {
     const { id, artifact, evidence } = manuscriptProject();
     const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph',
@@ -140,57 +122,6 @@ describe('research evidence and manuscript boundaries', () => {
     expect(repository.listProvenance({ projectId: id, subjectId: figure.id })).toEqual([edge]);
   });
 
-  it('exports only an approved current manuscript with its exact claims and evidence snapshot', () => {
-    const { id, artifact, evidence } = manuscriptProject();
-    const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph',
-      content: 'Measured improvement: 20%.', status: 'supported', evidenceIds: [evidence.id] });
-    const manuscript = repository.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
-    expect(() => repository.evidence.exportBundle({ projectId: id, artifactId: artifact.id })).toThrow('research_manuscript_approval_required');
-    repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' });
-    expect(() => repository.evidence.updateClaim({ id: claim.id, expectedVersion: claim.version, content: 'Changed', status: 'pending', evidenceIds: [] }))
-      .toThrow('research_stage_not_editable');
-    repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'approve' });
-    repository = new ResearchRepository(db);
-    const bundle = repository.evidence.exportBundle({ projectId: id, artifactId: artifact.id });
-    expect(bundle.manuscript).toEqual(manuscript);
-    expect(bundle.claims).toEqual([claim]);
-    expect(bundle.evidence).toEqual([evidence]);
-    expect(() => repository.evidence.updateClaim({ id: claim.id, expectedVersion: claim.version, content: 'Changed', status: 'supported', evidenceIds: [evidence.id] }))
-      .toThrow('research_artifact_immutable');
-  });
-
-  it('requires saving again after a claim changes and refuses approval of a stale manuscript', () => {
-    const { id, artifact, evidence } = manuscriptProject();
-    const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph',
-      content: 'Initial result.', status: 'supported', evidenceIds: [evidence.id] });
-    const request = { artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] };
-    repository.evidence.saveManuscript(request);
-    repository.evidence.updateClaim({ id: claim.id, expectedVersion: claim.version, content: 'Revised result.', status: 'supported', evidenceIds: [evidence.id] });
-    expect(repository.evidence.claimHistory(claim.id)).toMatchObject([
-      { version: 2, content: 'Revised result.' }, { version: 1, content: 'Initial result.' }
-    ]);
-    expect(() => repository.evidence.updateClaim({ id: claim.id, expectedVersion: 1, content: 'Stale overwrite.', status: 'supported', evidenceIds: [evidence.id] }))
-      .toThrow('research_claim_version_conflict');
-    expect(() => repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' })).toThrow('research_manuscript_stale');
-    expect(repository.getWorkflow(id).stages.find((stage) => stage.stage === 'writing')?.status).toBe('running');
-    repository.evidence.saveManuscript(request);
-    expect(repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' }).currentStage).toBe('writing');
-  });
-
-  it('does not let an artifact borrow paragraphs from another artifact', () => {
-    const { id, artifact, evidence } = manuscriptProject();
-    const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph',
-      content: 'Result.', status: 'supported', evidenceIds: [evidence.id] });
-    const other = repository.createArtifact({ projectId: id, stage: 'writing', kind: 'manuscript', title: 'Other draft', path: null });
-    expect(() => repository.evidence.saveManuscript({ artifactId: other.id, sections: [{ title: 'Results', claimIds: [claim.id] }] }))
-      .toThrow('research_claim_artifact_mismatch');
-  });
-
-  it('rejects writing completion without a traceable manuscript', () => {
-    const { id } = manuscriptProject();
-    expect(() => repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' })).toThrow('research_manuscript_required');
-  });
-
   it('requires figure evidence and a real render before it can be submitted for approval', () => {
     const { id } = project();
     repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'figure' });
@@ -201,16 +132,6 @@ describe('research evidence and manuscript boundaries', () => {
     const evidence = repository.evidence.capture({ projectId: id, chunkId: 'paper:chunk:0' });
     repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'figure', content: 'Measured comparison.', status: 'supported', evidenceIds: [evidence.id] });
     expect(() => repository.transitionWorkflow({ projectId: id, expectedStage: 'figure', action: 'complete' })).toThrow('research_figure_render_required');
-  });
-
-  it('refuses corrupted evidence during export even after approval', () => {
-    const { id, artifact, evidence } = manuscriptProject();
-    const claim = repository.evidence.createClaim({ projectId: id, artifactId: artifact.id, subjectType: 'paragraph', content: 'Result.', status: 'supported', evidenceIds: [evidence.id] });
-    repository.evidence.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
-    repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' });
-    repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'approve' });
-    db.prepare('UPDATE research_evidence SET excerpt = ? WHERE id = ?').run('Tampered source.', evidence.id);
-    expect(() => repository.evidence.exportBundle({ projectId: id, artifactId: artifact.id })).toThrow('research_evidence_integrity_invalid');
   });
 
   it('rolls back a claim when writing its provenance fails', () => {

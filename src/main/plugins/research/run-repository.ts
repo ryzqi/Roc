@@ -319,7 +319,7 @@ export class ResearchRunRepository {
         .filter((artifact) => stage !== 'revision' || artifact.kind !== 'review_report' || cycle?.reportArtifactIds.includes(artifact.id))
         .map((artifact) => ({
         artifact, output: this.getArtifactContent(projectId, artifact.id)?.output ?? null,
-        manuscript: this.research.evidence.getManuscript(artifact.id),
+        manuscript: this.research.manuscripts.getManuscript(artifact.id),
         ideaCanvas: this.research.ideas.get(artifact.id)
       }))
     };
@@ -378,7 +378,7 @@ export class ResearchRunRepository {
   private attachOutput(run: ResearchStageRun, artifact: ResearchArtifact, output: ResearchStageOutput, timestamp: string): void {
     const claims = output.claims.map((claim) => this.research.evidence.createClaim({ ...claim, projectId: run.projectId, artifactId: artifact.id }));
     if (run.outputKind === 'manuscript') {
-      this.research.evidence.saveManuscript({
+      this.research.manuscripts.saveManuscript({
         artifactId: artifact.id,
         sections: output.sections.map((section) => ({ title: section.title, claimIds: section.claimIndexes.map((index) => {
           const claim = claims[index];

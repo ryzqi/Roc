@@ -209,7 +209,7 @@ describe('approved production inputs', () => {
       const completed = repository.runs.get(run.id, projectId);
       expect(completed).toMatchObject({ status: 'completed', modelVersion: 'writing-test-revision-1', inputArtifactIds: [artifactId] });
       const manuscriptId = completed.outputArtifactIds[0];
-      expect(repository.evidence.getManuscript(manuscriptId)?.latex).toContain('Measured signal: 42.');
+      expect(repository.manuscripts.getManuscript(manuscriptId)?.latex).toContain('Measured signal: 42.');
       expect(repository.evidence.listClaims({ projectId, artifactId: manuscriptId })).toMatchObject([{ evidenceIds: [evidence.id], status: 'supported' }]);
       expect(repository.listProvenance({ projectId, subjectId: manuscriptId })).toContainEqual(expect.objectContaining({ sourceType: 'model_run', sourceId: run.id }));
       expect(repository.getWorkflow(projectId).stages.find((stage) => stage.stage === 'writing')?.status).toBe('waiting_approval');

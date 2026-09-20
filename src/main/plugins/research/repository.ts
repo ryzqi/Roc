@@ -30,6 +30,7 @@ import type {
 import { getResearchStageRoleProfile } from './role-profiles';
 import { assertResearchStageArtifacts } from './stage-artifacts';
 import { ResearchEvidenceRepository } from './evidence-repository';
+import { ResearchManuscriptRepository } from './manuscript-repository';
 import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
@@ -72,6 +73,7 @@ const stageGateRequired = new Set<(typeof researchStages)[number]>([
 
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
+  readonly manuscripts: ResearchManuscriptRepository;
   readonly runs: ResearchRunRepository;
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
@@ -93,6 +95,10 @@ export class ResearchRepository {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, now);
+    this.manuscripts = new ResearchManuscriptRepository(db, {
+      get: (id) => this.getArtifact(id),
+      requireEditable: (id) => this.requireEditableArtifact(id)
+    }, this.evidence, now);
     this.runs = new ResearchRunRepository(db, this, now);
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);

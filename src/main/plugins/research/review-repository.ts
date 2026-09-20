@@ -27,7 +27,7 @@ export class ResearchReviewRepository {
     if (stage !== 'review' && stage !== 'revision' && stage !== 'export') return null;
     const cycle = this.get(projectId);
     if (cycle === null) throw new Error('research_approved_manuscript_required');
-    this.research.evidence.exportBundle({ projectId, artifactId: cycle.manuscriptArtifactId });
+    this.research.manuscripts.exportBundle({ projectId, artifactId: cycle.manuscriptArtifactId });
     if (stage === 'revision') {
       if (cycle.status !== 'revision_required') throw new Error('research_revision_not_requested');
       if (cycle.revisionRound >= 2) throw new Error('research_revision_limit_reached');
@@ -71,7 +71,7 @@ export class ResearchReviewRepository {
   private latestManuscript(projectId: string, artifactIds: string[]): string {
     const id = artifactIds.filter((artifactId) => this.research.getArtifact(artifactId).kind === 'manuscript').at(-1);
     if (id === undefined) throw new Error('research_manuscript_required');
-    this.research.evidence.exportBundle({ projectId, artifactId: id });
+    this.research.manuscripts.exportBundle({ projectId, artifactId: id });
     return id;
   }
 }
