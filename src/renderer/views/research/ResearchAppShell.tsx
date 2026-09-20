@@ -529,11 +529,6 @@ export function ResearchAppShell({
                 artifacts={snapshot.artifacts}
                 context={context}
                 events={snapshot.events}
-                instruction={snapshot.instruction}
-                onApprove={(decision) => void workbench.transition('approve', decision === undefined ? undefined : { reviewDecision: decision })}
-                onCancelRun={() => void workbench.cancelRun()}
-                onControlIndex={(action) => void workbench.controlIndex(action)}
-                onInstructionChange={(value) => workbench.setInstruction(value)}
                 onOpenActivity={() => {
                   applyRoute({ view: 'activity' });
                   setActivityOpen(true);
@@ -543,14 +538,9 @@ export function ResearchAppShell({
                   applyRoute({ view: 'provenance' });
                 }}
                 onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
-                onRetryRun={() => void workbench.retryRun()}
-                onStartRun={() => void workbench.startRun()}
-                onTransition={(action, decision) => void workbench.transition(action, decision === undefined ? undefined : { reviewDecision: decision })}
                 onDownloadModels={() => void downloadModels()}
                 project={context.project}
-                runs={snapshot.runs}
                 workflow={context.workflow}
-                working={snapshot.working}
               />
             ) : (
               <Suspense fallback={<div className="research-loading">正在加载视图…</div>}>

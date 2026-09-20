@@ -82,22 +82,34 @@ const pluginId = '@roc/plugin-research';
 const capabilityVersion = '1.0.0';
 const emptyInputSchema = z.object({}).strict();
 
+const workbenchCapabilities = {
+  listProjects: descriptor('research.projects.list', researchProjectListRequestSchema, researchProjectSchema.array()),
+  getProject: descriptor('research.projects.get', researchProjectIdRequestSchema, researchProjectSchema),
+  createProject: descriptor('research.projects.create', researchProjectCreateRequestSchema, researchProjectSchema),
+  updateProject: descriptor('research.projects.update', researchProjectUpdateRequestSchema, researchProjectSchema),
+  getWorkflow: descriptor('research.workflow.get', researchProjectIdRequestSchema, researchWorkflowSnapshotSchema),
+  transitionWorkflow: descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
+  stageRole: descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema)
+};
+const literatureCapabilities = {
+  search: descriptor('research.literature.search', researchLiteratureSearchRequestSchema, researchLiteratureSchema.array())
+};
+const knowledgeCapabilities = {
+  listEmbedding: descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
+  saveEmbedding: descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
+  upsertDocument: descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
+  search: descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema)
+};
+const provenanceCapabilities = {
+  add: descriptor('research.provenance.add', researchProvenanceCreateRequestSchema, researchProvenanceSchema),
+  list: descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array())
+};
 const researchCapabilityDescriptors = [
-  descriptor('research.projects.list', researchProjectListRequestSchema, researchProjectSchema.array()),
-  descriptor('research.projects.get', researchProjectIdRequestSchema, researchProjectSchema),
-  descriptor('research.projects.create', researchProjectCreateRequestSchema, researchProjectSchema),
-  descriptor('research.projects.update', researchProjectUpdateRequestSchema, researchProjectSchema),
-  descriptor('research.workflow.get', researchProjectIdRequestSchema, researchWorkflowSnapshotSchema),
-  descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
-  descriptor('research.literature.search', researchLiteratureSearchRequestSchema, researchLiteratureSchema.array()),
-  descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
-  descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
-  descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
-  descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema),
-  descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema),
-  descriptor('research.provenance.add', researchProvenanceCreateRequestSchema, researchProvenanceSchema),
-  descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array()),
-] as const satisfies readonly CapabilityDescriptor[];
+  ...Object.values(workbenchCapabilities),
+  ...Object.values(literatureCapabilities),
+  ...Object.values(knowledgeCapabilities),
+  ...Object.values(provenanceCapabilities)
+];
 
 const lifecycleCapabilities = {
   createArtifact: descriptor('research.artifacts.create', researchArtifactCreateRequestSchema, researchArtifactSchema),
@@ -208,22 +220,22 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         researchRepository.updateArtifact(researchArtifactUpdateRequestSchema.parse(input)));
       context.capabilities.register(pluginId, lifecycleCapabilities.events, async (input) =>
         researchRepository.listWorkflowEvents(researchWorkflowEventsRequestSchema.parse(input)));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[0], async () => repository!.listProjects());
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[1], async (input) => repository!.getProject((input as { id: string }).id));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[2], async (input) => {
+      context.capabilities.register(pluginId, workbenchCapabilities.listProjects, async () => repository!.listProjects());
+      context.capabilities.register(pluginId, workbenchCapabilities.getProject, async (input) => repository!.getProject((input as { id: string }).id));
+      context.capabilities.register(pluginId, workbenchCapabilities.createProject, async (input) => {
         const project = researchRepository.createProject(researchProjectCreateRequestSchema.parse(input));
         researchIndexer.projectChanged(project.id);
         return project;
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[3], async (input) => {
+      context.capabilities.register(pluginId, workbenchCapabilities.updateProject, async (input) => {
         const project = researchRepository.updateProject(researchProjectUpdateRequestSchema.parse(input));
         researchIndexer.projectChanged(project.id);
         researchExperiments.projectChanged(project.id);
         researchExports.projectChanged(project.id);
         return project;
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[4], async (input) => repository!.getWorkflow((input as { id: string }).id));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[5], async (input) => {
+      context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));
+      context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => {
         const request = researchWorkflowTransitionRequestSchema.parse(input);
         const snapshot = request.action === 'complete' || request.action === 'approve' || request.action === 'reject'
           ? await humanGate[request.action](request)
@@ -231,25 +243,26 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         researchExports.projectChanged(request.projectId);
         return snapshot;
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[6], async (input) => {
+      context.capabilities.register(pluginId, workbenchCapabilities.stageRole, async (input) =>
+        getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
+      );
+      context.capabilities.register(pluginId, literatureCapabilities.search, async (input) => {
         return literatureService.searchAndStore(researchRepository, input as ResearchLiteratureSearchRequest);
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[7], async () => researchEmbeddings.listConfigs());
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[8], async (input) => {
+      context.capabilities.register(pluginId, knowledgeCapabilities.listEmbedding, async () => researchEmbeddings.listConfigs());
+      context.capabilities.register(pluginId, knowledgeCapabilities.saveEmbedding, async (input) => {
         const config = researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest);
         researchIndexer.configurationChanged();
         return config;
       });
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[9], async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[10], async (input) => await researchEmbeddings.search(input as ResearchKnowledgeSearchRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[11], async (input) =>
-        getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
-      );
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[12], async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
-      context.capabilities.register(pluginId, researchCapabilityDescriptors[13], async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
+      context.capabilities.register(pluginId, knowledgeCapabilities.upsertDocument, async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
+      context.capabilities.register(pluginId, knowledgeCapabilities.search, async (input) => await researchEmbeddings.search(input as ResearchKnowledgeSearchRequest));
+      context.capabilities.register(pluginId, provenanceCapabilities.add, async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
+      context.capabilities.register(pluginId, provenanceCapabilities.list, async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
       researchIndexer.start();
     },
     shutdown: async () => {
+      // productionJob.shutdown is a facade over figures/exports/experiments; plugin shutdown owns the real list.
       const results = await Promise.allSettled([productionInputs?.shutdown(), exports?.shutdown(), figures?.shutdown(), experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
       productionInputs = null;
       exports = null;

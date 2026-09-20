@@ -41,6 +41,9 @@ describe('research workbench dashboard', () => {
     expect(text('research-artifacts')).toContain('Results');
     expect(text('research-index-phase')).toBe('空闲');
     expect(text('research-index-counts')).toContain('已就绪 2');
+    expect(document.querySelector('[data-testid="research-approve"]')).toBeNull();
+    await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-current-actions"]') !== null);
     await click('research-approve');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve' }));
   });
@@ -69,11 +72,10 @@ describe('research workbench dashboard', () => {
     api.controlIndex.mockResolvedValueOnce({ ok: true, data: indexStatus({ phase: 'queued' }) });
     api.controlIndex.mockResolvedValueOnce({ ok: true, data: indexStatus({ phase: 'paused', paused: true }) });
     await renderView(api);
-    await click('research-index-rebuild');
-    expect(api.controlIndex).toHaveBeenCalledWith({ projectId: 'research_1', action: 'rebuild', expectedRevision: 1 });
-    await click('research-index-pause');
-    expect(api.controlIndex).toHaveBeenCalledWith({ projectId: 'research_1', action: 'pause', expectedRevision: 1 });
-    expect(text('research-index-phase')).toBe('已暂停');
+    expect(text('research-index-phase')).toBe('空闲');
+    expect(document.querySelector('[data-testid="research-index-rebuild"]')).toBeNull();
+    await click('research-shell-settings');
+    await waitUntil(() => document.querySelector('[data-testid="research-embedding-panel"]') !== null);
   });
 
   it('captures a knowledge hit as project evidence', async () => {
@@ -221,6 +223,9 @@ describe('research workbench dashboard', () => {
     const api = createResearchApi({ workflow: snapshot });
     await renderView(api);
     expect(text('research-current-stage')).toBe('审稿');
+    expect(document.querySelector('[data-testid="research-review-accept"]')).toBeNull();
+    await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-current-actions"]') !== null);
     await click('research-review-accept');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve', reviewDecision: 'accept', expectedStage: 'review' }));
   });
@@ -497,6 +502,9 @@ describe('research workbench dashboard', () => {
       artifacts: []
     });
     await renderView(api);
+    expect(document.querySelector('[data-testid="research-run-input"]')).toBeNull();
+    await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-run-input"]') !== null);
     setValue('research-run-input', '写出可追溯的检索策略。');
     await click('research-start-run');
     expect(api.startStageRun).toHaveBeenCalledWith(expect.objectContaining({

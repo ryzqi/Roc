@@ -15,7 +15,8 @@ import {
   latestCurrentRun,
   nextActionLabel,
   researchStageLabels,
-  researchStageStatusLabels
+  researchStageStatusLabels,
+  reviewDecisionRequired
 } from './research-workflow';
 
 const ResearchEditorPanel = lazy(() => import('./ResearchEditorPanel').then((module) => ({ default: module.ResearchEditorPanel })));
@@ -79,21 +80,21 @@ export function ResearchStageWorkspace({
     ?? productionSnapshot.error;
 
   useEffect(() => {
-    const unsubscribers = [
-      session.workbench.subscribe(setSnapshot),
-      session.library.subscribe(setLibrarySnapshot),
-      session.knowledge.subscribe(setKnowledgeSnapshot),
-      session.experiments.subscribe(setExperimentSnapshot),
-      session.policies.subscribe(setPolicySnapshot),
-      session.templates.subscribe(setTemplateSnapshot),
-      session.manuscript.subscribe(setManuscriptSnapshot),
-      session.ideas.subscribe(setIdeaSnapshot),
-      session.production.subscribe(setProductionSnapshot)
-    ];
+    const unsubscribers = [session.workbench.subscribe(setSnapshot)];
+    if (tab === 'library') unsubscribers.push(session.library.subscribe(setLibrarySnapshot));
+    if (tab === 'knowledge' || tab === 'embedding' || tab === 'manuscript' || tab === 'ideas') {
+      unsubscribers.push(session.knowledge.subscribe(setKnowledgeSnapshot));
+    }
+    if (tab === 'experiments') unsubscribers.push(session.experiments.subscribe(setExperimentSnapshot));
+    if (tab === 'policies') unsubscribers.push(session.policies.subscribe(setPolicySnapshot));
+    if (tab === 'editor') unsubscribers.push(session.templates.subscribe(setTemplateSnapshot));
+    if (tab === 'manuscript') unsubscribers.push(session.manuscript.subscribe(setManuscriptSnapshot));
+    if (tab === 'ideas') unsubscribers.push(session.ideas.subscribe(setIdeaSnapshot));
+    if (tab === 'production') unsubscribers.push(session.production.subscribe(setProductionSnapshot));
     return () => {
       for (const unsubscribe of unsubscribers) unsubscribe();
     };
-  }, [session]);
+  }, [session, tab]);
 
   useEffect(() => {
     if (tab === 'library') void session.library.load();
@@ -144,17 +145,42 @@ export function ResearchStageWorkspace({
             {current.status === 'ready' ? (
               <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('start')}>开始阶段</button>
             ) : null}
+            {current.status === 'running' ? (
+              <>
+                <button className="action-button" disabled={working} type="button" onClick={() => void session.workbench.transition('pause')}>暂停</button>
+                <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('complete')}>{current.gateRequired ? '提交审核' : '完成阶段'}</button>
+              </>
+            ) : null}
             {current.status === 'paused' ? (
               <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('resume')}>继续</button>
             ) : null}
-            {current.status === 'waiting_approval' ? (
+            {current.status === 'waiting_approval' && !reviewDecisionRequired(snapshot.workflow) ? (
               <>
                 <button className="action-button" disabled={working} type="button" onClick={() => void session.workbench.transition('reject')}>退回修改</button>
-                <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('approve')}>审批</button>
+                <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-approve" onClick={() => void session.workbench.transition('approve')}>确认通过</button>
               </>
             ) : null}
+            {reviewDecisionRequired(snapshot.workflow) ? (
+              <>
+                <button className="action-button" disabled={working} type="button" onClick={() => void session.workbench.transition('reject')}>退回修改</button>
+                <button className="action-button" disabled={working} type="button" data-testid="research-review-revise" onClick={() => void session.workbench.transition('approve', { reviewDecision: 'revise' })}>要求修订</button>
+                <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-review-accept" onClick={() => void session.workbench.transition('approve', { reviewDecision: 'accept' })}>接受稿件</button>
+              </>
+            ) : null}
+            {(current.status === 'ready' || current.status === 'running' || current.status === 'paused' || current.status === 'failed' || current.status === 'blocked') && (currentRun === null || !['queued', 'running'].includes(currentRun.status)) ? (
+              <label className="research-run-instruction">
+                角色指令
+                <textarea data-testid="research-run-input" spellCheck={true} value={snapshot.instruction} onChange={(event) => session.workbench.setInstruction(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
+              </label>
+            ) : null}
+            {currentRun === null || !['queued', 'running', 'failed', 'cancelled', 'interrupted'].includes(currentRun.status) ? (
+              <button className="action-button action-button--primary" disabled={working || snapshot.instruction.trim().length === 0} type="button" data-testid="research-start-run" onClick={() => void session.workbench.startRun()}>启动角色</button>
+            ) : null}
+            {currentRun !== null && ['queued', 'running'].includes(currentRun.status) ? (
+              <button className="action-button" disabled={working} type="button" data-testid="research-cancel-run" onClick={() => void session.workbench.cancelRun()}>取消运行</button>
+            ) : null}
             {currentRun !== null && ['failed', 'cancelled', 'interrupted'].includes(currentRun.status) ? (
-              <button className="action-button" disabled={working} type="button" onClick={() => void session.workbench.retryRun()}>重试</button>
+              <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-retry-run" onClick={() => void session.workbench.retryRun()}>重试运行</button>
             ) : null}
           </div>
         ) : null}

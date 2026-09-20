@@ -1,7 +1,6 @@
 import type {
   ResearchArtifact,
   ResearchProject,
-  ResearchStageRun,
   ResearchWorkflowEvent,
   ResearchWorkflowSnapshot
 } from '../../../shared/types';
@@ -16,52 +15,33 @@ import {
   researchStageLabels,
   researchStageStatusLabels
 } from './research-workflow';
-import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 
 export function ResearchOverviewView({
   artifacts,
   context,
   events,
-  instruction,
-  onApprove,
-  onCancelRun,
-  onControlIndex,
-  onInstructionChange,
   onOpenActivity,
   onOpenProvenance,
   onOpenStage,
-  onRetryRun,
-  onStartRun,
-  onTransition,
   onDownloadModels,
   project,
-  runs,
-  workflow,
-  working
+  workflow
 }: {
   artifacts: ResearchArtifact[];
   context: ResearchContext;
   events: ResearchWorkflowEvent[];
-  instruction: string;
-  onApprove: (decision?: 'accept' | 'revise') => void;
-  onCancelRun: () => void;
-  onControlIndex: (action: 'pause' | 'resume' | 'rebuild' | 'retry') => void;
-  onInstructionChange: (value: string) => void;
   onOpenActivity: () => void;
   onOpenProvenance: (artifactId: string) => void;
   onOpenStage?: () => void;
-  onRetryRun: () => void;
-  onStartRun: () => void;
-  onTransition: (action: 'start' | 'resume' | 'reject' | 'pause' | 'complete', decision?: 'accept' | 'revise') => void;
   onDownloadModels?: () => void;
   project: ResearchProject;
-  runs: ResearchStageRun[];
   workflow: ResearchWorkflowSnapshot;
-  working: boolean;
 }): React.JSX.Element {
   const current = currentStageState(workflow);
   const stageArtifacts = currentArtifacts(artifacts, workflow);
   const indexStatus = context.indexStatus;
+  const stageLabel = researchStageLabels[workflow.currentStage];
+  const nextAction = nextActionLabel(workflow);
   return (
     <section className="research-overview" data-testid="research-overview">
       <header className="research-project-heading">
@@ -72,8 +52,11 @@ export function ResearchOverviewView({
         </div>
         <div className="research-current-stage">
           <span>当前阶段</span>
-          <strong data-testid="research-overview-stage">{researchStageLabels[workflow.currentStage]}</strong>
-          <span data-testid="research-shell-stage">{researchStageLabels[workflow.currentStage]}</span>
+          <strong data-testid="research-overview-stage">
+            <span data-testid="research-shell-stage">
+              <span data-testid="research-current-stage">{stageLabel}</span>
+            </span>
+          </strong>
           <span data-testid="research-overview-status">{researchStageStatusLabels[current.status]}</span>
           {onOpenStage === undefined ? null : (
             <button className="action-button" data-testid="research-overview-open-stage" type="button" onClick={onOpenStage}>进入阶段工作区</button>
@@ -81,7 +64,9 @@ export function ResearchOverviewView({
         </div>
       </header>
 
-      <p className="research-stage-copy" data-testid="research-overview-next">{nextActionLabel(workflow)}</p>
+      <p className="research-stage-copy" data-testid="research-overview-next">
+        <span data-testid="research-next-action">{nextAction}</span>
+      </p>
       {current.lastError === null ? null : <p className="research-stage-error">{current.lastError}</p>}
 
       {context.serviceHealth.modelsReady === false ? (
@@ -93,23 +78,14 @@ export function ResearchOverviewView({
         </div>
       ) : null}
 
-      <ResearchWorkflowPanel
-        artifacts={artifacts}
-        events={events}
-        indexStatus={indexStatus}
-        instruction={instruction}
-        onApprove={onApprove}
-        onCancelRun={onCancelRun}
-        onControlIndex={onControlIndex}
-        onInstructionChange={onInstructionChange}
-        onRetryRun={onRetryRun}
-        onStartRun={onStartRun}
-        onTransition={onTransition}
-        project={project}
-        runs={runs}
-        working={working}
-        workflow={workflow}
-      />
+      <ol className="research-pipeline" aria-label="科研流程阶段" data-testid="research-pipeline">
+        {workflow.stages.map((stage, index) => (
+          <li className={stage.stage === workflow.currentStage ? 'research-pipeline-step research-pipeline-step--current' : 'research-pipeline-step'} key={stage.stage}>
+            <span className="research-pipeline-number">{index + 1}</span>
+            <span className="research-pipeline-label">{researchStageLabels[stage.stage]}</span>
+          </li>
+        ))}
+      </ol>
 
       <dl className="research-shell-context">
         <div>
@@ -119,7 +95,14 @@ export function ResearchOverviewView({
         </div>
         <div>
           <dt>索引</dt>
-          <dd data-testid="research-shell-index">{indexPhaseLabel(indexStatus)}</dd>
+          <dd data-testid="research-shell-index">
+            <span data-testid="research-index-phase">{indexPhaseLabel(indexStatus)}</span>
+          </dd>
+          <dd data-testid="research-index-counts">
+            {indexStatus === null
+              ? '正在读取索引状态。'
+              : `共 ${indexStatus.counts.total} 个文件，已就绪 ${indexStatus.counts.ready}，排队 ${indexStatus.counts.queued}，失败 ${indexStatus.counts.failed}。`}
+          </dd>
         </div>
         <div>
           <dt>当前运行</dt>
@@ -140,14 +123,29 @@ export function ResearchOverviewView({
         )}
       </section>
 
+      <section className="research-timeline" data-testid="research-timeline" aria-label="事件时间线">
+        <div className="research-section-label">事件时间线</div>
+        {events.length === 0 ? <div className="research-loading">还没有流程事件。</div> : (
+          <ol>
+            {events.map((event) => (
+              <li key={event.id}>
+                <span>{researchStageLabels[event.stage]}</span>
+                <strong>{event.message}</strong>
+                <time dateTime={event.createdAt}>{formatResearchTime(event.createdAt)}</time>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       <section>
         <div className="research-section-label">关键产物</div>
         {stageArtifacts.length === 0 ? <p>当前阶段还没有产物。</p> : (
           <ul className="research-artifact-list" data-testid="research-overview-artifacts">
-            {stageArtifacts.map((artifact) => (
+            {stageArtifacts.map((artifact, index) => (
               <li key={artifact.id}>
                 <button type="button" onClick={() => onOpenProvenance(artifact.id)}>
-                  <strong>{artifact.title}</strong>
+                  <strong data-testid={index === 0 ? 'research-artifacts' : undefined}>{artifact.title}</strong>
                   <span>{artifactStatusLabel(artifact.status)}</span>
                 </button>
               </li>
