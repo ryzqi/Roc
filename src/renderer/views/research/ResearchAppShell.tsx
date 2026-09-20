@@ -6,12 +6,20 @@ import type { RocClient } from '../../shared/roc-client';
 import { unwrap } from '../../loaded-state';
 import { persistResearchShellMode } from '../../app/view-routing';
 import { buildResearchTopMeta, createResearchContext } from './research-context';
-import { createResearchWorkbench, createResearchWorkbenchAdapter, type ResearchWorkbench } from './research-workbench';
-import { researchProjectStatusLabels, researchStageLabels, researchStageStatusLabels } from './research-workflow';
+import { createResearchSession, type ResearchSession } from './research-session';
+import { researchProjectStatusLabels, researchStageLabels } from './research-workflow';
 import type { ResearchEvidence, ResearchProvenance } from '../../../shared/types';
 import { ResearchActivityView } from './ResearchActivityView';
 import { ResearchOverviewView } from './ResearchOverviewView';
 import { ResearchProvenanceView } from './ResearchProvenanceView';
+import { ResearchStageWorkspace } from './ResearchStageWorkspace';
+import {
+  RESEARCH_STAGE_GROUPS,
+  isCurrentStageGroup,
+  stageGroupForStage,
+  type ResearchStageGroupId,
+  type ResearchStageTab
+} from './research-stage-groups';
 
 export function ResearchAppShell({
   client,
@@ -26,11 +34,12 @@ export function ResearchAppShell({
   onOpenAssistant?: () => void;
   state: LoadedState;
 }): React.JSX.Element {
-  const workbenchRef = useRef<{ client: RocClient; workbench: ResearchWorkbench } | null>(null);
-  if (workbenchRef.current === null || workbenchRef.current.client !== client) {
-    workbenchRef.current = { client, workbench: createResearchWorkbench(createResearchWorkbenchAdapter(client)) };
+  const sessionRef = useRef<{ client: RocClient; session: ResearchSession } | null>(null);
+  if (sessionRef.current === null || sessionRef.current.client !== client) {
+    sessionRef.current = { client, session: createResearchSession(client) };
   }
-  const workbench = workbenchRef.current.workbench;
+  const session = sessionRef.current.session;
+  const workbench = session.workbench;
   const [snapshot, setSnapshot] = useState(workbench.getSnapshot());
   const [modelsReady, setModelsReady] = useState<boolean | null>(null);
   const [modelsDownloading, setModelsDownloading] = useState(false);
@@ -40,7 +49,9 @@ export function ResearchAppShell({
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [projectQuery, setProjectQuery] = useState('');
   const [activityOpen, setActivityOpen] = useState(false);
-  const [canvasView, setCanvasView] = useState<'overview' | 'activity' | 'provenance'>('overview');
+  const [canvasView, setCanvasView] = useState<'overview' | 'activity' | 'provenance' | 'stage'>('overview');
+  const [stageGroup, setStageGroup] = useState<ResearchStageGroupId>('discover');
+  const [stageTab, setStageTab] = useState<ResearchStageTab>('library');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<ResearchProvenance[]>([]);
@@ -87,6 +98,27 @@ export function ResearchAppShell({
   useEffect(() => {
     onContextChange?.(buildResearchTopMeta(context));
   }, [context, onContextChange]);
+
+  useEffect(() => {
+    session.bindProject(context.projectId);
+    if (context.projectId !== null) {
+      void session.knowledge.loadEvidence();
+    }
+  }, [context.projectId, session]);
+
+  useEffect(() => {
+    const nextGroup = stageGroupForStage(snapshot.project?.currentStage ?? null);
+    const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === nextGroup);
+    setCanvasView('overview');
+    setActivityOpen(false);
+    setSelectedEventId(null);
+    setSelectedArtifactId(null);
+    setProvenance([]);
+    setEvidence([]);
+    setProvenanceError(null);
+    setStageGroup(nextGroup);
+    setStageTab(group?.tabs[0]?.id ?? 'library');
+  }, [context.projectId]);
 
   useEffect(() => {
     const projectId = context.projectId;
@@ -149,6 +181,14 @@ export function ResearchAppShell({
     setCanvasView('activity');
   }
 
+  function openStageGroup(groupId: ResearchStageGroupId): void {
+    const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === groupId);
+    const nextTab = group?.tabs[0]?.id ?? 'library';
+    setStageGroup(groupId);
+    setStageTab(nextTab);
+    setCanvasView('stage');
+  }
+
   async function downloadModels(): Promise<void> {
     setModelsDownloading(true);
     setModelsError(null);
@@ -188,6 +228,9 @@ export function ResearchAppShell({
           ) : null}
           {shellState === 'project' ? (
             <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => setCanvasView('provenance')}>溯源</button>
+          ) : null}
+          {shellState === 'project' ? (
+            <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
           ) : null}
           <button className="action-button" data-testid="research-shell-fallback" type="button" onClick={fallbackLegacy}>
             返回旧页面
@@ -252,6 +295,7 @@ export function ResearchAppShell({
               <button
                 className={project.id === context.projectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
                 key={project.id}
+                data-testid={`research-shell-project-${project.id}`}
                 type="button"
                 onClick={() => void workbench.selectProject(project.id)}
               >
@@ -266,16 +310,23 @@ export function ResearchAppShell({
           <main className="research-shell-canvas">
             {context.workflow === null ? null : (
               <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
-                {context.workflow.stages.map((stage) => (
-                  <span
-                    className={stage.stage === context.currentStage ? 'research-shell-stage research-shell-stage--current' : 'research-shell-stage'}
-                    data-status={stage.status}
-                    key={stage.stage}
-                  >
-                    <strong>{researchStageLabels[stage.stage]}</strong>
-                    <em>{researchStageStatusLabels[stage.status]}</em>
-                  </span>
-                ))}
+                {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {
+                  const current = isCurrentStageGroup(group.id, context.currentStage);
+                  const selected = stageGroup === group.id && canvasView === 'stage';
+                  return (
+                    <button
+                      aria-current={selected ? 'page' : undefined}
+                      className={selected || (current && canvasView !== 'stage') ? 'research-shell-stage research-shell-stage--current' : 'research-shell-stage'}
+                      data-testid={`research-stage-group-${group.id}`}
+                      key={group.id}
+                      type="button"
+                      onClick={() => openStageGroup(group.id)}
+                    >
+                      <strong>{group.label}</strong>
+                      <em>{current ? '当前' : '查看'}</em>
+                    </button>
+                  );
+                })}
               </nav>
             )}
             {context.workflow === null ? null : canvasView === 'overview' ? (
@@ -293,6 +344,7 @@ export function ResearchAppShell({
                   setSelectedArtifactId(artifactId);
                   setCanvasView('provenance');
                 }}
+                onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
                 onRetryRun={() => void workbench.retryRun()}
                 onTransition={(action) => void workbench.transition(action)}
                 onDownloadModels={() => void downloadModels()}
@@ -308,7 +360,7 @@ export function ResearchAppShell({
                 runs={snapshot.runs}
                 selectedEventId={selectedEventId}
               />
-            ) : (
+            ) : canvasView === 'provenance' ? (
               <ResearchProvenanceView
                 artifacts={snapshot.artifacts}
                 evidence={evidence}
@@ -317,6 +369,14 @@ export function ResearchAppShell({
                 provenance={provenance}
                 runs={snapshot.runs}
                 selectedArtifactId={selectedArtifactId}
+              />
+            ) : (
+              <ResearchStageWorkspace
+                groupId={stageGroup}
+                onTabChange={setStageTab}
+                session={session}
+                state={state}
+                tab={stageTab}
               />
             )}
             {canvasView === 'provenance' && provenanceError !== null ? (

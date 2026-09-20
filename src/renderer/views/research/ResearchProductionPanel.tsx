@@ -15,7 +15,8 @@ export function ResearchProductionPanel({
   onWriteExport,
   selectedFigureIds,
   title,
-  working
+  working,
+  readOnly = false
 }: {
   destinationPath: string;
   exports: ResearchExportExecution[];
@@ -30,8 +31,10 @@ export function ResearchProductionPanel({
   selectedFigureIds: string[];
   title: string;
   working: boolean;
+  readOnly?: boolean;
 }): React.JSX.Element {
   const manuscript = manuscripts.find((item) => item.status === 'approved') ?? manuscripts[0] ?? null;
+  const writeBlocked = working || readOnly;
   return (
     <section className="research-tool-panel" data-testid="research-production-panel">
       <div className="research-tool-heading">
@@ -57,7 +60,7 @@ export function ResearchProductionPanel({
             导出标题
             <input data-testid="research-export-title" value={title} onChange={(event) => onChangeTitle(event.target.value)} />
           </label>
-          <button className="action-button action-button--primary" disabled={working || manuscript === null || title.trim().length === 0} type="submit" data-testid="research-export-prepare">
+          <button className="action-button action-button--primary" disabled={writeBlocked || manuscript === null || title.trim().length === 0} type="submit" data-testid="research-export-prepare">
             <Send aria-hidden="true" size={15} />
             准备导出
           </button>
@@ -71,12 +74,12 @@ export function ResearchProductionPanel({
             {record.error === null ? null : <p>{record.error}</p>}
             <div className="research-stage-actions">
               {record.status === 'ready' && record.approval === 'unpublished' ? (
-                <button className="action-button" type="button" data-testid={`research-export-publish-${record.id}`} disabled={working} onClick={() => onPublishExport(record.id)}>发布审核</button>
+                <button className="action-button" type="button" data-testid={`research-export-publish-${record.id}`} disabled={writeBlocked} onClick={() => onPublishExport(record.id)}>发布审核</button>
               ) : null}
               {record.approval === 'approved' ? (
                 <>
                   <input data-testid={`research-export-destination-${record.id}`} value={destinationPath} onChange={(event) => onChangeDestination(event.target.value)} placeholder="/absolute/path/paper.zip" />
-                  <button className="action-button action-button--primary" type="button" data-testid={`research-export-write-${record.id}`} disabled={working || destinationPath.trim().length === 0} onClick={() => onWriteExport(record.id)}>保存 ZIP</button>
+                  <button className="action-button action-button--primary" type="button" data-testid={`research-export-write-${record.id}`} disabled={writeBlocked || destinationPath.trim().length === 0} onClick={() => onWriteExport(record.id)}>保存 ZIP</button>
                 </>
               ) : null}
             </div>

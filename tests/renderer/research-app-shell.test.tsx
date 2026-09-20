@@ -42,7 +42,7 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-gates')).toBe('1');
     expect(text('research-shell-runs')).toBe('0');
     expect(text('research-shell-artifacts')).toBe('1');
-    expect(text('research-shell-stages')).toContain('写作');
+    expect(text('research-shell-stages')).toContain('写作与审阅');
     expect(text('research-shell-workspace')).toContain('/tmp/roc');
     await click('research-shell-activity-toggle');
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
@@ -60,6 +60,25 @@ describe('ResearchAppShell', () => {
     expect(api.listProvenance).toHaveBeenCalledWith({ projectId: 'research_1' });
     await click('research-provenance-back');
     expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
+  });
+
+  it('opens the current stage workspace from overview and keeps other groups read-only', async () => {
+    const api = createResearchApi();
+    await renderShell(api);
+    await click('research-overview-open-stage');
+    expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
+    expect(text('research-stage-context-status')).toContain('当前阶段：写作');
+    expect(document.querySelector('[data-testid="research-manuscript-panel"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="research-stage-readonly"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-manuscript-create"]')?.hasAttribute('disabled')).toBe(false);
+    await click('research-stage-group-discover');
+    expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('discover');
+    expect(text('research-stage-readonly')).toContain('仅可查看');
+    expect(document.querySelector('[data-testid="research-library-panel"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="research-library-import-file"]')?.hasAttribute('disabled')).toBe(true);
+    expect(document.querySelector('[data-testid="research-stage-rail"]')).not.toBeNull();
+    await click('research-shell-settings');
+    expect(document.querySelector('[data-testid="research-embedding-panel"]')).not.toBeNull();
   });
 
   it('shows a provenance load error when the source list fails', async () => {
@@ -90,6 +109,31 @@ describe('ResearchAppShell', () => {
     expect(onContextChange).toHaveBeenCalledWith('证据图 · 写作 · 运行 0 · 闸门 1');
     await act(async () => { setInput('research-shell-project-search', '第二'); });
     expect(document.querySelector('.research-project-row-title')?.textContent).toBe('第二项目');
+  });
+
+  it('returns to overview when switching projects', async () => {
+    const extra: ResearchProject = {
+      id: 'research_2', title: '第二项目', description: '另一个问题。', workspacePath: null,
+      status: 'paused', language: 'zh', origin: null, currentStage: 'reading',
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const first: ResearchProject = {
+      id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: null,
+      status: 'active', language: 'zh', origin: null, currentStage: 'writing',
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const api = createResearchApi({ projects: [first, extra] });
+    api.getWorkflow.mockImplementation(async (request: { id: string }) => ({
+      ok: true,
+      data: request.id === 'research_2' ? workflow({ stage: 'reading', status: 'ready', artifactIds: [] }) : workflow()
+    }));
+    await renderShell(api);
+    await click('research-overview-open-stage');
+    expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
+    await click('research-shell-project-research_2');
+    expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
+    expect(text('research-shell-project-title')).toBe('第二项目');
+    expect(text('research-overview-stage')).toBe('阅读');
   });
 
   it('falls back to the legacy page and clears the shell flag', async () => {
@@ -130,18 +174,29 @@ function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
     getModelsStatus: vi.fn().mockResolvedValue({ ok: true, data: { ready: true, downloading: false, error: null, models: [] } }),
     downloadModels: vi.fn(),
     listProvenance: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-    listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] })
+    listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listLibrary: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listEmbeddingConfigs: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listStagePolicies: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listExperiments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listFigures: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listTemplates: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getTemplateFiles: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listClaims: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getManuscript: vi.fn().mockResolvedValue({ ok: true, data: null }),
+    getIdeaCanvas: vi.fn().mockResolvedValue({ ok: true, data: null })
   };
 }
 
-function workflow(): ResearchWorkflowSnapshot {
+function workflow(stage: Partial<ResearchWorkflowSnapshot['stages'][number]> = {}): ResearchWorkflowSnapshot {
   const names = ['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure', 'writing', 'review', 'revision', 'export'] as const;
   const current = {
     stage: 'writing' as const, status: 'waiting_approval' as const, activeRunId: null, artifactIds: ['artifact_1'],
-    enteredAt: '2026-09-14T00:30:00.000Z', completedAt: null, gateRequired: true, gateApproved: false, lastError: null
+    enteredAt: '2026-09-14T00:30:00.000Z', completedAt: null, gateRequired: true, gateApproved: false, lastError: null, ...stage
   };
   return {
-    projectId: 'research_1', currentStage: 'writing', projectStatus: 'active',
+    projectId: 'research_1', currentStage: current.stage, projectStatus: 'active',
     stages: names.map((name, index) => name === current.stage ? current : {
       stage: name, status: index < names.indexOf(current.stage) ? 'completed' as const : 'locked' as const,
       activeRunId: null, artifactIds: [], enteredAt: index < names.indexOf(current.stage) ? '2026-09-14T00:00:00.000Z' : null,

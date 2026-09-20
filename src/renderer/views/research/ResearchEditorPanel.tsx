@@ -14,7 +14,8 @@ export function ResearchEditorPanel({
   openFile,
   selectedTemplateId,
   templates,
-  working
+  working,
+  readOnly = false
 }: {
   files: ResearchTemplateFile[];
   onChangeDraft: (value: string) => void;
@@ -27,9 +28,11 @@ export function ResearchEditorPanel({
   selectedTemplateId: string | null;
   templates: ResearchTemplate[];
   working: boolean;
+  readOnly?: boolean;
 }): React.JSX.Element {
   const template = templates.find((item) => item.id === selectedTemplateId) ?? null;
   const preview = template === null ? null : researchTemplatePreviewUrl(template);
+  const writeBlocked = working || readOnly;
   return (
     <section className="research-tool-panel" data-testid="research-editor-panel">
       <div className="research-tool-heading">
@@ -38,7 +41,7 @@ export function ResearchEditorPanel({
           <h2>文稿编辑器</h2>
           <p>导入模板目录或 ZIP，编辑源文件并编译 PDF 预览。</p>
         </div>
-        <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-template-import" onClick={onImport}>导入模板</button>
+        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-template-import" onClick={onImport}>导入模板</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-template-list">
@@ -66,8 +69,8 @@ export function ResearchEditorPanel({
               </label>
             )}
             <div className="research-stage-actions">
-              <button className="action-button" disabled={working || openFile === null} type="button" data-testid="research-template-save" onClick={onSave}>保存文件</button>
-              <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-template-compile" onClick={onCompile}>
+              <button className="action-button" disabled={writeBlocked || openFile === null} type="button" data-testid="research-template-save" onClick={onSave}>保存文件</button>
+              <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-template-compile" onClick={onCompile}>
                 <Send aria-hidden="true" size={15} />
                 编译预览
               </button>

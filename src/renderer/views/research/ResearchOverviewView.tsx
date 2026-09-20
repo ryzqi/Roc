@@ -26,6 +26,7 @@ export function ResearchOverviewView({
   onControlIndex,
   onOpenActivity,
   onOpenProvenance,
+  onOpenStage,
   onRetryRun,
   onTransition,
   onDownloadModels,
@@ -41,6 +42,7 @@ export function ResearchOverviewView({
   onControlIndex: (action: 'retry' | 'rebuild') => void;
   onOpenActivity: () => void;
   onOpenProvenance: (artifactId: string) => void;
+  onOpenStage?: () => void;
   onRetryRun: () => void;
   onTransition: (action: 'start' | 'resume' | 'reject') => void;
   onDownloadModels?: () => void;
@@ -66,6 +68,9 @@ export function ResearchOverviewView({
           <strong data-testid="research-overview-stage">{researchStageLabels[workflow.currentStage]}</strong>
           <span data-testid="research-shell-stage">{researchStageLabels[workflow.currentStage]}</span>
           <span data-testid="research-overview-status">{researchStageStatusLabels[current.status]}</span>
+          {onOpenStage === undefined ? null : (
+            <button className="action-button" data-testid="research-overview-open-stage" type="button" onClick={onOpenStage}>进入阶段工作区</button>
+          )}
         </div>
       </header>
 

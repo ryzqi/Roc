@@ -36,7 +36,8 @@ export function ResearchManuscriptPanel({
   onSave,
   onSelect,
   selectedArtifactId,
-  working
+  working,
+  readOnly = false
 }: {
   artifacts: ResearchArtifact[];
   claims: ResearchClaim[];
@@ -50,8 +51,10 @@ export function ResearchManuscriptPanel({
   onSelect: (artifactId: string) => void;
   selectedArtifactId: string | null;
   working: boolean;
+  readOnly?: boolean;
 }): React.JSX.Element {
   const manuscripts = artifacts.filter((artifact) => artifact.kind === 'manuscript');
+  const writeBlocked = working || readOnly;
   return (
     <section className="research-tool-panel" data-testid="research-manuscript-panel">
       <div className="research-tool-heading">
@@ -60,7 +63,7 @@ export function ResearchManuscriptPanel({
           <h2>主张与正文</h2>
           <p>把证据绑定到段落主张，保存后生成可审核的 LaTeX 正文。</p>
         </div>
-        <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-manuscript-create" onClick={onCreate}>新建正文</button>
+        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-manuscript-create" onClick={onCreate}>新建正文</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-manuscript-list">
@@ -92,7 +95,7 @@ export function ResearchManuscriptPanel({
               </select>
             </label>
             <div className="research-form-actions">
-              <button className="action-button" disabled={working || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
+              <button className="action-button" disabled={writeBlocked || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
             </div>
             <div className="research-literature-list" data-testid="research-claim-list">
               {claims.length === 0 ? <div className="research-loading">还没有主张。</div> : claims.map((claim) => (
@@ -108,7 +111,7 @@ export function ResearchManuscriptPanel({
               <input data-testid="research-manuscript-section" value={draft.sectionTitle} onChange={(event) => onChange({ ...draft, sectionTitle: event.target.value })} />
             </label>
             <div className="research-form-actions">
-              <button className="action-button action-button--primary" disabled={working || draft.sectionTitle.trim().length === 0 || draft.selectedClaimIds.length === 0} type="submit" data-testid="research-manuscript-save">
+              <button className="action-button action-button--primary" disabled={writeBlocked || draft.sectionTitle.trim().length === 0 || draft.selectedClaimIds.length === 0} type="submit" data-testid="research-manuscript-save">
                 <Send aria-hidden="true" size={15} />
                 保存正文
               </button>

@@ -1,16 +1,13 @@
-import { CircleAlert, Plus, Send, X } from 'lucide-react';
+import { CircleAlert, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type {
-  ResearchEmbeddingConfig,
-  ResearchEvidence,
-  ResearchKnowledgeSearchResult
-} from '../../../shared/types';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { ResearchEditorPanel } from './ResearchEditorPanel';
+import { ResearchEmbeddingPanel } from './ResearchEmbeddingPanel';
 import { ResearchExperimentPanel } from './ResearchExperimentPanel';
 import { ResearchIdeaPanel } from './ResearchIdeaPanel';
+import { ResearchKnowledgePanel } from './ResearchKnowledgePanel';
 import { ResearchLibraryPanel } from './ResearchLibraryPanel';
 import { ResearchManuscriptPanel } from './ResearchManuscriptPanel';
 import { ResearchPolicyPanel } from './ResearchPolicyPanel';
@@ -428,7 +425,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         />
       ) : null}
       {activeTab === 'knowledge' ? (
-        <KnowledgePanel
+        <ResearchKnowledgePanel
           evidence={knowledgeSnapshot.evidence}
           projectId={selectedProjectId}
           query={knowledgeSnapshot.query}
@@ -451,7 +448,7 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
         />
       ) : null}
       {activeTab === 'embedding' ? (
-        <EmbeddingPanel
+        <ResearchEmbeddingPanel
           configs={knowledgeSnapshot.embedding.configs}
           id={knowledgeSnapshot.embedding.id}
           name={knowledgeSnapshot.embedding.name}
@@ -469,140 +466,6 @@ export function ResearchView({ client, state }: { client: RocClient; state: Load
           onSave={() => void knowledge.saveEmbeddingConfig()}
         />
       ) : null}
-    </section>
-  );
-}
-
-function KnowledgePanel({
-  evidence,
-  projectId,
-  query,
-  result,
-  working,
-  onCapture,
-  onQueryChange,
-  onSearch
-}: {
-  evidence: ResearchEvidence[];
-  projectId: string | null;
-  query: string;
-  result: ResearchKnowledgeSearchResult | null;
-  working: boolean;
-  onCapture: (chunkId: string) => void;
-  onQueryChange: (value: string) => void;
-  onSearch: () => void;
-}): React.JSX.Element {
-  const capturedChunkIds = new Set(evidence.map((item) => item.chunkId));
-  return (
-    <section className="research-tool-panel" data-testid="research-knowledge-panel">
-      <div className="research-tool-heading">
-        <div>
-          <div className="research-section-label">Knowledge Base</div>
-          <h2>知识库</h2>
-          <p>关键词和向量混合召回，使用 RRF 合并排序。命中片段可捕获为当前项目证据。</p>
-        </div>
-        <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
-          <input aria-label="搜索知识库" data-testid="research-knowledge-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
-          <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-knowledge-search">
-            <Send aria-hidden="true" size={15} />
-            搜索
-          </button>
-        </form>
-      </div>
-      <div className="research-knowledge-summary">
-        <span>关键词 {result?.keywordCount ?? 0}</span>
-        <span>向量 {result?.vectorCount ?? 0}</span>
-        <span>{result?.embeddingModel ?? '未启用嵌入模型'}</span>
-        <span data-testid="research-evidence-count">已捕获 {evidence.length}</span>
-      </div>
-      <div className="research-knowledge-list">
-        {result === null ? <div className="research-loading">输入查询开始召回证据。</div> : result.hits.map((hit) => (
-          <article className="research-knowledge-row" key={hit.chunkId}>
-            <div className="research-knowledge-rank">RRF {hit.rrfScore.toFixed(4)}</div>
-            <h3>{hit.title}</h3>
-            <p>{hit.content}</p>
-            <div className="research-literature-meta">
-              <span>{hit.sourceType} · {hit.sourceId}</span>
-              <span>{hit.locator ?? '未定位'}</span>
-              {capturedChunkIds.has(hit.chunkId) ? <span data-testid={`research-evidence-captured-${hit.chunkId}`}>已捕获</span> : (
-                <button className="action-button" disabled={working || projectId === null} type="button" data-testid={`research-evidence-capture-${hit.chunkId}`} onClick={() => onCapture(hit.chunkId)}>捕获证据</button>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-      {evidence.length === 0 ? null : (
-        <div className="research-literature-list" data-testid="research-evidence-list">
-          {evidence.map((item) => (
-            <article className="research-literature-row" key={item.id}>
-              <div className="research-literature-source">{item.locator}</div>
-              <h3>{item.title}</h3>
-              <p>{item.excerpt}</p>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function EmbeddingPanel({
-  configs,
-  id,
-  name,
-  baseUrl,
-  model,
-  dimensions,
-  apiKey,
-  working,
-  onIdChange,
-  onNameChange,
-  onBaseUrlChange,
-  onModelChange,
-  onDimensionsChange,
-  onApiKeyChange,
-  onSave
-}: {
-  configs: ResearchEmbeddingConfig[];
-  id: string;
-  name: string;
-  baseUrl: string;
-  model: string;
-  dimensions: string;
-  apiKey: string;
-  working: boolean;
-  onIdChange: (value: string) => void;
-  onNameChange: (value: string) => void;
-  onBaseUrlChange: (value: string) => void;
-  onModelChange: (value: string) => void;
-  onDimensionsChange: (value: string) => void;
-  onApiKeyChange: (value: string) => void;
-  onSave: () => void;
-}): React.JSX.Element {
-  return (
-    <section className="research-tool-panel">
-      <div className="research-tool-heading">
-        <div>
-          <div className="research-section-label">Embedding Provider</div>
-          <h2>嵌入模型配置</h2>
-          <p>连接 OpenAI 兼容 Embeddings API。Key 只写入本地加密 Secret Store。</p>
-        </div>
-        <span className="research-config-count">{configs.length} 个配置</span>
-      </div>
-      <div className="research-config-grid">
-        <label>配置 ID<input value={id} onChange={(event) => onIdChange(event.target.value)} /></label>
-        <label>名称<input value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
-        <label className="research-config-wide">Base URL<input value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} /></label>
-        <label>模型<input value={model} onChange={(event) => onModelChange(event.target.value)} /></label>
-        <label>向量维度<input inputMode="numeric" value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} /></label>
-        <label className="research-config-wide">API Key<input type="password" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} placeholder="保存时写入 Secret Store" /></label>
-      </div>
-      <div className="research-form-actions">
-        <button className="action-button action-button--primary" disabled={working} type="button" onClick={onSave}>保存配置</button>
-      </div>
-      <div className="research-config-list">
-        {configs.map((config) => <div className="research-config-row" key={config.id}><strong>{config.name}</strong><span>{config.model} · {config.dimensions} 维 · {config.keyConfigured ? 'Key 已配置' : '缺少 Key'}</span></div>)}
-      </div>
     </section>
   );
 }

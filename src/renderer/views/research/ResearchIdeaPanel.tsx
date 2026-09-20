@@ -43,7 +43,8 @@ export function ResearchIdeaPanel({
   onSave,
   onSelect,
   selectedArtifactId,
-  working
+  working,
+  readOnly = false
 }: {
   artifacts: ResearchArtifact[];
   canvas: ResearchIdeaCanvas | null;
@@ -56,8 +57,10 @@ export function ResearchIdeaPanel({
   onSelect: (artifactId: string) => void;
   selectedArtifactId: string | null;
   working: boolean;
+  readOnly?: boolean;
 }): React.JSX.Element {
   const canvases = artifacts.filter((artifact) => artifact.kind === 'idea_canvas');
+  const writeBlocked = working || readOnly;
   return (
     <section className="research-tool-panel" data-testid="research-idea-panel">
       <div className="research-tool-heading">
@@ -66,7 +69,7 @@ export function ResearchIdeaPanel({
           <h2>构思画布</h2>
           <p>分别记录问题、假设、新颖性、证据、实验和风险。已批准版本可晋升为新项目。</p>
         </div>
-        <button className="action-button action-button--primary" disabled={working} type="button" data-testid="research-idea-create" onClick={onCreate}>新建画布</button>
+        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-idea-create" onClick={onCreate}>新建画布</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-idea-list">
@@ -111,11 +114,11 @@ export function ResearchIdeaPanel({
               <textarea data-testid="research-idea-rationale" spellCheck={true} value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
             </label>
             <div className="research-form-actions">
-              <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-idea-save">
+              <button className="action-button action-button--primary" disabled={writeBlocked} type="submit" data-testid="research-idea-save">
                 <Send aria-hidden="true" size={15} />
                 保存画布
               </button>
-              <button className="action-button" disabled={working || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={onPromote}>晋升为项目</button>
+              <button className="action-button" disabled={writeBlocked || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={onPromote}>晋升为项目</button>
             </div>
           </form>
         )}

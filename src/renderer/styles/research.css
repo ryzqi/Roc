@@ -946,6 +946,27 @@ pre.research-reader-content {
   text-align: left;
 }
 
+.research-stage-workspace {
+  display: grid;
+  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr) minmax(170px, 220px);
+  gap: 18px;
+  min-width: 0;
+}
+
+.research-stage-context,
+.research-stage-rail,
+.research-stage-main {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.research-stage-context .research-tabs,
+.research-stage-main .research-tabs {
+  flex-wrap: wrap;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -961,6 +982,10 @@ pre.research-reader-content {
   }
 
   .research-shell-layout--activity {
+    grid-template-columns: 1fr;
+  }
+
+  .research-stage-workspace {
     grid-template-columns: 1fr;
   }
 }

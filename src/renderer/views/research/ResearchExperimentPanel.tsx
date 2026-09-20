@@ -69,7 +69,8 @@ export function ResearchExperimentPanel({
   onStart,
   projectId,
   selectedRunId,
-  working
+  working,
+  readOnly = false
 }: {
   draft: ResearchExperimentDraft;
   experiments: ResearchExperimentExecution[];
@@ -85,9 +86,11 @@ export function ResearchExperimentPanel({
   projectId: string | null;
   selectedRunId: string | null;
   working: boolean;
+  readOnly?: boolean;
 }): React.JSX.Element {
   const selected = experiments.find((item) => item.id === selectedRunId) ?? null;
   const runtimeLocked = draft.engine === 'r' || draft.engine === 'julia';
+  const writeBlocked = working || readOnly;
   return (
     <section className="research-tool-panel" data-testid="research-experiment-panel">
       <div className="research-tool-heading">
@@ -172,7 +175,7 @@ export function ResearchExperimentPanel({
             </div>
           ) : null}
           <div className="research-form-actions">
-            <button className="action-button action-button--primary" disabled={working || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
+            <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
               <Play aria-hidden="true" size={15} />
               校验并启动
             </button>
@@ -189,19 +192,19 @@ export function ResearchExperimentPanel({
               </button>
               <div className="research-stage-actions">
                 {['preparing', 'running'].includes(run.status) ? (
-                  <button className="action-button" disabled={working} type="button" data-testid={`research-experiment-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
+                  <button className="action-button" disabled={writeBlocked} type="button" data-testid={`research-experiment-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
                     <Square aria-hidden="true" size={14} />
                     取消
                   </button>
                 ) : null}
                 {run.status === 'completed' && run.request.engine === 'matplotlib' ? (
-                  <button className="action-button action-button--primary" disabled={working} type="button" data-testid={`research-experiment-publish-figure-${run.id}`} onClick={() => onPublishFigure(run.id)}>
+                  <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-figure-${run.id}`} onClick={() => onPublishFigure(run.id)}>
                     <Send aria-hidden="true" size={14} />
                     发布图稿
                   </button>
                 ) : null}
                 {run.status === 'completed' && run.request.engine !== 'matplotlib' ? (
-                  <button className="action-button action-button--primary" disabled={working} type="button" data-testid={`research-experiment-publish-${run.id}`} onClick={() => onPublish(run.id)}>
+                  <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-${run.id}`} onClick={() => onPublish(run.id)}>
                     <Send aria-hidden="true" size={14} />
                     发布实验
                   </button>
