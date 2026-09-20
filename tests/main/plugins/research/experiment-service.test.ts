@@ -92,6 +92,13 @@ describe('research experiment lifecycle', () => {
     expect(repository.experiments.list(projectId, 20)).toHaveLength(1);
   });
 
+  it('inspects internally when start omits expectedEnvironmentHash', async () => {
+    const { expectedEnvironmentHash: _hash, ...withoutHash } = request();
+    const started = await service.start(withoutHash);
+    expect(await finished(started.id)).toMatchObject({ status: 'completed', environment: environment.snapshot });
+    expect(inspect).toHaveBeenCalled();
+  });
+
   it('refuses an environment changed since preflight before executing any script', async () => {
     const started = await service.start(request({ expectedEnvironmentHash: 'c'.repeat(64) }));
     expect(await finished(started.id)).toMatchObject({ status: 'failed', error: 'research_experiment_environment_changed' });

@@ -32,7 +32,7 @@ const researchExperimentStartFields = {
   inputPaths: z.array(researchExperimentPathSchema).max(1000),
   arguments: z.array(z.string().max(8192).refine((value) => !value.includes('\u0000'))).max(100),
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
-  expectedEnvironmentHash: digest, timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
+  expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
 } as const;
 const researchStoredExperimentRequestFields = {
   ...researchExperimentStartFields,

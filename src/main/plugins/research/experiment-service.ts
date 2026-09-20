@@ -169,7 +169,7 @@ export class ResearchExperimentService {
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
       prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
-      if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
+      if (initial.request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal);
       files = snapshot.files;
       await this.verifyProject(initial, signal);

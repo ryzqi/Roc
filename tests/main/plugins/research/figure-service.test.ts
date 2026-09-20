@@ -103,6 +103,10 @@ describe('figure publication and review boundaries', () => {
     await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, missing.id).status));
     expect(repository.experiments.get(projectId, missing.id)).toMatchObject({ status: 'failed', error: 'research_figure_matplotlib_required' });
     inspect.mockResolvedValue({ snapshot: environment, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
+    const { expectedEnvironmentHash: _hash, ...withoutHash } = figureRequest;
+    const omitted = await liveFigures.start({ ...withoutHash, requestId: randomUUID() });
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, omitted.id).status));
+    expect(repository.experiments.get(projectId, omitted.id).error).toBe('research_figure_validation_failed');
     const started = await liveFigures.start({ ...figureRequest, requestId: randomUUID() });
     await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, started.id).status));
     expect(repository.experiments.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });

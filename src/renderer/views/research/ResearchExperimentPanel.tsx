@@ -94,7 +94,7 @@ export function ResearchExperimentPanel({
         <div>
           <div className="research-section-label">Experiments</div>
           <h2>实验运行</h2>
-          <p>校验项目环境后启动脚本，查看日志，完成后再发布为阶段产物。</p>
+          <p>选择引擎与源文件后启动脚本，查看日志，完成后再发布为阶段产物。</p>
         </div>
         <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-experiment-refresh" onClick={onRefresh}>刷新</button>
       </div>
@@ -166,7 +166,7 @@ export function ResearchExperimentPanel({
           <div className="research-form-actions">
             <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
               <Play aria-hidden="true" size={15} />
-              校验并启动
+              启动
             </button>
           </div>
         </form>

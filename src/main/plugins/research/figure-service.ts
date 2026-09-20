@@ -112,7 +112,7 @@ export class ResearchFigureService {
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
       prepared = await this.experiments.inspectWorkspace(workspace, initial.request.runtime, scratch, signal);
-      if (prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
+      if (initial.request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       assertFigureEnvironment(prepared.snapshot.packages);
       const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal, figureGeneratedInputs());
       files = snapshot.files;

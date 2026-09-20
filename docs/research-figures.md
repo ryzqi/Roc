@@ -1,6 +1,6 @@
 # 可复现科研绘图
 
-图稿有自己的 `startFigure` / `inspectFigureEnvironment`。代码、声明的输入、环境文件和应用的渲染入口均保存为不可变快照；内部复用进程沙箱，不走实验执行合同。使用内置 Python 或已校验的 uv 环境；uv 环境须安装并锁定 Matplotlib。Agent 可把 `inspectFigureEnvironment` 的 `hash` 传给 `startFigure.expectedEnvironmentHash`。旧 `startExperiment({ engine: "matplotlib" })` 会返回 `research_experiment_engine_invalid`。
+图稿有自己的 `startFigure` / `inspectFigureEnvironment`。代码、声明的输入、环境文件和应用的渲染入口均保存为不可变快照；内部复用进程沙箱，不走实验执行合同。使用内置 Python 或已校验的 uv 环境；uv 环境须安装并锁定 Matplotlib。UI 不传 hash；主进程缺 hash 则内部 inspect。Agent 可把 `inspectFigureEnvironment` 的 `hash` 传给 `startFigure.expectedEnvironmentHash` 以钉死重放。旧 `startExperiment({ engine: "matplotlib" })` 会返回 `research_experiment_engine_invalid`。
 
 绘图请求须显式指定 `figure`，网络固定关闭：
 

@@ -103,19 +103,16 @@ export function createResearchExperimentProjection(
         return;
       }
       await projection.runExclusive(async (token) => {
-        const runtime = experimentRuntime(draft);
-        const environment = await adapter.inspect({ projectId: currentProjectId, runtime });
         const started = await adapter.start({
           projectId: currentProjectId,
           requestId: createId(),
           label: draft.label.trim() || sourcePath,
           engine: draft.engine,
-          runtime,
+          runtime: experimentRuntime(draft),
           sourcePath,
           inputPaths: parseRelativePaths(draft.inputPaths),
           arguments: [],
           parameters: {},
-          expectedEnvironmentHash: environment.hash,
           timeoutMs,
           network: draft.network
         });

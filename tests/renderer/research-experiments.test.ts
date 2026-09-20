@@ -5,7 +5,7 @@ import { emptyExperimentDraft } from '../../src/renderer/views/research/Research
 import type { ResearchExperimentExecution } from '../../src/shared/types';
 
 describe('research experiment projection', () => {
-  it('inspects the environment then starts an experiment from the typed source path', async () => {
+  it('starts an experiment from the typed source path without a preflight inspect', async () => {
     const execution: ResearchExperimentExecution = {
       id: 'exp_1', projectId: 'research_1',
       request: {
@@ -41,11 +41,12 @@ describe('research experiment projection', () => {
       inputPaths: 'data.csv'
     });
     await projection.start();
-    expect(adapter.inspect).toHaveBeenCalledWith({ projectId: 'research_1', runtime: { kind: 'bundled-python' } });
+    expect(adapter.inspect).not.toHaveBeenCalled();
     expect(adapter.start).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'research_1', label: 'Measure signal', engine: 'python', sourcePath: 'run.py', inputPaths: ['data.csv'],
-      expectedEnvironmentHash: 'd'.repeat(64), network: 'disabled'
+      network: 'disabled'
     }));
+    expect(adapter.start.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
     expect(projection.getSnapshot().experiments[0]?.request.label).toBe('Measure signal');
   });
 });

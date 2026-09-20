@@ -421,7 +421,7 @@ describe('research workbench dashboard', () => {
     expect(api.writeExport).toHaveBeenCalledWith({ projectId: 'research_1', exportId: 'export_1', destinationPath: '/tmp/study.zip' });
   });
 
-  it('inspects the environment then starts an experiment from the typed source path', async () => {
+  it('starts an experiment from the typed source path without a preflight inspect', async () => {
     const execution: ResearchExperimentExecution = {
       id: 'exp_1', projectId: 'research_1',
       request: {
@@ -442,7 +442,6 @@ describe('research workbench dashboard', () => {
     const api = createResearchApi({
       workflow: workflow({ stage: 'experiment', status: 'ready', gateRequired: false, artifactIds: [] })
     });
-    api.inspectExperimentEnvironment.mockResolvedValue({ ok: true, data: execution.environment });
     api.startExperiment.mockResolvedValue({ ok: true, data: execution });
     api.listExperiments.mockResolvedValue({ ok: true, data: [execution] });
     await renderView(api);
@@ -452,11 +451,12 @@ describe('research workbench dashboard', () => {
     setInput('research-experiment-source', 'run.py');
     setInput('research-experiment-inputs', 'data.csv');
     await click('research-experiment-start');
-    expect(api.inspectExperimentEnvironment).toHaveBeenCalledWith({ projectId: 'research_1', runtime: { kind: 'bundled-python' } });
+    expect(api.inspectExperimentEnvironment).not.toHaveBeenCalled();
     expect(api.startExperiment).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'research_1', label: 'Measure signal', engine: 'python', sourcePath: 'run.py', inputPaths: ['data.csv'],
-      expectedEnvironmentHash: 'd'.repeat(64), network: 'disabled'
+      network: 'disabled'
     }));
+    expect(api.startExperiment.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
     expect(text('research-experiment-list')).toContain('Measure signal');
   });
 
