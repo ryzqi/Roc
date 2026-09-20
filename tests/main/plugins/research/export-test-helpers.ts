@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { ResearchRepository } from '../../../../src/main/plugins/research/repository';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 import { libraryEntry } from './library-fixtures';
 
@@ -32,7 +33,7 @@ export async function approveExportManuscript(repository: ResearchRepository, pr
     prepare: async () => ({ providerId: 'test-provider', modelId: 'test-model', execute: async ({ run }) => ({
       modelVersion: 'review-test-v1', output: { title: run.role, markdown: 'Reviewed with recorded evidence.', claims: [], sections: [], verdict: 'ready' }
     }) })
-  });
+  }, createResearchHumanGate({ repository }));
   try {
     runtime.start({ projectId, expectedStage: 'review', instruction: 'Review the manuscript.', requestId: randomUUID() });
     await runtime.waitForIdle();

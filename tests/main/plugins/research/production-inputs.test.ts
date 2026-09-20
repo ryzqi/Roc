@@ -17,6 +17,7 @@ import { ResearchProductionInputService } from '../../../../src/main/plugins/res
 import { registerResearchProductionInputCapabilities, researchProductionInputCapabilities } from '../../../../src/main/plugins/research/production-input-capabilities';
 import { createResearchRoleTools } from '../../../../src/main/plugins/research/role-tools';
 import { createResearchRoleExecutor } from '../../../../src/main/plugins/research/role-executor';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 import type { ResearchStageOutput } from '../../../../src/shared/types';
 import { createProviderTestServices } from '../../provider-test-fixture';
@@ -201,7 +202,7 @@ describe('approved production inputs', () => {
       providerId: provider.id, modelId: 'test-model', langChainHandle: { provider, model, modelId: 'test-model', runtime: {
         baseUrl: null, contextBudgetTokens: 32000, modelKwargs: {}, providerType: provider.type, streaming: false
       } }
-    })));
+    })), createResearchHumanGate({ repository }));
     try {
       const run = runtime.start({ projectId, expectedStage: 'writing', instruction: `Use the approved experiment and evidence ${evidence.id}.`, requestId: randomUUID() });
       await runtime.waitForIdle();

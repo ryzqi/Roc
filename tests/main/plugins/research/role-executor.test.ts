@@ -7,6 +7,7 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import { StaticAgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { createResearchRoleExecutor } from '../../../../src/main/plugins/research/role-executor';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 import type { ResearchStageOutput } from '../../../../src/shared/types';
 import { createProviderTestServices } from '../../provider-test-fixture';
@@ -53,7 +54,7 @@ it('runs the installed LangChain agent with structured output and only role-auth
       baseUrl: null, contextBudgetTokens: 32000, modelKwargs: {}, providerType: provider.type, streaming: false
     } }
   }));
-  const runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), executor);
+  const runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), executor, createResearchHumanGate({ repository }));
   try {
     const project = repository.createProject({ title: 'SDK test', description: 'Exercise the real SDK loop.', workspacePath: null });
     const run = runtime.start({ projectId: project.id, expectedStage: 'discovery', instruction: 'Plan the search.', requestId: 'sdk' });

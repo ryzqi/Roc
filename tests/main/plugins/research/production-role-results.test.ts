@@ -17,6 +17,7 @@ import { createResearchProductionJob } from '../../../../src/main/plugins/resear
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { getResearchStageRoleProfile, researchCapabilityToolNames } from '../../../../src/main/plugins/research/role-profiles';
 import { createResearchRoleTools } from '../../../../src/main/plugins/research/role-tools';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchWorkspaceFileService } from '../../../../src/main/plugins/research/workspace-files';
@@ -93,9 +94,10 @@ function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<R
 }
 
 function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ output: unknown; modelVersion: string | null }>) {
+  const production = createResearchProductionJob({ repository, experiments, figures, exports });
   runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), {
     prepare: async () => ({ providerId: 'test-provider', modelId: 'test-model', execute })
-  }, effects, createResearchProductionJob({ repository, experiments, figures, exports }));
+  }, createResearchHumanGate({ repository, production }), effects);
   return runtime;
 }
 

@@ -6,6 +6,7 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import type { ResearchRoleExecution } from '../../../../src/main/plugins/research/role-executor';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
+import { createResearchHumanGate, type ResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema } from '../../../../src/shared/schemas/research';
 import type { ResearchModelSelection, ResearchStageOutput } from '../../../../src/shared/types';
 
@@ -34,7 +35,14 @@ function project() {
   return repository.createProject({ title: 'Role test', description: 'Traceable role execution.', workspacePath: null });
 }
 
-function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ output: unknown; modelVersion: string | null }>) {
+function createGate(overrides: Partial<ResearchHumanGate> = {}): ResearchHumanGate {
+  return { ...createResearchHumanGate({ repository }), ...overrides };
+}
+
+function createRuntime(
+  execute: (input: ResearchRoleExecution) => Promise<{ output: unknown; modelVersion: string | null }>,
+  gate: ResearchHumanGate = createGate()
+) {
   const capabilities = new CapabilityRegistry();
   const descriptor = { name: 'research.knowledge.search', version: '1.0.0', inputSchema: researchKnowledgeSearchRequestSchema, outputSchema: researchKnowledgeSearchResultSchema };
   capabilities.declare('research', descriptor);
@@ -44,7 +52,7 @@ function createRuntime(execute: (input: ResearchRoleExecution) => Promise<{ outp
       selections.push(selection);
       return { providerId: 'test-provider', modelId: 'test-model', execute };
     }
-  });
+  }, gate);
   return runtime;
 }
 
@@ -85,6 +93,39 @@ describe('research stage runtime', () => {
     expect(repository.runs.get(run.id, id).status).toBe('completed');
     expect(repository.getWorkflow(id).stages.find((stage) => stage.stage === 'retrieval')?.status).toBe('waiting_approval');
     expect(repository.getWorkflow(id).currentStage).toBe('retrieval');
+  });
+
+  it('completes a successful role through the injected human gate once', async () => {
+    const { id } = project();
+    const complete = vi.fn(async (request) => createResearchHumanGate({ repository }).complete(request));
+    const engine = createRuntime(async () => ({ output, modelVersion: null }), createGate({ complete }));
+    const run = engine.start({ projectId: id, expectedStage: 'discovery', instruction: 'Search.', requestId: 'gate-once' });
+    await engine.waitForIdle();
+    expect(repository.runs.get(run.id, id).status).toBe('completed');
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledWith({ projectId: id, expectedStage: 'discovery', action: 'complete' });
+  });
+
+  it('refuses to construct without an injected human gate', () => {
+    expect(() => new ResearchStageRuntime(repository, new CapabilityRegistry(), undefined, undefined as never)).toThrow('research_human_gate_required');
+  });
+
+  it('keeps runtime completion and explicit complete on the same injected gate', async () => {
+    const { id } = project();
+    repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'retrieval' });
+    const gate = createResearchHumanGate({ repository });
+    const complete = vi.spyOn(gate, 'complete');
+    const engine = createRuntime(async () => ({ output, modelVersion: null }), gate);
+    const run = engine.start({ projectId: id, expectedStage: 'retrieval', instruction: 'Collect sources.', requestId: 'shared-gate' });
+    await engine.waitForIdle();
+    expect(repository.runs.get(run.id, id).status).toBe('completed');
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledWith({ projectId: id, expectedStage: 'retrieval', action: 'complete' });
+    expect(() => engine.transition({ projectId: id, expectedStage: 'retrieval', action: 'complete' })).toThrow('research_gate_required');
+    expect(() => engine.transition({ projectId: id, expectedStage: 'retrieval', action: 'approve' })).toThrow('research_gate_required');
+    const approved = await gate.approve({ projectId: id, expectedStage: 'retrieval', action: 'approve' });
+    expect(approved.currentStage).toBe('reading');
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 
   it('binds tools to project/global material and rejects foreign artifact access', async () => {

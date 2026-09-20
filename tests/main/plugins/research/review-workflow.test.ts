@@ -8,6 +8,7 @@ import { applyDatabaseMigrations } from '../../../../src/main/infrastructure/dat
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import type { ResearchRoleExecution } from '../../../../src/main/plugins/research/role-executor';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 import { getResearchStageRoleProfile } from '../../../../src/main/plugins/research/role-profiles';
 import { getResearchSkillInstructions } from '../../../../src/main/plugins/research/research-skills';
@@ -51,7 +52,7 @@ function createRuntime(execute: (input: ResearchRoleExecution) => Promise<Resear
     prepare: async () => ({ providerId: 'review-provider', modelId: 'review-model', execute: async (input) => ({
       output: await execute(input), modelVersion: `${input.run.role}-v1`
     }) })
-  });
+  }, createResearchHumanGate({ repository }));
   return runtime;
 }
 
@@ -198,7 +199,7 @@ describe('independent review and revision workflow', () => {
           sections: [{ title: 'Results', claimIndexes: [0] }]
         }, modelVersion: 'resumed-model-v1'
       }) })
-    });
+    }, createResearchHumanGate({ repository: upgraded }));
     try {
       expect(upgraded.runs.recoverInterrupted()).toBe(1);
       const retry = engine.retry({ projectId: saved.projectId, runId: saved.runId, requestId: 'resumed' });

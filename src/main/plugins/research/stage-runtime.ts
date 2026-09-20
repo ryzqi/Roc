@@ -6,7 +6,7 @@ import type { ResearchRepository } from './repository';
 import type { PreparedResearchRole, ResearchRoleExecutor } from './role-executor';
 import { createResearchRoleTools } from './role-tools';
 import type { ResearchProductionEffectService } from './production-effects';
-import { createResearchHumanGate, type ResearchHumanGate, type ResearchProductionVerifier } from './human-gate';
+import type { ResearchHumanGate } from './human-gate';
 
 type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string };
 
@@ -19,10 +19,11 @@ export class ResearchStageRuntime {
     private readonly repository: ResearchRepository,
     private readonly capabilities: RocCapabilityRegistry,
     private readonly executor: ResearchRoleExecutor | undefined,
-    private readonly effects?: ResearchProductionEffectService,
-    production?: ResearchProductionVerifier
+    gate: ResearchHumanGate,
+    private readonly effects?: ResearchProductionEffectService
   ) {
-    this.gate = createResearchHumanGate({ repository, production });
+    if (gate === undefined || gate === null) throw new Error('research_human_gate_required');
+    this.gate = gate;
   }
 
   start(request: ResearchStageRunStartRequest): ResearchStageRun {

@@ -10,6 +10,7 @@ import { createPluginCapabilityAdapter } from '../../../../src/main/ipc/plugin-c
 import { researchIdeaCanvasSchema, researchIdeaPromotionSchema } from '../../../../src/shared/schemas/research-ideas';
 import { researchProjectSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
 import type { ResearchIdeaCanvasSaveRequest, ResearchKnowledgeDocumentUpsertRequest, ResearchStageOutput } from '../../../../src/shared/types';
+import { createResearchHumanGate } from '../../../../src/main/plugins/research/human-gate';
 import { ResearchStageRuntime } from '../../../../src/main/plugins/research/stage-runtime';
 
 let db: Database.Database;
@@ -135,7 +136,7 @@ describe('research idea canvas and project language', () => {
         output: { title: 'Incomplete idea', markdown: 'Missing canvas.', claims: [], sections: [], verdict: 'ready' },
         modelVersion: 'idea-model'
       }) })
-    });
+    }, createResearchHumanGate({ repository }));
     try {
       const run = runtime.start({ projectId: id, expectedStage: 'ideation', instruction: 'Form the idea.', requestId: 'missing-canvas' });
       await runtime.waitForIdle();
@@ -163,7 +164,7 @@ describe('research idea canvas and project language', () => {
     };
     const runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), {
       prepare: async () => ({ providerId: 'test-provider', modelId: 'test-model', execute: async () => ({ output, modelVersion: 'idea-model' }) })
-    });
+    }, createResearchHumanGate({ repository }));
     try {
       const run = runtime.start({ projectId: id, expectedStage: 'ideation', instruction: 'Form the idea.', requestId: 'idea-run' });
       await runtime.waitForIdle();
