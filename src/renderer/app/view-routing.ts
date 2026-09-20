@@ -32,7 +32,7 @@ export function parseViewId(value: string | null): ViewId {
   if (value !== null && MAIN_VIEW_IDS.has(value as ViewId)) {
     return value as ViewId;
   }
-  return 'chat';
+  return 'research';
 }
 
 export function parseResearchShellMode(search: URLSearchParams, stored: string | null = null): ResearchShellMode {
@@ -40,7 +40,10 @@ export function parseResearchShellMode(search: URLSearchParams, stored: string |
   if (fromQuery === 'research' || fromQuery === 'legacy') {
     return fromQuery;
   }
-  return stored === 'research' ? 'research' : 'legacy';
+  if (stored === 'research' || stored === 'legacy') {
+    return stored;
+  }
+  return search.get('page') === 'research' ? 'legacy' : 'research';
 }
 
 export function readResearchShellMode(): ResearchShellMode {
@@ -84,6 +87,7 @@ export function parseWorkbenchTool(value: string | null, view: ViewId): Workbenc
 
 export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean): void {
   const url = new URL(window.location.href);
+  const researchShellMode = parseResearchShellMode(url.searchParams, window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY));
   url.searchParams.set('page', view);
   if (workbenchVisible || (view !== 'chat' && WORKBENCH_VIEWS.has(view))) {
     url.searchParams.set('tool', tool);
@@ -91,10 +95,9 @@ export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisi
     url.searchParams.delete('tool');
   }
   if (view === 'research') {
-    const mode = parseResearchShellMode(url.searchParams, window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY));
-    if (mode === 'research') {
+    if (researchShellMode === 'research') {
       url.searchParams.set(RESEARCH_SHELL_QUERY, 'research');
-    } else if (url.searchParams.get(RESEARCH_SHELL_QUERY) === 'legacy') {
+    } else if (researchShellMode === 'legacy' && (url.searchParams.get(RESEARCH_SHELL_QUERY) === 'legacy' || window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY) === 'legacy')) {
       url.searchParams.set(RESEARCH_SHELL_QUERY, 'legacy');
     } else {
       url.searchParams.delete(RESEARCH_SHELL_QUERY);
@@ -143,7 +146,7 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
     return `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 个可用 Skill`;
   }
   if (view === 'research') {
-    return '项目流程与证据追踪';
+    return '研究项目上下文';
   }
   if (view === 'settings') {
     return state.defaultModelId === null ? '默认模型未配置' : `默认模型 ${state.defaultModelId}`;

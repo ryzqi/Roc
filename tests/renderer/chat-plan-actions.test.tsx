@@ -27,7 +27,7 @@ describe('plan 模式操作按钮', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/?page=chat');
     window.matchMedia = vi.fn().mockReturnValue({
       matches: false,
       media: '(prefers-reduced-motion: reduce)',

@@ -64,7 +64,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const { error, setError, setState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'));
-  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
+  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'research' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -95,6 +95,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
   const [historySearchVisible, setHistorySearchVisible] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
@@ -440,8 +441,16 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   // 侧栏数据全部 memo 化：state 引用在 setTaskLiveRunState 这类高频 render 中不变，
   // 因此任务流流式运行期间侧栏子树不会被重渲。
   const topMeta = useMemo(
-    () => (state === null ? '' : buildTopMeta(activeView as MainViewId, state)),
-    [activeView, state]
+    () => {
+      if (state === null) {
+        return '';
+      }
+      if (activeView === 'research' && researchTopMeta !== null) {
+        return researchTopMeta;
+      }
+      return buildTopMeta(activeView as MainViewId, state);
+    },
+    [activeView, researchTopMeta, state]
   );
   const historyNavItems = useMemo(
     () => buildHistoryNavItems(selectedThreadId, activeView),
@@ -491,6 +500,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       setWorkbenchWidth={setWorkbenchWidth}
       startChatRun={startChatRun}
       state={state}
+      onResearchContextChange={setResearchTopMeta}
+      onOpenResearchAssistant={startNewConversation}
       submitTaskDetailInput={submitTaskDetailInput}
       taskBoardUiState={taskBoardUiState}
       taskLiveRunState={taskLiveRunState}

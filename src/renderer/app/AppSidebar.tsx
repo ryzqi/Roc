@@ -59,13 +59,13 @@ export const AppSidebar = memo(function AppSidebar({
         <button
           className="workspace-pill"
           data-testid="workspace-select-button"
-          title={visibleWorkspaceLabel(state)}
+          title={activeView === 'research' ? `计算目录 ${visibleWorkspaceLabel(state)}` : visibleWorkspaceLabel(state)}
           type="button"
           onClick={() => void selectWorkspaceFromDialog()}
         >
           <PreviewIcon name="folder" />
-          <span>{visibleWorkspaceLabel(state)}</span>
-          <strong>选择</strong>
+          <span>{activeView === 'research' ? `计算目录 · ${visibleWorkspaceLabel(state)}` : visibleWorkspaceLabel(state)}</span>
+          <strong>{activeView === 'research' ? '目录' : '选择'}</strong>
         </button>
         {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
       </div>

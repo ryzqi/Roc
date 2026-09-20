@@ -58,6 +58,8 @@ interface AppWorkspaceShellProps {
   workbenchWidth: number;
   windowState: WindowStateSnapshot;
   workspaceLoadState: LazyLoadState;
+  onResearchContextChange?: (meta: string) => void;
+  onOpenResearchAssistant?: () => void;
 }
 
 export function AppWorkspaceShell({
@@ -92,7 +94,9 @@ export function AppWorkspaceShell({
   workbenchVisible,
   workbenchWidth,
   windowState,
-  workspaceLoadState
+  workspaceLoadState,
+  onResearchContextChange,
+  onOpenResearchAssistant
 }: AppWorkspaceShellProps): React.JSX.Element {
   const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as CSSProperties : undefined;
@@ -135,6 +139,8 @@ export function AppWorkspaceShell({
                 setState((current) => (current === null ? current : { ...current, ...partial }))
               }
               workspaceLoadState={workspaceLoadState}
+              onResearchContextChange={onResearchContextChange}
+              onOpenResearchAssistant={onOpenResearchAssistant}
             />
           </div>
         </section>

@@ -19,6 +19,8 @@ describe('research shell routing', () => {
     expect(parseResearchShellMode(new URLSearchParams('page=research&shell=legacy'), 'research')).toBe('legacy');
     expect(parseResearchShellMode(new URLSearchParams('page=research'), 'research')).toBe('research');
     expect(parseResearchShellMode(new URLSearchParams('page=research&shell=research'))).toBe('research');
+    expect(parseResearchShellMode(new URLSearchParams())).toBe('research');
+    expect(parseResearchShellMode(new URLSearchParams('page=chat'))).toBe('research');
   });
 
   it('persists the research shell and writes the query', () => {
@@ -36,5 +38,13 @@ describe('research shell routing', () => {
     const url = new URL(window.location.href);
     expect(url.searchParams.get('page')).toBe('research');
     expect(url.searchParams.get('shell')).toBe('legacy');
+  });
+
+  it('writes the research shell when the default research page has no query', () => {
+    window.history.replaceState({}, '', '/');
+    syncRendererUrl('research', 'files', false);
+    const url = new URL(window.location.href);
+    expect(url.searchParams.get('page')).toBe('research');
+    expect(url.searchParams.get('shell')).toBe('research');
   });
 });

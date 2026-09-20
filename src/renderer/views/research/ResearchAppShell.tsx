@@ -4,17 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { persistResearchShellMode } from '../../app/view-routing';
-import { createResearchContext } from './research-context';
+import { buildResearchTopMeta, createResearchContext } from './research-context';
 import { createResearchWorkbench, createResearchWorkbenchAdapter, type ResearchWorkbench } from './research-workbench';
-import { researchProjectStatusLabels, researchStageLabels } from './research-workflow';
+import { formatResearchTime, researchProjectStatusLabels, researchStageLabels, researchStageStatusLabels } from './research-workflow';
 
 export function ResearchAppShell({
   client,
   onFallbackLegacy,
+  onContextChange,
+  onOpenAssistant,
   state
 }: {
   client: RocClient;
   onFallbackLegacy: () => void;
+  onContextChange?: (meta: string) => void;
+  onOpenAssistant?: () => void;
   state: LoadedState;
 }): React.JSX.Element {
   const workbenchRef = useRef<{ client: RocClient; workbench: ResearchWorkbench } | null>(null);
@@ -29,6 +33,8 @@ export function ResearchAppShell({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
+  const [projectQuery, setProjectQuery] = useState('');
+  const [activityOpen, setActivityOpen] = useState(false);
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
   useEffect(() => {
@@ -60,6 +66,16 @@ export function ResearchAppShell({
     [modelsDownloading, modelsError, modelsReady, snapshot]
   );
   const shellState = snapshot.loading ? 'loading' : context.projectId === null ? 'empty' : 'project';
+  const visibleProjects = snapshot.projects.filter((project) => {
+    const query = projectQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return true;
+    }
+    return project.title.toLowerCase().includes(query) || project.description.toLowerCase().includes(query);
+  });
+  useEffect(() => {
+    onContextChange?.(buildResearchTopMeta(context));
+  }, [context, onContextChange]);
 
   async function createProject(): Promise<void> {
     await workbench.createProject({
@@ -87,9 +103,21 @@ export function ResearchAppShell({
           <h1>科研主工作台</h1>
           <p>项目是一级上下文。当前为迁移壳层，旧科研页面仍可回退。</p>
         </div>
-        <button className="action-button" data-testid="research-shell-fallback" type="button" onClick={fallbackLegacy}>
-          返回旧页面
-        </button>
+        <div className="research-shell-banner-actions">
+          {onOpenAssistant === undefined ? null : (
+            <button className="action-button" data-testid="research-shell-assistant" type="button" onClick={onOpenAssistant}>
+              研究助手
+            </button>
+          )}
+          {shellState === 'project' ? (
+            <button className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
+              {activityOpen ? '关闭活动' : '活动与运行'}
+            </button>
+          ) : null}
+          <button className="action-button" data-testid="research-shell-fallback" type="button" onClick={fallbackLegacy}>
+            返回旧页面
+          </button>
+        </div>
       </header>
 
       {snapshot.error === null ? null : (
@@ -138,10 +166,14 @@ export function ResearchAppShell({
       ) : null}
 
       {shellState === 'project' && context.project !== null ? (
-        <div className="research-shell-layout" data-testid="research-shell-project">
+        <div className={activityOpen ? 'research-shell-layout research-shell-layout--activity' : 'research-shell-layout'} data-testid="research-shell-project">
           <aside className="research-projects" aria-label="最近项目">
             <div className="research-section-label">项目</div>
-            {snapshot.projects.map((project) => (
+            <label className="research-shell-search">
+              搜索项目
+              <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
+            </label>
+            {visibleProjects.map((project) => (
               <button
                 className={project.id === context.projectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
                 key={project.id}
@@ -154,8 +186,23 @@ export function ResearchAppShell({
                 </span>
               </button>
             ))}
+            {visibleProjects.length === 0 ? <div className="research-shell-search-empty">没有匹配的项目</div> : null}
           </aside>
           <main className="research-shell-canvas">
+            {context.workflow === null ? null : (
+              <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
+                {context.workflow.stages.map((stage) => (
+                  <span
+                    className={stage.stage === context.currentStage ? 'research-shell-stage research-shell-stage--current' : 'research-shell-stage'}
+                    data-status={stage.status}
+                    key={stage.stage}
+                  >
+                    <strong>{researchStageLabels[stage.stage]}</strong>
+                    <em>{researchStageStatusLabels[stage.status]}</em>
+                  </span>
+                ))}
+              </nav>
+            )}
             <dl className="research-shell-context">
               <div>
                 <dt>当前项目</dt>
@@ -182,7 +229,26 @@ export function ResearchAppShell({
                 <dd data-testid="research-shell-artifacts">{context.artifactSummary.total}</dd>
               </div>
             </dl>
+            {state.workspace?.path === undefined ? null : (
+              <p className="research-shell-workspace" data-testid="research-shell-workspace">计算目录：{state.workspace.path}</p>
+            )}
           </main>
+          {activityOpen ? (
+            <aside aria-label="活动与运行" className="research-shell-activity" data-testid="research-shell-activity">
+              <div className="research-section-label">最近活动</div>
+              {context.recentEvents.length === 0 ? (
+                <p>暂无活动。</p>
+              ) : (
+                context.recentEvents.map((entry) => (
+                  <div className="research-shell-activity-row" key={entry.id}>
+                    <strong>{researchStageLabels[entry.stage]}</strong>
+                    <span>{entry.message}</span>
+                    <time>{formatResearchTime(entry.createdAt)}</time>
+                  </div>
+                ))
+              )}
+            </aside>
+          ) : null}
         </div>
       ) : null}
     </section>

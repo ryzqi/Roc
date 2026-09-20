@@ -67,11 +67,12 @@ describe('renderer bundle boundaries', () => {
     expect(appShell).toContain("import('../workbench/WorkbenchPanel')");
   });
 
-  it('keeps the research shell behind a lazy flag and defaults to the legacy page', () => {
+  it('keeps the research shell behind a lazy flag and keeps the legacy page as fallback', () => {
     const viewContent = readFileSync('src/renderer/views/ViewContent.tsx', 'utf8');
     expect(viewContent).toContain("lazy(() => import('./research/ResearchView')");
     expect(viewContent).toContain("lazy(() => import('./research/ResearchAppShell')");
     expect(viewContent).toContain('readResearchShellMode');
     expect(viewContent).toContain("return renderLazyView(<ResearchView client={client} state={state} />)");
+    expect(readFileSync('src/renderer/app/view-routing.ts', 'utf8')).toContain("return 'research';");
   });
 });

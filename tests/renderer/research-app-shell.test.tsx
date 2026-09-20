@@ -42,6 +42,31 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-gates')).toBe('1');
     expect(text('research-shell-runs')).toBe('0');
     expect(text('research-shell-artifacts')).toBe('1');
+    expect(text('research-shell-stages')).toContain('写作');
+    expect(text('research-shell-workspace')).toContain('/tmp/roc');
+    await click('research-shell-activity-toggle');
+    expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
+  });
+
+  it('filters recent projects and reports the top meta', async () => {
+    const extra: ResearchProject = {
+      id: 'research_2', title: '第二项目', description: '另一个问题。', workspacePath: null,
+      status: 'paused', language: 'zh', origin: null, currentStage: 'reading',
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const api = createResearchApi({ projects: [
+      {
+        id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: null,
+        status: 'active', language: 'zh', origin: null, currentStage: 'writing',
+        createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+      },
+      extra
+    ] });
+    const onContextChange = vi.fn();
+    await renderShell(api, undefined, onContextChange);
+    expect(onContextChange).toHaveBeenCalledWith('证据图 · 写作 · 运行 0 · 闸门 1');
+    await act(async () => { setInput('research-shell-project-search', '第二'); });
+    expect(document.querySelector('.research-project-row-title')?.textContent).toBe('第二项目');
   });
 
   it('falls back to the legacy page and clears the shell flag', async () => {
@@ -117,11 +142,16 @@ function indexStatus(): ResearchIndexStatus {
   };
 }
 
-async function renderShell(research: ReturnType<typeof createResearchApi>, onFallbackLegacy?: () => void): Promise<void> {
+async function renderShell(
+  research: ReturnType<typeof createResearchApi>,
+  onFallbackLegacy?: () => void,
+  onContextChange?: (meta: string) => void
+): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
       client: { api: { research } as never },
       onFallbackLegacy: onFallbackLegacy ?? (() => undefined),
+      onContextChange,
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })
     }));
   });
@@ -140,4 +170,12 @@ async function click(testId: string): Promise<void> {
   expect(button).not.toBeNull();
   await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   await act(async () => { await Promise.resolve(); });
+}
+
+function setInput(testId: string, value: string): void {
+  const input = document.querySelector<HTMLInputElement>(`[data-testid="${testId}"]`);
+  expect(input).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
 }

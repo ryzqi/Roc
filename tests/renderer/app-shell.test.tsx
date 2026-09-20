@@ -72,6 +72,10 @@ describe('AppShell', () => {
     expect(container.querySelector('[data-testid="settings-gear"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="active-view"]')).not.toBeNull();
     expect(container.textContent).toContain('任务工作台');
+    await waitUntil(() => container.querySelector('[data-testid="research-app-shell"]') !== null);
+    expect(container.querySelector('[data-testid="research-view"]')).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
+    expect(new URL(window.location.href).searchParams.get('shell')).toBe('research');
   });
 
   it('keeps every workbench and control entry inside the pinned sidebar dock', async () => {
@@ -100,6 +104,7 @@ describe('AppShell', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     const client = createShellClient();
     window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=chat');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -370,6 +375,7 @@ describe('AppShell', () => {
       }
     });
     window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=chat');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -404,6 +410,7 @@ describe('AppShell', () => {
       };
     });
     window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=chat');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -486,6 +493,7 @@ describe('AppShell', () => {
       }
     }));
     window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=chat');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);

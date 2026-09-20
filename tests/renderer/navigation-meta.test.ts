@@ -70,4 +70,9 @@ describe('renderer navigation meta', () => {
     expect(memoryNav?.meta).toBe('全局记忆');
     expect(buildTopMeta('memory', state)).toBe('全局记忆');
   });
+
+  it('uses research project context as the default research top meta', () => {
+    const state = createLoadedState({});
+    expect(buildTopMeta('research', state)).toBe('研究项目上下文');
+  });
 });

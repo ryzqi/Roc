@@ -25,6 +25,19 @@
 - 新增 `ResearchContext` 与 `ResearchAppShell`；开关打开时区分空项目与选中项目壳层。
 - 旧 `?page=research` 与显式 `shell=legacy` 可回退。
 
+### 阶段 1：科研主壳层与项目上下文
+
+- **状态：** 完成
+- 无 `page` 时默认进入 `research` 新壳层；`?page=research` 无 `shell` 仍回退旧页。
+- 侧栏「研究助手」替代「新建对话」；顶栏科研页不再用文件夹路径当主上下文。
+- Chat 相关 AppShell 测试显式使用 `?page=chat`。
+
+### 阶段 1 审查修复
+
+- 顶栏接入 `buildResearchTopMeta`：项目、阶段、运行、人工闸门。
+- 壳层补阶段导航、活动抽屉、项目搜索；工作区 pill 在科研页标为计算目录。
+- 「研究助手」从壳层打开现有 Chat 视图。
+
 ## 验证结果
 
 | 检查 | 结果 |

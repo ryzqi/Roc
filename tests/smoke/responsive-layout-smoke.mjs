@@ -275,7 +275,7 @@ function buildSidebarHistoryMarkup() {
     <div class="workspace workspace--chat" style="width:320px;height:596px;padding:0;grid-template-columns:220px minmax(0,1fr)">
       <aside class="sidebar">
         <div class="sidebar-head"><button class="workspace-pill" type="button"><span>/Users/test/Code/Roc</span><strong>选择</strong></button></div>
-        ${buildDockRowMarkup('nav-chat', '新建对话', null)}
+        ${buildDockRowMarkup('nav-chat', '研究助手', null)}
         <div class="sidebar-block sidebar-block--history sidebar-block--history-search">
           <div class="side-title">历史会话</div>
           <label class="history-search-field"><input type="search" value=""></label>

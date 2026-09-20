@@ -51,7 +51,9 @@ export function ViewContent({
   taskBoardUiState,
   onTaskBoardUiStateChange,
   updateLoadedState,
-  workspaceLoadState
+  workspaceLoadState,
+  onResearchContextChange,
+  onOpenResearchAssistant
 }: {
   activeView: ViewId;
   chatSelectionVersion: number;
@@ -75,6 +77,8 @@ export function ViewContent({
   onTaskBoardUiStateChange: (state: TaskBoardUiState) => void;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   workspaceLoadState: LazyLoadState;
+  onResearchContextChange?: (meta: string) => void;
+  onOpenResearchAssistant?: () => void;
 }): React.JSX.Element {
   const [researchShellMode, setResearchShellMode] = useState(readResearchShellMode);
 
@@ -105,6 +109,8 @@ export function ViewContent({
           onFallbackLegacy={() => {
             setResearchShellMode('legacy');
           }}
+          onContextChange={onResearchContextChange}
+          onOpenAssistant={onOpenResearchAssistant}
           state={state}
         />
       );

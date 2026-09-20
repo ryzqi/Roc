@@ -7,6 +7,7 @@ import type {
   ResearchWorkflowSnapshot
 } from '../../../shared/types';
 import type { ResearchWorkbenchSnapshot } from './research-workbench';
+import { researchStageLabels } from './research-workflow';
 
 export type ResearchPendingGate = {
   stage: ResearchWorkflowSnapshot['currentStage'];
@@ -95,4 +96,12 @@ function artifactSummary(artifacts: ResearchArtifact[]): ResearchArtifactSummary
     approved: artifacts.filter((item) => item.status === 'approved').length,
     draft: artifacts.filter((item) => item.status === 'draft').length
   };
+}
+
+export function buildResearchTopMeta(context: ResearchContext): string {
+  if (context.project === null) {
+    return '创建研究项目';
+  }
+  const stage = context.currentStage === null ? '未开始' : researchStageLabels[context.currentStage];
+  return `${context.project.title} · ${stage} · 运行 ${context.activeRuns.length} · 闸门 ${context.pendingGates.length}`;
 }

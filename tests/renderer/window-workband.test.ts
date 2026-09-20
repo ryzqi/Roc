@@ -62,4 +62,21 @@ describe('WindowWorkband', () => {
     expect(brandMarkup).not.toContain('>/</span>');
     expect(html).not.toContain('条消息');
   });
+
+  it('renders research search without treating the workspace path as the primary context', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WindowWorkband, {
+        activeView: 'research',
+        chatSidebarCollapsed: false,
+        onHistorySearchToggle: vi.fn(),
+        onNewConversation: vi.fn(),
+        onSidebarToggle: vi.fn(),
+        showHistorySearch: false,
+        topMeta: '证据图 · 写作 · 运行 0 · 闸门 1'
+      })
+    );
+    expect(html).toContain('data-testid="research-top-search"');
+    expect(html).toContain('证据图 · 写作 · 运行 0 · 闸门 1');
+    expect(html).not.toContain('data-testid="chat-history-search-toggle"');
+  });
 });

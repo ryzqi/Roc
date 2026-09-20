@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createResearchContext } from '../../src/renderer/views/research/research-context';
+import { buildResearchTopMeta, createResearchContext } from '../../src/renderer/views/research/research-context';
 import type {
   ResearchArtifact,
   ResearchIndexStatus,
@@ -42,6 +42,7 @@ describe('research context', () => {
     expect(context.activeRuns.map((item) => item.id)).toEqual(['run_queued']);
     expect(context.artifactSummary).toEqual({ total: 2, approved: 1, draft: 1 });
     expect(context.serviceHealth.indexPhase).toBe('idle');
+    expect(buildResearchTopMeta(context)).toBe('证据图 · 写作 · 运行 1 · 闸门 1');
   });
 });
 

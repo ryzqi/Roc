@@ -62,10 +62,24 @@ export function WindowWorkband({
               </button>
             </div>
           ) : null}
+          {activeView === 'research' ? (
+            <div className="workband-chat-actions">
+              <button
+                aria-label="搜索研究项目"
+                className="icon-button workband-chat-action"
+                data-testid="research-top-search"
+                title="搜索研究项目"
+                type="button"
+                onClick={() => document.querySelector<HTMLInputElement>('[data-testid="research-shell-project-search"]')?.focus()}
+              >
+                <Search aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="thread-meta">
-        <PreviewIcon name="folder" />
+        <PreviewIcon name={activeView === 'research' ? 'microscope' : 'folder'} />
         <span>{topMeta}</span>
       </div>
     </header>

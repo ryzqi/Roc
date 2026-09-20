@@ -8,8 +8,8 @@ export function buildHistoryNavItems(selectedThreadId: string | null, activeView
   return [
     {
       id: 'chat',
-      label: '新建对话',
-      meta: '发送首条消息后创建新会话',
+      label: '研究助手',
+      meta: '在当前研究项目中打开对话',
       icon: 'history',
       active: activeView === 'chat' && selectedThreadId === null
     }
@@ -30,7 +30,7 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
     {
       id: 'research',
       label: '科研工作台',
-      meta: '项目、阶段流程与证据追踪',
+      meta: '项目总览、阶段与证据',
       icon: 'microscope'
     },
     {

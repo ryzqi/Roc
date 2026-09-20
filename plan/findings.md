@@ -109,6 +109,18 @@
 4. 返回旧页面写入 `shell=legacy` 并清除 storage。
 5. 项目选择、空项目、模型未安装、运行失败/取消/重试仍走 `research-workbench`；旧测试覆盖这些路径。
 
+## 阶段 1 实现记录
+
+- `parseViewId(null)` 默认 `research`；无 query/storage 时新壳层开启。
+- 裸 `?page=research` 仍是旧页，避免旧深链接跳进新壳层。
+- `syncRendererUrl` 在改 `page` 之前解析 shell mode，避免默认入口被写成旧页。
+
+## 阶段 1 审查修复
+
+- 顶栏 `thread-meta` 在科研页使用 `ResearchContext` 投影，不再只显示工作区路径。
+- `ResearchAppShell` 增加阶段进度条、活动抽屉、项目搜索；文件夹选择改称计算目录。
+- Chat 仍是独立视图，从壳层「研究助手」进入；项目/阶段元数据绑定留到服务集成阶段。
+
 ## 现状问题清单
 
 1. 科研入口在侧栏 dock，与 Chat、任务、文件、Git、终端、MCP、Skill、记忆同级，产品主叙事不一致。
