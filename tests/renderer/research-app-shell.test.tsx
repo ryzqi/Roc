@@ -36,6 +36,34 @@ describe('ResearchAppShell', () => {
     expect(new URL(window.location.href).searchParams.get('project')).toBeNull();
   });
 
+  it('creates a research project from the empty shell', async () => {
+    const created: ResearchProject = {
+      id: 'research_new', title: '新课题', description: '从空态创建。', workspacePath: '/tmp/roc',
+      status: 'active', language: 'zh', origin: null, currentStage: 'discovery',
+      createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z'
+    };
+    const api = createResearchApi({ projects: [] });
+    api.createProject.mockResolvedValue({ ok: true, data: created });
+    api.getWorkflow.mockResolvedValue({ ok: true, data: workflow({ stage: 'discovery', status: 'ready', gateRequired: false, artifactIds: [] }) });
+    api.listArtifacts.mockResolvedValue({ ok: true, data: [] });
+    api.listWorkflowEvents.mockResolvedValue({ ok: true, data: [] });
+    await renderShell(api);
+    await act(async () => { setInput('research-shell-title', '新课题'); });
+    await act(async () => { setTextarea('research-shell-description', '从空态创建。'); });
+    const form = document.querySelector<HTMLFormElement>('[data-testid="research-shell-create"]');
+    expect(form).not.toBeNull();
+    await act(async () => { form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+    await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
+    expect(api.createProject).toHaveBeenCalledWith({
+      title: '新课题',
+      description: '从空态创建。',
+      workspacePath: '/tmp/roc',
+      language: 'zh'
+    });
+    expect(text('research-shell-project-title')).toBe('新课题');
+    expect(new URL(window.location.href).searchParams.get('project')).toBe('research_new');
+  });
+
   it('shows the selected project context', async () => {
     const api = createResearchApi();
     await renderShell(api);
@@ -231,6 +259,52 @@ describe('ResearchAppShell', () => {
     await click('research-service-assistant');
     expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant' }));
   });
+
+  it('opens the project list in a drawer below 800px', async () => {
+    stubLayoutMedia(true, true);
+    const api = createResearchApi();
+    await renderShell(api);
+    expect(document.querySelector('[data-testid="research-shell-project"] .research-projects')).toBeNull();
+    await click('research-shell-projects-toggle');
+    expect(text('research-shell-project-research_1')).toContain('证据图');
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('opens activity with 2 and restores overview with 1', async () => {
+    const api = createResearchApi();
+    await renderShell(api);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }));
+    });
+    await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
+    expect(new URL(window.location.href).searchParams.get('view')).toBe('activity');
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    });
+    await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
+    expect(new URL(window.location.href).searchParams.get('view')).toBeNull();
+  });
+
+  it('shows a model download action when parse models are missing', async () => {
+    const api = createResearchApi();
+    api.getModelsStatus.mockResolvedValue({
+      ok: true,
+      data: { ready: false, downloading: false, error: 'research_models_unavailable', models: [] }
+    });
+    api.downloadModels.mockResolvedValue({
+      ok: true,
+      data: { ready: true, downloading: false, error: null, models: [] }
+    });
+    await renderShell(api);
+    expect(text('research-overview-models')).toContain('解析模型未安装');
+    await click('research-overview-download-models');
+    expect(api.downloadModels).toHaveBeenCalled();
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
+  });
 });
 
 function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
@@ -355,6 +429,14 @@ function setInput(testId: string, value: string): void {
   const input = document.querySelector<HTMLInputElement>(`[data-testid="${testId}"]`);
   expect(input).not.toBeNull();
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setTextarea(testId: string, value: string): void {
+  const input = document.querySelector<HTMLTextAreaElement>(`[data-testid="${testId}"]`);
+  expect(input).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(input, value);
   input?.dispatchEvent(new Event('input', { bubbles: true }));
 }
