@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import type { ChatRunState } from '../chat-run-state';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
@@ -8,6 +8,7 @@ import { ChatFeature } from '../features/chat';
 import type { TaskBoardUiState } from '../features/tasks';
 import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
+import { readResearchShellMode } from '../app/view-routing';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
@@ -26,6 +27,7 @@ const WorkspaceFeature = lazy(() =>
   import('../features/workspace').then((module) => ({ default: module.WorkspaceFeature }))
 );
 const ResearchView = lazy(() => import('./research/ResearchView').then((module) => ({ default: module.ResearchView })));
+const ResearchAppShell = lazy(() => import('./research/ResearchAppShell').then((module) => ({ default: module.ResearchAppShell })));
 
 export function ViewContent({
   activeView,
@@ -74,6 +76,8 @@ export function ViewContent({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   workspaceLoadState: LazyLoadState;
 }): React.JSX.Element {
+  const [researchShellMode, setResearchShellMode] = useState(readResearchShellMode);
+
   function renderLazyView(node: React.JSX.Element): React.JSX.Element {
     return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
   }
@@ -94,6 +98,17 @@ export function ViewContent({
     );
   }
   if (activeView === 'research') {
+    if (researchShellMode === 'research') {
+      return renderLazyView(
+        <ResearchAppShell
+          client={client}
+          onFallbackLegacy={() => {
+            setResearchShellMode('legacy');
+          }}
+          state={state}
+        />
+      );
+    }
     return renderLazyView(<ResearchView client={client} state={state} />);
   }
   if (activeView === 'task-detail') {

@@ -1,4 +1,4 @@
-import type { ResearchArtifact, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../../shared/types';
+import type { ResearchArtifact, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../../shared/types';
 
 export const researchStageLabels: Record<ResearchWorkflowSnapshot['currentStage'], string> = {
   discovery: '发现',
@@ -32,6 +32,13 @@ export const researchRunStatusLabels: Record<ResearchStageRun['status'], string>
   failed: '失败',
   cancelled: '已取消',
   interrupted: '已中断'
+};
+
+export const researchProjectStatusLabels: Record<ResearchProject['status'], string> = {
+  active: '进行中',
+  paused: '已暂停',
+  completed: '已完成',
+  archived: '已归档'
 };
 
 export function currentStageState(workflow: ResearchWorkflowSnapshot): ResearchWorkflowSnapshot['stages'][number] {
