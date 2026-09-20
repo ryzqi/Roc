@@ -29,6 +29,22 @@ describe('research workbench', () => {
     expect(store.adapter.getWorkflow).toHaveBeenCalledWith({ id: 'research_1' });
   });
 
+  it('loads a preferred project instead of the first one', async () => {
+    const extra = project({ id: 'research_2', title: '第二项目', currentStage: 'reading' });
+    const store = createStore({ extraProjects: [extra] });
+    store.setProjectState('research_2', {
+      workflow: workflow({ projectId: 'research_2', stage: 'reading', status: 'ready', artifactIds: [] }),
+      events: [],
+      runs: [],
+      artifacts: [],
+      indexStatus: indexStatus({ projectId: 'research_2' })
+    });
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('research_2');
+    expect(workbench.getSnapshot().project?.id).toBe('research_2');
+    expect(store.adapter.getWorkflow).toHaveBeenCalledWith({ id: 'research_2' });
+  });
+
   it('keeps instruction draft across refresh and resets it on project switch', async () => {
     const store = createStore({ extraProjects: [project({ id: 'research_2', title: '第二项目' })] });
     store.setProjectState('research_2', {

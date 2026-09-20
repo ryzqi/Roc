@@ -46,7 +46,7 @@ export type ResearchWorkbenchSnapshot = {
 export type ResearchWorkbench = {
   getSnapshot(): ResearchWorkbenchSnapshot;
   subscribe(listener: (snapshot: ResearchWorkbenchSnapshot) => void): () => void;
-  load(): Promise<void>;
+  load(preferredProjectId?: string | null): Promise<void>;
   selectProject(projectId: string): Promise<void>;
   createProject(request: { title: string; description: string; workspacePath: string | null; language?: 'zh' | 'en' }): Promise<void>;
   refresh(): Promise<void>;
@@ -157,14 +157,16 @@ export function createResearchWorkbench(
     subscribe(listener) {
       return projection.subscribe(listener);
     },
-    async load() {
+    async load(preferredProjectId) {
       const token = projection.bump();
       projection.assign({ loading: true, error: null });
       try {
         const projects = await adapter.listProjects();
         if (!projection.isCurrent(token)) return;
-        const currentId = projection.peek().project?.id;
-        const project = projects.find((item) => item.id === currentId) ?? projects[0] ?? null;
+        const currentId = preferredProjectId ?? projection.peek().project?.id;
+        const project = currentId === undefined || currentId === null
+          ? projects[0] ?? null
+          : projects.find((item) => item.id === currentId) ?? projects[0] ?? null;
         projection.assign({ projects, project, loading: false, error: null, ...(project?.id === currentId ? {} : { instruction: '' }) });
         if (project !== null) await refreshInternal(token);
       } catch (error) {
@@ -367,4 +369,3 @@ export function createResearchWorkbenchAdapter(client: RocClient): ResearchWorkb
     }
   };
 }
-

@@ -1,5 +1,6 @@
 import { BookOpen, Link2, Send, Unlink } from 'lucide-react';
 import type { ResearchBibliographyFormat, ResearchDocument, ResearchDocumentParse, ResearchLibraryExport, ResearchLibraryItem, ResearchLiterature } from '../../../shared/types';
+import { usePagedItems } from './research-list-page';
 
 export function ResearchLibraryPanel({
   bibliographyFormat,
@@ -59,6 +60,8 @@ export function ResearchLibraryPanel({
   readOnly?: boolean;
 }): React.JSX.Element {
   const writeBlocked = working || readOnly;
+  const resultPage = usePagedItems(results, query);
+  const itemPage = usePagedItems(items, `${scope}:${query}`);
   return (
     <section className="research-tool-panel" data-testid="research-library-panel">
       <div className="research-tool-heading">
@@ -102,7 +105,7 @@ export function ResearchLibraryPanel({
 
       {results.length === 0 ? null : (
         <div className="research-literature-list" data-testid="research-search-results">
-          {results.map((record) => (
+          {resultPage.visible.map((record) => (
             <article className="research-literature-row" key={record.id}>
               <div className="research-literature-source">{record.source} {record.publishedYear === null ? '' : `· ${record.publishedYear}`}</div>
               <h3>{record.title}</h3>
@@ -114,12 +117,17 @@ export function ResearchLibraryPanel({
               </div>
             </article>
           ))}
+          {resultPage.remaining === 0 ? null : (
+            <button className="action-button" data-testid="research-library-more-results" type="button" onClick={resultPage.showMore}>
+              继续加载检索结果（剩余 {resultPage.remaining}）
+            </button>
+          )}
         </div>
       )}
 
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-library-list">
-          {items.length === 0 ? <div className="research-loading">文献库为空。检索、导入 DOI 或参考文献文件后会出现在这里。</div> : items.map((item) => (
+          {items.length === 0 ? <div className="research-loading">文献库为空。检索、导入 DOI 或参考文献文件后会出现在这里。</div> : itemPage.visible.map((item) => (
             <article className={openItem?.id === item.id ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={item.id}>
               <label className="research-literature-source">
                 <input type="checkbox" data-testid={`research-library-select-${item.id}`} checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} />
@@ -141,6 +149,11 @@ export function ResearchLibraryPanel({
               </div>
             </article>
           ))}
+          {itemPage.remaining === 0 ? null : (
+            <button className="action-button" data-testid="research-library-more-items" type="button" onClick={itemPage.showMore}>
+              继续加载文献（剩余 {itemPage.remaining}）
+            </button>
+          )}
         </div>
         <aside className="research-reader" data-testid="research-reader">
           {openItem === null ? <div className="research-loading">选择一条文献阅读解析全文。</div> : (

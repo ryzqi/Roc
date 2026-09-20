@@ -1,6 +1,7 @@
 import { Play, Send, Square } from 'lucide-react';
 
 import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
+import { usePagedItems } from './research-list-page';
 
 export type ResearchExperimentEngine = ResearchExperimentExecution['request']['engine'];
 export type ResearchExperimentDraft = {
@@ -91,6 +92,7 @@ export function ResearchExperimentPanel({
   const selected = experiments.find((item) => item.id === selectedRunId) ?? null;
   const runtimeLocked = draft.engine === 'r' || draft.engine === 'julia';
   const writeBlocked = working || readOnly;
+  const experimentPage = usePagedItems(experiments, experiments.length.toString());
   return (
     <section className="research-tool-panel" data-testid="research-experiment-panel">
       <div className="research-tool-heading">
@@ -183,7 +185,7 @@ export function ResearchExperimentPanel({
         </form>
 
         <div className="research-literature-list" data-testid="research-experiment-list">
-          {experiments.length === 0 ? <div className="research-loading">还没有实验运行。填写源文件后启动。</div> : experiments.map((run) => (
+          {experiments.length === 0 ? <div className="research-loading">还没有实验运行。填写源文件后启动。</div> : experimentPage.visible.map((run) => (
             <article className={run.id === selectedRunId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={run.id}>
               <button className="research-literature-row" type="button" data-testid={`research-experiment-select-${run.id}`} onClick={() => onSelect(run.id)}>
                 <div className="research-literature-source">{statusLabels[run.status]} · {engineLabels[run.request.engine]}</div>
@@ -215,6 +217,11 @@ export function ResearchExperimentPanel({
               </div>
             </article>
           ))}
+          {experimentPage.remaining === 0 ? null : (
+            <button className="action-button" data-testid="research-experiment-more" type="button" onClick={experimentPage.showMore}>
+              继续加载实验（剩余 {experimentPage.remaining}）
+            </button>
+          )}
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { ResearchStageRun, ResearchWorkflowEvent } from '../../../shared/types';
 import { formatResearchTime, researchRunStatusLabels, researchStageLabels } from './research-workflow';
+import { usePagedItems } from './research-list-page';
 
 export type ResearchActivityFilter = 'all' | 'running' | 'failed' | 'gates';
 
@@ -19,9 +20,11 @@ export function ResearchActivityView({
   const [filter, setFilter] = useState<ResearchActivityFilter>('all');
   const visibleEvents = useMemo(() => events.filter((entry) => matchEvent(entry, filter)), [events, filter]);
   const visibleRuns = useMemo(() => runs.filter((run) => matchRun(run, filter)), [filter, runs]);
+  const eventPage = usePagedItems(visibleEvents, filter);
+  const runPage = usePagedItems(visibleRuns, filter);
   return (
     <section className="research-activity-view" data-testid="research-activity-view">
-      <div className="research-shell-banner-actions" role="tablist" aria-label="活动过滤">
+      <div className="research-shell-banner-actions" aria-label="活动过滤">
         {(['all', 'running', 'failed', 'gates'] as const).map((item) => (
           <button
             aria-pressed={filter === item}
@@ -36,14 +39,19 @@ export function ResearchActivityView({
         ))}
       </div>
       <div className="research-section-label">阶段运行</div>
-      {visibleRuns.length === 0 ? <p>没有匹配的运行。</p> : visibleRuns.map((run) => (
+      {runPage.visible.length === 0 ? <p>没有匹配的运行。</p> : runPage.visible.map((run) => (
         <div className="research-shell-activity-row" data-testid={`research-activity-run-${run.id}`} key={run.id}>
           <strong>{researchStageLabels[run.stage]} · {researchRunStatusLabels[run.status]}</strong>
           <span>{run.role}{run.error === null ? '' : ` · ${run.error}`}</span>
         </div>
       ))}
+      {runPage.remaining === 0 ? null : (
+        <button className="action-button" data-testid="research-activity-more-runs" type="button" onClick={runPage.showMore}>
+          继续加载运行（剩余 {runPage.remaining}）
+        </button>
+      )}
       <div className="research-section-label">工作流事件</div>
-      {visibleEvents.length === 0 ? <p>没有匹配的活动。</p> : visibleEvents.map((entry) => (
+      {eventPage.visible.length === 0 ? <p>没有匹配的活动。</p> : eventPage.visible.map((entry) => (
         <button
           className={entry.id === selectedEventId ? 'research-overview-event research-overview-event--active' : 'research-overview-event'}
           data-testid={`research-activity-event-${entry.id}`}
@@ -56,6 +64,11 @@ export function ResearchActivityView({
           <time>{formatResearchTime(entry.createdAt)}</time>
         </button>
       ))}
+      {eventPage.remaining === 0 ? null : (
+        <button className="action-button" data-testid="research-activity-more-events" type="button" onClick={eventPage.showMore}>
+          继续加载活动（剩余 {eventPage.remaining}）
+        </button>
+      )}
     </section>
   );
 }

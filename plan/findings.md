@@ -146,6 +146,17 @@
 - Chat 仍走 `workspacePath`；无选中研究项目时不绑定全局工作区。
 - 任务、文件、连接器、技能、记忆、诊断页显示当前项目横幅，旧页面别名保留。
 
+## 阶段 5 实现记录
+
+- URL：`?page=research&project=<id>&view=overview|stage|activity|provenance&stage=<group|tab>`；`view=service` 映射阶段页。
+- `writeResearchRoute` 叠在现有 `page/shell` 上，不覆盖全局路由。
+- 首次 `load(preferredProjectId)`；加载中不把空项目写进 URL。
+- 用户切视图/阶段 `history.pushState`；`popstate` 还原视图并按需 `selectProject`。
+- 切项目回到总览；深链接未知项目回退到列表第一项。
+- 总览同步；活动、溯源、阶段面板懒加载。
+- `<1100px` 服务区抽屉；`<800px` 项目侧栏抽屉。
+- Escape 关闭抽屉、活动栏和错误；`1/2/3` 切总览/活动/溯源。
+
 ## 现状问题清单
 
 1. 科研入口在侧栏 dock，与 Chat、任务、文件、Git、终端、MCP、Skill、记忆同级，产品主叙事不一致。

@@ -1013,14 +1013,16 @@ pre.research-reader-content {
   clip: rect(0 0 0 0);
 }
 
-@media (max-width: 900px) {
-  .research-shell-layout {
-    grid-template-columns: 1fr;
+@media (max-width: 1099px) {
+  .research-shell-layout,
+  .research-shell-layout--activity,
+  .research-shell-layout--compact {
+    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
     gap: 20px;
   }
 
-  .research-shell-layout--activity {
-    grid-template-columns: 1fr;
+  .research-shell-layout--activity .research-shell-activity {
+    grid-column: 1 / -1;
   }
 
   .research-stage-workspace {
@@ -1028,8 +1030,15 @@ pre.research-reader-content {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 799px) {
   .research-shell-banner {
     display: grid;
+  }
+
+  .research-shell-layout,
+  .research-shell-layout--activity,
+  .research-shell-layout--compact,
+  .research-shell-layout--narrow {
+    grid-template-columns: 1fr;
   }
 }

@@ -6,11 +6,11 @@
 
 ## 下一步
 
-按 `research-workbench-main-product-plan.md` 进入阶段 5：路由、性能、响应式与可访问性。
+按 `research-workbench-main-product-plan.md` 进入阶段 6：验证、灰度与清理。
 
 ## 当前阶段
 
-阶段 5：路由、性能、响应式与可访问性
+阶段 6：验证、灰度与清理
 
 ## 阶段
 
@@ -60,8 +60,8 @@
 - [x] 将 Agent 对话、任务审批、文件/Git/终端、MCP、Skill、记忆嵌入项目上下文
 - [x] 补齐科研服务目录、能力状态、权限/确认策略与失败恢复
 - [ ] 对齐已有 research plugin capability、SQLite schema、renderer adapter 与 IPC 类型
-- [ ] 建立迁移、缓存、懒加载与离线/模型未安装降级策略
-- **状态：** 进行中
+- [x] 建立迁移、缓存、懒加载与离线/模型未安装降级策略
+- **状态：** 完成
 
 ### 阶段 6：验证、迁移与发布
 

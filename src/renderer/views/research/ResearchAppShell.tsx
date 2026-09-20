@@ -1,5 +1,5 @@
-import { CircleAlert, Plus } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CircleAlert, Plus, X } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
@@ -9,10 +9,9 @@ import { buildResearchTopMeta, createResearchContext } from './research-context'
 import { createResearchSession, type ResearchSession } from './research-session';
 import { researchProjectStatusLabels, researchStageLabels } from './research-workflow';
 import type { ResearchEvidence, ResearchProvenance } from '../../../shared/types';
-import { ResearchActivityView } from './ResearchActivityView';
+import { Drawer } from '../../components/ui';
+import { useResearchLayout } from './research-layout';
 import { ResearchOverviewView } from './ResearchOverviewView';
-import { ResearchProvenanceView } from './ResearchProvenanceView';
-import { ResearchStageWorkspace } from './ResearchStageWorkspace';
 import { ResearchServicesPanel } from './ResearchServicesPanel';
 import {
   buildResearchServices,
@@ -27,6 +26,17 @@ import {
   type ResearchStageGroupId,
   type ResearchStageTab
 } from './research-stage-groups';
+import {
+  readResearchRoute,
+  researchRouteFromState,
+  sameResearchRoute,
+  writeResearchRoute,
+  type ResearchCanvasView
+} from './research-route';
+
+const ResearchActivityView = lazy(() => import('./ResearchActivityView').then((module) => ({ default: module.ResearchActivityView })));
+const ResearchProvenanceView = lazy(() => import('./ResearchProvenanceView').then((module) => ({ default: module.ResearchProvenanceView })));
+const ResearchStageWorkspace = lazy(() => import('./ResearchStageWorkspace').then((module) => ({ default: module.ResearchStageWorkspace })));
 
 export function ResearchAppShell({
   client,
@@ -60,18 +70,26 @@ export function ResearchAppShell({
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [projectQuery, setProjectQuery] = useState('');
   const [activityOpen, setActivityOpen] = useState(false);
-  const [canvasView, setCanvasView] = useState<'overview' | 'activity' | 'provenance' | 'stage'>('overview');
-  const [stageGroup, setStageGroup] = useState<ResearchStageGroupId>('discover');
-  const [stageTab, setStageTab] = useState<ResearchStageTab>('library');
+  const initialRoute = readResearchRoute();
+  const [canvasView, setCanvasView] = useState<ResearchCanvasView>(initialRoute.view);
+  const [stageGroup, setStageGroup] = useState<ResearchStageGroupId>(initialRoute.stageGroup);
+  const [stageTab, setStageTab] = useState<ResearchStageTab>(initialRoute.stageTab);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<ResearchProvenance[]>([]);
   const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
   const [provenanceError, setProvenanceError] = useState<string | null>(null);
+  const skipProjectResetRef = useRef(false);
+  const routeWriteModeRef = useRef<'replace' | 'push'>('replace');
+  const previousProjectIdRef = useRef<string | null>(null);
+  const initialProjectIdRef = useRef(initialRoute.projectId);
+  const { compact, narrow } = useResearchLayout();
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
   useEffect(() => {
-    void workbench.load();
+    void workbench.load(initialProjectIdRef.current);
   }, [workbench]);
   useEffect(() => {
     let cancelled = false;
@@ -127,18 +145,63 @@ export function ResearchAppShell({
   }, [context.projectId, session]);
 
   useEffect(() => {
+    const previousProjectId = previousProjectIdRef.current;
+    previousProjectIdRef.current = context.projectId;
+    if (skipProjectResetRef.current) {
+      skipProjectResetRef.current = false;
+      return;
+    }
+    if (previousProjectId === null || context.projectId === null || previousProjectId === context.projectId) {
+      return;
+    }
     const nextGroup = stageGroupForStage(snapshot.project?.currentStage ?? null);
     const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === nextGroup);
     setCanvasView('overview');
+    setStageGroup(nextGroup);
+    setStageTab(group?.tabs[0]?.id ?? 'library');
     setActivityOpen(false);
     setSelectedEventId(null);
     setSelectedArtifactId(null);
     setProvenance([]);
     setEvidence([]);
     setProvenanceError(null);
-    setStageGroup(nextGroup);
-    setStageTab(group?.tabs[0]?.id ?? 'library');
   }, [context.projectId]);
+
+  useEffect(() => {
+    const route = researchRouteFromState({
+      projectId: context.projectId,
+      view: canvasView,
+      stageGroup,
+      stageTab
+    });
+    if (sameResearchRoute(route, readResearchRoute())) {
+      return;
+    }
+    if (snapshot.loading && context.projectId === null && initialProjectIdRef.current !== null) {
+      return;
+    }
+    writeResearchRoute(route, routeWriteModeRef.current);
+    routeWriteModeRef.current = 'push';
+  }, [canvasView, context.projectId, snapshot.loading, stageGroup, stageTab]);
+
+  useEffect(() => {
+    function onPopState(): void {
+      const route = readResearchRoute();
+      routeWriteModeRef.current = 'replace';
+      setCanvasView(route.view);
+      setStageGroup(route.stageGroup);
+      setStageTab(route.stageTab);
+      setActivityOpen(route.view === 'activity');
+      if (route.projectId !== context.projectId) {
+        skipProjectResetRef.current = true;
+      }
+      if (route.projectId !== null && route.projectId !== context.projectId) {
+        void workbench.selectProject(route.projectId);
+      }
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [context.projectId, workbench]);
 
   useEffect(() => {
     const projectId = context.projectId;
@@ -171,6 +234,127 @@ export function ResearchAppShell({
     };
   }, [canvasView, client, context.projectId]);
 
+  useEffect(() => {
+    if (!narrow) {
+      setProjectsOpen(false);
+    }
+  }, [narrow]);
+
+  useEffect(() => {
+    if (!compact) {
+      setServicesOpen(false);
+    }
+  }, [compact]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) {
+          if (event.key !== 'Escape') {
+            return;
+          }
+        }
+      }
+      if (event.key === 'Escape') {
+        if (projectsOpen) {
+          event.preventDefault();
+          setProjectsOpen(false);
+          return;
+        }
+        if (servicesOpen) {
+          event.preventDefault();
+          setServicesOpen(false);
+          return;
+        }
+        if (activityOpen) {
+          event.preventDefault();
+          setActivityOpen(false);
+          return;
+        }
+        if (snapshot.error !== null) {
+          event.preventDefault();
+          workbench.clearError();
+        }
+        return;
+      }
+      if (shellState !== 'project') {
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        applyRoute({ view: 'overview' });
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        applyRoute({ view: 'activity' });
+        setActivityOpen(true);
+      }
+      if (event.key === '3') {
+        event.preventDefault();
+        applyRoute({ view: 'provenance' });
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activityOpen, projectsOpen, servicesOpen, shellState, snapshot.error, workbench]);
+
+  function applyRoute(route: {
+    view?: ResearchCanvasView;
+    stageGroup?: ResearchStageGroupId;
+    stageTab?: ResearchStageTab;
+  }): void {
+    routeWriteModeRef.current = 'push';
+    if (route.view !== undefined) {
+      setCanvasView(route.view);
+    }
+    if (route.stageGroup !== undefined) {
+      setStageGroup(route.stageGroup);
+    }
+    if (route.stageTab !== undefined) {
+      setStageTab(route.stageTab);
+    }
+  }
+
+  function selectListedProject(projectId: string): void {
+    routeWriteModeRef.current = 'push';
+    skipProjectResetRef.current = false;
+    setProjectsOpen(false);
+    void workbench.selectProject(projectId);
+  }
+
+  function renderProjectList(): React.JSX.Element {
+    return (
+      <>
+        <div className="research-section-label">项目</div>
+        <label className="research-shell-search">
+          搜索项目
+          <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
+        </label>
+        {visibleProjects.map((project) => (
+          <button
+            aria-current={project.id === context.projectId ? 'true' : undefined}
+            className={project.id === context.projectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
+            key={project.id}
+            data-testid={`research-shell-project-${project.id}`}
+            type="button"
+            onClick={() => selectListedProject(project.id)}
+          >
+            <span className="research-project-row-title">{project.title}</span>
+            <span className="research-project-row-meta">
+              {researchStageLabels[project.currentStage]} · {researchProjectStatusLabels[project.status]}
+            </span>
+          </button>
+        ))}
+        {visibleProjects.length === 0 ? <div className="research-shell-search-empty">没有匹配的项目</div> : null}
+      </>
+    );
+  }
+
   async function createProject(): Promise<void> {
     await workbench.createProject({
       title,
@@ -195,18 +379,16 @@ export function ResearchAppShell({
     const artifactId = payload.artifactId;
     if (typeof artifactId === 'string') {
       setSelectedArtifactId(artifactId);
-      setCanvasView('provenance');
+      applyRoute({ view: 'provenance' });
       return;
     }
-    setCanvasView('activity');
+    applyRoute({ view: 'activity' });
   }
 
   function openStageGroup(groupId: ResearchStageGroupId): void {
     const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === groupId);
     const nextTab = group?.tabs[0]?.id ?? 'library';
-    setStageGroup(groupId);
-    setStageTab(nextTab);
-    setCanvasView('stage');
+    applyRoute({ view: 'stage', stageGroup: groupId, stageTab: nextTab });
   }
 
   async function downloadModels(): Promise<void> {
@@ -238,16 +420,26 @@ export function ResearchAppShell({
               研究助手
             </button>
           )}
+          {shellState === 'project' && narrow ? (
+            <button aria-expanded={projectsOpen} className="action-button" data-testid="research-shell-projects-toggle" type="button" onClick={() => setProjectsOpen(true)}>
+              项目
+            </button>
+          ) : null}
+          {shellState === 'project' && compact ? (
+            <button aria-expanded={servicesOpen} className="action-button" data-testid="research-shell-services-toggle" type="button" onClick={() => setServicesOpen(true)}>
+              科研服务
+            </button>
+          ) : null}
           {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
+            <button aria-pressed={activityOpen} className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
               {activityOpen ? '关闭活动' : '活动与运行'}
             </button>
           ) : null}
           {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => setCanvasView('overview')}>项目总览</button>
+            <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => applyRoute({ view: 'overview' })}>项目总览</button>
           ) : null}
           {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => setCanvasView('provenance')}>溯源</button>
+            <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => applyRoute({ view: 'provenance' })}>溯源</button>
           ) : null}
           {shellState === 'project' ? (
             <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
@@ -262,6 +454,9 @@ export function ResearchAppShell({
         <div className="research-alert" role="alert">
           <CircleAlert aria-hidden="true" size={16} />
           <span>{snapshot.error}</span>
+          <button aria-label="关闭错误" className="action-button" type="button" onClick={() => workbench.clearError()}>
+            <X aria-hidden="true" size={15} />
+          </button>
         </div>
       )}
 
@@ -304,29 +499,20 @@ export function ResearchAppShell({
       ) : null}
 
       {shellState === 'project' && context.project !== null ? (
-        <div className={activityOpen ? 'research-shell-layout research-shell-layout--activity' : 'research-shell-layout'} data-testid="research-shell-project">
-          <aside className="research-projects" aria-label="最近项目">
-            <div className="research-section-label">项目</div>
-            <label className="research-shell-search">
-              搜索项目
-              <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
-            </label>
-            {visibleProjects.map((project) => (
-              <button
-                className={project.id === context.projectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
-                key={project.id}
-                data-testid={`research-shell-project-${project.id}`}
-                type="button"
-                onClick={() => void workbench.selectProject(project.id)}
-              >
-                <span className="research-project-row-title">{project.title}</span>
-                <span className="research-project-row-meta">
-                  {researchStageLabels[project.currentStage]} · {researchProjectStatusLabels[project.status]}
-                </span>
-              </button>
-            ))}
-            {visibleProjects.length === 0 ? <div className="research-shell-search-empty">没有匹配的项目</div> : null}
-          </aside>
+        <div
+          className={[
+            'research-shell-layout',
+            activityOpen ? 'research-shell-layout--activity' : '',
+            compact ? 'research-shell-layout--compact' : '',
+            narrow ? 'research-shell-layout--narrow' : ''
+          ].filter((value) => value.length > 0).join(' ')}
+          data-testid="research-shell-project"
+        >
+          {narrow ? null : (
+            <aside className="research-projects" aria-label="最近项目">
+              {renderProjectList()}
+            </aside>
+          )}
           <main className="research-shell-canvas">
             {context.workflow === null ? null : (
               <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
@@ -343,7 +529,7 @@ export function ResearchAppShell({
                       onClick={() => openStageGroup(group.id)}
                     >
                       <strong>{group.label}</strong>
-                      <em>{current ? '当前' : '查看'}</em>
+                      <em>{current ? '当前阶段' : '查看阶段'}</em>
                     </button>
                   );
                 })}
@@ -357,12 +543,12 @@ export function ResearchAppShell({
                 onApprove={() => void workbench.transition('approve')}
                 onControlIndex={(action) => void workbench.controlIndex(action)}
                 onOpenActivity={() => {
-                  setCanvasView('activity');
+                  applyRoute({ view: 'activity' });
                   setActivityOpen(true);
                 }}
                 onOpenProvenance={(artifactId) => {
                   setSelectedArtifactId(artifactId);
-                  setCanvasView('provenance');
+                  applyRoute({ view: 'provenance' });
                 }}
                 onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
                 onRetryRun={() => void workbench.retryRun()}
@@ -373,31 +559,35 @@ export function ResearchAppShell({
                 workflow={context.workflow}
                 working={snapshot.working}
               />
-            ) : canvasView === 'activity' ? (
-              <ResearchActivityView
-                events={snapshot.events}
-                onSelectEvent={openEvent}
-                runs={snapshot.runs}
-                selectedEventId={selectedEventId}
-              />
-            ) : canvasView === 'provenance' ? (
-              <ResearchProvenanceView
-                artifacts={snapshot.artifacts}
-                evidence={evidence}
-                onSelectArtifact={setSelectedArtifactId}
-                onBackToOverview={() => setCanvasView('overview')}
-                provenance={provenance}
-                runs={snapshot.runs}
-                selectedArtifactId={selectedArtifactId}
-              />
             ) : (
-              <ResearchStageWorkspace
-                groupId={stageGroup}
-                onTabChange={setStageTab}
-                session={session}
-                state={state}
-                tab={stageTab}
-              />
+              <Suspense fallback={<div className="research-loading">正在加载视图…</div>}>
+                {canvasView === 'activity' ? (
+                  <ResearchActivityView
+                    events={snapshot.events}
+                    onSelectEvent={openEvent}
+                    runs={snapshot.runs}
+                    selectedEventId={selectedEventId}
+                  />
+                ) : canvasView === 'provenance' ? (
+                  <ResearchProvenanceView
+                    artifacts={snapshot.artifacts}
+                    evidence={evidence}
+                    onSelectArtifact={setSelectedArtifactId}
+                    onBackToOverview={() => applyRoute({ view: 'overview' })}
+                    provenance={provenance}
+                    runs={snapshot.runs}
+                    selectedArtifactId={selectedArtifactId}
+                  />
+                ) : (
+                  <ResearchStageWorkspace
+                    groupId={stageGroup}
+                    onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
+                    session={session}
+                    state={state}
+                    tab={stageTab}
+                  />
+                )}
+              </Suspense>
             )}
             {canvasView === 'provenance' && provenanceError !== null ? (
               <div className="research-alert" role="alert" data-testid="research-provenance-error">{provenanceError}</div>
@@ -405,7 +595,7 @@ export function ResearchAppShell({
             {state.workspace?.path === undefined ? null : (
               <p className="research-shell-workspace" data-testid="research-shell-workspace">计算目录：{state.workspace.path}</p>
             )}
-            {onOpenService === undefined ? null : (
+            {onOpenService === undefined || compact ? null : (
               <ResearchServicesPanel onOpenService={onOpenService} services={services} />
             )}
           </main>
@@ -417,13 +607,27 @@ export function ResearchAppShell({
                   {snapshot.events[0].message}
                 </button>
               )}
-              <button className="action-button" data-testid="research-shell-open-activity" type="button" onClick={() => setCanvasView('activity')}>
+              <button className="action-button" data-testid="research-shell-open-activity" type="button" onClick={() => applyRoute({ view: 'activity' })}>
                 打开活动详情
               </button>
             </aside>
           ) : null}
         </div>
       ) : null}
+      <Drawer onClose={() => setProjectsOpen(false)} open={narrow && projectsOpen} title="最近项目">
+        {renderProjectList()}
+      </Drawer>
+      <Drawer onClose={() => setServicesOpen(false)} open={compact && servicesOpen} title="科研服务">
+        {onOpenService === undefined ? null : (
+          <ResearchServicesPanel
+            onOpenService={(service) => {
+              setServicesOpen(false);
+              onOpenService(service);
+            }}
+            services={services}
+          />
+        )}
+      </Drawer>
     </section>
   );
 }

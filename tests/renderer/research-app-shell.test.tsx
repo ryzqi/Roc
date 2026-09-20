@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RESEARCH_SHELL_STORAGE_KEY } from '../../src/renderer/app/view-routing';
 import { ResearchAppShell } from '../../src/renderer/views/research/ResearchAppShell';
 import type { ResearchIndexStatus, ResearchProject, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
-import { createLoadedState } from './view-test-helpers';
+import { createLoadedState, waitUntil } from './view-test-helpers';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -18,6 +18,7 @@ describe('ResearchAppShell', () => {
     root = createRoot(container);
     window.localStorage.clear();
     window.history.replaceState({}, '', '/?page=research&shell=research');
+    stubLayoutMedia(false, false);
   });
 
   afterEach(async () => {
@@ -32,6 +33,7 @@ describe('ResearchAppShell', () => {
     await renderShell(api);
     expect(text('research-shell-empty')).toContain('创建或导入研究项目');
     expect(document.querySelector('[data-testid="research-app-shell"]')?.getAttribute('data-shell-state')).toBe('empty');
+    expect(new URL(window.location.href).searchParams.get('project')).toBeNull();
   });
 
   it('shows the selected project context', async () => {
@@ -50,12 +52,12 @@ describe('ResearchAppShell', () => {
     expect(text('research-overview-next')).toContain('审核当前产物');
     expect(text('research-overview-progress')).toContain('写作');
     await click('research-overview-event');
-    expect(document.querySelector('[data-testid="research-activity-view"]')).not.toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
     await click('research-activity-filter-gates');
     expect(document.querySelector('[data-testid="research-activity-event-event_approval_requested"]')).not.toBeNull();
     await click('research-shell-provenance');
     await act(async () => { await Promise.resolve(); });
-    expect(document.querySelector('[data-testid="research-provenance-view"]')).not.toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-provenance-view"]') !== null);
     expect(text('research-provenance-missing')).toContain('未建立来源');
     expect(api.listProvenance).toHaveBeenCalledWith({ projectId: 'research_1' });
     await click('research-provenance-back');
@@ -81,19 +83,20 @@ describe('ResearchAppShell', () => {
     const api = createResearchApi();
     await renderShell(api);
     await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
     expect(text('research-stage-context-status')).toContain('当前阶段：写作');
-    expect(document.querySelector('[data-testid="research-manuscript-panel"]')).not.toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-manuscript-panel"]') !== null);
     expect(document.querySelector('[data-testid="research-stage-readonly"]')).toBeNull();
     expect(document.querySelector('[data-testid="research-manuscript-create"]')?.hasAttribute('disabled')).toBe(false);
     await click('research-stage-group-discover');
     expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('discover');
     expect(text('research-stage-readonly')).toContain('仅可查看');
-    expect(document.querySelector('[data-testid="research-library-panel"]')).not.toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-library-panel"]') !== null);
     expect(document.querySelector('[data-testid="research-library-import-file"]')?.hasAttribute('disabled')).toBe(true);
     expect(document.querySelector('[data-testid="research-stage-rail"]')).not.toBeNull();
     await click('research-shell-settings');
-    expect(document.querySelector('[data-testid="research-embedding-panel"]')).not.toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-embedding-panel"]') !== null);
   });
 
   it('shows a provenance load error when the source list fails', async () => {
@@ -144,7 +147,7 @@ describe('ResearchAppShell', () => {
     }));
     await renderShell(api);
     await click('research-overview-open-stage');
-    expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     await click('research-shell-project-research_2');
     expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
     expect(text('research-shell-project-title')).toBe('第二项目');
@@ -160,6 +163,73 @@ describe('ResearchAppShell', () => {
     expect(onFallbackLegacy).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY)).toBeNull();
     expect(new URL(window.location.href).searchParams.get('shell')).toBe('legacy');
+  });
+
+  it('restores a deep-linked project stage and keeps page/shell', async () => {
+    const extra: ResearchProject = {
+      id: 'research_2', title: '第二项目', description: '另一个问题。', workspacePath: null,
+      status: 'paused', language: 'zh', origin: null, currentStage: 'reading',
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const first: ResearchProject = {
+      id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: null,
+      status: 'active', language: 'zh', origin: null, currentStage: 'writing',
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    const api = createResearchApi({ projects: [first, extra] });
+    api.getWorkflow.mockImplementation(async (request: { id: string }) => ({
+      ok: true,
+      data: request.id === 'research_2' ? workflow({ stage: 'reading', status: 'ready', artifactIds: [] }) : workflow()
+    }));
+    window.history.replaceState({}, '', '/?page=research&shell=research&project=research_2&view=stage&stage=knowledge');
+    await renderShell(api);
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
+    expect(text('research-shell-project-research_2')).toContain('第二项目');
+    expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('discover');
+    expect(document.querySelector('[data-testid="research-library-panel"]')).toBeNull();
+    await waitUntil(() => document.querySelector('[data-testid="research-knowledge-panel"]') !== null);
+    const url = new URL(window.location.href);
+    expect(url.searchParams.get('page')).toBe('research');
+    expect(url.searchParams.get('shell')).toBe('research');
+    expect(url.searchParams.get('project')).toBe('research_2');
+    expect(url.searchParams.get('view')).toBe('stage');
+    expect(url.searchParams.get('stage')).toBe('knowledge');
+  });
+
+  it('falls back to the first project when the deep-linked project is missing', async () => {
+    const api = createResearchApi();
+    window.history.replaceState({}, '', '/?page=research&shell=research&project=missing&view=activity');
+    await renderShell(api);
+    expect(text('research-shell-project-research_1')).toContain('证据图');
+    await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
+    expect(new URL(window.location.href).searchParams.get('project')).toBe('research_1');
+    expect(new URL(window.location.href).searchParams.get('view')).toBe('activity');
+  });
+
+  it('pushes stage navigation and restores overview on back', async () => {
+    const api = createResearchApi();
+    await renderShell(api);
+    await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
+    expect(new URL(window.location.href).searchParams.get('view')).toBe('stage');
+    expect(new URL(window.location.href).searchParams.get('stage')).toBe('write');
+    await act(async () => { window.history.back(); });
+    await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
+    expect(new URL(window.location.href).searchParams.get('view')).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
+    expect(new URL(window.location.href).searchParams.get('shell')).toBe('research');
+  });
+
+  it('moves services into a drawer below 1100px', async () => {
+    stubLayoutMedia(true, false);
+    const api = createResearchApi();
+    const onOpenService = vi.fn();
+    await renderShell(api, undefined, undefined, onOpenService);
+    expect(document.querySelector('[data-testid="research-services"]')).toBeNull();
+    await click('research-shell-services-toggle');
+    expect(text('research-services')).toContain('研究助手');
+    await click('research-service-assistant');
+    expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant' }));
   });
 });
 
@@ -256,6 +326,18 @@ async function renderShell(
   await act(async () => { await Promise.resolve(); });
 }
 
+function stubLayoutMedia(compact: boolean, narrow: boolean): void {
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes('1099') ? compact : query.includes('799') ? narrow : false,
+    media: query,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() { return false; }
+  })) as typeof window.matchMedia;
+}
 function text(testId: string): string {
   const node = document.querySelector(`[data-testid="${testId}"]`);
   expect(node).not.toBeNull();

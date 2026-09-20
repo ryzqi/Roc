@@ -1,5 +1,6 @@
 import type { ResearchArtifact, ResearchEvidence, ResearchProvenance, ResearchStageRun } from '../../../shared/types';
 import { artifactStatusLabel, formatResearchTime, researchRunStatusLabels, researchStageLabels } from './research-workflow';
+import { usePagedItems } from './research-list-page';
 
 const SOURCE_LABELS: Record<ResearchProvenance['sourceType'], string> = {
   literature: '文献',
@@ -34,11 +35,12 @@ export function ResearchProvenanceView({
   const relatedRuns = selected === null
     ? []
     : runs.filter((run) => run.outputArtifactIds.includes(selected.id) || run.inputArtifactIds.includes(selected.id) || links.some((entry) => entry.sourceId === run.id));
+  const artifactPage = usePagedItems(artifacts, artifacts.length.toString());
   return (
     <section className="research-provenance-view" data-testid="research-provenance-view">
       <aside className="research-projects" aria-label="产物">
         <div className="research-section-label">产物</div>
-        {artifacts.map((artifact) => (
+        {artifactPage.visible.map((artifact) => (
           <button
             className={artifact.id === selected?.id ? 'research-project-row research-project-row--active' : 'research-project-row'}
             key={artifact.id}
@@ -49,6 +51,11 @@ export function ResearchProvenanceView({
             <span className="research-project-row-meta">{researchStageLabels[artifact.stage]} · {artifactStatusLabel(artifact.status)}</span>
           </button>
         ))}
+        {artifactPage.remaining === 0 ? null : (
+          <button className="action-button" data-testid="research-provenance-more" type="button" onClick={artifactPage.showMore}>
+            继续加载产物（剩余 {artifactPage.remaining}）
+          </button>
+        )}
       </aside>
       {selected === null ? <p>当前项目还没有产物。</p> : (
         <div className="research-shell-canvas">

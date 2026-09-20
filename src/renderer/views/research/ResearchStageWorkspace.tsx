@@ -1,16 +1,7 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
 import type { ResearchSession } from './research-session';
-import { ResearchEditorPanel } from './ResearchEditorPanel';
-import { ResearchEmbeddingPanel } from './ResearchEmbeddingPanel';
-import { ResearchExperimentPanel } from './ResearchExperimentPanel';
-import { ResearchIdeaPanel } from './ResearchIdeaPanel';
-import { ResearchKnowledgePanel } from './ResearchKnowledgePanel';
-import { ResearchLibraryPanel } from './ResearchLibraryPanel';
-import { ResearchManuscriptPanel } from './ResearchManuscriptPanel';
-import { ResearchPolicyPanel } from './ResearchPolicyPanel';
-import { ResearchProductionPanel } from './ResearchProductionPanel';
 import {
   RESEARCH_STAGE_GROUPS,
   isCurrentStageGroup,
@@ -26,6 +17,16 @@ import {
   researchStageLabels,
   researchStageStatusLabels
 } from './research-workflow';
+
+const ResearchEditorPanel = lazy(() => import('./ResearchEditorPanel').then((module) => ({ default: module.ResearchEditorPanel })));
+const ResearchEmbeddingPanel = lazy(() => import('./ResearchEmbeddingPanel').then((module) => ({ default: module.ResearchEmbeddingPanel })));
+const ResearchExperimentPanel = lazy(() => import('./ResearchExperimentPanel').then((module) => ({ default: module.ResearchExperimentPanel })));
+const ResearchIdeaPanel = lazy(() => import('./ResearchIdeaPanel').then((module) => ({ default: module.ResearchIdeaPanel })));
+const ResearchKnowledgePanel = lazy(() => import('./ResearchKnowledgePanel').then((module) => ({ default: module.ResearchKnowledgePanel })));
+const ResearchLibraryPanel = lazy(() => import('./ResearchLibraryPanel').then((module) => ({ default: module.ResearchLibraryPanel })));
+const ResearchManuscriptPanel = lazy(() => import('./ResearchManuscriptPanel').then((module) => ({ default: module.ResearchManuscriptPanel })));
+const ResearchPolicyPanel = lazy(() => import('./ResearchPolicyPanel').then((module) => ({ default: module.ResearchPolicyPanel })));
+const ResearchProductionPanel = lazy(() => import('./ResearchProductionPanel').then((module) => ({ default: module.ResearchProductionPanel })));
 
 export function ResearchStageWorkspace({
   groupId,
@@ -116,6 +117,7 @@ export function ResearchStageWorkspace({
         <nav aria-label={group.label} className="research-tabs">
           {group.tabs.map((item) => (
             <button
+              aria-current={tab === item.id ? 'page' : undefined}
               className={tab === item.id ? 'research-tab research-tab--active' : 'research-tab'}
               data-testid={`research-stage-tab-${item.id}`}
               key={item.id}
@@ -156,6 +158,7 @@ export function ResearchStageWorkspace({
             ) : null}
           </div>
         ) : null}
+        <Suspense fallback={<div className="research-loading">正在加载阶段面板…</div>}>
         {tab === 'library' ? (
           <ResearchLibraryPanel
             bibliographyFormat={librarySnapshot.bibliographyFormat}
@@ -316,6 +319,7 @@ export function ResearchStageWorkspace({
             onSave={() => void session.knowledge.saveEmbeddingConfig()}
           />
         ) : null}
+        </Suspense>
       </div>
       <aside className="research-stage-rail" data-testid="research-stage-rail">
         <div className="research-section-label">证据</div>
