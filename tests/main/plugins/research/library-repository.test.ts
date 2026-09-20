@@ -171,6 +171,25 @@ describe('research library repository', () => {
     expect(repository.library.get(item.id)).toEqual(edited);
   });
 
+  it('indexes literature ingest and document parses through the same knowledge write', () => {
+    const item = repository.library.import([libraryEntry({ abstract: 'Measured abstract 42.' })], null).items[0];
+    const literature = repository.knowledge.knowledgeDocument(`library:${item.id}`);
+    expect(literature).toMatchObject({ sourceType: 'literature', sourceId: item.id });
+    repository.knowledge.upsertFromSource({
+      id: 'document:parse-file', projectId: null, sourceType: 'file', sourceId: item.id,
+      title: `${item.metadata.title} — paper.pdf`, content: 'Parsed full text 42.',
+      chunks: [{ content: 'Parsed full text 42.', locator: 'page 1' }], embeddingPolicy: 'none'
+    });
+    const parsed = repository.knowledge.knowledgeDocument('document:parse-file');
+    expect(parsed.sourceType).toBe('file');
+    expect(parsed.sourceType).not.toBe('literature');
+    expect(() => repository.knowledge.upsertFromSource({
+      id: 'selected-blocked', projectId: null, sourceType: 'file', sourceId: item.id,
+      title: 'Needs vectors', content: 'Needs vectors.', chunks: [{ content: 'Needs vectors.', locator: 'line 1' }],
+      embeddingPolicy: 'selected'
+    })).toThrow('research_knowledge_selected_requires_embedding_service');
+  });
+
   it('does not reassign existing knowledge material between project and global scopes', () => {
     const request = { id: 'project-document', projectId, sourceType: 'file' as const, sourceId: 'data.csv', title: 'Data', content: '42',
       chunks: [{ content: '42', locator: 'row 1' }], embeddingConfigId: null };

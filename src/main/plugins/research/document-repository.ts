@@ -136,8 +136,8 @@ export class ResearchDocumentRepository {
 
   private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent): void {
     const chunks = data.content.blocks.filter((block) => block.text.trim()).map((block) => ({ content: block.text, locator: block.locator }));
-    this.research.knowledge.upsertKnowledgeDocument({ id: `document:${parseId}`, projectId: null, sourceType: 'literature', sourceId: document.libraryItemId,
-      title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingConfigId: null });
+    this.research.knowledge.upsertFromSource({ id: `document:${parseId}`, projectId: null, sourceType: 'file', sourceId: document.libraryItemId,
+      title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' });
   }
 }
 

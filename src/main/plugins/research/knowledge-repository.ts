@@ -13,6 +13,18 @@ import type {
 } from '../../../shared/types';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
 
+export type KnowledgeEmbeddingPolicy = 'selected' | 'none';
+export type KnowledgeSourceWrite = {
+  id: string;
+  projectId: string | null;
+  sourceType: 'literature' | 'file' | 'note' | 'experiment';
+  sourceId: string;
+  title: string;
+  content: string;
+  chunks: Array<{ content: string; locator: string | null }>;
+  embeddingPolicy: KnowledgeEmbeddingPolicy;
+};
+
 type Clock = () => string;
 
 export type EmbeddingConfigRow = {
@@ -82,6 +94,13 @@ export class ResearchKnowledgeRepository {
          FROM research_embedding_configs ORDER BY updated_at DESC`
       )
       .all() as EmbeddingConfigRow[];
+  }
+
+  upsertFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}): ResearchKnowledgeDocument {
+    if (input.embeddingPolicy === 'selected') throw new Error('research_knowledge_selected_requires_embedding_service');
+    if (input.embeddingPolicy !== 'none') throw new Error('research_knowledge_embedding_policy_invalid');
+    const { embeddingPolicy: _policy, ...fields } = input;
+    return this.upsertKnowledgeDocument({ ...fields, embeddingConfigId: null }, sourceMetadata);
   }
 
   upsertKnowledgeDocument(request: ResearchKnowledgeDocumentUpsertRequest, sourceMetadata: Record<string, unknown> = {}): ResearchKnowledgeDocument {

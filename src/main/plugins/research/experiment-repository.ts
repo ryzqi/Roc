@@ -106,7 +106,7 @@ export class ResearchExperimentRepository {
       if (next.status === 'completed') {
         this.requireActive(projectId, id);
         if (run.status !== 'running' || run.environment === null || run.inputHash === null || next.exitCode !== 0 || next.error !== null) throw new Error('research_experiment_result_invalid');
-        for (const { metadata, ...document } of documents) this.research.knowledge.upsertKnowledgeDocument({ ...document, projectId, sourceType: 'experiment', sourceId: id, embeddingConfigId: null }, metadata);
+        for (const { metadata, ...document } of documents) this.research.knowledge.upsertFromSource({ ...document, projectId, sourceType: 'experiment', sourceId: id, embeddingPolicy: 'none' }, metadata);
       }
       const value = { ...run, ...next, endedAt: this.now() };
       this.save(value);

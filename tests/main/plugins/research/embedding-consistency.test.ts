@@ -7,6 +7,7 @@ import { createResearchPlugin } from '../../../../src/main/plugins/research';
 import type { EmbeddingFetch } from '../../../../src/main/plugins/research/embedding-client';
 import type { ResearchKnowledgeSearchResult } from '../../../../src/shared/types';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
+import { ResearchEmbeddingService } from '../../../../src/main/plugins/research/embedding-service';
 import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 
 let db: Database.Database;
@@ -125,6 +126,26 @@ describe('research embedding consistency', () => {
     expect(count).toBe(2);
     expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_embeddings').get()).toEqual({ count: 0 });
     expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_chunks').get()).toEqual({ count: 40 });
+  });
+
+  it('embeds source writes when the knowledge policy is selected', async () => {
+    const repository = new ResearchRepository(db);
+    const embeddings = new ResearchEmbeddingService(repository.knowledge, { embed: async () => [[1, 0, 0]] } as never, {
+      secrets: { get: (key) => secrets.get(key) ?? null, set() {}, clear() {} },
+      logger: { info() {}, warn() {}, error() {} }
+    });
+    await embeddings.upsertFromSource({
+      id: 'selected-source', projectId: null, sourceType: 'file', sourceId: 'selected.md',
+      title: 'Selected source', content: 'Selected source', chunks: [{ content: 'Selected source', locator: 'line 1' }],
+      embeddingPolicy: 'selected'
+    });
+    expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_embeddings WHERE chunk_id = ?').get('selected-source:chunk:0')).toEqual({ count: 1 });
+    repository.knowledge.upsertFromSource({
+      id: 'keyword-source', projectId: null, sourceType: 'file', sourceId: 'keyword.md',
+      title: 'Keyword source', content: 'Keyword source', chunks: [{ content: 'Keyword source', locator: 'line 1' }],
+      embeddingPolicy: 'none'
+    });
+    expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_embeddings WHERE chunk_id = ?').get('keyword-source:chunk:0')).toEqual({ count: 0 });
   });
 
   it('rejects an explicitly selected missing configuration before mutating knowledge data', async () => {

@@ -5,7 +5,7 @@ import type { RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
 import type { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { vectorToBlob } from './embedding-vectors';
-import type { EmbeddingConfigRow, ResearchKnowledgeRepository } from './knowledge-repository';
+import type { EmbeddingConfigRow, KnowledgeSourceWrite, ResearchKnowledgeRepository } from './knowledge-repository';
 
 type EmbeddingTask = { configId: string | null; controller: AbortController; promise: Promise<unknown> };
 export type ResearchEmbeddingReceipt = { configId: string; revision: number } | null;
@@ -46,6 +46,18 @@ export class ResearchEmbeddingService {
       catch { this.context.logger.warn('Unused research embedding credential could not be removed.', { configId: request.id }); }
     }
     return this.config(saved);
+  }
+
+  async upsertFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}, signal?: AbortSignal): Promise<ResearchKnowledgeDocument> {
+    this.requireOpen();
+    const document = this.knowledge.upsertKnowledgeDocument({
+      id: input.id, projectId: input.projectId, sourceType: input.sourceType, sourceId: input.sourceId,
+      title: input.title, content: input.content, chunks: input.chunks, embeddingConfigId: null
+    }, sourceMetadata);
+    if (input.embeddingPolicy === 'none') return document;
+    if (input.embeddingPolicy !== 'selected') throw new Error('research_knowledge_embedding_policy_invalid');
+    await this.embedDocument(document.id, null, signal);
+    return document;
   }
 
   async upsertDocument(request: ResearchKnowledgeDocumentUpsertRequest, signal?: AbortSignal): Promise<ResearchKnowledgeDocument> {
