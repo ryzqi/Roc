@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy } from 'react';
 import type { ChatRunState } from '../chat-run-state';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
@@ -8,7 +8,6 @@ import { ChatFeature } from '../features/chat';
 import type { TaskBoardUiState } from '../features/tasks';
 import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
-import { readResearchShellMode } from '../app/view-routing';
 import type { ResearchServiceContext, ResearchServiceEntry } from './research/research-services';
 import { ResearchServiceContextBanner } from './research/ResearchServiceContextBanner';
 
@@ -28,7 +27,6 @@ const TasksBoardFeature = lazy(() =>
 const WorkspaceFeature = lazy(() =>
   import('../features/workspace').then((module) => ({ default: module.WorkspaceFeature }))
 );
-const ResearchView = lazy(() => import('./research/ResearchView').then((module) => ({ default: module.ResearchView })));
 const ResearchAppShell = lazy(() => import('./research/ResearchAppShell').then((module) => ({ default: module.ResearchAppShell })));
 
 export function ViewContent({
@@ -88,8 +86,6 @@ export function ViewContent({
   onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
   researchServiceContext?: ResearchServiceContext | null;
 }): React.JSX.Element {
-  const [researchShellMode, setResearchShellMode] = useState(readResearchShellMode);
-
   function renderLazyView(node: React.JSX.Element): React.JSX.Element {
     return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
   }
@@ -119,22 +115,16 @@ export function ViewContent({
     );
   }
   if (activeView === 'research') {
-    if (researchShellMode === 'research') {
-      return renderLazyView(
-        <ResearchAppShell
-          client={client}
-          onFallbackLegacy={() => {
-            setResearchShellMode('legacy');
-          }}
-          onContextChange={onResearchContextChange}
-          onOpenAssistant={onOpenResearchAssistant}
-          onOpenService={onOpenResearchService}
-          onServiceContextChange={onResearchServiceContextChange}
-          state={state}
-        />
-      );
-    }
-    return renderLazyView(<ResearchView client={client} state={state} />);
+    return renderLazyView(
+      <ResearchAppShell
+        client={client}
+        onContextChange={onResearchContextChange}
+        onOpenAssistant={onOpenResearchAssistant}
+        onOpenService={onOpenResearchService}
+        onServiceContextChange={onResearchServiceContextChange}
+        state={state}
+      />
+    );
   }
   if (activeView === 'task-detail') {
     if (selectedTaskDetailId === null) {

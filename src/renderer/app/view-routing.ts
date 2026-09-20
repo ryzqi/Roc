@@ -1,5 +1,5 @@
 import type { LoadedState } from '../loaded-state';
-import type { MainViewId, PreviewIconName, ResearchShellMode, ViewId, WorkbenchTool } from './types';
+import type { MainViewId, PreviewIconName, ViewId, WorkbenchTool } from './types';
 
 const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
@@ -19,9 +19,6 @@ const MAIN_VIEW_IDS = new Set<ViewId>([
 
 export const WORKBENCH_VIEWS = new Set<ViewId>(['chat', 'workspace', 'git', 'terminal', 'preview']);
 
-export const RESEARCH_SHELL_QUERY = 'shell';
-export const RESEARCH_SHELL_STORAGE_KEY = 'roc.research.shell';
-
 export const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: PreviewIconName }> = [
   { id: 'files', label: '文件', icon: 'folder' },
   { id: 'git', label: 'Git', icon: 'git' },
@@ -33,39 +30,6 @@ export function parseViewId(value: string | null): ViewId {
     return value as ViewId;
   }
   return 'research';
-}
-
-export function parseResearchShellMode(search: URLSearchParams, stored: string | null = null): ResearchShellMode {
-  const fromQuery = search.get(RESEARCH_SHELL_QUERY);
-  if (fromQuery === 'research' || fromQuery === 'legacy') {
-    return fromQuery;
-  }
-  if (stored === 'research' || stored === 'legacy') {
-    return stored;
-  }
-  return search.get('page') === 'research' ? 'legacy' : 'research';
-}
-
-export function readResearchShellMode(): ResearchShellMode {
-  return parseResearchShellMode(
-    new URLSearchParams(window.location.search),
-    window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY)
-  );
-}
-
-export function persistResearchShellMode(mode: ResearchShellMode): void {
-  if (mode === 'research') {
-    window.localStorage.setItem(RESEARCH_SHELL_STORAGE_KEY, 'research');
-  } else {
-    window.localStorage.removeItem(RESEARCH_SHELL_STORAGE_KEY);
-  }
-  const url = new URL(window.location.href);
-  if (mode === 'research') {
-    url.searchParams.set(RESEARCH_SHELL_QUERY, 'research');
-  } else {
-    url.searchParams.set(RESEARCH_SHELL_QUERY, 'legacy');
-  }
-  window.history.replaceState({}, '', url);
 }
 
 export function defaultWorkbenchTool(view: ViewId): WorkbenchTool {
@@ -87,24 +51,13 @@ export function parseWorkbenchTool(value: string | null, view: ViewId): Workbenc
 
 export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean): void {
   const url = new URL(window.location.href);
-  const researchShellMode = parseResearchShellMode(url.searchParams, window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY));
   url.searchParams.set('page', view);
   if (workbenchVisible || (view !== 'chat' && WORKBENCH_VIEWS.has(view))) {
     url.searchParams.set('tool', tool);
   } else {
     url.searchParams.delete('tool');
   }
-  if (view === 'research') {
-    if (researchShellMode === 'research') {
-      url.searchParams.set(RESEARCH_SHELL_QUERY, 'research');
-    } else if (researchShellMode === 'legacy' && (url.searchParams.get(RESEARCH_SHELL_QUERY) === 'legacy' || window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY) === 'legacy')) {
-      url.searchParams.set(RESEARCH_SHELL_QUERY, 'legacy');
-    } else {
-      url.searchParams.delete(RESEARCH_SHELL_QUERY);
-    }
-  } else {
-    url.searchParams.delete(RESEARCH_SHELL_QUERY);
-  }
+  url.searchParams.delete('shell');
   window.history.replaceState({}, '', url);
 }
 

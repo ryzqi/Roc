@@ -75,7 +75,7 @@ describe('AppShell', () => {
     await waitUntil(() => container.querySelector('[data-testid="research-app-shell"]') !== null);
     expect(container.querySelector('[data-testid="research-view"]')).toBeNull();
     expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
-    expect(new URL(window.location.href).searchParams.get('shell')).toBe('research');
+    expect(new URL(window.location.href).searchParams.get('shell')).toBeNull();
   });
 
   it('opens a research service from the project shell', async () => {

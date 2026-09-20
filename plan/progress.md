@@ -23,12 +23,12 @@
 - **状态：** 完成
 - 新增 `shell=research` / `roc.research.shell` feature flag；默认仍渲染旧 `ResearchView`。
 - 新增 `ResearchContext` 与 `ResearchAppShell`；开关打开时区分空项目与选中项目壳层。
-- 旧 `?page=research` 与显式 `shell=legacy` 可回退。
+- 旧 `ResearchView`、回退开关和 `shell` 查询已删除。
 
 ### 阶段 1：科研主壳层与项目上下文
 
 - **状态：** 完成
-- 无 `page` 时默认进入 `research` 新壳层；`?page=research` 无 `shell` 仍回退旧页。
+- 无 `page` 时默认进入 `research` 新壳层；`?page=research` 直接进入新壳层。
 - 侧栏「研究助手」替代「新建对话」；顶栏科研页不再用文件夹路径当主上下文。
 - Chat 相关 AppShell 测试显式使用 `?page=chat`。
 
@@ -63,7 +63,7 @@
 ### 阶段 5：路由、性能、响应式与可访问性
 
 - **状态：** 完成
-- URL：`project`、`view`、`stage`；保留 `page`/`shell`；`service` 映射阶段页。
+- URL：`project`、`view`、`stage`；保留 `page`；不再写 `shell`。
 - 刷新恢复指定项目；用户切视图 `push`，`popstate` 还原；切项目回总览。
 - 总览同步加载；活动/溯源/阶段面板懒加载。
 - `<1100px` 服务区抽屉，`<800px` 项目侧栏抽屉。
@@ -74,9 +74,9 @@
 
 - **状态：** 完成
 - 新壳层补空态创建、键盘 `1/2/3`、Escape 关抽屉、`<800px` 项目抽屉、模型未安装下载。
-- 旧页闭环测试保留：文献导入、证据捕获、实验、稿件、导出。
+- 闭环测试已迁到新壳层：文献导入、证据捕获、实验、稿件、导出。
 - 归档项目写入拒绝由 workflow/library 测试覆盖。
-- 灰度策略：新壳层默认开启，旧 `ResearchView` 仍可 `shell=legacy` 回退；本阶段不删旧入口。
+- 旧 `ResearchView`、回退开关和 `shell` 查询已删除。
 
 ## 验证结果
 

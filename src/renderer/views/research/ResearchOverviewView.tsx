@@ -12,22 +12,26 @@ import {
   currentStageState,
   formatResearchTime,
   indexPhaseLabel,
-  latestCurrentRun,
   nextActionLabel,
   researchStageLabels,
   researchStageStatusLabels
 } from './research-workflow';
+import { ResearchWorkflowPanel } from './ResearchWorkflowPanel';
 
 export function ResearchOverviewView({
   artifacts,
   context,
   events,
+  instruction,
   onApprove,
+  onCancelRun,
   onControlIndex,
+  onInstructionChange,
   onOpenActivity,
   onOpenProvenance,
   onOpenStage,
   onRetryRun,
+  onStartRun,
   onTransition,
   onDownloadModels,
   project,
@@ -38,13 +42,17 @@ export function ResearchOverviewView({
   artifacts: ResearchArtifact[];
   context: ResearchContext;
   events: ResearchWorkflowEvent[];
-  onApprove: () => void;
-  onControlIndex: (action: 'retry' | 'rebuild') => void;
+  instruction: string;
+  onApprove: (decision?: 'accept' | 'revise') => void;
+  onCancelRun: () => void;
+  onControlIndex: (action: 'pause' | 'resume' | 'rebuild' | 'retry') => void;
+  onInstructionChange: (value: string) => void;
   onOpenActivity: () => void;
   onOpenProvenance: (artifactId: string) => void;
   onOpenStage?: () => void;
   onRetryRun: () => void;
-  onTransition: (action: 'start' | 'resume' | 'reject') => void;
+  onStartRun: () => void;
+  onTransition: (action: 'start' | 'resume' | 'reject' | 'pause' | 'complete', decision?: 'accept' | 'revise') => void;
   onDownloadModels?: () => void;
   project: ResearchProject;
   runs: ResearchStageRun[];
@@ -52,7 +60,6 @@ export function ResearchOverviewView({
   working: boolean;
 }): React.JSX.Element {
   const current = currentStageState(workflow);
-  const run = latestCurrentRun(runs, workflow);
   const stageArtifacts = currentArtifacts(artifacts, workflow);
   const indexStatus = context.indexStatus;
   return (
@@ -77,43 +84,32 @@ export function ResearchOverviewView({
       <p className="research-stage-copy" data-testid="research-overview-next">{nextActionLabel(workflow)}</p>
       {current.lastError === null ? null : <p className="research-stage-error">{current.lastError}</p>}
 
-      <ol className="research-pipeline" aria-label="阶段进度" data-testid="research-overview-progress">
-        {workflow.stages.map((stage) => (
-          <li className={stage.stage === workflow.currentStage ? 'research-pipeline-step research-pipeline-step--current' : 'research-pipeline-step'} key={stage.stage}>
-            <span>{researchStageLabels[stage.stage]}</span>
-            <span>{researchStageStatusLabels[stage.status]}</span>
-          </li>
-        ))}
-      </ol>
+      {context.serviceHealth.modelsReady === false ? (
+        <div className="research-alert" role="status" data-testid="research-overview-models">
+          <span>解析模型未安装，文档解析前需先配置。</span>
+          {onDownloadModels === undefined ? null : (
+            <button className="action-button" data-testid="research-overview-download-models" type="button" onClick={onDownloadModels}>下载模型</button>
+          )}
+        </div>
+      ) : null}
 
-      <div className="research-stage-actions">
-        {current.status === 'ready' ? (
-          <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => onTransition('start')}>开始阶段</button>
-        ) : null}
-        {current.status === 'paused' ? (
-          <button className="action-button action-button--primary" disabled={working} type="button" onClick={() => onTransition('resume')}>继续</button>
-        ) : null}
-        {current.status === 'waiting_approval' ? (
-          <>
-            <button className="action-button" disabled={working} type="button" onClick={() => onTransition('reject')}>退回修改</button>
-            <button className="action-button action-button--primary" data-testid="research-overview-approve" disabled={working} type="button" onClick={onApprove}>审批</button>
-          </>
-        ) : null}
-        {run !== null && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') ? (
-          <button className="action-button" data-testid="research-overview-retry" disabled={working} type="button" onClick={onRetryRun}>重试</button>
-        ) : null}
-        {indexStatus?.phase === 'failed' ? (
-          <button className="action-button" type="button" onClick={() => onControlIndex('retry')}>修复索引</button>
-        ) : null}
-        {context.serviceHealth.modelsReady === false ? (
-          <>
-            <span data-testid="research-overview-models">解析模型未安装，文档解析前需先配置。</span>
-            {onDownloadModels === undefined ? null : (
-              <button className="action-button" data-testid="research-overview-download-models" type="button" onClick={onDownloadModels}>下载模型</button>
-            )}
-          </>
-        ) : null}
-      </div>
+      <ResearchWorkflowPanel
+        artifacts={artifacts}
+        events={events}
+        indexStatus={indexStatus}
+        instruction={instruction}
+        onApprove={onApprove}
+        onCancelRun={onCancelRun}
+        onControlIndex={onControlIndex}
+        onInstructionChange={onInstructionChange}
+        onRetryRun={onRetryRun}
+        onStartRun={onStartRun}
+        onTransition={onTransition}
+        project={project}
+        runs={runs}
+        working={working}
+        workflow={workflow}
+      />
 
       <dl className="research-shell-context">
         <div>

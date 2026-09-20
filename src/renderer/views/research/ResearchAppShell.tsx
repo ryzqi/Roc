@@ -4,7 +4,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { unwrap } from '../../loaded-state';
-import { persistResearchShellMode } from '../../app/view-routing';
 import { buildResearchTopMeta, createResearchContext } from './research-context';
 import { createResearchSession, type ResearchSession } from './research-session';
 import { researchProjectStatusLabels, researchStageLabels } from './research-workflow';
@@ -40,7 +39,6 @@ const ResearchStageWorkspace = lazy(() => import('./ResearchStageWorkspace').the
 
 export function ResearchAppShell({
   client,
-  onFallbackLegacy,
   onContextChange,
   onOpenAssistant,
   onOpenService,
@@ -48,7 +46,6 @@ export function ResearchAppShell({
   state
 }: {
   client: RocClient;
-  onFallbackLegacy: () => void;
   onContextChange?: (meta: string) => void;
   onOpenAssistant?: () => void;
   onOpenService?: (service: ResearchServiceEntry) => void;
@@ -368,11 +365,6 @@ export function ResearchAppShell({
     }
   }
 
-  function fallbackLegacy(): void {
-    persistResearchShellMode('legacy');
-    onFallbackLegacy();
-  }
-
   function openEvent(eventId: string): void {
     setSelectedEventId(eventId);
     const payload = snapshot.events.find((item) => item.id === eventId)?.payload ?? {};
@@ -412,7 +404,7 @@ export function ResearchAppShell({
         <div>
           <div className="eyebrow">RESEARCH SHELL</div>
           <h1>科研主工作台</h1>
-          <p>项目是一级上下文。当前为迁移壳层，旧科研页面仍可回退。</p>
+          <p>项目是一级上下文。阶段、证据、实验和产物都挂在当前研究项目下。</p>
         </div>
         <div className="research-shell-banner-actions">
           {onOpenAssistant === undefined ? null : (
@@ -444,9 +436,6 @@ export function ResearchAppShell({
           {shellState === 'project' ? (
             <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
           ) : null}
-          <button className="action-button" data-testid="research-shell-fallback" type="button" onClick={fallbackLegacy}>
-            返回旧页面
-          </button>
         </div>
       </header>
 
@@ -540,8 +529,11 @@ export function ResearchAppShell({
                 artifacts={snapshot.artifacts}
                 context={context}
                 events={snapshot.events}
-                onApprove={() => void workbench.transition('approve')}
+                instruction={snapshot.instruction}
+                onApprove={(decision) => void workbench.transition('approve', decision === undefined ? undefined : { reviewDecision: decision })}
+                onCancelRun={() => void workbench.cancelRun()}
                 onControlIndex={(action) => void workbench.controlIndex(action)}
+                onInstructionChange={(value) => workbench.setInstruction(value)}
                 onOpenActivity={() => {
                   applyRoute({ view: 'activity' });
                   setActivityOpen(true);
@@ -552,7 +544,8 @@ export function ResearchAppShell({
                 }}
                 onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
                 onRetryRun={() => void workbench.retryRun()}
-                onTransition={(action) => void workbench.transition(action)}
+                onStartRun={() => void workbench.startRun()}
+                onTransition={(action, decision) => void workbench.transition(action, decision === undefined ? undefined : { reviewDecision: decision })}
                 onDownloadModels={() => void downloadModels()}
                 project={context.project}
                 runs={snapshot.runs}

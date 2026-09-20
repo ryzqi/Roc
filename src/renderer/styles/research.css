@@ -4,7 +4,6 @@
   padding: 28px 30px 42px;
 }
 
-.research-header,
 .research-project-heading,
 .research-stage-panel-head {
   display: flex;
@@ -13,17 +12,12 @@
   gap: 24px;
 }
 
-.research-header h1,
 .research-project-heading h2,
 .research-stage-panel h3 {
   margin: 3px 0 0;
   color: var(--ink);
   letter-spacing: 0;
   font-weight: 600;
-}
-
-.research-header h1 {
-  font-size: 28px;
 }
 
 .research-project-heading h2 {
@@ -34,7 +28,6 @@
   font-size: 18px;
 }
 
-.research-header p,
 .research-project-heading p,
 .research-stage-copy {
   max-width: 680px;
@@ -44,7 +37,6 @@
   line-height: 1.6;
 }
 
-.research-create-button,
 .research-form-actions,
 .research-stage-actions {
   display: flex;
@@ -224,41 +216,6 @@
   grid-column: 1 / -1;
 }
 
-.research-create-panel {
-  display: grid;
-  gap: 14px;
-  max-width: 720px;
-  padding: 18px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-}
-
-.research-create-panel label {
-  display: grid;
-  gap: 7px;
-  color: var(--muted);
-  font-size: var(--font-meta-size);
-}
-
-.research-create-panel input,
-.research-create-panel textarea {
-  width: 100%;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  resize: vertical;
-}
-
-.research-create-panel input:focus,
-.research-create-panel textarea:focus {
-  border-color: var(--accent);
-  outline: 2px solid color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
 .research-form-actions {
   justify-content: flex-end;
 }
@@ -351,13 +308,6 @@
 .research-empty p {
   margin: 0 0 8px;
   line-height: 1.6;
-}
-
-.research-layout {
-  display: grid;
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
-  gap: 28px;
-  min-height: 480px;
 }
 
 .research-projects {
@@ -545,11 +495,6 @@
     padding: 20px 18px 32px;
   }
 
-  .research-layout {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
   .research-projects {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     padding-right: 0;
@@ -564,7 +509,6 @@
 }
 
 @media (max-width: 600px) {
-  .research-header,
   .research-project-heading,
   .research-stage-panel-head {
     display: grid;
@@ -620,7 +564,7 @@
 }
 
 .research-run-instruction textarea,
-.research-create-panel select {
+.research-shell-create select {
   width: 100%;
   min-height: 35px;
   padding: 9px 11px;

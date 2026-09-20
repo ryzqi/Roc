@@ -3,7 +3,6 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { RESEARCH_SHELL_STORAGE_KEY } from '../../src/renderer/app/view-routing';
 import { ResearchAppShell } from '../../src/renderer/views/research/ResearchAppShell';
 import type { ResearchIndexStatus, ResearchProject, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 import { createLoadedState, waitUntil } from './view-test-helpers';
@@ -17,7 +16,7 @@ describe('ResearchAppShell', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     window.localStorage.clear();
-    window.history.replaceState({}, '', '/?page=research&shell=research');
+    window.history.replaceState({}, '', '/?page=research');
     stubLayoutMedia(false, false);
   });
 
@@ -78,7 +77,7 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
     expect(text('research-overview-goal')).toContain('把想法变成可追溯项目。');
     expect(text('research-overview-next')).toContain('审核当前产物');
-    expect(text('research-overview-progress')).toContain('写作');
+    expect(text('research-pipeline')).toContain('写作');
     await click('research-overview-event');
     await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
     await click('research-activity-filter-gates');
@@ -95,7 +94,7 @@ describe('ResearchAppShell', () => {
   it('lists research services for the selected project', async () => {
     const api = createResearchApi();
     const onOpenService = vi.fn();
-    await renderShell(api, undefined, undefined, onOpenService);
+    await renderShell(api, undefined, onOpenService);
     expect(text('research-services')).toContain('研究助手');
     expect(text('research-service-tasks')).toContain('活动与运行');
     await click('research-service-assistant');
@@ -151,7 +150,7 @@ describe('ResearchAppShell', () => {
       extra
     ] });
     const onContextChange = vi.fn();
-    await renderShell(api, undefined, onContextChange);
+    await renderShell(api, onContextChange);
     expect(onContextChange).toHaveBeenCalledWith('证据图 · 写作 · 运行 0 · 闸门 1');
     await act(async () => { setInput('research-shell-project-search', '第二'); });
     expect(document.querySelector('.research-project-row-title')?.textContent).toBe('第二项目');
@@ -182,18 +181,7 @@ describe('ResearchAppShell', () => {
     expect(text('research-overview-stage')).toBe('阅读');
   });
 
-  it('falls back to the legacy page and clears the shell flag', async () => {
-    const api = createResearchApi();
-    window.localStorage.setItem(RESEARCH_SHELL_STORAGE_KEY, 'research');
-    const onFallbackLegacy = vi.fn();
-    await renderShell(api, onFallbackLegacy);
-    await click('research-shell-fallback');
-    expect(onFallbackLegacy).toHaveBeenCalledTimes(1);
-    expect(window.localStorage.getItem(RESEARCH_SHELL_STORAGE_KEY)).toBeNull();
-    expect(new URL(window.location.href).searchParams.get('shell')).toBe('legacy');
-  });
-
-  it('restores a deep-linked project stage and keeps page/shell', async () => {
+  it('restores a deep-linked project stage and keeps page', async () => {
     const extra: ResearchProject = {
       id: 'research_2', title: '第二项目', description: '另一个问题。', workspacePath: null,
       status: 'paused', language: 'zh', origin: null, currentStage: 'reading',
@@ -209,7 +197,7 @@ describe('ResearchAppShell', () => {
       ok: true,
       data: request.id === 'research_2' ? workflow({ stage: 'reading', status: 'ready', artifactIds: [] }) : workflow()
     }));
-    window.history.replaceState({}, '', '/?page=research&shell=research&project=research_2&view=stage&stage=knowledge');
+    window.history.replaceState({}, '', '/?page=research&project=research_2&view=stage&stage=knowledge');
     await renderShell(api);
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     expect(text('research-shell-project-research_2')).toContain('第二项目');
@@ -218,7 +206,6 @@ describe('ResearchAppShell', () => {
     await waitUntil(() => document.querySelector('[data-testid="research-knowledge-panel"]') !== null);
     const url = new URL(window.location.href);
     expect(url.searchParams.get('page')).toBe('research');
-    expect(url.searchParams.get('shell')).toBe('research');
     expect(url.searchParams.get('project')).toBe('research_2');
     expect(url.searchParams.get('view')).toBe('stage');
     expect(url.searchParams.get('stage')).toBe('knowledge');
@@ -226,7 +213,7 @@ describe('ResearchAppShell', () => {
 
   it('falls back to the first project when the deep-linked project is missing', async () => {
     const api = createResearchApi();
-    window.history.replaceState({}, '', '/?page=research&shell=research&project=missing&view=activity');
+    window.history.replaceState({}, '', '/?page=research&project=missing&view=activity');
     await renderShell(api);
     expect(text('research-shell-project-research_1')).toContain('证据图');
     await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
@@ -245,14 +232,13 @@ describe('ResearchAppShell', () => {
     await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
     expect(new URL(window.location.href).searchParams.get('view')).toBeNull();
     expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
-    expect(new URL(window.location.href).searchParams.get('shell')).toBe('research');
   });
 
   it('moves services into a drawer below 1100px', async () => {
     stubLayoutMedia(true, false);
     const api = createResearchApi();
     const onOpenService = vi.fn();
-    await renderShell(api, undefined, undefined, onOpenService);
+    await renderShell(api, undefined, onOpenService);
     expect(document.querySelector('[data-testid="research-services"]')).toBeNull();
     await click('research-shell-services-toggle');
     expect(text('research-services')).toContain('研究助手');
@@ -383,14 +369,12 @@ function indexStatus(): ResearchIndexStatus {
 
 async function renderShell(
   research: ReturnType<typeof createResearchApi>,
-  onFallbackLegacy?: () => void,
   onContextChange?: (meta: string) => void,
   onOpenService?: (service: { id: string }) => void
 ): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
       client: { api: { research } as never },
-      onFallbackLegacy: onFallbackLegacy ?? (() => undefined),
       onContextChange,
       onOpenService,
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })

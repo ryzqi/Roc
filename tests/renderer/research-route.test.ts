@@ -39,8 +39,8 @@ describe('research route', () => {
     });
   });
 
-  it('writes research params without dropping page or shell', () => {
-    window.history.replaceState({}, '', '/?page=research&shell=research&tool=files');
+  it('writes research params without dropping page or tool', () => {
+    window.history.replaceState({}, '', '/?page=research&tool=files');
     writeResearchRoute({
       projectId: 'research_2',
       view: 'stage',
@@ -49,7 +49,6 @@ describe('research route', () => {
     }, 'push');
     const url = new URL(window.location.href);
     expect(url.searchParams.get('page')).toBe('research');
-    expect(url.searchParams.get('shell')).toBe('research');
     expect(url.searchParams.get('tool')).toBe('files');
     expect(url.searchParams.get('project')).toBe('research_2');
     expect(url.searchParams.get('view')).toBe('stage');
@@ -57,7 +56,7 @@ describe('research route', () => {
   });
 
   it('omits overview view and default stage tabs, then compares routes', () => {
-    window.history.replaceState({}, '', '/?page=research&shell=research');
+    window.history.replaceState({}, '', '/?page=research');
     writeResearchRoute({
       projectId: 'research_1',
       view: 'overview',

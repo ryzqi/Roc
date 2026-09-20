@@ -2,18 +2,29 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ResearchView } from '../../src/renderer/views/research/ResearchView';
-import { createLoadedState } from './view-test-helpers';
+import { ResearchAppShell } from '../../src/renderer/views/research/ResearchAppShell';
+import { createLoadedState, waitUntil } from './view-test-helpers';
 import type { ProviderConfig, ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStagePolicy, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
-describe('ResearchView project dashboard', () => {
+describe('research workbench dashboard', () => {
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    window.history.replaceState({}, '', '/?page=research');
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() { return false; }
+    })) as typeof window.matchMedia;
   });
 
   afterEach(async () => {
@@ -46,11 +57,11 @@ describe('ResearchView project dashboard', () => {
     });
     await renderView(api);
     await act(async () => { await Promise.resolve(); });
-    expect(text('research-models-banner')).toContain('解析模型未安装');
-    await click('research-models-download');
+    expect(text('research-overview-models')).toContain('解析模型未安装');
+    await click('research-overview-download-models');
     expect(api.downloadModels).toHaveBeenCalled();
     await act(async () => { await Promise.resolve(); });
-    expect(document.querySelector('[data-testid="research-models-banner"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
   });
 
   it('pauses and rebuilds the project index from the dashboard', async () => {
@@ -72,7 +83,9 @@ describe('ResearchView project dashboard', () => {
       locator: 'lines 1-1', excerpt: 'Measured result: 42 units.', contentHash: 'b'.repeat(64),
       createdAt: '2026-09-14T01:00:00.000Z'
     };
-    const api = createResearchApi();
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'reading', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
     api.searchKnowledge.mockResolvedValue({
       ok: true,
       data: {
@@ -85,9 +98,13 @@ describe('ResearchView project dashboard', () => {
     api.captureEvidence.mockResolvedValue({ ok: true, data: captured });
     api.listEvidence.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [captured] });
     await renderView(api);
-    await clickTab('知识库');
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-tab-knowledge"]') !== null);
+    await click('research-stage-tab-knowledge');
+    await waitUntil(() => document.querySelector('[data-testid="research-knowledge-panel"]') !== null);
     setInput('research-knowledge-query', 'Measured');
     await click('research-knowledge-search');
+    await waitUntil(() => document.querySelector(`[data-testid="research-evidence-capture-${captured.chunkId}"]`) !== null);
     await click(`research-evidence-capture-${captured.chunkId}`);
     expect(api.captureEvidence).toHaveBeenCalledWith({ projectId: 'research_1', chunkId: captured.chunkId });
     expect(text('research-evidence-list')).toContain('Measured result: 42 units.');
@@ -125,7 +142,8 @@ describe('ResearchView project dashboard', () => {
     api.getManuscript.mockResolvedValue({ ok: true, data: null });
     api.saveManuscript.mockResolvedValue({ ok: true, data: saved });
     await renderView(api);
-    await clickTab('正文');
+    await click('research-overview-open-stage');
+    await waitUntil(() => document.querySelector('[data-testid="research-manuscript-panel"]') !== null);
     await click('research-manuscript-create');
     expect(api.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ stage: 'writing', kind: 'manuscript' }));
     setArea('research-claim-content', claim.content);
@@ -166,7 +184,9 @@ describe('ResearchView project dashboard', () => {
     api.listStagePolicies.mockResolvedValue({ ok: true, data: [policy] });
     api.saveStagePolicy.mockResolvedValue({ ok: true, data: saved });
     await renderView(api, undefined, [provider()]);
-    await clickTab('阶段模型');
+    await click('research-shell-settings');
+    await click('research-stage-tab-policies');
+    await waitUntil(() => document.querySelector('[data-testid="research-policy-panel"]') !== null);
     expect(text('research-policy-list')).toContain('写作');
     const kind = document.querySelector<HTMLSelectElement>('[data-testid="research-policy-model-kind"]');
     expect(kind).not.toBeNull();
@@ -216,23 +236,26 @@ describe('ResearchView project dashboard', () => {
         title: record.title, authors: record.authors, doi: record.doi, publishedYear: 2026, abstract: record.abstract, url: null },
       sources: [], projectIds: ['research_1'], revision: 1, archived: false, createdAt: record.importedAt, updatedAt: record.updatedAt
     };
-    const document: ResearchDocument = {
+    const libraryDocument: ResearchDocument = {
       id: 'doc_1', libraryItemId: item.id, filename: 'paper.pdf', mediaType: 'application/pdf', sourceHash: 'a'.repeat(64),
       size: 12, status: 'ready', currentParseId: 'parse_1', activeParseId: null, error: null, createdAt: record.importedAt, updatedAt: record.updatedAt
     };
     const parse: ResearchDocumentParse = {
       run: { id: 'parse_1', documentId: 'doc_1', status: 'ready', error: null, createdAt: record.importedAt, finishedAt: record.updatedAt },
-      content: { sourceHash: document.sourceHash, parserVersion: 'roc-pdf-1', pageCount: 1, content: 'Measured improvement.', warnings: [],
+      content: { sourceHash: libraryDocument.sourceHash, parserVersion: 'roc-pdf-1', pageCount: 1, content: 'Measured improvement.', warnings: [],
         assets: [], blocks: [{ id: 'b1', kind: 'paragraph', label: 'Body', text: 'Measured improvement.', locator: 'page 1', imageAssetId: null, locations: [] }] }
     };
-    const api = createResearchApi();
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'reading', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
     api.searchLiterature.mockResolvedValue({ ok: true, data: [record] });
     api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
     api.importLibraryRecord.mockResolvedValue({ ok: true, data: { items: [item], createdCount: 1, duplicateCount: 0 } });
-    api.listDocuments.mockResolvedValue({ ok: true, data: [document] });
+    api.listDocuments.mockResolvedValue({ ok: true, data: [libraryDocument] });
     api.getDocumentContent.mockResolvedValue({ ok: true, data: parse });
     await renderView(api);
-    await clickTab('文献库');
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-library-panel"]') !== null);
     setInput('research-library-query', 'evidence graph');
     await clickSubmit('research-library-panel');
     expect(api.searchLiterature).toHaveBeenCalled();
@@ -266,7 +289,9 @@ describe('ResearchView project dashboard', () => {
       content: { sourceHash: imported.sourceHash, parserVersion: 'roc-pdf-1', pageCount: 1, content: 'Measured improvement.', warnings: [],
         assets: [], blocks: [{ id: 'b1', kind: 'paragraph', label: 'Body', text: 'Measured improvement.', locator: 'page 1', imageAssetId: null, locations: [] }] }
     };
-    const api = createResearchApi();
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'reading', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
     api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
     api.listDocuments.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [ready] });
     api.importDocument.mockResolvedValue({ ok: true, data: imported });
@@ -274,7 +299,8 @@ describe('ResearchView project dashboard', () => {
     api.getDocumentContent.mockResolvedValue({ ok: true, data: parse });
     const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/paper.pdf'] } }) };
     await renderView(api, files);
-    await clickTab('文献库');
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-library-panel"]') !== null);
     await click(`research-library-open-${item.id}`);
     await click('research-document-import');
     expect(api.importDocument).toHaveBeenCalledWith({ target: 'library-item', sourcePath: '/tmp/paper.pdf', libraryItemId: item.id, projectId: 'research_1' });
@@ -293,13 +319,16 @@ describe('ResearchView project dashboard', () => {
         title: record.title, authors: record.authors, doi: record.doi, publishedYear: 2026, abstract: record.abstract, url: null },
       sources: [], projectIds: ['research_1'], revision: 1, archived: false, createdAt: record.importedAt, updatedAt: record.updatedAt
     };
-    const api = createResearchApi();
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'reading', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
     api.importBibliography.mockResolvedValue({ ok: true, data: { items: [item], createdCount: 1, duplicateCount: 0 } });
     api.listLibrary.mockResolvedValue({ ok: true, data: [item] });
     api.exportBibliography.mockResolvedValue({ ok: true, data: { format: 'bibtex', filename: 'library.bib', content: '@article{doe2026,title={Measured study}}' } });
     const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/library.bib'] } }) };
     await renderView(api, files);
-    await clickTab('文献库');
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-library-panel"]') !== null);
     await click('research-library-import-file');
     expect(api.importBibliography).toHaveBeenCalledWith({ sourcePath: '/tmp/library.bib', format: 'bibtex', projectId: 'research_1' });
     const checkbox = document.querySelector<HTMLInputElement>('[data-testid="research-library-select-lib_1"]');
@@ -327,12 +356,16 @@ describe('ResearchView project dashboard', () => {
         { key: 'risks', content: 'Stale duplicates.', status: 'pending', evidenceIds: [] }
       ]
     };
-    const api = createResearchApi({ artifacts: [ideaArtifact] });
+    const api = createResearchApi({
+      artifacts: [ideaArtifact],
+      workflow: workflow({ stage: 'ideation', status: 'ready', gateRequired: false, artifactIds: [ideaArtifact.id] })
+    });
     api.getIdeaCanvas.mockResolvedValue({ ok: true, data: canvas });
     api.saveIdeaCanvas.mockResolvedValue({ ok: true, data: { ...canvas, version: 2, rationale: 'Updated ranking.' } });
     api.promoteIdeaCanvas.mockResolvedValue({ ok: true, data: { canvas, project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: null, status: 'active', language: 'zh', origin: { projectId: 'research_1', artifactId: ideaArtifact.id, version: 1 }, currentStage: 'discovery', createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } } });
     await renderView(api);
-    await clickTab('构思');
+    await click('research-stage-group-plan');
+    await waitUntil(() => document.querySelector('[data-testid="research-idea-panel"]') !== null);
     await clickSelectIdea();
     setArea('research-idea-rationale', 'Updated ranking.');
     await click('research-idea-save');
@@ -361,14 +394,18 @@ describe('ResearchView project dashboard', () => {
       files: [], archive: { path: 'paper.zip', sha256: '4'.repeat(64), size: 20 }, artifactId: 'export_artifact',
       approval: 'unpublished', replacesExportId: null, error: null, createdAt: '2026-09-14T02:00:00.000Z', endedAt: '2026-09-14T02:01:00.000Z'
     };
-    const api = createResearchApi({ artifacts: [manuscript] });
+    const api = createResearchApi({
+      artifacts: [manuscript],
+      workflow: workflow({ stage: 'export', status: 'ready', gateRequired: false, artifactIds: [manuscript.id] })
+    });
     api.listFigures.mockResolvedValue({ ok: true, data: [figure] });
     api.listExports.mockResolvedValueOnce({ ok: true, data: [] }).mockResolvedValue({ ok: true, data: [{ ...prepared, approval: 'approved' }] });
     api.prepareExport.mockResolvedValue({ ok: true, data: prepared });
     api.publishExport.mockResolvedValue({ ok: true, data: { ...prepared, approval: 'draft' } });
     api.writeExport.mockResolvedValue({ ok: true, data: { exportId: prepared.id, projectId: 'research_1', destinationPath: '/tmp/study.zip', sha256: '4'.repeat(64), size: 20, createdAt: prepared.createdAt } });
     await renderView(api);
-    await clickTab('图稿导出');
+    await click('research-stage-group-publish');
+    await waitUntil(() => document.querySelector('[data-testid="research-production-panel"]') !== null);
     await act(async () => { await Promise.resolve(); });
     const checkbox = document.querySelector<HTMLInputElement>('[data-testid="research-figure-toggle-figure_1"]');
     expect(checkbox).not.toBeNull();
@@ -402,12 +439,15 @@ describe('ResearchView project dashboard', () => {
       inputHash: 'f'.repeat(64), exitCode: 0, error: null, artifactId: null,
       createdAt: '2026-09-14T01:00:00.000Z', startedAt: '2026-09-14T01:00:01.000Z', endedAt: '2026-09-14T01:00:02.000Z'
     };
-    const api = createResearchApi();
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'experiment', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
     api.inspectExperimentEnvironment.mockResolvedValue({ ok: true, data: execution.environment });
     api.startExperiment.mockResolvedValue({ ok: true, data: execution });
     api.listExperiments.mockResolvedValue({ ok: true, data: [execution] });
     await renderView(api);
-    await clickTab('实验');
+    await click('research-stage-group-experiment');
+    await waitUntil(() => document.querySelector('[data-testid="research-experiment-panel"]') !== null);
     setInput('research-experiment-label', 'Measure signal');
     setInput('research-experiment-source', 'run.py');
     setInput('research-experiment-inputs', 'data.csv');
@@ -436,7 +476,9 @@ describe('ResearchView project dashboard', () => {
     api.compileTemplate.mockResolvedValue({ ok: true, data: ready });
     const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/source'] } }) };
     await renderView(api, files);
-    await clickTab('文稿');
+    await click('research-overview-open-stage');
+    await click('research-stage-tab-editor');
+    await waitUntil(() => document.querySelector('[data-testid="research-editor-panel"]') !== null);
     await click('research-template-import');
     expect(api.importTemplate).toHaveBeenCalledWith({ projectId: 'research_1', sourcePath: '/tmp/source' });
     await clickFile('main.tex');
@@ -575,7 +617,7 @@ function run(): ResearchStageRun {
 
 async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }, providers: ProviderConfig[] = []): Promise<void> {
   await act(async () => {
-    root.render(React.createElement(ResearchView, {
+    root.render(React.createElement(ResearchAppShell, {
       client: { api: { research, files: files ?? { selectFromDialog: vi.fn() } } as never },
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never, providers })
     }));
@@ -603,13 +645,6 @@ function setValue(testId: string, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(textarea, value);
   textarea?.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-async function clickTab(label: string): Promise<void> {
-  const button = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === label);
-  expect(button).not.toBeUndefined();
-  await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  await act(async () => { await Promise.resolve(); });
 }
 
 async function clickSubmit(testId: string): Promise<void> {

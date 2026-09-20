@@ -36,8 +36,6 @@ export type ViewId =
   | 'settings'
   | 'diagnostics';
 
-export type ResearchShellMode = 'legacy' | 'research';
-
 export type PreviewIconName =
   | 'bot'
   | 'clipboard'
