@@ -967,6 +967,44 @@ pre.research-reader-content {
   flex-wrap: wrap;
 }
 
+.research-services,
+.research-service-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.research-service-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.research-service-row strong {
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+}
+
+.research-service-row span,
+.research-service-row em {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  font-style: normal;
+}
+
+.research-service-context {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  line-height: 1.5;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

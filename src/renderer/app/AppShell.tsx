@@ -11,6 +11,7 @@ import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { applySystemAppearance } from '../system-appearance';
 import { restoreDialogFocus } from '../dialog-focus';
+import type { ResearchServiceContext, ResearchServiceEntry } from '../views/research/research-services';
 import { AppSettingsLayer } from './AppSettingsLayer';
 import { AppSidebar } from './AppSidebar';
 import { AppWorkspaceShell } from './AppWorkspaceShell';
@@ -96,6 +97,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [historySearchVisible, setHistorySearchVisible] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
+  const [researchServiceContext, setResearchServiceContext] = useState<ResearchServiceContext | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
@@ -257,6 +259,18 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setPendingTaskSource(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
+
+  const openResearchService = useCallback((service: ResearchServiceEntry): void => {
+    if (service.id === 'assistant') {
+      startNewConversation();
+      return;
+    }
+    if (service.id === 'files') {
+      setActiveWorkbenchTool('files');
+      setWorkbenchVisible(true);
+    }
+    setActiveView(service.view);
+  }, [startNewConversation]);
 
   const selectHistoryThread = useCallback((threadId: string): void => {
     setActiveView('chat');
@@ -502,6 +516,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       state={state}
       onResearchContextChange={setResearchTopMeta}
       onOpenResearchAssistant={startNewConversation}
+      onOpenResearchService={openResearchService}
+      onResearchServiceContextChange={setResearchServiceContext}
+      researchServiceContext={researchServiceContext}
       submitTaskDetailInput={submitTaskDetailInput}
       taskBoardUiState={taskBoardUiState}
       taskLiveRunState={taskLiveRunState}

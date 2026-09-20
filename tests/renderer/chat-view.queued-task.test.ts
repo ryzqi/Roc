@@ -92,6 +92,51 @@ describe('ChatView task boundary', () => {
     expect(onSubmitChatTask).toHaveBeenCalledWith({ input: '普通聊天输入' });
   });
 
+  it('submits ordinary chat with the bound research workspace', async () => {
+    const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatView, {
+          chatSelectionVersion: 1,
+          client: createChatClient(),
+          selectedThreadId: null,
+          state: createLoadedState({}),
+          updateLoadedState: () => {},
+          onSubmitChatTask,
+          researchContext: {
+            projectId: 'research_1',
+            projectTitle: '证据图',
+            currentStage: 'writing',
+            workspacePath: '/tmp/project'
+          }
+        })
+      );
+    });
+
+    const input = container.querySelector('[data-testid="chat-input"]');
+    if (!(input instanceof HTMLTextAreaElement)) {
+      throw new Error('Chat input was not rendered.');
+    }
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+      if (setter === undefined) {
+        throw new Error('Chat input value setter was not available.');
+      }
+      setter.call(input, '继续当前研究');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    await flushPromises();
+
+    expect(onSubmitChatTask).toHaveBeenCalledWith({
+      input: '继续当前研究',
+      workspacePath: '/tmp/project'
+    });
+  });
+
   it('shows only the thinking spinner immediately while awaiting the first response byte', async () => {
     await act(async () => {
       root.render(

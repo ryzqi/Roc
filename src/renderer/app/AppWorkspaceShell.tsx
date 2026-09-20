@@ -12,6 +12,7 @@ import { RailOverlay } from '../workbench/RailOverlay';
 import type { AppBootstrap } from './use-app-bootstrap';
 import type { LazyLoadState, ViewId, WorkbenchTool, WorkspaceData } from './types';
 import { WORKBENCH_VIEWS } from './view-routing';
+import type { ResearchServiceContext, ResearchServiceEntry } from '../views/research/research-services';
 
 interface AppWorkspaceShellProps {
   activeTaskDetailId: string | null;
@@ -60,6 +61,9 @@ interface AppWorkspaceShellProps {
   workspaceLoadState: LazyLoadState;
   onResearchContextChange?: (meta: string) => void;
   onOpenResearchAssistant?: () => void;
+  onOpenResearchService?: (service: ResearchServiceEntry) => void;
+  onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
+  researchServiceContext?: ResearchServiceContext | null;
 }
 
 export function AppWorkspaceShell({
@@ -96,7 +100,10 @@ export function AppWorkspaceShell({
   windowState,
   workspaceLoadState,
   onResearchContextChange,
-  onOpenResearchAssistant
+  onOpenResearchAssistant,
+  onOpenResearchService,
+  onResearchServiceContextChange,
+  researchServiceContext
 }: AppWorkspaceShellProps): React.JSX.Element {
   const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as CSSProperties : undefined;
@@ -141,6 +148,9 @@ export function AppWorkspaceShell({
               workspaceLoadState={workspaceLoadState}
               onResearchContextChange={onResearchContextChange}
               onOpenResearchAssistant={onOpenResearchAssistant}
+              onOpenResearchService={onOpenResearchService}
+              onResearchServiceContextChange={onResearchServiceContextChange}
+              researchServiceContext={researchServiceContext}
             />
           </div>
         </section>

@@ -34,8 +34,14 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
       icon: 'microscope'
     },
     {
+      id: 'workspace',
+      label: '文件与代码',
+      meta: state.workspace?.path ?? '未选择计算目录',
+      icon: 'folder'
+    },
+    {
       id: 'tasks-board',
-      label: '任务工作台',
+      label: '活动与运行',
       meta: `${taskCounts.running} 运行中 · ${taskCounts.pendingConfirmation} 待确认 · ${taskCounts.total} 共计`,
       badge: `${taskCounts.running}/${taskCounts.pendingConfirmation}/${taskCounts.total}`,
       ...(taskCounts.pendingConfirmation > 0 ? { badgeTone: 'alert' as const } : {}),
@@ -43,7 +49,7 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
     },
     {
       id: 'diagnostics',
-      label: '任务诊断包',
+      label: '运行诊断',
       meta: `${state.taskSnapshot.counts.failed} 失败任务`,
       badge: `${state.taskSnapshot.counts.failed}`,
       ...(state.taskSnapshot.counts.failed > 0 ? { badgeTone: 'alert' as const } : {}),
@@ -56,7 +62,7 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
   return [
     {
       id: 'memory',
-      label: '记忆中心',
+      label: '项目记忆',
       meta: visibleMemoryLabel(state),
       // 工作区路径已在 workspace-pill 与顶栏显示，dock 只在全局记忆时给出区分标记。
       ...(state.appStatus.workspace.selectedPath === null ? { badge: '全局' } : {}),
@@ -64,14 +70,14 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
     },
     {
       id: 'mcp',
-      label: 'MCP',
+      label: '连接器',
       meta: `${state.mcpServers.filter((server) => server.enabled).length} 已启用`,
       badge: `${state.mcpServers.filter((server) => server.enabled).length}`,
       icon: 'nodes'
     },
     {
       id: 'skills',
-      label: 'Skill',
+      label: '技能',
       meta: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 可用`,
       badge: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length}`,
       icon: 'sparkles'

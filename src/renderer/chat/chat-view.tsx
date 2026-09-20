@@ -17,6 +17,8 @@ import { isImageInputSupported, toChatImageAttachments } from './image-attachmen
 import { parseSlashSkillCommand } from './slash-skill-command';
 import { extractLastProposedPlan } from './proposed-plan';
 import { usePersistedThreadHistory } from './use-persisted-thread-history';
+import type { ResearchServiceContext } from '../views/research/research-services';
+import { researchStageLabels } from '../views/research/research-workflow';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 type ComposerMode = 'chat' | 'plan';
@@ -40,6 +42,7 @@ export type ChatViewProps = {
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
+  researchContext?: ResearchServiceContext | null;
 };
 
 export function buildChatApprovalResumeRunRequest(input: {
@@ -83,7 +86,8 @@ export function ChatView({
   selectedThreadId,
   state,
   updateLoadedState,
-  onSubmitChatTask
+  onSubmitChatTask,
+  researchContext = null
 }: ChatViewProps): React.JSX.Element {
   const chatRun = useChatRun(client);
   const [chatInput, setChatInput] = useState('');
@@ -217,6 +221,9 @@ export function ChatView({
       const payload: ChatTaskSubmitPayload = {
         input: trimmedInput
       };
+      if (researchContext?.projectId && researchContext.workspacePath) {
+        payload.workspacePath = researchContext.workspacePath;
+      }
       if (composerMode === 'plan') {
         payload.mode = 'plan';
       }
@@ -271,7 +278,8 @@ export function ChatView({
       const result = await onSubmitChatTask({
         input: planText,
         mode: 'chat',
-        cleanThread: true
+        cleanThread: true,
+        ...(researchContext?.projectId && researchContext.workspacePath ? { workspacePath: researchContext.workspacePath } : {})
       });
       if (result.ok) {
         setPendingUserInput(planText);
@@ -305,9 +313,16 @@ export function ChatView({
             <div className="chat-feedback-stack">
               {showEmptyState ? (
                 <header className="chat-empty-copy" data-testid="chat-empty-state">
-                  <h1>Roc 本地工作台</h1>
-                  <p>问问 Roc 或交给它一个任务</p>
+                  <h1>{researchContext?.projectTitle ? '研究助手' : 'Roc 本地工作台'}</h1>
+                  <p>{researchContext?.projectTitle ? '在当前研究项目中提问或启动任务' : '问问 Roc 或交给它一个任务'}</p>
                 </header>
+              ) : null}
+              {researchContext?.projectTitle ? (
+                <p className="chat-research-context" data-testid="chat-research-context">
+                  当前项目 {researchContext.projectTitle}
+                  {researchContext.currentStage === null ? '' : ` · ${researchStageLabels[researchContext.currentStage]}`}
+                  {researchContext.workspacePath === null ? '' : ` · ${researchContext.workspacePath}`}
+                </p>
               ) : null}
               {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
               {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="chat-error">{chatRun.errorMessage}</span>}

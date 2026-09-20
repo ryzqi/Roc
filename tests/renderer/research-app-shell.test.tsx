@@ -62,6 +62,21 @@ describe('ResearchAppShell', () => {
     expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
   });
 
+  it('lists research services for the selected project', async () => {
+    const api = createResearchApi();
+    const onOpenService = vi.fn();
+    await renderShell(api, undefined, undefined, onOpenService);
+    expect(text('research-services')).toContain('研究助手');
+    expect(text('research-service-tasks')).toContain('活动与运行');
+    await click('research-service-assistant');
+    expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'assistant',
+      view: 'chat',
+      projectId: 'research_1',
+      stage: 'writing'
+    }));
+  });
+
   it('opens the current stage workspace from overview and keeps other groups read-only', async () => {
     const api = createResearchApi();
     await renderShell(api);
@@ -225,13 +240,15 @@ function indexStatus(): ResearchIndexStatus {
 async function renderShell(
   research: ReturnType<typeof createResearchApi>,
   onFallbackLegacy?: () => void,
-  onContextChange?: (meta: string) => void
+  onContextChange?: (meta: string) => void,
+  onOpenService?: (service: { id: string }) => void
 ): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
       client: { api: { research } as never },
       onFallbackLegacy: onFallbackLegacy ?? (() => undefined),
       onContextChange,
+      onOpenService,
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })
     }));
   });

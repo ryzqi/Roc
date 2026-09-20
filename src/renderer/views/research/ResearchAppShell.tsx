@@ -13,6 +13,13 @@ import { ResearchActivityView } from './ResearchActivityView';
 import { ResearchOverviewView } from './ResearchOverviewView';
 import { ResearchProvenanceView } from './ResearchProvenanceView';
 import { ResearchStageWorkspace } from './ResearchStageWorkspace';
+import { ResearchServicesPanel } from './ResearchServicesPanel';
+import {
+  buildResearchServices,
+  createResearchServiceContext,
+  type ResearchServiceContext,
+  type ResearchServiceEntry
+} from './research-services';
 import {
   RESEARCH_STAGE_GROUPS,
   isCurrentStageGroup,
@@ -26,12 +33,16 @@ export function ResearchAppShell({
   onFallbackLegacy,
   onContextChange,
   onOpenAssistant,
+  onOpenService,
+  onServiceContextChange,
   state
 }: {
   client: RocClient;
   onFallbackLegacy: () => void;
   onContextChange?: (meta: string) => void;
   onOpenAssistant?: () => void;
+  onOpenService?: (service: ResearchServiceEntry) => void;
+  onServiceContextChange?: (context: ResearchServiceContext | null) => void;
   state: LoadedState;
 }): React.JSX.Element {
   const sessionRef = useRef<{ client: RocClient; session: ResearchSession } | null>(null);
@@ -95,9 +106,18 @@ export function ResearchAppShell({
     }
     return project.title.toLowerCase().includes(query) || project.description.toLowerCase().includes(query);
   });
+  const serviceContext = useMemo(
+    () => createResearchServiceContext(context, state.workspace?.path ?? null),
+    [context, state.workspace?.path]
+  );
+  const services = useMemo(() => buildResearchServices(state, serviceContext), [serviceContext, state]);
   useEffect(() => {
     onContextChange?.(buildResearchTopMeta(context));
   }, [context, onContextChange]);
+
+  useEffect(() => {
+    onServiceContextChange?.(serviceContext.projectId === null ? null : serviceContext);
+  }, [onServiceContextChange, serviceContext]);
 
   useEffect(() => {
     session.bindProject(context.projectId);
@@ -384,6 +404,9 @@ export function ResearchAppShell({
             ) : null}
             {state.workspace?.path === undefined ? null : (
               <p className="research-shell-workspace" data-testid="research-shell-workspace">计算目录：{state.workspace.path}</p>
+            )}
+            {onOpenService === undefined ? null : (
+              <ResearchServicesPanel onOpenService={onOpenService} services={services} />
             )}
           </main>
           {activityOpen ? (

@@ -69,6 +69,9 @@ export function useAppTaskRuns({
         workflowHint: null,
         taskSource: null
       };
+      if (payload.workspacePath !== undefined && payload.workspacePath !== null) {
+        request.workspacePath = payload.workspacePath;
+      }
       if (payload.explicitSkillIds !== undefined) {
         request.explicitSkillIds = payload.explicitSkillIds;
       }

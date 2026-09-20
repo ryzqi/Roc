@@ -64,6 +64,30 @@ describe('chat view', () => {
     expect(html).toContain('class="chat-bottom-stack chat-bottom-stack--empty"');
   });
 
+  it('shows the bound research project on the empty assistant canvas', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatView, {
+        chatSelectionVersion: 1,
+        client: createChatClient(),
+        selectedThreadId: null,
+        state: createLoadedState({}),
+        updateLoadedState: () => {},
+        onSubmitChatTask: async () => ({ ok: true as const }),
+        researchContext: {
+          projectId: 'research_1',
+          projectTitle: '证据图',
+          currentStage: 'writing',
+          workspacePath: '/tmp/project'
+        }
+      })
+    );
+
+    expect(html).toContain('研究助手');
+    expect(html).toContain('data-testid="chat-research-context"');
+    expect(html).toContain('当前项目 证据图');
+    expect(html).toContain('写作');
+  });
+
   it('does not add extra bottom offset for the empty chat composer layout', () => {
     const entryCss = readFileSync('src/renderer/styles/main.css', 'utf8');
     const chatCss = readFileSync('src/renderer/styles/chat.css', 'utf8');

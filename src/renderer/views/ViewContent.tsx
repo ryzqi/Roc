@@ -9,6 +9,8 @@ import type { TaskBoardUiState } from '../features/tasks';
 import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 import { readResearchShellMode } from '../app/view-routing';
+import type { ResearchServiceContext, ResearchServiceEntry } from './research/research-services';
+import { ResearchServiceContextBanner } from './research/ResearchServiceContextBanner';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
@@ -53,7 +55,10 @@ export function ViewContent({
   updateLoadedState,
   workspaceLoadState,
   onResearchContextChange,
-  onOpenResearchAssistant
+  onOpenResearchAssistant,
+  onOpenResearchService,
+  onResearchServiceContextChange,
+  researchServiceContext
 }: {
   activeView: ViewId;
   chatSelectionVersion: number;
@@ -79,6 +84,9 @@ export function ViewContent({
   workspaceLoadState: LazyLoadState;
   onResearchContextChange?: (meta: string) => void;
   onOpenResearchAssistant?: () => void;
+  onOpenResearchService?: (service: ResearchServiceEntry) => void;
+  onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
+  researchServiceContext?: ResearchServiceContext | null;
 }): React.JSX.Element {
   const [researchShellMode, setResearchShellMode] = useState(readResearchShellMode);
 
@@ -86,8 +94,17 @@ export function ViewContent({
     return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
   }
 
-  if (activeView === 'tasks-board') {
+  function renderServiceView(node: React.JSX.Element): React.JSX.Element {
     return renderLazyView(
+      <>
+        <ResearchServiceContextBanner context={researchServiceContext} />
+        {node}
+      </>
+    );
+  }
+
+  if (activeView === 'tasks-board') {
+    return renderServiceView(
       <TasksBoardFeature
         client={client}
         liveTaskRun={liveTaskRun}
@@ -111,6 +128,8 @@ export function ViewContent({
           }}
           onContextChange={onResearchContextChange}
           onOpenAssistant={onOpenResearchAssistant}
+          onOpenService={onOpenResearchService}
+          onServiceContextChange={onResearchServiceContextChange}
           state={state}
         />
       );
@@ -121,6 +140,7 @@ export function ViewContent({
     if (selectedTaskDetailId === null) {
       return (
         <section className="canvas-stage task-detail-page" data-testid="task-detail-view">
+          <ResearchServiceContextBanner context={researchServiceContext} />
           <button className="action-button" type="button" onClick={onBackToTaskBoard}>
             返回任务工作台
           </button>
@@ -131,7 +151,7 @@ export function ViewContent({
         </section>
       );
     }
-    return renderLazyView(
+    return renderServiceView(
       <TaskDetailFeature
         client={client}
         liveTaskRun={liveTaskRun}
@@ -146,28 +166,28 @@ export function ViewContent({
     );
   }
   if (activeView === 'workspace') {
-    return renderLazyView(<WorkspaceFeature client={client} loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);
+    return renderServiceView(<WorkspaceFeature client={client} loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);
   }
   if (activeView === 'git') {
-    return renderLazyView(<GitView loadState={workspaceLoadState} state={state} />);
+    return renderServiceView(<GitView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'terminal') {
-    return renderLazyView(<TerminalView state={state} />);
+    return renderServiceView(<TerminalView state={state} />);
   }
   if (activeView === 'preview') {
-    return renderLazyView(<PreviewView loadState={workspaceLoadState} state={state} />);
+    return renderServiceView(<PreviewView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'mcp') {
-    return renderLazyView(<McpFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
+    return renderServiceView(<McpFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'skills') {
-    return renderLazyView(<SkillsFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
+    return renderServiceView(<SkillsFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'memory') {
-    return renderLazyView(<MemoryFeature client={client} loadState={memoryLoadState} state={state} />);
+    return renderServiceView(<MemoryFeature client={client} loadState={memoryLoadState} state={state} />);
   }
   if (activeView === 'diagnostics') {
-    return renderLazyView(<DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />);
+    return renderServiceView(<DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />);
   }
   return (
     <ChatFeature
@@ -177,6 +197,7 @@ export function ViewContent({
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
+      researchContext={researchServiceContext ?? null}
     />
   );
 }
