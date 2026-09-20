@@ -46,6 +46,29 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-workspace')).toContain('/tmp/roc');
     await click('research-shell-activity-toggle');
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
+    expect(text('research-overview-goal')).toContain('把想法变成可追溯项目。');
+    expect(text('research-overview-next')).toContain('审核当前产物');
+    expect(text('research-overview-progress')).toContain('写作');
+    await click('research-overview-event');
+    expect(document.querySelector('[data-testid="research-activity-view"]')).not.toBeNull();
+    await click('research-activity-filter-gates');
+    expect(document.querySelector('[data-testid="research-activity-event-event_approval_requested"]')).not.toBeNull();
+    await click('research-shell-provenance');
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('[data-testid="research-provenance-view"]')).not.toBeNull();
+    expect(text('research-provenance-missing')).toContain('未建立来源');
+    expect(api.listProvenance).toHaveBeenCalledWith({ projectId: 'research_1' });
+    await click('research-provenance-back');
+    expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
+  });
+
+  it('shows a provenance load error when the source list fails', async () => {
+    const api = createResearchApi();
+    api.listProvenance.mockResolvedValue({ ok: false, error: { message: 'denied' } });
+    await renderShell(api);
+    await click('research-shell-provenance');
+    await act(async () => { await Promise.resolve(); });
+    expect(text('research-provenance-error')).toContain('溯源记录加载失败。');
   });
 
   it('filters recent projects and reports the top meta', async () => {
@@ -105,7 +128,9 @@ function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
     retryStageRun: vi.fn(),
     controlIndex: vi.fn(),
     getModelsStatus: vi.fn().mockResolvedValue({ ok: true, data: { ready: true, downloading: false, error: null, models: [] } }),
-    downloadModels: vi.fn()
+    downloadModels: vi.fn(),
+    listProvenance: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] })
   };
 }
 

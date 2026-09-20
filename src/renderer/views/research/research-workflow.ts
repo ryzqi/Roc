@@ -1,4 +1,4 @@
-import type { ResearchArtifact, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../../shared/types';
+import type { ResearchArtifact, ResearchIndexStatus, ResearchProject, ResearchStageRun, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../../shared/types';
 
 export const researchStageLabels: Record<ResearchWorkflowSnapshot['currentStage'], string> = {
   discovery: '发现',
@@ -89,4 +89,15 @@ export function currentArtifacts(artifacts: ResearchArtifact[], workflow: Resear
 
 export function reviewDecisionRequired(workflow: ResearchWorkflowSnapshot): boolean {
   return currentStageState(workflow).stage === 'review' && currentStageState(workflow).status === 'waiting_approval';
+}
+
+export function indexPhaseLabel(status: ResearchIndexStatus | null): string {
+  if (status === null) return '读取中';
+  if (status.phase === 'unavailable') return '不可用';
+  if (status.phase === 'idle') return '空闲';
+  if (status.phase === 'queued') return '排队中';
+  if (status.phase === 'scanning') return '扫描中';
+  if (status.phase === 'indexing') return '索引中';
+  if (status.phase === 'paused') return '已暂停';
+  return '失败';
 }

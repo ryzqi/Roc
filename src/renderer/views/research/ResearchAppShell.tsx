@@ -3,10 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { unwrap } from '../../loaded-state';
 import { persistResearchShellMode } from '../../app/view-routing';
 import { buildResearchTopMeta, createResearchContext } from './research-context';
 import { createResearchWorkbench, createResearchWorkbenchAdapter, type ResearchWorkbench } from './research-workbench';
-import { formatResearchTime, researchProjectStatusLabels, researchStageLabels, researchStageStatusLabels } from './research-workflow';
+import { researchProjectStatusLabels, researchStageLabels, researchStageStatusLabels } from './research-workflow';
+import type { ResearchEvidence, ResearchProvenance } from '../../../shared/types';
+import { ResearchActivityView } from './ResearchActivityView';
+import { ResearchOverviewView } from './ResearchOverviewView';
+import { ResearchProvenanceView } from './ResearchProvenanceView';
 
 export function ResearchAppShell({
   client,
@@ -35,6 +40,12 @@ export function ResearchAppShell({
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [projectQuery, setProjectQuery] = useState('');
   const [activityOpen, setActivityOpen] = useState(false);
+  const [canvasView, setCanvasView] = useState<'overview' | 'activity' | 'provenance'>('overview');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const [provenance, setProvenance] = useState<ResearchProvenance[]>([]);
+  const [evidence, setEvidence] = useState<ResearchEvidence[]>([]);
+  const [provenanceError, setProvenanceError] = useState<string | null>(null);
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
   useEffect(() => {
@@ -77,6 +88,37 @@ export function ResearchAppShell({
     onContextChange?.(buildResearchTopMeta(context));
   }, [context, onContextChange]);
 
+  useEffect(() => {
+    const projectId = context.projectId;
+    if (projectId === null || canvasView !== 'provenance') {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [nextProvenance, nextEvidence] = await Promise.all([
+          unwrap('溯源', await client.api.research.listProvenance({ projectId })),
+          unwrap('证据', await client.api.research.listEvidence({ projectId }))
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setProvenance(nextProvenance);
+        setEvidence(nextEvidence);
+        setProvenanceError(null);
+      } catch {
+        if (!cancelled) {
+          setProvenance([]);
+          setEvidence([]);
+          setProvenanceError('溯源记录加载失败。');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canvasView, client, context.projectId]);
+
   async function createProject(): Promise<void> {
     await workbench.createProject({
       title,
@@ -93,6 +135,33 @@ export function ResearchAppShell({
   function fallbackLegacy(): void {
     persistResearchShellMode('legacy');
     onFallbackLegacy();
+  }
+
+  function openEvent(eventId: string): void {
+    setSelectedEventId(eventId);
+    const payload = snapshot.events.find((item) => item.id === eventId)?.payload ?? {};
+    const artifactId = payload.artifactId;
+    if (typeof artifactId === 'string') {
+      setSelectedArtifactId(artifactId);
+      setCanvasView('provenance');
+      return;
+    }
+    setCanvasView('activity');
+  }
+
+  async function downloadModels(): Promise<void> {
+    setModelsDownloading(true);
+    setModelsError(null);
+    const result = await client.api.research.downloadModels();
+    if (!result.ok) {
+      setModelsReady(false);
+      setModelsDownloading(false);
+      setModelsError(result.error.message);
+      return;
+    }
+    setModelsReady(result.data.ready);
+    setModelsDownloading(result.data.downloading);
+    setModelsError(result.data.error);
   }
 
   return (
@@ -113,6 +182,12 @@ export function ResearchAppShell({
             <button className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
               {activityOpen ? '关闭活动' : '活动与运行'}
             </button>
+          ) : null}
+          {shellState === 'project' ? (
+            <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => setCanvasView('overview')}>项目总览</button>
+          ) : null}
+          {shellState === 'project' ? (
+            <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => setCanvasView('provenance')}>溯源</button>
           ) : null}
           <button className="action-button" data-testid="research-shell-fallback" type="button" onClick={fallbackLegacy}>
             返回旧页面
@@ -203,32 +278,50 @@ export function ResearchAppShell({
                 ))}
               </nav>
             )}
-            <dl className="research-shell-context">
-              <div>
-                <dt>当前项目</dt>
-                <dd data-testid="research-shell-project-title">{context.project.title}</dd>
-              </div>
-              <div>
-                <dt>当前阶段</dt>
-                <dd data-testid="research-shell-stage">{context.currentStage === null ? '未开始' : researchStageLabels[context.currentStage]}</dd>
-              </div>
-              <div>
-                <dt>人工闸门</dt>
-                <dd data-testid="research-shell-gates">{context.pendingGates.length}</dd>
-              </div>
-              <div>
-                <dt>活动运行</dt>
-                <dd data-testid="research-shell-runs">{context.activeRuns.length}</dd>
-              </div>
-              <div>
-                <dt>索引</dt>
-                <dd data-testid="research-shell-index">{context.serviceHealth.indexPhase ?? '未知'}</dd>
-              </div>
-              <div>
-                <dt>产物</dt>
-                <dd data-testid="research-shell-artifacts">{context.artifactSummary.total}</dd>
-              </div>
-            </dl>
+            {context.workflow === null ? null : canvasView === 'overview' ? (
+              <ResearchOverviewView
+                artifacts={snapshot.artifacts}
+                context={context}
+                events={snapshot.events}
+                onApprove={() => void workbench.transition('approve')}
+                onControlIndex={(action) => void workbench.controlIndex(action)}
+                onOpenActivity={() => {
+                  setCanvasView('activity');
+                  setActivityOpen(true);
+                }}
+                onOpenProvenance={(artifactId) => {
+                  setSelectedArtifactId(artifactId);
+                  setCanvasView('provenance');
+                }}
+                onRetryRun={() => void workbench.retryRun()}
+                onTransition={(action) => void workbench.transition(action)}
+                onDownloadModels={() => void downloadModels()}
+                project={context.project}
+                runs={snapshot.runs}
+                workflow={context.workflow}
+                working={snapshot.working}
+              />
+            ) : canvasView === 'activity' ? (
+              <ResearchActivityView
+                events={snapshot.events}
+                onSelectEvent={openEvent}
+                runs={snapshot.runs}
+                selectedEventId={selectedEventId}
+              />
+            ) : (
+              <ResearchProvenanceView
+                artifacts={snapshot.artifacts}
+                evidence={evidence}
+                onSelectArtifact={setSelectedArtifactId}
+                onBackToOverview={() => setCanvasView('overview')}
+                provenance={provenance}
+                runs={snapshot.runs}
+                selectedArtifactId={selectedArtifactId}
+              />
+            )}
+            {canvasView === 'provenance' && provenanceError !== null ? (
+              <div className="research-alert" role="alert" data-testid="research-provenance-error">{provenanceError}</div>
+            ) : null}
             {state.workspace?.path === undefined ? null : (
               <p className="research-shell-workspace" data-testid="research-shell-workspace">计算目录：{state.workspace.path}</p>
             )}
@@ -236,17 +329,14 @@ export function ResearchAppShell({
           {activityOpen ? (
             <aside aria-label="活动与运行" className="research-shell-activity" data-testid="research-shell-activity">
               <div className="research-section-label">最近活动</div>
-              {context.recentEvents.length === 0 ? (
-                <p>暂无活动。</p>
-              ) : (
-                context.recentEvents.map((entry) => (
-                  <div className="research-shell-activity-row" key={entry.id}>
-                    <strong>{researchStageLabels[entry.stage]}</strong>
-                    <span>{entry.message}</span>
-                    <time>{formatResearchTime(entry.createdAt)}</time>
-                  </div>
-                ))
+              {snapshot.events[0] === undefined ? <p>暂无活动。</p> : (
+                <button className="research-overview-event" type="button" onClick={() => openEvent(snapshot.events[0]!.id)}>
+                  {snapshot.events[0].message}
+                </button>
               )}
+              <button className="action-button" data-testid="research-shell-open-activity" type="button" onClick={() => setCanvasView('activity')}>
+                打开活动详情
+              </button>
             </aside>
           ) : null}
         </div>

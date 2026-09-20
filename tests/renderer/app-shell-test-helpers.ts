@@ -90,7 +90,9 @@ export function createShellClient(): RocClient {
       getIndexStatus: vi.fn(),
       createProject: vi.fn(),
       getModelsStatus: vi.fn().mockResolvedValue({ ok: true, data: { ready: true, downloading: false, error: null, models: [] } }),
-      downloadModels: vi.fn()
+      downloadModels: vi.fn(),
+      listProvenance: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+      listEvidence: vi.fn().mockResolvedValue({ ok: true, data: [] })
     }
   } as unknown as RocPreloadApi;
   return { api };

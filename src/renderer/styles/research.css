@@ -934,6 +934,26 @@ pre.research-reader-content {
   font-size: var(--font-body-size);
 }
 
+.research-overview,
+.research-activity-view,
+.research-provenance-view {
+  display: grid;
+  gap: 18px;
+}
+
+.research-overview-event,
+.research-provenance-view {
+  text-align: left;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 @media (max-width: 900px) {
   .research-shell-layout {
     grid-template-columns: 1fr;

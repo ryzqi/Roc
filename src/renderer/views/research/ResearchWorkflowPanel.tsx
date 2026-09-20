@@ -15,6 +15,7 @@ import {
   currentStageState,
   eventTone,
   formatResearchTime,
+  indexPhaseLabel,
   latestCurrentRun,
   nextActionLabel,
   nextStageLabel,
@@ -260,17 +261,6 @@ export function ResearchWorkflowPanel({
       </section>
     </>
   );
-}
-
-function indexPhaseLabel(status: ResearchIndexStatus | null): string {
-  if (status === null) return '读取中';
-  if (status.phase === 'unavailable') return '不可用';
-  if (status.phase === 'idle') return '空闲';
-  if (status.phase === 'queued') return '排队中';
-  if (status.phase === 'scanning') return '扫描中';
-  if (status.phase === 'indexing') return '索引中';
-  if (status.phase === 'paused') return '已暂停';
-  return '失败';
 }
 
 function indexPhaseTone(status: ResearchIndexStatus | null): string {

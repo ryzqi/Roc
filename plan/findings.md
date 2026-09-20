@@ -121,6 +121,18 @@
 - `ResearchAppShell` 增加阶段进度条、活动抽屉、项目搜索；文件夹选择改称计算目录。
 - Chat 仍是独立视图，从壳层「研究助手」进入；项目/阶段元数据绑定留到服务集成阶段。
 
+## 阶段 2 实现记录
+
+- 首屏不新增 `research.project.snapshot`；总览/活动用 workbench 已加载的 workflow、events、runs、artifacts、indexStatus。
+- 溯源进入视图后才请求 `listProvenance` 与 `listEvidence`。
+- 缺失 provenance 显示「未建立来源」，不宣称已验证。
+
+## 阶段 2 审查修复
+
+- 总览补阶段进度条；活动抽屉改为快捷入口，详情进 `ResearchActivityView`。
+- 溯源可返回总览；事件带 `payload.artifactId` 才跳产物，避免按阶段猜产物。
+- 实验/导出/编译列表仍走后续阶段页，本阶段不并行拉领域全文。
+
 ## 现状问题清单
 
 1. 科研入口在侧栏 dock，与 Chat、任务、文件、Git、终端、MCP、Skill、记忆同级，产品主叙事不一致。

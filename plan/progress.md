@@ -38,6 +38,12 @@
 - 壳层补阶段导航、活动抽屉、项目搜索；工作区 pill 在科研页标为计算目录。
 - 「研究助手」从壳层打开现有 Chat 视图。
 
+### 阶段 2：项目总览、活动与溯源
+
+- **状态：** 完成
+- 新增 `ResearchOverviewView`、`ResearchActivityView`、`ResearchProvenanceView`，复用 workbench 快照与现有 provenance/evidence IPC。
+- 总览给出下一步、审批/重试/索引修复；活动可过滤并跳转溯源；无来源产物明确写「未建立来源」。
+
 ## 验证结果
 
 | 检查 | 结果 |
