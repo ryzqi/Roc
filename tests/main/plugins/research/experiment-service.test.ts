@@ -159,7 +159,7 @@ describe('research experiment lifecycle', () => {
     const done = await finished(started.id);
     expect(done).toMatchObject({ status: 'failed', exitCode: 2, error: 'research_experiment_process_failed' });
     expect((await service.read({ projectId, runId: done.id, area: 'log', path: 'stderr.txt' })).content).toContain('invalid measurement');
-    expect(() => repository.recordExperimentRun({ id: done.id, projectId, label: 'Forged', command: 'none', parameters: {}, environment: {}, status: 'completed', outputs: [], startedAt: done.createdAt, endedAt: done.endedAt }))
+    expect(() => repository.experiments.record({ id: done.id, projectId, label: 'Forged', command: 'none', parameters: {}, environment: {}, status: 'completed', outputs: [], startedAt: done.createdAt, endedAt: done.endedAt }))
       .toThrow('research_experiment_execution_immutable');
     await expect(service.publish(projectId, done.id)).rejects.toThrow('research_experiment_completed_required');
   });

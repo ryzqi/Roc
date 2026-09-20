@@ -4,7 +4,7 @@ import type { Database } from 'better-sqlite3';
 import type { ResearchExperimentExecution } from '../../../shared/schemas/research-experiments';
 import { researchFigurePublicationSchema, type ResearchFigurePublication } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema, type ResearchFigureValidation } from '../../../shared/schemas/research-plotting';
-import type { ResearchArtifact } from '../../../shared/types';
+import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
 import { figureRendererPath } from './figure-runner';
 import type { ResearchRepository } from './repository';
 
@@ -16,6 +16,31 @@ export class ResearchFigureRepository {
 
   managed(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_figure_publications WHERE figure_id = ?').get(id) !== undefined; }
   hasArtifact(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_figure_publications WHERE artifact_id = ?').get(id) !== undefined; }
+
+  record(request: ResearchFigureRecordRequest): ResearchFigure {
+    this.research.getProject(request.projectId);
+    if (this.managed(request.id)) throw new Error('research_figure_publication_immutable');
+    const previous = this.db.prepare('SELECT project_id,created_at FROM research_figures WHERE id = ?').get(request.id) as { project_id: string; created_at: string } | undefined;
+    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_figure_project_mismatch');
+    if (request.runId !== null) {
+      const run = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.runId) as { project_id: string } | undefined;
+      if (run === undefined || run.project_id !== request.projectId) throw new Error('research_figure_run_invalid');
+    }
+    const timestamp = this.now();
+    this.db.prepare(`INSERT INTO research_figures
+      (id, project_id, title, code_path, data_paths_json, output_paths_json, status, run_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        code_path = excluded.code_path,
+        data_paths_json = excluded.data_paths_json,
+        output_paths_json = excluded.output_paths_json,
+        status = excluded.status,
+        run_id = excluded.run_id,
+        updated_at = excluded.updated_at`)
+      .run(request.id, request.projectId, request.title, request.codePath, JSON.stringify(request.dataPaths), JSON.stringify(request.outputPaths), request.status, request.runId, timestamp, timestamp);
+    return { ...request, createdAt: previous?.created_at ?? timestamp, updatedAt: timestamp };
+  }
 
   get(projectId: string, id: string): ResearchFigurePublication {
     const row = this.db.prepare('SELECT snapshot_json FROM research_figure_publications WHERE figure_id = ?').get(id) as Row | undefined;
@@ -47,7 +72,7 @@ export class ResearchFigureRepository {
       const previous = replacesFigureId === null ? null : this.get(projectId, replacesFigureId);
       if (previous !== null && previous.status !== 'rendered') throw new Error('research_figure_replacement_invalid');
       const id = `figure_${randomUUID()}`;
-      const figure = this.research.recordFigure({ id, projectId, title: run.request.label, codePath: `input/${run.request.sourcePath}`,
+      const figure = this.record({ id, projectId, title: run.request.label, codePath: `input/${run.request.sourcePath}`,
         dataPaths: run.request.inputPaths.map((path) => `input/${path}`), outputPaths: validation.files.map((file) => `output/${file.path}`), status: 'rendered', runId });
       const artifact = this.research.createArtifact({ projectId, stage: 'figure', kind: 'figure', title: figure.title,
         path: join(this.research.experiments.root(projectId, runId), figureManifestPath) });

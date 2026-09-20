@@ -4,7 +4,7 @@ import type { Database } from 'better-sqlite3';
 import { researchExperimentExecutionSchema, type ResearchExperimentExecution, type ResearchExperimentEnvironment,
   type ResearchExperimentFile, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { ResearchRepository } from './repository';
-import type { ResearchArtifact } from '../../../shared/types';
+import type { ResearchArtifact, ResearchExperimentRun, ResearchExperimentRunRecordRequest } from '../../../shared/types';
 
 type ExecutionRow = { snapshot_json: string; root_path: string };
 const activeStatuses = new Set<ResearchExperimentExecution['status']>(['preparing', 'running']);
@@ -55,6 +55,26 @@ export class ResearchExperimentRepository {
 
   root(projectId: string, id: string): string { this.get(projectId, id); return this.row(id).root_path; }
   managed(id: string): boolean { return this.db.prepare('SELECT 1 FROM research_experiment_executions WHERE run_id = ?').get(id) !== undefined; }
+
+  record(request: ResearchExperimentRunRecordRequest): ResearchExperimentRun {
+    this.research.getProject(request.projectId);
+    if (this.managed(request.id)) throw new Error('research_experiment_execution_immutable');
+    const previous = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.id) as { project_id: string } | undefined;
+    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_experiment_project_mismatch');
+    this.db.prepare(`INSERT INTO research_experiment_runs
+      (id, project_id, label, command, parameters_json, environment_json, status, outputs_json, started_at, ended_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        label = excluded.label,
+        command = excluded.command,
+        parameters_json = excluded.parameters_json,
+        environment_json = excluded.environment_json,
+        status = excluded.status,
+        outputs_json = excluded.outputs_json,
+        ended_at = excluded.ended_at`)
+      .run(request.id, request.projectId, request.label, request.command, JSON.stringify(request.parameters), JSON.stringify(request.environment), request.status, JSON.stringify(request.outputs), request.startedAt, request.endedAt);
+    return request;
+  }
   hasArtifact(id: string): boolean { return this.db.prepare("SELECT 1 FROM research_experiment_executions WHERE json_extract(snapshot_json, '$.artifactId') = ?").get(id) !== undefined; }
   forArtifact(artifact: ResearchArtifact): ResearchExperimentExecution {
     const row = this.db.prepare("SELECT run_id FROM research_experiment_executions WHERE json_extract(snapshot_json, '$.artifactId') = ? AND project_id = ?")

@@ -15,12 +15,6 @@ import type {
   ResearchArtifactUpdateRequest,
   ResearchWorkflowEvent,
   ResearchWorkflowEventsRequest,
-  ResearchExperimentRun,
-  ResearchExperimentRunRecordRequest,
-  ResearchFigure,
-  ResearchFigureRecordRequest,
-  ResearchLiterature,
-  ResearchLiteratureSearchRequest,
   ResearchProvenance,
   ResearchProvenanceCreateRequest,
   ResearchProvenanceListRequest,
@@ -203,92 +197,6 @@ export class ResearchRepository {
             request.status ?? current.status, timestamp, request.id])
       );
     return this.getProject(request.id);
-  }
-
-  upsertLiterature(record: ResearchLiterature): ResearchLiterature {
-    this.db
-      .prepare(
-        `INSERT INTO research_literature_records
-         (id, source, external_id, doi, title, authors_json, abstract, published_year, citation_count, url, open_access_url, imported_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(source, external_id) DO UPDATE SET
-           doi = excluded.doi,
-           title = excluded.title,
-           authors_json = excluded.authors_json,
-           abstract = excluded.abstract,
-           published_year = excluded.published_year,
-           citation_count = excluded.citation_count,
-           url = excluded.url,
-           open_access_url = excluded.open_access_url,
-           updated_at = excluded.updated_at`
-      )
-      .run(
-        record.id,
-        record.source,
-        record.externalId,
-        record.doi,
-        record.title,
-        JSON.stringify(record.authors),
-        record.abstract,
-        record.publishedYear,
-        record.citationCount,
-        record.url,
-        record.openAccessUrl,
-        record.importedAt,
-        record.updatedAt
-      );
-    return record;
-  }
-
-  recordExperimentRun(request: ResearchExperimentRunRecordRequest): ResearchExperimentRun {
-    this.getProject(request.projectId);
-    if (this.experiments.managed(request.id)) throw new Error('research_experiment_execution_immutable');
-    const previous = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.id) as { project_id: string } | undefined;
-    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_experiment_project_mismatch');
-    this.db
-      .prepare(
-        `INSERT INTO research_experiment_runs
-         (id, project_id, label, command, parameters_json, environment_json, status, outputs_json, started_at, ended_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           label = excluded.label,
-           command = excluded.command,
-           parameters_json = excluded.parameters_json,
-           environment_json = excluded.environment_json,
-           status = excluded.status,
-           outputs_json = excluded.outputs_json,
-           ended_at = excluded.ended_at`
-      )
-      .run(request.id, request.projectId, request.label, request.command, JSON.stringify(request.parameters), JSON.stringify(request.environment), request.status, JSON.stringify(request.outputs), request.startedAt, request.endedAt);
-    return request;
-  }
-
-  recordFigure(request: ResearchFigureRecordRequest): ResearchFigure {
-    this.getProject(request.projectId);
-    if (this.figures.managed(request.id)) throw new Error('research_figure_publication_immutable');
-    const previous = this.db.prepare('SELECT project_id,created_at FROM research_figures WHERE id = ?').get(request.id) as { project_id: string; created_at: string } | undefined;
-    if (previous !== undefined && previous.project_id !== request.projectId) throw new Error('research_figure_project_mismatch');
-    if (request.runId !== null) {
-      const run = this.db.prepare('SELECT project_id FROM research_experiment_runs WHERE id = ?').get(request.runId) as { project_id: string } | undefined;
-      if (run === undefined || run.project_id !== request.projectId) throw new Error('research_figure_run_invalid');
-    }
-    const timestamp = this.now();
-    this.db
-      .prepare(
-        `INSERT INTO research_figures
-         (id, project_id, title, code_path, data_paths_json, output_paths_json, status, run_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           title = excluded.title,
-           code_path = excluded.code_path,
-           data_paths_json = excluded.data_paths_json,
-           output_paths_json = excluded.output_paths_json,
-           status = excluded.status,
-           run_id = excluded.run_id,
-           updated_at = excluded.updated_at`
-      )
-      .run(request.id, request.projectId, request.title, request.codePath, JSON.stringify(request.dataPaths), JSON.stringify(request.outputPaths), request.status, request.runId, timestamp, timestamp);
-    return { ...request, createdAt: previous?.created_at ?? timestamp, updatedAt: timestamp };
   }
 
   createArtifact(input: ResearchArtifactCreateRequest): ResearchArtifact {
@@ -528,20 +436,6 @@ export class ResearchRepository {
       excerpt: row.excerpt,
       createdAt: row.created_at
     }));
-  }
-
-  listLiterature(request: ResearchLiteratureSearchRequest): ResearchLiterature[] {
-    const placeholders = request.sources.map(() => '?').join(', ');
-    const rows = this.db
-      .prepare(
-        `SELECT id, source, external_id, doi, title, authors_json, abstract, published_year,
-                citation_count, url, open_access_url, imported_at, updated_at
-         FROM research_literature_records
-         WHERE source IN (${placeholders})
-         ORDER BY updated_at DESC LIMIT ?`
-      )
-      .all(...request.sources, request.limit) as LiteratureRow[];
-    return rows.map(toLiterature);
   }
 
   getWorkflow(projectId: string): ResearchWorkflowSnapshot {
@@ -809,22 +703,6 @@ type ResearchEventRow = {
   created_at: string;
 };
 
-type LiteratureRow = {
-  id: string;
-  source: ResearchLiterature['source'];
-  external_id: string;
-  doi: string | null;
-  title: string;
-  authors_json: string;
-  abstract: string | null;
-  published_year: number | null;
-  citation_count: number | null;
-  url: string | null;
-  open_access_url: string | null;
-  imported_at: string;
-  updated_at: string;
-};
-
 type ProvenanceRow = {
   id: string;
   project_id: string;
@@ -908,30 +786,6 @@ function toStageState(row: ResearchStageStateRow): ResearchStageState {
     gateApproved: row.gate_approved === 1,
     lastError: row.last_error
   });
-}
-
-function toLiterature(row: LiteratureRow): ResearchLiterature {
-  let authors: unknown;
-  try {
-    authors = JSON.parse(row.authors_json);
-  } catch {
-    throw new Error('research_literature_authors_invalid');
-  }
-  return {
-    id: row.id,
-    source: row.source,
-    externalId: row.external_id,
-    doi: row.doi,
-    title: row.title,
-    authors: Array.isArray(authors) ? authors.filter((author): author is string => typeof author === 'string') : [],
-    abstract: row.abstract,
-    publishedYear: row.published_year,
-    citationCount: row.citation_count,
-    url: row.url,
-    openAccessUrl: row.open_access_url,
-    importedAt: row.imported_at,
-    updatedAt: row.updated_at
-  };
 }
 
 function toTemplate(row: TemplateRow): ResearchTemplate {

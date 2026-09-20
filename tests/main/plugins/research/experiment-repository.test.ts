@@ -48,7 +48,7 @@ describe('experiment persistence migration and provenance', () => {
       applyResearchDatabaseSchema(db); applyResearchDatabaseSchema(db);
       expect(repository.experiments.list(project.id, 10)).toEqual([]);
       expect(db.prepare('SELECT label,status FROM research_experiment_runs WHERE id = ?').get('legacy')).toEqual({ label: 'Legacy result', status: 'completed' });
-      expect(() => repository.recordExperimentRun({ id: 'legacy', projectId: other.id, label: 'Overwrite', command: 'none', parameters: {}, environment: {}, status: 'failed', outputs: [], startedAt: '', endedAt: null }))
+      expect(() => repository.experiments.record({ id: 'legacy', projectId: other.id, label: 'Overwrite', command: 'none', parameters: {}, environment: {}, status: 'failed', outputs: [], startedAt: '', endedAt: null }))
         .toThrow('research_experiment_project_mismatch');
       expect(() => repository.addProvenance({ projectId: other.id, artifactId: null, subjectType: 'experiment', subjectId: 'legacy', sourceType: 'file', sourceId: 'data.csv', locator: null, excerpt: null }))
         .toThrow('research_provenance_project_mismatch');
@@ -63,13 +63,13 @@ describe('experiment persistence migration and provenance', () => {
       const project = repository.createProject({ title: 'Project', description: 'Provenance.', workspacePath: null });
       const other = repository.createProject({ title: 'Other', description: 'Other provenance.', workspacePath: null });
       const request = { id: 'pending', projectId: project.id, label: 'Pending', command: 'python run.py', parameters: {}, environment: {}, status: 'running' as const, outputs: [], startedAt: '2026-09-12T00:00:00.000Z', endedAt: null };
-      repository.recordExperimentRun(request);
-      repository.recordExperimentRun({ ...request, id: 'elsewhere', projectId: other.id, status: 'completed' });
+      repository.experiments.record(request);
+      repository.experiments.record({ ...request, id: 'elsewhere', projectId: other.id, status: 'completed' });
       const artifact = repository.createArtifact({ projectId: project.id, stage: 'discovery', kind: 'search_strategy', title: 'Study', path: null });
       const provenance = { projectId: project.id, artifactId: artifact.id, subjectType: 'artifact' as const, subjectId: artifact.id, sourceType: 'experiment' as const, sourceId: 'pending', locator: null, excerpt: null };
       expect(() => repository.addProvenance(provenance)).toThrow('research_provenance_source_invalid');
       expect(() => repository.addProvenance({ ...provenance, sourceId: 'elsewhere' })).toThrow('research_provenance_source_invalid');
-      repository.recordExperimentRun({ ...request, status: 'completed', endedAt: '2026-09-12T00:00:01.000Z' });
+      repository.experiments.record({ ...request, status: 'completed', endedAt: '2026-09-12T00:00:01.000Z' });
       expect(repository.addProvenance(provenance).sourceId).toBe('pending');
     } finally { db.close(); }
   });

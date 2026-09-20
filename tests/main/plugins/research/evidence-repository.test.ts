@@ -133,7 +133,7 @@ describe('research evidence and manuscript boundaries', () => {
 
   it('distinguishes figure entities from figure claims in provenance', () => {
     const { id } = project();
-    const figure = repository.recordFigure({ id: 'figure-1', projectId: id, title: 'Figure', codePath: 'plot.py',
+    const figure = repository.figures.record({ id: 'figure-1', projectId: id, title: 'Figure', codePath: 'plot.py',
       dataPaths: ['data.csv'], outputPaths: [], status: 'draft', runId: null });
     const edge = repository.addProvenance({ projectId: id, artifactId: null, subjectType: 'figure', subjectId: figure.id,
       sourceType: 'file', sourceId: 'data.csv', locator: 'rows 2-3', excerpt: 'Measured data.' });

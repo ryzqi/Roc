@@ -147,7 +147,7 @@ describe('figure publication and review boundaries', () => {
     expect(repository.figures.list(projectId, 10)).toEqual([first]);
     expect(repository.listProvenance({ projectId, subjectId: first.id })).toMatchObject([{ sourceType: 'experiment', sourceId: run.id, artifactId: first.artifactId }]);
     expect(() => repository.updateArtifact({ id: first.artifactId, path: '/unverified.png' })).toThrow('research_figure_publication_immutable');
-    expect(() => repository.recordFigure({ id: first.id, projectId, title: 'Forged', codePath: 'other.py', dataPaths: [], outputPaths: [], status: 'approved', runId: null }))
+    expect(() => repository.figures.record({ id: first.id, projectId, title: 'Forged', codePath: 'other.py', dataPaths: [], outputPaths: [], status: 'approved', runId: null }))
       .toThrow('research_figure_publication_immutable');
     await rm(workspace, { recursive: true });
     expect(await figures.verify(projectId, first.id)).toEqual(first);
@@ -216,8 +216,8 @@ describe('figure publication and review boundaries', () => {
     const other = repository.createProject({ title: 'Other', description: '', workspacePath: workspace });
     expect(() => repository.figures.get(other.id, figure.id)).toThrow('research_figure_project_mismatch');
     await expect(figures.publish(other.id, run.id, null)).rejects.toThrow('research_experiment_project_mismatch');
-    repository.recordFigure({ id: 'legacy', projectId, title: 'Legacy', codePath: 'plot.py', dataPaths: [], outputPaths: [], status: 'draft', runId: null });
-    expect(() => repository.recordFigure({ id: 'legacy', projectId: other.id, title: 'Changed', codePath: 'x', dataPaths: [], outputPaths: [], status: 'draft', runId: null }))
+    repository.figures.record({ id: 'legacy', projectId, title: 'Legacy', codePath: 'plot.py', dataPaths: [], outputPaths: [], status: 'draft', runId: null });
+    expect(() => repository.figures.record({ id: 'legacy', projectId: other.id, title: 'Changed', codePath: 'x', dataPaths: [], outputPaths: [], status: 'draft', runId: null }))
       .toThrow('research_figure_project_mismatch');
     const pending = repository.experiments.create(request(), workspace, workspace, join(root, 'runs'));
     repository.experiments.finish(projectId, pending.id, { status: 'cancelled', files: [], exitCode: null, error: 'research_experiment_cancelled' });
