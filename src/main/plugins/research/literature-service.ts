@@ -1,6 +1,8 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
+import { literatureIdentity, normalizeResearchDoi, referenceKey } from './literature-identity';
+import type { BibliographyEntry } from './library-repository';
 import type { ResearchRepository } from './repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -51,7 +53,7 @@ export class LiteratureSearchService {
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
       externalId: item.id,
-      doi: normalizeDoi(item.doi),
+      doi: optionalResearchDoi(item.doi),
       title: item.title ?? 'Untitled work',
       authors: (item.authorships ?? []).map((author) => author.author?.display_name ?? '').filter(Boolean),
       abstract: invertAbstract(item.abstract_inverted_index),
@@ -70,7 +72,7 @@ export class LiteratureSearchService {
       id: `crossref:${item.DOI ?? item.URL ?? item.title?.[0] ?? crypto.randomUUID()}`,
       source: 'crossref' as const,
       externalId: item.DOI ?? item.URL ?? item.title?.[0] ?? crypto.randomUUID(),
-      doi: item.DOI ?? null,
+      doi: optionalResearchDoi(item.DOI),
       title: item.title?.[0] ?? 'Untitled work',
       authors: (item.author ?? []).map((author) => [author.given, author.family].filter(Boolean).join(' ')),
       abstract: item.abstract ?? null,
@@ -89,7 +91,7 @@ export class LiteratureSearchService {
       id: `semantic_scholar:${item.paperId}`,
       source: 'semantic_scholar' as const,
       externalId: item.paperId,
-      doi: item.externalIds?.DOI ?? null,
+      doi: optionalResearchDoi(item.externalIds?.DOI),
       title: item.title ?? 'Untitled work',
       authors: (item.authors ?? []).map((author) => author.name),
       abstract: item.abstract ?? null,
@@ -129,7 +131,7 @@ export class LiteratureSearchService {
       id: `${source}:${item.id ?? item.pmid ?? crypto.randomUUID()}`,
       source,
       externalId: item.id ?? item.pmid ?? crypto.randomUUID(),
-      doi: item.doi ?? null,
+      doi: optionalResearchDoi(item.doi),
       title: item.title ?? 'Untitled work',
       authors: item.authorString === undefined ? [] : item.authorString.split(',').map((author) => author.trim()).filter(Boolean),
       abstract: item.abstractText ?? null,
@@ -158,15 +160,15 @@ export class LiteratureSearchService {
 function dedupeLiterature(records: ResearchLiterature[]): ResearchLiterature[] {
   const byIdentity = new Map<string, ResearchLiterature>();
   for (const record of records) {
-    const identity = record.doi?.toLowerCase() ?? `${record.title.toLowerCase()}|${record.publishedYear ?? ''}`;
+    const identity = literatureIdentity({ doi: record.doi, source: record.source, externalId: record.externalId });
     if (!byIdentity.has(identity)) byIdentity.set(identity, record);
   }
   return Array.from(byIdentity.values());
 }
 
-function normalizeDoi(doi: string | null | undefined): string | null {
+function optionalResearchDoi(doi: string | null | undefined): string | null {
   if (doi === undefined || doi === null || doi.trim().length === 0) return null;
-  return doi.replace(/^https?:\/\/doi\.org\//iu, '').trim();
+  return normalizeResearchDoi(doi);
 }
 
 function invertAbstract(value: Record<string, number[]> | null | undefined): string | null {
@@ -201,16 +203,30 @@ type ArxivEntry = { id?: string; title?: string; summary?: string; published?: s
 type EuropePmcPayload = { resultList?: { result?: Array<{ id?: string; pmid?: string; doi?: string; title?: string; authorString?: string; abstractText?: string; pubYear?: string; citedByCount?: number; isOpenAccess?: string; source?: string }> } };
 
 export function ingestLiteratureRecord(repository: ResearchRepository, record: ResearchLiterature): void {
-  repository.upsertLiterature(record);
-  if (record.abstract === null || record.abstract.trim().length === 0) return;
-  repository.knowledge.upsertKnowledgeDocument({
-    id: `literature:${record.id}`,
-    projectId: null,
-    sourceType: 'literature',
-    sourceId: record.id,
+  const identity = literatureIdentity(record);
+  const bibliography = bibliographyFromRecord(record, identity);
+  repository.library.import([{ metadata: record, bibliography }], null);
+}
+
+function bibliographyFromRecord(record: ResearchLiterature, identity: string): BibliographyEntry {
+  return {
+    citationKey: referenceKey(identity),
+    entryType: 'article',
+    preambles: [],
+    csl: null,
     title: record.title,
-    content: record.abstract,
-    chunks: [{ content: record.abstract, locator: 'abstract' }],
-    embeddingConfigId: null
-  });
+    authors: record.authors,
+    doi: record.doi,
+    publishedYear: record.publishedYear,
+    abstract: record.abstract,
+    url: record.url,
+    fields: {
+      title: record.title,
+      ...(record.authors.length === 0 ? {} : { author: record.authors.join(' and ') }),
+      ...(record.doi === null ? {} : { doi: record.doi }),
+      ...(record.publishedYear === null ? {} : { year: String(record.publishedYear) }),
+      ...(record.abstract === null ? {} : { abstract: record.abstract }),
+      ...(record.url === null ? {} : { url: record.url })
+    }
+  };
 }

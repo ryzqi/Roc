@@ -6,6 +6,7 @@ import { applyDatabaseMigrations } from '../../../../src/main/infrastructure/dat
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
 import { normalizeResearchDoi } from '../../../../src/main/plugins/research/literature-identity';
 import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
+import { LiteratureSearchService } from '../../../../src/main/plugins/research/literature-service';
 import { libraryEntry } from './library-fixtures';
 
 let db: Database.Database;
@@ -53,7 +54,22 @@ describe('research library repository', () => {
     expect(repository.library.get(first.id).projectIds).toEqual([otherProject]);
   });
 
+  it('imports searched records onto the same identity_key as DOI import', async () => {
+    const service = new LiteratureSearchService(async () => Response.json({ results: [{
+      id: 'https://openalex.org/Wpaper', doi: 'https://doi.org/10.1234/paper', title: 'Evidence study',
+      authorships: [{ author: { display_name: 'Jane Doe' } }], publication_year: 2026
+    }] }));
+    await service.searchAndStore(repository, { query: 'evidence', sources: ['openalex'], limit: 5 });
+    const searched = repository.library.list({ ...listRequest, query: 'Evidence' });
+    expect(searched).toHaveLength(1);
+    expect(db.prepare('SELECT identity_key FROM research_library WHERE id = ?').get(searched[0].id)).toEqual({ identity_key: 'doi:10.1234/paper' });
+    const imported = repository.library.import([libraryEntry({ doi: '10.1234/paper' })], null);
+    expect(imported).toMatchObject({ createdCount: 0, duplicateCount: 1 });
+    expect(imported.items[0].id).toBe(searched[0].id);
+  });
+
   it('uses source identity without merging unrelated works that only share a title', () => {
+
     const first = libraryEntry({ doi: null });
     const second = libraryEntry({ doi: null, source: 'openalex', externalId: 'other', id: 'openalex:other' });
     const result = repository.library.import([first, second, first], null);

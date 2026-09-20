@@ -144,10 +144,53 @@ describe('research adapters', () => {
       const repository = new ResearchRepository(db);
       const records = await service.searchAndStore(repository, { query: 'stored', sources: ['openalex'], limit: 5 });
       expect(records).toHaveLength(1);
-      expect(repository.listLiterature({ query: 'Stored', sources: ['openalex'], limit: 5 })[0]).toMatchObject({ title: 'Stored evidence', doi: '10.1000/stored' });
-      expect(repository.knowledge.knowledgeDocument(`literature:${records[0].id}`)).toMatchObject({
-        sourceType: 'literature', sourceId: records[0].id, title: 'Stored evidence'
+      const items = repository.library.list({ projectId: null, query: 'Stored', includeArchived: false, limit: 5 });
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ metadata: { title: 'Stored evidence', doi: '10.1000/stored' } });
+      expect(db.prepare('SELECT identity_key FROM research_library WHERE id = ?').get(items[0].id)).toEqual({ identity_key: 'doi:10.1000/stored' });
+      expect(repository.knowledge.knowledgeDocument(`library:${items[0].id}`)).toMatchObject({
+        sourceType: 'literature', sourceId: items[0].id, title: 'Stored evidence'
       });
     } finally { db.close(); }
+  });
+
+  it('dedupes the same DOI across URL wrappers and stores one library identity', async () => {
+    const service = new LiteratureSearchService(async (url) => {
+      if (url.startsWith('https://api.openalex.org')) {
+        return Response.json({ results: [{
+          id: 'https://openalex.org/Wdoi', doi: 'https://doi.org/10.1000/Same', title: 'Same work',
+          authorships: [], publication_year: 2024, cited_by_count: 0
+        }] });
+      }
+      return Response.json({ message: { items: [{
+        DOI: '10.1000/Same', URL: 'https://doi.org/10.1000/Same', title: ['Same work'], author: []
+      }] } });
+    });
+    const records = await service.search({ query: 'same', sources: ['openalex', 'crossref'], limit: 10 });
+    expect(records).toHaveLength(1);
+    expect(records[0].doi).toBe('10.1000/same');
+    const db = new Database(':memory:');
+    try {
+      db.pragma('foreign_keys = ON');
+      applyResearchDatabaseSchema(db);
+      const repository = new ResearchRepository(db);
+      await service.searchAndStore(repository, { query: 'same', sources: ['openalex', 'crossref'], limit: 10 });
+      expect(repository.library.list({ projectId: null, query: 'Same', includeArchived: false, limit: 10 })).toHaveLength(1);
+      expect(db.prepare('SELECT count(*) AS count FROM research_library WHERE identity_key = ?').get('doi:10.1000/same')).toEqual({ count: 1 });
+    } finally { db.close(); }
+  });
+
+  it('folds no-DOI records on source and externalId instead of title and year', async () => {
+    const service = new LiteratureSearchService(async () => new Response(
+      `<?xml version="1.0"?><feed>
+        <entry><id>http://arxiv.org/abs/1234.1</id><title>First title</title><summary>A</summary><published>2023-01-01T00:00:00Z</published><author><name>A</name></author></entry>
+        <entry><id>http://arxiv.org/abs/1234.1</id><title>Renamed title</title><summary>B</summary><published>2024-01-01T00:00:00Z</published><author><name>B</name></author></entry>
+        <entry><id>http://arxiv.org/abs/9999.9</id><title>First title</title><summary>C</summary><published>2023-01-01T00:00:00Z</published><author><name>C</name></author></entry>
+      </feed>`,
+      { status: 200 }
+    ));
+    const records = await service.search({ query: 'arxiv', sources: ['arxiv'], limit: 10 });
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.externalId).sort()).toEqual(['http://arxiv.org/abs/1234.1', 'http://arxiv.org/abs/9999.9'].sort());
   });
 });
