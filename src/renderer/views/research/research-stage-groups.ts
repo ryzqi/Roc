@@ -7,6 +7,7 @@ export type ResearchStageTab =
   | 'ideas'
   | 'policies'
   | 'experiments'
+  | 'figures'
   | 'manuscript'
   | 'editor'
   | 'production'
@@ -37,7 +38,7 @@ export const RESEARCH_STAGE_GROUPS: Array<{
     id: 'experiment',
     label: '实验与检查',
     stages: ['experiment', 'figure'],
-    tabs: [{ id: 'experiments', label: '实验' }]
+    tabs: [{ id: 'experiments', label: '实验' }, { id: 'figures', label: '图稿' }]
   },
   {
     id: 'write',

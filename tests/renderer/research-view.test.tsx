@@ -465,6 +465,45 @@ describe('research workbench dashboard', () => {
     expect(text('research-experiment-list')).toContain('Measure signal');
   });
 
+  it('starts a figure from the figure tab without a preflight inspect', async () => {
+    const execution: ResearchExperimentExecution = {
+      id: 'fig_1', projectId: 'research_1',
+      request: {
+        projectId: 'research_1', requestId: 'req_fig', label: 'Measured figure', engine: 'matplotlib',
+        runtime: { kind: 'bundled-python' }, sourcePath: 'plot.py', inputPaths: ['data.csv'], arguments: [],
+        parameters: {}, timeoutMs: 60000, network: 'disabled', figure: { widthInches: 6, heightInches: 4, dpi: 150, seed: 1 }
+      },
+      ownerRunId: null, workspacePath: '/tmp/roc', workspaceRoot: '/tmp/roc', status: 'completed',
+      environment: {
+        runtime: { kind: 'bundled-python' }, executable: '/tmp/python', prefix: '/tmp/python', basePrefix: '/tmp/python',
+        version: '3.12.14', platform: 'darwin', architecture: 'arm64', toolchainHash: 'b'.repeat(64), metadataHash: 'c'.repeat(64),
+        packages: [], lockFiles: [], hash: 'd'.repeat(64)
+      },
+      files: [{ area: 'log', path: 'stdout.txt', sha256: 'e'.repeat(64), size: 12 }],
+      inputHash: 'f'.repeat(64), exitCode: 0, error: null, artifactId: null,
+      createdAt: '2026-09-14T01:00:00.000Z', startedAt: '2026-09-14T01:00:01.000Z', endedAt: '2026-09-14T01:00:02.000Z'
+    };
+    const api = createResearchApi({
+      workflow: workflow({ stage: 'figure', status: 'ready', gateRequired: false, artifactIds: [] })
+    });
+    api.startFigure.mockResolvedValue({ ok: true, data: execution });
+    api.listExperiments.mockResolvedValue({ ok: true, data: [execution] });
+    await renderView(api);
+    await click('research-stage-group-experiment');
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-tab-figures"]') !== null);
+    await click('research-stage-tab-figures');
+    await waitUntil(() => document.querySelector('[data-testid="research-figure-panel"]') !== null);
+    setInput('research-figure-label', 'Measured figure');
+    setInput('research-figure-source', 'plot.py');
+    setInput('research-figure-inputs', 'data.csv');
+    await click('research-figure-start');
+    expect(api.startFigure).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'research_1', label: 'Measured figure', sourcePath: 'plot.py', inputPaths: ['data.csv']
+    }));
+    expect(api.startFigure.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
+    expect(text('research-figure-list')).toContain('Measured figure');
+  });
+
   it('imports a template, edits the entry, and compiles a preview', async () => {
     const template: ResearchTemplate = {
       id: 'template_1', projectId: 'research_1', rootPath: '/tmp/template', entryPath: 'main.tex', status: 'imported',
@@ -568,6 +607,10 @@ function createResearchApi(overrides: {
     listExperiments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     inspectExperimentEnvironment: vi.fn(),
     startExperiment: vi.fn(),
+    startFigure: vi.fn(),
+    cancelFigure: vi.fn(),
+    publishFigure: vi.fn(),
+    getFigureRun: vi.fn(),
     getExperiment: vi.fn(),
     cancelExperiment: vi.fn(),
     publishExperiment: vi.fn(),

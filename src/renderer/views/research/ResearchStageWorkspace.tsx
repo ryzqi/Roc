@@ -22,6 +22,7 @@ import {
 const ResearchEditorPanel = lazy(() => import('./ResearchEditorPanel').then((module) => ({ default: module.ResearchEditorPanel })));
 const ResearchEmbeddingPanel = lazy(() => import('./ResearchEmbeddingPanel').then((module) => ({ default: module.ResearchEmbeddingPanel })));
 const ResearchExperimentPanel = lazy(() => import('./ResearchExperimentPanel').then((module) => ({ default: module.ResearchExperimentPanel })));
+const ResearchFigurePanel = lazy(() => import('./ResearchFigurePanel').then((module) => ({ default: module.ResearchFigurePanel })));
 const ResearchIdeaPanel = lazy(() => import('./ResearchIdeaPanel').then((module) => ({ default: module.ResearchIdeaPanel })));
 const ResearchKnowledgePanel = lazy(() => import('./ResearchKnowledgePanel').then((module) => ({ default: module.ResearchKnowledgePanel })));
 const ResearchLibraryPanel = lazy(() => import('./ResearchLibraryPanel').then((module) => ({ default: module.ResearchLibraryPanel })));
@@ -46,6 +47,7 @@ export function ResearchStageWorkspace({
   const [librarySnapshot, setLibrarySnapshot] = useState(session.library.getSnapshot());
   const [knowledgeSnapshot, setKnowledgeSnapshot] = useState(session.knowledge.getSnapshot());
   const [experimentSnapshot, setExperimentSnapshot] = useState(session.experiments.getSnapshot());
+  const [figureSnapshot, setFigureSnapshot] = useState(session.figures.getSnapshot());
   const [policySnapshot, setPolicySnapshot] = useState(session.policies.getSnapshot());
   const [templateSnapshot, setTemplateSnapshot] = useState(session.templates.getSnapshot());
   const [manuscriptSnapshot, setManuscriptSnapshot] = useState(session.manuscript.getSnapshot());
@@ -59,6 +61,7 @@ export function ResearchStageWorkspace({
     || librarySnapshot.working
     || knowledgeSnapshot.working
     || experimentSnapshot.working
+    || figureSnapshot.working
     || policySnapshot.working
     || templateSnapshot.working
     || manuscriptSnapshot.working
@@ -73,6 +76,7 @@ export function ResearchStageWorkspace({
     ?? librarySnapshot.error
     ?? knowledgeSnapshot.error
     ?? experimentSnapshot.error
+    ?? figureSnapshot.error
     ?? policySnapshot.error
     ?? templateSnapshot.error
     ?? manuscriptSnapshot.error
@@ -86,6 +90,7 @@ export function ResearchStageWorkspace({
       unsubscribers.push(session.knowledge.subscribe(setKnowledgeSnapshot));
     }
     if (tab === 'experiments') unsubscribers.push(session.experiments.subscribe(setExperimentSnapshot));
+    if (tab === 'figures') unsubscribers.push(session.figures.subscribe(setFigureSnapshot));
     if (tab === 'policies') unsubscribers.push(session.policies.subscribe(setPolicySnapshot));
     if (tab === 'editor') unsubscribers.push(session.templates.subscribe(setTemplateSnapshot));
     if (tab === 'manuscript') unsubscribers.push(session.manuscript.subscribe(setManuscriptSnapshot));
@@ -99,6 +104,7 @@ export function ResearchStageWorkspace({
   useEffect(() => {
     if (tab === 'library') void session.library.load();
     if (tab === 'experiments') void session.experiments.load();
+    if (tab === 'figures') void session.figures.load();
     if (tab === 'production') void session.production.load();
     if (tab === 'editor') void session.templates.load();
     if (tab === 'policies') void session.policies.load();
@@ -259,6 +265,24 @@ export function ResearchStageWorkspace({
             onStart={() => void session.experiments.start()}
             projectId={selectedProjectId}
             selectedRunId={experimentSnapshot.selectedRunId}
+            working={working}
+            readOnly={!writeAllowed}
+          />
+        ) : null}
+        {tab === 'figures' ? (
+          <ResearchFigurePanel
+            draft={figureSnapshot.draft}
+            log={figureSnapshot.log}
+            onCancel={(runId) => void session.figures.cancel(runId)}
+            onChange={(draft) => session.figures.setDraft(draft)}
+            onPublish={(runId) => void session.figures.publish(runId)}
+            onReadLog={(runId) => void session.figures.readLog(runId)}
+            onRefresh={() => void session.figures.load()}
+            onSelect={(runId) => session.figures.select(runId)}
+            onStart={() => void session.figures.start()}
+            projectId={selectedProjectId}
+            runs={figureSnapshot.runs}
+            selectedRunId={figureSnapshot.selectedRunId}
             working={working}
             readOnly={!writeAllowed}
           />

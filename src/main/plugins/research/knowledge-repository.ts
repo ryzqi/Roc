@@ -97,8 +97,10 @@ export class ResearchKnowledgeRepository {
   }
 
   upsertFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}): ResearchKnowledgeDocument {
+    if (input.embeddingPolicy !== 'none' && input.embeddingPolicy !== 'selected') {
+      throw new Error('research_knowledge_embedding_policy_invalid');
+    }
     if (input.embeddingPolicy === 'selected') throw new Error('research_knowledge_selected_requires_embedding_service');
-    if (input.embeddingPolicy !== 'none') throw new Error('research_knowledge_embedding_policy_invalid');
     const { embeddingPolicy: _policy, ...fields } = input;
     return this.upsertKnowledgeDocument({ ...fields, embeddingConfigId: null }, sourceMetadata);
   }

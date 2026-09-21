@@ -59,7 +59,7 @@ export class ResearchLibraryRepository {
       if (metadata.doi !== bibliography.doi || metadata.title !== bibliography.title) throw new Error('research_library_metadata_mismatch');
       return { metadata, bibliography, identity: literatureIdentity(metadata) };
     });
-    return this.db.transaction(() => {
+    const imported = this.db.transaction(() => {
       let createdCount = 0;
       let duplicateCount = 0;
       const ids: string[] = [];
@@ -126,6 +126,8 @@ export class ResearchLibraryRepository {
       for (const id of restoredIds) this.research.documents.syncLibraryIndex(id);
       return { items, createdCount, duplicateCount };
     })();
+    this.research.flushKnowledgeFromSource();
+    return imported;
   }
 
   link(id: string, projectId: string, linked: boolean): LibraryItem {
@@ -138,7 +140,7 @@ export class ResearchLibraryRepository {
   }
 
   archive(id: string, expectedRevision: number, archived: boolean): LibraryItem {
-    return this.db.transaction(() => {
+    const archivedItem = this.db.transaction(() => {
       this.get(id);
       const result = this.db.prepare('UPDATE research_library SET archived = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?')
         .run(archived ? 1 : 0, this.now(), id, expectedRevision);
@@ -149,6 +151,8 @@ export class ResearchLibraryRepository {
       this.research.documents.syncLibraryIndex(id);
       return item;
     })();
+    this.research.flushKnowledgeFromSource();
+    return archivedItem;
   }
 
   setCitationKey(id: string, expectedRevision: number, citationKey: string): LibraryItem {
@@ -172,8 +176,10 @@ export class ResearchLibraryRepository {
       .get(`library:${item.id}`) as { title: string; content: string; project_id: string | null; source_id: string; source_type: string } | undefined;
     if (existing !== undefined && existing.project_id === null && existing.source_id === item.id
         && existing.source_type === 'literature' && existing.title === item.metadata.title && existing.content === content) return;
-    this.research.knowledge.upsertFromSource({ id: `library:${item.id}`, projectId: null, sourceType: 'literature', sourceId: item.id,
-      title: item.metadata.title, content, chunks, embeddingPolicy: 'none' });
+    const input = { id: `library:${item.id}`, projectId: null as string | null, sourceType: 'literature' as const, sourceId: item.id,
+      title: item.metadata.title, content, chunks, embeddingPolicy: 'none' as const };
+    this.research.knowledge.upsertFromSource(input);
+    this.research.queueKnowledgeFromSource(input);
   }
 }
 

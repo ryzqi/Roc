@@ -1,6 +1,7 @@
 import type { ResearchArtifact } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createResearchExperimentAdapter, createResearchExperimentProjection, type ResearchExperimentProjection } from './research-experiments';
+import { createResearchFigureAdapter, createResearchFigureProjection, type ResearchFigureProjection } from './research-figures';
 import { createResearchIdeaAdapter, createResearchIdeaProjection, type ResearchIdeaHost, type ResearchIdeaProjection } from './research-ideas';
 import { createResearchKnowledgeAdapter, createResearchKnowledgeProjection, type ResearchKnowledgeProjection } from './research-knowledge';
 import { createResearchLibraryAdapter, createResearchLibraryProjection, type ResearchLibraryProjection } from './research-library';
@@ -15,6 +16,7 @@ export type ResearchSession = {
   library: ResearchLibraryProjection;
   knowledge: ResearchKnowledgeProjection;
   experiments: ResearchExperimentProjection;
+  figures: ResearchFigureProjection;
   policies: ResearchPolicyProjection;
   templates: ResearchTemplateProjection;
   manuscript: ResearchManuscriptProjection;
@@ -65,6 +67,7 @@ export function createResearchSession(client: RocClient): ResearchSession {
   const library = createResearchLibraryProjection(createResearchLibraryAdapter(client));
   const knowledge = createResearchKnowledgeProjection(createResearchKnowledgeAdapter(client));
   const experiments = createResearchExperimentProjection(createResearchExperimentAdapter(client));
+  const figures = createResearchFigureProjection(createResearchFigureAdapter(client));
   const policies = createResearchPolicyProjection(createResearchPolicyAdapter(client));
   const templates = createResearchTemplateProjection(createResearchTemplateAdapter(client));
   const hosts = createStageHost(workbench);
@@ -72,11 +75,12 @@ export function createResearchSession(client: RocClient): ResearchSession {
   const ideas = createResearchIdeaProjection(createResearchIdeaAdapter(client), hosts.ideaHost);
   const production = createResearchProductionProjection(createResearchProductionAdapter(client), hosts.productionHost);
   return {
-    workbench, library, knowledge, experiments, policies, templates, manuscript, ideas, production,
+    workbench, library, knowledge, experiments, figures, policies, templates, manuscript, ideas, production,
     bindProject(projectId) {
       library.setProject(projectId);
       knowledge.setProject(projectId);
       experiments.setProject(projectId);
+      figures.setProject(projectId);
       policies.setProject(projectId);
       templates.setProject(projectId);
       production.setProject(projectId);

@@ -25,7 +25,8 @@ import type {
   ResearchProjectUpdateRequest,
   ResearchStageState,
   ResearchWorkflowSnapshot,
-  ResearchWorkflowTransitionRequest
+  ResearchWorkflowTransitionRequest,
+  ResearchKnowledgeDocument
 } from '../../../shared/types';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { assertResearchStageArtifacts } from './stage-artifacts';
@@ -40,7 +41,7 @@ import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchFigureRepository } from './figure-repository';
 import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
-import { ResearchKnowledgeRepository } from './knowledge-repository';
+import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 
 export const researchStages = [
   'discovery',
@@ -84,6 +85,8 @@ export class ResearchRepository {
   readonly exports: ResearchExportRepository;
   readonly ideas: ResearchIdeaRepository;
   readonly knowledge: ResearchKnowledgeRepository;
+  private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
+  private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
   private readonly projectLanguageReady: boolean;
 
   constructor(
@@ -110,6 +113,24 @@ export class ResearchRepository {
     this.ideas = new ResearchIdeaRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
+
+  setKnowledgeWriter(writer: (input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>): void {
+    this.knowledgeWriter = writer;
+  }
+
+  queueKnowledgeFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}): void {
+    this.pendingKnowledgeWrites.push({ input, sourceMetadata });
+  }
+
+  flushKnowledgeFromSource(): void {
+    const pending = this.pendingKnowledgeWrites.splice(0, this.pendingKnowledgeWrites.length);
+    const writer = this.knowledgeWriter;
+    if (writer === null) return;
+    for (const item of pending) {
+      void writer({ ...item.input, embeddingPolicy: 'selected' }, item.sourceMetadata).catch(() => undefined);
+    }
+  }
+
 
   listProjects(): ResearchProject[] {
     const rows = this.db

@@ -88,8 +88,10 @@ export class ResearchExperimentRepository {
   list(projectId: string, limit: number): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')
-      .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+      .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)))
+      .filter((run) => run.request.engine !== 'matplotlib');
   }
+
   ownedActive(projectId: string, ownerRunId: string): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare("SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? AND json_extract(snapshot_json, '$.ownerRunId') = ? AND status IN ('preparing','running')")
@@ -114,7 +116,7 @@ export class ResearchExperimentRepository {
 
   finish(projectId: string, id: string, result: Pick<ResearchExperimentExecution, 'status' | 'files' | 'exitCode' | 'error'>,
     documents: Array<{ id: string; title: string; content: string; chunks: Array<{ content: string; locator: string }>; metadata: Record<string, unknown> }> = []): ResearchExperimentExecution {
-    return this.db.transaction(() => {
+    const finished = this.db.transaction(() => {
       const run = this.get(projectId, id);
       if (!activeStatuses.has(run.status)) return run;
       if (activeStatuses.has(result.status)) throw new Error('research_experiment_terminal_status_required');
@@ -126,7 +128,11 @@ export class ResearchExperimentRepository {
       if (next.status === 'completed') {
         this.requireActive(projectId, id);
         if (run.status !== 'running' || run.environment === null || run.inputHash === null || next.exitCode !== 0 || next.error !== null) throw new Error('research_experiment_result_invalid');
-        for (const { metadata, ...document } of documents) this.research.knowledge.upsertFromSource({ ...document, projectId, sourceType: 'experiment', sourceId: id, embeddingPolicy: 'none' }, metadata);
+        for (const { metadata, ...document } of documents) {
+          const input = { ...document, projectId, sourceType: 'experiment' as const, sourceId: id, embeddingPolicy: 'none' as const };
+          this.research.knowledge.upsertFromSource(input, metadata);
+          this.research.queueKnowledgeFromSource(input, metadata);
+        }
       }
       const value = { ...run, ...next, endedAt: this.now() };
       this.save(value);
@@ -135,6 +141,8 @@ export class ResearchExperimentRepository {
       this.event(value, `experiment_${next.status}`, next.status === 'completed' ? '实验完成，输出与日志已保存。' : '实验已结束，详情见运行记录。');
       return value;
     })();
+    this.research.flushKnowledgeFromSource();
+    return finished;
   }
 
   publish(projectId: string, id: string): ResearchExperimentExecution {

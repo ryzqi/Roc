@@ -50,13 +50,17 @@ export class ResearchEmbeddingService {
 
   async upsertFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}, signal?: AbortSignal): Promise<ResearchKnowledgeDocument> {
     this.requireOpen();
+    if (input.embeddingPolicy !== 'none' && input.embeddingPolicy !== 'selected') {
+      throw new Error('research_knowledge_embedding_policy_invalid');
+    }
     const document = this.knowledge.upsertKnowledgeDocument({
       id: input.id, projectId: input.projectId, sourceType: input.sourceType, sourceId: input.sourceId,
       title: input.title, content: input.content, chunks: input.chunks, embeddingConfigId: null
     }, sourceMetadata);
     if (input.embeddingPolicy === 'none') return document;
-    if (input.embeddingPolicy !== 'selected') throw new Error('research_knowledge_embedding_policy_invalid');
-    await this.embedDocument(document.id, null, signal);
+    const selected = this.select(null);
+    if (selected === null) return document;
+    await this.embedDocument(document.id, selected.id, signal);
     return document;
   }
 

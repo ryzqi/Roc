@@ -36,6 +36,10 @@ describe('research session', () => {
       listExperiments: vi.fn(),
       inspectExperimentEnvironment: vi.fn(),
       startExperiment: vi.fn(),
+      startFigure: vi.fn(),
+      cancelFigure: vi.fn(),
+      publishFigure: vi.fn(),
+      getFigureRun: vi.fn(),
       cancelExperiment: vi.fn(),
       publishExperiment: vi.fn(),
       getExperiment: vi.fn(),
@@ -66,6 +70,7 @@ describe('research session', () => {
     const library = vi.spyOn(session.library, 'setProject');
     const knowledge = vi.spyOn(session.knowledge, 'setProject');
     const experiments = vi.spyOn(session.experiments, 'setProject');
+    const figures = vi.spyOn(session.figures, 'setProject');
     const policies = vi.spyOn(session.policies, 'setProject');
     const templates = vi.spyOn(session.templates, 'setProject');
     const production = vi.spyOn(session.production, 'setProject');
@@ -73,6 +78,7 @@ describe('research session', () => {
     expect(library).toHaveBeenCalledWith('research_1');
     expect(knowledge).toHaveBeenCalledWith('research_1');
     expect(experiments).toHaveBeenCalledWith('research_1');
+    expect(figures).toHaveBeenCalledWith('research_1');
     expect(policies).toHaveBeenCalledWith('research_1');
     expect(templates).toHaveBeenCalledWith('research_1');
     expect(production).toHaveBeenCalledWith('research_1');

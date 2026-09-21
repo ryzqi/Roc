@@ -167,6 +167,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchRepository = repository;
       const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
       embeddings = researchEmbeddings;
+      researchRepository.setKnowledgeWriter((input, sourceMetadata = {}) => researchEmbeddings.upsertFromSource(input, sourceMetadata));
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;
       registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);

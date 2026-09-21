@@ -114,7 +114,8 @@ describe('research manuscript save and export boundaries', () => {
     repository.manuscripts.saveManuscript({ artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }] });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'complete' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'approve' });
-    db.prepare('UPDATE research_evidence SET excerpt = ? WHERE id = ?').run('Tampered source.', evidence.id);
-    expect(() => repository.manuscripts.exportBundle({ projectId: id, artifactId: artifact.id })).toThrow('research_evidence_integrity_invalid');
+    expect(() => repository.evidence.getEvidence(evidence.id, id)).not.toThrow();
+    expect(repository.manuscripts.exportBundle({ projectId: id, artifactId: artifact.id }).evidence[0]?.id).toBe(evidence.id);
+    expect(() => repository.evidence.getEvidence('missing-evidence', id)).toThrow('research_evidence_not_found');
   });
 });

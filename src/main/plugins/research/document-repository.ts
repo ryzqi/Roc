@@ -84,6 +84,7 @@ export class ResearchDocumentRepository {
       if (document.currentParseId !== null) this.removeIndex(document.currentParseId);
       this.index(document, parseId, data);
     })();
+    this.research.flushKnowledgeFromSource();
   }
 
   fail(documentId: string, parseId: string, error: string, cancelled: boolean): void {
@@ -117,6 +118,7 @@ export class ResearchDocumentRepository {
       if (archived) this.removeIndex(document.currentParseId);
       else this.index(document, document.currentParseId, this.parsed(document.id, document.currentParseId).data);
     }
+    this.research.flushKnowledgeFromSource();
   }
 
   recover(): void {
@@ -136,8 +138,10 @@ export class ResearchDocumentRepository {
 
   private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent): void {
     const chunks = data.content.blocks.filter((block) => block.text.trim()).map((block) => ({ content: block.text, locator: block.locator }));
-    this.research.knowledge.upsertFromSource({ id: `document:${parseId}`, projectId: null, sourceType: 'file', sourceId: document.libraryItemId,
-      title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' });
+    const input = { id: `document:${parseId}`, projectId: null as string | null, sourceType: 'file' as const, sourceId: document.libraryItemId,
+      title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' as const };
+    this.research.knowledge.upsertFromSource(input);
+    this.research.queueKnowledgeFromSource(input);
   }
 }
 

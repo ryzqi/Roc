@@ -141,11 +141,11 @@ export function ResearchOverviewView({
       <section>
         <div className="research-section-label">关键产物</div>
         {stageArtifacts.length === 0 ? <p>当前阶段还没有产物。</p> : (
-          <ul className="research-artifact-list" data-testid="research-overview-artifacts">
-            {stageArtifacts.map((artifact, index) => (
+          <ul className="research-artifact-list" data-testid="research-artifacts">
+            {stageArtifacts.map((artifact) => (
               <li key={artifact.id}>
                 <button type="button" onClick={() => onOpenProvenance(artifact.id)}>
-                  <strong data-testid={index === 0 ? 'research-artifacts' : undefined}>{artifact.title}</strong>
+                  <strong>{artifact.title}</strong>
                   <span>{artifactStatusLabel(artifact.status)}</span>
                 </button>
               </li>

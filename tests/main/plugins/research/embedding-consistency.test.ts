@@ -7,6 +7,7 @@ import { createResearchPlugin } from '../../../../src/main/plugins/research';
 import type { EmbeddingFetch } from '../../../../src/main/plugins/research/embedding-client';
 import type { ResearchKnowledgeSearchResult } from '../../../../src/shared/types';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
+import { OpenAICompatibleEmbeddingClient } from '../../../../src/main/plugins/research/embedding-client';
 import { ResearchEmbeddingService } from '../../../../src/main/plugins/research/embedding-service';
 import { vectorToBlob } from '../../../../src/main/plugins/research/embedding-vectors';
 
@@ -46,6 +47,19 @@ beforeEach(async () => {
 afterEach(async () => { await plugin.shutdown(); db.close(); });
 
 describe('research embedding consistency', () => {
+  it('embeds source writes when an embedding configuration is enabled', async () => {
+    const repository = new ResearchRepository(db);
+    const embeddings = new ResearchEmbeddingService(repository.knowledge, new OpenAICompatibleEmbeddingClient(fetchImpl), {
+      secrets: { get: (key: string) => secrets.get(key) ?? null, set: () => undefined, clear: () => undefined },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined }
+    });
+    const document = await embeddings.upsertFromSource({
+      id: 'source-auto', projectId: null, sourceType: 'file', sourceId: 'auto.md', title: 'Auto',
+      content: 'Auto embedded.', chunks: [{ content: 'Auto embedded.', locator: 'line 1' }], embeddingPolicy: 'selected'
+    });
+    expect(document.id).toBe('source-auto');
+    expect(db.prepare('SELECT count(*) AS count FROM research_knowledge_embeddings WHERE chunk_id = ?').get('source-auto:chunk:0')).toEqual({ count: 1 });
+  });
   it('does not let a late vector overwrite an updated chunk', async () => {
     const entered = deferred<void>();
     const delayed = deferred<Response>();
@@ -130,7 +144,7 @@ describe('research embedding consistency', () => {
 
   it('embeds source writes when the knowledge policy is selected', async () => {
     const repository = new ResearchRepository(db);
-    const embeddings = new ResearchEmbeddingService(repository.knowledge, { embed: async () => [[1, 0, 0]] } as never, {
+    const embeddings = new ResearchEmbeddingService(repository.knowledge, new OpenAICompatibleEmbeddingClient(fetchImpl), {
       secrets: { get: (key) => secrets.get(key) ?? null, set() {}, clear() {} },
       logger: { info() {}, warn() {}, error() {} }
     });

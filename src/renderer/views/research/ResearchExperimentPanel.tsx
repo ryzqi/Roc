@@ -36,7 +36,7 @@ const engineLabels: Record<ResearchExperimentExecution['request']['engine'], str
   python: 'Python',
   r: 'R / renv',
   julia: 'Julia',
-  matplotlib: '历史图稿运行'
+  matplotlib: '图稿'
 };
 const draftEngineLabels: Record<ResearchExperimentEngine, string> = {
   python: 'Python',
@@ -186,7 +186,7 @@ export function ResearchExperimentPanel({
                     取消
                   </button>
                 ) : null}
-                {run.status === 'completed' && run.request.engine !== 'matplotlib' ? (
+                {run.status === 'completed' ? (
                   <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-${run.id}`} onClick={() => onPublish(run.id)}>
                     <Send aria-hidden="true" size={14} />
                     发布实验

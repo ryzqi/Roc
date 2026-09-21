@@ -12,6 +12,7 @@ describe('research stage groups', () => {
     expect(stageGroupForStage('reading')).toBe('discover');
     expect(stageGroupForStage('ideation')).toBe('plan');
     expect(stageGroupForStage('experiment')).toBe('experiment');
+    expect(stageGroupForStage('figure')).toBe('experiment');
     expect(stageGroupForStage('writing')).toBe('write');
     expect(stageGroupForStage('export')).toBe('publish');
     expect(isCurrentStageGroup('write', 'writing')).toBe(true);
