@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { buildControlNavItems } from '../../src/renderer/app/nav-items';
 import { buildTopMeta } from '../../src/renderer/app/view-routing';
 import { createLoadedState } from './view-test-helpers';
 
@@ -48,9 +47,6 @@ describe('renderer navigation meta', () => {
       }
     });
 
-    const memoryNav = buildControlNavItems(state).find((item) => item.id === 'memory');
-
-    expect(memoryNav?.meta).toBe('/Users/test/Code/Roc');
     expect(buildTopMeta('memory', state)).toBe('/Users/test/Code/Roc');
   });
 
@@ -65,9 +61,6 @@ describe('renderer navigation meta', () => {
       }
     });
 
-    const memoryNav = buildControlNavItems(state).find((item) => item.id === 'memory');
-
-    expect(memoryNav?.meta).toBe('全局记忆');
     expect(buildTopMeta('memory', state)).toBe('全局记忆');
   });
 

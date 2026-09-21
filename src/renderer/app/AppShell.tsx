@@ -6,14 +6,12 @@ import type {
 } from '../../shared/types';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
 import { useChatFeature } from '../features/chat/use-chat-feature';
-import { filterHistoryItems } from '../history-sidebar';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { applySystemAppearance } from '../system-appearance';
 import { restoreDialogFocus } from '../dialog-focus';
 import type { ResearchServiceContext, ResearchServiceEntry } from '../views/research/research-services';
 import { AppSettingsLayer } from './AppSettingsLayer';
-import { AppSidebar } from './AppSidebar';
 import { AppWorkspaceShell } from './AppWorkspaceShell';
 import {
   completeTaskRunEvent,
@@ -24,15 +22,8 @@ import {
   loadTaskSurfaceData,
   loadWorkspaceData
 } from './data-loading';
-import {
-  buildControlNavItems,
-  buildHistoryItems,
-  buildHistoryNavItems,
-  buildWorkspaceNavItems
-} from './nav-items';
 import type {
   MainViewId,
-  NavItem,
   ViewId,
   WorkbenchTool,
   WorkspaceData
@@ -46,6 +37,7 @@ import {
   WORKBENCH_VIEWS,
   buildTopMeta,
   defaultWorkbenchTool,
+  isProjectServiceView,
   parseViewId,
   parseWorkbenchTool,
   syncRendererUrl
@@ -64,7 +56,7 @@ function resetScrollPosition(element: HTMLElement): void {
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
   const { error, setError, setState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
-  const initialView = parseViewId(initialParams.get('page'));
+  const initialView = parseViewId(initialParams.get('page'), initialParams.get('project'));
   const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'research' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const settingsOpenerRef = useRef<HTMLElement | null>(null);
@@ -85,7 +77,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [pendingWorkflowHint, setPendingWorkflowHint] = useState<ChatStartRunRequest['workflowHint']>(null);
   const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
-  const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
     parseWorkbenchTool(initialParams.get('tool'), initialView)
   );
@@ -93,12 +84,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     initialView === 'chat' ? initialParams.has('tool') : WORKBENCH_VIEWS.has(initialView)
   );
   const [workbenchWidth, setWorkbenchWidth] = useState(560);
-  const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
-  const [historySearchVisible, setHistorySearchVisible] = useState(false);
-  const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
   const [researchServiceContext, setResearchServiceContext] = useState<ResearchServiceContext | null>(null);
-  const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
@@ -133,7 +120,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
   useEffect(() => {
     return client.api.app.onNavigate((page) => {
-      const view = parseViewId(page);
+      const view = parseViewId(page, new URLSearchParams(window.location.search).get('project'));
       if (view === 'settings') {
         settingsOpenerRef.current = null;
         setSettingsOpen(true);
@@ -203,18 +190,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setActiveWorkbenchTool(defaultWorkbenchTool(activeView));
   }, [activeView]);
 
-  useEffect(() => {
-    if (activeView !== 'chat') {
-      setHistorySearchVisible(false);
-      setHistorySearchQuery('');
-      return;
-    }
-    if (historySearchVisible) {
-      historySearchInputRef.current?.focus();
-      historySearchInputRef.current?.select();
-    }
-  }, [activeView, historySearchVisible]);
-
   const currentWorkspace = state?.workspace ?? null;
   const currentAppMode = state?.appStatus.mode ?? null;
   const currentAgentExecution = state?.agent.execution ?? null;
@@ -240,7 +215,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   });
   const chatWorkspaceScale = useChatWorkspaceScale({
     activeView,
-    chatSidebarCollapsed,
     hostRef: chatWorkspaceScaleHostRef
   });
 
@@ -261,6 +235,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, []);
 
   const openResearchService = useCallback((service: ResearchServiceEntry): void => {
+    if (service.projectId === null) {
+      setActiveView('research');
+      return;
+    }
     if (service.id === 'assistant') {
       startNewConversation();
       return;
@@ -271,14 +249,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     }
     setActiveView(service.view);
   }, [startNewConversation]);
-
-  const selectHistoryThread = useCallback((threadId: string): void => {
-    setActiveView('chat');
-    setSelectedThreadId(threadId);
-    setPendingWorkflowHint(null);
-    setPendingTaskSource(null);
-    setChatSelectionVersion((current) => current + 1);
-  }, []);
 
   const openTaskDetail = useCallback((taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }): void => {
     if (boardUiState !== undefined) {
@@ -299,32 +269,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setActiveTaskDetailId(null);
     setActiveView('tasks-board');
   }, []);
-
-  const toggleChatSidebar = useCallback((): void => {
-    setChatSidebarCollapsed((current) => {
-      const next = !current;
-      if (next) {
-        setHistorySearchVisible(false);
-        setHistorySearchQuery('');
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleHistorySearch = useCallback((): void => {
-    if (chatSidebarCollapsed) {
-      setChatSidebarCollapsed(false);
-      setHistorySearchVisible(true);
-      return;
-    }
-    setHistorySearchVisible((current) => {
-      const next = !current;
-      if (!next) {
-        setHistorySearchQuery('');
-      }
-      return next;
-    });
-  }, [chatSidebarCollapsed]);
 
   const {
     createTaskFromWorkbench,
@@ -349,33 +293,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     taskBoardUiState
   });
 
-  const deleteHistoryThread = useCallback(
-    async (threadId: string): Promise<void> => {
-      const result = await client.api.tasks.deleteThread({ threadId });
-      if (!result.ok) {
-        setError(result.error.message);
-        return;
-      }
-      // 走 ref 读取当前选中会话，避免 selectedThreadId 变化让回调引用失效、击穿侧栏 memo。
-      if (selectedThreadIdRef.current === threadId) {
-        startNewConversation();
-      }
-      await refreshTaskState();
-    },
-    [refreshTaskState, startNewConversation]
-  );
-
-  const selectNavItem = useCallback(
-    (item: NavItem): void => {
-      if (item.id === 'chat') {
-        startNewConversation();
-        return;
-      }
-      setActiveView(item.id);
-    },
-    [startNewConversation]
-  );
-
   useAgentCapabilityPreview({
     client,
     currentAgentExecution,
@@ -385,12 +302,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     state
   });
 
-  // 视图切换只重置侧栏容器自身与非 chat 内容区；不碰 .sidebar-block-scroll，
-  // 侧栏内部（历史列表、各导航列表）的滚动位置跨视图保留。
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelectorAll<HTMLElement>('.sidebar, .canvas:not(.canvas--chat) .canvas-scroll')
+        .querySelectorAll<HTMLElement>('.canvas:not(.canvas--chat) .canvas-scroll')
         .forEach(resetScrollPosition);
     });
 
@@ -411,14 +326,21 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [activeWorkbenchTool]);
 
   useEffect(() => {
+    const projectId = new URLSearchParams(window.location.search).get('project');
+    if (isProjectServiceView(activeView) && (projectId === null || projectId.trim().length === 0)) {
+      setActiveView('research');
+      setWorkbenchVisible(false);
+    }
+  }, [activeView]);
+
+  useEffect(() => {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
   const selectWorkspaceFromDialog = useCallback(async (): Promise<void> => {
-    setWorkspaceSelectError(null);
     const selected = await client.api.workspace.selectFromDialog();
     if (!selected.ok) {
-      setWorkspaceSelectError(selected.error.message);
+      setError(selected.error.message);
       return;
     }
     if (selected.data === null) {
@@ -446,7 +368,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             ...workspaceData
           }
     );
-  }, [client, setState, setWorkspaceLoadState]);
+  }, [client, setError, setState, setWorkspaceLoadState]);
 
   const updateWorkspaceData = useCallback((partial: Partial<WorkspaceData>): void => {
     setState((current) => (current === null ? current : { ...current, ...partial }));
@@ -466,17 +388,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     },
     [activeView, researchTopMeta, state]
   );
-  const historyNavItems = useMemo(
-    () => buildHistoryNavItems(selectedThreadId, activeView),
-    [activeView, selectedThreadId]
-  );
-  const historyItems = useMemo(() => (state === null ? [] : buildHistoryItems(state)), [state]);
-  const visibleHistoryItems = useMemo(
-    () => (activeView === 'chat' ? filterHistoryItems(historyItems, historySearchQuery) : historyItems),
-    [activeView, historyItems, historySearchQuery]
-  );
-  const workspaceNavItems = useMemo(() => (state === null ? [] : buildWorkspaceNavItems(state)), [state]);
-  const controlNavItems = useMemo(() => (state === null ? [] : buildControlNavItems(state)), [state]);
 
   if (error !== null) {
     return <div className="fatal">Roc 启动失败：{error}</div>;
@@ -486,9 +397,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     return <div className="boot">Roc 正在加载本地工作台</div>;
   }
 
-  const showHistorySearch = activeView === 'chat' && historySearchVisible;
-  const showHistorySearchEmpty = showHistorySearch && historyItems.length > 0 && visibleHistoryItems.length === 0;
-  const showChatSidebar = activeView !== 'chat' || !chatSidebarCollapsed;
   const workspaceShellNode = (
     <AppWorkspaceShell
       activeTaskDetailId={activeTaskDetailId}
@@ -535,46 +443,34 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
       <WindowWorkband
         activeView={activeView}
-        chatSidebarCollapsed={chatSidebarCollapsed}
-        onHistorySearchToggle={toggleHistorySearch}
         onNewConversation={startNewConversation}
-        onSidebarToggle={toggleChatSidebar}
-        showHistorySearch={showHistorySearch}
+        onNewProject={() => {
+          setActiveView('research');
+          window.dispatchEvent(new Event('research-new-project'));
+        }}
+        onOpenSettings={openSettings}
+        onReturnToProjects={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('project');
+          url.searchParams.delete('view');
+          url.searchParams.delete('stage');
+          url.searchParams.set('page', 'research');
+          window.history.pushState({}, '', url);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          setActiveView('research');
+          setWorkbenchVisible(false);
+        }}
+        researchContext={researchServiceContext}
         topMeta={topMeta}
       />
 
       <div
         className={
           activeView === 'chat'
-            ? showChatSidebar
-              ? 'workspace workspace--chat'
-              : 'workspace workspace--chat workspace--chat-sidebar-collapsed'
-            : 'workspace'
+            ? 'workspace workspace--chat workspace--no-sidebar'
+            : 'workspace workspace--no-sidebar'
         }
       >
-        {showChatSidebar ? (
-          <AppSidebar
-            activeView={activeView}
-            controlNavItems={controlNavItems}
-            deleteHistoryThread={deleteHistoryThread}
-            historyItems={historyItems}
-            historyNavItems={historyNavItems}
-            historySearchInputRef={historySearchInputRef}
-            historySearchQuery={historySearchQuery}
-            selectHistoryThread={selectHistoryThread}
-            selectWorkspaceFromDialog={selectWorkspaceFromDialog}
-            selectedThreadId={selectedThreadId}
-            setHistorySearchQuery={setHistorySearchQuery}
-            onOpenSettings={openSettings}
-            onSelectNavItem={selectNavItem}
-            showHistorySearch={showHistorySearch}
-            showHistorySearchEmpty={showHistorySearchEmpty}
-            state={state}
-            visibleHistoryItems={visibleHistoryItems}
-            workspaceNavItems={workspaceNavItems}
-            workspaceSelectError={workspaceSelectError}
-          />
-        ) : null}
         <div
           className="chat-workspace-scale-host"
           data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}

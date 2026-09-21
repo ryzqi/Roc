@@ -6,7 +6,6 @@ import type { ViewId } from './types';
 
 export function useChatWorkspaceScale(input: {
   activeView: ViewId;
-  chatSidebarCollapsed: boolean;
   hostRef: RefObject<HTMLDivElement | null>;
 }): {
   active: boolean;
@@ -33,7 +32,7 @@ export function useChatWorkspaceScale(input: {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [input.activeView, input.chatSidebarCollapsed, input.hostRef]);
+  }, [input.activeView, input.hostRef]);
 
   if (input.activeView !== 'chat') {
     return {
@@ -43,8 +42,7 @@ export function useChatWorkspaceScale(input: {
   }
 
   const scale = resolveChatWorkspaceScale({
-    availableWidth: hostWidth,
-    chatSidebarCollapsed: input.chatSidebarCollapsed
+    availableWidth: hostWidth
   });
 
   return {

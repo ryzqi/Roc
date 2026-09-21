@@ -25,11 +25,36 @@ export const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: Pr
   { id: 'terminal', label: '终端', icon: 'terminal' }
 ];
 
-export function parseViewId(value: string | null): ViewId {
+const PROJECT_SERVICE_VIEWS = new Set<ViewId>([
+  'chat',
+  'tasks-board',
+  'task-detail',
+  'workspace',
+  'git',
+  'terminal',
+  'preview',
+  'mcp',
+  'skills',
+  'memory',
+  'diagnostics'
+]);
+
+export function parseViewId(value: string | null, projectId: string | null): ViewId {
+  if (value === 'settings') {
+    return 'settings';
+  }
   if (value !== null && MAIN_VIEW_IDS.has(value as ViewId)) {
-    return value as ViewId;
+    const view = value as ViewId;
+    if (PROJECT_SERVICE_VIEWS.has(view) && (projectId === null || projectId.trim().length === 0)) {
+      return 'research';
+    }
+    return view;
   }
   return 'research';
+}
+
+export function isProjectServiceView(view: ViewId): boolean {
+  return PROJECT_SERVICE_VIEWS.has(view);
 }
 
 export function defaultWorkbenchTool(view: ViewId): WorkbenchTool {

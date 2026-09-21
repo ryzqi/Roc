@@ -71,7 +71,6 @@ describe('AppShell', () => {
     expect(container.querySelector('[data-testid="window-close"]')).toBeNull();
     expect(container.querySelector('[data-testid="settings-gear"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="active-view"]')).not.toBeNull();
-    expect(container.textContent).toContain('活动与运行');
     await waitUntil(() => container.querySelector('[data-testid="research-app-shell"]') !== null);
     expect(container.querySelector('[data-testid="research-view"]')).toBeNull();
     expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
@@ -125,7 +124,7 @@ describe('AppShell', () => {
     expect(new URL(window.location.href).searchParams.get('page')).toBe('workspace');
   });
 
-  it('keeps every workbench and control entry inside the pinned sidebar dock', async () => {
+  it('keeps settings in the window workband and does not render a global sidebar', async () => {
     const client = createShellClient();
     window.roc = client.api;
 
@@ -133,14 +132,10 @@ describe('AppShell', () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
     });
 
-    const dock = container.querySelector('.sidebar-dock');
-    if (dock === null) {
-      throw new Error('Expected the sidebar dock to render');
-    }
-    for (const testId of ['nav-tasks-board', 'nav-diagnostics', 'nav-memory', 'nav-mcp', 'nav-skills', 'settings-gear']) {
-      expect(dock.querySelector(`[data-testid="${testId}"]`)).not.toBeNull();
-    }
-    expect(dock.querySelector('[data-testid="nav-workspace"]')).not.toBeNull();
+    expect(container.querySelector('.sidebar-dock')).toBeNull();
+    expect(container.querySelector('[data-testid="nav-workspace"]')).toBeNull();
+    expect(container.querySelector('[data-testid="nav-tasks-board"]')).toBeNull();
+    expect(container.querySelector('[data-testid="settings-gear"]')).not.toBeNull();
   });
 
   it('resets sidebar scroll without resetting the chat canvas', async () => {
@@ -152,26 +147,23 @@ describe('AppShell', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     const client = createShellClient();
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=chat');
+    window.history.replaceState(null, '', '/?page=chat&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
     });
-    const sidebar = container.querySelector<HTMLElement>('.sidebar');
     const chatCanvas = container.querySelector<HTMLElement>('.canvas--chat .canvas-scroll');
-    if (sidebar === null || chatCanvas === null) {
+    if (chatCanvas === null) {
       throw new Error('Expected chat scroll surfaces to render');
     }
-    const sidebarScrollTop = vi.fn();
     const chatScrollTop = vi.fn();
-    Object.defineProperty(sidebar, 'scrollTop', { configurable: true, get: () => 120, set: sidebarScrollTop });
     Object.defineProperty(chatCanvas, 'scrollTop', { configurable: true, get: () => 480, set: chatScrollTop });
 
     await act(async () => {
       frames.splice(0).forEach((callback) => callback(0));
     });
 
-    expect(sidebarScrollTop).toHaveBeenCalledWith(0);
+    expect(container.querySelector('.sidebar')).toBeNull();
     expect(chatScrollTop).not.toHaveBeenCalled();
   });
 
@@ -213,15 +205,42 @@ describe('AppShell', () => {
   it('opens the task workbench entry as the board page instead of chat', async () => {
     const client = createShellClient();
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
     });
 
-    expect(container.textContent).toContain('活动与运行');
     expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="chat-view"]')).toBeNull();
+  });
+
+  it('sends a chat url without a project back to the project list', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=chat');
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    await waitUntil(() => container.querySelector('[data-testid="research-app-shell"]') !== null);
+    expect(container.querySelector('[data-testid="chat-view"]')).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
+  });
+
+  it('sends a tasks-board url without a project back to the project list', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=tasks-board');
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    await waitUntil(() => container.querySelector('[data-testid="research-app-shell"]') !== null);
+    expect(container.querySelector('[data-testid="tasks-board-view"]')).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
   });
 
   it('does not keep queued task prompt state in the task workbench flow', async () => {
@@ -264,7 +283,7 @@ describe('AppShell', () => {
     vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: createTaskDetail(createdTask) });
     vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -312,7 +331,7 @@ describe('AppShell', () => {
     });
     vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -384,7 +403,7 @@ describe('AppShell', () => {
     vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: createTaskDetail(createdTask) });
     vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -423,7 +442,7 @@ describe('AppShell', () => {
       }
     });
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=chat');
+    window.history.replaceState(null, '', '/?page=chat&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -458,7 +477,7 @@ describe('AppShell', () => {
       };
     });
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=chat');
+    window.history.replaceState(null, '', '/?page=chat&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -541,7 +560,7 @@ describe('AppShell', () => {
       }
     }));
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=chat');
+    window.history.replaceState(null, '', '/?page=chat&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -627,7 +646,7 @@ describe('AppShell', () => {
     vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: taskDetail });
     vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(
@@ -684,7 +703,7 @@ describe('AppShell', () => {
       return { ok: true, data: { deleted: true, taskId: 'task-delete' } };
     });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(
@@ -756,7 +775,7 @@ describe('AppShell', () => {
         : { ok: true, data: createBackgroundTaskDetail(task) }
     );
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(
@@ -800,7 +819,7 @@ describe('AppShell', () => {
     });
     vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board', project: 'research_1' }).toString()}`);
 
     await act(async () => {
       root.render(

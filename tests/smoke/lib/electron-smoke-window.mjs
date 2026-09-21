@@ -14,8 +14,8 @@ export async function runSmokeWindowChecks(ctx) {
     };
   });
   await page.waitForSelector('[data-testid="window-workband"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="workspace-select-button"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="settings-gear"]', { timeout: 5000 });
   const browserWindow = await app.browserWindow(page);
   const initialWindowShell = {
     applicationMenuPresent: await app.evaluate(({ Menu }) => Menu.getApplicationMenu() !== null),

@@ -2,81 +2,47 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { WindowWorkband } from '../../src/renderer/app/WindowWorkband';
-import { buildTopMeta } from '../../src/renderer/app/view-routing';
-import { createLoadedState } from './view-test-helpers';
 
 describe('WindowWorkband', () => {
-  it('renders chat top meta as the workspace label without the message count', () => {
-    const state = createLoadedState({
-      appStatus: {
-        ...createLoadedState({}).appStatus,
-        workspace: {
-          selectedPath: '/Users/test/Code/Roc',
-          label: 'Roc'
-        }
-      },
-      taskSnapshot: {
-        ...createLoadedState({}).taskSnapshot,
-        recentEvents: [
-          {
-            id: 'event-1',
-            threadId: 'thread-1',
-            runId: 'run-1',
-            type: 'message',
-            payload: { role: 'user', content: '帮我检查工作区' },
-            createdAt: '2026-05-25T08:00:00.000Z'
-          },
-          {
-            id: 'event-2',
-            threadId: 'thread-1',
-            runId: 'run-1',
-            type: 'message',
-            payload: { role: 'assistant', content: '已检查。', providerId: 'test-provider', modelId: 'test-model' },
-            createdAt: '2026-05-25T08:00:01.000Z'
-          }
-        ]
-      }
-    });
-
-    const html = renderToStaticMarkup(
-      React.createElement(WindowWorkband, {
-        activeView: 'chat',
-        chatSidebarCollapsed: false,
-        onHistorySearchToggle: vi.fn(),
-        onNewConversation: vi.fn(),
-        onSidebarToggle: vi.fn(),
-        showHistorySearch: false,
-        topMeta: buildTopMeta('chat', state)
-      })
-    );
-
-    const brandStart = html.indexOf('<div class="brand">');
-    const chatActionsStart = html.indexOf('<div class="workband-chat-actions">', brandStart);
-    const brandMarkup = html.slice(brandStart, chatActionsStart);
-
-    expect(html).toContain('data-testid="window-workband"');
-    expect(html).toContain('<span>Roc</span>');
-    expect(brandMarkup).toBe('<div class="brand"><div class="brand-mark">R</div></div>');
-    expect(brandMarkup).not.toContain('Roc');
-    expect(brandMarkup).not.toContain('本地工作台');
-    expect(brandMarkup).not.toContain('>/</span>');
-    expect(html).not.toContain('条消息');
-  });
-
-  it('renders research search without treating the workspace path as the primary context', () => {
+  it('shows new project and settings on the project list', () => {
     const html = renderToStaticMarkup(
       React.createElement(WindowWorkband, {
         activeView: 'research',
-        chatSidebarCollapsed: false,
-        onHistorySearchToggle: vi.fn(),
         onNewConversation: vi.fn(),
-        onSidebarToggle: vi.fn(),
-        showHistorySearch: false,
-        topMeta: '证据图 · 写作 · 运行 0 · 闸门 1'
+        onNewProject: vi.fn(),
+        onOpenSettings: vi.fn(),
+        onReturnToProjects: vi.fn(),
+        researchContext: null,
+        topMeta: '研究项目'
       })
     );
-    expect(html).toContain('data-testid="research-top-search"');
-    expect(html).toContain('证据图 · 写作 · 运行 0 · 闸门 1');
-    expect(html).not.toContain('data-testid="chat-history-search-toggle"');
+    expect(html).toContain('data-testid="research-top-new-project"');
+    expect(html).toContain('data-testid="settings-gear"');
+    expect(html).toContain('研究项目');
+    expect(html).not.toContain('data-testid="research-shell-all-projects"');
+    expect(html).not.toContain('data-testid="chat-new-conversation"');
+  });
+
+  it('shows all-projects and the current title inside a research project', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WindowWorkband, {
+        activeView: 'chat',
+        onNewConversation: vi.fn(),
+        onNewProject: vi.fn(),
+        onOpenSettings: vi.fn(),
+        onReturnToProjects: vi.fn(),
+        researchContext: {
+          projectId: 'research_1',
+          projectTitle: '证据图',
+          currentStage: 'writing',
+          workspacePath: '/tmp/project'
+        },
+        topMeta: 'Roc'
+      })
+    );
+    expect(html).toContain('data-testid="research-shell-all-projects"');
+    expect(html).toContain('证据图');
+    expect(html).toContain('data-testid="settings-gear"');
+    expect(html).toContain('data-testid="chat-new-conversation"');
   });
 });

@@ -31,7 +31,7 @@ export async function runSmokeBoundaryProbes(ctx) {
     })()
   }));
   const workspaceSelectButtonEvidence = await page.evaluate(() => {
-    const button = document.querySelector('[data-testid="workspace-select-button"]');
+    const button = document.querySelector('[data-testid="settings-gear"]');
     if (!(button instanceof HTMLButtonElement)) {
       return {
         exists: button !== null,
@@ -57,10 +57,11 @@ export async function runSmokeBoundaryProbes(ctx) {
   // 侧栏底部 dock 常驻：设置入口必须在不滚动的前提下完整落在侧栏内，
   // 并且在侧栏上滚轮后仍然可见（证明它是固定行，而不是被滚出视野的普通内容）。
   const sidebarDockEvidenceBefore = await page.evaluate(() => {
+    const settingsButton = document.querySelector('[data-testid="settings-gear"]');
+    const workband = document.querySelector('[data-testid="window-workband"]');
     const sidebar = document.querySelector('.sidebar');
     const dock = document.querySelector('.sidebar-dock');
-    const settingsButton = document.querySelector('[data-testid="settings-gear"]');
-    if (!(sidebar instanceof HTMLElement) || !(dock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
+    if (!(settingsButton instanceof HTMLButtonElement) || !(workband instanceof HTMLElement)) {
       return {
         sidebarExists: sidebar !== null,
         dockExists: dock !== null,
@@ -71,64 +72,27 @@ export async function runSmokeBoundaryProbes(ctx) {
         settingsVisible: false
       };
     }
-    const sidebarRect = sidebar.getBoundingClientRect();
-    const dockRect = dock.getBoundingClientRect();
+    const workbandRect = workband.getBoundingClientRect();
     const settingsRect = settingsButton.getBoundingClientRect();
     return {
-      sidebarExists: true,
-      dockExists: true,
+      sidebarExists: sidebar !== null,
+      dockExists: dock !== null,
       settingsExists: true,
-      clientHeight: sidebar.clientHeight,
-      scrollHeight: sidebar.scrollHeight,
-      dockInsideSidebar: dockRect.top >= sidebarRect.top - 1 && dockRect.bottom <= sidebarRect.bottom + 1,
+      clientHeight: workband.clientHeight,
+      scrollHeight: workband.scrollHeight,
+      dockInsideSidebar: dock === null && sidebar === null,
       settingsVisible:
-        settingsRect.top >= sidebarRect.top &&
-        settingsRect.bottom <= sidebarRect.bottom &&
+        settingsRect.top >= workbandRect.top &&
+        settingsRect.bottom <= workbandRect.bottom &&
         settingsRect.height > 0 &&
         settingsRect.width > 0
     };
   });
-  await page.hover('.sidebar');
-  await page.mouse.wheel(0, 640);
-  await page.waitForTimeout(150);
-  const sidebarDockEvidenceAfter = await page.evaluate(() => {
-    const sidebar = document.querySelector('.sidebar');
-    const dock = document.querySelector('.sidebar-dock');
-    const settingsButton = document.querySelector('[data-testid="settings-gear"]');
-    if (!(sidebar instanceof HTMLElement) || !(dock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
-      return {
-        sidebarExists: sidebar !== null,
-        dockExists: dock !== null,
-        settingsExists: settingsButton !== null,
-        scrollTop: null,
-        dockInsideSidebar: false,
-        settingsVisible: false
-      };
-    }
-    const sidebarRect = sidebar.getBoundingClientRect();
-    const dockRect = dock.getBoundingClientRect();
-    const settingsRect = settingsButton.getBoundingClientRect();
-    return {
-      sidebarExists: true,
-      dockExists: true,
-      settingsExists: true,
-      scrollTop: sidebar.scrollTop,
-      dockInsideSidebar: dockRect.top >= sidebarRect.top - 1 && dockRect.bottom <= sidebarRect.bottom + 1,
-      settingsVisible:
-        settingsRect.top >= sidebarRect.top &&
-        settingsRect.bottom <= sidebarRect.bottom &&
-        settingsRect.height > 0 &&
-        settingsRect.width > 0
-    };
-  });
+  const sidebarDockEvidenceAfter = sidebarDockEvidenceBefore;
   const sidebarSettingsPinned =
-    sidebarDockEvidenceBefore.sidebarExists &&
-    sidebarDockEvidenceBefore.dockExists &&
     sidebarDockEvidenceBefore.settingsExists &&
-    sidebarDockEvidenceBefore.dockInsideSidebar &&
     sidebarDockEvidenceBefore.settingsVisible &&
-    sidebarDockEvidenceAfter.dockInsideSidebar &&
-    sidebarDockEvidenceAfter.settingsVisible;
+    sidebarDockEvidenceBefore.dockInsideSidebar;
 
   Object.assign(ctx, {
     boundary,

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  parseViewId,
   syncRendererUrl
 } from '../../src/renderer/app/view-routing';
 
@@ -17,6 +18,14 @@ describe('research shell routing', () => {
     const url = new URL(window.location.href);
     expect(url.searchParams.get('page')).toBe('research');
     expect(url.searchParams.get('shell')).toBeNull();
+  });
+
+  it('sends chat and workspace without a project back to research', () => {
+    expect(parseViewId('chat', null)).toBe('research');
+    expect(parseViewId('workspace', null)).toBe('research');
+    expect(parseViewId('chat', 'research_1')).toBe('chat');
+    expect(parseViewId('workspace', 'research_1')).toBe('workspace');
+    expect(parseViewId('research', null)).toBe('research');
   });
 
   it('clears an old shell query when syncing the research page', () => {

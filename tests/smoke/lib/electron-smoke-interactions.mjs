@@ -5,10 +5,6 @@ export async function runSmokeInteractionChecks(ctx) {
   const { page } = ctx;
   const buttonInteractionEvidence = {
     chatTopbarActionsGrouped: false,
-    chatSidebarToggleVisible: false,
-    chatSidebarToggleWorks: false,
-    chatHistorySearchToggleVisible: false,
-    chatHistorySearchToggleWorks: false,
     chatNewConversationVisible: false,
     chatNewConversationWorks: false,
     attachmentPickerVisible: false,
@@ -40,40 +36,25 @@ export async function runSmokeInteractionChecks(ctx) {
   buttonInteractionEvidence.chatTopbarActionsGrouped = await page.evaluate(() => {
     const workband = document.querySelector('[data-testid="window-workband"]');
     const brand = workband?.querySelector('.brand');
-    const sidebarToggle = document.querySelector('[data-testid="chat-sidebar-toggle"]');
-    const historySearchToggle = document.querySelector('[data-testid="chat-history-search-toggle"]');
     const newConversation = document.querySelector('[data-testid="chat-new-conversation"]');
+    const settings = document.querySelector('[data-testid="settings-gear"]');
     if (
       !(workband instanceof HTMLElement) ||
       !(brand instanceof HTMLElement) ||
-      !(sidebarToggle instanceof HTMLElement) ||
-      !(historySearchToggle instanceof HTMLElement) ||
-      !(newConversation instanceof HTMLElement)
+      !(newConversation instanceof HTMLElement) ||
+      !(settings instanceof HTMLElement)
     ) {
       return false;
     }
     return (
-      workband.contains(sidebarToggle) &&
-      workband.contains(historySearchToggle) &&
       workband.contains(newConversation) &&
-      !document.querySelector('.chat-toolbar-actions')?.contains(sidebarToggle) &&
-      sidebarToggle.getBoundingClientRect().left > brand.getBoundingClientRect().right
+      workband.contains(settings) &&
+      document.querySelector('.sidebar') === null &&
+      newConversation.getBoundingClientRect().left > brand.getBoundingClientRect().right
     );
   });
-  buttonInteractionEvidence.chatSidebarToggleVisible = (await page.locator('[data-testid="chat-sidebar-toggle"]').count()) === 1;
-  buttonInteractionEvidence.chatHistorySearchToggleVisible =
-    (await page.locator('[data-testid="chat-history-search-toggle"]').count()) === 1;
   buttonInteractionEvidence.chatNewConversationVisible =
     (await page.locator('[data-testid="chat-new-conversation"]').count()) === 1;
-  await page.click('[data-testid="chat-history-search-toggle"]');
-  await page.waitForSelector('[data-testid="chat-history-search-input"]', { timeout: 5000 });
-  buttonInteractionEvidence.chatHistorySearchToggleWorks =
-    (await page.locator('[data-testid="chat-history-search-input"]').count()) === 1;
-  await page.click('[data-testid="chat-sidebar-toggle"]');
-  await page.waitForFunction(() => document.querySelector('.sidebar') === null, undefined, { timeout: 5000 });
-  buttonInteractionEvidence.chatSidebarToggleWorks = (await page.locator('.sidebar').count()) === 0;
-  await page.click('[data-testid="chat-sidebar-toggle"]');
-  await page.waitForSelector('.sidebar', { timeout: 5000 });
   await page.hover('[data-testid="chat-attachment-trigger"]');
   buttonInteractionEvidence.attachmentPickerVisible = (await page.locator('[data-testid="chat-attachment-trigger"]').count()) === 1;
   await page.click('[data-testid="chat-attachment-trigger"]');
@@ -301,8 +282,8 @@ export async function runSmokeInteractionChecks(ctx) {
 
     return {
       body: readStyle('body'),
-      navChat: readStyle('[data-testid="nav-chat"]'),
-      chatHistorySearchToggle: readStyle('[data-testid="chat-history-search-toggle"]'),
+      navChat: readStyle('[data-testid="settings-gear"]'),
+      chatHistorySearchToggle: readStyle('[data-testid="settings-gear"]'),
       chatNewConversation: readStyle('[data-testid="chat-new-conversation"]'),
       chatInput: readStyle('[data-testid="chat-input"]'),
       pointerCursorNonLinks

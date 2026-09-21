@@ -1,4 +1,5 @@
 import { waitForAppReady, waitForTextContent } from './assertions.mjs';
+import { openResearchService } from './ui-actions.mjs';
 import { nextDailyRunAtUtc } from './electron-smoke-time.mjs';
 import { seedSmokeRuntimeData } from './ipc.mjs';
 
@@ -18,7 +19,7 @@ export async function runSmokeTaskFlow(ctx) {
   }
   await page.reload();
   await waitForAppReady(page, 'after-skill-import', artifactDir);
-  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 5000 });
   const selectedWorkspace = await page.evaluate(async (workspacePath) => {
     const result = await window.roc.workspace.select({ path: workspacePath });
     if (!result.ok) {
@@ -38,8 +39,8 @@ export async function runSmokeTaskFlow(ctx) {
   });
   await page.reload();
   await waitForAppReady(page, 'after-runtime-seed', artifactDir);
-  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
-  await page.click('[data-testid="nav-tasks-board"]');
+  await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 5000 });
+  await openResearchService(page, 'tasks');
   await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="tasks-board-view"]', backgroundTaskGoal, 15000);
   const manualRunNowEvidence = await page.evaluate(async (workspacePath) => {
@@ -103,7 +104,7 @@ export async function runSmokeTaskFlow(ctx) {
   }, workspaceRoot);
   await page.reload();
   await waitForAppReady(page, 'after-manual-run-now', artifactDir);
-  await page.click('[data-testid="nav-tasks-board"]');
+  await openResearchService(page, 'tasks');
   await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
   await page.locator(`[data-testid="task-board-card-${manualRunNowEvidence.taskId}"]`).click();
   await page.waitForSelector('[data-testid="task-detail-view"]', { timeout: 10000 });

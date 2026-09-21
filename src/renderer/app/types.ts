@@ -1,4 +1,3 @@
-import type { HistorySidebarItem } from '../history-sidebar';
 import type {
   ActiveTaskItem,
   DiagnosticCheck,
@@ -54,18 +53,6 @@ export type PreviewIconName =
   | 'terminal'
   | 'wrench';
 
-export type NavItem = {
-  id: ViewId;
-  label: string;
-  // 完整文案，dock 单行放不下，降级为 title tooltip。
-  meta: string;
-  // 短徽标，dock 行右对齐显示；无可显示数值时省略。
-  badge?: string;
-  badgeTone?: 'alert';
-  icon: PreviewIconName;
-  active?: boolean;
-};
-
 export type WorkbenchTool = 'files' | 'git' | 'terminal';
 export type MainViewId = ViewId;
 
@@ -110,4 +97,3 @@ export type LazyLoadState = {
   key: string | null;
 };
 
-export type { HistorySidebarItem };

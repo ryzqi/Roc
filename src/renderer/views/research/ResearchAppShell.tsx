@@ -87,6 +87,13 @@ export function ResearchAppShell({
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
   useEffect(() => {
+    function onNewProject(): void {
+      setCreating(true);
+    }
+    window.addEventListener('research-new-project', onNewProject);
+    return () => window.removeEventListener('research-new-project', onNewProject);
+  }, []);
+  useEffect(() => {
     void workbench.load(initialProjectIdRef.current);
   }, [workbench]);
   useEffect(() => {

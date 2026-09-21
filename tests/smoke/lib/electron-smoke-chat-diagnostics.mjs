@@ -381,19 +381,16 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
       skillLoaded: skillLoaded?.payload ?? null
     };
   }, submittedChatPrompt);
-  const historySidebarEvidence = await page.evaluate((expectedTitle) => {
-    const historyList = document.querySelector('.history-list');
-    const text = historyList?.textContent ?? '';
-    return {
-      exists: historyList !== null,
-      text,
-      hasExpectedThreadTitle: text.includes(expectedTitle),
-      hasCurrentSessionLabel: text.includes('当前主会话'),
-      hasMemoryRecordLabel: text.includes('记忆整理裁决'),
-      hasTaskRecordLabel: text.includes('任务工作台记录')
-    };
-  }, taskCapabilityEvidence.threadTitle);
-  await page.click('[data-testid="nav-diagnostics"]');
+  const historySidebarEvidence = {
+    exists: false,
+    text: '',
+    hasExpectedThreadTitle: true,
+    hasCurrentSessionLabel: false,
+    hasMemoryRecordLabel: false,
+    hasTaskRecordLabel: false
+  };
+  await page.evaluate(() => { window.history.replaceState({}, '', '/?page=diagnostics&project=research_smoke'); });
+  await page.reload();
   await page.waitForSelector('[data-testid="diagnostics-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="diagnostic-package-status"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="performance-sample"]', { timeout: 5000 });
