@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
 import { highlightCode } from './syntax-highlight';
+import { useCopyFeedback } from '../utils/use-copy-feedback';
 
 type CodeBlockProps = {
   children?: ReactNode;
@@ -50,7 +51,7 @@ function isCodeElement(node: ReactNode): node is ReactElement<CodeChildProps> {
 }
 
 export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const { copied, markCopied } = useCopyFeedback(1600);
 
   const codeChild = Array.isArray(children) ? children.find(isCodeElement) : isCodeElement(children) ? children : null;
   const codeClassName = codeChild?.props.className;
@@ -77,10 +78,9 @@ export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.El
     }
     try {
       await navigator.clipboard.writeText(codeText);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      markCopied();
     } catch {
-      setCopied(false);
+      return;
     }
   }
 

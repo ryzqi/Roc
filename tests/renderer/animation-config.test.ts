@@ -18,6 +18,7 @@ describe('renderer animation configuration', () => {
 
     expect(css).toContain("html[data-window-hidden='true']");
     expect(css).toContain('animation-play-state: paused !important;');
+    expect(css).toContain('transition: none !important;');
     expect(visibility).toContain('client.api.window.onHidden');
     expect(visibility).not.toContain('visibilitychange');
   });
@@ -86,6 +87,8 @@ describe('renderer animation configuration', () => {
     expect(pointerBlocks).toEqual(['a[href]']);
     expect(baseBodyBlock).toContain('cursor: default;');
     expect(baseBodyBlock).toContain('user-select: none;');
+    expect(baseBodyBlock).toContain('text-rendering: optimizeSpeed;');
+    expect(baseBodyBlock).not.toContain('optimizeLegibility');
     expect(baseCss).toContain('input,');
     expect(baseCss).toContain('.chat-message-row,');
     expect(baseCss).toContain('.code-preview,');

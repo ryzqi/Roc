@@ -15,12 +15,18 @@ describe('chromium runtime flags', () => {
       'DialMediaRouteProvider',
       'TranslateUI',
       'HardwareMediaKeyHandling',
-      'SpareRendererForSitePerProcess'
+      'SpareRendererForSitePerProcess',
+      'AutofillServerCommunication',
+      'InterestFeedContentSuggestions',
+      'CalculateNativeWinOcclusion'
     ]);
     expect(commandLine.appendSwitch).toHaveBeenCalledWith(
       'disable-features',
-      'MediaRouter,DialMediaRouteProvider,TranslateUI,HardwareMediaKeyHandling,SpareRendererForSitePerProcess'
+      'MediaRouter,DialMediaRouteProvider,TranslateUI,HardwareMediaKeyHandling,SpareRendererForSitePerProcess,AutofillServerCommunication,InterestFeedContentSuggestions,CalculateNativeWinOcclusion'
     );
+    expect(commandLine.appendSwitch).toHaveBeenCalledWith('disable-background-networking');
+    expect(commandLine.appendSwitch).toHaveBeenCalledWith('disable-component-update');
+    expect(commandLine.appendSwitch).toHaveBeenCalledWith('disable-domain-reliability');
     expect(commandLine.appendSwitch).not.toHaveBeenCalledWith('remote-debugging-port', expect.anything());
   });
 

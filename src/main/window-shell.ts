@@ -42,7 +42,8 @@ export function buildMainWindowOptions(
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: true
+      backgroundThrottling: true,
+      v8CacheOptions: 'code'
     }
   };
 }

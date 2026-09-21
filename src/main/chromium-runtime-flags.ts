@@ -3,13 +3,19 @@ export const disabledChromiumFeatures = [
   'DialMediaRouteProvider',
   'TranslateUI',
   'HardwareMediaKeyHandling',
-  'SpareRendererForSitePerProcess'
+  'SpareRendererForSitePerProcess',
+  'AutofillServerCommunication',
+  'InterestFeedContentSuggestions',
+  'CalculateNativeWinOcclusion'
 ] as const;
 
 export function applyChromiumRuntimeFlags(commandLine: {
   appendSwitch(switchValue: string, value?: string): void;
 }, env: NodeJS.ProcessEnv = process.env, argv: readonly string[] = process.argv): void {
   commandLine.appendSwitch('disable-features', disabledChromiumFeatures.join(','));
+  commandLine.appendSwitch('disable-background-networking');
+  commandLine.appendSwitch('disable-component-update');
+  commandLine.appendSwitch('disable-domain-reliability');
   const remoteDebuggingPort = resolveRemoteDebuggingPort(argv) ?? (env.ROC_SMOKE === '1' ? '0' : null);
   if (remoteDebuggingPort !== null) {
     commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort);

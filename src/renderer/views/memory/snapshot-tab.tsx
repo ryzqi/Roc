@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
+import { useCopyFeedback } from '../../utils/use-copy-feedback';
 
 export function SnapshotTab({ client }: { client?: RocClient }): React.JSX.Element {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, markCopied } = useCopyFeedback();
 
   useEffect(() => {
     void refresh();
@@ -26,10 +27,9 @@ export function SnapshotTab({ client }: { client?: RocClient }): React.JSX.Eleme
   async function copyToClipboard(): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      markCopied();
     } catch {
-      setCopied(false);
+      return;
     }
   }
 

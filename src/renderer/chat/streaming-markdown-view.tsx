@@ -19,7 +19,7 @@ export const StreamingMarkdownView = memo(
 
     return (
       <div data-testid="streaming-markdown">
-        <Streamdown animated components={markdownComponents} isAnimating={isStreaming}>
+        <Streamdown animated={false} components={markdownComponents} isAnimating={isStreaming}>
           {text}
         </Streamdown>
       </div>

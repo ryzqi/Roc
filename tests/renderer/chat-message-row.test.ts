@@ -9,6 +9,41 @@ describe('chat message row', () => {
   it('disables mount motion for persisted messages only', () => {
     expect(messageInitial('persisted')).toBe(false);
     expect(messageInitial('live')).toBe('initial');
+
+    const persistedHtml = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          source: 'persisted',
+          key: 'assistant-persisted',
+          role: 'assistant',
+          content: '历史消息',
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      })
+    );
+    const liveHtml = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          source: 'live',
+          key: 'assistant-live',
+          role: 'assistant',
+          content: '新消息',
+          reasoning: null,
+          blocks: [],
+          interrupts: [],
+          isStreaming: false
+        }
+      })
+    );
+    const rowSource = readFileSync('src/renderer/chat/chat-message-row.tsx', 'utf8');
+
+    expect(persistedHtml).toContain('data-testid="chat-message-assistant"');
+    expect(persistedHtml).not.toContain('style="opacity:');
+    expect(liveHtml).toContain('opacity:');
+    expect(rowSource).toContain('if (!animateEntry)');
   });
 
   it('uses a streaming Markdown boundary while assistant content is flowing', () => {
@@ -20,6 +55,7 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid="streaming-markdown"');
+    expect(readFileSync('src/renderer/chat/streaming-markdown-view.tsx', 'utf8')).toContain('animated={false}');
   });
 
   it('does not add a second per-token CSS animation on top of Streamdown', () => {

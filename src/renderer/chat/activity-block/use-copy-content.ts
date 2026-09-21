@@ -1,22 +1,22 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
+import { useCopyFeedback } from '../../utils/use-copy-feedback';
 
 export function useCopyContent(content: () => string): {
   copied: boolean;
   copy: () => void;
 } {
-  const [copied, setCopied] = useState(false);
+  const { copied, markCopied } = useCopyFeedback();
 
   const copy = useCallback(() => {
     navigator.clipboard.writeText(content()).then(
       () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 2000);
+        markCopied();
       },
       (error) => {
         console.error('复制失败:', error);
       }
     );
-  }, [content]);
+  }, [content, markCopied]);
 
   return { copied, copy };
 }

@@ -4,7 +4,6 @@ import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
-import { ChatFeature } from '../features/chat';
 import type { TaskBoardUiState } from '../features/tasks';
 import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
@@ -12,6 +11,7 @@ import type { ResearchServiceContext, ResearchServiceEntry } from './research/re
 import { ResearchServiceContextBanner } from './research/ResearchServiceContextBanner';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
+const ChatFeature = lazy(() => import('../features/chat').then((module) => ({ default: module.ChatFeature })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
 const PreviewView = lazy(() => import('./preview/PreviewView').then((module) => ({ default: module.PreviewView })));
 const DiagnosticsFeature = lazy(() => import('../features/diagnostics').then((module) => ({ default: module.DiagnosticsFeature })));
@@ -179,7 +179,7 @@ export function ViewContent({
   if (activeView === 'diagnostics') {
     return renderServiceView(<DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />);
   }
-  return (
+  return renderLazyView(
     <ChatFeature
       chatSelectionVersion={chatSelectionVersion}
       client={client}

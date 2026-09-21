@@ -152,6 +152,7 @@
   min-width: 0;
   max-width: 100%;
   padding-bottom: var(--chat-gap);
+  contain: content;
 }
 
 .chat-message-row {

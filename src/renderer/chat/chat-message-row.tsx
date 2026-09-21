@@ -52,57 +52,69 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
   ]
     .filter((part) => part.length > 0)
     .join(' ');
-  const variants = isAssistant ? assistantBubbleEnter : userBubbleEnter;
+  const rowClassName = isAssistant ? 'chat-message-row chat-message-row--assistant' : 'chat-message-row chat-message-row--user';
+  const testId = isAssistant ? 'chat-message-assistant' : 'chat-message-user';
+  const animateEntry = messageInitial(message.source) === 'initial';
+  const body = (
+    <article className={bubbleClassName}>
+      {isAssistant ? (
+        <div className="chat-assistant-content" data-testid="chat-assistant-content">
+          {activityBlocks.map((block) => (
+            <ChatActivityBlockView key={block.id} block={block} />
+          ))}
+          {message.content.length === 0 ? null : (
+            <Suspense fallback={null}>
+              <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
+            </Suspense>
+          )}
+          {message.interrupts.map((interrupt) => (
+            <ChatInterruptView
+              interrupt={interrupt}
+              key={interrupt.interruptId}
+              onApprovalDecision={onApprovalDecision}
+              source={message.source}
+            />
+          ))}
+          {message.isStreaming ? (
+            <span className="chat-typing-cursor" aria-hidden="true" />
+          ) : null}
+          {!message.isStreaming && message.content.length > 0 ? <CopyAnswerButton content={message.content} /> : null}
+        </div>
+      ) : (
+        <>
+          <p>{message.content}</p>
+          {attachments.length === 0 ? null : (
+            <div className="chat-message-attachments" data-testid="chat-message-attachments">
+              {attachments.map((attachment) => (
+                <span className="chat-message-attachment" key={`${attachment.name}-${attachment.sizeBytes}`}>
+                  <span>{attachment.name}</span>
+                  <small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small>
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </article>
+  );
+  if (!animateEntry) {
+    return (
+      <div className={rowClassName} data-role={message.role} data-testid={testId}>
+        {body}
+      </div>
+    );
+  }
   return (
     <motion.div
       animate="animate"
-      className={isAssistant ? 'chat-message-row chat-message-row--assistant' : 'chat-message-row chat-message-row--user'}
+      className={rowClassName}
       data-role={message.role}
-      data-testid={isAssistant ? 'chat-message-assistant' : 'chat-message-user'}
-      initial={messageInitial(message.source)}
+      data-testid={testId}
+      initial="initial"
       transition={resolveMotionTransition(bubbleEnterTransition)}
-      variants={variants}
+      variants={isAssistant ? assistantBubbleEnter : userBubbleEnter}
     >
-      <article className={bubbleClassName}>
-        {isAssistant ? (
-          <div className="chat-assistant-content" data-testid="chat-assistant-content">
-            {activityBlocks.map((block) => (
-              <ChatActivityBlockView key={block.id} block={block} />
-            ))}
-            {message.content.length === 0 ? null : (
-              <Suspense fallback={null}>
-                <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
-              </Suspense>
-            )}
-            {message.interrupts.map((interrupt) => (
-              <ChatInterruptView
-                interrupt={interrupt}
-                key={interrupt.interruptId}
-                onApprovalDecision={onApprovalDecision}
-                source={message.source}
-              />
-            ))}
-            {message.isStreaming ? (
-              <span className="chat-typing-cursor" aria-hidden="true" />
-            ) : null}
-            {!message.isStreaming && message.content.length > 0 ? <CopyAnswerButton content={message.content} /> : null}
-          </div>
-        ) : (
-          <>
-            <p>{message.content}</p>
-            {attachments.length === 0 ? null : (
-              <div className="chat-message-attachments" data-testid="chat-message-attachments">
-                {attachments.map((attachment) => (
-                  <span className="chat-message-attachment" key={`${attachment.name}-${attachment.sizeBytes}`}>
-                    <span>{attachment.name}</span>
-                    <small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small>
-                  </span>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </article>
+      {body}
     </motion.div>
   );
 }
@@ -134,15 +146,8 @@ function ChatInterruptView(input: {
     return <TaskApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />;
   }
   const editableAction = interrupt.actionRequests.length === 1 ? interrupt.actionRequests[0] : undefined;
-  return (
-    <motion.div
-      className="chat-approval-card"
-      data-testid="chat-approval-card"
-      initial={messageInitial(input.source)}
-      animate="animate"
-      variants={approvalCardEnter}
-      transition={resolveMotionTransition(approvalCardTransition)}
-    >
+  const approvalBody = (
+    <>
       <header className="chat-approval-head">
         等待审批
         <span className="chat-approval-count">{interrupt.actionRequests.length}</span>
@@ -186,6 +191,25 @@ function ChatInterruptView(input: {
           </button>
         ) : null}
       </div>
+    </>
+  );
+  if (messageInitial(input.source) === false) {
+    return (
+      <div className="chat-approval-card" data-testid="chat-approval-card">
+        {approvalBody}
+      </div>
+    );
+  }
+  return (
+    <motion.div
+      className="chat-approval-card"
+      data-testid="chat-approval-card"
+      initial="initial"
+      animate="animate"
+      variants={approvalCardEnter}
+      transition={resolveMotionTransition(approvalCardTransition)}
+    >
+      {approvalBody}
     </motion.div>
   );
 }

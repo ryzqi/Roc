@@ -24,6 +24,7 @@ describe('immersive window shell', () => {
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
     expect(options.webPreferences?.backgroundThrottling).toBe(true);
+    expect(options.webPreferences?.v8CacheOptions).toBe('code');
     expect(options.webPreferences).not.toHaveProperty('spellcheck');
   });
 

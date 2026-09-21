@@ -101,6 +101,7 @@ export function ChatTranscriptPanel({
         firstItemIndex={initialWindowRef.current.firstItemIndex}
         initialTopMostItemIndex={initialWindowRef.current.initialTopMostItemIndex}
         computeItemKey={(_index, message) => message.key}
+        increaseViewportBy={240}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (

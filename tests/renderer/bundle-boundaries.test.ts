@@ -57,6 +57,8 @@ describe('renderer bundle boundaries', () => {
     expect(settingsLayerSource).toContain("lazy(() => import('../features/settings')");
     expect(viewContentSource).not.toContain("import { DiagnosticsFeature } from '../features/diagnostics';");
     expect(viewContentSource).toContain("lazy(() => import('../features/diagnostics')");
+    expect(viewContentSource).not.toContain("import { ChatFeature } from '../features/chat';");
+    expect(viewContentSource).toContain("lazy(() => import('../features/chat')");
   });
 
   it('lazy-loads the workbench panel outside the chat first-screen bundle', () => {

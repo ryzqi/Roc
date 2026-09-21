@@ -18,7 +18,7 @@ body {
   cursor: default;
   letter-spacing: 0;
   overflow: hidden;
-  text-rendering: optimizeLegibility;
+  text-rendering: optimizeSpeed;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
