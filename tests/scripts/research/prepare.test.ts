@@ -89,6 +89,13 @@ describe('research prepare', () => {
     expect(lock.texBundle.zipSha256).toBe('658f7598c28451fcfa4bd0213e5e2f4dbddb5e652bc99f861b22110af7febf99');
   });
 
+  it('fails immediately on a non-macOS host instead of returning a missing architecture', () => {
+    const source = readFileSync(new URL('../../../scripts/research/prepare.ts', import.meta.url), 'utf8');
+    expect(source).toContain("if (process.platform !== 'darwin' || (process.arch !== 'arm64' && process.arch !== 'x64'))");
+    expect(source).toContain("fail('research_toolchain_build_requires_matching_macos_host')");
+    expect(source).not.toContain('return undefined');
+  });
+
   it('does not copy fetched models into the toolchain output', () => {
     const source = readFileSync(new URL('../../../scripts/research/prepare.ts', import.meta.url), 'utf8');
     expect(source).toContain('await fetchModels(');

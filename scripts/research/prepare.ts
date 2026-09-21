@@ -54,10 +54,11 @@ async function pathInfo(path: string) {
   }
 }
 
-function hostArchitecture(): string | undefined {
-  if (process.platform !== 'darwin') return undefined;
-  if (process.arch === 'arm64' || process.arch === 'x64') return process.arch;
-  return undefined;
+function hostArchitecture(): 'arm64' | 'x64' {
+  if (process.platform !== 'darwin' || (process.arch !== 'arm64' && process.arch !== 'x64')) {
+    fail('research_toolchain_build_requires_matching_macos_host');
+  }
+  return process.arch;
 }
 
 function overlaps(left: string, right: string): boolean {
@@ -224,8 +225,7 @@ function sameRecord(left: Record<string, string>, right: Record<string, string>)
 }
 
 export async function prepare(architecture: string, outputPath: string, cachePath: string, modelCachePath: string): Promise<void> {
-  const host = hostArchitecture();
-  if (host === undefined || architecture !== host) fail('research_toolchain_build_requires_matching_macos_host');
+  if (architecture !== hostArchitecture()) fail('research_toolchain_build_requires_matching_macos_host');
   if ((await pathInfo(outputPath))?.isSymbolicLink()
       || (await pathInfo(cachePath))?.isSymbolicLink()
       || (await pathInfo(modelCachePath))?.isSymbolicLink()) {
