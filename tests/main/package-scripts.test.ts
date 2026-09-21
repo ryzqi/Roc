@@ -15,6 +15,34 @@ const releaseChecklistCommands = [
 ];
 
 describe('package scripts', () => {
+  it('ignores non-macOS optional native packages at install time', () => {
+    const workspace = readFileSync(new URL('../../pnpm-workspace.yaml', import.meta.url), 'utf8');
+    const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+
+    expect(packageJson.os).toEqual(['darwin']);
+    expect(packageJson.cpu).toEqual(['arm64', 'x64']);
+    expect(workspace).toContain("ignoredOptionalDependencies:");
+    expect(workspace).toContain("'@esbuild/win32-*'");
+    expect(workspace).toContain("'@esbuild/linux-*'");
+    expect(workspace).toContain("'@esbuild/android-*'");
+    expect(workspace).toContain("'@esbuild/freebsd-*'");
+    expect(workspace).toContain("'@rolldown/binding-win32-*'");
+    expect(workspace).toContain("'@rolldown/binding-linux-*'");
+    expect(workspace).toContain("'@typescript/typescript-win32-*'");
+    expect(workspace).toContain("'@typescript/typescript-linux-*'");
+    expect(workspace).toContain("'@typescript/typescript-aix-*'");
+    expect(workspace).toContain("'@typescript/typescript-freebsd-*'");
+    expect(workspace).toContain("'lightningcss-win32-*'");
+    expect(workspace).toContain("'lightningcss-linux-*'");
+    expect(workspace).toContain("'sqlite-vec-linux-*'");
+    expect(workspace).toContain("'sqlite-vec-windows-*'");
+    expect(workspace).toContain("'@napi-rs/canvas-win32-*'");
+    expect(workspace).toContain("'@napi-rs/canvas-linux-*'");
+    expect(workspace).toContain("'@napi-rs/canvas-android-*'");
+    expect(workspace).not.toContain("'@esbuild/darwin-*'");
+    expect(workspace).not.toContain("'@napi-rs/canvas-darwin-*'");
+  });
+
   it('does not expose the removed audit script anymore', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     const removedScriptName = ['visual', 'audit'].join(':');
