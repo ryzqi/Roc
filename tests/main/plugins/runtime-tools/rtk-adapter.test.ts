@@ -26,7 +26,6 @@ describe('runtime tools RTK adapter', () => {
     const service = createRtkService({
       rootDir: root,
       binaryManager: new RTKBinaryManager({
-        platform: 'darwin',
         arch: 'x64',
         resourcesPath
       })

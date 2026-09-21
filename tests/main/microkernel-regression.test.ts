@@ -160,7 +160,6 @@ describe('microkernel regression', () => {
           rootDir: root,
           workspacePath: workspaceRoot,
           binaryManager: new RTKBinaryManager({
-            platform: 'darwin',
             arch: 'x64',
             resourcesPath
           })

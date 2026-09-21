@@ -28,7 +28,7 @@ resources/rtk-binaries/darwin-arm64/rtk
 
 ## 关键模块
 
-- `src/rtk-integration/binary-manager.ts`：解析当前平台 RTK binary 路径并检查可用性。
+- `src/rtk-integration/binary-manager.ts`：解析当前 macOS 架构的 RTK binary 路径并检查可用性。
 - `src/rtk-integration/rewriter.ts`：调用 `rtk rewrite <command>`，解析 `rtk ...` 参数。
 - `src/rtk-integration/middleware.ts`：拦截 LangChain shell 工具调用并改写命令。
 - `src/main/services/rtk-service.ts`：向 Roc 状态面板和执行链暴露 bundled RTK binary 状态。
@@ -61,7 +61,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
 
 ## 降级行为
 
-- `RTKBinaryManager` 找不到当前平台 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行。
+- `RTKBinaryManager` 找不到当前 macOS 架构 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行。
 - `rtk rewrite` 返回 unsupported：Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行，并记录 `command_not_supported`。
 - RTK deny：middleware 返回错误 `ToolMessage`，不执行原命令。
 - 改写后命令执行失败：默认回退原命令；实际执行仍受 `ShellExecutionService` 的 RTK 与 shell 风险策略约束。

@@ -11,10 +11,9 @@ describe('RTKBinaryManager', () => {
     expect(manager.getRTKBinaryPath()).toContain('rtk');
   });
 
-  it('returns null for unsupported platforms', () => {
+  it('returns null for unsupported macOS architectures', () => {
     const manager = new RTKBinaryManager({
-      platform: 'freebsd',
-      arch: 'x64'
+      arch: 'ia32'
     });
 
     expect(manager.getRTKBinaryPath()).toBeNull();
@@ -23,7 +22,6 @@ describe('RTKBinaryManager', () => {
 
   it('reports the bundled macOS binary as available in development', () => {
     const manager = new RTKBinaryManager({
-      platform: 'darwin',
       arch: 'x64',
       resourceRoot: process.cwd()
     });
@@ -34,13 +32,12 @@ describe('RTKBinaryManager', () => {
 
   it('resolves every supported bundled platform directory', () => {
     const cases = [
-      { platform: 'darwin', arch: 'x64', expected: join('darwin-x64', 'rtk') },
-      { platform: 'darwin', arch: 'arm64', expected: join('darwin-arm64', 'rtk') },
+      { arch: 'x64', expected: join('darwin-x64', 'rtk') },
+      { arch: 'arm64', expected: join('darwin-arm64', 'rtk') },
     ] as const;
 
     for (const platformCase of cases) {
       const manager = new RTKBinaryManager({
-        platform: platformCase.platform,
         arch: platformCase.arch,
         resourcesPath: '/Applications/Roc.app/Contents/Resources'
       });
@@ -56,7 +53,6 @@ describe('RTKBinaryManager', () => {
     processWithResources.resourcesPath = '/Electron.app/Contents/Resources';
     try {
       const manager = new RTKBinaryManager({
-        platform: 'darwin',
         arch: 'x64'
       });
 
@@ -83,7 +79,6 @@ describe('RTKBinaryManager', () => {
     processWithResources.defaultApp = true;
     try {
       const manager = new RTKBinaryManager({
-        platform: 'darwin',
         arch: 'x64',
         resourceRoot: '/Users/test/Projects/Roc'
       });

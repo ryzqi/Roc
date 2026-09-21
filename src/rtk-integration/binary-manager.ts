@@ -1,10 +1,7 @@
 import { accessSync, constants, existsSync } from 'node:fs';
 import path from 'node:path';
 
-type NodePlatform = NodeJS.Platform | 'freebsd';
-
 export type RTKBinaryManagerOptions = {
-  platform?: NodePlatform;
   arch?: NodeJS.Architecture;
   resourceRoot?: string;
   resourcesPath?: string;
@@ -54,13 +51,11 @@ export class RTKBinaryManager {
   }
 
   private resolvePlatformBinary(): PlatformBinary | null {
-    const platform = this.platform();
     const arch = this.arch();
-
-    if (platform === 'darwin' && arch === 'x64') {
+    if (arch === 'x64') {
       return { platformDir: 'darwin-x64', binaryName: 'rtk' };
     }
-    if (platform === 'darwin' && arch === 'arm64') {
+    if (arch === 'arm64') {
       return { platformDir: 'darwin-arm64', binaryName: 'rtk' };
     }
     return null;
@@ -78,10 +73,6 @@ export class RTKBinaryManager {
     }
 
     return path.join(this.options.resourceRoot ?? process.cwd(), 'resources');
-  }
-
-  private platform(): NodePlatform {
-    return this.options.platform ?? process.platform;
   }
 
   private arch(): NodeJS.Architecture {
