@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ClipboardEvent, Dispatch, DragEvent, FocusEvent, SetStateAction } from 'react';
 import type { FileNameSearchMatch, McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
-import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
+import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings/settings-save-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
 import { applyComposerCompletion, detectComposerTrigger } from './composer-trigger';

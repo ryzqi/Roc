@@ -1,51 +1,17 @@
 import type {
   AgentRuntimeStatus,
   AppSettings,
-  HostIntegrationStatus,
-  McpServerSnapshot,
   PermissionsConfig,
   ProviderConfig,
-  ProviderSecretStatus,
-  ProviderTestResult,
-  RocHookConfigSnapshot,
   SettingsSaveRequest,
-  SettingsSnapshot,
-  SkillSnapshot
+  SettingsSnapshot
 } from '../../shared/types';
 import { buildProviderModelKey, parseProviderModelKey } from '../../shared/provider-model-key';
-import type { LoadedState } from '../loaded-state';
-import { unwrap } from '../loaded-state';
+import { applySettingsSnapshot, unwrap, type LoadedSettingsState, type LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 
-export type LoadedSettingsState = {
-  settings: AppSettings;
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  providerSecretStatus: ProviderSecretStatus[];
-  permissions: PermissionsConfig;
-  mcpServers: McpServerSnapshot[];
-  skills: SkillSnapshot[];
-  hookSettings: RocHookConfigSnapshot;
-  hostIntegration: HostIntegrationStatus;
-  providerTestStatus: ProviderTestResult | null;
-  mcpTestStatus: null;
-};
-
-export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSettingsState {
-  return {
-    settings: snapshot.settings,
-    providers: snapshot.providers,
-    defaultModelId: snapshot.defaultModelId,
-    providerSecretStatus: snapshot.providerSecretStatus,
-    permissions: snapshot.permissions,
-    mcpServers: snapshot.mcpServers,
-    skills: snapshot.skills,
-    hookSettings: snapshot.hooks,
-    hostIntegration: snapshot.hostIntegration,
-    providerTestStatus: null,
-    mcpTestStatus: null
-  };
-}
+export type { LoadedSettingsState };
+export { applySettingsSnapshot };
 
 export async function buildSettingsStateUpdate(client: RocClient, snapshot: SettingsSnapshot): Promise<Partial<LoadedState>> {
   return {

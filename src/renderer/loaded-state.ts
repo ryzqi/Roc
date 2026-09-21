@@ -30,6 +30,7 @@ import type {
   SchedulerStatus,
   ScheduledTaskRun,
   SkillSnapshot,
+  SettingsSnapshot,
   TaskDetail,
   TaskSnapshot,
   TerminalSessionSnapshot,
@@ -82,6 +83,36 @@ export type LoadedState = {
   terminalError: string | null;
   terminalSession: TerminalSessionSnapshot | null;
 };
+
+export type LoadedSettingsState = {
+  settings: AppSettings;
+  providers: ProviderConfig[];
+  defaultModelId: string | null;
+  providerSecretStatus: ProviderSecretStatus[];
+  permissions: PermissionsConfig;
+  mcpServers: McpServerSnapshot[];
+  skills: SkillSnapshot[];
+  hookSettings: RocHookConfigSnapshot;
+  hostIntegration: HostIntegrationStatus;
+  providerTestStatus: ProviderTestResult | null;
+  mcpTestStatus: null;
+};
+
+export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSettingsState {
+  return {
+    settings: snapshot.settings,
+    providers: snapshot.providers,
+    defaultModelId: snapshot.defaultModelId,
+    providerSecretStatus: snapshot.providerSecretStatus,
+    permissions: snapshot.permissions,
+    mcpServers: snapshot.mcpServers,
+    skills: snapshot.skills,
+    hookSettings: snapshot.hooks,
+    hostIntegration: snapshot.hostIntegration,
+    providerTestStatus: null,
+    mcpTestStatus: null
+  };
+}
 
 export type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
 

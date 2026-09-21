@@ -50,4 +50,16 @@ describe('renderer bundle splitting', () => {
     expect(viteConfig).toContain('manifest: true');
     expect(packageJson).toContain('"check:renderer-chunks"');
   });
+
+  it('keeps settings-model out of the eager startup graph', () => {
+    const dataLoading = readFileSync('src/renderer/app/data-loading.ts', 'utf8');
+    const bootstrap = readFileSync('src/renderer/app/use-app-bootstrap.ts', 'utf8');
+    const composer = readFileSync('src/renderer/chat/chat-composer.tsx', 'utf8');
+    const loadedState = readFileSync('src/renderer/loaded-state.ts', 'utf8');
+
+    expect(dataLoading).not.toContain("from '../settings-model'");
+    expect(bootstrap).not.toContain("from '../settings-model'");
+    expect(composer).not.toContain("from '../settings-model'");
+    expect(loadedState).toContain('export function applySettingsSnapshot');
+  });
 });

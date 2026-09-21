@@ -14,11 +14,9 @@ import type {
   TraySummary,
   Workspace
 } from '../../shared/types';
-import { unwrap } from '../loaded-state';
+import { applySettingsSnapshot, unwrap, type LoadedSettingsState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
-import type { LoadedSettingsState } from '../settings-model';
-import { applySettingsSnapshot } from '../settings-model';
 import { findNextGitSelection } from '../workbench/git-helpers';
 import { emptyWorkspaceData } from './empty-states';
 import type { MemoryData, OperationsData, TaskSurfaceData, WorkspaceData } from './types';
