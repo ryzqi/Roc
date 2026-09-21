@@ -536,21 +536,17 @@ export function verifyPackagedBetterSqlite3({
   });
 }
 
-export function preparePackagedNodePty({ resourcesDir, platform = process.platform }) {
+export function preparePackagedNodePty({ resourcesDir }) {
   prepareNodePtyHelpers({
-    packageRoot: resolve(resourcesDir, 'app.asar.unpacked', 'node_modules', 'node-pty'),
-    platform
+    packageRoot: resolve(resourcesDir, 'app.asar.unpacked', 'node_modules', 'node-pty')
   });
 }
 
-export function prepareWorkspaceNodePty({ projectRoot: targetProjectRoot = projectRoot, platform = process.platform } = {}) {
-  prepareNodePtyHelpers({ packageRoot: resolve(targetProjectRoot, 'node_modules', 'node-pty'), platform });
+export function prepareWorkspaceNodePty({ projectRoot: targetProjectRoot = projectRoot } = {}) {
+  prepareNodePtyHelpers({ packageRoot: resolve(targetProjectRoot, 'node_modules', 'node-pty') });
 }
 
-function prepareNodePtyHelpers({ packageRoot, platform }) {
-  if (platform !== 'darwin' && platform !== 'mas') {
-    return;
-  }
+function prepareNodePtyHelpers({ packageRoot }) {
   const prebuildsDir = resolve(packageRoot, 'prebuilds');
   const macPrebuilds = readdirSync(prebuildsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('darwin-'));

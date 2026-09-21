@@ -210,7 +210,7 @@ describe('native packaging contract', () => {
       return helperPath;
     });
 
-    preparePackagedNodePty({ resourcesDir, platform: 'darwin' });
+    preparePackagedNodePty({ resourcesDir });
 
     for (const helperPath of helperPaths) {
       expect(statSync(helperPath).mode & 0o111).toBe(0o111);
@@ -346,7 +346,7 @@ describe('native packaging contract', () => {
     const resourcesDir = createTemporaryDirectory();
     mkdirSync(join(resourcesDir, 'app.asar.unpacked/node_modules/node-pty/prebuilds/darwin-arm64'), { recursive: true });
 
-    expect(() => preparePackagedNodePty({ resourcesDir, platform: 'darwin' })).toThrow(/ENOENT/);
+    expect(() => preparePackagedNodePty({ resourcesDir })).toThrow(/ENOENT/);
   });
 
   it('rewrites langgraph-sdk bundled pnpm relative imports to package specifiers', async () => {

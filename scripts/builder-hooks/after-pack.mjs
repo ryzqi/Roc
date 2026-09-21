@@ -11,7 +11,7 @@ import {
 export default async function afterPack(context) {
   const resourcesDir = context.packager.getResourcesDir(context.appOutDir);
   verifyPackagedFileLayout({ resourcesDir });
-  preparePackagedNodePty({ resourcesDir, platform: context.electronPlatformName });
+  preparePackagedNodePty({ resourcesDir });
   verifyPackagedBetterSqlite3({
     resourcesDir,
     run: (command, args, options) =>
