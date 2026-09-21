@@ -33,17 +33,17 @@ async function renderPage(job: ResearchJobPaths, pageNumber: number, scale: numb
   path: string; page: number; pageCount: number; width: number; height: number; text: string;
 }> {
   const bytes = await readFile(job.source);
-  const pdf = await getDocument({
+  const loadingTask = getDocument({
     data: new Uint8Array(bytes),
     disableFontFace: true,
-    isEvalSupported: false,
     useSystemFonts: true,
     useWorkerFetch: false,
     cMapUrl: assetUrl('cmaps'),
     cMapPacked: true,
     standardFontDataUrl: assetUrl('standard_fonts'),
     wasmUrl: assetUrl('wasm')
-  }).promise;
+  });
+  const pdf = await loadingTask.promise;
   try {
     if (pageNumber > pdf.numPages) {
       researchJobError('research_pdf_page_out_of_range');
@@ -75,6 +75,6 @@ async function renderPage(job: ResearchJobPaths, pageNumber: number, scale: numb
       page.cleanup();
     }
   } finally {
-    await pdf.destroy();
+    await loadingTask.destroy();
   }
 }

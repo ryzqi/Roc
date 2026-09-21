@@ -112,7 +112,9 @@ describe('figure publication and review boundaries', () => {
     await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, started.id).status));
     expect(repository.experiments.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
     const processRequest = runProcess.mock.calls.at(0)?.at(0);
-    expect(processRequest).toBeDefined();
+    if (processRequest === undefined) {
+      throw new Error('figure_process_request_missing');
+    }
     expect(processRequest?.args).toEqual(expect.arrayContaining(['render', expect.stringContaining('.roc/figure.py')]));
     expect(processRequest?.environment).toMatchObject({ SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' });
     await Promise.all([liveFigures.shutdown(), liveExperiments.shutdown()]);

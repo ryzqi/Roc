@@ -160,7 +160,7 @@ describe('DeepAgents official contract assumptions', () => {
     }
 
     await expect(readTool.invoke({ file_path: '/outside/file.txt' })).resolves.toEqual([
-      { type: 'text', text: '     1\thello' }
+      { type: 'text', text: '@@ lines 1-1 @@\nhello' }
     ]);
   });
 

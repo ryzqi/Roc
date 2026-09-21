@@ -10,9 +10,16 @@ import { createLoadedState } from './view-test-helpers';
 
 describe('chat image attachment helpers', () => {
   it('creates base64 attachments from dropped or pasted image files', async () => {
+    const createObjectURL = URL.createObjectURL;
+    URL.createObjectURL = () => 'blob:roc-test';
     const file = new File([new Uint8Array([1, 2, 3])], 'chart.png', { type: 'image/png' });
 
-    const attachment = await createFileImageAttachment(file, 'drop');
+    let attachment;
+    try {
+      attachment = await createFileImageAttachment(file, 'drop');
+    } finally {
+      URL.createObjectURL = createObjectURL;
+    }
 
     expect(attachment).toMatchObject({
       kind: 'image',
@@ -20,7 +27,8 @@ describe('chat image attachment helpers', () => {
       name: 'chart.png',
       mediaType: 'image/png',
       sizeBytes: 3,
-      data: 'AQID'
+      data: 'AQID',
+      previewUrl: 'blob:roc-test'
     });
   });
 

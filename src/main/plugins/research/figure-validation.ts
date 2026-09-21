@@ -115,17 +115,17 @@ function inspectSvg(bytes: Buffer, options: ResearchFigureOptions): void {
 }
 
 async function inspectPdf(bytes: Buffer, options: ResearchFigureOptions): Promise<{ widthPoints: number; heightPoints: number }> {
-  const pdf = await getDocument({
+  const loadingTask = getDocument({
     data: new Uint8Array(bytes),
     disableFontFace: true,
-    isEvalSupported: false,
     useSystemFonts: true,
     useWorkerFetch: false,
     cMapUrl: assetUrl('cmaps'),
     cMapPacked: true,
     standardFontDataUrl: assetUrl('standard_fonts'),
     wasmUrl: assetUrl('wasm')
-  }).promise;
+  });
+  const pdf = await loadingTask.promise;
   try {
     if (pdf.numPages !== 1) fail('research_figure_pdf_page_count_invalid');
     const page: PDFPageProxy = await pdf.getPage(1);
@@ -142,7 +142,7 @@ async function inspectPdf(bytes: Buffer, options: ResearchFigureOptions): Promis
       page.cleanup();
     }
   } finally {
-    await pdf.destroy();
+    await loadingTask.destroy();
   }
 }
 

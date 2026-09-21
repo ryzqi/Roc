@@ -45,17 +45,17 @@ const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot,
 
 async function renderSmokePdf(sourcePath: string, outputDir: string): Promise<{ path: string; text: string; pageCount: number }> {
   const bytes = await readFile(sourcePath);
-  const pdf = await getDocument({
+  const loadingTask = getDocument({
     data: new Uint8Array(bytes),
     disableFontFace: true,
-    isEvalSupported: false,
     useSystemFonts: true,
     useWorkerFetch: false,
     cMapUrl: assetUrl('cmaps'),
     cMapPacked: true,
     standardFontDataUrl: assetUrl('standard_fonts'),
     wasmUrl: assetUrl('wasm')
-  }).promise;
+  });
+  const pdf = await loadingTask.promise;
   try {
     const page: PDFPageProxy = await pdf.getPage(1);
     try {
@@ -72,7 +72,7 @@ async function renderSmokePdf(sourcePath: string, outputDir: string): Promise<{ 
       page.cleanup();
     }
   } finally {
-    await pdf.destroy();
+    await loadingTask.destroy();
   }
 }
 
