@@ -74,7 +74,7 @@ describe('research plugin IPC integration', () => {
   });
 
   it('carries evidence through a gated manuscript to a validated export bundle', async () => {
-    const project = await call('createProject', { title: 'IPC study', description: 'End-to-end provenance.', workspacePath: null }, researchProjectSchema);
+    const project = await call('createProject', { title: 'IPC study', description: 'End-to-end provenance.', workspacePath: '/tmp/plugin.test-1' }, researchProjectSchema);
     await call('transitionWorkflow', { projectId: project.id, expectedStage: 'discovery', action: 'move', targetStage: 'writing' }, researchWorkflowSnapshotSchema);
     await call('transitionWorkflow', { projectId: project.id, expectedStage: 'writing', action: 'start' }, researchWorkflowSnapshotSchema);
     const artifact = await call('createArtifact', { projectId: project.id, stage: 'writing', kind: 'manuscript', title: 'Results', path: null }, researchArtifactSchema);
@@ -108,7 +108,7 @@ describe('research plugin IPC integration', () => {
   });
 
   it('rejects forged snapshot fields and direct artifact self-approval at the capability boundary', async () => {
-    const project = await call('createProject', { title: 'Boundary', description: 'Reject forged input.', workspacePath: null }, researchProjectSchema);
+    const project = await call('createProject', { title: 'Boundary', description: 'Reject forged input.', workspacePath: '/tmp/plugin.test-2' }, researchProjectSchema);
     const artifact = await call('createArtifact', { projectId: project.id, stage: 'discovery', kind: 'search_strategy', title: 'Strategy', path: null }, researchArtifactSchema);
     expect((await adapter.invoke('research.updateArtifact', [{ id: artifact.id, status: 'approved' }])).ok).toBe(false);
     expect((await adapter.invoke('research.captureEvidence', [{ projectId: project.id, chunkId: 'forged', excerpt: 'Invented evidence.' }])).ok).toBe(false);

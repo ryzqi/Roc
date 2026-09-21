@@ -34,15 +34,15 @@ describe('research idea projection', () => {
       createArtifact: vi.fn(),
       get: vi.fn(async () => canvas),
       save: vi.fn(async () => ({ ...canvas, version: 2, rationale: 'Updated ranking.' })),
-      promote: vi.fn(async () => ({ project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: null, status: 'active' as const, language: 'zh' as const, origin: { projectId: 'research_1', artifactId: canvas.artifactId, version: 1 }, currentStage: 'discovery' as const, createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } }))
+      promote: vi.fn(async () => ({ project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: '/tmp/research-ideas.test-1', status: 'active' as const, language: 'zh' as const, origin: { projectId: 'research_1', artifactId: canvas.artifactId, version: 1 }, currentStage: 'discovery' as const, createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } }))
     };
     const projection = createResearchIdeaProjection(adapter, host);
     await projection.select(canvas.artifactId);
     projection.setDraft({ ...canvasToDraft(canvas), rationale: 'Updated ranking.' });
     await projection.save();
     expect(adapter.save).toHaveBeenCalled();
-    await projection.promote();
-    expect(adapter.promote).toHaveBeenCalledWith({ artifactId: canvas.artifactId, expectedVersion: 2 });
+    await projection.promote('/tmp/promoted-study');
+    expect(adapter.promote).toHaveBeenCalledWith({ artifactId: canvas.artifactId, expectedVersion: 2, workspacePath: '/tmp/promoted-study' });
     expect(host.selectProject).toHaveBeenCalledWith('research_2');
   });
 });

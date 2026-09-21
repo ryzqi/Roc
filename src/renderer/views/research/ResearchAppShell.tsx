@@ -65,6 +65,7 @@ export function ResearchAppShell({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
+  const [workspacePath, setWorkspacePath] = useState('');
   const [projectQuery, setProjectQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'archived'>('active');
@@ -365,16 +366,39 @@ export function ResearchAppShell({
     );
   }
 
+  async function chooseWorkspace(): Promise<string | null> {
+    const selected = await client.api.workspace.selectFromDialog();
+    if (!selected.ok) {
+      workbench.fail(selected.error.message);
+      return null;
+    }
+    if (selected.data === null) {
+      return null;
+    }
+    setWorkspacePath(selected.data.path);
+    return selected.data.path;
+  }
+
+  async function bindWorkspace(): Promise<void> {
+    const path = await chooseWorkspace();
+    if (path === null) {
+      return;
+    }
+    await workbench.bindWorkspace(path);
+  }
+
   async function createProject(): Promise<void> {
     await workbench.createProject({
       title,
       description,
-      workspacePath: state.workspace?.path ?? null,
+      workspacePath,
       language
     });
     if (workbench.getSnapshot().error === null) {
       setTitle('');
       setDescription('');
+      setWorkspacePath('');
+      setCreating(false);
     }
   }
 
@@ -517,6 +541,13 @@ export function ResearchAppShell({
                   <option value="en">English</option>
                 </select>
               </label>
+              <label>
+                工作目录
+                <input data-testid="research-shell-workspace-path" readOnly value={workspacePath} />
+              </label>
+              <button className="action-button" data-testid="research-shell-choose-workspace" type="button" onClick={() => void chooseWorkspace()}>
+                选择目录
+              </button>
               <div className="research-form-actions">
                 <button className="action-button" type="button" onClick={() => setCreating(false)}>取消</button>
                 <button className="action-button action-button--primary" type="submit">
@@ -585,6 +616,7 @@ export function ResearchAppShell({
                   setSelectedArtifactId(artifactId);
                   applyRoute({ view: 'provenance' });
                 }}
+                onBindWorkspace={() => void bindWorkspace()}
                 onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
                 onDownloadModels={() => void downloadModels()}
                 project={context.project}
@@ -623,9 +655,6 @@ export function ResearchAppShell({
             {canvasView === 'provenance' && provenanceError !== null ? (
               <div className="research-alert" role="alert" data-testid="research-provenance-error">{provenanceError}</div>
             ) : null}
-            {context.project?.workspacePath === null || context.project?.workspacePath === undefined ? null : (
-              <p className="research-shell-workspace" data-testid="research-shell-workspace">工作目录：{context.project.workspacePath}</p>
-            )}
             {onOpenService === undefined || compact ? null : (
               <ResearchServicesPanel onOpenService={onOpenService} services={services} />
             )}

@@ -74,7 +74,7 @@ export const researchProjectCreateRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     description: z.string().trim().min(1).max(5000),
-    workspacePath: z.string().trim().min(1).nullable(),
+    workspacePath: z.string().trim().min(1),
     language: researchProjectLanguageSchema.optional()
   })
   .strict();
@@ -84,7 +84,7 @@ export const researchProjectUpdateRequestSchema = z
     id: z.string().min(1),
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().trim().min(1).max(5000).optional(),
-    workspacePath: z.string().trim().min(1).nullable().optional(),
+    workspacePath: z.string().trim().min(1).optional(),
     status: researchProjectStatusSchema.optional(),
     language: researchProjectLanguageSchema.optional()
   })

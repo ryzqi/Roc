@@ -32,7 +32,7 @@ afterEach(async () => {
 const output: ResearchStageOutput = { title: 'Search strategy', markdown: 'A bounded search strategy.', claims: [], sections: [], verdict: 'ready' };
 
 function project() {
-  return repository.createProject({ title: 'Role test', description: 'Traceable role execution.', workspacePath: null });
+  return repository.createProject({ title: 'Role test', description: 'Traceable role execution.', workspacePath: `/tmp/stage-runtime.test-${crypto.randomUUID()}` });
 }
 
 function createGate(overrides: Partial<ResearchHumanGate> = {}): ResearchHumanGate {

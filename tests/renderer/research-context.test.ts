@@ -49,7 +49,7 @@ describe('research context', () => {
 
 function project(): ResearchProject {
   return {
-    id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: null,
+    id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '/tmp/research-context.test-1',
     status: 'active', language: 'zh', origin: null, currentStage: 'writing',
     createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
   };

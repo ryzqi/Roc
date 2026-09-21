@@ -53,6 +53,7 @@ describe('ResearchAppShell', () => {
     await click('research-shell-new-project');
     await act(async () => { setInput('research-shell-title', '新课题'); });
     await act(async () => { setTextarea('research-shell-description', '从空态创建。'); });
+    await click('research-shell-choose-workspace');
     const form = document.querySelector<HTMLFormElement>('[data-testid="research-shell-create"]');
     expect(form).not.toBeNull();
     await act(async () => { form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
@@ -77,6 +78,7 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-runs')).toBe('0');
     expect(text('research-shell-artifacts')).toBe('1');
     expect(text('research-shell-stages')).toContain('写作与审阅');
+    expect(document.querySelector('[data-testid="research-overview-bind-workspace"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="research-shell-workspace"]')).toBeNull();
     await click('research-shell-activity-toggle');
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
@@ -94,6 +96,25 @@ describe('ResearchAppShell', () => {
     expect(api.listProvenance).toHaveBeenCalledWith({ projectId: 'research_1' });
     await click('research-provenance-back');
     expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
+  });
+
+  it('binds a missing workspace directory from overview', async () => {
+    const api = createResearchApi();
+    api.updateProject = vi.fn().mockImplementation(async (request: { id: string; workspacePath: string }) => ({
+      ok: true,
+      data: {
+        id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: request.workspacePath,
+        status: 'active', language: 'zh', origin: null, currentStage: 'writing',
+        createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+      }
+    }));
+    await renderShell(api);
+    await openListedProject('research_1');
+    expect(text('research-overview-bind-workspace')).toContain('还没有工作目录');
+    await click('research-overview-choose-workspace');
+    await waitUntil(() => document.querySelector('[data-testid="research-shell-workspace"]') !== null);
+    expect(api.updateProject).toHaveBeenCalledWith({ id: 'research_1', workspacePath: '/tmp/roc' });
+    expect(text('research-shell-workspace')).toContain('/tmp/roc');
   });
 
   it('lists research services for the selected project', async () => {
@@ -326,6 +347,7 @@ function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
     }] }),
     getIndexStatus: vi.fn().mockResolvedValue({ ok: true, data: indexStatus() }),
     createProject: vi.fn(),
+    updateProject: vi.fn(),
     transitionWorkflow: vi.fn(),
     startStageRun: vi.fn(),
     cancelStageRun: vi.fn(),
@@ -389,7 +411,7 @@ async function renderShell(
 ): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
-      client: { api: { research } as never },
+      client: { api: { research, workspace: { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { path: '/tmp/roc' } }) } } as never },
       onContextChange,
       onOpenService,
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })

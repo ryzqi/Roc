@@ -117,7 +117,7 @@ export class ResearchIdeaRepository {
       const project = this.research.createProject({
         title: input.title ?? artifact.title,
         description: input.description ?? canvas.problem,
-        workspacePath: input.workspacePath === undefined ? source.workspacePath : input.workspacePath,
+        workspacePath: input.workspacePath,
         language: input.language ?? source.language
       }, origin);
       this.db.prepare(

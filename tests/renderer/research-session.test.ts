@@ -66,7 +66,7 @@ describe('research session', () => {
       publishExport: vi.fn(),
       writeExport: vi.fn()
     };
-    const session = createResearchSession({ api: { research, files: { selectFromDialog: vi.fn() } } as never });
+    const session = createResearchSession({ api: { research, files: { selectFromDialog: vi.fn() }, workspace: { selectFromDialog: vi.fn() } } as never });
     const library = vi.spyOn(session.library, 'setProject');
     const knowledge = vi.spyOn(session.knowledge, 'setProject');
     const experiments = vi.spyOn(session.experiments, 'setProject');

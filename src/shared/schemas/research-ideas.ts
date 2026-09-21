@@ -99,7 +99,7 @@ export const researchIdeaPromoteRequestSchema = z.object({
   expectedVersion: z.number().int().positive(),
   title: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().min(1).max(5000).optional(),
-  workspacePath: z.string().trim().min(1).nullable().optional(),
+  workspacePath: z.string().trim().min(1),
   language: researchProjectLanguageSchema.optional()
 }).strict();
 

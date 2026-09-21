@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 function project() {
-  return repository.createProject({ title: 'Workflow', description: 'Persistent research workflow.', workspacePath: null });
+  return repository.createProject({ title: 'Workflow', description: 'Persistent research workflow.', workspacePath: `/tmp/workflow-lifecycle.test-${crypto.randomUUID()}` });
 }
 
 describe('research workflow lifecycle', () => {

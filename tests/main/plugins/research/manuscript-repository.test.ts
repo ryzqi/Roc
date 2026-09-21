@@ -17,7 +17,7 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 function project() {
-  return repository.createProject({ title: 'Evidence study', description: 'Test provenance.', workspacePath: null });
+  return repository.createProject({ title: 'Evidence study', description: 'Test provenance.', workspacePath: `/tmp/manuscript-repository.test-${crypto.randomUUID()}` });
 }
 
 function document(projectId: string | null, input: Partial<ResearchKnowledgeDocumentUpsertRequest> = {}) {

@@ -45,23 +45,6 @@ export function AppBasicsSection({
       </div>
       <div className="settings-form">
         <div className="settings-section-group">
-          <h3 className="settings-group-title">工作区</h3>
-          <FieldRow hint="工作区切换不会自动转移已运行任务，新任务才会绑定新的工作区。" label="默认工作区">
-            <TextInput
-              data-testid="settings-default-workspace"
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  defaultWorkspace:
-                    event.currentTarget.value.trim().length === 0 ? null : event.currentTarget.value
-                })
-              }
-              placeholder="例如 /Users/me/Projects/Roc"
-              value={draft.defaultWorkspace ?? ''}
-            />
-          </FieldRow>
-        </div>
-        <div className="settings-section-group">
           <h3 className="settings-group-title">窗口行为</h3>
           <div className="form-grid">
             <label className="field checkbox-field settings-toggle-row ui-switch">

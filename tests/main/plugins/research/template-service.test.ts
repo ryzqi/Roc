@@ -199,7 +199,9 @@ describe('research templates', () => {
   it('rejects cross-project access, symlink templates and managed-directory redirects', async () => {
     const templates = service();
     const template = await templates.importTemplate({ projectId, sourcePath: source });
-    const other = repository.createProject({ title: 'Other', description: 'Another project', workspacePath: root });
+    const otherRoot = join(root, 'other-templates');
+    await mkdir(otherRoot);
+    const other = repository.createProject({ title: 'Other', description: 'Another project', workspacePath: otherRoot });
     await expect(templates.readFile({ projectId: other.id, templateId: template.id, path: 'main.tex' })).rejects.toThrow('research_template_not_found');
     await symlink(join(source, 'main.tex'), join(source, 'linked.tex'));
     await expect(templates.importTemplate({ projectId, sourcePath: source })).rejects.toThrow('research_template_symlink');

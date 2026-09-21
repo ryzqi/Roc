@@ -20,7 +20,7 @@ beforeEach(() => {
   sqliteVec.load(db);
   applyResearchDatabaseSchema(db);
   repository = new ResearchRepository(db);
-  projectId = repository.createProject({ title: 'Study', description: '', workspacePath: null }).id;
+  projectId = repository.createProject({ title: 'Study', description: '', workspacePath: '/tmp/library-repository.test-1' }).id;
 });
 afterEach(() => db.close());
 
@@ -38,7 +38,7 @@ describe('research library repository', () => {
   it('shares DOI duplicates across projects while preserving the first citation key and completing empty fields', () => {
     const original = libraryEntry({ authors: [], abstract: null, publishedYear: null }, { author: '', abstract: ' ', year: '' });
     const first = repository.library.import([original], projectId).items[0];
-    const otherProject = repository.createProject({ title: 'Second study', description: '', workspacePath: null }).id;
+    const otherProject = repository.createProject({ title: 'Second study', description: '', workspacePath: '/tmp/library-repository.test-2' }).id;
     const incoming = libraryEntry({ id: 'openalex:second', source: 'openalex', externalId: 'second', doi: 'https://doi.org/10.1234/PAPER', abstract: 'Measured evidence' });
     incoming.bibliography.citationKey = 'new-key';
     const imported = repository.library.import([incoming], otherProject);

@@ -23,6 +23,7 @@ export type ResearchSession = {
   ideas: ResearchIdeaProjection;
   production: ResearchProductionProjection;
   bindProject(projectId: string | null): void;
+  chooseWorkspace(): Promise<string | null>;
 };
 
 function createStageHost(workbench: ResearchWorkbench) {
@@ -84,6 +85,17 @@ export function createResearchSession(client: RocClient): ResearchSession {
       policies.setProject(projectId);
       templates.setProject(projectId);
       production.setProject(projectId);
+    },
+    async chooseWorkspace() {
+      const selected = await client.api.workspace.selectFromDialog();
+      if (!selected.ok) {
+        workbench.fail(selected.error.message);
+        return null;
+      }
+      if (selected.data === null) {
+        return null;
+      }
+      return selected.data.path;
     }
   };
 }

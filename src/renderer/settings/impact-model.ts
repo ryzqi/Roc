@@ -92,17 +92,6 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
   pushIfChanged(
     rows,
     'app-basics',
-    'defaultWorkspace',
-    base.settings.defaultWorkspace,
-    draft.settings.defaultWorkspace,
-    '会影响新任务的默认执行边界，工作区外动作仍需显式确认。',
-    'info',
-    (value) => (value === null ? '未选择' : value)
-  );
-
-  pushIfChanged(
-    rows,
-    'app-basics',
     'startup.openAtLogin',
     base.settings.startup.openAtLogin,
     draft.settings.startup.openAtLogin,

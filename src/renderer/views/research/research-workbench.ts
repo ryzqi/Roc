@@ -13,7 +13,8 @@ import { createProjectionController } from './research-projection';
 
 export type ResearchWorkbenchAdapter = {
   listProjects(): Promise<ResearchProject[]>;
-  createProject(request: { title: string; description: string; workspacePath: string | null; language?: 'zh' | 'en' }): Promise<ResearchProject>;
+  createProject(request: { title: string; description: string; workspacePath: string; language?: 'zh' | 'en' }): Promise<ResearchProject>;
+  updateProject(request: { id: string; workspacePath: string }): Promise<ResearchProject>;
   getWorkflow(request: { id: string }): Promise<ResearchWorkflowSnapshot>;
   listWorkflowEvents(request: { projectId: string; limit: number }): Promise<ResearchWorkflowEvent[]>;
   listStageRuns(request: { projectId: string; limit: number }): Promise<ResearchStageRun[]>;
@@ -49,7 +50,9 @@ export type ResearchWorkbench = {
   load(preferredProjectId?: string | null): Promise<void>;
   selectProject(projectId: string): Promise<void>;
   clearProject(): void;
-  createProject(request: { title: string; description: string; workspacePath: string | null; language?: 'zh' | 'en' }): Promise<void>;
+  createProject(request: { title: string; description: string; workspacePath: string; language?: 'zh' | 'en' }): Promise<void>;
+  bindWorkspace(workspacePath: string): Promise<void>;
+  fail(message: string): void;
   refresh(): Promise<void>;
   setInstruction(value: string): void;
   transition(action: ResearchWorkflowTransitionRequest['action'], options?: { targetStage?: ResearchWorkflowSnapshot['currentStage']; reviewDecision?: 'accept' | 'revise' }): Promise<void>;
@@ -220,11 +223,15 @@ export function createResearchWorkbench(
         projection.fail('项目标题和研究目标不能为空。');
         return;
       }
+      if (request.workspacePath.trim().length === 0) {
+        projection.fail('请选择工作目录。');
+        return;
+      }
       await projection.runExclusive(async (token) => {
         const created = await adapter.createProject({
           title: request.title.trim(),
           description: request.description.trim(),
-          workspacePath: request.workspacePath,
+          workspacePath: request.workspacePath.trim(),
           language: request.language
         });
         if (!projection.isCurrent(token)) return;
@@ -232,6 +239,29 @@ export function createResearchWorkbench(
         projection.assign({ projects: [created, ...snapshot.projects.filter((item) => item.id !== created.id)], project: created, instruction: '' });
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '科研项目创建失败。' });
+    },
+    async bindWorkspace(workspacePath) {
+      if (workspacePath.trim().length === 0) {
+        projection.fail('请选择工作目录。');
+        return;
+      }
+      await projection.runExclusive(async (token) => {
+        const project = projection.peek().project;
+        if (project === null) throw new Error('请先选择研究项目。');
+        const updated = await adapter.updateProject({
+          id: project.id,
+          workspacePath: workspacePath.trim()
+        });
+        if (!projection.isCurrent(token)) return;
+        const snapshot = projection.peek();
+        projection.assign({
+          projects: snapshot.projects.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+          project: snapshot.project === null || snapshot.project.id !== updated.id
+            ? snapshot.project
+            : { ...snapshot.project, ...updated }
+        });
+        await refreshInternal(token);
+      }, { busy: '当前命令仍在进行。', failed: '绑定工作目录失败。' });
     },
     async refresh() {
       await projection.runExclusive(async (token) => {
@@ -243,6 +273,9 @@ export function createResearchWorkbench(
     },
     setInstruction(value) {
       projection.assign({ instruction: value });
+    },
+    fail(message) {
+      projection.fail(message);
     },
     clearError() {
       projection.clearError();
@@ -348,6 +381,7 @@ function sameSnapshot(left: ResearchWorkbenchSnapshot, right: ResearchWorkbenchS
     && left.error === right.error
     && left.instruction === right.instruction
     && left.project?.id === right.project?.id
+    && left.project?.workspacePath === right.project?.workspacePath
     && left.projects === right.projects
     && left.workflow === right.workflow
     && left.events === right.events
@@ -365,6 +399,9 @@ export function createResearchWorkbenchAdapter(client: RocClient): ResearchWorkb
     },
     async createProject(request) {
       return unwrap('创建科研项目', await research.createProject(request));
+    },
+    async updateProject(request) {
+      return unwrap('更新科研项目', await research.updateProject(request));
     },
     async getWorkflow(request) {
       return unwrap('科研流程', await research.getWorkflow(request));

@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 function project(language: 'zh' | 'en' = 'zh') {
-  return repository.createProject({ title: 'Canvas study', description: 'Structured ideas.', workspacePath: null, language });
+  return repository.createProject({ title: 'Canvas study', description: 'Structured ideas.', workspacePath: `/tmp/idea-canvas-${crypto.randomUUID()}`, language });
 }
 
 function document(projectId: string, input: Partial<ResearchKnowledgeDocumentUpsertRequest> = {}) {
@@ -61,9 +61,9 @@ function ideationArtifact(projectId: string) {
 
 describe('research idea canvas and project language', () => {
   it('defaults new projects to Chinese and persists an explicit English setting', () => {
-    const chinese = repository.createProject({ title: '默认项目', description: '中文工作语言。', workspacePath: null });
+    const chinese = repository.createProject({ title: '默认项目', description: '中文工作语言。', workspacePath: '/tmp/idea-canvas-zh' });
     expect(chinese).toMatchObject({ language: 'zh', origin: null });
-    const english = repository.createProject({ title: 'English project', description: 'Write in English.', workspacePath: null, language: 'en' });
+    const english = repository.createProject({ title: 'English project', description: 'Write in English.', workspacePath: '/tmp/idea-canvas-en', language: 'en' });
     expect(english.language).toBe('en');
     expect(repository.updateProject({ id: english.id, language: 'zh' }).language).toBe('zh');
   });
@@ -94,15 +94,15 @@ describe('research idea canvas and project language', () => {
     document(id);
     const evidence = repository.evidence.capture({ projectId: id, chunkId: 'paper:chunk:0' });
     const canvas = repository.ideas.save(canvasRequest(artifact.id, evidence.id));
-    expect(() => repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version })).toThrow('research_idea_canvas_approval_required');
+    expect(() => repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, workspacePath: '/tmp/promoted-unapproved' })).toThrow('research_idea_canvas_approval_required');
     repository.transitionWorkflow({ projectId: id, expectedStage: 'ideation', action: 'complete' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'ideation', action: 'approve' });
-    const first = repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Promoted study' });
+    const first = repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Promoted study', workspacePath: '/tmp/promoted-study' });
     expect(first.project).toMatchObject({
       title: 'Promoted study', language: 'en', currentStage: 'discovery',
       origin: { projectId: id, artifactId: artifact.id, version: canvas.version }
     });
-    const second = repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Duplicate title' });
+    const second = repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Duplicate title', workspacePath: '/tmp/promoted-dup' });
     expect(second.project.id).toBe(first.project.id);
     expect(repository.listProjects().filter((item) => item.origin?.artifactId === artifact.id)).toHaveLength(1);
   });
@@ -116,7 +116,7 @@ describe('research idea canvas and project language', () => {
     repository.transitionWorkflow({ projectId: id, expectedStage: 'ideation', action: 'complete' });
     repository.transitionWorkflow({ projectId: id, expectedStage: 'ideation', action: 'approve' });
     db.exec("CREATE TRIGGER fail_promotion BEFORE INSERT ON research_workflow_events WHEN NEW.type = 'idea_canvas_promoted' BEGIN SELECT RAISE(ABORT, 'promotion_event_failed'); END");
-    expect(() => repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Promoted study' }))
+    expect(() => repository.ideas.promote({ artifactId: artifact.id, expectedVersion: canvas.version, title: 'Promoted study', workspacePath: '/tmp/promoted-study' }))
       .toThrow('promotion_event_failed');
     expect(repository.listProjects().filter((item) => item.origin?.artifactId === artifact.id)).toEqual([]);
   });
@@ -182,7 +182,7 @@ describe('research idea canvas and project language', () => {
     const legacy = new Database(':memory:');
     try {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((item) => item.version <= 14) });
-      const old = { id: 'legacy-project', title: 'Existing', description: 'Preserve me.', workspacePath: null,
+      const old = { id: 'legacy-project', title: 'Existing', description: 'Preserve me.', workspacePath: '/tmp/idea-legacy',
         status: 'active', currentStage: 'discovery', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z' };
       legacy.prepare('INSERT INTO research_projects (id, title, description, workspace_path, status, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(old.id, old.title, old.description, old.workspacePath, old.status, old.currentStage, old.createdAt, old.updatedAt);
@@ -212,7 +212,7 @@ describe('research idea canvas IPC', () => {
       invokeCapability: <TInput, TOutput>(name: string, input: TInput) => capabilities.invoke<TInput, TOutput>(name, input)
     });
     try {
-      const created = await adapter.invoke('research.createProject', [{ title: 'IPC canvas', description: 'Promote through IPC.', workspacePath: null, language: 'en' }]);
+      const created = await adapter.invoke('research.createProject', [{ title: 'IPC canvas', description: 'Promote through IPC.', workspacePath: '/tmp/idea-canvas', language: 'en' }]);
       if (!created.ok) throw new Error(created.error.message);
       const project = researchProjectSchema.parse(created.data);
       expect(project.language).toBe('en');
@@ -234,7 +234,7 @@ describe('research idea canvas IPC', () => {
       const approved = await adapter.invoke('research.transitionWorkflow', [{ projectId: project.id, expectedStage: 'ideation', action: 'approve' }]);
       if (!approved.ok) throw new Error(approved.error.message);
       expect(researchWorkflowSnapshotSchema.parse(approved.data).currentStage).toBe('planning');
-      const promoted = await adapter.invoke('research.promoteIdeaCanvas', [{ artifactId, expectedVersion: 1 }]);
+      const promoted = await adapter.invoke('research.promoteIdeaCanvas', [{ artifactId, expectedVersion: 1, workspacePath: '/tmp/promoted-ipc' }]);
       if (!promoted.ok) throw new Error(promoted.error.message);
       expect(researchIdeaPromotionSchema.parse(promoted.data).project.origin).toEqual({ projectId: project.id, artifactId, version: 1 });
     } finally {

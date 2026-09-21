@@ -157,6 +157,15 @@ export class ResearchRepository {
   }
 
   createProject(request: ResearchProjectCreateRequest, origin: ResearchProject['origin'] = null): ResearchProject {
+    if (request.workspacePath.trim().length === 0) {
+      throw new Error('research_project_workspace_required');
+    }
+    const occupied = this.db
+      .prepare('SELECT id FROM research_projects WHERE workspace_path = ? LIMIT 1')
+      .get(request.workspacePath) as { id: string } | undefined;
+    if (occupied !== undefined) {
+      throw new Error(`research_project_workspace_taken:${occupied.id}`);
+    }
     const id = `research_${randomUUID()}`;
     const timestamp = this.now();
     const language = request.language ?? 'zh';
@@ -206,6 +215,14 @@ export class ResearchRepository {
   updateProject(request: ResearchProjectUpdateRequest): ResearchProject {
     this.getProject(request.id);
     const current = this.getProject(request.id);
+    if (request.workspacePath !== undefined && request.workspacePath !== current.workspacePath) {
+      const occupied = this.db
+        .prepare('SELECT id FROM research_projects WHERE workspace_path = ? AND id != ? LIMIT 1')
+        .get(request.workspacePath, request.id) as { id: string } | undefined;
+      if (occupied !== undefined) {
+        throw new Error(`research_project_workspace_taken:${occupied.id}`);
+      }
+    }
     const timestamp = this.now();
     if (request.language !== undefined && !this.projectLanguageReady) throw new Error('research_project_language_schema_required');
     this.db

@@ -102,7 +102,7 @@ describe('project index IPC and filesystem integration', () => {
     await call('saveIndexSettings', { ...options, projectId: project.id, expectedRevision: revision, exclude: [...options.exclude, '**/*.csv'] }, researchIndexStatusSchema);
     await vi.waitFor(async () => expect(await files(project.id)).toEqual([]), { timeout: 10000 });
     expect((await adapter.invoke('research.saveIndexSettings', [{ ...options, projectId: project.id, expectedRevision: revision }]))).toMatchObject({ ok: false, error: { code: 'research_index_settings_changed' } });
-    const other = await call('createProject', { title: 'Other project', description: 'Isolation.', workspacePath: null }, researchProjectSchema);
+    const other = await call('createProject', { title: 'Other project', description: 'Isolation.', workspacePath: '/tmp/index-ipc.test-1' }, researchProjectSchema);
     await expect(capabilities.invoke('research.index.source', { projectId: other.id, fileId: origin.fileId, sourceHash: origin.sourceHash })).rejects.toThrow('research_index_project_mismatch');
     if (artifacts !== undefined) await writeFile(join(root, 'filesystem-result.json'), JSON.stringify({ project, initial, evidence, origin, jobs }, null, 2));
   });

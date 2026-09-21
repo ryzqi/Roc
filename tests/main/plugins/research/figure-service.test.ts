@@ -218,7 +218,7 @@ describe('figure publication and review boundaries', () => {
   it('rejects cross-project reads, legacy rewrites and failed runs as figures', async () => {
     const { run } = await completedRun(); enterFigure();
     const figure = await figures.publish(projectId, run.id, null);
-    const other = repository.createProject({ title: 'Other', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Other', description: '', workspacePath: join(root, 'other-figure') });
     expect(() => repository.figures.get(other.id, figure.id)).toThrow('research_figure_project_mismatch');
     await expect(figures.publish(other.id, run.id, null)).rejects.toThrow('research_experiment_project_mismatch');
     repository.figures.record({ id: 'legacy', projectId, title: 'Legacy', codePath: 'plot.py', dataPaths: [], outputPaths: [], status: 'draft', runId: null });
@@ -275,7 +275,7 @@ describe('figure publication and review boundaries', () => {
       old.pragma('foreign_keys = ON');
       applyDatabaseMigrations(old, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 10) });
       const legacy = new ResearchRepository(old);
-      const project = legacy.createProject({ title: 'Legacy', description: '', workspacePath: null });
+      const project = legacy.createProject({ title: 'Legacy', description: '', workspacePath: '/tmp/figure-service.test-1' });
       old.prepare("INSERT INTO research_figures VALUES ('legacy',?,'Old plot','plot.py','[]','[\"old.png\"]','approved',NULL,'old','old')").run(project.id);
       applyResearchDatabaseSchema(old); applyResearchDatabaseSchema(old);
       expect(legacy.figures.list(project.id, 10)).toEqual([]);

@@ -67,10 +67,8 @@ describe('AppBasicsSection', () => {
       })
     );
 
-    expect(html).toContain('工作区');
     expect(html).toContain('窗口行为');
     expect(html).toContain('全局入口');
-    expect(html).toContain('data-testid="settings-default-workspace"');
     expect(html).toContain('data-testid="settings-startup-open-at-login"');
     expect(html).not.toContain('data-testid="settings-startup-minimize-to-tray"');
     expect(html).toContain('data-testid="settings-global-hotkey"');

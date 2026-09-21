@@ -60,11 +60,49 @@ describe('ResearchRepository', () => {
     expect(workflow.stages[1]).toMatchObject({ stage: 'retrieval', status: 'locked', gateRequired: true });
   });
 
+  it('rejects a second project that reuses the same workspace directory', () => {
+    repository.createProject({
+      title: 'First',
+      description: 'Owns the directory.',
+      workspacePath: '/tmp/owned-graph'
+    });
+    expect(() => repository.createProject({
+      title: 'Second',
+      description: 'Same directory.',
+      workspacePath: '/tmp/owned-graph'
+    })).toThrow('research_project_workspace_taken');
+  });
+
+  it('rejects creating a project without a workspace directory', () => {
+    expect(() => repository.createProject({
+      title: 'Missing directory',
+      description: 'Must fail.',
+      workspacePath: ''
+    })).toThrow();
+  });
+
+  it('rejects binding a workspace directory already owned by another project', () => {
+    const first = repository.createProject({
+      title: 'First',
+      description: 'Owns the directory.',
+      workspacePath: '/tmp/bind-owned'
+    });
+    const second = repository.createProject({
+      title: 'Second',
+      description: 'Needs a different directory.',
+      workspacePath: '/tmp/bind-free'
+    });
+    expect(() => repository.updateProject({
+      id: second.id,
+      workspacePath: '/tmp/bind-owned'
+    })).toThrow(`research_project_workspace_taken:${first.id}`);
+  });
+
   it('advances discovery automatically and pauses at the first human gate', () => {
     const project = repository.createProject({
       title: 'Workflow test',
       description: 'Exercise stage transitions.',
-      workspacePath: null
+      workspacePath: '/tmp/repository.test-2'
     });
 
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'discovery' });
@@ -89,7 +127,7 @@ describe('ResearchRepository', () => {
   });
 
   it('requires approval before moving beyond a gated stage', () => {
-    const project = repository.createProject({ title: 'Approval test', description: 'Approval.', workspacePath: null });
+    const project = repository.createProject({ title: 'Approval test', description: 'Approval.', workspacePath: '/tmp/repository.test-3' });
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'discovery' });
     repository.transitionWorkflow({ projectId: project.id, action: 'complete', expectedStage: 'discovery' });
     repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'retrieval' });
@@ -112,7 +150,7 @@ describe('ResearchRepository', () => {
   });
 
   it('rejects stale transitions so two views cannot advance different stages', () => {
-    const project = repository.createProject({ title: 'Conflict test', description: 'Conflict.', workspacePath: null });
+    const project = repository.createProject({ title: 'Conflict test', description: 'Conflict.', workspacePath: '/tmp/repository.test-4' });
 
     expect(() =>
       repository.transitionWorkflow({ projectId: project.id, action: 'start', expectedStage: 'retrieval' })
@@ -162,7 +200,7 @@ describe('ResearchRepository', () => {
     const project = repository.createProject({
       title: 'Artifact test',
       description: 'Artifact domain.',
-      workspacePath: null
+      workspacePath: '/tmp/repository.test-5'
     });
 
     const artifact = repository.createArtifact({
@@ -188,7 +226,7 @@ describe('ResearchRepository', () => {
     const project = repository.createProject({
       title: 'Gate',
       description: 'Gate',
-      workspacePath: null
+      workspacePath: '/tmp/repository.test-6'
     });
 
     repository.transitionWorkflow({

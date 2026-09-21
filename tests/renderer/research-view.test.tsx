@@ -367,16 +367,18 @@ describe('research workbench dashboard', () => {
     });
     api.getIdeaCanvas.mockResolvedValue({ ok: true, data: canvas });
     api.saveIdeaCanvas.mockResolvedValue({ ok: true, data: { ...canvas, version: 2, rationale: 'Updated ranking.' } });
-    api.promoteIdeaCanvas.mockResolvedValue({ ok: true, data: { canvas, project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: null, status: 'active', language: 'zh', origin: { projectId: 'research_1', artifactId: ideaArtifact.id, version: 1 }, currentStage: 'discovery', createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } } });
-    await renderView(api);
+    api.promoteIdeaCanvas.mockResolvedValue({ ok: true, data: { canvas, project: { id: 'research_2', title: 'Promoted', description: canvas.problem, workspacePath: '/tmp/promoted-study', status: 'active', language: 'zh', origin: { projectId: 'research_1', artifactId: ideaArtifact.id, version: 1 }, currentStage: 'discovery', createdAt: canvas.createdAt, updatedAt: canvas.updatedAt } } });
+    const workspace = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { path: '/tmp/promoted-study' } }) };
+    await renderView(api, undefined, [], workspace);
     await click('research-stage-group-plan');
     await waitUntil(() => document.querySelector('[data-testid="research-idea-panel"]') !== null);
     await clickSelectIdea();
     setArea('research-idea-rationale', 'Updated ranking.');
     await click('research-idea-save');
     expect(api.saveIdeaCanvas).toHaveBeenCalled();
+    await click('research-idea-choose-workspace');
     await click('research-idea-promote');
-    expect(api.promoteIdeaCanvas).toHaveBeenCalledWith({ artifactId: ideaArtifact.id, expectedVersion: 2 });
+    expect(api.promoteIdeaCanvas).toHaveBeenCalledWith({ artifactId: ideaArtifact.id, expectedVersion: 2, workspacePath: '/tmp/promoted-study' });
   });
 
   it('prepares an export from approved manuscript and figures then saves the zip', async () => {
@@ -665,10 +667,10 @@ function run(): ResearchStageRun {
   };
 }
 
-async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }, providers: ProviderConfig[] = []): Promise<void> {
+async function renderView(research: ReturnType<typeof createResearchApi>, files?: { selectFromDialog: ReturnType<typeof vi.fn> }, providers: ProviderConfig[] = [], workspace?: { selectFromDialog: ReturnType<typeof vi.fn> }): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
-      client: { api: { research, files: files ?? { selectFromDialog: vi.fn() } } as never },
+      client: { api: { research, files: files ?? { selectFromDialog: vi.fn() }, workspace: workspace ?? { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { path: '/tmp/roc' } }) } } as never },
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never, providers })
     }));
   });

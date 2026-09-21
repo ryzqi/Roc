@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 function project() {
-  return repository.createProject({ title: 'Evidence study', description: 'Test provenance.', workspacePath: null });
+  return repository.createProject({ title: 'Evidence study', description: 'Test provenance.', workspacePath: `/tmp/evidence-repository.test-${crypto.randomUUID()}` });
 }
 
 function document(projectId: string | null, input: Partial<ResearchKnowledgeDocumentUpsertRequest> = {}) {
@@ -146,7 +146,7 @@ describe('research evidence and claim boundaries', () => {
     const legacy = new Database(':memory:');
     try {
       applyDatabaseMigrations(legacy, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.slice(0, 1) });
-      const old = { id: 'legacy-project', title: 'Existing', description: 'Preserve me.', workspacePath: null,
+      const old = { id: 'legacy-project', title: 'Existing', description: 'Preserve me.', workspacePath: '/tmp/evidence-repository.test-2',
         status: 'active', currentStage: 'discovery', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z' };
       legacy.prepare('INSERT INTO research_projects (id, title, description, workspace_path, status, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(old.id, old.title, old.description, old.workspacePath, old.status, old.currentStage, old.createdAt, old.updatedAt);

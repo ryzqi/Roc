@@ -20,6 +20,7 @@ export function ResearchOverviewView({
   artifacts,
   context,
   events,
+  onBindWorkspace,
   onOpenActivity,
   onOpenProvenance,
   onOpenStage,
@@ -30,6 +31,7 @@ export function ResearchOverviewView({
   artifacts: ResearchArtifact[];
   context: ResearchContext;
   events: ResearchWorkflowEvent[];
+  onBindWorkspace: () => void;
   onOpenActivity: () => void;
   onOpenProvenance: (artifactId: string) => void;
   onOpenStage?: () => void;
@@ -77,6 +79,15 @@ export function ResearchOverviewView({
           )}
         </div>
       ) : null}
+
+      {project.workspacePath === null ? (
+        <div className="research-alert" role="status" data-testid="research-overview-bind-workspace">
+          <span>当前项目还没有工作目录，打开文件与代码前必须先绑定。</span>
+          <button className="action-button" data-testid="research-overview-choose-workspace" type="button" onClick={onBindWorkspace}>绑定工作目录</button>
+        </div>
+      ) : (
+        <p className="research-shell-workspace" data-testid="research-shell-workspace">工作目录：{project.workspacePath}</p>
+      )}
 
       <ol className="research-pipeline" aria-label="科研流程阶段" data-testid="research-pipeline">
         {workflow.stages.map((stage, index) => (

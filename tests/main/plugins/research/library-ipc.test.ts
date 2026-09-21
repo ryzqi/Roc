@@ -62,7 +62,7 @@ async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Pr
 
 describe('research library IPC', () => {
   it('routes list, get, project links, archive and versioned citation editing through validated contracts', async () => {
-    const project = await call('createProject', { title: 'Library IPC', description: 'Library contract integration.', workspacePath: null }, researchProjectSchema);
+    const project = await call('createProject', { title: 'Library IPC', description: 'Library contract integration.', workspacePath: '/tmp/library-ipc.test-1' }, researchProjectSchema);
     const item = new ResearchRepository(db).library.import([libraryEntry()], null).items[0];
     const query = { projectId: null, query: '', includeArchived: false, limit: 100 };
     expect(await call('listLibrary', query, researchLibraryItemSchema.array())).toEqual([item]);

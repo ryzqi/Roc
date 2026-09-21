@@ -165,7 +165,7 @@ describe('research experiment lifecycle', () => {
   });
 
   it('protects project ownership and stops execution after a project workspace change', async () => {
-    const other = repository.createProject({ title: 'Other', description: 'Other project.', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Other', description: 'Other project.', workspacePath: join(root, 'other-experiment') });
     const entered = deferred<void>(); const release = deferred<void>();
     runProcess.mockImplementationOnce(async () => { entered.resolve(); await release.promise; return { exitCode: 0, stdout: 'late', stderr: '' }; });
     const started = await service.start(request()); await entered.promise;

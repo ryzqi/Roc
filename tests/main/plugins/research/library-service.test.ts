@@ -27,7 +27,7 @@ beforeEach(async () => {
   db.pragma('foreign_keys = ON');
   applyResearchDatabaseSchema(db);
   repository = new ResearchRepository(db);
-  projectId = repository.createProject({ title: 'Library', description: '', workspacePath: null }).id;
+  projectId = repository.createProject({ title: 'Library', description: '', workspacePath: '/tmp/library-service.test-1' }).id;
   read.mockReset().mockResolvedValue([libraryEntry().bibliography]);
   normalize.mockReset().mockResolvedValue([libraryEntry().bibliography]);
   write.mockReset().mockResolvedValue({ filename: 'references.bib', content: '@article{original,title={Evidence study}}' });

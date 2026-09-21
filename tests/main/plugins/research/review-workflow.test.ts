@@ -29,7 +29,7 @@ beforeEach(() => {
 afterEach(async () => { await runtime?.shutdown(); db.close(); });
 
 function readyForReview() {
-  const { id } = repository.createProject({ title: 'Review study', description: 'An evidence-based manuscript.', workspacePath: null });
+  const { id } = repository.createProject({ title: 'Review study', description: 'An evidence-based manuscript.', workspacePath: '/tmp/review-workflow.test-1' });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'discovery', action: 'move', targetStage: 'writing' });
   repository.transitionWorkflow({ projectId: id, expectedStage: 'writing', action: 'start' });
   repository.knowledge.upsertKnowledgeDocument({ id: `data:${id}`, projectId: id, sourceType: 'file', sourceId: 'data.csv', title: 'Measured data',
@@ -161,7 +161,7 @@ describe('independent review and revision workflow', () => {
   });
 
   it('blocks review and export without an approved manuscript and a human acceptance', () => {
-    const project = repository.createProject({ title: 'No manuscript', description: 'Cannot invent an input.', workspacePath: null });
+    const project = repository.createProject({ title: 'No manuscript', description: 'Cannot invent an input.', workspacePath: '/tmp/review-workflow.test-2' });
     repository.transitionWorkflow({ projectId: project.id, expectedStage: 'discovery', action: 'move', targetStage: 'review' });
     const engine = createRuntime(async (input) => report(input.run.role));
     expect(() => engine.start({ projectId: project.id, expectedStage: 'review', instruction: 'Review.', requestId: 'missing' })).toThrow('research_approved_manuscript_required');

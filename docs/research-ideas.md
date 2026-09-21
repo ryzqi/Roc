@@ -1,6 +1,6 @@
 # Idea Canvas 与项目语言
 
-构思阶段把研究想法写成结构化 Idea Canvas。项目语言是项目级中英设置，阶段 Agent 按该语言输出；界面仍为中文。成熟且已批准的 Canvas 可以晋升为新研究项目，并保留来源版本。
+构思阶段把研究想法写成结构化 Idea Canvas。项目语言是项目级中英设置，阶段 Agent 按该语言输出；界面仍为中文。成熟且已批准的 Canvas 可以晋升为新研究项目，并保留来源版本。晋升必须指定新的工作目录，不能沿用源项目目录。
 
 ## 项目语言
 
@@ -10,7 +10,7 @@
 await research.createProject({
   title: '证据图研究',
   description: '把可晋升想法变成可追溯项目。',
-  workspacePath: null,
+  workspacePath: '/Users/me/research/evidence-graph',
   language: 'zh'
 });
 ```

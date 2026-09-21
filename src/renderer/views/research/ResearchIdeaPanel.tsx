@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Send } from 'lucide-react';
 
 import type { ResearchArtifact, ResearchEvidence, ResearchIdeaCanvas, ResearchIdeaCanvasSaveRequest } from '../../../shared/types';
@@ -38,6 +39,7 @@ export function ResearchIdeaPanel({
   draft,
   evidence,
   onChange,
+  onChooseWorkspace,
   onCreate,
   onPromote,
   onSave,
@@ -51,8 +53,9 @@ export function ResearchIdeaPanel({
   draft: ResearchIdeaCanvasSaveRequest | null;
   evidence: ResearchEvidence[];
   onChange: (draft: ResearchIdeaCanvasSaveRequest) => void;
+  onChooseWorkspace: () => Promise<string | null>;
   onCreate: () => void;
-  onPromote: () => void;
+  onPromote: (workspacePath: string) => void;
   onSave: () => void;
   onSelect: (artifactId: string) => void;
   selectedArtifactId: string | null;
@@ -61,6 +64,7 @@ export function ResearchIdeaPanel({
 }): React.JSX.Element {
   const canvases = artifacts.filter((artifact) => artifact.kind === 'idea_canvas');
   const writeBlocked = working || readOnly;
+  const [workspacePath, setWorkspacePath] = useState('');
   return (
     <section className="research-tool-panel" data-testid="research-idea-panel">
       <div className="research-tool-heading">
@@ -113,12 +117,21 @@ export function ResearchIdeaPanel({
               优先级依据
               <textarea data-testid="research-idea-rationale" spellCheck={true} value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
             </label>
+            <label>
+              新项目工作目录
+              <input data-testid="research-idea-workspace-path" readOnly value={workspacePath} />
+            </label>
             <div className="research-form-actions">
               <button className="action-button action-button--primary" disabled={writeBlocked} type="submit" data-testid="research-idea-save">
                 <Send aria-hidden="true" size={15} />
                 保存画布
               </button>
-              <button className="action-button" disabled={writeBlocked || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={onPromote}>晋升为项目</button>
+              <button className="action-button" disabled={writeBlocked} type="button" data-testid="research-idea-choose-workspace" onClick={() => {
+                void onChooseWorkspace().then((path) => {
+                  if (path !== null) setWorkspacePath(path);
+                });
+              }}>选择目录</button>
+              <button className="action-button" disabled={writeBlocked || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={() => onPromote(workspacePath)}>晋升为项目</button>
             </div>
           </form>
         )}

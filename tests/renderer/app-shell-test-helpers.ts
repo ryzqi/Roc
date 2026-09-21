@@ -63,6 +63,10 @@ export function createShellClient(): RocClient {
       getCapabilityPreview: vi.fn().mockResolvedValue({ ok: true, data: state.agentCapabilityPreview })
     },
     workspace: {
+      select: vi.fn().mockImplementation(async ({ path }: { path: string }) => ({
+        ok: true,
+        data: { id: 'ws', path, displayName: 'project', lastOpenedAt: '2026-09-14T00:00:00.000Z', trustState: 'trusted' }
+      })),
       selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null }),
       onChanged: vi.fn().mockReturnValue(() => {})
     },
@@ -79,7 +83,12 @@ export function createShellClient(): RocClient {
       onHidden: vi.fn().mockReturnValue(() => {})
     },
     files: {
-      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })
+      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null }),
+      listTree: vi.fn().mockResolvedValue({ ok: true, data: { relativePath: '', entries: [] } })
+    },
+    git: {
+      status: vi.fn().mockResolvedValue({ ok: true, data: { workspacePath: '/tmp/project', branch: 'main', changedFiles: 0 } }),
+      listBranches: vi.fn().mockResolvedValue({ ok: true, data: { current: 'main', branches: [] } })
     },
     research: {
       listProjects: vi.fn().mockResolvedValue({ ok: true, data: [] }),

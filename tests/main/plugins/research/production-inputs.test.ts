@@ -96,7 +96,7 @@ describe('approved production inputs', () => {
     expect(result.source).toMatchObject({ kind: 'experiment', execution: { id: experimentId, status: 'completed' } });
     expect(result.files).toContainEqual(expect.objectContaining({ area: 'output', path: 'result.csv', size: 10 }));
     expect((await inputs.read({ projectId, artifactId, area: 'output', path: 'result.csv' })).content).toBe('signal\n42\n');
-    const other = repository.createProject({ title: 'Other', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Other', description: '', workspacePath: join(root, 'other-inputs') });
     await expect(inputs.inspect(other.id, artifactId)).rejects.toThrow('research_production_project_mismatch');
     await expect(inputs.read({ projectId, artifactId, area: 'bundle', path: 'result.csv' })).rejects.toThrow('research_production_file_not_found');
   });

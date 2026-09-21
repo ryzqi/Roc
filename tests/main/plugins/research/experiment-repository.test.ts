@@ -41,8 +41,8 @@ describe('experiment persistence migration and provenance', () => {
       db.pragma('foreign_keys = ON');
       applyDatabaseMigrations(db, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 9) });
       const repository = new ResearchRepository(db);
-      const project = repository.createProject({ title: 'Legacy', description: 'Legacy records.', workspacePath: null });
-      const other = repository.createProject({ title: 'Other', description: 'Another project.', workspacePath: null });
+      const project = repository.createProject({ title: 'Legacy', description: 'Legacy records.', workspacePath: '/tmp/experiment-repository.test-1' });
+      const other = repository.createProject({ title: 'Other', description: 'Another project.', workspacePath: '/tmp/experiment-repository.test-2' });
       db.prepare("INSERT INTO research_experiment_runs VALUES (?,?,?,'python run.py','{}','{}','completed','[]',?,?)")
         .run('legacy', project.id, 'Legacy result', '2026-09-12T00:00:00.000Z', '2026-09-12T00:00:01.000Z');
       applyResearchDatabaseSchema(db); applyResearchDatabaseSchema(db);
@@ -60,8 +60,8 @@ describe('experiment persistence migration and provenance', () => {
     try {
       applyResearchDatabaseSchema(db);
       const repository = new ResearchRepository(db);
-      const project = repository.createProject({ title: 'Project', description: 'Provenance.', workspacePath: null });
-      const other = repository.createProject({ title: 'Other', description: 'Other provenance.', workspacePath: null });
+      const project = repository.createProject({ title: 'Project', description: 'Provenance.', workspacePath: '/tmp/experiment-repository.test-3' });
+      const other = repository.createProject({ title: 'Other', description: 'Other provenance.', workspacePath: '/tmp/experiment-repository.test-4' });
       const request = { id: 'pending', projectId: project.id, label: 'Pending', command: 'python run.py', parameters: {}, environment: {}, status: 'running' as const, outputs: [], startedAt: '2026-09-12T00:00:00.000Z', endedAt: null };
       repository.experiments.record(request);
       repository.experiments.record({ ...request, id: 'elsewhere', projectId: other.id, status: 'completed' });

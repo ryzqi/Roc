@@ -120,9 +120,30 @@ describe('research workbench', () => {
     const store = createStore({ projects: [] });
     const workbench = createResearchWorkbench(store.adapter);
     await workbench.load();
-    await workbench.createProject({ title: '  ', description: '目标', workspacePath: null, language: 'zh' });
+    await workbench.createProject({ title: '  ', description: '目标', workspacePath: '/tmp/roc', language: 'zh' });
     expect(workbench.getSnapshot().error).toBe('项目标题和研究目标不能为空。');
     expect(store.adapter.createProject).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing workspace directory without calling the adapter', async () => {
+    const store = createStore({ projects: [] });
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load();
+    await workbench.createProject({ title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '  ', language: 'zh' });
+    expect(workbench.getSnapshot().error).toBe('请选择工作目录。');
+    expect(store.adapter.createProject).not.toHaveBeenCalled();
+  });
+
+  it('binds a workspace directory onto the current project', async () => {
+    const store = createStore({ projects: [project({ workspacePath: null })] });
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('research_1');
+    await workbench.bindWorkspace('/tmp/bound-workspace');
+    expect(store.adapter.updateProject).toHaveBeenCalledWith({
+      id: 'research_1',
+      workspacePath: '/tmp/bound-workspace'
+    });
+    expect(workbench.getSnapshot().project?.workspacePath).toBe('/tmp/bound-workspace');
   });
 
   it('starts a run with generated requestId and expectedStage from the snapshot', async () => {
@@ -352,6 +373,7 @@ function createStore(overrides: {
   const adapter: ResearchWorkbenchAdapter & {
     listProjects: ReturnType<typeof vi.fn>;
     createProject: ReturnType<typeof vi.fn>;
+    updateProject: ReturnType<typeof vi.fn>;
     getWorkflow: ReturnType<typeof vi.fn>;
     listWorkflowEvents: ReturnType<typeof vi.fn>;
     listStageRuns: ReturnType<typeof vi.fn>;
@@ -364,7 +386,7 @@ function createStore(overrides: {
     controlIndex: ReturnType<typeof vi.fn>;
   } = {
     listProjects: vi.fn(async () => [...projects]),
-    createProject: vi.fn(async (request: { title: string; description: string; workspacePath: string | null; language?: 'zh' | 'en' }) => {
+    createProject: vi.fn(async (request: { title: string; description: string; workspacePath: string; language?: 'zh' | 'en' }) => {
       const created = project({
         id: `research_${projects.length + 1}`,
         title: request.title,
@@ -381,6 +403,14 @@ function createStore(overrides: {
         indexStatus: indexStatus({ projectId: created.id })
       });
       return created;
+    }),
+    updateProject: vi.fn(async (request: { id: string; workspacePath: string }) => {
+      const current = projects.find((item) => item.id === request.id);
+      if (current === undefined) throw new Error('research_project_not_found');
+      const updated = { ...current, workspacePath: request.workspacePath };
+      const index = projects.findIndex((item) => item.id === request.id);
+      projects[index] = updated;
+      return updated;
     }),
     getWorkflow: vi.fn(async (request: { id: string }) => states.get(request.id)!.workflow),
     listWorkflowEvents: vi.fn(async (request: { projectId: string }) => states.get(request.projectId)!.events),
@@ -441,7 +471,7 @@ function createStore(overrides: {
 
 function project(overrides: Partial<ResearchProject> = {}): ResearchProject {
   return {
-    id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: null,
+    id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '/tmp/research-workbench.test-1',
     status: 'active', language: 'zh', origin: null, currentStage: 'writing',
     createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z',
     ...overrides

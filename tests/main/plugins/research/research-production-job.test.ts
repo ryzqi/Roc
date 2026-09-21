@@ -29,7 +29,7 @@ describe('research production job', () => {
   });
 
   it('routes verifyStage to the current production stage', async () => {
-    const project = repository.createProject({ title: 'Job', description: 'Production verify.', workspacePath: null });
+    const project = repository.createProject({ title: 'Job', description: 'Production verify.', workspacePath: '/tmp/research-production-job.test-1' });
     const figures = { verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const exports = { recover: vi.fn(), verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const job = createResearchProductionJob({

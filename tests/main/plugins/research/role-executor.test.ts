@@ -56,7 +56,7 @@ it('runs the installed LangChain agent with structured output and only role-auth
   }));
   const runtime = new ResearchStageRuntime(repository, new CapabilityRegistry(), executor, createResearchHumanGate({ repository }));
   try {
-    const project = repository.createProject({ title: 'SDK test', description: 'Exercise the real SDK loop.', workspacePath: null });
+    const project = repository.createProject({ title: 'SDK test', description: 'Exercise the real SDK loop.', workspacePath: '/tmp/role-executor.test-1' });
     const run = runtime.start({ projectId: project.id, expectedStage: 'discovery', instruction: 'Plan the search.', requestId: 'sdk' });
     await runtime.waitForIdle();
     const completed = repository.runs.get(run.id, project.id);

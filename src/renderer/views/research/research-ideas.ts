@@ -18,7 +18,7 @@ export type ResearchIdeaAdapter = {
   createArtifact(request: { projectId: string; stage: 'ideation'; kind: 'idea_canvas'; title: string; path: null }): Promise<ResearchArtifact>;
   get(request: { artifactId: string }): Promise<ResearchIdeaCanvas | null>;
   save(request: ResearchIdeaCanvasSaveRequest): Promise<ResearchIdeaCanvas>;
-  promote(request: { artifactId: string; expectedVersion: number }): Promise<{ project: ResearchProject }>;
+  promote(request: { artifactId: string; expectedVersion: number; workspacePath: string }): Promise<{ project: ResearchProject }>;
 };
 
 export type ResearchIdeaSnapshot = {
@@ -36,7 +36,7 @@ export type ResearchIdeaProjection = {
   select(artifactId: string): Promise<void>;
   create(): Promise<void>;
   save(): Promise<void>;
-  promote(): Promise<void>;
+  promote(workspacePath: string): Promise<void>;
   clearError(): void;
 };
 
@@ -93,11 +93,19 @@ export function createResearchIdeaProjection(adapter: ResearchIdeaAdapter, host:
         projection.assign({ canvas: saved, draft: canvasToDraft(saved) });
       }, { busy: '当前命令仍在进行。', failed: '保存 Idea Canvas 失败。' });
     },
-    async promote() {
+    async promote(workspacePath) {
       const canvas = projection.peek().canvas;
       if (canvas === null) return;
+      if (workspacePath.trim().length === 0) {
+        projection.fail('请选择工作目录。');
+        return;
+      }
       await projection.runExclusive(async (token) => {
-        const promoted = await adapter.promote({ artifactId: canvas.artifactId, expectedVersion: canvas.version });
+        const promoted = await adapter.promote({
+          artifactId: canvas.artifactId,
+          expectedVersion: canvas.version,
+          workspacePath: workspacePath.trim()
+        });
         if (!projection.isCurrent(token)) return;
         await host.selectProject(promoted.project.id);
       }, { busy: '当前命令仍在进行。', failed: '晋升 Idea Canvas 失败。' });

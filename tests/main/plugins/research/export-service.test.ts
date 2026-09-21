@@ -150,7 +150,7 @@ describe('final export lifecycle', () => {
   });
 
   it('requires all crossref parents and rejects cyclic reference inheritance before compilation', async () => {
-    const other = repository.createProject({ title: 'Reference errors', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Reference errors', description: '', workspacePath: join(root, 'other-reference-errors') });
     const [parent, child] = crossrefLibraryEntries();
     const childItem = repository.library.import([child], other.id).items[0];
     const evidence = repository.evidence.capture({ projectId: other.id, chunkId: `library:${childItem.id}:chunk:1` });
@@ -164,7 +164,7 @@ describe('final export lifecycle', () => {
   });
 
   it('includes parent versions and rejects a changed crossref parent after preparation', async () => {
-    const other = repository.createProject({ title: 'Inherited metadata', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Inherited metadata', description: '', workspacePath: join(root, 'other-inherited') });
     const [parent, child] = crossrefLibraryEntries();
     const [parentItem, childItem] = repository.library.import([parent, child], other.id).items;
     const evidence = repository.evidence.capture({ projectId: other.id, chunkId: `library:${childItem.id}:chunk:1` });
@@ -215,13 +215,13 @@ describe('final export lifecycle', () => {
     const entered = deferred(); const release = deferred(); const original = compile.getMockImplementation()!;
     compile.mockImplementationOnce(async (input) => { entered.resolve(); await release.promise; return await original(input); });
     const pending = prepared(); await entered.promise;
-    const other = repository.createProject({ title: 'Other', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Other', description: '', workspacePath: join(root, 'other-export-active') });
     service.projectChanged(other.id);
     release.resolve(); expect((await pending).status).toBe('ready');
   });
 
   it('maps library citation keys and rejects changed bibliography revisions after preparation', async () => {
-    const other = repository.createProject({ title: 'Cited study', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Cited study', description: '', workspacePath: join(root, 'other-cited') });
     const paper = repository.library.import([libraryEntry({ abstract: 'Measured improvement: 20%.' })], other.id).items[0];
     const evidence = repository.evidence.capture({ projectId: other.id, chunkId: `library:${paper.id}:chunk:1` });
     const manuscript = await approveExportManuscript(repository, other.id, evidence.id);
@@ -235,7 +235,7 @@ describe('final export lifecycle', () => {
 
   it('rejects cross-project access before creating a destination', async () => {
     const record = await prepared();
-    const other = repository.createProject({ title: 'Other', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Other', description: '', workspacePath: join(root, 'other-export-mismatch') });
     expect(() => repository.exports.get(other.id, record.id)).toThrow('research_export_project_mismatch');
     await expect(service.write({ projectId: other.id, exportId: record.id, destinationPath: join(root, 'forbidden.zip') })).rejects.toThrow('research_export_project_mismatch');
     await expect(readFile(join(root, 'forbidden.zip'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -246,7 +246,7 @@ describe('final export lifecycle', () => {
     try {
       applyDatabaseMigrations(old, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 11) });
       const legacy = new ResearchRepository(old);
-      const project = legacy.createProject({ title: 'Legacy', description: '', workspacePath: null });
+      const project = legacy.createProject({ title: 'Legacy', description: '', workspacePath: '/tmp/export-service.test-1' });
       legacy.transitionWorkflow({ projectId: project.id, expectedStage: 'discovery', action: 'move', targetStage: 'export' });
       const artifact = legacy.createArtifact({ projectId: project.id, stage: 'export', kind: 'export_package', title: 'Legacy export', path: '/legacy/export.zip' });
       applyResearchDatabaseSchema(old); applyResearchDatabaseSchema(old);
@@ -291,7 +291,7 @@ describe('final export lifecycle', () => {
   });
 
   it('rejects a bibliography change after the source capture but before approval commits', async () => {
-    const other = repository.createProject({ title: 'Late citation change', description: '', workspacePath: workspace });
+    const other = repository.createProject({ title: 'Late citation change', description: '', workspacePath: join(root, 'other-late-citation') });
     const paper = repository.library.import([libraryEntry({ abstract: 'Measured improvement: 20%.' })], other.id).items[0];
     const evidence = repository.evidence.capture({ projectId: other.id, chunkId: `library:${paper.id}:chunk:1` });
     const manuscript = await approveExportManuscript(repository, other.id, evidence.id);

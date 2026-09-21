@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 function project() {
-  return repository.createProject({ title: 'Gate', description: 'Human gate checks.', workspacePath: null });
+  return repository.createProject({ title: 'Gate', description: 'Human gate checks.', workspacePath: `/tmp/human-gate.test-${crypto.randomUUID()}` });
 }
 
 describe('research human gate', () => {

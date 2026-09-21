@@ -6,7 +6,7 @@ import type {
 } from '../../shared/types';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
 import { useChatFeature } from '../features/chat/use-chat-feature';
-import { unwrap } from '../loaded-state';
+import { unwrap, type LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { applySystemAppearance } from '../system-appearance';
 import { restoreDialogFocus } from '../dialog-focus';
@@ -234,6 +234,30 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
+  const applySelectedWorkspace = useCallback(async (workspace: NonNullable<LoadedState['workspace']>): Promise<void> => {
+    const [appStatus, workspaceData] = await Promise.all([
+      client.api.app.getStatus(),
+      loadWorkspaceData(workspace, {}, client)
+    ]);
+    const selectedAppStatus = unwrap<AppStatus>('app status', appStatus);
+    applySystemAppearance(selectedAppStatus.appearance);
+    setWorkspaceLoadState({
+      status: 'ready',
+      error: null,
+      key: workspace.path
+    });
+    setState((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            appStatus: selectedAppStatus,
+            workspace,
+            ...workspaceData
+          }
+    );
+  }, [client, setState, setWorkspaceLoadState]);
+
   const openResearchService = useCallback((service: ResearchServiceEntry): void => {
     if (service.projectId === null) {
       setActiveView('research');
@@ -244,11 +268,26 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       return;
     }
     if (service.id === 'files') {
-      setActiveWorkbenchTool('files');
-      setWorkbenchVisible(true);
+      if (service.workspacePath === null) {
+        setError('打开文件与代码前必须先绑定工作目录。');
+        return;
+      }
+      const workspacePath = service.workspacePath;
+      void (async () => {
+        const selected = await client.api.workspace.select({ path: workspacePath });
+        if (!selected.ok) {
+          setError(selected.error.message);
+          return;
+        }
+        await applySelectedWorkspace(selected.data);
+        setActiveWorkbenchTool('files');
+        setWorkbenchVisible(true);
+        setActiveView(service.view);
+      })();
+      return;
     }
     setActiveView(service.view);
-  }, [startNewConversation]);
+  }, [applySelectedWorkspace, client, setError, startNewConversation]);
 
   const openTaskDetail = useCallback((taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }): void => {
     if (boardUiState !== undefined) {
@@ -346,29 +385,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     if (selected.data === null) {
       return;
     }
-
-    const [appStatus, workspaceData] = await Promise.all([
-      client.api.app.getStatus(),
-      loadWorkspaceData(selected.data, {}, client)
-    ]);
-    const selectedAppStatus = unwrap<AppStatus>('app status', appStatus);
-    applySystemAppearance(selectedAppStatus.appearance);
-    setWorkspaceLoadState({
-      status: 'ready',
-      error: null,
-      key: selected.data.path
-    });
-    setState((current) =>
-      current === null
-        ? current
-        : {
-            ...current,
-            appStatus: selectedAppStatus,
-            workspace: selected.data,
-            ...workspaceData
-          }
-    );
-  }, [client, setError, setState, setWorkspaceLoadState]);
+    await applySelectedWorkspace(selected.data);
+  }, [applySelectedWorkspace, client, setError]);
 
   const updateWorkspaceData = useCallback((partial: Partial<WorkspaceData>): void => {
     setState((current) => (current === null ? current : { ...current, ...partial }));

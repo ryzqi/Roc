@@ -242,8 +242,12 @@ export function ResearchStageWorkspace({
             draft={ideaSnapshot.draft}
             evidence={knowledgeSnapshot.evidence}
             onChange={(draft) => session.ideas.setDraft(draft)}
+            onChooseWorkspace={async () => {
+              const selected = await session.chooseWorkspace();
+              return selected;
+            }}
             onCreate={() => void session.ideas.create()}
-            onPromote={() => void session.ideas.promote()}
+            onPromote={(workspacePath) => void session.ideas.promote(workspacePath)}
             onSave={() => void session.ideas.save()}
             onSelect={(artifactId) => void session.ideas.select(artifactId)}
             selectedArtifactId={ideaSnapshot.selectedArtifactId}
