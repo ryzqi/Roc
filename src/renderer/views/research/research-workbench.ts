@@ -48,6 +48,7 @@ export type ResearchWorkbench = {
   subscribe(listener: (snapshot: ResearchWorkbenchSnapshot) => void): () => void;
   load(preferredProjectId?: string | null): Promise<void>;
   selectProject(projectId: string): Promise<void>;
+  clearProject(): void;
   createProject(request: { title: string; description: string; workspacePath: string | null; language?: 'zh' | 'en' }): Promise<void>;
   refresh(): Promise<void>;
   setInstruction(value: string): void;
@@ -163,12 +164,26 @@ export function createResearchWorkbench(
       try {
         const projects = await adapter.listProjects();
         if (!projection.isCurrent(token)) return;
-        const currentId = preferredProjectId ?? projection.peek().project?.id;
-        const project = currentId === undefined || currentId === null
-          ? projects[0] ?? null
-          : projects.find((item) => item.id === currentId) ?? projects[0] ?? null;
-        projection.assign({ projects, project, loading: false, error: null, ...(project?.id === currentId ? {} : { instruction: '' }) });
-        if (project !== null) await refreshInternal(token);
+        const requestedId = preferredProjectId === undefined ? projection.peek().project?.id ?? null : preferredProjectId;
+        const project = requestedId === null ? null : projects.find((item) => item.id === requestedId) ?? null;
+        projection.assign({
+          projects,
+          project,
+          loading: false,
+          error: null,
+          ...(project?.id === requestedId ? {} : { instruction: '' })
+        });
+        if (project !== null) {
+          await refreshInternal(token);
+          return;
+        }
+        projection.assign({
+          workflow: null,
+          events: [],
+          runs: [],
+          artifacts: [],
+          indexStatus: null
+        });
       } catch (error) {
         if (!projection.isCurrent(token)) return;
         projection.fail(error instanceof Error ? error.message : '科研项目加载失败。', { loading: false });
@@ -185,6 +200,20 @@ export function createResearchWorkbench(
         if (!projection.isCurrent(token)) return;
         projection.fail(error instanceof Error ? error.message : '科研流程加载失败。');
       }
+    },
+    clearProject() {
+      projection.bump();
+      projection.assign({
+        project: null,
+        workflow: null,
+        events: [],
+        runs: [],
+        artifacts: [],
+        indexStatus: null,
+        instruction: '',
+        working: false,
+        error: null
+      });
     },
     async createProject(request) {
       if (request.title.trim().length === 0 || request.description.trim().length === 0) {

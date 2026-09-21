@@ -318,8 +318,66 @@
   border-right: 1px solid var(--line);
 }
 
-.research-section-label,
-.eyebrow {
+.research-project-list {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.research-project-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.research-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.research-project-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-height: 108px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.research-project-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-card-hover);
+}
+
+.research-project-card-title {
+  color: var(--ink);
+  font-size: var(--font-body-size);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.research-project-card-goal {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.research-project-card-meta {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-section-label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -839,13 +897,13 @@ pre.research-reader-content {
 
 .research-shell-layout {
   display: grid;
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 28px;
   min-height: 480px;
 }
 
 .research-shell-layout--activity {
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr) minmax(180px, 240px);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
 }
 
 .research-shell-canvas {
@@ -961,7 +1019,7 @@ pre.research-reader-content {
   .research-shell-layout,
   .research-shell-layout--activity,
   .research-shell-layout--compact {
-    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
 

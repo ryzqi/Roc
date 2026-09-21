@@ -6,8 +6,8 @@ import type { RocClient } from '../../shared/roc-client';
 import { unwrap } from '../../loaded-state';
 import { buildResearchTopMeta, createResearchContext } from './research-context';
 import { createResearchSession, type ResearchSession } from './research-session';
-import { researchProjectStatusLabels, researchStageLabels } from './research-workflow';
-import type { ResearchEvidence, ResearchProvenance } from '../../../shared/types';
+import { formatResearchTime, researchProjectStatusLabels, researchStageLabels } from './research-workflow';
+import type { ResearchEvidence, ResearchProject, ResearchProvenance } from '../../../shared/types';
 import { Drawer } from '../../components/ui';
 import { useResearchLayout } from './research-layout';
 import { ResearchOverviewView } from './ResearchOverviewView';
@@ -66,6 +66,8 @@ export function ResearchAppShell({
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const [projectQuery, setProjectQuery] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'archived'>('active');
   const [activityOpen, setActivityOpen] = useState(false);
   const initialRoute = readResearchRoute();
   const [canvasView, setCanvasView] = useState<ResearchCanvasView>(initialRoute.view);
@@ -81,7 +83,6 @@ export function ResearchAppShell({
   const previousProjectIdRef = useRef<string | null>(null);
   const initialProjectIdRef = useRef(initialRoute.projectId);
   const { compact, narrow } = useResearchLayout();
-  const [projectsOpen, setProjectsOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
@@ -113,14 +114,25 @@ export function ResearchAppShell({
     () => createResearchContext(snapshot, { modelsReady, modelsDownloading, modelsError }),
     [modelsDownloading, modelsError, modelsReady, snapshot]
   );
-  const shellState = snapshot.loading ? 'loading' : context.projectId === null ? 'empty' : 'project';
-  const visibleProjects = snapshot.projects.filter((project) => {
-    const query = projectQuery.trim().toLowerCase();
-    if (query.length === 0) {
+  const shellState = snapshot.loading ? 'loading' : context.projectId === null ? 'list' : 'project';
+  const visibleProjects = [...snapshot.projects]
+    .filter((project) => {
+      if (statusFilter === 'active') {
+        return project.status !== 'archived';
+      }
+      if (statusFilter === 'archived') {
+        return project.status === 'archived';
+      }
       return true;
-    }
-    return project.title.toLowerCase().includes(query) || project.description.toLowerCase().includes(query);
-  });
+    })
+    .filter((project) => {
+      const query = projectQuery.trim().toLowerCase();
+      if (query.length === 0) {
+        return true;
+      }
+      return project.title.toLowerCase().includes(query) || project.description.toLowerCase().includes(query);
+    })
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const serviceContext = useMemo(
     () => createResearchServiceContext(context, state.workspace?.path ?? null),
     [context, state.workspace?.path]
@@ -192,7 +204,11 @@ export function ResearchAppShell({
       if (route.projectId !== context.projectId) {
         skipProjectResetRef.current = true;
       }
-      if (route.projectId !== null && route.projectId !== context.projectId) {
+      if (route.projectId === null) {
+        workbench.clearProject();
+        return;
+      }
+      if (route.projectId !== context.projectId) {
         void workbench.selectProject(route.projectId);
       }
     }
@@ -232,12 +248,6 @@ export function ResearchAppShell({
   }, [canvasView, client, context.projectId]);
 
   useEffect(() => {
-    if (!narrow) {
-      setProjectsOpen(false);
-    }
-  }, [narrow]);
-
-  useEffect(() => {
     if (!compact) {
       setServicesOpen(false);
     }
@@ -258,11 +268,6 @@ export function ResearchAppShell({
         }
       }
       if (event.key === 'Escape') {
-        if (projectsOpen) {
-          event.preventDefault();
-          setProjectsOpen(false);
-          return;
-        }
         if (servicesOpen) {
           event.preventDefault();
           setServicesOpen(false);
@@ -298,7 +303,7 @@ export function ResearchAppShell({
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activityOpen, projectsOpen, servicesOpen, shellState, snapshot.error, workbench]);
+  }, [activityOpen, servicesOpen, shellState, snapshot.error, workbench]);
 
   function applyRoute(route: {
     view?: ResearchCanvasView;
@@ -320,35 +325,36 @@ export function ResearchAppShell({
   function selectListedProject(projectId: string): void {
     routeWriteModeRef.current = 'push';
     skipProjectResetRef.current = false;
-    setProjectsOpen(false);
+    setCreating(false);
     void workbench.selectProject(projectId);
   }
 
-  function renderProjectList(): React.JSX.Element {
+  function returnToList(): void {
+    routeWriteModeRef.current = 'push';
+    skipProjectResetRef.current = true;
+    setCreating(false);
+    setActivityOpen(false);
+    setServicesOpen(false);
+    setCanvasView('overview');
+    workbench.clearProject();
+  }
+
+  function renderProjectCard(project: ResearchProject): React.JSX.Element {
+    const goal = project.description.trim();
     return (
-      <>
-        <div className="research-section-label">项目</div>
-        <label className="research-shell-search">
-          搜索项目
-          <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
-        </label>
-        {visibleProjects.map((project) => (
-          <button
-            aria-current={project.id === context.projectId ? 'true' : undefined}
-            className={project.id === context.projectId ? 'research-project-row research-project-row--active' : 'research-project-row'}
-            key={project.id}
-            data-testid={`research-shell-project-${project.id}`}
-            type="button"
-            onClick={() => selectListedProject(project.id)}
-          >
-            <span className="research-project-row-title">{project.title}</span>
-            <span className="research-project-row-meta">
-              {researchStageLabels[project.currentStage]} · {researchProjectStatusLabels[project.status]}
-            </span>
-          </button>
-        ))}
-        {visibleProjects.length === 0 ? <div className="research-shell-search-empty">没有匹配的项目</div> : null}
-      </>
+      <button
+        className="research-project-card"
+        data-testid={`research-shell-project-${project.id}`}
+        key={project.id}
+        type="button"
+        onClick={() => selectListedProject(project.id)}
+      >
+        <span className="research-project-card-title">{project.title}</span>
+        {goal.length === 0 ? null : <span className="research-project-card-goal">{goal}</span>}
+        <span className="research-project-card-meta">
+          {researchStageLabels[project.currentStage]} · {researchProjectStatusLabels[project.status]} · {formatResearchTime(project.updatedAt)}
+        </span>
+      </button>
     );
   }
 
@@ -401,42 +407,46 @@ export function ResearchAppShell({
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
       <header className="research-shell-banner">
-        <div>
-          <div className="eyebrow">RESEARCH SHELL</div>
-          <h1>科研主工作台</h1>
-          <p>项目是一级上下文。阶段、证据、实验和产物都挂在当前研究项目下。</p>
-        </div>
-        <div className="research-shell-banner-actions">
-          {onOpenAssistant === undefined ? null : (
-            <button className="action-button" data-testid="research-shell-assistant" type="button" onClick={onOpenAssistant}>
-              研究助手
-            </button>
-          )}
-          {shellState === 'project' && narrow ? (
-            <button aria-expanded={projectsOpen} className="action-button" data-testid="research-shell-projects-toggle" type="button" onClick={() => setProjectsOpen(true)}>
-              项目
-            </button>
-          ) : null}
-          {shellState === 'project' && compact ? (
-            <button aria-expanded={servicesOpen} className="action-button" data-testid="research-shell-services-toggle" type="button" onClick={() => setServicesOpen(true)}>
-              科研服务
-            </button>
-          ) : null}
-          {shellState === 'project' ? (
-            <button aria-pressed={activityOpen} className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
-              {activityOpen ? '关闭活动' : '活动与运行'}
-            </button>
-          ) : null}
-          {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => applyRoute({ view: 'overview' })}>项目总览</button>
-          ) : null}
-          {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => applyRoute({ view: 'provenance' })}>溯源</button>
-          ) : null}
-          {shellState === 'project' ? (
-            <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
-          ) : null}
-        </div>
+        {shellState === 'project' && context.project !== null ? (
+          <>
+            <div>
+              <button className="action-button" data-testid="research-shell-all-projects" type="button" onClick={returnToList}>
+                所有项目
+              </button>
+              <h1 data-testid="research-shell-current-title">{context.project.title}</h1>
+            </div>
+            <div className="research-shell-banner-actions">
+              {onOpenAssistant === undefined ? null : (
+                <button className="action-button" data-testid="research-shell-assistant" type="button" onClick={onOpenAssistant}>
+                  研究助手
+                </button>
+              )}
+              {compact ? (
+                <button aria-expanded={servicesOpen} className="action-button" data-testid="research-shell-services-toggle" type="button" onClick={() => setServicesOpen(true)}>
+                  科研服务
+                </button>
+              ) : null}
+              <button aria-pressed={activityOpen} className="action-button" data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
+                {activityOpen ? '关闭活动' : '活动与运行'}
+              </button>
+              <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => applyRoute({ view: 'overview' })}>项目总览</button>
+              <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => applyRoute({ view: 'provenance' })}>溯源</button>
+              <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <h1>研究项目</h1>
+            </div>
+            <div className="research-shell-banner-actions">
+              <button className="action-button action-button--primary" data-testid="research-shell-new-project" type="button" onClick={() => setCreating(true)}>
+                <Plus aria-hidden="true" size={16} />
+                新建研究项目
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
       {snapshot.error === null ? null : (
@@ -451,39 +461,75 @@ export function ResearchAppShell({
 
       {shellState === 'loading' ? <div className="research-loading">正在读取科研项目…</div> : null}
 
-      {shellState === 'empty' ? (
-        <div className="research-empty" data-testid="research-shell-empty">
-          <div className="research-empty-mark">∑</div>
-          <h2>创建或导入研究项目</h2>
-          <p>没有研究项目时进入空态。创建后会进入项目壳层，而不是通用对话页。</p>
-          <form
-            className="research-shell-create"
-            data-testid="research-shell-create"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void createProject();
-            }}
-          >
-            <label>
-              项目标题
-              <input data-testid="research-shell-title" onChange={(event) => setTitle(event.target.value)} value={title} />
-            </label>
-            <label>
-              研究目标
-              <textarea data-testid="research-shell-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
-            </label>
-            <label>
-              项目语言
-              <select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            <button className="action-button action-button--primary" type="submit">
-              <Plus aria-hidden="true" size={16} />
-              创建研究项目
-            </button>
-          </form>
+      {shellState === 'list' ? (
+        <div className="research-project-list" data-testid="research-shell-list">
+          {snapshot.projects.length > 0 ? (
+            <div className="research-project-list-toolbar">
+              <label className="research-shell-search">
+                搜索项目
+                <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
+              </label>
+              <label className="research-shell-search">
+                状态
+                <select
+                  data-testid="research-shell-status-filter"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setStatusFilter(value === 'all' || value === 'archived' ? value : 'active');
+                  }}
+                  value={statusFilter}
+                >
+                  <option value="active">进行中</option>
+                  <option value="archived">已归档</option>
+                  <option value="all">全部</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {creating ? (
+            <form
+              className="research-shell-create"
+              data-testid="research-shell-create"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createProject();
+              }}
+            >
+              <label>
+                项目标题
+                <input data-testid="research-shell-title" onChange={(event) => setTitle(event.target.value)} value={title} />
+              </label>
+              <label>
+                研究目标
+                <textarea data-testid="research-shell-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
+              </label>
+              <label>
+                项目语言
+                <select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <div className="research-form-actions">
+                <button className="action-button" type="button" onClick={() => setCreating(false)}>取消</button>
+                <button className="action-button action-button--primary" type="submit">
+                  <Plus aria-hidden="true" size={16} />
+                  创建研究项目
+                </button>
+              </div>
+            </form>
+          ) : null}
+          {snapshot.projects.length === 0 && !creating ? (
+            <div className="research-empty" data-testid="research-shell-empty">
+              <h2>还没有研究项目</h2>
+              <p>新建研究项目后才会进入该项目的科研工作台。</p>
+            </div>
+          ) : (
+            <div className="research-project-grid" data-testid="research-shell-project-grid">
+              {visibleProjects.map(renderProjectCard)}
+            </div>
+          )}
+          {snapshot.projects.length > 0 && visibleProjects.length === 0 ? <div className="research-shell-search-empty">没有匹配的项目</div> : null}
         </div>
       ) : null}
 
@@ -497,11 +543,6 @@ export function ResearchAppShell({
           ].filter((value) => value.length > 0).join(' ')}
           data-testid="research-shell-project"
         >
-          {narrow ? null : (
-            <aside className="research-projects" aria-label="最近项目">
-              {renderProjectList()}
-            </aside>
-          )}
           <main className="research-shell-canvas">
             {context.workflow === null ? null : (
               <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
@@ -575,8 +616,8 @@ export function ResearchAppShell({
             {canvasView === 'provenance' && provenanceError !== null ? (
               <div className="research-alert" role="alert" data-testid="research-provenance-error">{provenanceError}</div>
             ) : null}
-            {state.workspace?.path === undefined ? null : (
-              <p className="research-shell-workspace" data-testid="research-shell-workspace">计算目录：{state.workspace.path}</p>
+            {context.project?.workspacePath === null || context.project?.workspacePath === undefined ? null : (
+              <p className="research-shell-workspace" data-testid="research-shell-workspace">工作目录：{context.project.workspacePath}</p>
             )}
             {onOpenService === undefined || compact ? null : (
               <ResearchServicesPanel onOpenService={onOpenService} services={services} />
@@ -597,9 +638,6 @@ export function ResearchAppShell({
           ) : null}
         </div>
       ) : null}
-      <Drawer onClose={() => setProjectsOpen(false)} open={narrow && projectsOpen} title="最近项目">
-        {renderProjectList()}
-      </Drawer>
       <Drawer onClose={() => setServicesOpen(false)} open={compact && servicesOpen} title="科研服务">
         {onOpenService === undefined ? null : (
           <ResearchServicesPanel

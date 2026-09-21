@@ -112,6 +112,7 @@ describe('AppShell', () => {
       }
     });
     window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=research&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);

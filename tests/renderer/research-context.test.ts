@@ -25,6 +25,7 @@ describe('research context', () => {
     expect(context.activeRuns).toEqual([]);
     expect(context.pendingGates).toEqual([]);
     expect(context.serviceHealth.modelsReady).toBe(false);
+    expect(buildResearchTopMeta(context)).toBe('研究项目');
   });
 
   it('collects pending gates, active runs and artifact counts', () => {

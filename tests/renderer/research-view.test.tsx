@@ -14,7 +14,7 @@ describe('research workbench dashboard', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    window.history.replaceState({}, '', '/?page=research');
+    window.history.replaceState({}, '', '/?page=research&project=research_1');
     window.matchMedia = ((query: string) => ({
       matches: false,
       media: query,

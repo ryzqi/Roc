@@ -12,21 +12,40 @@ import type {
 import type { ResearchWorkbenchAdapter } from '../../src/renderer/views/research/research-workbench';
 
 describe('research workbench', () => {
-  it('loads projects and selects the first one with a snapshot', async () => {
+  it('loads projects without selecting one', async () => {
     const store = createStore();
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load(null);
     const snapshot = workbench.getSnapshot();
     expect(snapshot.projects).toHaveLength(1);
-    expect(snapshot.project?.id).toBe('research_1');
-    expect(snapshot.workflow?.currentStage).toBe('writing');
-    expect(snapshot.artifacts).toHaveLength(1);
-    expect(snapshot.indexStatus?.phase).toBe('idle');
+    expect(snapshot.project).toBeNull();
+    expect(snapshot.workflow).toBeNull();
+    expect(snapshot.artifacts).toEqual([]);
     expect(snapshot.loading).toBe(false);
     expect(snapshot.working).toBe(false);
     expect(snapshot.error).toBeNull();
     expect(store.adapter.listProjects).toHaveBeenCalledTimes(1);
-    expect(store.adapter.getWorkflow).toHaveBeenCalledWith({ id: 'research_1' });
+    expect(store.adapter.getWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('clears the current project without dropping the list', async () => {
+    const store = createStore();
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('research_1');
+    expect(workbench.getSnapshot().project?.id).toBe('research_1');
+    workbench.clearProject();
+    expect(workbench.getSnapshot().project).toBeNull();
+    expect(workbench.getSnapshot().workflow).toBeNull();
+    expect(workbench.getSnapshot().projects).toHaveLength(1);
+  });
+
+  it('does not fall back to another project when the preferred id is missing', async () => {
+    const store = createStore();
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('missing');
+    expect(workbench.getSnapshot().project).toBeNull();
+    expect(workbench.getSnapshot().projects).toHaveLength(1);
+    expect(store.adapter.getWorkflow).not.toHaveBeenCalled();
   });
 
   it('loads a preferred project instead of the first one', async () => {
@@ -55,7 +74,7 @@ describe('research workbench', () => {
       indexStatus: indexStatus({ projectId: 'research_2' })
     });
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     workbench.setInstruction('写出可追溯的检索策略。');
     await workbench.refresh();
     expect(workbench.getSnapshot().instruction).toBe('写出可追溯的检索策略。');
@@ -67,7 +86,7 @@ describe('research workbench', () => {
   it('returns a copy from getSnapshot', async () => {
     const store = createStore();
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     const first = workbench.getSnapshot();
     first.instruction = 'mutated';
     first.projects.pop();
@@ -111,7 +130,7 @@ describe('research workbench', () => {
       workflow: workflow({ status: 'running', gateRequired: false, artifactIds: [] })
     });
     const workbench = createResearchWorkbench(store.adapter, { createId: () => 'req_fixed' });
-    await workbench.load();
+    await workbench.load('research_1');
     workbench.setInstruction('写出可追溯的检索策略。');
     await workbench.startRun();
     expect(store.adapter.startStageRun).toHaveBeenCalledWith({
@@ -127,7 +146,7 @@ describe('research workbench', () => {
   it('rejects empty instruction without starting a run', async () => {
     const store = createStore();
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     await workbench.startRun();
     expect(workbench.getSnapshot().error).toBe('阶段指令不能为空。');
     expect(store.adapter.startStageRun).not.toHaveBeenCalled();
@@ -140,7 +159,7 @@ describe('research workbench', () => {
       runs: [queued]
     });
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     await workbench.cancelRun();
     expect(store.adapter.cancelStageRun).toHaveBeenCalledWith({ projectId: 'research_1', runId: 'run_1' });
   });
@@ -152,7 +171,7 @@ describe('research workbench', () => {
       runs: [failed]
     });
     const workbench = createResearchWorkbench(store.adapter, { createId: () => 'retry_fixed' });
-    await workbench.load();
+    await workbench.load('research_1');
     await workbench.retryRun();
     expect(store.adapter.retryStageRun).toHaveBeenCalledWith({
       projectId: 'research_1',
@@ -164,7 +183,7 @@ describe('research workbench', () => {
   it('fills expectedStage on transition and move', async () => {
     const store = createStore();
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     await workbench.transition('approve', { reviewDecision: 'accept' });
     expect(store.adapter.transitionWorkflow).toHaveBeenCalledWith({
       projectId: 'research_1',
@@ -184,7 +203,7 @@ describe('research workbench', () => {
   it('controls the index using snapshot revision and null fileId on retry', async () => {
     const store = createStore();
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     await workbench.controlIndex('rebuild');
     expect(store.adapter.controlIndex).toHaveBeenCalledWith({
       projectId: 'research_1',
@@ -208,7 +227,7 @@ describe('research workbench', () => {
       release = () => resolve(workflow({ status: 'completed', gateApproved: true }));
     }));
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     const pending = workbench.transition('approve', { reviewDecision: 'accept' });
     await Promise.resolve();
     expect(workbench.getSnapshot().working).toBe(true);
@@ -224,7 +243,7 @@ describe('research workbench', () => {
     const store = createStore();
     store.adapter.startStageRun.mockRejectedValueOnce(new Error('阶段角色启动失败。'));
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     workbench.setInstruction('写出可追溯的检索策略。');
     const before = store.adapter.getWorkflow.mock.calls.length;
     await workbench.startRun();
@@ -252,7 +271,7 @@ describe('research workbench', () => {
       return store.workflowFor(request.id);
     });
     const workbench = createResearchWorkbench(store.adapter);
-    await workbench.load();
+    await workbench.load('research_1');
     const stale = workbench.refresh();
     await workbench.selectProject('research_2');
     expect(workbench.getSnapshot().project?.id).toBe('research_2');

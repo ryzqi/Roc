@@ -100,7 +100,7 @@ function artifactSummary(artifacts: ResearchArtifact[]): ResearchArtifactSummary
 
 export function buildResearchTopMeta(context: ResearchContext): string {
   if (context.project === null) {
-    return '创建研究项目';
+    return '研究项目';
   }
   const stage = context.currentStage === null ? '未开始' : researchStageLabels[context.currentStage];
   return `${context.project.title} · ${stage} · 运行 ${context.activeRuns.length} · 闸门 ${context.pendingGates.length}`;
