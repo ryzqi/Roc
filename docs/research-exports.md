@@ -76,4 +76,4 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Ro
 rtk proxy env PYTHONDONTWRITEBYTECODE=1 ROC_RESEARCH_TOOLCHAIN=/Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 ROC_RESEARCH_ARTIFACT_ROOT=/Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-export-integration pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-ipc.test.ts
 ```
 
-真实测试需要已准备的私有工具链，验证中文 PDF、批准图稿、BibTeX 引用、ZIP 内容、用户模板及禁止覆盖。完整导出界面在 Renderer 增量接入。
+真实测试需要已准备的私有工具链，验证中文 PDF、批准图稿、BibTeX 引用、ZIP 内容、用户模板及禁止覆盖。科研页导出面板选择批准正文与图稿后准备 ZIP、发布审核，再保存到新文件。

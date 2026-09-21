@@ -1,222 +1,47 @@
 # Roc
 
-Roc 是一个基于 **Electron + React** 的本地 AI Agent 桌面应用。它把 LangGraph / DeepAgents 执行时、插件化 Kernel、类型安全 IPC、工作区/终端/MCP/Skills/Memory/Task 工作台，以及面向生产的工具调用护栏整合进同一套 desktop runtime。
+Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研究项目，而不是通用对话页。项目下组织文献、证据、想法、实验、图稿和论文；研究助手、文件、任务、连接器、技能和诊断作为科研服务挂在当前项目上。
 
-Roc 在真实 macOS 工作区上持续执行任务：路径边界清晰、工具调用可恢复、上下文可控、密钥不进仓库。
+底层仍是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
-- 平台：macOS，支持 Apple Silicon 与 Intel（按架构打包 RTK binary）
-- 运行时：Electron main / preload / renderer 三层隔离
-- Agent 内核：`deepagents` + LangGraph checkpointer / store
-- 数据面：SQLite + Electron `safeStorage` 加密密钥
-- 包管理：`pnpm`
+- 平台：仅 macOS，Apple Silicon 与 Intel（按架构打包 RTK 与科研工具链）
+- 默认界面：科研工作台（`page=research`）
+- Agent：研究助手与阶段角色，不是产品主页
+- 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
+- 包管理：`pnpm@12.5.1`
+
+术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。
 
 ---
 
-## 功能总览
+## 科研工作台
 
-### 1. Chat Agent Runtime
+打开应用后进入项目壳层。没有项目时是空态，创建后进入该项目的总览，而不是 Chat。
 
-- 多线程会话、流式消息、工具调用过程可视化
-- run / plan 双模式：plan 侧收紧写能力与工具可见性
-- 图片附件、中断/继续、run event 队列
-- Provider 配置支持 OpenAI 兼容链路与 Anthropic 系模型
-
-### 2. Agent Harness（核心）
-
-Roc 的 harness 不是单独服务，而是把 DeepAgents 原生能力与 Roc 本地边界粘合起来的执行栈：
-
-```
-UI / Task Workbench
-        │ IPC (Zod schema)
-        ▼
-Agent Plugin (run lifecycle / recovery / event queue)
-        ▼
-DeepAgent Executor
-        ▼
-Context Harness + createDeepAgent(buildDeepAgent)
-        ▼
-Middleware stack + CompositeBackend + Tools
-        ▼
-Workspace FS / Shell / MCP / Skills / Memory / Background Tasks
-```
-
-#### 2.1 `createDeepAgent` 构建入口
-
-主入口：`src/main/services/deep-agent/agent-builder.ts`
-
-每次 run 会：
-
-1. 注册 Roc harness profile（见下）
-2. 按 mode 选择 tools / subagents / memory
-3. 组装 middleware 护栏栈
-4. 调用 DeepAgents `createDeepAgent(...)`
-
-关键配置：
-
-- **model / systemPrompt / tools / subagents**
-- **backend**：Roc `CompositeBackend`（虚拟路由）
-- **store / checkpointer**：LangGraph 持久化与 memory 后端
-- **permissions**：文件系统 allow/deny
-- **interruptOn**：需要用户确认的工具中断点
-- **middleware**：Forge 护栏 + Roc 路径策略 + RTK + 幂等 + compaction
-
-#### 2.2 Harness Profile
-
-文件：`src/main/services/deep-agent/harness-profiles.ts`
-
-Roc 通过 DeepAgents `createHarnessProfile` / `registerHarnessProfile` 注册 provider 级 profile：
-
-- 对 `anthropic` / `openai` 都生效（Roc 模型最终落在这两类 provider key）
-- **排除** 内置 `SummarizationMiddleware`  
-  原因：Roc 使用自研分层压缩，不走 DeepAgents 默认 `/conversation_history` 卸载路径
-- **排除** 内置 `execute` shell 工具  
-  原因：DeepAgents native `execute` 不受 Roc shell 风险策略约束；Roc 只暴露受控 `run_shell_command`
-
-#### 2.3 Context Harness
-
-文件：`src/main/services/deep-agent/context/context-assembler.ts`
-
-在真正建 agent 前，Roc 先组装一轮“上下文装备”：
-
-- 生成稳定分层 system prompt blocks（利于 prompt cache）
-- 注入 mode / workspace / workflow / skill 说明
-- 附加 `session_search` 等上下文工具
-- 解析 memory / skills 源路径
-- 绑定 runtime workspace identity
-
-这层把“提示词拼装 + 工具装配 + 作用域”从执行器里抽出来，避免每次 run 各写一套。
-
-#### 2.4 虚拟文件系统路由
-
-文件：
-
-- `src/main/services/deep-agent/backend.ts`
-- `src/main/services/deep-agent/filesystem-tool-contract.ts`
-
-Agent 文件工具只认三条虚拟路由：
-
-| 路由 | 含义 | 权限 |
-| --- | --- | --- |
-| `/workspace/**` | 当前选中工作区 | 读写（plan 模式只读） |
-| `/memory/**` | DeepAgents 语义 memory（如 `AGENTS.md` / `USER.md`） | 受 memory 策略与安全扫描约束 |
-| `/skills/**` | 技能目录 | 只读 |
-
-硬边界：
-
-- 拒绝真实主机绝对路径与 `..` 穿越
-- `write_file` 只创建新文件；改已有文件必须 `read_file` + `edit_file`
-- `delete_file` 仅允许 `/workspace/` 下目标
-- **不要把 `/workspace/...` 当 shell cwd**。shell 使用真实 macOS 工作目录
-
-#### 2.5 Shell 与 RTK
-
-- `run_shell_command`：Roc 自定义 command tool
-- shell 默认 cwd = 当前 workspace 根
-- `shell-path-policy` / `shell-path-guard` 拦截虚拟路径泄漏
-- RTK（`resources/rtk-binaries/**`）压缩常见 shell 输出，降低上下文膨胀
-- RTK 不可用时按 shell 风险策略回退，不静默绕过 deny
-
-详见 [docs/rtk-integration.md](docs/rtk-integration.md)。
-
-#### 2.6 工具面
-
-内置 DeepAgents 可见工具 allowlist（Roc 主动暴露）：
-
-- `write_todos`, `task`
-- `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`
-
-Roc 追加 / 编排的能力包括：
-
-- `run_shell_command`
-- `ask_user`
-- `web_read` / research subagent
-- background task tools（创建/查询/更新/取消后台任务）
-- `session_search`（SQLite FTS）
-- MCP tools / Skills / runtime-tools（由 enabled capabilities 注入）
-
-Plan 模式会进一步：
-
-- 隐藏高风险写工具
-- 挂载只读 memory middleware
-- 限制 subagent 工具范围
-
-#### 2.7 Middleware 护栏栈（Forge + Roc）
-
-构建顺序（逻辑上从外到内，见 `agent-builder.ts`）：
-
-1. Hooks middleware（可选）
-2. Plan-mode guards（只读 memory / tool exposure / default path）
-3. Shell path policy
-4. RTK middleware
-5. Network-sensitive tool retry（如 `web_read` / `web_search`）
-6. Tool protocol 规范化
-7. Tool-effect idempotency（side-effect 幂等）
-8. Error budget / iteration tracking
-9. Filesystem path policy + filesystem tool error 映射
-10. Context compaction（Roc 分层压缩；可叠加 Forge tiered compaction）
-11. Rescue parsing（修复野生 tool-call 格式）
-12. Tool resolution / runtime error mapping
-13. Forge cleanup
-
-Forge 模块说明见 `src/main/services/forge-guardrails/`。目标是把“模型想调用工具”和“框架强制可执行、可恢复、可审计”分开。
-
-#### 2.8 上下文压缩与 Checkpoint
-
-- **cheap-first compaction**：先砍超大 tool result / 中段历史 / 旧 tool payload，必要时再做摘要
-- protected head 保留任务意图与关键配对
-- tool pair 按 `tool_call_id` 恢复，避免截断后 API 报错
-- LangGraph checkpointer + SQLite：支持 run 恢复、thread 连续性
-- recovery policy：对 transient provider/network/5xx/429 等做有限次退避恢复
-
-#### 2.9 Memory / Skills / Background Tasks
-
-- Memory：DeepAgents native memory 语义 + Roc store backend + capacity / security scan
-- Skills：`/skills/` 挂载，支持显式 skill 注入与回合级启用
-- Background Tasks：任务工作台与 chat 隔离；创建时绑定 runtime workspace 与 capability 快照，避免“聊天线程能力”和“后台任务能力”漂移
-
-### 3. 插件化 Kernel
-
-`src/main/plugins/`：
-
-| 插件 | 职责 |
+| 区域 | 作用 |
 | --- | --- |
-| `agent` | DeepAgents 执行器、会话、run 生命周期 |
-| `workspace` | 工作区、文件、Git、终端 |
-| `mcp` | MCP server 注册与工具/资源调用 |
-| `skills` | 技能发现与启用 |
-| `task` | 任务看板 / 详情 / 后台任务 |
-| `memory` | memory 存储与预览 |
-| `app` | 应用设置与主题 |
-| `diagnostics` | 诊断与指标 |
-| `runtime-tools` | 运行时小工具 |
+| 项目总览 | 当前阶段、人工闸门、索引、运行与产物。只读。 |
+| 阶段工作区 | 按阶段组编辑文献、知识、构思、实验、图稿、正文、文稿与导出。 |
+| 活动与运行 | 阶段运行、任务审批、后台作业。 |
+| 溯源 | 工件、证据、实验/图稿/模型来源。 |
+| 科研服务 | 研究助手、文件与代码、连接器、技能、项目记忆、运行诊断。 |
 
-插件经 Capability Registry 暴露能力；renderer 不直接碰 Node/Electron 内部 API。
+11 个研究阶段：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出。证据集、提纲、正文改写、图稿和最终导出走人工闸门。
 
-### 4. 类型安全 IPC
+阶段工作区已接入：
 
-- 合同注册：`src/shared/ipc-registry.ts`；payload Zod schema 位于 `src/shared/schemas/`
-- 生成：`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc generate:ipc`
-- 漂移检查：`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc`
-- preload 只暴露受控 bridge
+- 文献库 / 知识库 / Idea Canvas
+- Python、R、Julia 实验运行
+- Matplotlib 图稿渲染与发布
+- LaTeX 文稿、模板编译
+- 批准正文与图稿的最终 ZIP 导出
 
-### 5. 工作区与终端
+合同细节：
 
-- 多工作区选择
-- 文件浏览 / diff
-- `node-pty` 终端会话
-- Git workbench 能力（本地仓库场景）
-
-### 6. 设置与密钥
-
-- Provider / 模型 / 高级参数
-- API Key 走 `SecretManager` + Electron `safeStorage`，落本地加密存储（默认 `~/.roc`）
-- **仓库内不保存真实密钥**
-
-### 7. 数据与运维
-
-- SQLite 连接策略、migration ledger、backup/restore/rebuild
-- retention cleanup / health probe
-- 打包脚本校验 `better-sqlite3` / `node-pty` 能在 Electron 下加载，并 asarUnpack 当前架构预编译文件
+- [Idea Canvas](docs/research-ideas.md)
+- [实验运行](docs/research-experiments.md)
+- [图稿](docs/research-figures.md)
+- [最终导出](docs/research-exports.md)
 
 ---
 
@@ -224,61 +49,54 @@ Forge 模块说明见 `src/main/services/forge-guardrails/`。目标是把“模
 
 ```
 src/
-  main/           # Electron 主进程：Kernel、插件、Agent、DB、IPC
+  main/           # Kernel、插件、Agent、科研域、DB、IPC
   preload/        # 类型安全 bridge
-  renderer/       # React 19 UI
-  shared/         # 跨进程 schema / types / IPC 合同
-  rtk-integration/# shell 输出压缩中间件
-tests/            # main / renderer / shared / smoke
-scripts/          # dev、打包、IPC 生成、验证
-resources/        # 图标与 RTK binaries
+  renderer/       # React 19 UI；默认科研壳
+  shared/         # schema / types / IPC 合同
+  rtk-integration/# shell 输出压缩
+tests/
+scripts/
+resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill
 ```
 
-进程边界：
-
-1. **renderer**：只做 UI 与用户交互
-2. **preload**：白名单 IPC
-3. **main**：真实文件系统、网络、密钥、Agent 执行
+进程边界：renderer 只做 UI；preload 白名单 IPC；main 负责文件系统、网络、密钥、Agent 与科研生产。
 
 ---
 
-## 快速开始
+## 研究助手运行时
 
-### 环境要求
+对话页是科研服务，不是默认首页。阶段角色走各自 Skill 白名单；通用研究助手走 DeepAgents harness。
 
-- macOS + zsh
-- Node.js（与仓库当前 Electron/Vite 工具链兼容）
-- `pnpm`
-
-### 安装与开发
-
-```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev
+```
+科研工作台 / 阶段角色 / 研究助手
+        │ IPC (Zod schema)
+        ▼
+Research plugin + Agent plugin
+        ▼
+DeepAgent Executor
+        ▼
+Context Harness + createDeepAgent
+        ▼
+Middleware + CompositeBackend + Tools
+        ▼
+Workspace FS / Shell / MCP / Skills / Memory / 科研生产工具
 ```
 
-`rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev` 会先验证原生模块，再启动 Electron + Vite。
+主入口：`src/main/services/deep-agent/agent-builder.ts`
 
-### 常用命令
+每次 run 会注册 harness profile、按 mode 选择 tools / subagents / memory、组装护栏，再调用 DeepAgents `createDeepAgent(...)`。
 
-```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test tests/main/macos-host-service.test.ts
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc build
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc generate:ipc
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:electron
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:native-packaging
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
-```
+Harness profile（`harness-profiles.ts`）：
 
----
+- 对 `anthropic` / `openai` 生效
+- 排除内置 `SummarizationMiddleware`（Roc 自研分层压缩）
+- 排除内置 `execute`；只暴露受控 `run_shell_command`
 
-## Agent Harness 开发入口
+文件工具只认 `/workspace/**`、`/memory/**`、`/skills/**`。不要把 `/workspace/...` 当 shell cwd。shell 使用真实 macOS 工作目录。RTK 见 [docs/rtk-integration.md](docs/rtk-integration.md)。
 
-如果你要改 agent 行为，优先从这些文件读起：
+未手动填写的模型上下文预算运行时回落到 `500_000`。单次最大输出（`maxTokens`）未填时不发送，由上游默认。
+
+改 agent 行为优先读：
 
 | 区域 | 路径 |
 | --- | --- |
@@ -286,62 +104,88 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 | 执行器 | `src/main/plugins/agent/deep-agent-executor.ts` |
 | Harness profile | `src/main/services/deep-agent/harness-profiles.ts` |
 | Context 组装 | `src/main/services/deep-agent/context/` |
-| 文件路由合同 | `src/main/services/deep-agent/filesystem-tool-contract.ts` |
-| Backend 路由 | `src/main/services/deep-agent/backend.ts` |
-| Shell 边界 | `src/main/services/deep-agent/shell-path-*.ts` |
+| 文件路由 | `src/main/services/deep-agent/filesystem-tool-contract.ts` |
 | 护栏 | `src/main/services/forge-guardrails/` |
-| 恢复策略 | `src/main/plugins/agent/recovery-policy.ts` |
-| RTK | `src/rtk-integration/` |
+| 科研插件 | `src/main/plugins/research/` |
+| 科研壳 | `src/renderer/views/research/` |
 
-验收时重点盯：
+---
 
-1. `/workspace` 只用于 file tools，不泄漏进 shell cwd
-2. plan/run 工具可见性符合预期
-3. compaction 后 tool pair 仍合法
-4. 后台任务 workspace / capability 与创建快照一致
-5. 密钥只出现在本地 secret storage，不进日志明文
+## 插件化 Kernel
+
+`src/main/plugins/`，由 `src/main/main-kernel-bootstrap.ts` 注册：
+
+| 插件 | 职责 |
+| --- | --- |
+| `research` | 研究项目、阶段、文献、证据、实验、图稿、导出 |
+| `agent` | DeepAgents 执行器、会话、run 生命周期 |
+| `workspace` | 工作区、文件、Git、终端 |
+| `mcp` | MCP server 与工具/资源 |
+| `skills` | 技能发现与启用 |
+| `task` | 任务看板 / 后台任务 |
+| `memory` | memory 存储与预览 |
+| `app` | 应用设置与主题 |
+| `diagnostics` | 诊断与指标 |
+| `runtime-tools` | RTK 等运行时小工具 |
+
+科研插件为 `critical`。renderer 不直接碰 Node/Electron 内部 API。
+
+IPC 合同：`src/shared/ipc-registry.ts`。生成与漂移检查：
+
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc generate:ipc
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc check:ipc
+```
+
+---
+
+## 快速开始
+
+环境：macOS + zsh、兼容当前 Electron/Vite 的 Node.js、`pnpm`。
+
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev
+```
+
+`dev` 先验证原生模块，再启动 Electron + Vite。默认打开科研工作台。
+
+```bash
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc build
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:native-packaging
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
+```
 
 ---
 
 ## 安全与隐私
 
-Roc 默认把敏感状态放在用户本机：
+- 配置 / 日志 / memory / skills / 科研库与导出：`~/.roc`
+- Provider secrets：SQLite + `safeStorage`
+- 本地缓存：`.runtime/`、`.artifacts/`（gitignore）
+- 仓库不保存真实密钥。测试只允许明显假数据
 
-- 配置/日志/memory/skills/artifacts：`~/.roc`（或运行时 paths 覆盖）
-- Provider secrets：SQLite + `safeStorage` 加密
-- 本地 runtime 缓存：`.runtime/`、`.artifacts/`（已 gitignore）
-
-推送/贡献前请确认：
-
-- 不要提交 `.env`、真实 API Key、私钥、导出的 chat 数据库
-- 不要提交 `~/.roc`、本机路径下的用户 memory
-- 测试里只允许明显假数据（如 `sk-ant-test`、AWS 文档示例 `AKIAIOSFODNN7EXAMPLE`）
-- 二进制与大文件：仓库只包含 macOS arm64/x64 RTK binary，新增大文件请先评估必要性
-
-当前仓库安全扫描结论（推送前）：
-
-- 未发现真实私钥 / GitHub PAT / 生产 API Key
-- 命中的 credential 样式字符串均位于测试夹具或安全扫描自身规则
-- `.runtime/`、`.artifacts/`、`dist/`、`node_modules/`、本地 `AGENTS.md` / `CLAUDE.md` 已被忽略
-
-注意：git commit author 使用开发者身份信息；推送到 GitHub 后提交元数据会公开。
+推送前确认：不要提交 `.env`、真实 API Key、`~/.roc`、导出的 chat 数据库。二进制只保留 macOS arm64/x64 RTK。
 
 ---
 
-## 测试约定
+## 测试
 
-- Vitest，测试位于 `tests/**`
-- 断言要钉业务结果 / 错误分支，避免空洞的 `toBeDefined()`
+- Vitest，位于 `tests/**`
+- 断言钉业务结果与错误分支
 - bug fix 优先 red-green
-- UI 改动补 renderer 测试；响应式风险可跑 smoke 脚本
+- UI 改动补 renderer 测试
 
 ---
 
 ## 打包
 
-### macOS
-
-使用匹配本机架构的 Node.js 和 Electron 安装。以下命令在当前项目路径执行；其他位置需替换 `--dir` 的绝对路径。
+仅 darwin。以下命令在当前项目路径执行。
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install --frozen-lockfile
@@ -349,19 +193,17 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --ar
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 ```
 
-`package:mac` 依次完成类型检查、构建、首屏代码体积检查、当前架构目录包、签名验证和包内启动验证，只生成可直接运行的 `.app` 目录包。构建缓存位于 `.runtime/`；验证截图及结果位于 `.artifacts/mac-package/`，临时测试数据自动清理。
+`package:mac`：校验 live 科研工具链 → `pnpm build`（含 typecheck）→ 首屏体积检查 → `electron-builder --mac --dir` → `smoke-mac`。输出当前架构的 `.app`。不会再打 zip/dmg。构建缓存在 `.runtime/`，验证截图在 `.artifacts/mac-package/`。
 
-- Apple Silicon：`release/mac-arm64/Roc.app`。
-- Intel：在 x64 Mac 上安装匹配架构的依赖，输出 `release/mac/Roc.app`。
-- 包内只保留当前 macOS 架构的 SQLite、PTY 和 RTK，前端依赖已编入 renderer，不重复携带其源码。
-- 科研工具链随包分发 Python / Tectonic / TeX 子集；Docling 解析模型不进安装包。打开应用后在科研工作台下载到 `~/.roc/research-models`。打包前校验 live 工具链，并用当前 `worker.py` / `figure.py` 覆盖过期副本，同时排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。
-- 当前使用 ad-hoc 本地签名，未进行 Developer ID 签名或 Apple 公证；跨机器公开分发前需配置发布证书和公证。
-- macOS 关闭窗口后保留后台任务，点击 Dock 图标恢复；通过菜单或 `Cmd+Q` 完全退出。
-- macOS 终端使用用户登录 Shell，命令执行使用 zsh；工作区文件和 Git 使用系统路径边界，支持 POSIX 目录。
-- Finder/Dock 启动时通过 `shell-env` 恢复登录 Shell 的 PATH；代理命令仍使用环境变量白名单。
-- 窗口使用系统红黄绿按钮、应用菜单和模板菜单栏图标；登录启动项在打包后的应用中设置，系统审批状态在设置页显示。
-- Hook 仅使用 `command`，由 `/bin/zsh -f -c` 执行。信任摘要已更新，已有 Hook 需重新审核；旧文件不会被自动改写。
-- macOS 关闭窗口始终保留后台任务；旧配置中的退出行为开关在初始化迁移时移除。
+- Apple Silicon：`release/mac-arm64/Roc.app`
+- Intel：在 x64 Mac 上安装匹配依赖，输出 `release/mac/Roc.app`
+- 包内只留当前架构的 SQLite、PTY、RTK 和科研工具链
+- 随包分发 Python / Tectonic / TeX 子集；Docling 模型不进安装包，打开后下载到 `~/.roc/research-models`
+- 打包前用当前 `worker.py` / `figure.py` 覆盖 live 副本；排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。文献交换已在主进程 TypeScript（`bibliography.ts`）
+- ad-hoc 本地签名（`identity: "-"`），未做 Developer ID / 公证
+- 关窗口保留后台任务；菜单或 `Cmd+Q` 退出
+- 终端走用户登录 Shell 与 zsh；Finder/Dock 启动用 `shell-env` 恢复 PATH
+- Hook 仅 `command`，由 `/bin/zsh -f -c` 执行
 
 单独验证已有应用包：
 
@@ -369,17 +211,11 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
 ```
 
-### 目录包
+目录包：
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
 ```
-
-`electron-builder.yml` 会：
-
-- 打包 `dist/**`
-- 解包 `better-sqlite3` / `node-pty`
-- 附带当前 macOS 架构需要的 RTK binary、图标，以及不含 models 的 research-toolchain
 
 ---
 
@@ -387,14 +223,10 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
 
 当前版本：`0.1.0`（积极开发中）
 
-公开仓库目标：
-
-- 让他人理解 Roc 的 agent harness 边界
-- 方便 issue / PR 对齐执行层而不是只改提示词
-- 保持密钥与本机运行态默认不进 Git
-
----
+- 产品口径：科研工作台
+- 仓库目标：对齐项目/阶段/闸门/产物合同，而不是只改提示词
+- 密钥与本机运行态默认不进 Git
 
 ## License
 
-未单独声明许可证前，默认保留所有权利。如需开源许可，请在仓库中补充 `LICENSE`。
+未单独声明许可证前，默认保留所有权利。

@@ -1,0 +1,85 @@
+# 科研工作台
+
+Roc 默认打开科研工作台。未知 `page` 或从设置页返回时落到 `research`。项目是一级上下文；对话、文件、任务等是挂在当前项目上的科研服务。
+
+术语边界见 [CONTEXT.md](../CONTEXT.md)。**研究项目工作台**是总览投影：当前阶段、阶段运行、工件、人工闸门和索引状态。文献、证据、Idea Canvas、实验、文稿、图稿和知识库在阶段工作区，不塞进总览。
+
+## 入口
+
+- Renderer：`src/renderer/views/research/ResearchAppShell.tsx`
+- 路由：`research-route.ts`（`project` / `view` / `stage`）
+- 阶段组：`research-stage-groups.ts`
+- 主进程：`src/main/plugins/research/`，`loadPhase: critical`
+- 数据根：`~/.roc`；库、索引、实验、导出分别在 `research-library` / `research-index` / `research-experiments` / `research-exports`
+
+无项目时显示空态，可创建标题、研究目标和项目语言（`zh` / `en`，默认中文）。创建后进入该项目壳层。
+
+项目内快捷键：`1` 总览，`2` 活动，`3` 溯源。`Escape` 关闭抽屉、活动栏或错误条。
+
+## 壳层视图
+
+| `view` | 界面 | 内容 |
+| --- | --- | --- |
+| `overview` | `ResearchOverviewView` | 研究目标、当前阶段、闸门、索引、流水线、最近活动。只读。 |
+| `activity` | `ResearchActivityView` | 流程事件与阶段运行。 |
+| `provenance` | `ResearchProvenanceView` | 工件、证据、来源。 |
+| `stage` | `ResearchStageWorkspace` | 当前阶段组的可编辑面板。 |
+
+非当前阶段组只读。设置组（嵌入配置、阶段模型）始终可写。
+
+## 阶段组
+
+| 组 | 流程阶段 | 面板 |
+| --- | --- | --- |
+| 发现与阅读 | discovery / retrieval / reading | 文献库、知识库 |
+| 构思与计划 | ideation / planning | 构思（Idea Canvas） |
+| 实验与检查 | experiment / figure | 实验、图稿 |
+| 写作与审阅 | writing / review / revision | 正文、文稿 |
+| 发布与复现 | export | 图稿导出 |
+| 项目设置 | （无流程阶段） | 嵌入配置、阶段模型 |
+
+当前阶段可开始 / 暂停 / 完成、提交审核、批准或退回。审稿待批时还需选择接受或要求修订。角色运行绑定当前项目与阶段；`ownerRunId` 由服务写入。
+
+## 科研服务
+
+`research-services.ts` 把既有能力标成项目服务，不另起运行时：
+
+| 服务 | 视图 | 说明 |
+| --- | --- | --- |
+| 研究助手 | `chat` | 绑定当前项目与阶段的对话 |
+| 活动与运行 | `tasks-board` | 任务、审批、后台运行 |
+| 文件与代码 | `workspace` | 项目文件、Git、终端 |
+| 连接器 | `mcp` | MCP 授权 |
+| 技能 | `skills` | 按阶段可调用的 Skill |
+| 项目记忆 | `memory` | 会话与自动记忆 |
+| 运行诊断 | `diagnostics` | 失败运行与主机状态 |
+
+窄屏下服务进抽屉。研究助手从壳层按钮打开对话，不替换项目上下文。
+
+## 阶段角色
+
+`role-profiles.ts` 为每个阶段固定 role、Skill 和能力白名单。Skill 正文在 `resources/research-skills/`。
+
+| 阶段 | Skill | 结构化产出 |
+| --- | --- | --- |
+| discovery | `roc-research-discovery` | 检索策略 |
+| retrieval | `roc-literature-retrieval` | 文献集 |
+| reading | `roc-paper-reading` | 阅读笔记 |
+| ideation | `roc-research-ideation` | Idea Canvas |
+| planning | `roc-research-planning` | 研究方案 |
+| experiment | `roc-experiment-provenance` | 实验运行 |
+| figure | `roc-scientific-figure` | 图稿 |
+| writing | `roc-academic-writing` | 正文 |
+| review | `roc-peer-review` | 审稿意见 |
+| revision | `roc-revision-coach` | 修订正文 |
+| export | `roc-manuscript-export` | 导出包 |
+
+模型不能指定项目身份，也不能跳过人工批准或直接写最终 ZIP。未发布的真实工件不会被空产物顶替。
+
+## 相关文档
+
+- [Idea Canvas](research-ideas.md)
+- [实验运行](research-experiments.md)
+- [图稿](research-figures.md)
+- [最终导出](research-exports.md)
+- [架构 ADR](adr/0001-research-workbench-architecture.md)

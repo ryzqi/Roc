@@ -28,7 +28,7 @@ resources/rtk-binaries/darwin-arm64/rtk
 
 ## 关键模块
 
-- `src/rtk-integration/binary-manager.ts`：解析当前 macOS 架构的 RTK binary 路径并检查可用性。
+- `src/rtk-integration/binary-manager.ts`：只解析 `darwin-arm64` / `darwin-x64` 的 RTK binary 路径并检查可用性。
 - `src/rtk-integration/rewriter.ts`：调用 `rtk rewrite <command>`，解析 `rtk ...` 参数。
 - `src/rtk-integration/middleware.ts`：拦截 LangChain shell 工具调用并改写命令。
 - `src/main/services/rtk-service.ts`：向 Roc 状态面板和执行链暴露 bundled RTK binary 状态。

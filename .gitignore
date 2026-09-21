@@ -11,6 +11,8 @@ __pycache__/
 *.py[cod]
 *.log
 docs/*
+!docs/README.md
+!docs/research-workbench.md
 !docs/research-experiments.md
 !docs/research-figures.md
 !docs/research-exports.md

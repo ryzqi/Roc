@@ -56,6 +56,8 @@ await research.promoteIdeaCanvas({
 
 构思角色输出必须包含 `ideaCanvas`。系统把它写入本次运行创建的 `idea_canvas` 工件；缺少结构、证据或字段一致性时运行失败，不打开审核闸门。
 
+科研页构思面板保存 Canvas、查看历史，并在已批准版本上晋升为新项目。
+
 ## 验证
 
 ```bash
