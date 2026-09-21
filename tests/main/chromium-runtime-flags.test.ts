@@ -31,6 +31,15 @@ describe('chromium runtime flags', () => {
     expect(source.indexOf('applyChromiumRuntimeFlags(app.commandLine);')).toBeLessThan(source.indexOf('app.whenReady()'));
   });
 
+  it('exits before Chromium setup when the host is not macOS', () => {
+    const source = readFileSync('src/main/index.ts', 'utf8');
+    expect(source).toContain("if (process.platform !== 'darwin')");
+    expect(source).toContain("console.error('Roc requires macOS.');");
+    expect(source).toContain('app.exit(1);');
+    expect(source.indexOf("if (process.platform !== 'darwin')")).toBeLessThan(source.indexOf('registerPdfPreviewScheme();'));
+    expect(source.indexOf("if (process.platform !== 'darwin')")).toBeLessThan(source.indexOf('applyChromiumRuntimeFlags(app.commandLine);'));
+  });
+
   it('forwards Playwright remote debugging into Chromium before app ready', () => {
     const commandLine = {
       appendSwitch: vi.fn()

@@ -64,6 +64,11 @@ const mainReadyStartedAtMs = performance.now();
 let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
 
+if (process.platform !== 'darwin') {
+  console.error('Roc requires macOS.');
+  app.exit(1);
+}
+
 registerPdfPreviewScheme();
 applyChromiumRuntimeFlags(app.commandLine);
 
