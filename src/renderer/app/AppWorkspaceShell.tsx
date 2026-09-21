@@ -60,6 +60,8 @@ interface AppWorkspaceShellProps {
   windowState: WindowStateSnapshot;
   workspaceLoadState: LazyLoadState;
   onResearchContextChange?: (meta: string) => void;
+  assistantOpen?: boolean;
+  onCloseResearchAssistant?: () => void;
   onOpenResearchAssistant?: () => void;
   onOpenResearchService?: (service: ResearchServiceEntry) => void;
   onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
@@ -100,15 +102,25 @@ export function AppWorkspaceShell({
   windowState,
   workspaceLoadState,
   onResearchContextChange,
+  assistantOpen = false,
+  onCloseResearchAssistant,
   onOpenResearchAssistant,
   onOpenResearchService,
   onResearchServiceContextChange,
   researchServiceContext
 }: AppWorkspaceShellProps): React.JSX.Element {
-  const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
+  const overlayAssistant = assistantOpen && activeView === 'research';
+  const hasWorkbench = overlayAssistant
+    ? workbenchVisible
+    : activeView === 'chat'
+      ? workbenchVisible
+      : WORKBENCH_VIEWS.has(activeView);
   const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as CSSProperties : undefined;
-  const workspaceShellClassName =
-    activeView === 'chat'
+  const workspaceShellClassName = overlayAssistant
+    ? hasWorkbench
+      ? 'workspace-shell workspace-shell--research-assistant workspace-shell--with-workbench'
+      : 'workspace-shell workspace-shell--research-assistant'
+    : activeView === 'chat'
       ? hasWorkbench
         ? 'workspace-shell workspace-shell--chat'
         : 'workspace-shell workspace-shell--chat-collapsed'
@@ -122,7 +134,7 @@ export function AppWorkspaceShell({
         <section className={activeView === 'chat' ? 'canvas canvas--chat' : 'canvas'}>
           <div className="canvas-scroll">
             <ViewContent
-              activeView={activeView}
+              activeView={overlayAssistant ? 'research' : activeView}
               chatSelectionVersion={chatSelectionVersion}
               client={client}
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
@@ -156,7 +168,46 @@ export function AppWorkspaceShell({
         </section>
       </main>
 
-      {activeView === 'chat' ? (
+      {overlayAssistant ? (
+        <aside className="research-assistant-overlay" data-testid="research-assistant-overlay">
+          <div className="research-assistant-overlay-header">
+            <strong>研究助手</strong>
+            <button className="action-button" data-testid="research-assistant-close" type="button" onClick={onCloseResearchAssistant}>
+              关闭
+            </button>
+          </div>
+          <div className="research-assistant-overlay-body">
+            <ViewContent
+              activeView="chat"
+              chatSelectionVersion={chatSelectionVersion}
+              client={client}
+              liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
+              memoryLoadState={memoryLoadState}
+              onOpenTaskDetail={openTaskDetail}
+              onTaskApprovalDecision={resumeTaskApprovalFromDetail}
+              onBackToTaskBoard={returnToTaskBoard}
+              onDeleteTaskStarted={clearDeletingTaskSelection}
+              operationsLoadState={operationsLoadState}
+              onQueueTaskPrompt={createTaskFromWorkbench}
+              onSelectWorkspace={selectWorkspaceFromDialog}
+              onSubmitChatTask={startChatRun}
+              onSubmitTaskDetailInput={submitTaskDetailInput}
+              onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
+              selectedTaskDetailId={activeTaskDetailId}
+              selectedThreadId={selectedThreadId}
+              state={state}
+              taskBoardUiState={taskBoardUiState}
+              onTaskBoardUiStateChange={setTaskBoardUiState}
+              updateLoadedState={(partial) =>
+                setState((current) => (current === null ? current : { ...current, ...partial }))
+              }
+              workspaceLoadState={workspaceLoadState}
+              researchServiceContext={researchServiceContext}
+            />
+          </div>
+        </aside>
+      ) : null}
+      {activeView === 'chat' && !overlayAssistant ? (
         <RailOverlay
           activeTool={activeWorkbenchTool}
           activeView={activeView}
@@ -176,6 +227,10 @@ export function AppWorkspaceShell({
             client={client}
             onToolChange={setActiveWorkbenchTool}
             onClose={() => {
+              if (overlayAssistant) {
+                setWorkbenchVisible(false);
+                return;
+              }
               setActiveView('chat');
               setWorkbenchVisible(false);
             }}

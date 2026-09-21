@@ -217,6 +217,37 @@
   grid-template-columns: minmax(0, 1fr) 56px;
 }
 
+.workspace-shell--research-assistant {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+}
+
+.workspace-shell--research-assistant.workspace-shell--with-workbench {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px) var(--workbench-width, 560px);
+}
+
+.research-assistant-overlay {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.research-assistant-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.research-assistant-overlay-body {
+  min-height: 0;
+  overflow: auto;
+}
+
 .chat-workspace-scale-host {
   min-width: 0;
   min-height: 0;

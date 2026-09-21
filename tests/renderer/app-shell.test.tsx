@@ -122,6 +122,74 @@ describe('AppShell', () => {
     });
     await waitUntil(() => container.querySelector('[data-testid="workspace-view"]') !== null || container.textContent?.includes('文件') === true);
     expect(new URL(window.location.href).searchParams.get('page')).toBe('workspace');
+    expect(client.api.workspace.select).toHaveBeenCalledWith({ path: '/tmp/project' });
+  });
+
+  it('opens the research assistant as a right overlay without leaving the project canvas', async () => {
+    const client = createShellClient();
+    const project = {
+      id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '/tmp/project',
+      status: 'active' as const, language: 'zh' as const, origin: null, currentStage: 'writing' as const,
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    vi.mocked(client.api.research.listProjects).mockResolvedValue({ ok: true, data: [project] });
+    vi.mocked(client.api.research.getWorkflow).mockResolvedValue({
+      ok: true,
+      data: {
+        projectId: 'research_1', currentStage: 'writing', projectStatus: 'active',
+        stages: [{
+          stage: 'writing', status: 'waiting_approval', activeRunId: null, artifactIds: [],
+          enteredAt: '2026-09-14T00:30:00.000Z', completedAt: null, gateRequired: true, gateApproved: false, lastError: null
+        }],
+        lastEvent: { type: 'approval_requested', stage: 'writing', message: '阶段产物等待用户审核。', createdAt: '2026-09-14T01:00:00.000Z' }
+      }
+    });
+    vi.mocked(client.api.research.listWorkflowEvents).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.listStageRuns).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.listArtifacts).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.getIndexStatus).mockResolvedValue({
+      ok: true,
+      data: {
+        settings: {
+          projectId: 'research_1', revision: 1, kinds: ['markdown', 'latex', 'bibliography', 'csv', 'pdf', 'image'],
+          include: ['**/*'], exclude: ['**/node_modules/**'], watch: true, paused: false, embeddingConfigId: null
+        },
+        generation: 1, workspacePath: '/tmp/project', phase: 'idle', error: null, lastScanAt: '2026-09-14T01:00:00.000Z',
+        counts: { total: 0, queued: 0, running: 0, ready: 0, failed: 0 }
+      }
+    });
+    window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=research&project=research_1');
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+    await waitUntil(() => container.querySelector('[data-testid="research-shell-assistant"]') !== null);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="research-shell-assistant"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await waitUntil(() => container.querySelector('[data-testid="research-assistant-overlay"]') !== null);
+    expect(container.querySelector('[data-testid="research-overview"]')).not.toBeNull();
+    expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
+    expect(new URL(window.location.href).searchParams.get('assistant')).toBe('1');
+  });
+
+  it('binds the project workspace when opening files from a deep link', async () => {
+    const client = createShellClient();
+    const project = {
+      id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '/tmp/project',
+      status: 'active' as const, language: 'zh' as const, origin: null, currentStage: 'writing' as const,
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    vi.mocked(client.api.research.listProjects).mockResolvedValue({ ok: true, data: [project] });
+    window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=workspace&project=research_1');
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+    await waitUntil(() => vi.mocked(client.api.workspace.select).mock.calls.length > 0);
+    expect(client.api.workspace.select).toHaveBeenCalledWith({ path: '/tmp/project' });
   });
 
   it('keeps settings in the window workband and does not render a global sidebar', async () => {
@@ -138,33 +206,48 @@ describe('AppShell', () => {
     expect(container.querySelector('[data-testid="settings-gear"]')).not.toBeNull();
   });
 
-  it('resets sidebar scroll without resetting the chat canvas', async () => {
-    const frames: FrameRequestCallback[] = [];
-    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
-      frames.push(callback);
-      return frames.length;
-    }));
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  it('opens a project chat deep link as an assistant overlay without a sidebar', async () => {
     const client = createShellClient();
+    const project = {
+      id: 'research_1', title: '证据图', description: '把想法变成可追溯项目。', workspacePath: '/tmp/project',
+      status: 'active' as const, language: 'zh' as const, origin: null, currentStage: 'writing' as const,
+      createdAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-14T01:00:00.000Z'
+    };
+    vi.mocked(client.api.research.listProjects).mockResolvedValue({ ok: true, data: [project] });
+    vi.mocked(client.api.research.getWorkflow).mockResolvedValue({
+      ok: true,
+      data: {
+        projectId: 'research_1', currentStage: 'writing', projectStatus: 'active',
+        stages: [{
+          stage: 'writing', status: 'waiting_approval', activeRunId: null, artifactIds: [],
+          enteredAt: '2026-09-14T00:30:00.000Z', completedAt: null, gateRequired: true, gateApproved: false, lastError: null
+        }],
+        lastEvent: { type: 'approval_requested', stage: 'writing', message: '阶段产物等待用户审核。', createdAt: '2026-09-14T01:00:00.000Z' }
+      }
+    });
+    vi.mocked(client.api.research.listWorkflowEvents).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.listStageRuns).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.listArtifacts).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(client.api.research.getIndexStatus).mockResolvedValue({
+      ok: true,
+      data: {
+        settings: {
+          projectId: 'research_1', revision: 1, kinds: ['markdown', 'latex', 'bibliography', 'csv', 'pdf', 'image'],
+          include: ['**/*'], exclude: ['**/node_modules/**'], watch: true, paused: false, embeddingConfigId: null
+        },
+        generation: 1, workspacePath: '/tmp/project', phase: 'idle', error: null, lastScanAt: '2026-09-14T01:00:00.000Z',
+        counts: { total: 0, queued: 0, running: 0, ready: 0, failed: 0 }
+      }
+    });
     window.roc = client.api;
     window.history.replaceState(null, '', '/?page=chat&project=research_1');
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
     });
-    const chatCanvas = container.querySelector<HTMLElement>('.canvas--chat .canvas-scroll');
-    if (chatCanvas === null) {
-      throw new Error('Expected chat scroll surfaces to render');
-    }
-    const chatScrollTop = vi.fn();
-    Object.defineProperty(chatCanvas, 'scrollTop', { configurable: true, get: () => 480, set: chatScrollTop });
-
-    await act(async () => {
-      frames.splice(0).forEach((callback) => callback(0));
-    });
-
+    await waitUntil(() => container.querySelector('[data-testid="research-assistant-overlay"]') !== null);
     expect(container.querySelector('.sidebar')).toBeNull();
-    expect(chatScrollTop).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="research-overview"]')).not.toBeNull();
   });
 
   it('restores focus to the settings opener after Escape closes the modal', async () => {

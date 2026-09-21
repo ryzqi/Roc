@@ -55,7 +55,8 @@ export function ResearchStageWorkspace({
   const [productionSnapshot, setProductionSnapshot] = useState(session.production.getSnapshot());
   const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === groupId) ?? RESEARCH_STAGE_GROUPS[0]!;
   const current = snapshot.workflow === null ? undefined : currentStageState(snapshot.workflow);
-  const writeAllowed = stageGroupWriteAllowed(groupId, snapshot.workflow?.currentStage ?? null, current?.status);
+  const writeAllowed = snapshot.project?.status !== 'archived'
+    && stageGroupWriteAllowed(groupId, snapshot.workflow?.currentStage ?? null, current?.status);
   const currentGroup = isCurrentStageGroup(groupId, snapshot.workflow?.currentStage ?? null);
   const working = snapshot.working
     || librarySnapshot.working

@@ -57,7 +57,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const { error, setError, setState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'), initialParams.get('project'));
-  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'research' : initialView);
+  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' || initialView === 'chat' ? 'research' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -86,6 +86,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [workbenchWidth, setWorkbenchWidth] = useState(560);
   const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
   const [researchServiceContext, setResearchServiceContext] = useState<ResearchServiceContext | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(initialView === 'chat' && initialParams.get('project') !== null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
@@ -126,8 +127,20 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         setSettingsOpen(true);
         return;
       }
+      if (view === 'chat') {
+        const projectId = new URLSearchParams(window.location.search).get('project');
+        if (projectId !== null && projectId.trim().length > 0) {
+          setActiveView('research');
+          setAssistantOpen(true);
+          return;
+        }
+        setActiveView('research');
+        setAssistantOpen(false);
+        return;
+      }
       setActiveView(view);
-      setWorkbenchVisible(view !== 'chat' && WORKBENCH_VIEWS.has(view));
+      setAssistantOpen(false);
+      setWorkbenchVisible(WORKBENCH_VIEWS.has(view));
     });
   }, []);
 
@@ -227,7 +240,13 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [selectedThreadId]);
 
   const startNewConversation = useCallback((): void => {
-    setActiveView('chat');
+    const projectId = new URLSearchParams(window.location.search).get('project');
+    if (projectId === null || projectId.trim().length === 0) {
+      setActiveView('research');
+      setAssistantOpen(false);
+      return;
+    }
+    setAssistantOpen(true);
     setSelectedThreadId(null);
     setPendingWorkflowHint(null);
     setPendingTaskSource(null);
@@ -368,13 +387,62 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     const projectId = new URLSearchParams(window.location.search).get('project');
     if (isProjectServiceView(activeView) && (projectId === null || projectId.trim().length === 0)) {
       setActiveView('research');
+      setAssistantOpen(false);
       setWorkbenchVisible(false);
     }
   }, [activeView]);
 
   useEffect(() => {
-    syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
-  }, [activeView, activeWorkbenchTool, workbenchVisible]);
+    if (activeView !== 'workspace' && activeView !== 'git' && activeView !== 'terminal' && activeView !== 'preview') {
+      return;
+    }
+    const projectId = new URLSearchParams(window.location.search).get('project');
+    if (projectId === null || projectId.trim().length === 0) {
+      return;
+    }
+    const currentPath = state?.workspace?.path ?? null;
+    let cancelled = false;
+    void (async () => {
+      const listed = await client.api.research.listProjects();
+      if (cancelled || !listed.ok) {
+        if (!cancelled && !listed.ok) {
+          setError(listed.error.message);
+        }
+        return;
+      }
+      const project = listed.data.find((item) => item.id === projectId);
+      if (project === undefined) {
+        setActiveView('research');
+        setWorkbenchVisible(false);
+        return;
+      }
+      if (project.workspacePath === null) {
+        setError('打开文件与代码前必须先绑定工作目录。');
+        setActiveView('research');
+        setWorkbenchVisible(false);
+        return;
+      }
+      if (currentPath === project.workspacePath) {
+        return;
+      }
+      const selected = await client.api.workspace.select({ path: project.workspacePath });
+      if (cancelled) {
+        return;
+      }
+      if (!selected.ok) {
+        setError(selected.error.message);
+        return;
+      }
+      await applySelectedWorkspace(selected.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, applySelectedWorkspace, client, setError, state?.workspace?.path]);
+
+  useEffect(() => {
+    syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible, assistantOpen);
+  }, [activeView, activeWorkbenchTool, assistantOpen, workbenchVisible]);
 
   const selectWorkspaceFromDialog = useCallback(async (): Promise<void> => {
     const selected = await client.api.workspace.selectFromDialog();
@@ -441,6 +509,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       startChatRun={startChatRun}
       state={state}
       onResearchContextChange={setResearchTopMeta}
+      assistantOpen={assistantOpen}
+      onCloseResearchAssistant={() => setAssistantOpen(false)}
       onOpenResearchAssistant={startNewConversation}
       onOpenResearchService={openResearchService}
       onResearchServiceContextChange={setResearchServiceContext}
@@ -476,6 +546,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           window.history.pushState({}, '', url);
           window.dispatchEvent(new PopStateEvent('popstate'));
           setActiveView('research');
+          setAssistantOpen(false);
           setWorkbenchVisible(false);
         }}
         researchContext={researchServiceContext}

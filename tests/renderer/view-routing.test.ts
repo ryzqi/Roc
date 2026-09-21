@@ -35,4 +35,12 @@ describe('research shell routing', () => {
     expect(url.searchParams.get('page')).toBe('research');
     expect(url.searchParams.get('shell')).toBeNull();
   });
+
+  it('records the assistant overlay without leaving the research page', () => {
+    window.history.replaceState({}, '', '/?page=research&project=research_1');
+    syncRendererUrl('research', 'files', false, true);
+    const url = new URL(window.location.href);
+    expect(url.searchParams.get('page')).toBe('research');
+    expect(url.searchParams.get('assistant')).toBe('1');
+  });
 });

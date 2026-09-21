@@ -188,3 +188,17 @@
     padding: 14px;
   }
 }
+
+@media (max-width: 1099px) {
+  .workspace-shell--research-assistant,
+  .workspace-shell--research-assistant.workspace-shell--with-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .research-assistant-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    border-left: none;
+  }
+}

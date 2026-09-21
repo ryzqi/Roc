@@ -74,9 +74,14 @@ export function parseWorkbenchTool(value: string | null, view: ViewId): Workbenc
   return defaultWorkbenchTool(view);
 }
 
-export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean): void {
+export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean, assistantOpen = false): void {
   const url = new URL(window.location.href);
   url.searchParams.set('page', view);
+  if (assistantOpen && view === 'research') {
+    url.searchParams.set('assistant', '1');
+  } else {
+    url.searchParams.delete('assistant');
+  }
   if (workbenchVisible || (view !== 'chat' && WORKBENCH_VIEWS.has(view))) {
     url.searchParams.set('tool', tool);
   } else {
