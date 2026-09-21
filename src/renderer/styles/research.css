@@ -829,6 +829,7 @@ pre.research-reader-content {
   display: grid;
   gap: 12px;
   width: min(100%, 420px);
+  margin: 70px auto;
   text-align: left;
 }
 
@@ -837,6 +838,15 @@ pre.research-reader-content {
   gap: 6px;
   color: var(--muted);
   font-size: var(--font-ui-size);
+}
+
+.research-shell-create input,
+.research-shell-create textarea {
+  width: 100%;
+}
+
+.research-shell-create .research-form-actions {
+  justify-content: center;
 }
 
 .research-shell-banner-actions {
