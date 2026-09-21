@@ -243,6 +243,12 @@ export class ResearchRepository {
     return this.getProject(request.id);
   }
 
+  deleteProject(id: string): { id: string; deleted: true } {
+    this.getProject(id);
+    this.db.prepare('DELETE FROM research_projects WHERE id = ?').run(id);
+    return { id, deleted: true };
+  }
+
   createArtifact(input: ResearchArtifactCreateRequest): ResearchArtifact {
     return this.db.transaction(() => {
       this.requireEditableStage(input.projectId, input.stage);

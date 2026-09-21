@@ -111,6 +111,7 @@ export const rocApi: RocPreloadApi = {
     getProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsGet, ...args),
     createProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsCreate, ...args),
     updateProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsUpdate, ...args),
+    deleteProject: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsDelete, ...args),
     getWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowGet, ...args),
     transitionWorkflow: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowTransition, ...args),
     listWorkflowEvents: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowEvents, ...args),

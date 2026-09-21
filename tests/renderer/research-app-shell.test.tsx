@@ -348,6 +348,7 @@ function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
     getIndexStatus: vi.fn().mockResolvedValue({ ok: true, data: indexStatus() }),
     createProject: vi.fn(),
     updateProject: vi.fn(),
+    deleteProject: vi.fn(),
     transitionWorkflow: vi.fn(),
     startStageRun: vi.fn(),
     cancelStageRun: vi.fn(),

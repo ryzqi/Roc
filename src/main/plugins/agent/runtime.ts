@@ -212,6 +212,7 @@ export class AgentPluginRuntime {
         }),
         threadKind: resolveNewRunThreadKind(request),
         threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
+        researchProjectId: request.researchProjectId,
         userInput: input
       });
     } catch (error) {

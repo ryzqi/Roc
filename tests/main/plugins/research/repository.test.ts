@@ -73,6 +73,16 @@ describe('ResearchRepository', () => {
     })).toThrow('research_project_workspace_taken');
   });
 
+  it('deletes a project record without requiring the workspace directory to vanish', () => {
+    const project = repository.createProject({
+      title: 'Disposable',
+      description: 'Delete the record only.',
+      workspacePath: '/tmp/delete-record'
+    });
+    expect(repository.deleteProject(project.id)).toEqual({ id: project.id, deleted: true });
+    expect(() => repository.getProject(project.id)).toThrow('research_project_not_found');
+  });
+
   it('rejects creating a project without a workspace directory', () => {
     expect(() => repository.createProject({
       title: 'Missing directory',

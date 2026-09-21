@@ -6,8 +6,7 @@ import { AppBasicsSection } from '../../src/renderer/settings/sections/app-basic
 
 function createSettings(): AppSettings {
   return {
-    schemaVersion: 2,
-    defaultWorkspace: null,
+    schemaVersion: 3,
     startup: {
       openAtLogin: false
     },

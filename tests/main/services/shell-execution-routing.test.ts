@@ -60,7 +60,7 @@ it('resolves quoted explicit RTK commands from the bundled binary with a minimal
 
 function createService(): ShellExecutionService {
   const workspace = new WorkspaceService({
-    getSettings: () => ({ ...defaultSettings, defaultWorkspace: null }),
+    getSettings: () => defaultSettings,
     saveSettings: vi.fn()
   });
   workspace.selectWorkspace(root);

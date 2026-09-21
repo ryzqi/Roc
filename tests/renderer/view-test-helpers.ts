@@ -84,8 +84,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     },
     memoryRecovery: null,
     settings: {
-      schemaVersion: 2,
-      defaultWorkspace: null,
+      schemaVersion: 3,
       startup: {
         openAtLogin: false
       },

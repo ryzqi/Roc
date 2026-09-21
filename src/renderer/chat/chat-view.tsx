@@ -221,8 +221,11 @@ export function ChatView({
       const payload: ChatTaskSubmitPayload = {
         input: trimmedInput
       };
-      if (researchContext?.projectId && researchContext.workspacePath) {
-        payload.workspacePath = researchContext.workspacePath;
+      if (researchContext?.projectId) {
+        payload.researchProjectId = researchContext.projectId;
+        if (researchContext.workspacePath) {
+          payload.workspacePath = researchContext.workspacePath;
+        }
       }
       if (composerMode === 'plan') {
         payload.mode = 'plan';
@@ -279,7 +282,7 @@ export function ChatView({
         input: planText,
         mode: 'chat',
         cleanThread: true,
-        ...(researchContext?.projectId && researchContext.workspacePath ? { workspacePath: researchContext.workspacePath } : {})
+        ...(researchContext?.projectId ? { researchProjectId: researchContext.projectId, ...(researchContext.workspacePath ? { workspacePath: researchContext.workspacePath } : {}) } : {})
       });
       if (result.ok) {
         setPendingUserInput(planText);

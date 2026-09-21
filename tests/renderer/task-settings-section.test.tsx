@@ -7,8 +7,7 @@ import type { AppSettings } from '../../src/shared/types';
 
 function createSettings(): AppSettings {
   return {
-    schemaVersion: 2,
-    defaultWorkspace: null,
+    schemaVersion: 3,
     startup: { openAtLogin: false },
     globalHotkey: null,
     memory: {

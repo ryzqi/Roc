@@ -146,6 +146,16 @@ describe('research workbench', () => {
     expect(workbench.getSnapshot().project?.workspacePath).toBe('/tmp/bound-workspace');
   });
 
+  it('deletes the current project without touching the disk path', async () => {
+    const store = createStore();
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('research_1');
+    await workbench.deleteProject('research_1');
+    expect(store.adapter.deleteProject).toHaveBeenCalledWith({ id: 'research_1' });
+    expect(workbench.getSnapshot().project).toBeNull();
+    expect(workbench.getSnapshot().projects).toHaveLength(0);
+  });
+
   it('starts a run with generated requestId and expectedStage from the snapshot', async () => {
     const store = createStore({
       workflow: workflow({ status: 'running', gateRequired: false, artifactIds: [] })
@@ -374,6 +384,7 @@ function createStore(overrides: {
     listProjects: ReturnType<typeof vi.fn>;
     createProject: ReturnType<typeof vi.fn>;
     updateProject: ReturnType<typeof vi.fn>;
+    deleteProject: ReturnType<typeof vi.fn>;
     getWorkflow: ReturnType<typeof vi.fn>;
     listWorkflowEvents: ReturnType<typeof vi.fn>;
     listStageRuns: ReturnType<typeof vi.fn>;
@@ -411,6 +422,12 @@ function createStore(overrides: {
       const index = projects.findIndex((item) => item.id === request.id);
       projects[index] = updated;
       return updated;
+    }),
+    deleteProject: vi.fn(async (request: { id: string }) => {
+      const index = projects.findIndex((item) => item.id === request.id);
+      if (index >= 0) projects.splice(index, 1);
+      states.delete(request.id);
+      return { id: request.id, deleted: true as const };
     }),
     getWorkflow: vi.fn(async (request: { id: string }) => states.get(request.id)!.workflow),
     listWorkflowEvents: vi.fn(async (request: { projectId: string }) => states.get(request.projectId)!.events),

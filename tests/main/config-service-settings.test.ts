@@ -30,7 +30,6 @@ describe('ConfigService unified settings document', () => {
   it.each([2, 3, 4])('drops obsolete startup fields from version %i documents without changing other settings', (schemaVersion) => {
     const expectedSettings = {
       ...defaultSettings,
-      defaultWorkspace: '/Users/test/Code/Roc',
       startup: { openAtLogin: true },
       globalHotkey: 'Command+Shift+R'
     };
@@ -86,8 +85,7 @@ describe('ConfigService unified settings document', () => {
         {
           schemaVersion: 4,
           settings: {
-            schemaVersion: 2,
-            defaultWorkspace: null,
+            schemaVersion: 3,
             startup: { openAtLogin: false },
             globalHotkey: null,
             memory: {
@@ -242,8 +240,7 @@ describe('ConfigService unified settings document', () => {
       `${JSON.stringify({
         schemaVersion: 3,
         settings: {
-          schemaVersion: 2,
-          defaultWorkspace: null,
+          schemaVersion: 3,
           startup: { openAtLogin: false },
           ['notifica' + 'tions']: { ['low' + 'Distraction']: true },
           globalHotkey: null,

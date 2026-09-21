@@ -68,7 +68,7 @@ describe('ShellExecutionService macOS cancellation', () => {
 
 function createService(): ShellExecutionService {
   const workspaceService = new WorkspaceService({
-    getSettings: () => ({ ...defaultSettings, defaultWorkspace: null }),
+    getSettings: () => defaultSettings,
     saveSettings: () => {}
   });
   workspaceService.selectWorkspace(root);

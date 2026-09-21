@@ -12,8 +12,7 @@ import type {
 } from '../../../shared/types';
 
 export const defaultSettings: AppSettings = {
-  schemaVersion: 2,
-  defaultWorkspace: null,
+  schemaVersion: 3,
   startup: {
     openAtLogin: false
   },

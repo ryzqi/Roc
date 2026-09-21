@@ -387,6 +387,14 @@ export function ResearchAppShell({
     await workbench.bindWorkspace(path);
   }
 
+  async function deleteCurrentProject(): Promise<void> {
+    const project = workbench.getSnapshot().project;
+    if (project === null) {
+      return;
+    }
+    await workbench.deleteProject(project.id);
+  }
+
   async function createProject(): Promise<void> {
     await workbench.createProject({
       title,
@@ -463,6 +471,7 @@ export function ResearchAppShell({
               <button className="action-button" data-testid="research-shell-overview" type="button" onClick={() => applyRoute({ view: 'overview' })}>项目总览</button>
               <button className="action-button" data-testid="research-shell-provenance" type="button" onClick={() => applyRoute({ view: 'provenance' })}>溯源</button>
               <button className="action-button" data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
+              <button className="action-button" data-testid="research-shell-delete-project" type="button" onClick={() => void deleteCurrentProject()}>删除项目</button>
             </div>
           </>
         ) : (

@@ -15,6 +15,7 @@ export type ResearchWorkbenchAdapter = {
   listProjects(): Promise<ResearchProject[]>;
   createProject(request: { title: string; description: string; workspacePath: string; language?: 'zh' | 'en' }): Promise<ResearchProject>;
   updateProject(request: { id: string; workspacePath: string }): Promise<ResearchProject>;
+  deleteProject(request: { id: string }): Promise<{ id: string; deleted: true }>;
   getWorkflow(request: { id: string }): Promise<ResearchWorkflowSnapshot>;
   listWorkflowEvents(request: { projectId: string; limit: number }): Promise<ResearchWorkflowEvent[]>;
   listStageRuns(request: { projectId: string; limit: number }): Promise<ResearchStageRun[]>;
@@ -52,6 +53,7 @@ export type ResearchWorkbench = {
   clearProject(): void;
   createProject(request: { title: string; description: string; workspacePath: string; language?: 'zh' | 'en' }): Promise<void>;
   bindWorkspace(workspacePath: string): Promise<void>;
+  deleteProject(projectId: string): Promise<void>;
   fail(message: string): void;
   refresh(): Promise<void>;
   setInstruction(value: string): void;
@@ -263,6 +265,27 @@ export function createResearchWorkbench(
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '绑定工作目录失败。' });
     },
+    async deleteProject(projectId) {
+      await projection.runExclusive(async (token) => {
+        await adapter.deleteProject({ id: projectId });
+        if (!projection.isCurrent(token)) return;
+        const snapshot = projection.peek();
+        const projects = snapshot.projects.filter((item) => item.id !== projectId);
+        const clearing = snapshot.project?.id === projectId;
+        projection.assign({
+          projects,
+          ...(clearing ? {
+            project: null,
+            workflow: null,
+            events: [],
+            runs: [],
+            artifacts: [],
+            indexStatus: null,
+            instruction: ''
+          } : {})
+        });
+      }, { busy: '当前命令仍在进行。', failed: '删除研究项目失败。' });
+    },
     async refresh() {
       await projection.runExclusive(async (token) => {
         if (projection.peek().project === null) {
@@ -402,6 +425,9 @@ export function createResearchWorkbenchAdapter(client: RocClient): ResearchWorkb
     },
     async updateProject(request) {
       return unwrap('更新科研项目', await research.updateProject(request));
+    },
+    async deleteProject(request) {
+      return unwrap('删除科研项目', await research.deleteProject(request));
     },
     async getWorkflow(request) {
       return unwrap('科研流程', await research.getWorkflow(request));

@@ -29,7 +29,10 @@ export type ShellAdapterOptions = {
 export function createShellExecutionService(options: ShellAdapterOptions): ShellExecutionService {
   const paths = new RocPaths(options.rootDir);
   paths.ensureTree();
-  const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig(options.workspacePath));
+  const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig());
+  if (options.workspacePath !== undefined) {
+    workspaceService.selectWorkspace(options.workspacePath);
+  }
   const taskRecorder = options.taskRecorder === undefined ? createNoopTaskRecorder() : options.taskRecorder;
   if (options.commandExecutor !== undefined) {
     return new InjectableShellExecutionService(
@@ -72,12 +75,9 @@ class InjectableShellExecutionService extends ShellExecutionService {
   }
 }
 
-function createWorkspaceConfig(workspacePath: string | undefined): WorkspaceConfigService {
+function createWorkspaceConfig(): WorkspaceConfigService {
   return {
-    getSettings: () => ({
-      ...defaultSettings,
-      defaultWorkspace: workspacePath === undefined ? null : workspacePath
-    }),
+    getSettings: () => defaultSettings,
     saveSettings: () => {}
   };
 }

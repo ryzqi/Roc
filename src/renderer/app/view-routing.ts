@@ -96,8 +96,7 @@ export function visibleWorkspaceLabel(state: LoadedState): string {
 }
 
 export function visibleMemoryLabel(state: LoadedState): string {
-  // 与 main 侧 memory-store-repository 的 workspaceLabel 同源（都来自 settings.defaultWorkspace），
-  // 但 appStatus 在 bootstrap 阶段即可用，不像 memoryStatus 要等 memory 视图懒加载。
+  // appStatus.workspace 来自当前会话选中的工作区，bootstrap 阶段即可用。
   if (state.appStatus.workspace.selectedPath === null) {
     return '全局记忆';
   }

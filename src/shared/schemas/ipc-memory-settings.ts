@@ -267,8 +267,7 @@ export const settingsTrustHookRequestSchema = z
 
 export const appSettingsSchema = z
   .object({
-    schemaVersion: z.literal(2),
-    defaultWorkspace: z.string().nullable(),
+    schemaVersion: z.literal(3),
     startup: z.object({ openAtLogin: z.boolean() }).strict(),
     globalHotkey: z.string().nullable(),
     memory: z

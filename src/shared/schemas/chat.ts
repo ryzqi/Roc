@@ -300,6 +300,7 @@ export const chatStartRunRequestSchema = z
     workflowHint: workflowHintSchema.optional(),
     taskSource: z.enum(['background_schedule', 'workbench']).nullable().optional(),
     workspacePath: z.string().nullable().optional(),
+    researchProjectId: identifierSchema.optional(),
     shellAllowedCommands: z.array(identifierSchema).optional(),
     attachments: z.array(chatImageAttachmentSchema).max(4).optional(),
     dispatchKey: identifierSchema.optional(),

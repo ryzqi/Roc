@@ -86,6 +86,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [workbenchWidth, setWorkbenchWidth] = useState(560);
   const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
   const [researchServiceContext, setResearchServiceContext] = useState<ResearchServiceContext | null>(null);
+  const previousResearchProjectIdRef = useRef<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(initialView === 'chat' && initialParams.get('project') !== null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
@@ -238,6 +239,19 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    const projectId = researchServiceContext?.projectId ?? null;
+    const previous = previousResearchProjectIdRef.current;
+    if (previous === projectId) {
+      return;
+    }
+    previousResearchProjectIdRef.current = projectId;
+    if (previous !== null) {
+      setSelectedThreadId(null);
+      setAssistantOpen(false);
+    }
+  }, [researchServiceContext?.projectId]);
 
   const startNewConversation = useCallback((): void => {
     const projectId = new URLSearchParams(window.location.search).get('project');
@@ -547,6 +561,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           window.dispatchEvent(new PopStateEvent('popstate'));
           setActiveView('research');
           setAssistantOpen(false);
+          setSelectedThreadId(null);
           setWorkbenchVisible(false);
         }}
         researchContext={researchServiceContext}

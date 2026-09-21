@@ -9,8 +9,7 @@ const trayIconPath = '/Applications/Roc.app/Contents/Resources/trayTemplate.png'
 
 function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
-    schemaVersion: 2,
-    defaultWorkspace: null,
+    schemaVersion: 3,
     startup: {
       openAtLogin: false,
       ...overrides.startup

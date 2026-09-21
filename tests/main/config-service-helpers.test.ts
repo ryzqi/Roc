@@ -249,8 +249,7 @@ describe('config helper modules', () => {
   it('drops obsolete disk-memory settings during legacy migration', () => {
     const migrated = migrateLegacySplitConfig({
       rawSettings: {
-        schemaVersion: 2,
-        defaultWorkspace: null,
+        schemaVersion: 3,
         startup: { openAtLogin: false },
         globalHotkey: null,
         memory: {

@@ -207,19 +207,9 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
 
 function createWorkspaceConfigAdapter(context: RocPluginContext): WorkspaceConfigService {
   return {
-    getSettings: () => {
-      const settings = context.config.get<RocSettingsDocument['settings']>('settings');
-      if (settings !== null) {
-        return settings;
-      }
-      return {
-        ...defaultSettings,
-        defaultWorkspace: context.config.get<string>('defaultWorkspace')
-      };
-    },
+    getSettings: () => context.config.get<RocSettingsDocument['settings']>('settings') ?? defaultSettings,
     saveSettings: (settings) => {
       context.config.set('settings', settings);
-      context.config.set('defaultWorkspace', settings.defaultWorkspace);
     }
   };
 }

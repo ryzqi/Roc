@@ -692,6 +692,15 @@ export const agentMigrations: RocDatabaseMigration[] = [
 
       INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild');
     `
+  },
+  {
+    version: 16,
+    name: 'agent_threads_research_project',
+    sql: `
+      ALTER TABLE agent_threads ADD COLUMN research_project_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_agent_threads_research_project
+        ON agent_threads(research_project_id, updated_at DESC);
+    `
   }
 ];
 
@@ -1512,6 +1521,15 @@ export const researchMigrations: RocDatabaseMigration[] = [
         WHERE EXISTS (
           SELECT 1 FROM json_each(context_json, '$.inputs') WHERE json_extract(value, '$.ideaCanvas') IS NULL
         );
+    `
+  },
+  {
+    version: 16,
+    name: 'research_project_workspace_unique',
+    sql: `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_research_projects_workspace_path
+        ON research_projects(workspace_path)
+        WHERE workspace_path IS NOT NULL AND trim(workspace_path) != '';
     `
   }
 ];

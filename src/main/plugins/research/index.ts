@@ -87,6 +87,7 @@ const workbenchCapabilities = {
   getProject: descriptor('research.projects.get', researchProjectIdRequestSchema, researchProjectSchema),
   createProject: descriptor('research.projects.create', researchProjectCreateRequestSchema, researchProjectSchema),
   updateProject: descriptor('research.projects.update', researchProjectUpdateRequestSchema, researchProjectSchema),
+  deleteProject: descriptor('research.projects.delete', researchProjectIdRequestSchema, z.object({ id: z.string(), deleted: z.literal(true) }).strict()),
   getWorkflow: descriptor('research.workflow.get', researchProjectIdRequestSchema, researchWorkflowSnapshotSchema),
   transitionWorkflow: descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
   stageRole: descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema)
@@ -234,6 +235,10 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         researchExperiments.projectChanged(project.id);
         researchExports.projectChanged(project.id);
         return project;
+      });
+      context.capabilities.register(pluginId, workbenchCapabilities.deleteProject, async (input) => {
+        const request = researchProjectIdRequestSchema.parse(input);
+        return researchRepository.deleteProject(request.id);
       });
       context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));
       context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => {

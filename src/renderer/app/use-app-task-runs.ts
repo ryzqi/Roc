@@ -72,6 +72,9 @@ export function useAppTaskRuns({
       if (payload.workspacePath !== undefined && payload.workspacePath !== null) {
         request.workspacePath = payload.workspacePath;
       }
+      if (payload.researchProjectId !== undefined) {
+        request.researchProjectId = payload.researchProjectId;
+      }
       if (payload.explicitSkillIds !== undefined) {
         request.explicitSkillIds = payload.explicitSkillIds;
       }
@@ -118,6 +121,9 @@ export function useAppTaskRuns({
         taskSource: requestTaskSource,
         workspacePath: requestWorkspacePath
       };
+      if (payload.researchProjectId !== undefined) {
+        request.researchProjectId = payload.researchProjectId;
+      }
       if (payload.explicitSkillIds !== undefined) {
         request.explicitSkillIds = payload.explicitSkillIds;
       }

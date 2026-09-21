@@ -143,8 +143,7 @@ function upgradeLegacySettings(raw: unknown): AppSettings {
   const startup = (value.startup ?? {}) as Record<string, unknown>;
 
   return SettingsSchema.parse({
-    schemaVersion: 2,
-    defaultWorkspace: typeof value.defaultWorkspace === 'string' ? value.defaultWorkspace : null,
+    schemaVersion: 3,
     startup: {
       openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false
     },

@@ -189,6 +189,7 @@ export class AgentSessionRepository {
     snapshot: RunExecutionSnapshotSeed;
     threadKind: TaskKind;
     threadId?: string;
+    researchProjectId?: string | null;
     attachments?: ChatPersistedAttachment[];
   }): TaskRun {
     const now = new Date().toISOString();
@@ -243,10 +244,10 @@ export class AgentSessionRepository {
         if (existingThreadId === null || !hasExistingThread) {
           this.db
             .prepare(
-              `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at, research_project_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
             )
-            .run(threadId, input.threadKind, input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now);
+            .run(threadId, input.threadKind, input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now, input.researchProjectId === undefined ? null : input.researchProjectId);
         } else {
           this.db
             .prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?')
