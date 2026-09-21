@@ -15,9 +15,10 @@ beforeEach(() => {
   workspaceRoot = join(root, 'workspace');
   mkdirSync(join(workspaceRoot, 'nested'), { recursive: true });
   workspace = new WorkspaceService({
-    getSettings: () => ({ ...defaultSettings, defaultWorkspace: workspaceRoot }),
+    getSettings: () => ({ ...defaultSettings, defaultWorkspace: null }),
     saveSettings: vi.fn()
   });
+  workspace.selectWorkspace(workspaceRoot);
 });
 
 afterEach(() => {

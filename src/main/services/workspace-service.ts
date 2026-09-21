@@ -11,6 +11,8 @@ export type WorkspaceConfigService = {
 };
 
 export class WorkspaceService {
+  private currentWorkspace: Workspace | null = null;
+
   constructor(private readonly configService: WorkspaceConfigService) {}
 
   selectWorkspace(path: string): Workspace {
@@ -36,21 +38,12 @@ export class WorkspaceService {
       });
     }
 
-    const settings = this.configService.getSettings();
-    this.configService.saveSettings({
-      ...settings,
-      defaultWorkspace: resolvedPath
-    });
-
-    return this.createWorkspace(resolvedPath);
+    this.currentWorkspace = this.createWorkspace(resolvedPath);
+    return this.currentWorkspace;
   }
 
   getCurrentWorkspace(): Workspace | null {
-    const workspacePath = this.configService.getSettings().defaultWorkspace;
-    if (workspacePath === null) {
-      return null;
-    }
-    return this.createWorkspace(workspacePath);
+    return this.currentWorkspace;
   }
 
   requireWorkspace(): Workspace {

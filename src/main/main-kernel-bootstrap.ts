@@ -191,7 +191,6 @@ function createDefaultMainKernelPlugins(input: {
 }): readonly RocPlugin[] {
   input.paths.ensureTree();
   const configService = input.configService;
-  const defaultWorkspace = configService.getSettings().defaultWorkspace;
   const agentModelFactory = new LangChainAgentModelFactoryAdapter(input.modelFactory, {
     beforeCreate: () => configService.reloadSettingsDocument()
   });
@@ -238,11 +237,7 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createMemoryPlugin({
-      getWorkspace: () => {
-        configService.reloadSettingsDocument();
-        const workspacePath = configService.getSettings().defaultWorkspace;
-        return workspacePath === null ? null : { path: workspacePath, label: workspacePath };
-      },
+      getWorkspace: () => null,
       getMemorySettings: () => {
         configService.reloadSettingsDocument();
         return configService.getSettings().memory;
@@ -262,7 +257,7 @@ function createDefaultMainKernelPlugins(input: {
       confirmShellRequest: input.confirmShellRequest,
       rootDir: input.paths.root,
       workspaceConfigService: configService,
-      workspacePath: defaultWorkspace === null ? undefined : defaultWorkspace
+      workspacePath: undefined
     }),
     createDiagnosticsPlugin({
       performanceObserverService: input.performanceObserverService,
@@ -286,9 +281,8 @@ function createAppStatus(input: {
   paths: RocPaths;
   version: string;
 }): AppStatus {
-  const defaultWorkspace = input.configService.getSettings().defaultWorkspace;
-  const workspaceLabel = defaultWorkspace === null ? '未选择工作区' : defaultWorkspace;
-  const workspaceReady = defaultWorkspace === null ? 'blocked' : 'ready';
+  const workspaceLabel = '未选择工作区';
+  const workspaceReady = 'blocked';
   return {
     appName: 'Roc',
     version: input.version,
@@ -296,7 +290,7 @@ function createAppStatus(input: {
     startedAt: new Date().toISOString(),
     appearance: input.getAppearance === undefined ? defaultAppearance() : input.getAppearance(),
     workspace: {
-      selectedPath: defaultWorkspace,
+      selectedPath: null,
       label: workspaceLabel
     },
     paths: input.paths.snapshot(),

@@ -68,9 +68,10 @@ describe('ShellExecutionService macOS cancellation', () => {
 
 function createService(): ShellExecutionService {
   const workspaceService = new WorkspaceService({
-    getSettings: () => ({ ...defaultSettings, defaultWorkspace: root }),
+    getSettings: () => ({ ...defaultSettings, defaultWorkspace: null }),
     saveSettings: () => {}
   });
+  workspaceService.selectWorkspace(root);
   const rtkService = {
     getExecutionMetadata: () => ({
       binaryPath: join(root, 'missing-rtk'),
