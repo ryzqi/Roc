@@ -170,7 +170,7 @@ describe('research workbench dashboard', () => {
     });
     await click('research-manuscript-save');
     expect(api.saveManuscript).toHaveBeenCalledWith({
-      artifactId: manuscriptArtifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }]
+      artifactId: manuscriptArtifact.id, sections: [{ title: '结果', claimIds: [claim.id] }]
     });
     expect(text('research-manuscript-latex')).toContain('The measured result is 42 units.');
   });

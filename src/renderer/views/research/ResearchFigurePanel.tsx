@@ -36,6 +36,11 @@ const statusLabels: Record<ResearchExperimentExecution['status'], string> = {
   interrupted: '已中断'
 };
 
+const runtimeLabels: Record<ResearchFigureDraft['runtimeKind'], string> = {
+  'bundled-python': '内置 Python',
+  uv: 'uv'
+};
+
 export function ResearchFigurePanel({
   draft,
   log,
@@ -74,7 +79,6 @@ export function ResearchFigurePanel({
     <section className="research-tool-panel" data-testid="research-figure-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Figures</div>
           <h2>图稿渲染</h2>
           <p>选择 Python 源与数据后渲染图稿，完成后再发布为阶段产物。</p>
         </div>
@@ -150,7 +154,7 @@ export function ResearchFigurePanel({
         <aside className="research-reader" data-testid="research-figure-detail">
           <div className="research-section-label">运行记录</div>
           <h3>{selected.request.label}</h3>
-          <p>{selected.request.runtime.kind} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
+          <p>{runtimeLabels[selected.request.runtime.kind === 'uv' ? 'uv' : 'bundled-python']} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
           {log === null ? <div className="research-loading">选择一条运行并打开日志。</div> : (
             <pre className="research-reader-content" data-testid="research-figure-log">{log.content}</pre>
           )}

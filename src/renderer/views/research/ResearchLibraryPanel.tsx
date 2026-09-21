@@ -66,7 +66,6 @@ export function ResearchLibraryPanel({
     <section className="research-tool-panel" data-testid="research-library-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Literature Library</div>
           <h2>文献库</h2>
           <p>检索开放论文，导入 DOI 或参考文献文件，阅读已解析全文，并关联到当前项目。</p>
         </div>

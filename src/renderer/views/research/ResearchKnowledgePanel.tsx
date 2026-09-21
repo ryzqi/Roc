@@ -32,7 +32,6 @@ export function ResearchKnowledgePanel({
     <section className="research-tool-panel" data-testid="research-knowledge-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Knowledge Base</div>
           <h2>知识库</h2>
           <p>关键词和向量混合召回，使用 RRF 合并排序。命中片段可捕获为当前项目证据。</p>
         </div>

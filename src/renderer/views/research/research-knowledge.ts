@@ -159,7 +159,7 @@ export function createResearchKnowledgeProjection(adapter: ResearchKnowledgeAdap
       const embedding = projection.peek().embedding;
       const dimensions = Number(embedding.dimensions);
       if (!Number.isInteger(dimensions) || dimensions <= 0 || embedding.apiKey.trim().length === 0) {
-        projection.fail('嵌入维度必须为正整数，API Key 不能为空。');
+        projection.fail('嵌入维度必须为正整数，接口密钥不能为空。');
         return;
       }
       await projection.runExclusive(async (token) => {

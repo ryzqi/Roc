@@ -2,6 +2,21 @@ import { Send } from 'lucide-react';
 
 import type { ResearchArtifact, ResearchExportExecution, ResearchFigurePublication } from '../../../shared/types';
 
+const exportStatusLabels: Record<ResearchExportExecution['status'], string> = {
+  preparing: '准备中',
+  ready: '已就绪',
+  failed: '失败',
+  cancelled: '已取消',
+  interrupted: '已中断'
+};
+
+const exportApprovalLabels: Record<ResearchExportExecution['approval'], string> = {
+  unpublished: '未发布',
+  draft: '草稿',
+  approved: '已批准',
+  superseded: '已替换'
+};
+
 export function ResearchProductionPanel({
   destinationPath,
   exports,
@@ -39,7 +54,6 @@ export function ResearchProductionPanel({
     <section className="research-tool-panel" data-testid="research-production-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Figures & Export</div>
           <h2>图稿与导出</h2>
           <p>选择已发布图稿和批准正文，准备最终 ZIP，审核后再保存到新文件。</p>
         </div>
@@ -69,7 +83,7 @@ export function ResearchProductionPanel({
       <div className="research-literature-list" data-testid="research-export-list">
         {exports.length === 0 ? <div className="research-loading">还没有导出作业。</div> : exports.map((record) => (
           <article className="research-literature-row" key={record.id}>
-            <div className="research-literature-source">{record.status} · {record.approval}</div>
+            <div className="research-literature-source">{exportStatusLabels[record.status]} · {exportApprovalLabels[record.approval]}</div>
             <h3>{record.request.title}</h3>
             {record.error === null ? null : <p>{record.error}</p>}
             <div className="research-stage-actions">

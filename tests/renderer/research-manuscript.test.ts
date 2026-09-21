@@ -57,7 +57,7 @@ describe('research manuscript projection', () => {
     });
     await projection.save();
     expect(adapter.saveManuscript).toHaveBeenCalledWith({
-      artifactId: artifact.id, sections: [{ title: 'Results', claimIds: [claim.id] }]
+      artifactId: artifact.id, sections: [{ title: '结果', claimIds: [claim.id] }]
     });
     expect(projection.getSnapshot().manuscript?.latex).toContain('The measured result is 42 units.');
   });

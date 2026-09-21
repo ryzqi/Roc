@@ -547,7 +547,7 @@ export function ResearchAppShell({
                 项目语言
                 <select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
                   <option value="zh">中文</option>
-                  <option value="en">English</option>
+                  <option value="en">英文</option>
                 </select>
               </label>
               <label>

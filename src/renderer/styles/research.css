@@ -14,7 +14,7 @@
 
 .research-project-heading h2,
 .research-stage-panel h3 {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--ink);
   letter-spacing: 0;
   font-weight: 600;
@@ -53,13 +53,17 @@
 }
 
 .research-tab {
+  display: inline-flex;
   min-height: 32px;
+  align-items: center;
+  justify-content: center;
   padding: 0 13px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -89,7 +93,7 @@
 }
 
 .research-tool-heading h2 {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--ink);
   font-size: 22px;
   font-weight: 600;
@@ -118,6 +122,7 @@
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  line-height: 1;
 }
 
 .research-literature-list,
@@ -261,6 +266,7 @@
 .research-alert .action-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--accent);
@@ -381,8 +387,8 @@
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .research-section-label {
@@ -504,12 +510,14 @@
 .research-status {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 26px;
   padding: 0 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
   font-size: var(--font-meta-size);
+  line-height: 1;
 }
 
 .research-status--running {
@@ -805,13 +813,18 @@ pre.research-reader-content {
 
 .research-shell-banner {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
 
+.research-shell-banner > div:first-child {
+  display: grid;
+  gap: 8px;
+}
+
 .research-shell-banner h1 {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--ink);
   font-size: 28px;
   font-weight: 600;
@@ -881,6 +894,8 @@ pre.research-reader-content {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  text-align: center;
+  line-height: 1.2;
 }
 
 .research-shell-stage--current {
@@ -891,6 +906,7 @@ pre.research-reader-content {
 .research-shell-stage em {
   font-style: normal;
   font-size: var(--font-meta-size);
+  line-height: 1.2;
 }
 
 .research-shell-activity {

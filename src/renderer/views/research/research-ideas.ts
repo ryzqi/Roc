@@ -69,7 +69,7 @@ export function createResearchIdeaProjection(adapter: ResearchIdeaAdapter, host:
           canvas,
           draft: canvas === null ? emptyIdeaDraft(artifactId) : canvasToDraft(canvas)
         });
-      }, { busy: '当前命令仍在进行。', failed: 'Idea Canvas 加载失败。' });
+      }, { busy: '当前命令仍在进行。', failed: '构思画布加载失败。' });
     },
     async create() {
       const projectId = host.projectId();
@@ -77,11 +77,11 @@ export function createResearchIdeaProjection(adapter: ResearchIdeaAdapter, host:
       await projection.runExclusive(async (token) => {
         if (host.currentStage() !== 'ideation') await host.moveToIdeation();
         if (host.stageStatus('ideation') === 'ready') await host.startIdeation();
-        const artifact = await adapter.createArtifact({ projectId, stage: 'ideation', kind: 'idea_canvas', title: 'Idea Canvas', path: null });
+        const artifact = await adapter.createArtifact({ projectId, stage: 'ideation', kind: 'idea_canvas', title: '构思画布', path: null });
         await host.refresh();
         if (!projection.isCurrent(token)) return;
         projection.assign({ selectedArtifactId: artifact.id, canvas: null, draft: emptyIdeaDraft(artifact.id) });
-      }, { busy: '当前命令仍在进行。', failed: '创建 Idea Canvas 失败。' });
+      }, { busy: '当前命令仍在进行。', failed: '创建构思画布失败。' });
     },
     async save() {
       const draft = projection.peek().draft;
@@ -91,7 +91,7 @@ export function createResearchIdeaProjection(adapter: ResearchIdeaAdapter, host:
         await host.refresh();
         if (!projection.isCurrent(token)) return;
         projection.assign({ canvas: saved, draft: canvasToDraft(saved) });
-      }, { busy: '当前命令仍在进行。', failed: '保存 Idea Canvas 失败。' });
+      }, { busy: '当前命令仍在进行。', failed: '保存构思画布失败。' });
     },
     async promote(workspacePath) {
       const canvas = projection.peek().canvas;
@@ -108,7 +108,7 @@ export function createResearchIdeaProjection(adapter: ResearchIdeaAdapter, host:
         });
         if (!projection.isCurrent(token)) return;
         await host.selectProject(promoted.project.id);
-      }, { busy: '当前命令仍在进行。', failed: '晋升 Idea Canvas 失败。' });
+      }, { busy: '当前命令仍在进行。', failed: '晋升构思画布失败。' });
     },
     clearError() { projection.clearError(); }
   };
@@ -118,7 +118,7 @@ export function createResearchIdeaAdapter(client: RocClient): ResearchIdeaAdapte
   const research = client.api.research;
   return {
     async createArtifact(request) { return unwrap('创建画布', await research.createArtifact(request)); },
-    async get(request) { return unwrap('Idea Canvas', await research.getIdeaCanvas(request)); },
+    async get(request) { return unwrap('构思画布', await research.getIdeaCanvas(request)); },
     async save(request) { return unwrap('保存画布', await research.saveIdeaCanvas(request)); },
     async promote(request) { return unwrap('晋升画布', await research.promoteIdeaCanvas(request)); }
   };

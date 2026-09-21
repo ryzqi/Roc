@@ -38,6 +38,12 @@ const engineLabels: Record<ResearchExperimentExecution['request']['engine'], str
   julia: 'Julia',
   matplotlib: '图稿'
 };
+const runtimeLabels: Record<ResearchExperimentExecution['request']['runtime']['kind'], string> = {
+  'bundled-python': '随包 Python',
+  uv: '项目 uv',
+  renv: 'R 环境',
+  julia: 'Julia'
+};
 const draftEngineLabels: Record<ResearchExperimentEngine, string> = {
   python: 'Python',
   r: 'R / renv',
@@ -92,7 +98,6 @@ export function ResearchExperimentPanel({
     <section className="research-tool-panel" data-testid="research-experiment-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Experiments</div>
           <h2>实验运行</h2>
           <p>选择引擎与源文件后启动脚本，查看日志，完成后再发布为阶段产物。</p>
         </div>
@@ -210,7 +215,7 @@ export function ResearchExperimentPanel({
         <aside className="research-reader" data-testid="research-experiment-detail">
           <div className="research-section-label">运行记录</div>
           <h3>{selected.request.label}</h3>
-          <p>{selected.request.engine} · {selected.request.runtime.kind} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
+          <p>{engineLabels[selected.request.engine]} · {runtimeLabels[selected.request.runtime.kind]} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
           {log === null ? <div className="research-loading">选择一条运行并打开日志。</div> : (
             <pre className="research-reader-content" data-testid="research-experiment-log">{log.content}</pre>
           )}

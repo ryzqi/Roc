@@ -14,7 +14,7 @@ export const emptyManuscriptDraft: ResearchManuscriptDraft = {
   content: '',
   status: 'hypothesis',
   evidenceIds: [],
-  sectionTitle: 'Results',
+  sectionTitle: '结果',
   selectedClaimIds: []
 };
 
@@ -59,7 +59,6 @@ export function ResearchManuscriptPanel({
     <section className="research-tool-panel" data-testid="research-manuscript-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Manuscript</div>
           <h2>主张与正文</h2>
           <p>把证据绑定到段落主张，保存后生成可审核的 LaTeX 正文。</p>
         </div>

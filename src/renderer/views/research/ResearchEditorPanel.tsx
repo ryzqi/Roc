@@ -37,7 +37,6 @@ export function ResearchEditorPanel({
     <section className="research-tool-panel" data-testid="research-editor-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">LaTeX Editor</div>
           <h2>文稿编辑器</h2>
           <p>导入模板目录或 ZIP，编辑源文件并编译 PDF 预览。</p>
         </div>

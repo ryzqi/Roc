@@ -87,7 +87,7 @@ export function createResearchManuscriptProjection(
           claims,
           draft: {
             ...emptyManuscriptDraft,
-            sectionTitle: manuscript?.sections[0]?.title ?? 'Results',
+            sectionTitle: manuscript?.sections[0]?.title ?? emptyManuscriptDraft.sectionTitle,
             selectedClaimIds: manuscript?.sections[0]?.claimIds ?? []
           }
         });
@@ -99,7 +99,7 @@ export function createResearchManuscriptProjection(
       await projection.runExclusive(async (token) => {
         if (host.currentStage() !== 'writing') await host.moveToWriting();
         if (host.stageStatus('writing') === 'ready') await host.startWriting();
-        const artifact = await adapter.createArtifact({ projectId, stage: 'writing', kind: 'manuscript', title: 'Manuscript', path: null });
+        const artifact = await adapter.createArtifact({ projectId, stage: 'writing', kind: 'manuscript', title: '正文', path: null });
         await host.refresh();
         if (!projection.isCurrent(token)) return;
         projection.assign({

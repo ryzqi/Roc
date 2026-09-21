@@ -58,7 +58,6 @@ export function ResearchPolicyPanel({
     <section className="research-tool-panel" data-testid="research-policy-panel">
       <div className="research-tool-heading">
         <div>
-          <div className="research-section-label">Stage Models</div>
           <h2>阶段模型策略</h2>
           <p>按阶段选择档位和模型。默认跟随应用模型，也可覆盖为指定提供商。</p>
         </div>
