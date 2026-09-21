@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
-  type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+  type ResearchExperimentRuntime, type ResearchExperimentStart, type ResearchScriptExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
@@ -47,8 +47,7 @@ export class ResearchExperimentService {
     return this.verifyProject(run, signal);
   }
 
-  async start(input: ResearchExperimentStart): Promise<ResearchExperimentExecution> {
-    if (input.engine === 'matplotlib') throw new Error('research_experiment_engine_invalid');
+  async start(input: ResearchScriptExperimentStart): Promise<ResearchExperimentExecution> {
     return await this.enqueue(researchExperimentStartSchema.parse(input), (run, signal) => this.execute(run, signal));
   }
 
@@ -252,4 +251,3 @@ export class ResearchExperimentService {
 function errorCode(error: unknown): string {
   return error instanceof Error && /^research_[a-z0-9_]+$/u.test(error.message) ? error.message : 'research_experiment_failed';
 }
-

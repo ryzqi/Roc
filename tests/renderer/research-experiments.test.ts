@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createResearchExperimentProjection } from '../../src/renderer/views/research/research-experiments';
+import { createResearchExperimentProjection, type ResearchExperimentAdapter } from '../../src/renderer/views/research/research-experiments';
 import { emptyExperimentDraft } from '../../src/renderer/views/research/ResearchExperimentPanel';
 import type { ResearchExperimentExecution } from '../../src/shared/types';
 
@@ -26,7 +26,7 @@ describe('research experiment projection', () => {
     const adapter = {
       list: vi.fn(async () => [execution]),
       inspect: vi.fn(async () => execution.environment!),
-      start: vi.fn(async () => execution),
+      start: vi.fn<ResearchExperimentAdapter['start']>(async () => execution),
       cancel: vi.fn(),
       publish: vi.fn(),
       get: vi.fn(),
@@ -46,7 +46,7 @@ describe('research experiment projection', () => {
       projectId: 'research_1', label: 'Measure signal', engine: 'python', sourcePath: 'run.py', inputPaths: ['data.csv'],
       network: 'disabled'
     }));
-    expect(adapter.start.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
+    expect(adapter.start.mock.calls.at(0)?.at(0)?.expectedEnvironmentHash).toBeUndefined();
     expect(projection.getSnapshot().experiments[0]?.request.label).toBe('Measure signal');
   });
 });

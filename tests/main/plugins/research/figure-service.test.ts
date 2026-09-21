@@ -18,6 +18,7 @@ import { ResearchRepository } from '../../../../src/main/plugins/research/reposi
 import { type ResearchExperimentEnvironment, type ResearchExperimentFile, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import { researchFigureStartSchema } from '../../../../src/shared/schemas/research-figures';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
+import type { ResearchProcessRequest, ResearchProcessResult } from '../../../../src/main/plugins/research/process-runner';
 
 let db: Database.Database;
 let repository: ResearchRepository;
@@ -92,7 +93,7 @@ function support(artifactId: string) {
 describe('figure publication and review boundaries', () => {
   it('keeps matplotlib environment and renderer rules inside the figure runner', async () => {
     const inspect = vi.fn();
-    const runProcess = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    const runProcess = vi.fn<(input: ResearchProcessRequest) => Promise<ResearchProcessResult>>(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
     const liveExperiments = new ResearchExperimentService(repository, { inspect }, join(root, 'runs'), { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, runProcess);
     const liveFigures = new ResearchFigureService(repository, liveExperiments);
     inspect.mockResolvedValueOnce({ snapshot: { ...environment, packages: [] }, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
@@ -110,8 +111,10 @@ describe('figure publication and review boundaries', () => {
     const started = await liveFigures.start({ ...figureRequest, requestId: randomUUID() });
     await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, started.id).status));
     expect(repository.experiments.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
-    expect(runProcess.mock.calls[0][0].args).toEqual(expect.arrayContaining(['render', expect.stringContaining('.roc/figure.py')]));
-    expect(runProcess.mock.calls[0][0].environment).toMatchObject({ SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' });
+    const processRequest = runProcess.mock.calls.at(0)?.at(0);
+    expect(processRequest).toBeDefined();
+    expect(processRequest?.args).toEqual(expect.arrayContaining(['render', expect.stringContaining('.roc/figure.py')]));
+    expect(processRequest?.environment).toMatchObject({ SOURCE_DATE_EPOCH: '0', PYTHONHASHSEED: '0' });
     await Promise.all([liveFigures.shutdown(), liveExperiments.shutdown()]);
   });
 

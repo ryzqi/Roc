@@ -23,7 +23,7 @@ import { ResearchTemplateService } from '../../../../src/main/plugins/research/t
 import { ResearchWorkspaceFileService } from '../../../../src/main/plugins/research/workspace-files';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import type { ResearchRoleExecution } from '../../../../src/main/plugins/research/role-executor';
-import type { ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import type { ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
 import type { ResearchStageOutput } from '../../../../src/shared/types';
 import { approveExportManuscript } from './export-test-helpers';
@@ -88,7 +88,7 @@ function enter(stage: 'experiment' | 'figure' | 'export'): void {
   }
 }
 
-function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'> {
+function experimentRequest(input: Partial<ResearchScriptExperimentStart> = {}): Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'> {
   return { requestId: randomUUID(), label: 'Signal experiment', engine: 'python', runtime: { kind: 'bundled-python' }, sourcePath: 'run.py',
     inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.snapshot.hash, timeoutMs: 10000, network: 'disabled', ...input };
 }

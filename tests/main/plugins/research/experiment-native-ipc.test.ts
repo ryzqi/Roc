@@ -15,7 +15,7 @@ import { createResearchPlugin } from '../../../../src/main/plugins/research';
 import { juliaExperimentFlags } from '../../../../src/main/plugins/research/experiment-native-probes';
 import { researchProjectSchema } from '../../../../src/shared/schemas/research';
 import { researchExperimentEnvironmentSchema, researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentStartSchema,
-  type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+  type ResearchExperimentRuntime, type ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 
 const execute = promisify(execFile);
 const tools = process.env.ROC_RESEARCH_TOOLCHAIN;
@@ -58,7 +58,7 @@ async function call<T>(method: string, input: unknown, schema: z.ZodType<T>): Pr
   return schema.parse(result.data);
 }
 async function inspect(runtime: ResearchExperimentRuntime) { return await call('inspectExperimentEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema); }
-async function start(runtime: ResearchExperimentRuntime, engine: ResearchExperimentStart['engine'], sourcePath: string, inputPaths = ['data.csv']) {
+async function start(runtime: ResearchExperimentRuntime, engine: ResearchScriptExperimentStart['engine'], sourcePath: string, inputPaths = ['data.csv']) {
   const environment = await inspect(runtime);
   return await call('startExperiment', { projectId, requestId: randomUUID(), label: sourcePath, sourcePath, engine, runtime, inputPaths,
     arguments: ['2'], parameters: { scale: '2' }, expectedEnvironmentHash: environment.hash, timeoutMs: 60000, network: 'disabled' }, researchExperimentExecutionSchema);

@@ -15,7 +15,9 @@ docs/*
 !docs/research-figures.md
 !docs/research-exports.md
 !docs/research-ideas.md
-!docs/superpowers/
+!docs/rtk-integration.md
+!docs/adr/
+!docs/adr/0001-research-workbench-architecture.md
 !docs/release/
 !docs/release/release-candidate-checklist.md
 .claude/

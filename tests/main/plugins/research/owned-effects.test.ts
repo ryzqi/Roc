@@ -17,7 +17,7 @@ import { createResearchRoleTools } from '../../../../src/main/plugins/research/r
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchWorkspaceFileService } from '../../../../src/main/plugins/research/workspace-files';
 import type { ResearchProcessRequest, ResearchProcessResult } from '../../../../src/main/plugins/research/process-runner';
-import type { ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import type { ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import { getResearchStageRoleProfile } from '../../../../src/main/plugins/research/role-profiles';
 
 let db: Database.Database;
@@ -67,7 +67,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await Promise.all([exports.shutdown(), figures.shutdown(), experiments.shutdown(), templates.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 
-function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'> {
+function experimentRequest(input: Partial<ResearchScriptExperimentStart> = {}): Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'> {
   return { requestId: randomUUID(), label: 'Signal experiment', engine: 'python', runtime: { kind: 'bundled-python' }, sourcePath: 'run.py',
     inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.snapshot.hash, timeoutMs: 10000, network: 'disabled', ...input };
 }

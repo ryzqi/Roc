@@ -1,4 +1,4 @@
-import type { ResearchExperimentExecution, ResearchExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
+import type { ResearchExperimentExecution, ResearchScriptExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
 import type { ResearchExportExecution, ResearchExportPrepare } from '../../../shared/schemas/research-exports';
 import type { ResearchFigurePublication, ResearchFigureStart } from '../../../shared/schemas/research-figures';
 import type { ResearchTemplate, ResearchTemplateFileContent } from '../../../shared/types';
@@ -60,7 +60,7 @@ export class ResearchProductionEffectService {
     }
   }
 
-  async startExperiment(ownerRunId: string, projectId: string, request: Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
+  async startExperiment(ownerRunId: string, projectId: string, request: Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
     this.requireOwner(ownerRunId, projectId);
     const started = await this.experiments.start({ ...request, projectId, ownerRunId });
     try { this.requireOwner(ownerRunId, projectId); return started; }

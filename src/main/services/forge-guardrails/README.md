@@ -2,8 +2,6 @@
 
 把 forge 的护栏思想以 LangChain v1 AgentMiddleware 形式接入 Roc 的 deepagents 链路。
 
-详细设计见 `docs/superpowers/specs/2026-05-28-forge-guardrails-integration-design.md`。
-
 ## 模块布局
 
 - `errors.ts` — RocToolResolutionError

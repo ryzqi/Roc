@@ -461,7 +461,7 @@ describe('research workbench dashboard', () => {
       projectId: 'research_1', label: 'Measure signal', engine: 'python', sourcePath: 'run.py', inputPaths: ['data.csv'],
       network: 'disabled'
     }));
-    expect(api.startExperiment.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
+    expect(api.startExperiment.mock.calls.at(0)?.at(0)?.expectedEnvironmentHash).toBeUndefined();
     expect(text('research-experiment-list')).toContain('Measure signal');
   });
 
@@ -500,7 +500,7 @@ describe('research workbench dashboard', () => {
     expect(api.startFigure).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'research_1', label: 'Measured figure', sourcePath: 'plot.py', inputPaths: ['data.csv']
     }));
-    expect(api.startFigure.mock.calls[0][0].expectedEnvironmentHash).toBeUndefined();
+    expect(api.startFigure.mock.calls.at(0)?.at(0)?.expectedEnvironmentHash).toBeUndefined();
     expect(text('research-figure-list')).toContain('Measured figure');
   });
 

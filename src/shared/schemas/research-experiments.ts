@@ -51,7 +51,12 @@ function refineScriptExperimentStart(value: { engine: 'python' | 'r' | 'julia'; 
   }
 }
 function refineStoredExperimentRequest(value: { engine: 'python' | 'r' | 'julia' | 'matplotlib'; sourcePath: string; inputPaths: string[]; arguments: string[]; runtime: { kind: string }; figure?: unknown; network: string }, context: z.RefinementCtx): void {
-  refineScriptExperimentStart(value.engine === 'matplotlib' ? { ...value, engine: 'python' } : value, context);
+  refineScriptExperimentStart({
+    engine: value.engine === 'matplotlib' ? 'python' : value.engine,
+    sourcePath: value.sourcePath,
+    inputPaths: value.inputPaths,
+    runtime: value.runtime
+  }, context);
   if (value.engine === 'matplotlib') {
     if (!value.sourcePath.toLowerCase().endsWith('.py')) {
       context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
