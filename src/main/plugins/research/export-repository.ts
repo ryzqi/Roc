@@ -137,9 +137,15 @@ export class ResearchExportRepository {
     const exports = stage.artifactIds.map((id) => {
       const artifact = this.research.getArtifact(id);
       const record = this.forArtifact(artifact);
-      return { artifactId: artifact.id, status: artifact.status, path: artifact.path, exportId: record.id, sourceHash: record.sourceHash };
-    }).sort((left, right) => left.artifactId.localeCompare(right.artifactId));
-    return researchContentHash(JSON.stringify({ stage: workflow.currentStage, projectStatus: workflow.projectStatus, exports }));
+      return {
+        artifactId: artifact.id, status: artifact.status, path: artifact.path, exportId: record.id,
+        sourceHash: record.sourceHash, toolchainHash: record.toolchainHash, archive: record.archive, approval: record.approval
+      };
+    });
+    return researchContentHash(JSON.stringify({
+      stage: workflow.currentStage, projectStatus: workflow.projectStatus, stageStatus: stage.status,
+      gateRequired: stage.gateRequired, artifactIds: stage.artifactIds, exports
+    }));
   }
 
   private row(id: string): Row {

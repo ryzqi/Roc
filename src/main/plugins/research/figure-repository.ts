@@ -113,11 +113,14 @@ export class ResearchFigureRepository {
       const artifact = this.research.getArtifact(id);
       const record = this.forArtifact(artifact);
       const claims = this.research.evidence.listClaims({ projectId, artifactId: id }).map((claim) => ({
-        id: claim.id, status: claim.status, content: claim.content, evidenceIds: [...claim.evidenceIds].sort()
-      })).sort((left, right) => left.id.localeCompare(right.id));
+        id: claim.id, subjectType: claim.subjectType, content: claim.content, status: claim.status, evidenceIds: claim.evidenceIds, version: claim.version
+      }));
       return { artifactId: artifact.id, status: artifact.status, path: artifact.path, figureId: record.id, manifestHash: record.manifestHash, claims };
-    }).sort((left, right) => left.artifactId.localeCompare(right.artifactId));
-    return researchContentHash(JSON.stringify({ stage: workflow.currentStage, projectStatus: workflow.projectStatus, figures }));
+    });
+    return researchContentHash(JSON.stringify({
+      stage: workflow.currentStage, projectStatus: workflow.projectStatus, stageStatus: stage.status,
+      gateRequired: stage.gateRequired, artifactIds: stage.artifactIds, figures
+    }));
   }
 }
 
