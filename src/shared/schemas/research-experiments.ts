@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { researchFigureOptionsSchema } from './research-plotting';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((value) =>
@@ -34,11 +33,6 @@ const researchExperimentStartFields = {
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
   expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
 } as const;
-const researchStoredExperimentRequestFields = {
-  ...researchExperimentStartFields,
-  engine: z.enum(['python', 'r', 'julia', 'matplotlib']),
-  figure: researchFigureOptionsSchema.optional()
-} as const;
 function refineScriptExperimentStart(value: { engine: 'python' | 'r' | 'julia'; sourcePath: string; inputPaths: string[]; runtime: { kind: string } }, context: z.RefinementCtx): void {
   const extensions = { python: '.py', r: '.r', julia: '.jl' };
   if (!value.sourcePath.toLowerCase().endsWith(extensions[value.engine])) {
@@ -50,35 +44,12 @@ function refineScriptExperimentStart(value: { engine: 'python' | 'r' | 'julia'; 
     context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
   }
 }
-function refineStoredExperimentRequest(value: { engine: 'python' | 'r' | 'julia' | 'matplotlib'; sourcePath: string; inputPaths: string[]; arguments: string[]; runtime: { kind: string }; figure?: unknown; network: string }, context: z.RefinementCtx): void {
-  refineScriptExperimentStart({
-    engine: value.engine === 'matplotlib' ? 'python' : value.engine,
-    sourcePath: value.sourcePath,
-    inputPaths: value.inputPaths,
-    runtime: value.runtime
-  }, context);
-  if (value.engine === 'matplotlib') {
-    if (!value.sourcePath.toLowerCase().endsWith('.py')) {
-      context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
-    }
-    if (!['bundled-python', 'uv'].includes(value.runtime.kind)) {
-      context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
-    }
-  }
-  if (value.engine === 'matplotlib' ? value.figure === undefined : value.figure !== undefined) {
-    context.addIssue({ code: 'custom', message: 'research_figure_options_invalid', path: ['figure'] });
-  }
-  if (value.engine === 'matplotlib' && value.network !== 'disabled') context.addIssue({ code: 'custom', message: 'research_figure_offline_required', path: ['network'] });
-}
 export const researchOwnedExperimentStartSchema = z.object(researchExperimentStartFields).strict().superRefine(refineScriptExperimentStart);
 export const researchExperimentStartSchema = z.object({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional(), ...researchExperimentStartFields
 }).strict().superRefine(refineScriptExperimentStart);
-export const researchStoredExperimentRequestSchema = z.object({
-  projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional(), ...researchStoredExperimentRequestFields
-}).strict().superRefine(refineStoredExperimentRequest);
 export const researchExperimentExecutionSchema = z.object({
-  id: z.string().min(1), projectId: z.string().min(1), request: researchStoredExperimentRequestSchema, ownerRunId: z.string().min(1).nullable(),
+  id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema, ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   environment: researchExperimentEnvironmentSchema.nullable(), files: z.array(researchExperimentFileSchema),
   inputHash: digest.nullable(), exitCode: z.number().int().nullable(), error: z.string().nullable(), artifactId: z.string().nullable(),
@@ -104,8 +75,7 @@ export const researchWorkspaceFileSaveRequestSchema = researchWorkspaceFileReque
 
 export type ResearchExperimentRuntime = z.infer<typeof researchExperimentRuntimeSchema>;
 export type ResearchExperimentEnvironment = z.infer<typeof researchExperimentEnvironmentSchema>;
-export type ResearchExperimentStart = z.infer<typeof researchStoredExperimentRequestSchema>;
-export type ResearchScriptExperimentStart = z.infer<typeof researchExperimentStartSchema>;
+export type ResearchExperimentStart = z.infer<typeof researchExperimentStartSchema>;
 export type ResearchExperimentExecution = z.infer<typeof researchExperimentExecutionSchema>;
 export type ResearchExperimentFile = z.infer<typeof researchExperimentFileSchema>;
 export type ResearchExperimentFileContent = z.infer<typeof researchExperimentFileContentSchema>;

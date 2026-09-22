@@ -23,7 +23,7 @@ import { ResearchTemplateService } from '../../../../src/main/plugins/research/t
 import { ResearchWorkspaceFileService } from '../../../../src/main/plugins/research/workspace-files';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import type { ResearchRoleExecution } from '../../../../src/main/plugins/research/role-executor';
-import type { ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import type { ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
 import type { ResearchStageOutput } from '../../../../src/shared/types';
 import { approveExportManuscript } from './export-test-helpers';
@@ -63,7 +63,7 @@ beforeEach(async () => {
     await writeFile(join(directory, 'result.csv'), 'measurement\n42\n');
     return { exitCode: 0, stdout: 'Measured signal 42.\n', stderr: '' };
   });
-  figures = new ResearchFigureService(repository, experiments);
+  figures = new ResearchFigureService(repository, experiments, join(root, 'runs'), logger);
   templates = new ResearchTemplateService(repository, { compile: async () => { throw new Error('compile_unused'); }, extractTemplate: async () => { throw new Error('zip_unused'); } });
   exports = new ResearchExportService(repository, { capture: async () => { throw new Error('export_unused'); }, assertCurrent: () => { throw new Error('export_unused'); } },
     { status: async () => ({ available: false, versions: null, error: 'research_toolchain_unavailable' }), identity: async () => 'a'.repeat(64),
@@ -88,7 +88,7 @@ function enter(stage: 'experiment' | 'figure' | 'export'): void {
   }
 }
 
-function experimentRequest(input: Partial<ResearchScriptExperimentStart> = {}): Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'> {
+function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'> {
   return { requestId: randomUUID(), label: 'Signal experiment', engine: 'python', runtime: { kind: 'bundled-python' }, sourcePath: 'run.py',
     inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.snapshot.hash, timeoutMs: 10000, network: 'disabled', ...input };
 }
@@ -109,10 +109,10 @@ function captureEvidence(content = 'Measured signal 42.') {
 }
 
 async function completedFigureRun(ownerRunId: string) {
-  const request = { projectId, ownerRunId, requestId: randomUUID(), label: 'Measured response', engine: 'matplotlib' as const, runtime: { kind: 'bundled-python' as const },
+  const request = { projectId, ownerRunId, requestId: randomUUID(), label: 'Measured response', runtime: { kind: 'bundled-python' as const },
     sourcePath: 'plot.py', inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.snapshot.hash,
-    timeoutMs: 10000, network: 'disabled' as const, figure: options };
-  const initial = repository.experiments.create(request, workspace, workspace, join(root, 'runs'));
+    timeoutMs: 10000, figure: options };
+  const initial = repository.figureRuns.create(request, workspace, workspace, join(root, 'runs'));
   const entries: Array<{ area: 'input' | 'output'; path: string; content: string }> = [
     { area: 'input', path: 'plot.py', content: 'figure = build_figure()' }, { area: 'input', path: 'data.csv', content: 'value\n42\n' },
     { area: 'input', path: figureRendererPath, content: figureRenderer },
@@ -122,14 +122,14 @@ async function completedFigureRun(ownerRunId: string) {
   const validation: ResearchFigureValidation = { options, rendererHash: researchContentHash(figureRenderer), widthPixels: 600, heightPixels: 450, widthPoints: 288, heightPoints: 216, pageCount: 1,
     files: (['png', 'svg', 'pdf'] as const).map((format) => ({ path: `figure.${format}`, sha256: researchContentHash(`${format} unit fixture`), size: Buffer.byteLength(`${format} unit fixture`) })) };
   entries.push({ area: 'output', path: figureValidationPath, content: JSON.stringify(validation) });
-  const runRoot = repository.experiments.root(projectId, initial.id);
+  const runRoot = repository.figureRuns.root(projectId, initial.id);
   for (const entry of entries) {
     const destination = join(runRoot, entry.area, entry.path);
     await mkdir(join(destination, '..'), { recursive: true });
     await writeFile(destination, entry.content);
   }
-  repository.experiments.start(projectId, initial.id, environment.snapshot, entries.filter((entry) => entry.area === 'input').map(file), researchContentHash('fixture inputs'));
-  return repository.experiments.finish(projectId, initial.id, { status: 'completed', files: entries.map(file), exitCode: 0, error: null });
+  repository.figureRuns.start(projectId, initial.id, environment.snapshot, entries.filter((entry) => entry.area === 'input').map(file), researchContentHash('fixture inputs'));
+  return repository.figureRuns.finish(projectId, initial.id, { status: 'completed', files: entries.map(file), exitCode: 0, error: null });
 }
 
 describe('production role results', () => {
@@ -239,7 +239,7 @@ describe('production role results', () => {
     expect(completed).toMatchObject({ status: 'completed', modelVersion: 'figure-model-v1' });
     const artifact = repository.getArtifact(completed.outputArtifactIds[0]);
     const figure = repository.figures.forArtifact(artifact);
-    expect(artifact.path).toBe(join(repository.experiments.root(projectId, plotId), figureManifestPath));
+    expect(artifact.path).toBe(join(repository.figureRuns.root(projectId, plotId), figureManifestPath));
     expect(repository.listProvenance({ projectId, subjectId: artifact.id })).toEqual(expect.arrayContaining([
       expect.objectContaining({ sourceType: 'experiment', sourceId: plotId }),
       expect.objectContaining({ sourceType: 'model_run', sourceId: run.id, locator: 'provider:test-provider; model:test-model; version:figure-model-v1' })

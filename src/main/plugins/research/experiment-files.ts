@@ -13,7 +13,7 @@ export async function experimentStorage(path: string | null): Promise<string> {
   return await realpath(path);
 }
 
-export async function snapshotExperimentInputs(workspace: string, target: string, request: ResearchExperimentStart,
+export async function snapshotExperimentInputs(workspace: string, target: string, request: ResearchExperimentStart | { sourcePath: string; inputPaths: string[]; arguments: string[]; parameters: Record<string, string>; figure: unknown },
   environment: ResearchExperimentEnvironment, signal: AbortSignal, generatedInputs: Record<string, string> = {}): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
   const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...environment.lockFiles.map((file) => file.path)])].sort();
   if (Object.keys(generatedInputs).some((path) => paths.includes(path))) throw new Error('research_experiment_reserved_input');
@@ -46,9 +46,11 @@ export async function snapshotExperimentInputs(workspace: string, target: string
     await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
     files.push({ area: 'input', path, size: bytes.length, sha256: researchContentHash(bytes) });
   }
-  return { files, hash: researchContentHash(JSON.stringify({ engine: request.engine, source: request.sourcePath, files,
-    arguments: request.arguments, parameters: Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right)), environment: environment.hash, network: request.network,
-    ...(request.figure === undefined ? {} : { figure: request.figure }) })) };
+  const identity = 'engine' in request
+    ? { engine: request.engine, network: request.network }
+    : { kind: 'figure' as const, figure: request.figure };
+  return { files, hash: researchContentHash(JSON.stringify({ ...identity, source: request.sourcePath, files,
+    arguments: request.arguments, parameters: Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right)), environment: environment.hash })) };
 }
 
 export async function collectExperimentFiles(root: string, area: ResearchExperimentFile['area']): Promise<ResearchExperimentFile[]> {

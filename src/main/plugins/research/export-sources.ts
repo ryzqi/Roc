@@ -96,8 +96,9 @@ export class ResearchExportSourceService {
     const provenance = this.repository.listProvenance({ projectId: project.id }).filter((entry) => entry.artifactId !== null && artifactIds.has(entry.artifactId));
     const modelRuns = [...new Set(provenance.filter((entry) => entry.sourceType === 'model_run').map((entry) => entry.sourceId))]
       .map((id) => this.repository.runs.get(id, project.id));
-    const experimentIds = [...new Set([...figures.map((figure) => figure.runId), ...evidence.filter((source) => source.sourceType === 'experiment').map((source) => source.sourceId)])];
+    const experimentIds = [...new Set(evidence.filter((source) => source.sourceType === 'experiment').map((source) => source.sourceId))];
     const experiments = experimentIds.map((id) => this.repository.experiments.get(project.id, id));
+    for (const figure of figures) this.repository.figureRuns.get(project.id, figure.runId);
     if (experiments.some((run) => run.status !== 'completed')) throw new Error('research_export_experiment_incomplete');
     if (request.template.kind === 'imported') {
       const selection = request.template;

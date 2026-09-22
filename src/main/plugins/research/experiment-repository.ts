@@ -88,8 +88,7 @@ export class ResearchExperimentRepository {
   list(projectId: string, limit: number): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')
-      .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)))
-      .filter((run) => run.request.engine !== 'matplotlib');
+      .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
   }
 
   ownedActive(projectId: string, ownerRunId: string): ResearchExperimentExecution[] {

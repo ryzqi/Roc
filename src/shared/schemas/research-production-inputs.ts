@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { researchArtifactSchema } from './research';
 import { researchExperimentExecutionSchema, researchExperimentPathSchema } from './research-experiments';
-import { researchFigurePublicationSchema } from './research-figures';
+import { researchFigurePublicationSchema, researchFigureRunSchema } from './research-figures';
 import { researchExportExecutionSchema } from './research-exports';
 
 export const researchProductionInputRequestSchema = z.object({ projectId: z.string().min(1), artifactId: z.string().min(1) }).strict();
@@ -13,7 +13,7 @@ export const researchProductionInputSchema = z.object({
   artifact: researchArtifactSchema, files: z.array(researchProductionInputFileSchema),
   source: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('experiment'), execution: researchExperimentExecutionSchema }).strict(),
-    z.object({ kind: z.literal('figure'), figure: researchFigurePublicationSchema, execution: researchExperimentExecutionSchema }).strict(),
+    z.object({ kind: z.literal('figure'), figure: researchFigurePublicationSchema, execution: researchFigureRunSchema }).strict(),
     z.object({ kind: z.literal('export'), execution: researchExportExecutionSchema }).strict()
   ])
 }).strict();

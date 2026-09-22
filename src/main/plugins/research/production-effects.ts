@@ -1,4 +1,5 @@
-import type { ResearchExperimentExecution, ResearchScriptExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
+import type { ResearchExperimentExecution, ResearchExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
+import type { ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import type { ResearchExportExecution, ResearchExportPrepare } from '../../../shared/schemas/research-exports';
 import type { ResearchFigurePublication, ResearchFigureStart } from '../../../shared/schemas/research-figures';
 import type { ResearchTemplate, ResearchTemplateFileContent } from '../../../shared/types';
@@ -60,7 +61,7 @@ export class ResearchProductionEffectService {
     }
   }
 
-  async startExperiment(ownerRunId: string, projectId: string, request: Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
+  async startExperiment(ownerRunId: string, projectId: string, request: Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
     this.requireOwner(ownerRunId, projectId);
     const started = await this.experiments.start({ ...request, projectId, ownerRunId });
     try { this.requireOwner(ownerRunId, projectId); return started; }
@@ -70,7 +71,7 @@ export class ResearchProductionEffectService {
     }
   }
 
-  async startFigure(ownerRunId: string, projectId: string, request: Omit<ResearchFigureStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
+  async startFigure(ownerRunId: string, projectId: string, request: Omit<ResearchFigureStart, 'projectId' | 'ownerRunId'>): Promise<ResearchFigureRun> {
     this.requireOwner(ownerRunId, projectId);
     const started = await this.figures.start({ ...request, projectId, ownerRunId });
     try { this.requireOwner(ownerRunId, projectId); return started; }
@@ -93,7 +94,7 @@ export class ResearchProductionEffectService {
   }
 
   async publishFigure(ownerRunId: string, projectId: string, experimentId: string, replacesFigureId: string | null): Promise<ResearchFigurePublication> {
-    this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
+    this.requireOwnedFigure(ownerRunId, projectId, experimentId);
     const published = await this.figures.publish(projectId, experimentId, replacesFigureId);
     this.requireOwner(ownerRunId, projectId);
     return published;
@@ -127,14 +128,24 @@ export class ResearchProductionEffectService {
 
   async cancelOwned(projectId: string, ownerRunId: string): Promise<void> {
     const experiments = this.repository.experiments.ownedActive(projectId, ownerRunId);
+    const figures = this.repository.figureRuns.ownedActive(projectId, ownerRunId);
     const exports = this.repository.exports.ownedPreparing(projectId, ownerRunId);
     for (const run of experiments) this.experiments.abort(run.id);
+    for (const run of figures) this.figures.abort(run.id);
     for (const record of exports) this.exports.abort(record.id);
     this.templates.abortOwned(ownerRunId);
     await Promise.all([
       ...experiments.map((run) => this.experiments.cancel(projectId, run.id)),
+      ...figures.map((run) => this.figures.cancel(projectId, run.id)),
       ...exports.map((record) => this.exports.cancel(projectId, record.id))
     ]);
+  }
+
+  private requireOwnedFigure(ownerRunId: string, projectId: string, runId: string): ResearchFigureRun {
+    this.requireOwner(ownerRunId, projectId);
+    const execution = this.repository.figureRuns.get(projectId, runId);
+    if (execution.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    return execution;
   }
 
   private requireOwnedExperiment(ownerRunId: string, projectId: string, experimentId: string): ResearchExperimentExecution {

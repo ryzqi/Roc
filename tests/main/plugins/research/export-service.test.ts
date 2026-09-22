@@ -50,7 +50,7 @@ beforeEach(async () => {
   projectId = repository.createProject({ title: 'Export study', description: 'Traceable delivery.', workspacePath: workspace }).id;
   manuscriptArtifactId = await approveExportManuscript(repository, projectId);
   experiments = new ResearchExperimentService(repository, { inspect: async () => { throw new Error('unexpected_environment'); } }, join(root, 'runs'), logger);
-  figures = new ResearchFigureService(repository, experiments);
+  figures = new ResearchFigureService(repository, experiments, join(root, 'runs'), logger);
   templates = new ResearchTemplateService(repository, { compile, extractTemplate: async () => { throw new Error('unexpected_archive'); } });
   sources = new ResearchExportSourceService(repository, figures, experiments, templates);
   compile.mockReset().mockImplementation(async (input) => {

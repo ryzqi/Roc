@@ -54,7 +54,7 @@ export class ResearchProductionInputService {
     }
     if (artifact.kind === 'figure') {
       const figure = this.repository.figures.forArtifact(artifact);
-      const execution = this.repository.experiments.get(projectId, figure.runId);
+      const execution = this.repository.figureRuns.get(projectId, figure.runId);
       return { artifact, files: execution.files, source: { kind: 'figure', figure, execution } };
     }
     if (artifact.kind === 'export_package') {

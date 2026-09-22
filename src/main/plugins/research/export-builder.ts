@@ -49,7 +49,7 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   for (const figure of sources.figures) {
     for (const file of figure.validation.files) {
       signal.throwIfAborted();
-      await writer.copy(repository.experiments.root(record.projectId, figure.runId), { ...file, path: `output/${file.path}` },
+      await writer.copy(repository.figureRuns.root(record.projectId, figure.runId), { ...file, path: `output/${file.path}` },
         join('source', entryDirectory, `figures/${figure.id}.${file.path.split('.').at(-1)}`));
     }
   }

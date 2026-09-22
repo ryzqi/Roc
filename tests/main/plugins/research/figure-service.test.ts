@@ -15,8 +15,8 @@ import { figureManifestPath } from '../../../../src/main/plugins/research/figure
 import { figureRenderer, figureRendererPath, figureValidationPath } from '../../../../src/main/plugins/research/figure-runner';
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import { ResearchRepository } from '../../../../src/main/plugins/research/repository';
-import { type ResearchExperimentEnvironment, type ResearchExperimentFile, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
-import { researchFigureStartSchema } from '../../../../src/shared/schemas/research-figures';
+import { type ResearchExperimentEnvironment, type ResearchExperimentFile } from '../../../../src/shared/schemas/research-experiments';
+import { researchFigureRunSchema, researchFigureStartSchema, type ResearchFigureStart } from '../../../../src/shared/schemas/research-figures';
 import type { ResearchFigureValidation } from '../../../../src/shared/schemas/research-plotting';
 import type { ResearchProcessRequest, ResearchProcessResult } from '../../../../src/main/plugins/research/process-runner';
 
@@ -40,7 +40,7 @@ beforeEach(async () => {
   projectId = repository.createProject({ title: 'Plots', description: 'Verified figure publications.', workspacePath: workspace }).id;
   experiments = new ResearchExperimentService(repository, { inspect: async () => { throw new Error('unexpected_environment_probe'); } }, join(root, 'runs'),
     { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
-  figures = new ResearchFigureService(repository, experiments);
+  figures = new ResearchFigureService(repository, experiments, join(root, 'runs'), { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
   gate = createResearchHumanGate({
     repository,
     production: createResearchProductionJob({
@@ -53,15 +53,15 @@ beforeEach(async () => {
 });
 afterEach(async () => { await Promise.all([figures.shutdown(), experiments.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 
-function request(): ResearchExperimentStart {
-  return { projectId, requestId: randomUUID(), label: 'Measured response', engine: 'matplotlib', runtime: { kind: 'bundled-python' }, sourcePath: 'plot.py',
-    inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 10000, network: 'disabled', figure: options };
+function request(): ResearchFigureStart {
+  return { projectId, requestId: randomUUID(), label: 'Measured response', runtime: { kind: 'bundled-python' }, sourcePath: 'plot.py',
+    inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 10000, figure: options };
 }
 function enterFigure(): void { repository.transitionWorkflow({ projectId, expectedStage: 'discovery', action: 'move', targetStage: 'figure' }); }
 function deferred() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
 
 async function completedRun() {
-  const initial = repository.experiments.create(request(), workspace, workspace, join(root, 'runs'));
+  const initial = repository.figureRuns.create(request(), workspace, workspace, join(root, 'runs'));
   const entries: Array<{ area: ResearchExperimentFile['area']; path: string; content: string }> = [
     { area: 'input', path: 'plot.py', content: 'figure = build_figure()' }, { area: 'input', path: 'data.csv', content: 'value\n42\n' },
     { area: 'input', path: figureRendererPath, content: figureRenderer },
@@ -71,14 +71,14 @@ async function completedRun() {
   const validation: ResearchFigureValidation = { options, rendererHash: researchContentHash(figureRenderer), widthPixels: 600, heightPixels: 450, widthPoints: 288, heightPoints: 216, pageCount: 1,
     files: (['png', 'svg', 'pdf'] as const).map((format) => ({ path: `figure.${format}`, sha256: researchContentHash(`${format} unit fixture`), size: Buffer.byteLength(`${format} unit fixture`) })) };
   entries.push({ area: 'output', path: figureValidationPath, content: JSON.stringify(validation) });
-  const runRoot = repository.experiments.root(projectId, initial.id);
+  const runRoot = repository.figureRuns.root(projectId, initial.id);
   for (const entry of entries) {
     const destination = join(runRoot, entry.area, entry.path);
     await mkdir(join(destination, '..'), { recursive: true });
     await writeFile(destination, entry.content);
   }
-  repository.experiments.start(projectId, initial.id, environment, entries.filter((entry) => entry.area === 'input').map(file), researchContentHash('fixture inputs'));
-  const run = repository.experiments.finish(projectId, initial.id, { status: 'completed', files: entries.map(file), exitCode: 0, error: null });
+  repository.figureRuns.start(projectId, initial.id, environment, entries.filter((entry) => entry.area === 'input').map(file), researchContentHash('fixture inputs'));
+  const run = repository.figureRuns.finish(projectId, initial.id, { status: 'completed', files: entries.map(file), exitCode: 0, error: null });
   return { run, validation, runRoot };
 }
 
@@ -95,22 +95,22 @@ describe('figure publication and review boundaries', () => {
     const inspect = vi.fn();
     const runProcess = vi.fn<(input: ResearchProcessRequest) => Promise<ResearchProcessResult>>(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
     const liveExperiments = new ResearchExperimentService(repository, { inspect }, join(root, 'runs'), { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, runProcess);
-    const liveFigures = new ResearchFigureService(repository, liveExperiments);
+    const liveFigures = new ResearchFigureService(repository, liveExperiments, join(root, 'runs'), { info: vi.fn(), warn: vi.fn(), error: vi.fn() });
     inspect.mockResolvedValueOnce({ snapshot: { ...environment, packages: [] }, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
     await writeFile(join(workspace, 'plot.py'), 'figure = make_figure()');
     const figureRequest = { projectId, requestId: randomUUID(), label: 'Measured response', runtime: { kind: 'bundled-python' as const }, sourcePath: 'plot.py',
       inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 10000, figure: options };
     const missing = await liveFigures.start(figureRequest);
-    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, missing.id).status));
-    expect(repository.experiments.get(projectId, missing.id)).toMatchObject({ status: 'failed', error: 'research_figure_matplotlib_required' });
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.figureRuns.get(projectId, missing.id).status));
+    expect(repository.figureRuns.get(projectId, missing.id)).toMatchObject({ status: 'failed', error: 'research_figure_matplotlib_required' });
     inspect.mockResolvedValue({ snapshot: environment, readablePaths: ['/toolchain'], environment: { PATH: '/toolchain' }, python: '/toolchain/python' });
     const { expectedEnvironmentHash: _hash, ...withoutHash } = figureRequest;
     const omitted = await liveFigures.start({ ...withoutHash, requestId: randomUUID() });
-    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, omitted.id).status));
-    expect(repository.experiments.get(projectId, omitted.id).error).toBe('research_figure_validation_failed');
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.figureRuns.get(projectId, omitted.id).status));
+    expect(repository.figureRuns.get(projectId, omitted.id).error).toBe('research_figure_validation_failed');
     const started = await liveFigures.start({ ...figureRequest, requestId: randomUUID() });
-    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.experiments.get(projectId, started.id).status));
-    expect(repository.experiments.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
+    await vi.waitFor(() => expect(['preparing', 'running']).not.toContain(repository.figureRuns.get(projectId, started.id).status));
+    expect(repository.figureRuns.get(projectId, started.id)).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
     const processRequest = runProcess.mock.calls.at(0)?.at(0);
     if (processRequest === undefined) {
       throw new Error('figure_process_request_missing');
@@ -172,7 +172,7 @@ describe('figure publication and review boundaries', () => {
     const { run, runRoot } = await completedRun(); enterFigure();
     const original = await readFile(join(runRoot, 'output/figure.png'));
     await writeFile(join(runRoot, 'output/figure.png'), 'changed');
-    await expect(figures.publish(projectId, run.id, null)).rejects.toThrow('research_experiment_snapshot_changed');
+    await expect(figures.publish(projectId, run.id, null)).rejects.toThrow('research_figure_snapshot_changed');
     await writeFile(join(runRoot, 'output/figure.png'), original);
     const figure = await figures.publish(projectId, run.id, null);
     const manifestPath = join(runRoot, figureManifestPath);
@@ -220,19 +220,19 @@ describe('figure publication and review boundaries', () => {
     const figure = await figures.publish(projectId, run.id, null);
     const other = repository.createProject({ title: 'Other', description: '', workspacePath: join(root, 'other-figure') });
     expect(() => repository.figures.get(other.id, figure.id)).toThrow('research_figure_project_mismatch');
-    await expect(figures.publish(other.id, run.id, null)).rejects.toThrow('research_experiment_project_mismatch');
+    await expect(figures.publish(other.id, run.id, null)).rejects.toThrow('research_figure_project_mismatch');
     repository.figures.record({ id: 'legacy', projectId, title: 'Legacy', codePath: 'plot.py', dataPaths: [], outputPaths: [], status: 'draft', runId: null });
     expect(() => repository.figures.record({ id: 'legacy', projectId: other.id, title: 'Changed', codePath: 'x', dataPaths: [], outputPaths: [], status: 'draft', runId: null }))
       .toThrow('research_figure_project_mismatch');
-    const pending = repository.experiments.create(request(), workspace, workspace, join(root, 'runs'));
-    repository.experiments.finish(projectId, pending.id, { status: 'cancelled', files: [], exitCode: null, error: 'research_experiment_cancelled' });
-    await expect(figures.publish(projectId, pending.id, null)).rejects.toThrow('research_experiment_completed_required');
+    const pending = repository.figureRuns.create(request(), workspace, workspace, join(root, 'runs'));
+    repository.figureRuns.finish(projectId, pending.id, { status: 'cancelled', files: [], exitCode: null, error: 'research_figure_cancelled' });
+    await expect(figures.publish(projectId, pending.id, null)).rejects.toThrow('research_figure_completed_required');
   });
 
   it('blocks late publication after shutdown without adding workflow artifacts', async () => {
     const { run } = await completedRun(); enterFigure();
-    const snapshot = experiments.snapshot.bind(experiments);
-    vi.spyOn(experiments, 'snapshot').mockImplementationOnce(async (...args) => { const result = await snapshot(...args); figures.shutdown(); return result; });
+    const read = repository.figureRuns.get.bind(repository.figureRuns);
+    vi.spyOn(repository.figureRuns, 'get').mockImplementationOnce((...args) => { const result = read(...args); void figures.shutdown(); return result; });
     await expect(figures.publish(projectId, run.id, null)).rejects.toThrow('research_figure_service_closed');
     expect(repository.figures.list(projectId, 10)).toEqual([]);
   });
@@ -280,6 +280,41 @@ describe('figure publication and review boundaries', () => {
       applyResearchDatabaseSchema(old); applyResearchDatabaseSchema(old);
       expect(legacy.figures.list(project.id, 10)).toEqual([]);
       expect(old.prepare('SELECT title,status,output_paths_json FROM research_figures').get()).toEqual({ title: 'Old plot', status: 'approved', output_paths_json: '["old.png"]' });
+    } finally { old.close(); }
+  });
+
+  it('moves stored matplotlib executions into figure runs without experiment fields', () => {
+    const old = new Database(':memory:');
+    try {
+      old.pragma('foreign_keys = ON');
+      applyDatabaseMigrations(old, { dbName: 'plugin:@roc/plugin-research', migrations: researchMigrations.filter((migration) => migration.version <= 16) });
+      const legacy = new ResearchRepository(old);
+      const project = legacy.createProject({ title: 'Legacy figure', description: '', workspacePath: '/tmp/figure-service.test-2' });
+      const snapshot = {
+        id: 'experiment_old', projectId: project.id,
+        request: {
+          projectId: project.id, requestId: 'req_old', label: 'Old figure', engine: 'matplotlib', runtime: { kind: 'bundled-python' },
+          sourcePath: 'plot.py', inputPaths: [], arguments: [], parameters: {}, timeoutMs: 10000, network: 'disabled',
+          figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 1 }
+        },
+        ownerRunId: null, workspacePath: '/tmp/figure-service.test-2', workspaceRoot: '/tmp/figure-service.test-2', status: 'completed',
+        environment: null, files: [], inputHash: null, exitCode: 0, error: null, artifactId: null,
+        createdAt: 'old', startedAt: null, endedAt: 'old'
+      };
+      old.prepare("INSERT INTO research_experiment_runs VALUES ('experiment_old',?,'Old figure','[]','{}','{}','completed','[]','old','old')").run(project.id);
+      old.prepare("INSERT INTO research_experiment_executions VALUES ('experiment_old',?,'req_old','completed',?,?,'old')").run(project.id, JSON.stringify(snapshot), '/tmp/root/experiment_old');
+      old.prepare("INSERT INTO research_figures VALUES ('figure_old',?,'Old figure','input/plot.py','[]','[]','rendered','experiment_old','old','old')").run(project.id);
+      old.prepare("INSERT INTO research_artifacts VALUES ('artifact_old',?,'figure','figure','Old figure',?, 'draft','old','old')").run(project.id, '/tmp/root/experiment_old/figure-manifest.json');
+      old.prepare("INSERT INTO research_figure_publications VALUES ('figure_old',?,'experiment_old','artifact_old','{}','old')").run(project.id);
+      applyResearchDatabaseSchema(old);
+      expect(old.prepare('SELECT count(*) AS count FROM research_experiment_executions').get()).toEqual({ count: 0 });
+      expect(old.prepare('SELECT count(*) AS count FROM research_figure_publications').get()).toEqual({ count: 1 });
+      const row = old.prepare('SELECT snapshot_json FROM research_figure_runs').get() as { snapshot_json: string };
+      const migrated = researchFigureRunSchema.parse(JSON.parse(row.snapshot_json));
+      expect(migrated.request.figure.seed).toBe(1);
+      expect(migrated.request).not.toHaveProperty('engine');
+      expect(migrated.request).not.toHaveProperty('network');
+      expect(legacy.figureRuns.get(project.id, 'experiment_old').id).toBe('experiment_old');
     } finally { old.close(); }
   });
 });

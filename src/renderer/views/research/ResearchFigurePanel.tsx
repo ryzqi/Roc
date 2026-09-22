@@ -1,7 +1,7 @@
 import { Play, Send, Square } from 'lucide-react';
 
 import { Select, TextInput } from '../../components/ui';
-import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
+import type { ResearchExperimentFileContent, ResearchFigureRun } from '../../../shared/types';
 import { usePagedItems } from './research-list-page';
 
 export type ResearchFigureDraft = {
@@ -28,7 +28,7 @@ export const emptyFigureDraft: ResearchFigureDraft = {
   seed: '1'
 };
 
-const statusLabels: Record<ResearchExperimentExecution['status'], string> = {
+const statusLabels: Record<ResearchFigureRun['status'], string> = {
   preparing: '准备中',
   running: '运行中',
   completed: '已完成',
@@ -68,7 +68,7 @@ export function ResearchFigurePanel({
   onSelect: (runId: string) => void;
   onStart: () => void;
   projectId: string | null;
-  runs: ResearchExperimentExecution[];
+  runs: ResearchFigureRun[];
   selectedRunId: string | null;
   working: boolean;
   readOnly?: boolean;

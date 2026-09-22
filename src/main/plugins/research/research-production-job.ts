@@ -12,12 +12,13 @@ export type ResearchProductionJob = {
 export function createResearchProductionJob(input: {
   repository: ResearchRepository;
   experiments: Pick<ResearchExperimentService, 'recover' | 'shutdown'>;
-  figures: Pick<ResearchFigureService, 'verifyStage' | 'shutdown'>;
+  figures: Pick<ResearchFigureService, 'recover' | 'verifyStage' | 'shutdown'>;
   exports: Pick<ResearchExportService, 'recover' | 'verifyStage' | 'shutdown'>;
 }): ResearchProductionJob {
   return {
     recover() {
       input.experiments.recover();
+      input.figures.recover();
       input.exports.recover();
     },
     async verifyStage(projectId) {

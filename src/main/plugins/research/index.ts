@@ -175,7 +175,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
-      const researchFigures = new ResearchFigureService(researchRepository, researchExperiments);
+      const researchFigures = new ResearchFigureService(researchRepository, researchExperiments, options.experimentRoot ?? null, context.logger);
       figures = researchFigures;
       registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);
       researchRepository.runs.recoverInterrupted();
@@ -233,6 +233,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         const project = researchRepository.updateProject(researchProjectUpdateRequestSchema.parse(input));
         researchIndexer.projectChanged(project.id);
         researchExperiments.projectChanged(project.id);
+        researchFigures.projectChanged(project.id);
         researchExports.projectChanged(project.id);
         return project;
       });

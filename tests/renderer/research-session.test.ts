@@ -34,6 +34,8 @@ describe('research session', () => {
       listEmbeddingConfigs: vi.fn(),
       saveEmbeddingConfig: vi.fn(),
       listExperiments: vi.fn(),
+      listFigureRuns: vi.fn(),
+      readFigureFile: vi.fn(),
       inspectExperimentEnvironment: vi.fn(),
       startExperiment: vi.fn(),
       startFigure: vi.fn(),

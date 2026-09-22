@@ -15,9 +15,9 @@ import { ResearchRepository } from '../../../../src/main/plugins/research/reposi
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import { ResearchToolchain } from '../../../../src/main/plugins/research/toolchain';
 import { researchProjectSchema, researchTemplateSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
-import { researchExperimentEnvironmentSchema, researchExperimentExecutionSchema } from '../../../../src/shared/schemas/research-experiments';
+import { researchExperimentEnvironmentSchema } from '../../../../src/shared/schemas/research-experiments';
 import { researchExportDeliverySchema, researchExportExecutionSchema, type ResearchExportPrepare } from '../../../../src/shared/schemas/research-exports';
-import { researchFigurePublicationSchema } from '../../../../src/shared/schemas/research-figures';
+import { researchFigurePublicationSchema, researchFigureRunSchema } from '../../../../src/shared/schemas/research-figures';
 import { researchProductionInputContentSchema, researchProductionInputSchema } from '../../../../src/shared/schemas/research-production-inputs';
 import { approveExportManuscript, crossrefLibraryEntries } from './export-test-helpers';
 import { libraryEntry } from './library-fixtures';
@@ -92,8 +92,8 @@ Path(os.environ['ROC_OUTPUT_DIR'], 'measurements.json').write_text(json.dumps({'
   const environment = await call('inspectFigureEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
   let run = await call('startFigure', { projectId, requestId: randomUUID(), label: 'Measured improvement', runtime, sourcePath: 'plot.py',
     inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000,
-    figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } }, researchExperimentExecutionSchema);
-  await vi.waitFor(async () => { run = await call('getFigureRun', { projectId, runId: run.id }, researchExperimentExecutionSchema); expect(['preparing', 'running']).not.toContain(run.status); }, { timeout: 45000, interval: 100 });
+    figure: { widthInches: 4, heightInches: 3, dpi: 150, seed: 42 } }, researchFigureRunSchema);
+  await vi.waitFor(async () => { run = await call('getFigureRun', { projectId, runId: run.id }, researchFigureRunSchema); expect(['preparing', 'running']).not.toContain(run.status); }, { timeout: 45000, interval: 100 });
   expect(run.status).toBe('completed');
   const evidence = repository.evidence.capture({ projectId, chunkId: `experiment:${run.id}:output:measurements.json:chunk:0` });
   repository.transitionWorkflow({ projectId, expectedStage: 'discovery', action: 'move', targetStage: 'figure' });

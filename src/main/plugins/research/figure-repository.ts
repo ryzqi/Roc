@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Database } from 'better-sqlite3';
-import type { ResearchExperimentExecution } from '../../../shared/schemas/research-experiments';
-import { researchFigurePublicationSchema, type ResearchFigurePublication } from '../../../shared/schemas/research-figures';
+import { researchFigurePublicationSchema, researchFigureRunSchema, type ResearchFigurePublication, type ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema, type ResearchFigureValidation } from '../../../shared/schemas/research-plotting';
 import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
 import { figureRendererPath } from './figure-runner';
@@ -60,7 +59,7 @@ export class ResearchFigureRepository {
 
   publish(projectId: string, runId: string, replacesFigureId: string | null, validation: ResearchFigureValidation, manifestHash: string): ResearchFigurePublication {
     return this.db.transaction(() => {
-      const run = this.research.experiments.get(projectId, runId);
+      const run = this.research.figureRuns.get(projectId, runId);
       assertFigureRun(run, validation);
       if (run.ownerRunId !== null) this.research.runs.requireActive(run.ownerRunId, projectId);
       const existing = this.db.prepare('SELECT figure_id FROM research_figure_publications WHERE run_id = ?').get(runId) as { figure_id: string } | undefined;
@@ -75,7 +74,7 @@ export class ResearchFigureRepository {
       const figure = this.record({ id, projectId, title: run.request.label, codePath: `input/${run.request.sourcePath}`,
         dataPaths: run.request.inputPaths.map((path) => `input/${path}`), outputPaths: validation.files.map((file) => `output/${file.path}`), status: 'rendered', runId });
       const artifact = this.research.createArtifact({ projectId, stage: 'figure', kind: 'figure', title: figure.title,
-        path: join(this.research.experiments.root(projectId, runId), figureManifestPath) });
+        path: join(this.research.figureRuns.root(projectId, runId), figureManifestPath) });
       const record = researchFigurePublicationSchema.parse({ id, projectId, runId, artifactId: artifact.id, title: figure.title,
         sourcePath: run.request.sourcePath, inputPaths: run.request.inputPaths, replacesFigureId, validation, manifestHash, status: 'rendered', createdAt: this.now() });
       this.db.prepare(`INSERT INTO research_figure_publications (figure_id,project_id,run_id,artifact_id,snapshot_json,created_at)
@@ -97,18 +96,18 @@ export class ResearchFigureRepository {
     const row = this.db.prepare('SELECT figure_id FROM research_figure_publications WHERE artifact_id = ?').get(artifact.id) as { figure_id: string } | undefined;
     if (row === undefined) throw new Error('research_figure_render_required');
     const record = this.get(artifact.projectId, row.figure_id);
-    const run = this.research.experiments.get(record.projectId, record.runId);
+    const run = this.research.figureRuns.get(record.projectId, record.runId);
     assertFigureRun(run, record.validation);
-    if (artifact.kind !== 'figure' || artifact.stage !== 'figure' || artifact.path !== join(this.research.experiments.root(record.projectId, run.id), figureManifestPath)) {
+    if (artifact.kind !== 'figure' || artifact.stage !== 'figure' || artifact.path !== join(this.research.figureRuns.root(record.projectId, run.id), figureManifestPath)) {
       throw new Error('research_figure_artifact_invalid');
     }
     return record;
   }
 }
 
-export function assertFigureRun(run: ResearchExperimentExecution, input: ResearchFigureValidation): void {
+export function assertFigureRun(run: ResearchFigureRun, input: ResearchFigureValidation): void {
   const validation = researchFigureValidationSchema.parse(input);
-  if (run.status !== 'completed' || run.request.engine !== 'matplotlib' || run.request.figure === undefined || run.inputHash === null || run.environment === null) {
+  if (run.status !== 'completed' || run.inputHash === null || run.environment === null) {
     throw new Error('research_figure_render_required');
   }
   if (JSON.stringify(run.request.figure) !== JSON.stringify(validation.options)) throw new Error('research_figure_options_changed');
@@ -120,7 +119,7 @@ export function assertFigureRun(run: ResearchExperimentExecution, input: Researc
   }
 }
 
-export function figureManifest(run: ResearchExperimentExecution, validation: ResearchFigureValidation): string {
+export function figureManifest(run: ResearchFigureRun, validation: ResearchFigureValidation): string {
   const { artifactId: _artifactId, ...execution } = run;
   return JSON.stringify({ version: 1, execution, validation }, null, 2);
 }

@@ -1,11 +1,11 @@
-import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
+import type { ResearchExperimentFileContent, ResearchFigureRun } from '../../../shared/types';
 import { unwrap } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { emptyFigureDraft, type ResearchFigureDraft } from './ResearchFigurePanel';
 import { createProjectionController } from './research-projection';
 
 export type ResearchFigureAdapter = {
-  list(request: { projectId: string; limit: number }): Promise<ResearchExperimentExecution[]>;
+  list(request: { projectId: string; limit: number }): Promise<ResearchFigureRun[]>;
   start(request: {
     projectId: string;
     requestId: string;
@@ -17,15 +17,15 @@ export type ResearchFigureAdapter = {
     parameters: Record<string, string>;
     timeoutMs: number;
     figure: { widthInches: number; heightInches: number; dpi: number; seed: number };
-  }): Promise<ResearchExperimentExecution>;
+  }): Promise<ResearchFigureRun>;
   cancel(request: { projectId: string; runId: string }): Promise<unknown>;
   publish(request: { projectId: string; runId: string; replacesFigureId: null }): Promise<unknown>;
-  get(request: { projectId: string; runId: string }): Promise<ResearchExperimentExecution>;
-  readFile(request: { projectId: string; runId: string; area: ResearchExperimentExecution['files'][number]['area']; path: string }): Promise<ResearchExperimentFileContent>;
+  get(request: { projectId: string; runId: string }): Promise<ResearchFigureRun>;
+  readFile(request: { projectId: string; runId: string; area: ResearchFigureRun['files'][number]['area']; path: string }): Promise<ResearchExperimentFileContent>;
 };
 
 export type ResearchFigureSnapshot = {
-  runs: ResearchExperimentExecution[];
+  runs: ResearchFigureRun[];
   draft: ResearchFigureDraft;
   selectedRunId: string | null;
   log: ResearchExperimentFileContent | null;
@@ -87,8 +87,7 @@ export function createResearchFigureProjection(
       projection.assign({ runs: [], selectedRunId: null, log: null });
       return;
     }
-    const listed = await adapter.list({ projectId, limit: 100 });
-    const runs = listed.filter((run) => run.request.engine === 'matplotlib');
+    const runs = await adapter.list({ projectId, limit: 100 });
     if (!projection.isCurrent(token)) return;
     projection.assign({ runs });
   }
@@ -171,11 +170,11 @@ export function createResearchFigureProjection(
 export function createResearchFigureAdapter(client: RocClient): ResearchFigureAdapter {
   const research = client.api.research;
   return {
-    async list(request) { return unwrap('图稿运行', await research.listExperiments(request)); },
+    async list(request) { return unwrap('图稿运行', await research.listFigureRuns(request)); },
     async start(request) { return unwrap('启动图稿', await research.startFigure(request)); },
     async cancel(request) { return unwrap('取消图稿', await research.cancelFigure(request)); },
     async publish(request) { return unwrap('发布图稿', await research.publishFigure(request)); },
     async get(request) { return unwrap('图稿运行', await research.getFigureRun(request)); },
-    async readFile(request) { return unwrap('图稿日志', await research.readExperimentFile(request)); }
+    async readFile(request) { return unwrap('图稿日志', await research.readFigureFile(request)); }
   };
 }

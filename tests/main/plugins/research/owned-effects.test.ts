@@ -17,7 +17,7 @@ import { createResearchRoleTools } from '../../../../src/main/plugins/research/r
 import { ResearchTemplateService } from '../../../../src/main/plugins/research/template-service';
 import { ResearchWorkspaceFileService } from '../../../../src/main/plugins/research/workspace-files';
 import type { ResearchProcessRequest, ResearchProcessResult } from '../../../../src/main/plugins/research/process-runner';
-import type { ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import type { ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 import { getResearchStageRoleProfile } from '../../../../src/main/plugins/research/role-profiles';
 
 let db: Database.Database;
@@ -55,7 +55,7 @@ beforeEach(async () => {
     return { exitCode: 0, stdout: 'Measured signal 42.\n', stderr: '' };
   });
   experiments = new ResearchExperimentService(repository, { inspect }, join(root, 'runs'), logger, runProcess);
-  figures = new ResearchFigureService(repository, experiments);
+  figures = new ResearchFigureService(repository, experiments, join(root, 'runs'), logger);
   templates = new ResearchTemplateService(repository, { compile: async () => { throw new Error('compile_unused'); }, extractTemplate: async () => { throw new Error('zip_unused'); } });
   exports = new ResearchExportService(repository, { capture: async () => { throw new Error('export_unused'); }, assertCurrent: () => { throw new Error('export_unused'); } },
     { status: async () => ({ available: false, versions: null, error: 'research_toolchain_unavailable' }), identity: async () => 'a'.repeat(64),
@@ -67,7 +67,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await Promise.all([exports.shutdown(), figures.shutdown(), experiments.shutdown(), templates.shutdown()]); db.close(); await rm(root, { recursive: true, force: true }); });
 
-function experimentRequest(input: Partial<ResearchScriptExperimentStart> = {}): Omit<ResearchScriptExperimentStart, 'projectId' | 'ownerRunId'> {
+function experimentRequest(input: Partial<ResearchExperimentStart> = {}): Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'> {
   return { requestId: randomUUID(), label: 'Signal experiment', engine: 'python', runtime: { kind: 'bundled-python' }, sourcePath: 'run.py',
     inputPaths: [], arguments: [], parameters: {}, expectedEnvironmentHash: environment.snapshot.hash, timeoutMs: 10000, network: 'disabled', ...input };
 }

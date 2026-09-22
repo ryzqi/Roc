@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import figureRenderer from '../../../../resources/research-runtime/figure.py?raw';
-import type { ResearchExperimentExecution } from '../../../shared/schemas/research-experiments';
+import type { ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import { researchFigureOutputCheckSchema, researchFigureValidationSchema, type ResearchFigureOptions } from '../../../shared/schemas/research-plotting';
 import { inspectFigureOutput } from './figure-validation';
 import { experimentFileLimit } from './experiment-files';
@@ -50,12 +50,11 @@ export function assertFigureEnvironment(packages: Array<{ name: string }>): void
 }
 
 export function figureProcessCommand(
-  run: ResearchExperimentExecution,
+  run: ResearchFigureRun,
   prepared: PreparedExperimentEnvironment,
   input: string,
   output: string
 ): { command: string; args: string[]; environment: Record<string, string> } {
-  if (run.request.engine !== 'matplotlib' || run.request.figure === undefined) throw new Error('research_figure_options_invalid');
   const executable = prepared.snapshot.executable;
   return {
     command: executable,
@@ -65,10 +64,9 @@ export function figureProcessCommand(
 }
 
 export async function finishFigureOutput(
-  run: ResearchExperimentExecution,
+  run: ResearchFigureRun,
   output: string,
   signal: AbortSignal
 ): Promise<void> {
-  if (run.request.figure === undefined) throw new Error('research_figure_options_invalid');
   await validateFigureOutput(output, run.request.figure, signal);
 }

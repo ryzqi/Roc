@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
-  type ResearchExperimentRuntime, type ResearchExperimentStart, type ResearchScriptExperimentStart } from '../../../shared/schemas/research-experiments';
+  type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
@@ -47,14 +47,8 @@ export class ResearchExperimentService {
     return this.verifyProject(run, signal);
   }
 
-  async start(input: ResearchScriptExperimentStart): Promise<ResearchExperimentExecution> {
-    return await this.enqueue(researchExperimentStartSchema.parse(input), (run, signal) => this.execute(run, signal));
-  }
-
-  async enqueue(
-    request: ResearchExperimentStart,
-    worker: (run: ResearchExperimentExecution, signal: AbortSignal) => Promise<void>
-  ): Promise<ResearchExperimentExecution> {
+  async start(input: ResearchExperimentStart): Promise<ResearchExperimentExecution> {
+    const request = researchExperimentStartSchema.parse(input);
     return await this.session.run(async (signal) => {
       const project = this.repository.getProject(request.projectId);
       if (project.status === 'archived') throw new Error('research_project_archived');
@@ -64,7 +58,7 @@ export class ResearchExperimentService {
       if (project.workspacePath === null) throw new Error('research_project_workspace_required');
       const run = this.repository.experiments.create(request, project.workspacePath, workspace, storage);
       if (run.status === 'preparing' && !this.executions.has(run.id)) {
-        this.executions.start(run.id, { projectId: run.projectId }, (jobSignal) => worker(run, jobSignal));
+        this.executions.start(run.id, { projectId: run.projectId }, (jobSignal) => this.execute(run, jobSignal));
       }
       return run;
     });

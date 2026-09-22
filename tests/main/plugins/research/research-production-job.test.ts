@@ -20,17 +20,18 @@ afterEach(() => db.close());
 describe('research production job', () => {
   it('recovers experiments and exports through one interface', () => {
     const experiments = { recover: vi.fn(), shutdown: vi.fn(async () => undefined) };
-    const figures = { verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
+    const figures = { recover: vi.fn(), verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const exports = { recover: vi.fn(), verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const job = createResearchProductionJob({ repository, experiments, figures, exports });
     job.recover();
     expect(experiments.recover).toHaveBeenCalledTimes(1);
+    expect(figures.recover).toHaveBeenCalledTimes(1);
     expect(exports.recover).toHaveBeenCalledTimes(1);
   });
 
   it('routes verifyStage to the current production stage', async () => {
     const project = repository.createProject({ title: 'Job', description: 'Production verify.', workspacePath: '/tmp/research-production-job.test-1' });
-    const figures = { verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
+    const figures = { recover: vi.fn(), verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const exports = { recover: vi.fn(), verifyStage: vi.fn(async () => undefined), shutdown: vi.fn(async () => undefined) };
     const job = createResearchProductionJob({
       repository,

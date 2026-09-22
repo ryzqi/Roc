@@ -39,6 +39,7 @@ import { ResearchDocumentRepository } from './document-repository';
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchFigureRepository } from './figure-repository';
+import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
@@ -82,6 +83,7 @@ export class ResearchRepository {
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
   readonly figures: ResearchFigureRepository;
+  readonly figureRuns: ResearchFigureRunRepository;
   readonly exports: ResearchExportRepository;
   readonly ideas: ResearchIdeaRepository;
   readonly knowledge: ResearchKnowledgeRepository;
@@ -108,6 +110,7 @@ export class ResearchRepository {
     this.documents = new ResearchDocumentRepository(db, this, now);
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
+    this.figureRuns = new ResearchFigureRunRepository(db, this, now);
     this.figures = new ResearchFigureRepository(db, this, now);
     this.exports = new ResearchExportRepository(db, this, now);
     this.ideas = new ResearchIdeaRepository(db, this, now);

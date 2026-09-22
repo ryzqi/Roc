@@ -9,7 +9,7 @@ import { ResearchRepository } from '../../../../src/main/plugins/research/reposi
 import { ResearchExperimentService } from '../../../../src/main/plugins/research/experiment-service';
 import type { ResearchExperimentEnvironmentService, PreparedExperimentEnvironment } from '../../../../src/main/plugins/research/experiment-environment';
 import type { ResearchProcessRequest, ResearchProcessResult } from '../../../../src/main/plugins/research/process-runner';
-import { researchExperimentStartSchema, type ResearchScriptExperimentStart } from '../../../../src/shared/schemas/research-experiments';
+import { researchExperimentStartSchema, type ResearchExperimentStart } from '../../../../src/shared/schemas/research-experiments';
 
 let db: Database.Database;
 let repository: ResearchRepository;
@@ -25,7 +25,7 @@ const environment: PreparedExperimentEnvironment = {
     platform: 'darwin', architecture: 'arm64', toolchainHash: 'a'.repeat(64), metadataHash: 'a'.repeat(64), packages: [{ name: 'matplotlib', version: '3.11.1' }], lockFiles: [], hash: 'b'.repeat(64) },
   readablePaths: ['/python'], environment: { PATH: '/python/bin:/usr/bin' }, python: '/python/bin/python'
 };
-function request(input: Partial<ResearchScriptExperimentStart> = {}): ResearchScriptExperimentStart {
+function request(input: Partial<ResearchExperimentStart> = {}): ResearchExperimentStart {
   return { projectId, requestId: randomUUID(), label: 'Signal experiment', engine: 'python', runtime: { kind: 'bundled-python' }, sourcePath: 'run.py',
     inputPaths: ['data.csv'], arguments: [], parameters: { scale: '2' }, expectedEnvironmentHash: environment.snapshot.hash, timeoutMs: 10000, network: 'disabled', ...input };
 }

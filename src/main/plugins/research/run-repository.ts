@@ -360,7 +360,7 @@ export class ResearchRunRepository {
 
   private ownerRunIdFor(artifact: ResearchArtifact): string | null {
     if (artifact.kind === 'experiment_run') return this.research.experiments.forArtifact(artifact).ownerRunId;
-    if (artifact.kind === 'figure') return this.research.experiments.get(artifact.projectId, this.research.figures.forArtifact(artifact).runId).ownerRunId;
+    if (artifact.kind === 'figure') return this.research.figureRuns.get(artifact.projectId, this.research.figures.forArtifact(artifact).runId).ownerRunId;
     if (artifact.kind === 'export_package') return this.research.exports.forArtifact(artifact).ownerRunId;
     return null;
   }

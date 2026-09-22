@@ -36,8 +36,7 @@ export const emptyExperimentDraft: ResearchExperimentDraft = {
 const engineLabels: Record<ResearchExperimentExecution['request']['engine'], string> = {
   python: 'Python',
   r: 'R / renv',
-  julia: 'Julia',
-  matplotlib: '图稿'
+  julia: 'Julia'
 };
 const runtimeLabels: Record<ResearchExperimentExecution['request']['runtime']['kind'], string> = {
   'bundled-python': '随包 Python',

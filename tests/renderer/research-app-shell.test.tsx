@@ -424,6 +424,8 @@ function createResearchApi(overrides: { projects?: ResearchProject[] } = {}) {
     listEmbeddingConfigs: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listStagePolicies: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listExperiments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listFigureRuns: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    readFigureFile: vi.fn(),
     listFigures: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listTemplates: vi.fn().mockResolvedValue({ ok: true, data: [] }),

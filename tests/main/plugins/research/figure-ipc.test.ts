@@ -13,8 +13,8 @@ import { figureRenderer, figureRendererPath } from '../../../../src/main/plugins
 import { researchContentHash } from '../../../../src/main/plugins/research/research-files';
 import { researchProjectSchema, researchWorkflowSnapshotSchema } from '../../../../src/shared/schemas/research';
 import { researchClaimSchema, researchEvidenceSchema } from '../../../../src/shared/schemas/research-evidence';
-import { researchFigurePublicationSchema } from '../../../../src/shared/schemas/research-figures';
-import { researchExperimentEnvironmentSchema, researchExperimentExecutionSchema, researchExperimentFileContentSchema } from '../../../../src/shared/schemas/research-experiments';
+import { researchFigurePublicationSchema, researchFigureRunSchema } from '../../../../src/shared/schemas/research-figures';
+import { researchExperimentEnvironmentSchema, researchExperimentFileContentSchema } from '../../../../src/shared/schemas/research-experiments';
 import { researchFigureValidationSchema } from '../../../../src/shared/schemas/research-plotting';
 import { researchProductionInputContentSchema, researchProductionInputSchema } from '../../../../src/shared/schemas/research-production-inputs';
 import { verifySvgPreviews } from './figure-preview-helper';
@@ -61,15 +61,15 @@ async function render() {
   const runtime = { kind: 'bundled-python' };
   const environment = await call('inspectFigureEnvironment', { projectId, runtime }, researchExperimentEnvironmentSchema);
   const initial = await call('startFigure', { projectId, requestId: randomUUID(), label: 'Measured response', sourcePath: 'plot.py',
-    runtime, inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, figure: options }, researchExperimentExecutionSchema);
+    runtime, inputPaths: ['data.csv'], arguments: [], parameters: {}, expectedEnvironmentHash: environment.hash, timeoutMs: 30000, figure: options }, researchFigureRunSchema);
   let latest = initial;
   await vi.waitFor(async () => {
-    latest = await call('getFigureRun', { projectId, runId: initial.id }, researchExperimentExecutionSchema);
+    latest = await call('getFigureRun', { projectId, runId: initial.id }, researchFigureRunSchema);
     expect(['preparing', 'running']).not.toContain(latest.status);
   }, { timeout: 45000, interval: 50 });
   await writeFile(join(root, `${initial.id}-result.json`), JSON.stringify(latest, null, 2));
   if (latest.status === 'failed') {
-    const log = await call('readExperimentFile', { projectId, runId: latest.id, area: 'log', path: 'stderr.txt' }, researchExperimentFileContentSchema);
+    const log = await call('readFigureFile', { projectId, runId: latest.id, area: 'log', path: 'stderr.txt' }, researchExperimentFileContentSchema);
     await writeFile(join(root, `${initial.id}-stderr.txt`), log.content);
   }
   return latest;
@@ -107,7 +107,7 @@ describe.skipIf(tools === undefined)('actual research figure rendering', () => {
     await writeFile(join(workspace, 'plot.py'), "from matplotlib.figure import Figure\nfrom pathlib import Path\nfigure = Figure()\nfigure.savefig = lambda path, **kwargs: Path(path).write_text('forged bytes', encoding='utf-8')\nprint('before validation')\n");
     const run = await render();
     expect(run).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
-    const log = await call('readExperimentFile', { projectId, runId: run.id, area: 'log', path: 'stdout.txt' }, researchExperimentFileContentSchema);
+    const log = await call('readFigureFile', { projectId, runId: run.id, area: 'log', path: 'stdout.txt' }, researchExperimentFileContentSchema);
     expect(log.content).toContain('before validation');
     expect(run.files.some((file) => file.path === 'figure-validation.json')).toBe(false);
   }, 60000);
@@ -171,7 +171,7 @@ axes.set_title('Frequency of url(...) tokens')
     const figure = await call('publishFigure', { projectId, runId: run.id, replacesFigureId: null }, researchFigurePublicationSchema);
     const svg = figure.validation.files.find((file) => file.path === 'figure.svg')!;
     const figureResponse = await capabilities.invoke<unknown, Response>('research.figure.source', { projectId, figureId: figure.id, format: 'svg', sha256: svg.sha256 });
-    const experimentResponse = await capabilities.invoke<unknown, Response>('research.experiment.source', { projectId, runId: run.id, area: 'output', path: svg.path, sha256: svg.sha256 });
+    const experimentResponse = await capabilities.invoke<unknown, Response>('research.figure.runSource', { projectId, runId: run.id, area: 'output', path: svg.path, sha256: svg.sha256 });
     const content = await figureResponse.clone().text();
     expect(content).toContain('data:image/png;base64,');
     expect(content).toContain('Frequency of url(...) tokens');
@@ -182,7 +182,7 @@ axes.set_title('Frequency of url(...) tokens')
     await writeFile(join(workspace, 'plot.py'), "import matplotlib.pyplot as plt\nfigure, axes = plt.subplots()\nline, = axes.plot([1, 2], [3, 4])\nline.set_url('https://example.invalid/remote-resource')\n");
     const run = await render();
     expect(run).toMatchObject({ status: 'failed', error: 'research_figure_validation_failed' });
-    const diagnostics = await call('readExperimentFile', { projectId, runId: run.id, area: 'log', path: 'stderr.txt' }, researchExperimentFileContentSchema);
+    const diagnostics = await call('readFigureFile', { projectId, runId: run.id, area: 'log', path: 'stderr.txt' }, researchExperimentFileContentSchema);
     expect(diagnostics.content).toContain('research_figure_svg_external_resource');
   }, 60000);
 });

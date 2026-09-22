@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchAppShell } from '../../src/renderer/views/research/ResearchAppShell';
 import { createLoadedState, waitUntil } from './view-test-helpers';
-import type { ProviderConfig, ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStagePolicy, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
+import type { ProviderConfig, ResearchArtifact, ResearchClaim, ResearchDocument, ResearchDocumentParse, ResearchEvidence, ResearchExperimentExecution, ResearchFigureRun, ResearchExportExecution, ResearchFigurePublication, ResearchIdeaCanvas, ResearchIndexStatus, ResearchLibraryItem, ResearchLiterature, ResearchManuscript, ResearchProject, ResearchStagePolicy, ResearchStageRun, ResearchTemplate, ResearchWorkflowEvent, ResearchWorkflowSnapshot } from '../../src/shared/types';
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -468,12 +468,12 @@ describe('research workbench dashboard', () => {
   });
 
   it('starts a figure from the figure tab without a preflight inspect', async () => {
-    const execution: ResearchExperimentExecution = {
+    const execution: ResearchFigureRun = {
       id: 'fig_1', projectId: 'research_1',
       request: {
-        projectId: 'research_1', requestId: 'req_fig', label: 'Measured figure', engine: 'matplotlib',
+        projectId: 'research_1', requestId: 'req_fig', label: 'Measured figure',
         runtime: { kind: 'bundled-python' }, sourcePath: 'plot.py', inputPaths: ['data.csv'], arguments: [],
-        parameters: {}, timeoutMs: 60000, network: 'disabled', figure: { widthInches: 6, heightInches: 4, dpi: 150, seed: 1 }
+        parameters: {}, timeoutMs: 60000, figure: { widthInches: 6, heightInches: 4, dpi: 150, seed: 1 }
       },
       ownerRunId: null, workspacePath: '/tmp/roc', workspaceRoot: '/tmp/roc', status: 'completed',
       environment: {
@@ -489,7 +489,7 @@ describe('research workbench dashboard', () => {
       workflow: workflow({ stage: 'figure', status: 'ready', gateRequired: false, artifactIds: [] })
     });
     api.startFigure.mockResolvedValue({ ok: true, data: execution });
-    api.listExperiments.mockResolvedValue({ ok: true, data: [execution] });
+    api.listFigureRuns.mockResolvedValue({ ok: true, data: [execution] });
     await renderView(api);
     await click('research-stage-group-experiment');
     await waitUntil(() => document.querySelector('[data-testid="research-stage-tab-figures"]') !== null);
@@ -607,6 +607,8 @@ function createResearchApi(overrides: {
     listFigures: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listExports: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     listExperiments: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    listFigureRuns: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    readFigureFile: vi.fn(),
     inspectExperimentEnvironment: vi.fn(),
     startExperiment: vi.fn(),
     startFigure: vi.fn(),

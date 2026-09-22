@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { researchExperimentIdRequestSchema, researchExperimentListRequestSchema, researchExperimentPathSchema, researchExperimentRuntimeSchema } from './research-experiments';
+import { researchExperimentEnvironmentSchema, researchExperimentFileSchema, researchExperimentIdRequestSchema, researchExperimentListRequestSchema, researchExperimentPathSchema, researchExperimentRuntimeSchema } from './research-experiments';
 import { researchFigureOptionsSchema, researchFigureValidationSchema } from './research-plotting';
 
 
@@ -26,6 +26,13 @@ export const researchOwnedFigureStartSchema = z.object(researchFigureStartFields
 export const researchFigureStartSchema = z.object({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional(), ...researchFigureStartFields
 }).strict().superRefine(refineFigureStart);
+export const researchFigureRunSchema = z.object({
+  id: z.string().min(1), projectId: z.string().min(1), request: researchFigureStartSchema, ownerRunId: z.string().min(1).nullable(),
+  workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
+  environment: researchExperimentEnvironmentSchema.nullable(), files: z.array(researchExperimentFileSchema),
+  inputHash: digest.nullable(), exitCode: z.number().int().nullable(), error: z.string().nullable(), artifactId: z.string().nullable(),
+  createdAt: z.string(), startedAt: z.string().nullable(), endedAt: z.string().nullable()
+}).strict();
 export const researchFigurePublicationSchema = z.object({
   id: z.string().min(1), projectId: z.string().min(1), runId: z.string().min(1), artifactId: z.string().min(1),
   title: z.string().min(1), sourcePath: researchExperimentPathSchema, inputPaths: z.array(researchExperimentPathSchema),
@@ -41,4 +48,5 @@ export const researchFigureSourceRequestSchema = researchFigureIdRequestSchema.e
 }).strict();
 
 export type ResearchFigurePublication = z.infer<typeof researchFigurePublicationSchema>;
+export type ResearchFigureRun = z.infer<typeof researchFigureRunSchema>;
 export type ResearchFigureStart = z.infer<typeof researchFigureStartSchema>;

@@ -1531,6 +1531,47 @@ export const researchMigrations: RocDatabaseMigration[] = [
         ON research_projects(workspace_path)
         WHERE workspace_path IS NOT NULL AND trim(workspace_path) != '';
     `
+  },
+  {
+    version: 17,
+    name: 'research_figure_runs',
+    sql: `
+      CREATE TABLE research_figure_runs (
+        run_id TEXT PRIMARY KEY REFERENCES research_experiment_runs(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        request_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('preparing','running','completed','failed','cancelled','interrupted')),
+        snapshot_json TEXT NOT NULL,
+        root_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(project_id, request_id)
+      );
+      CREATE INDEX idx_research_figure_runs_project ON research_figure_runs(project_id, created_at);
+      CREATE UNIQUE INDEX idx_research_figure_run_artifact ON research_figure_runs(json_extract(snapshot_json, '$.artifactId'))
+        WHERE json_extract(snapshot_json, '$.artifactId') IS NOT NULL;
+      CREATE INDEX idx_research_figure_run_owner ON research_figure_runs(json_extract(snapshot_json, '$.ownerRunId'));
+      INSERT INTO research_figure_runs (run_id, project_id, request_id, status, snapshot_json, root_path, created_at)
+        SELECT run_id, project_id, request_id, status,
+          json_remove(snapshot_json, '$.request.engine', '$.request.network'),
+          root_path, created_at
+        FROM research_experiment_executions
+        WHERE json_extract(snapshot_json, '$.request.engine') = 'matplotlib';
+      CREATE TABLE research_figure_publications_v17 (
+        figure_id TEXT PRIMARY KEY REFERENCES research_figures(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL UNIQUE REFERENCES research_figure_runs(run_id) ON DELETE CASCADE,
+        artifact_id TEXT NOT NULL UNIQUE REFERENCES research_artifacts(id) ON DELETE CASCADE,
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO research_figure_publications_v17 (figure_id, project_id, run_id, artifact_id, snapshot_json, created_at)
+        SELECT figure_id, project_id, run_id, artifact_id, snapshot_json, created_at FROM research_figure_publications;
+      DROP TABLE research_figure_publications;
+      DELETE FROM research_experiment_executions
+        WHERE json_extract(snapshot_json, '$.request.engine') = 'matplotlib';
+      ALTER TABLE research_figure_publications_v17 RENAME TO research_figure_publications;
+      CREATE INDEX idx_research_figure_publications_project ON research_figure_publications(project_id, created_at);
+    `
   }
 ];
 

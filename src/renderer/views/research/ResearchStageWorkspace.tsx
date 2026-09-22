@@ -37,19 +37,16 @@ export type ResearchStageWorkspaceHandle = {
   clearSurfaceError: () => void;
 };
 
-export const ResearchStageWorkspace = forwardRef<ResearchStageWorkspaceHandle, {
-  groupId,
-  onTabChange,
-  session,
-  state,
-  tab
-}: {
+type ResearchStageWorkspaceProps = {
   groupId: ResearchStageGroupId;
   onTabChange: (tab: ResearchStageTab) => void;
   session: ResearchSession;
   state: LoadedState;
   tab: ResearchStageTab;
-}, function ResearchStageWorkspace({
+};
+
+export const ResearchStageWorkspace = forwardRef<ResearchStageWorkspaceHandle, ResearchStageWorkspaceProps>(
+function ResearchStageWorkspace({
   groupId,
   onTabChange,
   session,
@@ -441,5 +438,4 @@ export const ResearchStageWorkspace = forwardRef<ResearchStageWorkspaceHandle, {
       </aside>
     </section>
   );
-}
-);
+});
