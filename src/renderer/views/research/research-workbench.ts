@@ -403,14 +403,19 @@ function sameSnapshot(left: ResearchWorkbenchSnapshot, right: ResearchWorkbenchS
     && left.working === right.working
     && left.error === right.error
     && left.instruction === right.instruction
-    && left.project?.id === right.project?.id
-    && left.project?.workspacePath === right.project?.workspacePath
-    && left.projects === right.projects
-    && left.workflow === right.workflow
-    && left.events === right.events
-    && left.runs === right.runs
-    && left.artifacts === right.artifacts
-    && left.indexStatus === right.indexStatus;
+    && JSON.stringify(snapshotData(left)) === JSON.stringify(snapshotData(right));
+}
+
+function snapshotData(snapshot: ResearchWorkbenchSnapshot) {
+  return {
+    project: snapshot.project,
+    projects: snapshot.projects,
+    workflow: snapshot.workflow,
+    events: snapshot.events,
+    runs: snapshot.runs,
+    artifacts: snapshot.artifacts,
+    indexStatus: snapshot.indexStatus
+  };
 }
 
 

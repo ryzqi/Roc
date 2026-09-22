@@ -64,6 +64,17 @@ describe('research workbench', () => {
     expect(store.adapter.getWorkflow).toHaveBeenCalledWith({ id: 'research_2' });
   });
 
+  it('does not notify when a refresh returns the same project data', async () => {
+    const store = createStore();
+    const workbench = createResearchWorkbench(store.adapter);
+    await workbench.load('research_1');
+    const seen = vi.fn();
+    workbench.subscribe(seen);
+    await workbench.refresh();
+    expect(seen).toHaveBeenCalledTimes(2);
+    expect(workbench.getSnapshot().working).toBe(false);
+  });
+
   it('keeps instruction draft across refresh and resets it on project switch', async () => {
     const store = createStore({ extraProjects: [project({ id: 'research_2', title: '第二项目' })] });
     store.setProjectState('research_2', {
