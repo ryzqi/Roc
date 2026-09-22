@@ -403,7 +403,28 @@ function sameSnapshot(left: ResearchWorkbenchSnapshot, right: ResearchWorkbenchS
     && left.working === right.working
     && left.error === right.error
     && left.instruction === right.instruction
-    && JSON.stringify(snapshotData(left)) === JSON.stringify(snapshotData(right));
+    && sameSnapshotData(snapshotData(left), snapshotData(right));
+}
+
+export function sameSnapshotData(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) {
+      if ((index in left) !== (index in right)) return false;
+      if (index in left && !sameSnapshotData(left[index], right[index])) return false;
+    }
+    return true;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = new Set([...Object.keys(leftRecord), ...Object.keys(rightRecord)]);
+  for (const key of keys) {
+    if (Object.hasOwn(leftRecord, key) !== Object.hasOwn(rightRecord, key)) return false;
+    if (Object.hasOwn(leftRecord, key) && !sameSnapshotData(leftRecord[key], rightRecord[key])) return false;
+  }
+  return true;
 }
 
 function snapshotData(snapshot: ResearchWorkbenchSnapshot) {

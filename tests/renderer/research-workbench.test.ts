@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createResearchWorkbench } from '../../src/renderer/views/research/research-workbench';
+import { createResearchWorkbench, sameSnapshotData } from '../../src/renderer/views/research/research-workbench';
 import type {
   ResearchArtifact,
   ResearchIndexStatus,
@@ -73,6 +73,17 @@ describe('research workbench', () => {
     await workbench.refresh();
     expect(seen).toHaveBeenCalledTimes(2);
     expect(workbench.getSnapshot().working).toBe(false);
+  });
+
+  it('treats undefined, holes and non-finite numbers as different snapshot data', () => {
+    expect(sameSnapshotData({ id: 'research_1' }, { id: 'research_1' })).toBe(true);
+    expect(sameSnapshotData({ description: undefined }, {})).toBe(false);
+    expect(sameSnapshotData([undefined], [null])).toBe(false);
+    const hole: unknown[] = [];
+    hole.length = 1;
+    expect(sameSnapshotData(hole, [undefined])).toBe(false);
+    expect(sameSnapshotData(Number.NaN, null)).toBe(false);
+    expect(sameSnapshotData(Number.POSITIVE_INFINITY, null)).toBe(false);
   });
 
   it('keeps instruction draft across refresh and resets it on project switch', async () => {
