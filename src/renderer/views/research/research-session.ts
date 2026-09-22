@@ -9,6 +9,7 @@ import { createResearchManuscriptAdapter, createResearchManuscriptProjection, ty
 import { createResearchPolicyAdapter, createResearchPolicyProjection, type ResearchPolicyProjection } from './research-policies';
 import { createResearchProductionAdapter, createResearchProductionProjection, type ResearchProductionHost, type ResearchProductionProjection } from './research-production';
 import { createResearchTemplateAdapter, createResearchTemplateProjection, type ResearchTemplateProjection } from './research-templates';
+import type { ResearchStageTab } from './research-stage-groups';
 import { createResearchWorkbench, createResearchWorkbenchAdapter, type ResearchWorkbench } from './research-workbench';
 
 export type ResearchSession = {
@@ -24,6 +25,23 @@ export type ResearchSession = {
   production: ResearchProductionProjection;
   bindProject(projectId: string | null): void;
   chooseWorkspace(): Promise<string | null>;
+  loadTab(tab: ResearchStageTab): Promise<void>;
+  watchTab(tab: ResearchStageTab, listeners: ResearchTabListeners): () => void;
+  surfaceError(): string | null;
+  clearErrors(): void;
+};
+
+type ResearchTabListeners = {
+  workbench: (snapshot: ReturnType<ResearchWorkbench['getSnapshot']>) => void;
+  library: (snapshot: ReturnType<ResearchLibraryProjection['getSnapshot']>) => void;
+  knowledge: (snapshot: ReturnType<ResearchKnowledgeProjection['getSnapshot']>) => void;
+  experiments: (snapshot: ReturnType<ResearchExperimentProjection['getSnapshot']>) => void;
+  figures: (snapshot: ReturnType<ResearchFigureProjection['getSnapshot']>) => void;
+  policies: (snapshot: ReturnType<ResearchPolicyProjection['getSnapshot']>) => void;
+  templates: (snapshot: ReturnType<ResearchTemplateProjection['getSnapshot']>) => void;
+  manuscript: (snapshot: ReturnType<ResearchManuscriptProjection['getSnapshot']>) => void;
+  ideas: (snapshot: ReturnType<ResearchIdeaProjection['getSnapshot']>) => void;
+  production: (snapshot: ReturnType<ResearchProductionProjection['getSnapshot']>) => void;
 };
 
 function createStageHost(workbench: ResearchWorkbench) {
@@ -96,6 +114,54 @@ export function createResearchSession(client: RocClient): ResearchSession {
         return null;
       }
       return selected.data.path;
+    },
+    async loadTab(tab) {
+      if (tab === 'library') await library.load();
+      if (tab === 'experiments') await experiments.load();
+      if (tab === 'figures') await figures.load();
+      if (tab === 'production') await production.load();
+      if (tab === 'editor') await templates.load();
+      if (tab === 'policies') await policies.load();
+      if (tab === 'embedding') await knowledge.loadEmbeddingConfigs();
+    },
+    watchTab(tab, listeners) {
+      const unsubscribers = [workbench.subscribe(listeners.workbench)];
+      if (tab === 'library') unsubscribers.push(library.subscribe(listeners.library));
+      if (tab === 'knowledge' || tab === 'embedding' || tab === 'manuscript' || tab === 'ideas') unsubscribers.push(knowledge.subscribe(listeners.knowledge));
+      if (tab === 'experiments') unsubscribers.push(experiments.subscribe(listeners.experiments));
+      if (tab === 'figures') unsubscribers.push(figures.subscribe(listeners.figures));
+      if (tab === 'policies') unsubscribers.push(policies.subscribe(listeners.policies));
+      if (tab === 'editor') unsubscribers.push(templates.subscribe(listeners.templates));
+      if (tab === 'manuscript') unsubscribers.push(manuscript.subscribe(listeners.manuscript));
+      if (tab === 'ideas') unsubscribers.push(ideas.subscribe(listeners.ideas));
+      if (tab === 'production') unsubscribers.push(production.subscribe(listeners.production));
+      return () => {
+        for (const unsubscribe of unsubscribers) unsubscribe();
+      };
+    },
+    surfaceError() {
+      return workbench.getSnapshot().error
+        ?? library.getSnapshot().error
+        ?? knowledge.getSnapshot().error
+        ?? experiments.getSnapshot().error
+        ?? figures.getSnapshot().error
+        ?? policies.getSnapshot().error
+        ?? templates.getSnapshot().error
+        ?? manuscript.getSnapshot().error
+        ?? ideas.getSnapshot().error
+        ?? production.getSnapshot().error;
+    },
+    clearErrors() {
+      workbench.clearError();
+      library.clearError();
+      knowledge.clearError();
+      experiments.clearError();
+      figures.clearError();
+      policies.clearError();
+      templates.clearError();
+      manuscript.clearError();
+      ideas.clearError();
+      production.clearError();
     }
   };
 }

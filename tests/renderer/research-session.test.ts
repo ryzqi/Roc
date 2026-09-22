@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createResearchSession } from '../../src/renderer/views/research/research-session';
 
 describe('research session', () => {
-  it('binds the selected project across projections in one place', () => {
+  function createClient() {
     const research = {
       listProjects: vi.fn(),
       createProject: vi.fn(),
@@ -68,7 +68,11 @@ describe('research session', () => {
       publishExport: vi.fn(),
       writeExport: vi.fn()
     };
-    const session = createResearchSession({ api: { research, files: { selectFromDialog: vi.fn() }, workspace: { selectFromDialog: vi.fn() } } as never });
+    return { api: { research, files: { selectFromDialog: vi.fn() }, workspace: { selectFromDialog: vi.fn() } } } as never;
+  }
+
+  it('binds the selected project across projections in one place', () => {
+    const session = createResearchSession(createClient());
     const library = vi.spyOn(session.library, 'setProject');
     const knowledge = vi.spyOn(session.knowledge, 'setProject');
     const experiments = vi.spyOn(session.experiments, 'setProject');
@@ -84,5 +88,18 @@ describe('research session', () => {
     expect(policies).toHaveBeenCalledWith('research_1');
     expect(templates).toHaveBeenCalledWith('research_1');
     expect(production).toHaveBeenCalledWith('research_1');
+  });
+
+  it('loads only the selected tab and clears projection errors together', async () => {
+    const session = createResearchSession(createClient());
+    const figures = vi.spyOn(session.figures, 'load');
+    const experiments = vi.spyOn(session.experiments, 'load');
+    session.bindProject('research_1');
+    await session.loadTab('figures');
+    expect(figures).toHaveBeenCalledTimes(1);
+    expect(experiments).not.toHaveBeenCalled();
+    expect(session.surfaceError()).not.toBeNull();
+    session.clearErrors();
+    expect(session.surfaceError()).toBeNull();
   });
 });

@@ -83,58 +83,29 @@ function ResearchStageWorkspace({
   const recentRuns = snapshot.runs.slice(0, 3);
   const recentEvidence = knowledgeSnapshot.evidence.slice(0, 4);
   const currentRun = snapshot.workflow === null ? null : latestCurrentRun(snapshot.runs, snapshot.workflow);
-  const surfaceError = snapshot.error
-    ?? librarySnapshot.error
-    ?? knowledgeSnapshot.error
-    ?? experimentSnapshot.error
-    ?? figureSnapshot.error
-    ?? policySnapshot.error
-    ?? templateSnapshot.error
-    ?? manuscriptSnapshot.error
-    ?? ideaSnapshot.error
-    ?? productionSnapshot.error;
+  const surfaceError = session.surfaceError();
 
   function clearSurfaceError(): void {
-    session.workbench.clearError();
-    session.library.clearError();
-    session.knowledge.clearError();
-    session.experiments.clearError();
-    session.figures.clearError();
-    session.policies.clearError();
-    session.templates.clearError();
-    session.manuscript.clearError();
-    session.ideas.clearError();
-    session.production.clearError();
+    session.clearErrors();
   }
 
   useImperativeHandle(ref, () => ({ clearSurfaceError }), [session]);
 
-  useEffect(() => {
-    const unsubscribers = [session.workbench.subscribe(setSnapshot)];
-    if (tab === 'library') unsubscribers.push(session.library.subscribe(setLibrarySnapshot));
-    if (tab === 'knowledge' || tab === 'embedding' || tab === 'manuscript' || tab === 'ideas') {
-      unsubscribers.push(session.knowledge.subscribe(setKnowledgeSnapshot));
-    }
-    if (tab === 'experiments') unsubscribers.push(session.experiments.subscribe(setExperimentSnapshot));
-    if (tab === 'figures') unsubscribers.push(session.figures.subscribe(setFigureSnapshot));
-    if (tab === 'policies') unsubscribers.push(session.policies.subscribe(setPolicySnapshot));
-    if (tab === 'editor') unsubscribers.push(session.templates.subscribe(setTemplateSnapshot));
-    if (tab === 'manuscript') unsubscribers.push(session.manuscript.subscribe(setManuscriptSnapshot));
-    if (tab === 'ideas') unsubscribers.push(session.ideas.subscribe(setIdeaSnapshot));
-    if (tab === 'production') unsubscribers.push(session.production.subscribe(setProductionSnapshot));
-    return () => {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-    };
-  }, [session, tab]);
+  useEffect(() => session.watchTab(tab, {
+    workbench: setSnapshot,
+    library: setLibrarySnapshot,
+    knowledge: setKnowledgeSnapshot,
+    experiments: setExperimentSnapshot,
+    figures: setFigureSnapshot,
+    policies: setPolicySnapshot,
+    templates: setTemplateSnapshot,
+    manuscript: setManuscriptSnapshot,
+    ideas: setIdeaSnapshot,
+    production: setProductionSnapshot
+  }), [session, tab]);
 
   useEffect(() => {
-    if (tab === 'library') void session.library.load();
-    if (tab === 'experiments') void session.experiments.load();
-    if (tab === 'figures') void session.figures.load();
-    if (tab === 'production') void session.production.load();
-    if (tab === 'editor') void session.templates.load();
-    if (tab === 'policies') void session.policies.load();
-    if (tab === 'embedding') void session.knowledge.loadEmbeddingConfigs();
+    void session.loadTab(tab);
   }, [session, tab]);
 
   return (
