@@ -88,7 +88,7 @@
   padding: 0 5px;
   border-radius: var(--r-xs);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: var(--font-meta-size);
   font-weight: 600;
   line-height: 1;
@@ -101,26 +101,8 @@
   line-height: 1.35;
 }
 
-.mcp-empty-panel {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 18px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--bg-soft);
-}
-
-.mcp-empty-panel strong {
-  color: var(--ink);
-  font-size: var(--font-body-size);
-  font-weight: 600;
-}
-
-.mcp-empty-panel span {
-  color: var(--muted);
-  font-size: var(--font-ui-size);
-  line-height: 1.5;
+.mcp-empty-panel.empty-state {
+  margin: 0 auto;
 }
 
 .mcp-server-table {
@@ -303,8 +285,8 @@
   align-items: center;
   justify-content: center;
   min-width: 64px;
-  min-height: 32px;
-  padding: 0 9px;
+  min-height: var(--control-height);
+  padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-xs);
   background: transparent;

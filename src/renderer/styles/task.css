@@ -301,14 +301,16 @@
 
 .task-detail-followup textarea {
   width: 100%;
-  min-height: 120px;
-  padding: 12px;
+  min-height: var(--control-height-textarea);
+  padding: 9px var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--r-sm);
+  background: var(--surface-strong);
   color: var(--ink);
-  line-height: 1.5;
+  font-size: var(--font-ui-size);
+  line-height: 1.55;
   resize: vertical;
+  box-shadow: var(--shadow-input);
 }
 
 .task-detail-followup textarea:focus-visible {
@@ -337,7 +339,7 @@
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height);
   line-height: 1;
   text-align: left;
 }
@@ -397,8 +399,7 @@
   justify-content: center;
   width: max-content;
   min-width: 88px;
-  height: 34px;
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 16px;
   white-space: nowrap;
 }

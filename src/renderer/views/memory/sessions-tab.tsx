@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RocError, SessionMessageSearchRequest, SessionMessageSearchResult } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
+import { Select, TextInput } from '../../components/ui';
 import { highlightMatch } from './formatters';
 
 type WorkspaceScope = 'current' | 'all';
@@ -46,7 +47,7 @@ export function SessionsTab({ client, workspaceHash }: { client?: RocClient; wor
       <div className="memory-session-searchbar">
         <label className="memory-session-field">
           <span>关键词</span>
-          <input
+          <TextInput
             className="memory-session-input"
             data-testid="memory-session-query"
             onChange={(event) => setQuery(event.currentTarget.value)}
@@ -55,7 +56,7 @@ export function SessionsTab({ client, workspaceHash }: { client?: RocClient; wor
         </label>
         <label className="memory-session-field compact">
           <span>范围</span>
-          <select
+          <Select
             className="memory-session-input"
             data-testid="memory-session-scope"
             onChange={(event) => setWorkspaceScope(readWorkspaceScope(event.currentTarget.value))}
@@ -63,11 +64,11 @@ export function SessionsTab({ client, workspaceHash }: { client?: RocClient; wor
           >
             <option value="current">当前工作区</option>
             <option value="all">全部工作区</option>
-          </select>
+          </Select>
         </label>
         <label className="memory-session-field compact">
           <span>天数</span>
-          <input
+          <TextInput
             className="memory-session-input"
             data-testid="memory-session-since-days"
             min={1}

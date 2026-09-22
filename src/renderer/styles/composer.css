@@ -273,7 +273,7 @@
   place-items: center;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: var(--font-nano-size);
   font-weight: 600;
   border: 1.5px solid var(--surface);

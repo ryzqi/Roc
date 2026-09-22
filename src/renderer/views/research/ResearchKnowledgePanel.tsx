@@ -1,5 +1,7 @@
 import { Send } from 'lucide-react';
 
+import { TextInput } from '../../components/ui';
+
 import type {
   ResearchEvidence,
   ResearchKnowledgeSearchResult
@@ -36,7 +38,7 @@ export function ResearchKnowledgePanel({
           <p>关键词和向量混合召回，使用 RRF 合并排序。命中片段可捕获为当前项目证据。</p>
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
-          <input aria-label="搜索知识库" data-testid="research-knowledge-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
+          <TextInput aria-label="搜索知识库" data-testid="research-knowledge-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
           <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-knowledge-search">
             <Send aria-hidden="true" size={15} />
             搜索

@@ -1,5 +1,6 @@
 import { Send } from 'lucide-react';
 
+import { TextArea } from '../../components/ui';
 import { researchTemplatePreviewUrl } from '../../../shared/research-preview';
 import type { ResearchTemplate, ResearchTemplateFile, ResearchTemplateFileContent } from '../../../shared/types';
 
@@ -64,7 +65,7 @@ export function ResearchEditorPanel({
             {openFile === null ? <div className="research-loading">选择一个源文件。</div> : (
               <label className="research-run-instruction">
                 {openFile.path}
-                <textarea data-testid="research-template-editor" spellCheck={true} value={openFile.content} onChange={(event) => onChangeDraft(event.target.value)} rows={16} />
+                <TextArea data-testid="research-template-editor" spellCheck={true} value={openFile.content} onChange={(event) => onChangeDraft(event.target.value)} rows={16} />
               </label>
             )}
             <div className="research-stage-actions">

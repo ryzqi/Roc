@@ -1,7 +1,7 @@
 .selection-chip {
   display: inline-flex;
   min-width: 72px;
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -103,7 +103,7 @@
 .skill-drawer-action {
   display: inline-flex;
   min-width: 58px;
-  min-height: 34px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   gap: 6px;

@@ -1,5 +1,6 @@
 import { BookOpen, Link2, Send, Unlink } from 'lucide-react';
 import type { ResearchBibliographyFormat, ResearchDocument, ResearchDocumentParse, ResearchLibraryExport, ResearchLibraryItem, ResearchLiterature } from '../../../shared/types';
+import { Select, TextInput } from '../../components/ui';
 import { usePagedItems } from './research-list-page';
 
 export function ResearchLibraryPanel({
@@ -70,7 +71,7 @@ export function ResearchLibraryPanel({
           <p>检索开放论文，导入 DOI 或参考文献文件，阅读已解析全文，并关联到当前项目。</p>
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
-          <input aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
+          <TextInput aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
           <button className="action-button action-button--primary" disabled={working} type="submit">
             <Send aria-hidden="true" size={15} />
             检索
@@ -81,22 +82,22 @@ export function ResearchLibraryPanel({
       <div className="research-library-toolbar">
         <label>
           范围
-          <select data-testid="research-library-scope" value={scope} onChange={(event) => onScopeChange(event.target.value === 'all' ? 'all' : 'project')}>
+          <Select data-testid="research-library-scope" value={scope} onChange={(event) => onScopeChange(event.target.value === 'all' ? 'all' : 'project')}>
             <option value="project">当前项目</option>
             <option value="all">全局文献库</option>
-          </select>
+          </Select>
         </label>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onImportDoi(); }}>
-          <input aria-label="导入 DOI" data-testid="research-library-doi" value={doi} onChange={(event) => onChangeDoi(event.target.value)} placeholder="10.xxxx/xxxx" />
+          <TextInput aria-label="导入 DOI" data-testid="research-library-doi" value={doi} onChange={(event) => onChangeDoi(event.target.value)} placeholder="10.xxxx/xxxx" />
           <button className="action-button" disabled={writeBlocked || doi.trim().length === 0} type="submit">导入 DOI</button>
         </form>
         <label>
           参考文献格式
-          <select data-testid="research-library-format" value={bibliographyFormat} onChange={(event) => onChangeFormat(readFormat(event.target.value))}>
+          <Select data-testid="research-library-format" value={bibliographyFormat} onChange={(event) => onChangeFormat(readFormat(event.target.value))}>
             <option value="bibtex">BibTeX</option>
             <option value="biblatex">BibLaTeX</option>
             <option value="csl-json">CSL JSON</option>
-          </select>
+          </Select>
         </label>
         <button className="action-button" disabled={writeBlocked} type="button" data-testid="research-library-import-file" onClick={onImportFile}>导入文件</button>
         <button className="action-button" disabled={writeBlocked || selectedIds.length === 0} type="button" data-testid="research-library-export" onClick={onExport}>导出选中</button>

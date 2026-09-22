@@ -16,13 +16,14 @@
 
 .provider-search {
   flex: 1 1 auto;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: var(--control-height-input);
+  padding: 0 var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-sm);
   background: var(--surface-strong);
   color: var(--ink);
   font-size: var(--font-ui-size);
+  box-shadow: var(--shadow-input);
 }
 
 .provider-search:focus-visible {
@@ -37,8 +38,8 @@
 }
 
 .provider-toolbar-actions button {
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: var(--control-height);
+  padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   background: transparent;
@@ -306,7 +307,7 @@
 }
 
 .provider-type-option {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: calc(var(--radius-sm) - 2px);
@@ -343,8 +344,8 @@
 
 .provider-secret-input input {
   flex: 1 1 auto;
-  min-height: 38px;
-  padding: 0 44px 0 12px;
+  min-height: var(--control-height-input);
+  padding: 0 44px 0 var(--control-pad-x);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-strong);
@@ -391,7 +392,7 @@
 }
 
 .provider-secret-actions button {
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
@@ -422,7 +423,7 @@
 }
 
 .provider-detail-actions button {
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);

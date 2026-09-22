@@ -1,5 +1,6 @@
 import { Send } from 'lucide-react';
 
+import { TextInput } from '../../components/ui';
 import type { ResearchArtifact, ResearchExportExecution, ResearchFigurePublication } from '../../../shared/types';
 
 const exportStatusLabels: Record<ResearchExportExecution['status'], string> = {
@@ -72,7 +73,7 @@ export function ResearchProductionPanel({
           <p data-testid="research-export-manuscript">{manuscript === null ? '需要一份已批准正文才能准备导出。' : `正文：${manuscript.title}`}</p>
           <label>
             导出标题
-            <input data-testid="research-export-title" value={title} onChange={(event) => onChangeTitle(event.target.value)} />
+            <TextInput data-testid="research-export-title" value={title} onChange={(event) => onChangeTitle(event.target.value)} />
           </label>
           <button className="action-button action-button--primary" disabled={writeBlocked || manuscript === null || title.trim().length === 0} type="submit" data-testid="research-export-prepare">
             <Send aria-hidden="true" size={15} />
@@ -92,7 +93,7 @@ export function ResearchProductionPanel({
               ) : null}
               {record.approval === 'approved' ? (
                 <>
-                  <input data-testid={`research-export-destination-${record.id}`} value={destinationPath} onChange={(event) => onChangeDestination(event.target.value)} placeholder="/absolute/path/paper.zip" />
+                  <TextInput data-testid={`research-export-destination-${record.id}`} value={destinationPath} onChange={(event) => onChangeDestination(event.target.value)} placeholder="/absolute/path/paper.zip" />
                   <button className="action-button action-button--primary" type="button" data-testid={`research-export-write-${record.id}`} disabled={writeBlocked || destinationPath.trim().length === 0} onClick={() => onWriteExport(record.id)}>保存 ZIP</button>
                 </>
               ) : null}

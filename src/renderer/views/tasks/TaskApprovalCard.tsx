@@ -5,6 +5,7 @@ import {
   createTaskFormDraft,
   type TaskFormDraft
 } from './task-form-model';
+import { Select, TextArea, TextInput } from '../../components/ui';
 
 export function TaskApprovalCard({
   approval,
@@ -34,7 +35,7 @@ export function TaskApprovalCard({
           {action.name === 'cancel_background_task' ? (
             <label className="task-form-field">
               <span>原因</span>
-              <textarea
+              <TextArea
                 spellCheck={true}
                 data-testid="task-approval-edit-reason"
                 rows={3}
@@ -46,7 +47,7 @@ export function TaskApprovalCard({
             <>
               <label className="task-form-field">
                 <span>目标</span>
-                <textarea
+                <TextArea
                   spellCheck={true}
                   data-testid="task-approval-edit-goal"
                   rows={3}
@@ -56,7 +57,7 @@ export function TaskApprovalCard({
               </label>
               <label className="task-form-field">
                 <span>触发类型</span>
-                <select
+                <Select
                   data-testid="task-approval-edit-trigger-type"
                   value={draft.triggerType}
                   onChange={(event) =>
@@ -69,11 +70,11 @@ export function TaskApprovalCard({
                   <option value="manual">手动</option>
                   <option value="once">一次</option>
                   <option value="cron">定时</option>
-                </select>
+                </Select>
               </label>
               <label className="task-form-field">
                 <span>触发描述</span>
-                <input
+                <TextInput
                   data-testid="task-approval-edit-trigger-description"
                   type="text"
                   value={draft.triggerDescription}
@@ -83,7 +84,7 @@ export function TaskApprovalCard({
               {draft.triggerType === 'manual' ? null : (
                 <label className="task-form-field">
                   <span>下次运行时间</span>
-                  <input
+                  <TextInput
                     data-testid="task-approval-edit-next-run-at"
                     type="datetime-local"
                     value={draft.nextRunAt}
@@ -94,7 +95,7 @@ export function TaskApprovalCard({
               {draft.triggerType !== 'cron' ? null : (
                 <label className="task-form-field">
                   <span>Cron 表达式</span>
-                  <input
+                  <TextInput
                     data-testid="task-approval-edit-cron-expression"
                     type="text"
                     value={draft.cronExpression}
@@ -104,7 +105,7 @@ export function TaskApprovalCard({
               )}
               <label className="task-form-field">
                 <span>工作区路径</span>
-                <input
+                <TextInput
                   data-testid="task-approval-edit-workspace-path"
                   type="text"
                   value={draft.workspacePath}
@@ -113,7 +114,7 @@ export function TaskApprovalCard({
               </label>
               <label className="task-form-field">
                 <span>允许动作</span>
-                <textarea
+                <TextArea
                   spellCheck={true}
                   data-testid="task-approval-edit-allowed-actions"
                   rows={3}
@@ -123,7 +124,7 @@ export function TaskApprovalCard({
               </label>
               <label className="task-form-field">
                 <span>禁止动作</span>
-                <textarea
+                <TextArea
                   spellCheck={true}
                   data-testid="task-approval-edit-forbidden-actions"
                   rows={3}
@@ -134,7 +135,7 @@ export function TaskApprovalCard({
               {action.name !== 'update_background_task' ? null : (
                 <label className="task-form-field">
                   <span>修改原因</span>
-                  <textarea
+                  <TextArea
                   spellCheck={true}
                     data-testid="task-approval-edit-reason"
                     rows={3}

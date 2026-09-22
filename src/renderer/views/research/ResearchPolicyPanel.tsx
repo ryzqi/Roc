@@ -1,5 +1,6 @@
 import { Send } from 'lucide-react';
 
+import { Select, TextInput } from '../../components/ui';
 import type { ProviderConfig, ResearchStagePolicy, ResearchWorkflowSnapshot } from '../../../shared/types';
 import { researchStageLabels } from './research-workflow';
 
@@ -74,44 +75,44 @@ export function ResearchPolicyPanel({
         <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
           <label>
             档位
-            <select data-testid="research-policy-tier" value={draft.tier} onChange={(event) => onChange({ ...draft, tier: event.target.value as ResearchStagePolicy['tier'] })}>
+            <Select data-testid="research-policy-tier" value={draft.tier} onChange={(event) => onChange({ ...draft, tier: event.target.value as ResearchStagePolicy['tier'] })}>
               <option value="fast">快速</option>
               <option value="balanced">均衡</option>
               <option value="deep">深度</option>
-            </select>
+            </Select>
           </label>
           <label>
             模型
-            <select data-testid="research-policy-model-kind" value={draft.modelKind} onChange={(event) => onChange({ ...draft, modelKind: event.target.value === 'model' ? 'model' : 'app_default' })}>
+            <Select data-testid="research-policy-model-kind" value={draft.modelKind} onChange={(event) => onChange({ ...draft, modelKind: event.target.value === 'model' ? 'model' : 'app_default' })}>
               <option value="app_default">应用默认</option>
               <option value="model">指定模型</option>
-            </select>
+            </Select>
           </label>
           {draft.modelKind === 'model' ? (
             <>
               <label>
                 提供商
-                <select data-testid="research-policy-provider" value={draft.providerId} onChange={(event) => onChange({ ...draft, providerId: event.target.value, modelId: '' })}>
+                <Select data-testid="research-policy-provider" value={draft.providerId} onChange={(event) => onChange({ ...draft, providerId: event.target.value, modelId: '' })}>
                   <option value="">选择提供商</option>
                   {providers.filter((item) => item.enabled).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+                </Select>
               </label>
               <label>
                 模型 ID
-                <select data-testid="research-policy-model" value={draft.modelId} onChange={(event) => onChange({ ...draft, modelId: event.target.value })}>
+                <Select data-testid="research-policy-model" value={draft.modelId} onChange={(event) => onChange({ ...draft, modelId: event.target.value })}>
                   <option value="">选择模型</option>
                   {(provider?.models ?? []).filter((model) => model.enabled).map((model) => <option key={model.id} value={model.id}>{model.displayName || model.id}</option>)}
-                </select>
+                </Select>
               </label>
             </>
           ) : null}
           <label>
             最大步数
-            <input data-testid="research-policy-steps" inputMode="numeric" value={draft.maxSteps} onChange={(event) => onChange({ ...draft, maxSteps: event.target.value })} />
+            <TextInput data-testid="research-policy-steps" inputMode="numeric" value={draft.maxSteps} onChange={(event) => onChange({ ...draft, maxSteps: event.target.value })} />
           </label>
           <label>
             超时（毫秒）
-            <input data-testid="research-policy-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
+            <TextInput data-testid="research-policy-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
             <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-policy-save">

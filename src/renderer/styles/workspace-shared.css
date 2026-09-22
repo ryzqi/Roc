@@ -41,7 +41,7 @@
 
 .tree-item {
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -116,7 +116,7 @@
 
 .action-button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   gap: 6px;

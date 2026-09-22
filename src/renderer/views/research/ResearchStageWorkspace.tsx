@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 
+import { TextArea } from '../../components/ui';
 import type { LoadedState } from '../../loaded-state';
 import type { ResearchSession } from './research-session';
 import {
@@ -177,7 +178,7 @@ export function ResearchStageWorkspace({
             {(current.status === 'ready' || current.status === 'running' || current.status === 'paused' || current.status === 'failed' || current.status === 'blocked') && (currentRun === null || !['queued', 'running'].includes(currentRun.status)) ? (
               <label className="research-run-instruction">
                 角色指令
-                <textarea data-testid="research-run-input" spellCheck={true} value={snapshot.instruction} onChange={(event) => session.workbench.setInstruction(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
+                <TextArea data-testid="research-run-input" spellCheck={true} value={snapshot.instruction} onChange={(event) => session.workbench.setInstruction(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
               </label>
             ) : null}
             {currentRun === null || !['queued', 'running', 'failed', 'cancelled', 'interrupted'].includes(currentRun.status) ? (

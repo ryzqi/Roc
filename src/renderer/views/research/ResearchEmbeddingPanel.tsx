@@ -1,5 +1,7 @@
 import type { ResearchEmbeddingConfig } from '../../../shared/types';
 
+import { TextInput } from '../../components/ui';
+
 export function ResearchEmbeddingPanel({
   configs,
   id,
@@ -43,12 +45,12 @@ export function ResearchEmbeddingPanel({
         <span className="research-config-count">{configs.length} 个配置</span>
       </div>
       <div className="research-config-grid">
-        <label>配置 ID<input value={id} onChange={(event) => onIdChange(event.target.value)} /></label>
-        <label>名称<input value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
-        <label className="research-config-wide">接口地址<input value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} /></label>
-        <label>模型<input value={model} onChange={(event) => onModelChange(event.target.value)} /></label>
-        <label>向量维度<input inputMode="numeric" value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} /></label>
-        <label className="research-config-wide">接口密钥<input type="password" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} placeholder="保存时写入本地加密存储" /></label>
+        <label>配置 ID<TextInput value={id} onChange={(event) => onIdChange(event.target.value)} /></label>
+        <label>名称<TextInput value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
+        <label className="research-config-wide">接口地址<TextInput value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} /></label>
+        <label>模型<TextInput value={model} onChange={(event) => onModelChange(event.target.value)} /></label>
+        <label>向量维度<TextInput inputMode="numeric" value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} /></label>
+        <label className="research-config-wide">接口密钥<TextInput type="password" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} placeholder="保存时写入本地加密存储" /></label>
       </div>
       <div className="research-form-actions">
         <button className="action-button action-button--primary" disabled={working} type="button" onClick={onSave}>保存配置</button>

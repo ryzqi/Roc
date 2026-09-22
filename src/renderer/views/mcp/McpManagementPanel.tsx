@@ -1,6 +1,7 @@
 import { CheckCircle2, ChevronDown, ChevronRight, FlaskConical, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ApprovalMode, McpServerSnapshot, McpServerTestResult } from '../../../shared/types';
+import { EmptyState } from '../../components/EmptyState';
 import { StatusPill } from '../../components/StatusPill';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
@@ -164,10 +165,12 @@ export function McpManagementPanel({
         </div>
       </div>
       {state.mcpServers.length === 0 ? (
-        <div className="mcp-empty-panel">
-          <strong>尚未配置 MCP server</strong>
-          <span>添加服务后，可在这里查看连接方式、工具数量和启用状态。</span>
-        </div>
+        <EmptyState
+          className="mcp-empty-panel"
+          detail="添加服务后，可在这里查看连接方式、工具数量和启用状态。"
+          testId="mcp-empty-state"
+          title="尚未配置 MCP server"
+        />
       ) : (
         <div className="mcp-server-table">
           {state.mcpServers.map((server) => {

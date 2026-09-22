@@ -1,5 +1,6 @@
 import { Send } from 'lucide-react';
 
+import { Select, TextArea, TextInput } from '../../components/ui';
 import type { ResearchArtifact, ResearchClaim, ResearchEvidence, ResearchManuscript } from '../../../shared/types';
 
 export type ResearchManuscriptDraft = {
@@ -77,21 +78,21 @@ export function ResearchManuscriptPanel({
           <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
             <label>
               主张内容
-              <textarea data-testid="research-claim-content" spellCheck={true} value={draft.content} onChange={(event) => onChange({ ...draft, content: event.target.value })} rows={4} />
+              <TextArea data-testid="research-claim-content" spellCheck={true} value={draft.content} onChange={(event) => onChange({ ...draft, content: event.target.value })} rows={4} />
             </label>
             <label>
               状态
-              <select data-testid="research-claim-status" value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as ResearchClaim['status'] })}>
+              <Select data-testid="research-claim-status" value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as ResearchClaim['status'] })}>
                 <option value="supported">已支持</option>
                 <option value="hypothesis">假设</option>
                 <option value="pending">待验证</option>
-              </select>
+              </Select>
             </label>
             <label>
               证据
-              <select data-testid="research-claim-evidence" multiple size={4} value={draft.evidenceIds} onChange={(event) => onChange({ ...draft, evidenceIds: Array.from(event.target.selectedOptions, (option) => option.value) })}>
+              <Select data-testid="research-claim-evidence" multiple size={4} value={draft.evidenceIds} onChange={(event) => onChange({ ...draft, evidenceIds: Array.from(event.target.selectedOptions, (option) => option.value) })}>
                 {evidence.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.locator}</option>)}
-              </select>
+              </Select>
             </label>
             <div className="research-form-actions">
               <button className="action-button" disabled={writeBlocked || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
@@ -107,7 +108,7 @@ export function ResearchManuscriptPanel({
             </div>
             <label>
               章节标题
-              <input data-testid="research-manuscript-section" value={draft.sectionTitle} onChange={(event) => onChange({ ...draft, sectionTitle: event.target.value })} />
+              <TextInput data-testid="research-manuscript-section" value={draft.sectionTitle} onChange={(event) => onChange({ ...draft, sectionTitle: event.target.value })} />
             </label>
             <div className="research-form-actions">
               <button className="action-button action-button--primary" disabled={writeBlocked || draft.sectionTitle.trim().length === 0 || draft.selectedClaimIds.length === 0} type="submit" data-testid="research-manuscript-save">

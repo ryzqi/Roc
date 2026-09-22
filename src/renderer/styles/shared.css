@@ -246,7 +246,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 36px;
+  min-height: var(--control-height);
   margin-bottom: 12px;
   padding: 0 0 10px;
   border-bottom: 1px solid var(--line);
@@ -389,7 +389,7 @@
 .capability-strip button {
   display: inline-flex;
   min-width: 58px;
-  min-height: 34px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   gap: 6px;

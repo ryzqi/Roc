@@ -12,7 +12,7 @@
 
 .ui-button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   gap: 7px;
@@ -21,8 +21,8 @@
   white-space: nowrap;
 }
 
-.ui-button--compact { min-height: 30px; padding: 0 10px; font-size: var(--font-meta-size); }
-.ui-button--primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+.ui-button--compact { min-height: var(--control-height-compact); padding: 0 10px; font-size: var(--font-meta-size); }
+.ui-button--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .ui-button--primary:hover:not(:disabled) { border-color: var(--accent-deep); background: var(--accent-deep); }
 .ui-button--secondary { border-color: var(--line-strong); background: var(--surface); }
 .ui-button--secondary:hover:not(:disabled),
@@ -32,7 +32,7 @@
 .ui-button--danger:hover:not(:disabled) { border-color: var(--st-bad); background: color-mix(in srgb, var(--st-bad) 9%, transparent); }
 .ui-button__icon { display: inline-grid; place-items: center; }
 .primary.ui-button,
-.secondary.ui-button { min-height: 36px; padding: 0 14px; border-radius: var(--r-md); }
+.secondary.ui-button { min-height: var(--control-height); padding: 0 14px; border-radius: var(--r-md); }
 
 .ui-icon-button {
   display: inline-grid;
@@ -82,8 +82,8 @@
   box-shadow: var(--shadow-input);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
-.ui-input, .ui-select { min-height: 38px; padding: 0 11px; }
-.ui-textarea { min-height: 88px; padding: 9px 11px; line-height: 1.55; resize: vertical; }
+.ui-input, .ui-select { min-height: var(--control-height-input); padding: 0 var(--control-pad-x); }
+.ui-textarea { min-height: var(--control-height-textarea); padding: 9px var(--control-pad-x); line-height: 1.55; resize: vertical; }
 .ui-input:hover:not(:disabled), .ui-textarea:hover:not(:disabled), .ui-select:hover:not(:disabled) { border-color: var(--line-strong); }
 .ui-input:focus-visible, .ui-textarea:focus-visible, .ui-select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ui-input[readonly], .ui-textarea[readonly] { background: var(--bg-soft); color: var(--muted); }

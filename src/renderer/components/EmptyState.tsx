@@ -2,22 +2,30 @@ import { CircleAlert, RefreshCw } from 'lucide-react';
 
 export function EmptyState({
   action,
+  className,
+  detail,
   title,
   testId,
   tone = 'idle'
 }: {
   action?: React.ReactNode;
+  className?: string;
+  detail?: string;
   title: string;
   testId: string;
   tone?: 'idle' | 'loading' | 'error';
 }): React.JSX.Element {
   const Icon = tone === 'loading' ? RefreshCw : CircleAlert;
+  const classes = ['empty-state', `empty-state--${tone}`, className]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ');
   return (
-    <div className={`empty-state empty-state--${tone}`} data-testid={testId}>
+    <div className={classes} data-testid={testId}>
       <span className="empty-state-icon">
         <Icon size={24} />
       </span>
       <strong>{title}</strong>
+      {detail === undefined ? null : <p>{detail}</p>}
       {action}
     </div>
   );

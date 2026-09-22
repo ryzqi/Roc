@@ -175,7 +175,7 @@
 }
 
 .settings-actions button {
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 12px;
   font-weight: 500;
 }
@@ -187,13 +187,14 @@
 
 .settings-form input,
 .settings-form select {
-  min-height: 38px;
-  padding: 0 10px;
+  min-height: var(--control-height-input);
+  padding: 0 var(--control-pad-x);
 }
 
 .settings-form textarea {
-  min-height: 94px;
-  padding: 10px;
+  min-height: var(--control-height-textarea);
+  padding: 9px var(--control-pad-x);
+  line-height: 1.55;
   resize: vertical;
 }
 
@@ -218,7 +219,7 @@
 }
 
 .field-box {
-  min-height: 36px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -266,7 +267,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   gap: 10px;
   padding: 0 10px;
@@ -302,8 +303,8 @@
 }
 
 .settings-page-actions button {
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: var(--control-height);
+  padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   background: transparent;
@@ -396,21 +397,22 @@
 .provider-detail .field > input,
 .provider-detail .field > select,
 .provider-detail .field > textarea {
-  min-height: 38px;
-  padding: 0 10px;
+  min-height: var(--control-height-input);
+  padding: 0 var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
+  border-radius: var(--r-sm);
   background: var(--surface-strong);
   color: var(--ink);
   font-family: inherit;
   font-size: var(--font-ui-size);
+  box-shadow: var(--shadow-input);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .provider-detail .field > textarea {
-  min-height: 94px;
-  padding: 10px;
-  line-height: 1.5;
+  min-height: var(--control-height-textarea);
+  padding: 9px var(--control-pad-x);
+  line-height: 1.55;
   resize: vertical;
 }
 

@@ -35,6 +35,22 @@
   --fill-strong-hover: var(--accent-deep);
   --fill-strong-text: #ffffff;
 
+  /* 主色上的文字与加深态别名，页面不再各写 --accent-contrast / --accent-strong */
+  --on-accent: #ffffff;
+  --accent-contrast: var(--on-accent);
+  --accent-strong: var(--accent-deep);
+
+  /* 成功态别名，科研页历史 --st-good 接到共享 --st-ok */
+  --st-good: var(--st-ok);
+  --st-good-line: var(--st-ok-line);
+
+  /* 控件尺寸：按钮 36 / 紧凑 30 / 输入 38 / 文本域 88 */
+  --control-height: 36px;
+  --control-height-compact: 30px;
+  --control-height-input: 38px;
+  --control-height-textarea: 88px;
+  --control-pad-x: 11px;
+
   /* 状态 */
   --st-ok: #166c4a;
   --st-info: var(--accent);

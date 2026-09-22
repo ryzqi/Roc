@@ -1,5 +1,6 @@
 import { Play, Send, Square } from 'lucide-react';
 
+import { Select, TextInput } from '../../components/ui';
 import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
 import { usePagedItems } from './research-list-page';
 
@@ -88,26 +89,26 @@ export function ResearchFigurePanel({
         <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onStart(); }}>
           <label>
             标签
-            <input data-testid="research-figure-label" value={draft.label} onChange={(event) => onChange({ ...draft, label: event.target.value })} />
+            <TextInput data-testid="research-figure-label" value={draft.label} onChange={(event) => onChange({ ...draft, label: event.target.value })} />
           </label>
           <label>
             运行时
-            <select data-testid="research-figure-runtime" value={draft.runtimeKind} onChange={(event) => onChange({ ...draft, runtimeKind: event.target.value as ResearchFigureDraft['runtimeKind'] })}>
+            <Select data-testid="research-figure-runtime" value={draft.runtimeKind} onChange={(event) => onChange({ ...draft, runtimeKind: event.target.value as ResearchFigureDraft['runtimeKind'] })}>
               <option value="bundled-python">内置 Python</option>
               <option value="uv">uv</option>
-            </select>
+            </Select>
           </label>
           <label>
             源文件
-            <input data-testid="research-figure-source" value={draft.sourcePath} onChange={(event) => onChange({ ...draft, sourcePath: event.target.value })} placeholder="plot.py" />
+            <TextInput data-testid="research-figure-source" value={draft.sourcePath} onChange={(event) => onChange({ ...draft, sourcePath: event.target.value })} placeholder="plot.py" />
           </label>
           <label>
             输入文件
-            <input data-testid="research-figure-inputs" value={draft.inputPaths} onChange={(event) => onChange({ ...draft, inputPaths: event.target.value })} placeholder="data.csv" />
+            <TextInput data-testid="research-figure-inputs" value={draft.inputPaths} onChange={(event) => onChange({ ...draft, inputPaths: event.target.value })} placeholder="data.csv" />
           </label>
           <label>
             超时（毫秒）
-            <input data-testid="research-figure-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
+            <TextInput data-testid="research-figure-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
             <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-figure-start">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
 
+import { Select, TextArea, TextInput } from '../../components/ui';
 import type { ResearchArtifact, ResearchEvidence, ResearchIdeaCanvas, ResearchIdeaCanvasSaveRequest } from '../../../shared/types';
 
 const fieldLabels: Record<ResearchIdeaCanvasSaveRequest['fields'][number]['key'], string> = {
@@ -90,35 +91,35 @@ export function ResearchIdeaPanel({
               return (
                 <label key={key}>
                   {fieldLabels[key]}
-                  <textarea data-testid={`research-idea-field-${key}`} spellCheck={true} value={field.content} onChange={(event) => onChange(updateField(draft, key, event.target.value))} rows={key === 'counterevidence' ? 2 : 3} />
+                  <TextArea data-testid={`research-idea-field-${key}`} spellCheck={true} value={field.content} onChange={(event) => onChange(updateField(draft, key, event.target.value))} rows={key === 'counterevidence' ? 2 : 3} />
                   <span>
-                    <select value={field.status} onChange={(event) => onChange(updateFieldStatus(draft, key, event.target.value as typeof field.status))}>
+                    <Select value={field.status} onChange={(event) => onChange(updateFieldStatus(draft, key, event.target.value as typeof field.status))}>
                       <option value="supported">已支持</option>
                       <option value="hypothesis">假设</option>
                       <option value="pending">待验证</option>
-                    </select>
-                    <select multiple size={3} value={field.evidenceIds} onChange={(event) => onChange(updateFieldEvidence(draft, key, Array.from(event.target.selectedOptions, (option) => option.value)))}>
+                    </Select>
+                    <Select multiple size={3} value={field.evidenceIds} onChange={(event) => onChange(updateFieldEvidence(draft, key, Array.from(event.target.selectedOptions, (option) => option.value)))}>
                       {evidence.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.locator}</option>)}
-                    </select>
+                    </Select>
                   </span>
                 </label>
               );
             })}
             <label>
               优先级
-              <select data-testid="research-idea-priority" value={draft.priority} onChange={(event) => onChange({ ...draft, priority: event.target.value as ResearchIdeaCanvasSaveRequest['priority'] })}>
+              <Select data-testid="research-idea-priority" value={draft.priority} onChange={(event) => onChange({ ...draft, priority: event.target.value as ResearchIdeaCanvasSaveRequest['priority'] })}>
                 <option value="high">高</option>
                 <option value="medium">中</option>
                 <option value="low">低</option>
-              </select>
+              </Select>
             </label>
             <label>
               优先级依据
-              <textarea data-testid="research-idea-rationale" spellCheck={true} value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
+              <TextArea data-testid="research-idea-rationale" spellCheck={true} value={draft.rationale} onChange={(event) => onChange({ ...draft, rationale: event.target.value })} rows={2} />
             </label>
             <label>
               新项目工作目录
-              <input data-testid="research-idea-workspace-path" readOnly value={workspacePath} />
+              <TextInput data-testid="research-idea-workspace-path" readOnly value={workspacePath} />
             </label>
             <div className="research-form-actions">
               <button className="action-button action-button--primary" disabled={writeBlocked} type="submit" data-testid="research-idea-save">

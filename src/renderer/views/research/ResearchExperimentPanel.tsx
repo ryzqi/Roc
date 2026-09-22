@@ -1,5 +1,6 @@
 import { Play, Send, Square } from 'lucide-react';
 
+import { Select, TextInput } from '../../components/ui';
 import type { ResearchExperimentExecution, ResearchExperimentFileContent } from '../../../shared/types';
 import { usePagedItems } from './research-list-page';
 
@@ -108,28 +109,28 @@ export function ResearchExperimentPanel({
         <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onStart(); }}>
           <label>
             引擎
-            <select data-testid="research-experiment-engine" value={draft.engine} onChange={(event) => onChange(changeEngine(draft, event.target.value as ResearchExperimentEngine))}>
+            <Select data-testid="research-experiment-engine" value={draft.engine} onChange={(event) => onChange(changeEngine(draft, event.target.value as ResearchExperimentEngine))}>
               {Object.entries(draftEngineLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </Select>
           </label>
           {runtimeLocked ? null : (
             <label>
               Python 运行时
-              <select data-testid="research-experiment-runtime" value={draft.runtimeKind} onChange={(event) => onChange({ ...draft, runtimeKind: event.target.value === 'uv' ? 'uv' : 'bundled-python' })}>
+              <Select data-testid="research-experiment-runtime" value={draft.runtimeKind} onChange={(event) => onChange({ ...draft, runtimeKind: event.target.value === 'uv' ? 'uv' : 'bundled-python' })}>
                 <option value="bundled-python">随包 Python</option>
                 <option value="uv">项目 uv / .venv</option>
-              </select>
+              </Select>
             </label>
           )}
           {draft.engine === 'r' ? (
             <>
               <label>
                 R.home 绝对路径
-                <input data-testid="research-experiment-r-root" value={draft.rRootPath} onChange={(event) => onChange({ ...draft, rRootPath: event.target.value })} />
+                <TextInput data-testid="research-experiment-r-root" value={draft.rRootPath} onChange={(event) => onChange({ ...draft, rRootPath: event.target.value })} />
               </label>
               <label>
                 项目库相对路径
-                <input data-testid="research-experiment-r-library" value={draft.rLibraryPath} onChange={(event) => onChange({ ...draft, rLibraryPath: event.target.value })} />
+                <TextInput data-testid="research-experiment-r-library" value={draft.rLibraryPath} onChange={(event) => onChange({ ...draft, rLibraryPath: event.target.value })} />
               </label>
             </>
           ) : null}
@@ -137,36 +138,36 @@ export function ResearchExperimentPanel({
             <>
               <label>
                 Julia 根目录
-                <input data-testid="research-experiment-julia-root" value={draft.juliaRootPath} onChange={(event) => onChange({ ...draft, juliaRootPath: event.target.value })} />
+                <TextInput data-testid="research-experiment-julia-root" value={draft.juliaRootPath} onChange={(event) => onChange({ ...draft, juliaRootPath: event.target.value })} />
               </label>
               <label>
                 Depot 绝对路径
-                <input data-testid="research-experiment-julia-depot" value={draft.juliaDepotPath} onChange={(event) => onChange({ ...draft, juliaDepotPath: event.target.value })} />
+                <TextInput data-testid="research-experiment-julia-depot" value={draft.juliaDepotPath} onChange={(event) => onChange({ ...draft, juliaDepotPath: event.target.value })} />
               </label>
             </>
           ) : null}
           <label>
             运行标签
-            <input data-testid="research-experiment-label" value={draft.label} onChange={(event) => onChange({ ...draft, label: event.target.value })} />
+            <TextInput data-testid="research-experiment-label" value={draft.label} onChange={(event) => onChange({ ...draft, label: event.target.value })} />
           </label>
           <label>
             源文件
-            <input data-testid="research-experiment-source" value={draft.sourcePath} onChange={(event) => onChange({ ...draft, sourcePath: event.target.value })} placeholder={sourcePlaceholder(draft.engine)} />
+            <TextInput data-testid="research-experiment-source" value={draft.sourcePath} onChange={(event) => onChange({ ...draft, sourcePath: event.target.value })} placeholder={sourcePlaceholder(draft.engine)} />
           </label>
           <label>
             输入文件
-            <input data-testid="research-experiment-inputs" value={draft.inputPaths} onChange={(event) => onChange({ ...draft, inputPaths: event.target.value })} placeholder="data.csv, helper.py" />
+            <TextInput data-testid="research-experiment-inputs" value={draft.inputPaths} onChange={(event) => onChange({ ...draft, inputPaths: event.target.value })} placeholder="data.csv, helper.py" />
           </label>
           <label>
             网络
-            <select data-testid="research-experiment-network" value={draft.network} onChange={(event) => onChange({ ...draft, network: event.target.value === 'enabled' ? 'enabled' : 'disabled' })}>
+            <Select data-testid="research-experiment-network" value={draft.network} onChange={(event) => onChange({ ...draft, network: event.target.value === 'enabled' ? 'enabled' : 'disabled' })}>
               <option value="disabled">禁用</option>
               <option value="enabled">允许</option>
-            </select>
+            </Select>
           </label>
           <label>
             超时（毫秒）
-            <input data-testid="research-experiment-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
+            <TextInput data-testid="research-experiment-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
             <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">

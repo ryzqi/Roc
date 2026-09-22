@@ -7,6 +7,7 @@ import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
 import { usePersistedThreadHistory } from '../../chat/use-persisted-thread-history';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { TextArea } from '../../components/ui';
 import { getTaskActionAvailability } from './task-view-model';
 import type { TaskActions } from './use-task-actions';
 
@@ -184,10 +185,9 @@ export function TaskDetailView({
                     <h2>继续任务</h2>
                   </div>
                 </div>
-                <textarea
+                <TextArea
                   data-testid="task-detail-followup-input"
                   placeholder="继续说明任务需要的信息..."
-                  spellCheck={true}
                   value={followupInput}
                   onChange={(event) => setFollowupInput(event.target.value)}
                 />

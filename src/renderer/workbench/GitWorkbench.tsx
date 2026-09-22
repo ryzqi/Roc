@@ -17,6 +17,7 @@ import {
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
+import { TextArea } from '../components/ui';
 import { GitBranchPopover } from './GitBranchPopover';
 import { GitChangeList } from './GitChangeList';
 import { GitDiffPanel } from './GitDiffPanel';
@@ -356,12 +357,11 @@ export function GitWorkbench({
       <div className="workbench-git workbench-git--split" style={{ '--git-pane-width': `${gitPaneWidth}px` } as React.CSSProperties}>
         <aside className="git-sidebar">
           <header className="git-header">
-            <textarea
+            <TextArea
               className="git-commit-message"
               data-testid="workbench-git-commit-message"
               disabled={actionBusy}
               placeholder="Commit message..."
-              spellCheck={true}
               value={commitMessage}
               onChange={(event) => setCommitMessage(event.target.value)}
             />

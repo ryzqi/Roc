@@ -108,7 +108,7 @@
 }
 
 .workbench-bar {
-  min-height: 42px;
+  min-height: var(--control-height-input);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -240,7 +240,7 @@
 }
 
 .workbench-sidebar-summary {
-  min-height: 36px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -324,7 +324,7 @@
 }
 
 .workbench-file-meta-strip {
-  min-height: 34px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -431,7 +431,7 @@
 }
 
 .workbench-footer-bar {
-  min-height: 38px;
+  min-height: var(--control-height-input);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -445,7 +445,7 @@
 
 .tree-item {
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   gap: 8px;

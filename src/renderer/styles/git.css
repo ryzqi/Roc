@@ -51,7 +51,7 @@
 }
 
 .git-commit-button {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -145,7 +145,7 @@
 
 .git-stage-all-button {
   margin-left: auto;
-  min-height: 30px;
+  min-height: var(--control-height-compact);
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
@@ -170,7 +170,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 40px;
+  min-height: var(--control-height);
   padding: 6px 8px;
   border-radius: var(--r-sm);
 }
@@ -256,13 +256,15 @@
 }
 
 .git-branch-search {
-  min-height: 42px;
-  padding: 0 12px;
+  min-height: var(--control-height-input);
+  padding: 0 var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   outline: none;
-  color: var(--text);
+  background: var(--surface-strong);
+  color: var(--ink);
   font-size: var(--font-ui-size);
+  box-shadow: var(--shadow-input);
 }
 
 .git-branch-list {
@@ -276,7 +278,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 10px;
   border-radius: var(--r-sm);
   color: var(--text);
@@ -303,7 +305,7 @@
 
 .git-branch-create-button,
 .git-stage-all-button {
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 12px;
   border-radius: var(--r-md);
   background: transparent;

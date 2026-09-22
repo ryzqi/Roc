@@ -1,5 +1,5 @@
 .memory-search-box {
-  min-height: 42px;
+  min-height: var(--control-height-input);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -181,7 +181,7 @@
 }
 
 .memory-chip-button {
-  min-height: 30px;
+  min-height: var(--control-height-compact);
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -224,7 +224,7 @@
 }
 
 .memory-tabs .tab {
-  min-height: 32px;
+  min-height: var(--control-height-compact);
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -441,15 +441,16 @@
 }
 
 .memory-session-input {
-  min-height: 32px;
+  min-height: var(--control-height-input);
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
-  padding: 0 10px;
-  font-size: var(--font-meta-size);
+  border-radius: var(--r-sm);
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 0 var(--control-pad-x);
+  font-size: var(--font-ui-size);
   outline: none;
+  box-shadow: var(--shadow-input);
 }
 
 .memory-session-input:focus {

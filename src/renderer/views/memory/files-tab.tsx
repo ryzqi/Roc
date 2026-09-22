@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { MemoryFileMeta, MemoryFileWriteOutcome, MemoryStatus, RocError } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
+import { TextArea } from '../../components/ui';
 import { formatKind, formatScope } from './formatters';
 
 type FileTabError =
@@ -124,12 +125,11 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
                 {overLimit ? ` (+${charDiff})` : ''}
               </span>
             </div>
-            <textarea
+            <TextArea
               className="memory-file-textarea"
               data-testid="memory-file-editor"
               disabled={loading}
               onChange={(event) => setBuffer(event.currentTarget.value)}
-              spellCheck={true}
               value={buffer}
             />
             <div className="memory-file-actions">

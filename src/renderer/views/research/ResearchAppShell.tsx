@@ -8,7 +8,8 @@ import { buildResearchTopMeta, createResearchContext } from './research-context'
 import { createResearchSession, type ResearchSession } from './research-session';
 import { formatResearchTime, researchProjectStatusLabels, researchStageLabels } from './research-workflow';
 import type { ResearchEvidence, ResearchProject, ResearchProvenance } from '../../../shared/types';
-import { Drawer } from '../../components/ui';
+import { EmptyState } from '../../components/EmptyState';
+import { Drawer, Select, TextArea, TextInput } from '../../components/ui';
 import { useResearchLayout } from './research-layout';
 import { ResearchOverviewView } from './ResearchOverviewView';
 import { ResearchServicesPanel } from './ResearchServicesPanel';
@@ -445,16 +446,16 @@ export function ResearchAppShell({
 
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
-      <header className="research-shell-banner">
+      <header className="page-strip research-shell-banner">
         {shellState === 'project' && context.project !== null ? (
           <>
-            <div>
+            <div className="page-copy">
               <button className="action-button" data-testid="research-shell-all-projects" type="button" onClick={returnToList}>
                 所有项目
               </button>
-              <h1 data-testid="research-shell-current-title">{context.project.title}</h1>
+              <h1 className="page-title" data-testid="research-shell-current-title">{context.project.title}</h1>
             </div>
-            <div className="research-shell-banner-actions">
+            <div className="page-flags research-shell-banner-actions">
               {onOpenAssistant === undefined ? null : (
                 <button className="action-button" data-testid="research-shell-assistant" type="button" onClick={onOpenAssistant}>
                   研究助手
@@ -476,10 +477,10 @@ export function ResearchAppShell({
           </>
         ) : (
           <>
-            <div>
-              <h1>研究项目</h1>
+            <div className="page-copy">
+              <h1 className="page-title">研究项目</h1>
             </div>
-            <div className="research-shell-banner-actions">
+            <div className="page-flags research-shell-banner-actions">
               <button className="action-button action-button--primary" data-testid="research-shell-new-project" type="button" onClick={() => setCreating(true)}>
                 <Plus aria-hidden="true" size={16} />
                 新建研究项目
@@ -507,11 +508,11 @@ export function ResearchAppShell({
             <div className="research-project-list-toolbar">
               <label className="research-shell-search">
                 搜索项目
-                <input data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
+                <TextInput data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} value={projectQuery} />
               </label>
               <label className="research-shell-search">
                 状态
-                <select
+                <Select
                   data-testid="research-shell-status-filter"
                   onChange={(event) => {
                     const value = event.target.value;
@@ -522,7 +523,7 @@ export function ResearchAppShell({
                   <option value="active">进行中</option>
                   <option value="archived">已归档</option>
                   <option value="all">全部</option>
-                </select>
+                </Select>
               </label>
             </div>
           ) : null}
@@ -537,22 +538,22 @@ export function ResearchAppShell({
             >
               <label>
                 项目标题
-                <input data-testid="research-shell-title" onChange={(event) => setTitle(event.target.value)} value={title} />
+                <TextInput data-testid="research-shell-title" onChange={(event) => setTitle(event.target.value)} value={title} />
               </label>
               <label>
                 研究目标
-                <textarea data-testid="research-shell-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
+                <TextArea data-testid="research-shell-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
               </label>
               <label>
                 项目语言
-                <select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
+                <Select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
                   <option value="zh">中文</option>
                   <option value="en">英文</option>
-                </select>
+                </Select>
               </label>
               <label>
                 工作目录
-                <input data-testid="research-shell-workspace-path" readOnly value={workspacePath} />
+                <TextInput data-testid="research-shell-workspace-path" readOnly value={workspacePath} />
               </label>
               <button className="action-button" data-testid="research-shell-choose-workspace" type="button" onClick={() => void chooseWorkspace()}>
                 选择目录
@@ -567,10 +568,12 @@ export function ResearchAppShell({
             </form>
           ) : null}
           {snapshot.projects.length === 0 && !creating ? (
-            <div className="research-empty" data-testid="research-shell-empty">
-              <h2>还没有研究项目</h2>
-              <p>新建研究项目后才会进入该项目的科研工作台。</p>
-            </div>
+            <EmptyState
+              className="research-empty"
+              detail="新建研究项目后才会进入该项目的科研工作台。"
+              testId="research-shell-empty"
+              title="还没有研究项目"
+            />
           ) : (
             <div className="research-project-grid" data-testid="research-shell-project-grid">
               {visibleProjects.map(renderProjectCard)}
