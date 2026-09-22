@@ -49,8 +49,8 @@ export function ResearchOverviewView({
       <header className="research-project-heading">
         <div>
           <div className="research-section-label">研究目标</div>
-          <h2 data-testid="research-shell-project-title">{project.title}</h2>
           <p data-testid="research-overview-goal">{project.description}</p>
+          <span className="visually-hidden" data-testid="research-shell-project-title">{project.title}</span>
         </div>
         <div className="research-current-stage">
           <span>当前阶段</span>
@@ -61,7 +61,7 @@ export function ResearchOverviewView({
           </strong>
           <span data-testid="research-overview-status">{researchStageStatusLabels[current.status]}</span>
           {onOpenStage === undefined ? null : (
-            <button className="action-button" data-testid="research-overview-open-stage" type="button" onClick={onOpenStage}>进入阶段工作区</button>
+            <button className="action-button action-button--primary" data-testid="research-overview-open-stage" type="button" onClick={onOpenStage}>进入阶段工作区</button>
           )}
         </div>
       </header>
@@ -125,23 +125,18 @@ export function ResearchOverviewView({
         </div>
       </dl>
 
-      <section>
+      <section className="research-timeline" data-testid="research-timeline" aria-label="最近活动">
         <div className="research-section-label">最近活动</div>
-        {events.length === 0 ? <p>暂无活动。</p> : (
-          <button className="research-overview-event" data-testid="research-overview-event" type="button" onClick={onOpenActivity}>
-            {events[0]?.message} · {events[0] === undefined ? '' : formatResearchTime(events[0].createdAt)}
-          </button>
-        )}
-      </section>
-
-      <section className="research-timeline" data-testid="research-timeline" aria-label="事件时间线">
-        <div className="research-section-label">事件时间线</div>
-        {events.length === 0 ? <div className="research-loading">还没有流程事件。</div> : (
+        {events.length === 0 ? <div className="research-empty-inline" role="status">暂无活动。</div> : (
           <ol>
-            {events.map((event) => (
-              <li key={event.id}>
+            {events.map((event, index) => (
+              <li className="research-timeline-item" key={event.id}>
                 <span>{researchStageLabels[event.stage]}</span>
-                <strong>{event.message}</strong>
+                {index === 0 ? (
+                  <button className="research-inline-event" data-testid="research-overview-event" type="button" onClick={onOpenActivity}>
+                    {event.message}
+                  </button>
+                ) : <strong>{event.message}</strong>}
                 <time dateTime={event.createdAt}>{formatResearchTime(event.createdAt)}</time>
               </li>
             ))}
@@ -151,7 +146,7 @@ export function ResearchOverviewView({
 
       <section>
         <div className="research-section-label">关键产物</div>
-        {stageArtifacts.length === 0 ? <p>当前阶段还没有产物。</p> : (
+        {stageArtifacts.length === 0 ? <p className="research-empty-inline" role="status">当前阶段还没有产物。</p> : (
           <ul className="research-artifact-list" data-testid="research-artifacts">
             {stageArtifacts.map((artifact) => (
               <li key={artifact.id}>

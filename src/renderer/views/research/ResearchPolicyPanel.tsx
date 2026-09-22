@@ -60,12 +60,11 @@ export function ResearchPolicyPanel({
       <div className="research-tool-heading">
         <div>
           <h2>阶段模型策略</h2>
-          <p>按阶段选择档位和模型。默认跟随应用模型，也可覆盖为指定提供商。</p>
         </div>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-policy-list">
-          {policies.length === 0 ? <div className="research-loading">还没有阶段策略。</div> : policies.map((policy) => (
+          {policies.length === 0 ? <div className="research-empty-inline" role="status">还没有阶段策略。</div> : policies.map((policy) => (
             <button className={policy.stage === draft.stage ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={policy.stage} type="button" onClick={() => onSelect(policy.stage)}>
               <strong>{researchStageLabels[policy.stage]}</strong>
               <span>{tierLabels[policy.tier]} · {policy.model.kind === 'app_default' ? '应用默认' : policy.model.modelId}</span>

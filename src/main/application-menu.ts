@@ -20,7 +20,14 @@ export function buildApplicationMenuTemplate(
         { role: 'quit' }
       ]
     },
-    { role: 'fileMenu' },
+    {
+      label: '文件',
+      submenu: [
+        { id: 'new-research-project', label: '新建研究项目', accelerator: 'Command+N', click: () => openMainPage('research-new') },
+        { type: 'separator' },
+        { role: 'close' }
+      ]
+    },
     { role: 'editMenu' },
     {
       label: '显示',

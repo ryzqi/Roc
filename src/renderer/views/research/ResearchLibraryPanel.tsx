@@ -68,7 +68,6 @@ export function ResearchLibraryPanel({
       <div className="research-tool-heading">
         <div>
           <h2>文献库</h2>
-          <p>检索开放论文，导入 DOI 或参考文献文件，阅读已解析全文，并关联到当前项目。</p>
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
           <TextInput aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
@@ -127,7 +126,7 @@ export function ResearchLibraryPanel({
 
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-library-list">
-          {items.length === 0 ? <div className="research-loading">文献库为空。检索、导入 DOI 或参考文献文件后会出现在这里。</div> : itemPage.visible.map((item) => (
+          {items.length === 0 ? <div className="research-empty-inline" role="status">文献库为空。检索、导入 DOI 或参考文献文件后会出现在这里。</div> : itemPage.visible.map((item) => (
             <article className={openItem?.id === item.id ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={item.id}>
               <label className="research-literature-source">
                 <input type="checkbox" data-testid={`research-library-select-${item.id}`} checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} />
@@ -156,7 +155,7 @@ export function ResearchLibraryPanel({
           )}
         </div>
         <aside className="research-reader" data-testid="research-reader">
-          {openItem === null ? <div className="research-loading">选择一条文献阅读解析全文。</div> : (
+          {openItem === null ? <div className="research-empty-inline" role="status">选择一条文献阅读解析全文。</div> : (
             <>
               <div className="research-section-label">阅读器</div>
               <h3>{openItem.metadata.title}</h3>

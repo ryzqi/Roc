@@ -41,7 +41,7 @@
   grid-template-columns: 22px minmax(0, 1fr) max-content 14px;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
+  cursor: default;
   min-height: 22px;
   min-width: 0;
 }

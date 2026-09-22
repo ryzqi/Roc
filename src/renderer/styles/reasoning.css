@@ -14,7 +14,7 @@
   color: var(--muted);
   font-size: var(--font-meta-size);
   font-weight: 500;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 
@@ -71,7 +71,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--subtle);
-  cursor: pointer;
+  cursor: default;
   transition:
     color var(--duration-fast) var(--easing-standard),
     background var(--duration-fast) var(--easing-standard),

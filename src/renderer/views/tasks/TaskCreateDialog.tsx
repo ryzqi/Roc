@@ -108,7 +108,6 @@ export function TaskCreateDialog({
               <div className="task-create-dialog" data-testid="task-create-dialog">
                 <header className="task-create-dialog-header">
                   <div className="task-create-dialog-heading">
-                    <span className="task-create-dialog-kicker">Task Control</span>
                     <h2 className="task-create-dialog-title">新建任务</h2>
                     <p className="task-create-dialog-copy">描述你想要的后台任务，由 AI 生成并创建。</p>
                   </div>

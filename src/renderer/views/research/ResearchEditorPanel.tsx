@@ -39,20 +39,19 @@ export function ResearchEditorPanel({
       <div className="research-tool-heading">
         <div>
           <h2>文稿编辑器</h2>
-          <p>导入模板目录或 ZIP，编辑源文件并编译 PDF 预览。</p>
         </div>
         <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-template-import" onClick={onImport}>导入模板</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-template-list">
-          {templates.length === 0 ? <div className="research-loading">还没有模板。导入后可在这里编辑。</div> : templates.map((item) => (
+          {templates.length === 0 ? <div className="research-empty-inline" role="status">还没有模板。导入后可在这里编辑。</div> : templates.map((item) => (
             <button className={item.id === selectedTemplateId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={item.id} type="button" onClick={() => onSelect(item.id)}>
               <strong>{item.entryPath}</strong>
               <span>{item.status === 'ready' ? '可预览' : item.status === 'failed' ? '编译失败' : item.status === 'compiling' ? '编译中' : '已导入'}</span>
             </button>
           ))}
         </div>
-        {template === null ? <div className="research-loading">选择一份模板开始编辑。</div> : (
+        {template === null ? <div className="research-empty-inline" role="status">选择一份模板开始编辑。</div> : (
           <div className="research-editor">
             <div className="research-literature-list" data-testid="research-template-files">
               {files.map((file) => (
@@ -62,7 +61,7 @@ export function ResearchEditorPanel({
                 </button>
               ))}
             </div>
-            {openFile === null ? <div className="research-loading">选择一个源文件。</div> : (
+            {openFile === null ? <div className="research-empty-inline" role="status">选择一个源文件。</div> : (
               <label className="research-run-instruction">
                 {openFile.path}
                 <TextArea data-testid="research-template-editor" spellCheck={true} value={openFile.content} onChange={(event) => onChangeDraft(event.target.value)} rows={16} />

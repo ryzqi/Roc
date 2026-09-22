@@ -6,7 +6,7 @@
   place-items: center;
   padding: 32px;
   background: var(--overlay-scrim);
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
 }
 
 :root[data-reduced-transparency='true'] .task-create-dialog-backdrop {
@@ -15,11 +15,11 @@
 }
 
 .task-create-dialog-panel {
-  width: min(980px, calc(100vw - 48px));
+  width: min(720px, calc(100vw - 48px));
   max-height: calc(100vh - 56px);
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: var(--shadow-modal);
 }
@@ -48,22 +48,14 @@
   min-width: 0;
 }
 
-.task-create-dialog-kicker {
-  color: var(--muted);
-  font-size: var(--font-meta-size);
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .task-create-dialog-title {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(24px, 2.4vw, 32px);
+  font-size: var(--font-h2-size);
   font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.03em;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
 .task-create-dialog-copy {

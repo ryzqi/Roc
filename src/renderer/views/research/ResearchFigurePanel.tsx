@@ -81,7 +81,6 @@ export function ResearchFigurePanel({
       <div className="research-tool-heading">
         <div>
           <h2>图稿渲染</h2>
-          <p>选择 Python 源与数据后渲染图稿，完成后再发布为阶段产物。</p>
         </div>
         <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-figure-refresh" onClick={onRefresh}>刷新</button>
       </div>
@@ -118,7 +117,7 @@ export function ResearchFigurePanel({
           </div>
         </form>
         <div className="research-literature-list" data-testid="research-figure-list">
-          {runs.length === 0 ? <div className="research-loading">还没有图稿运行。填写源文件后渲染。</div> : page.visible.map((run) => (
+          {runs.length === 0 ? <div className="research-empty-inline" role="status">还没有图稿运行。填写源文件后渲染。</div> : page.visible.map((run) => (
             <article className={run.id === selectedRunId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={run.id}>
               <button className="research-literature-row" type="button" data-testid={`research-figure-select-${run.id}`} onClick={() => onSelect(run.id)}>
                 <div className="research-literature-source">{statusLabels[run.status]}</div>
@@ -156,7 +155,7 @@ export function ResearchFigurePanel({
           <div className="research-section-label">运行记录</div>
           <h3>{selected.request.label}</h3>
           <p>{runtimeLabels[selected.request.runtime.kind === 'uv' ? 'uv' : 'bundled-python']} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
-          {log === null ? <div className="research-loading">选择一条运行并打开日志。</div> : (
+          {log === null ? <div className="research-empty-inline" role="status">选择一条运行并打开日志。</div> : (
             <pre className="research-reader-content" data-testid="research-figure-log">{log.content}</pre>
           )}
         </aside>

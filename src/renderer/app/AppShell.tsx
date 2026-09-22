@@ -122,6 +122,25 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
   useEffect(() => {
     return client.api.app.onNavigate((page) => {
+      if (page === 'research-new') {
+        const current = new URL(window.location.href);
+        if (current.searchParams.get('project') !== null) {
+          return;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.delete('project');
+        url.searchParams.delete('view');
+        url.searchParams.delete('stage');
+        url.searchParams.set('page', 'research');
+        window.history.pushState({}, '', url);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        setActiveView('research');
+        setAssistantOpen(false);
+        setSelectedThreadId(null);
+        setWorkbenchVisible(false);
+        window.dispatchEvent(new Event('research-new-project'));
+        return;
+      }
       const view = parseViewId(page, new URLSearchParams(window.location.search).get('project'));
       if (view === 'settings') {
         settingsOpenerRef.current = null;
@@ -543,6 +562,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
   return (
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
+      <a className="skip-to-canvas" href="#roc-main">跳到内容</a>
       <WindowWorkband
         activeView={activeView}
         onNewConversation={startNewConversation}
@@ -578,6 +598,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         <div
           className="chat-workspace-scale-host"
           data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
+          id="roc-main"
           ref={chatWorkspaceScaleHostRef}
           style={chatWorkspaceScale.style}
         >

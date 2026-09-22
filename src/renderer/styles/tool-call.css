@@ -17,7 +17,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .tool-call-modern__header::-webkit-details-marker,

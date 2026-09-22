@@ -28,7 +28,7 @@ export function ResearchActivityView({
         {(['all', 'running', 'failed', 'gates'] as const).map((item) => (
           <button
             aria-pressed={filter === item}
-            className={filter === item ? 'action-button action-button--primary' : 'action-button'}
+            className={filter === item ? 'research-filter research-filter--selected' : 'research-filter'}
             data-testid={`research-activity-filter-${item}`}
             key={item}
             type="button"
@@ -39,10 +39,11 @@ export function ResearchActivityView({
         ))}
       </div>
       <div className="research-section-label">阶段运行</div>
-      {runPage.visible.length === 0 ? <p>没有匹配的运行。</p> : runPage.visible.map((run) => (
+      {runPage.visible.length === 0 ? <p className="research-empty-inline" role="status">没有匹配的运行。</p> : runPage.visible.map((run) => (
         <div className="research-shell-activity-row" data-testid={`research-activity-run-${run.id}`} key={run.id}>
-          <strong>{researchStageLabels[run.stage]} · {researchRunStatusLabels[run.status]}</strong>
-          <span>{run.role}{run.error === null ? '' : ` · ${run.error}`}</span>
+          <span>{researchRunStatusLabels[run.status]}</span>
+          <strong>{researchStageLabels[run.stage]} · {run.role}{run.error === null ? '' : ` · ${run.error}`}</strong>
+          <time>{formatResearchTime(run.endedAt ?? run.createdAt)}</time>
         </div>
       ))}
       {runPage.remaining === 0 ? null : (
@@ -51,7 +52,7 @@ export function ResearchActivityView({
         </button>
       )}
       <div className="research-section-label">工作流事件</div>
-      {eventPage.visible.length === 0 ? <p>没有匹配的活动。</p> : eventPage.visible.map((entry) => (
+      {eventPage.visible.length === 0 ? <p className="research-empty-inline" role="status">没有匹配的活动。</p> : eventPage.visible.map((entry) => (
         <button
           className={entry.id === selectedEventId ? 'research-overview-event research-overview-event--active' : 'research-overview-event'}
           data-testid={`research-activity-event-${entry.id}`}
@@ -59,8 +60,8 @@ export function ResearchActivityView({
           type="button"
           onClick={() => onSelectEvent(entry.id)}
         >
-          <strong>{researchStageLabels[entry.stage]}</strong>
-          <span>{entry.message}</span>
+          <span>{researchStageLabels[entry.stage]}</span>
+          <strong>{entry.message}</strong>
           <time>{formatResearchTime(entry.createdAt)}</time>
         </button>
       ))}

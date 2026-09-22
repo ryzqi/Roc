@@ -100,7 +100,6 @@ export function ResearchExperimentPanel({
       <div className="research-tool-heading">
         <div>
           <h2>实验运行</h2>
-          <p>选择引擎与源文件后启动脚本，查看日志，完成后再发布为阶段产物。</p>
         </div>
         <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-experiment-refresh" onClick={onRefresh}>刷新</button>
       </div>
@@ -178,7 +177,7 @@ export function ResearchExperimentPanel({
         </form>
 
         <div className="research-literature-list" data-testid="research-experiment-list">
-          {experiments.length === 0 ? <div className="research-loading">还没有实验运行。填写源文件后启动。</div> : experimentPage.visible.map((run) => (
+          {experiments.length === 0 ? <div className="research-empty-inline" role="status">还没有实验运行。填写源文件后启动。</div> : experimentPage.visible.map((run) => (
             <article className={run.id === selectedRunId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={run.id}>
               <button className="research-literature-row" type="button" data-testid={`research-experiment-select-${run.id}`} onClick={() => onSelect(run.id)}>
                 <div className="research-literature-source">{statusLabels[run.status]} · {engineLabels[run.request.engine]}</div>
@@ -217,7 +216,7 @@ export function ResearchExperimentPanel({
           <div className="research-section-label">运行记录</div>
           <h3>{selected.request.label}</h3>
           <p>{engineLabels[selected.request.engine]} · {runtimeLabels[selected.request.runtime.kind]} · {selected.environment?.hash.slice(0, 12) ?? '尚未校验环境'}</p>
-          {log === null ? <div className="research-loading">选择一条运行并打开日志。</div> : (
+          {log === null ? <div className="research-empty-inline" role="status">选择一条运行并打开日志。</div> : (
             <pre className="research-reader-content" data-testid="research-experiment-log">{log.content}</pre>
           )}
         </aside>

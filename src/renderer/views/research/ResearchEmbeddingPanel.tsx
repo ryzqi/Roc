@@ -40,7 +40,6 @@ export function ResearchEmbeddingPanel({
       <div className="research-tool-heading">
         <div>
           <h2>嵌入模型配置</h2>
-          <p>连接 OpenAI 兼容嵌入接口。密钥只写入本地加密存储。</p>
         </div>
         <span className="research-config-count">{configs.length} 个配置</span>
       </div>

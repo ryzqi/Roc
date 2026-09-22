@@ -137,9 +137,7 @@
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 34%),
-    var(--surface);
+  background: var(--surface);
   box-shadow: var(--shadow-input);
 }
 
@@ -149,6 +147,12 @@
   gap: 16px;
   align-items: start;
   min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .task-detail-page-body {
+    grid-template-columns: 1fr;
+  }
 }
 
 .task-detail-main-column,

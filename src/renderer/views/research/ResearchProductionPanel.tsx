@@ -1,4 +1,4 @@
-import { Send } from 'lucide-react';
+import { CircleAlert, Send } from 'lucide-react';
 
 import { TextInput } from '../../components/ui';
 import type { ResearchArtifact, ResearchExportExecution, ResearchFigurePublication } from '../../../shared/types';
@@ -56,12 +56,11 @@ export function ResearchProductionPanel({
       <div className="research-tool-heading">
         <div>
           <h2>图稿与导出</h2>
-          <p>选择已发布图稿和批准正文，准备最终 ZIP，审核后再保存到新文件。</p>
         </div>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-figure-list">
-          {figures.length === 0 ? <div className="research-loading">还没有已发布图稿。</div> : figures.map((figure) => (
+          {figures.length === 0 ? <div className="research-empty-inline" role="status">还没有已发布图稿。</div> : figures.map((figure) => (
             <label className="research-literature-row" key={figure.id}>
               <input type="checkbox" data-testid={`research-figure-toggle-${figure.id}`} checked={selectedFigureIds.includes(figure.id)} onChange={() => onToggleFigure(figure.id)} />
               <strong>{figure.title}</strong>
@@ -82,11 +81,16 @@ export function ResearchProductionPanel({
         </form>
       </div>
       <div className="research-literature-list" data-testid="research-export-list">
-        {exports.length === 0 ? <div className="research-loading">还没有导出作业。</div> : exports.map((record) => (
+        {exports.length === 0 ? <div className="research-empty-inline" role="status">还没有导出作业。</div> : exports.map((record) => (
           <article className="research-literature-row" key={record.id}>
             <div className="research-literature-source">{exportStatusLabels[record.status]} · {exportApprovalLabels[record.approval]}</div>
             <h3>{record.request.title}</h3>
-            {record.error === null ? null : <p>{record.error}</p>}
+            {record.error === null ? null : (
+              <p className="research-stage-error" role="alert">
+                <CircleAlert aria-hidden="true" size={14} />
+                <span>{record.error} 修正来源后重新准备导出。</span>
+              </p>
+            )}
             <div className="research-stage-actions">
               {record.status === 'ready' && record.approval === 'unpublished' ? (
                 <button className="action-button" type="button" data-testid={`research-export-publish-${record.id}`} disabled={writeBlocked} onClick={() => onPublishExport(record.id)}>发布审核</button>

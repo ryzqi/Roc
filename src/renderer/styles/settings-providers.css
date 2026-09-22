@@ -189,7 +189,7 @@
   font-weight: 500;
   color: var(--ink);
   line-height: 1.3;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
 }
 
 .provider-status-pill {
@@ -512,7 +512,7 @@
 .provider-model-row__actions { display: flex; align-items: center; gap: 2px; padding: 0 8px 0 4px; }
 .provider-model-drawer-form { display: grid; gap: 16px; }
 .provider-model-advanced { border-top: 1px solid var(--line); padding-top: 14px; }
-.provider-model-advanced summary { color: var(--text); cursor: pointer; font-size: var(--font-ui-size); font-weight: 600; }
+.provider-model-advanced summary { color: var(--text); cursor: default; font-size: var(--font-ui-size); font-weight: 600; }
 .provider-model-advanced[open] summary { margin-bottom: 12px; }
 .provider-model-drawer-form .provider-model-capabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .provider-detail-actions .ui-button--danger { margin-left: 0; }

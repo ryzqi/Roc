@@ -46,6 +46,20 @@ export function ResearchProvenanceView({
             key={artifact.id}
             type="button"
             onClick={() => onSelectArtifact(artifact.id)}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+                return;
+              }
+              const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-project-row') ?? []];
+              const index = buttons.indexOf(event.currentTarget);
+              const next = buttons[index + (event.key === 'ArrowDown' ? 1 : -1)];
+              if (next === undefined) {
+                return;
+              }
+              event.preventDefault();
+              next.focus();
+              next.click();
+            }}
           >
             <span className="research-project-row-title">{artifact.title}</span>
             <span className="research-project-row-meta">{researchStageLabels[artifact.stage]} · {artifactStatusLabel(artifact.status)}</span>
@@ -57,34 +71,36 @@ export function ResearchProvenanceView({
           </button>
         )}
       </aside>
-      {selected === null ? <p>当前项目还没有产物。</p> : (
+      {selected === null ? <div className="research-empty-inline" role="status">当前项目还没有产物。</div> : (
         <div className="research-shell-canvas">
-          <h2 data-testid="research-provenance-title">{selected.title}</h2>
-          {onBackToOverview === undefined ? null : (
-            <button className="action-button" data-testid="research-provenance-back" type="button" onClick={onBackToOverview}>返回总览</button>
-          )}
-          <p>{researchStageLabels[selected.stage]} · {artifactStatusLabel(selected.status)} · {formatResearchTime(selected.updatedAt)}</p>
+          <div className="research-tool-heading">
+            <h2 data-testid="research-provenance-title">{selected.title}</h2>
+            {onBackToOverview === undefined ? null : (
+              <button className="action-button" data-testid="research-provenance-back" type="button" onClick={onBackToOverview}>返回总览</button>
+            )}
+          </div>
+          <p className="research-rail-item">{researchStageLabels[selected.stage]} · {artifactStatusLabel(selected.status)} · {formatResearchTime(selected.updatedAt)}</p>
           <div className="research-section-label">来源</div>
           {links.length === 0 ? (
-            <p data-testid="research-provenance-missing">未建立来源。不能把该产物标记为已验证。</p>
+            <p className="research-empty-inline" data-testid="research-provenance-missing" role="status">未建立来源。不能把该产物标记为已验证。</p>
           ) : (
-            <ul data-testid="research-provenance-links">
+            <ul className="research-artifact-list" data-testid="research-provenance-links">
               {links.map((entry) => (
-                <li key={entry.id}>
-                  {SOURCE_LABELS[entry.sourceType]} · {entry.sourceId}
-                  {entry.locator === null ? '' : ` · ${entry.locator}`}
-                  {entry.excerpt === null ? '' : ` · ${entry.excerpt}`}
+                <li className="research-timeline-item" key={entry.id}>
+                  <span>{SOURCE_LABELS[entry.sourceType]}</span>
+                  <strong>{entry.sourceId}{entry.locator === null ? '' : ` · ${entry.locator}`}</strong>
+                  <time>{entry.excerpt ?? formatResearchTime(entry.createdAt)}</time>
                 </li>
               ))}
             </ul>
           )}
           <div className="research-section-label">证据</div>
-          {relatedEvidence.length === 0 ? <p>没有关联证据片段。</p> : relatedEvidence.map((item) => (
-            <p key={item.id}>{item.title} · {item.locator}</p>
+          {relatedEvidence.length === 0 ? <p className="research-empty-inline">没有关联证据片段。</p> : relatedEvidence.map((item) => (
+            <p className="research-rail-item" key={item.id}>{item.title} · {item.locator}</p>
           ))}
           <div className="research-section-label">运行</div>
-          {relatedRuns.length === 0 ? <p>没有关联运行记录。</p> : relatedRuns.map((run) => (
-            <p key={run.id}>{researchStageLabels[run.stage]} · {researchRunStatusLabels[run.status]} · {run.role}</p>
+          {relatedRuns.length === 0 ? <p className="research-empty-inline">没有关联运行记录。</p> : relatedRuns.map((run) => (
+            <p className="research-rail-item" key={run.id}>{researchStageLabels[run.stage]} · {researchRunStatusLabels[run.status]} · {run.role}</p>
           ))}
         </div>
       )}

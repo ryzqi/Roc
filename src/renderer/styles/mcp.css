@@ -59,7 +59,7 @@
   background: var(--bg-soft);
   color: var(--ink);
   font-size: var(--font-ui-size);
-  cursor: pointer;
+  cursor: default;
 }
 
 .mcp-approval-mode-option.is-selected {
@@ -122,7 +122,7 @@
   padding: 10px 11px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  cursor: pointer;
+  cursor: default;
 }
 
 .mcp-server-row:last-child {
@@ -148,7 +148,7 @@
   background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .mcp-server-main {

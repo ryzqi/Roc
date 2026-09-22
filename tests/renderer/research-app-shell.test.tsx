@@ -78,6 +78,8 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-runs')).toBe('0');
     expect(text('research-shell-artifacts')).toBe('1');
     expect(text('research-shell-stages')).toContain('写作与审阅');
+    expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-current')).toBe('step');
+    expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-pressed')).toBe('false');
     expect(document.querySelector('[data-testid="research-overview-bind-workspace"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="research-shell-workspace"]')).toBeNull();
     await click('research-shell-activity-toggle');
@@ -140,6 +142,7 @@ describe('ResearchAppShell', () => {
     await click('research-overview-open-stage');
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
+    expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(text('research-stage-context-status')).toContain('当前阶段：写作');
     await waitUntil(() => document.querySelector('[data-testid="research-manuscript-panel"]') !== null);
     expect(document.querySelector('[data-testid="research-stage-readonly"]')).toBeNull();
@@ -152,6 +155,20 @@ describe('ResearchAppShell', () => {
     expect(document.querySelector('[data-testid="research-stage-rail"]')).not.toBeNull();
     await click('research-shell-settings');
     await waitUntil(() => document.querySelector('[data-testid="research-embedding-panel"]') !== null);
+  });
+
+  it('moves the stage toolbar with arrow keys', async () => {
+    const api = createResearchApi();
+    await renderShell(api);
+    await openListedProject('research_1');
+    const writing = document.querySelector<HTMLButtonElement>('[data-testid="research-stage-group-write"]');
+    expect(writing).not.toBeNull();
+    writing?.focus();
+    await act(async () => {
+      writing?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    });
+    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group') === 'experiment');
+    expect(document.activeElement).toBe(document.querySelector('[data-testid="research-stage-group-experiment"]'));
   });
 
   it('shows a provenance load error when the source list fails', async () => {
@@ -184,6 +201,19 @@ describe('ResearchAppShell', () => {
     expect([...document.querySelectorAll('.research-project-card-title')].map((node) => node.textContent)).toEqual(['证据图', '第二项目']);
     await act(async () => { setInput('research-shell-project-search', '第二'); });
     expect(document.querySelector('.research-project-card-title')?.textContent).toBe('第二项目');
+    const writing = document.querySelector('[data-testid="research-stage-group-write"]');
+    expect(writing).toBeNull();
+  });
+
+  it('shows a clearable empty state when project search matches nothing', async () => {
+    const api = createResearchApi();
+    await renderShell(api);
+    await act(async () => { setInput('research-shell-project-search', '不存在'); });
+    expect(text('research-shell-search-empty')).toContain('没有匹配的项目');
+    expect(document.querySelector('.research-project-card')).toBeNull();
+    await click('research-shell-clear-search');
+    expect(document.querySelector('[data-testid="research-shell-project-research_1"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="research-shell-search-empty"]')).toBeNull();
   });
 
   it('returns to overview when switching projects', async () => {
@@ -307,6 +337,38 @@ describe('ResearchAppShell', () => {
     });
     await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
     expect(new URL(window.location.href).searchParams.get('view')).toBeNull();
+  });
+
+  it('confirms before deleting the current project', async () => {
+    const api = createResearchApi();
+    api.deleteProject.mockResolvedValue({ ok: true, data: { id: 'research_1', deleted: true } });
+    await renderShell(api);
+    await openListedProject('research_1');
+    await click('research-shell-delete-project');
+    expect(api.deleteProject).not.toHaveBeenCalled();
+    const dialog = document.querySelector('.ui-confirm-dialog');
+    expect(dialog).not.toBeNull();
+    const confirm = Array.from(dialog?.querySelectorAll('button') ?? []).find((button) => button.textContent?.trim() === '删除项目');
+    expect(confirm).not.toBeUndefined();
+    await act(async () => { confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await waitUntil(() => api.deleteProject.mock.calls.length > 0);
+    expect(api.deleteProject).toHaveBeenCalledWith({ id: 'research_1' });
+  });
+
+  it('opens create from the empty-state action', async () => {
+    const api = createResearchApi({ projects: [] });
+    await renderShell(api);
+    await click('research-shell-empty-create');
+    expect(document.querySelector('[data-testid="research-shell-create"]')).not.toBeNull();
+  });
+
+  it('opens create with Cmd+N on the project list', async () => {
+    const api = createResearchApi({ projects: [] });
+    await renderShell(api);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }));
+    });
+    expect(document.querySelector('[data-testid="research-shell-create"]')).not.toBeNull();
   });
 
   it('shows a model download action when parse models are missing', async () => {
@@ -446,6 +508,17 @@ async function openListedProject(projectId: string): Promise<void> {
 }
 
 async function click(testId: string): Promise<void> {
+  if (testId === 'research-shell-all-projects') {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('project');
+    url.searchParams.delete('view');
+    url.searchParams.delete('stage');
+    url.searchParams.set('page', 'research');
+    window.history.pushState({}, '', url);
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    await act(async () => { await Promise.resolve(); });
+    return;
+  }
   const button = document.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`);
   expect(button).not.toBeNull();
   await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });

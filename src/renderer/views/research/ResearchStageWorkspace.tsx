@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { CircleAlert, X } from 'lucide-react';
+import { forwardRef, lazy, Suspense, useEffect, useImperativeHandle, useState } from 'react';
 
 import { TextArea } from '../../components/ui';
 import type { LoadedState } from '../../loaded-state';
@@ -15,6 +16,7 @@ import {
   formatResearchTime,
   latestCurrentRun,
   nextActionLabel,
+  researchRunStatusLabels,
   researchStageLabels,
   researchStageStatusLabels,
   reviewDecisionRequired
@@ -31,7 +33,11 @@ const ResearchManuscriptPanel = lazy(() => import('./ResearchManuscriptPanel').t
 const ResearchPolicyPanel = lazy(() => import('./ResearchPolicyPanel').then((module) => ({ default: module.ResearchPolicyPanel })));
 const ResearchProductionPanel = lazy(() => import('./ResearchProductionPanel').then((module) => ({ default: module.ResearchProductionPanel })));
 
-export function ResearchStageWorkspace({
+export type ResearchStageWorkspaceHandle = {
+  clearSurfaceError: () => void;
+};
+
+export const ResearchStageWorkspace = forwardRef<ResearchStageWorkspaceHandle, {
   groupId,
   onTabChange,
   session,
@@ -43,7 +49,13 @@ export function ResearchStageWorkspace({
   session: ResearchSession;
   state: LoadedState;
   tab: ResearchStageTab;
-}): React.JSX.Element {
+}, function ResearchStageWorkspace({
+  groupId,
+  onTabChange,
+  session,
+  state,
+  tab
+}, ref): React.JSX.Element {
   const [snapshot, setSnapshot] = useState(session.workbench.getSnapshot());
   const [librarySnapshot, setLibrarySnapshot] = useState(session.library.getSnapshot());
   const [knowledgeSnapshot, setKnowledgeSnapshot] = useState(session.knowledge.getSnapshot());
@@ -84,6 +96,21 @@ export function ResearchStageWorkspace({
     ?? manuscriptSnapshot.error
     ?? ideaSnapshot.error
     ?? productionSnapshot.error;
+
+  function clearSurfaceError(): void {
+    session.workbench.clearError();
+    session.library.clearError();
+    session.knowledge.clearError();
+    session.experiments.clearError();
+    session.figures.clearError();
+    session.policies.clearError();
+    session.templates.clearError();
+    session.manuscript.clearError();
+    session.ideas.clearError();
+    session.production.clearError();
+  }
+
+  useImperativeHandle(ref, () => ({ clearSurfaceError }), [session]);
 
   useEffect(() => {
     const unsubscribers = [session.workbench.subscribe(setSnapshot)];
@@ -132,6 +159,20 @@ export function ResearchStageWorkspace({
               key={item.id}
               type="button"
               onClick={() => onTabChange(item.id)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+                  return;
+                }
+                const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-tab') ?? []];
+                const index = buttons.indexOf(event.currentTarget);
+                const next = buttons[index + (event.key === 'ArrowDown' ? 1 : -1)];
+                if (next === undefined) {
+                  return;
+                }
+                event.preventDefault();
+                next.focus();
+                next.click();
+              }}
             >
               {item.label}
             </button>
@@ -145,7 +186,15 @@ export function ResearchStageWorkspace({
           </div>
         )}
         {surfaceError === null ? null : (
-          <div className="research-alert" role="alert" data-testid="research-stage-error">{surfaceError}</div>
+          <div className="research-alert" role="alert" data-testid="research-stage-error">
+            <CircleAlert aria-hidden="true" size={16} />
+            <span>{surfaceError}</span>
+            <button aria-label="关闭错误" className="research-toolbar-button" type="button" onClick={() => {
+              clearSurfaceError();
+            }}>
+              <X aria-hidden="true" size={15} />
+            </button>
+          </div>
         )}
         {currentGroup && snapshot.workflow !== null && current !== undefined ? (
           <div className="research-stage-actions" data-testid="research-stage-current-actions">
@@ -192,7 +241,7 @@ export function ResearchStageWorkspace({
             ) : null}
           </div>
         ) : null}
-        <Suspense fallback={<div className="research-loading">正在加载阶段面板…</div>}>
+        <Suspense fallback={<div className="research-loading" role="status">正在加载阶段面板…</div>}>
         {tab === 'library' ? (
           <ResearchLibraryPanel
             bibliographyFormat={librarySnapshot.bibliographyFormat}
@@ -378,18 +427,19 @@ export function ResearchStageWorkspace({
       </div>
       <aside className="research-stage-rail" data-testid="research-stage-rail">
         <div className="research-section-label">证据</div>
-        {recentEvidence.length === 0 ? <p>还没有捕获证据。</p> : recentEvidence.map((item) => (
-          <p key={item.id}>{item.title}</p>
+        {recentEvidence.length === 0 ? <p className="research-empty-inline">还没有捕获证据。</p> : recentEvidence.map((item) => (
+          <p className="research-rail-item" key={item.id}>{item.title}</p>
         ))}
         <div className="research-section-label">运行</div>
-        {recentRuns.length === 0 ? <p>没有阶段运行。</p> : recentRuns.map((run) => (
-          <p key={run.id}>{researchStageLabels[run.stage]} · {run.status}</p>
+        {recentRuns.length === 0 ? <p className="research-empty-inline">没有阶段运行。</p> : recentRuns.map((run) => (
+          <p className="research-rail-item" key={run.id}>{researchStageLabels[run.stage]} · {researchRunStatusLabels[run.status]}</p>
         ))}
         <div className="research-section-label">最近活动</div>
-        {recentEvents.length === 0 ? <p>暂无活动。</p> : recentEvents.map((event) => (
-          <p key={event.id}>{event.message} · {formatResearchTime(event.createdAt)}</p>
+        {recentEvents.length === 0 ? <p className="research-empty-inline">暂无活动。</p> : recentEvents.map((event) => (
+          <p className="research-rail-item" key={event.id}>{event.message} · {formatResearchTime(event.createdAt)}</p>
         ))}
       </aside>
     </section>
   );
 }
+);

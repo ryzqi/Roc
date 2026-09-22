@@ -28,7 +28,7 @@
   --accent-tint: var(--accent);
   --accent-soft: color-mix(in srgb, var(--accent-tint) 10%, transparent);
   --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 18%, transparent);
-  --accent-stripe: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, #ffffff) 100%);
+  --accent-stripe: var(--accent);
 
   /* 实心主按钮填充：浅色深底白字，深色由 dark 块反转 */
   --fill-strong: var(--ink);
@@ -281,4 +281,18 @@
   --syntax-string: CanvasText;
   --syntax-comment: GrayText;
   --syntax-number: CanvasText;
+}
+
+:root[data-high-contrast='true'] {
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --shadow-modal: none;
+  --shadow-popover: none;
+  --shadow-input: none;
+}
+
+:root[data-reduced-transparency='true'] {
+  --surface-translucent: var(--surface);
+  --surface-glass: var(--surface);
+  --surface-glass-strong: var(--surface);
 }

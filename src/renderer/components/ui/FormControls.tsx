@@ -9,9 +9,9 @@ function classNames(base: string, className: string | undefined): string {
   return className === undefined || className.length === 0 ? base : `${base} ${className}`;
 }
 
-export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>): React.JSX.Element {
-  return <input className={classNames('ui-input', className)} {...props} />;
-}
+export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function TextInput({ className, ...props }, ref): React.JSX.Element {
+  return <input className={classNames('ui-input', className)} ref={ref} {...props} />;
+});
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea({ className, spellCheck = true, ...props }, ref): React.JSX.Element {
   return <textarea className={classNames('ui-textarea', className)} ref={ref} spellCheck={spellCheck} {...props} />;

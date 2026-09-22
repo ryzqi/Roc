@@ -111,27 +111,27 @@
 
 .chat-empty-copy {
   display: grid;
-  justify-items: center;
-  gap: 10px;
-  text-align: center;
-  padding: 0 24px;
+  justify-items: start;
+  gap: 8px;
+  text-align: left;
+  padding: 0;
 }
 
-.chat-empty-copy h1 {
+.chat-empty-copy strong {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: var(--font-h1-size);
+  font-size: var(--font-h3-size);
   font-weight: 500;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
 
 .chat-empty-copy p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--font-body-size);
-  line-height: 1.65;
+  font-size: var(--font-meta-size);
+  line-height: 1.5;
 }
 
 .chat-research-context {
@@ -139,7 +139,7 @@
   color: var(--muted);
   font-size: var(--font-meta-size);
   line-height: 1.5;
-  text-align: center;
+  text-align: left;
 }
 
 .chat-transcript {

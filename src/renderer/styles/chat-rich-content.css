@@ -246,7 +246,7 @@
   min-width: 0;
   max-width: 100%;
   gap: 0;
-  padding-top: 12px;
+  padding-top: 0;
   justify-items: center;
 }
 
@@ -273,7 +273,7 @@
   font-weight: 500;
   line-height: 1.35;
   color: var(--ink);
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 .chat-bubble--assistant h1 { font-size: var(--font-h2-size); }

@@ -82,23 +82,23 @@
 
 .empty-state {
   display: grid;
-  max-width: 560px;
-  gap: 12px;
-  justify-items: center;
-  padding: 36px 24px;
-  margin: 0 auto;
+  max-width: 420px;
+  gap: 8px;
+  justify-items: start;
+  padding: 24px 0;
+  margin: 0;
   color: var(--muted);
-  text-align: center;
+  text-align: left;
 }
 
 .empty-state-icon {
   display: grid;
-  width: 56px;
-  height: 56px;
+  width: 28px;
+  height: 28px;
   place-items: center;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
 }
 
 .empty-state--loading .empty-state-icon {
@@ -129,6 +129,7 @@
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+  cursor: default;
 }
 
 .action-button svg {
@@ -137,14 +138,29 @@
 }
 
 .action-button:hover {
-  background: var(--bg-soft);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--overlay-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.action-button:active {
+  background: var(--overlay-active);
 }
 
 .action-button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: 2px;
+}
+
+.action-button--danger {
+  border-color: var(--st-bad-line);
+  color: var(--st-bad);
+}
+
+.action-button--danger:hover:not(:disabled) {
+  border-color: var(--st-bad);
+  background: color-mix(in srgb, var(--st-bad) 9%, transparent);
+  color: var(--st-bad);
 }
 
 .action-button:disabled {
@@ -156,9 +172,16 @@
 
 .empty-state strong {
   color: var(--ink);
-  font-size: var(--font-lead-size);
+  font-size: var(--font-h3-size);
   font-weight: 500;
-  margin-top: 4px;
+  margin-top: 0;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  line-height: 1.5;
 }
 
 .section-empty-state {

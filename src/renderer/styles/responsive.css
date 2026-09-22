@@ -4,8 +4,8 @@
   }
 
   .workspace:not(.workspace--chat) {
-    grid-template-columns: 220px minmax(0, 1fr);
-    padding-right: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    padding-right: 0;
   }
 
   .workspace:not(.workspace--chat) .sidebar-block-scroll {
@@ -23,7 +23,7 @@
   }
 
   .workspace-shell:not(.workspace-shell--chat):not(.workspace-shell--chat-collapsed) .workspace-main {
-    padding: 10px 12px 0;
+    padding: 0;
   }
 
   .grid-2,
@@ -129,7 +129,7 @@
   .workspace:not(.workspace--chat) {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
-    padding: 0 12px 14px;
+    padding: 0;
   }
 
   .workspace-shell {

@@ -1,3 +1,26 @@
+.skip-to-canvas {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  z-index: 40;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.skip-to-canvas:focus-visible {
+  width: auto;
+  height: auto;
+  clip: auto;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
 .app-shell {
   position: relative;
   display: grid;
@@ -7,7 +30,7 @@
   grid-template-rows: 40px 1fr;
   margin: 0;
   overflow: hidden;
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--bg);
   box-shadow: none;
 }
@@ -69,11 +92,12 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border: 0;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
   line-height: 1;
+  cursor: default;
 }
 
 .workband-chat-action:not(.icon-button) {
@@ -92,15 +116,18 @@
 }
 
 .workband-chat-action:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--ink);
 }
 
 .workband-chat-action.is-active {
-  border-color: var(--accent);
-  background: var(--accent-soft-strong);
+  background: var(--accent-soft);
   color: var(--accent);
+  box-shadow: inset var(--stripe-width) 0 0 var(--accent);
+}
+
+.workband-chat-action:active {
+  background: var(--overlay-active);
 }
 
 .brand-mark {
@@ -163,20 +190,25 @@
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
+  cursor: default;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .icon-button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: 2px;
 }
 
 .icon-button:hover {
-  background: var(--bg-soft);
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--ink);
+}
+
+.icon-button:active {
+  background: var(--overlay-active);
 }
 
 .status-pill,
@@ -199,7 +231,7 @@
   display: grid;
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);
-  padding: 0 20px 20px;
+  padding: 0;
 }
 
 .workspace--no-sidebar {
@@ -296,14 +328,14 @@
   min-width: 0;
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 16px;
-  padding: 18px 0 18px 26px;
+  gap: 0;
+  padding: 0;
 }
 
 .workspace-main--chat {
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  padding: 10px 0 4px 24px;
+  padding: 0;
 }
 
 .canvas {
@@ -315,8 +347,8 @@
 .canvas-scroll {
   height: 100%;
   overflow: auto;
-  padding: 8px 6px 0 0;
-  scrollbar-width: none;
+  padding: 0;
+  scrollbar-width: auto;
 }
 
 .canvas--chat {

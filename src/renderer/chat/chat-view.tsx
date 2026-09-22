@@ -316,7 +316,7 @@ export function ChatView({
             <div className="chat-feedback-stack">
               {showEmptyState ? (
                 <header className="chat-empty-copy" data-testid="chat-empty-state">
-                  <h1>{researchContext?.projectTitle ? '研究助手' : 'Roc 本地工作台'}</h1>
+                  <strong>{researchContext?.projectTitle ? '研究助手' : 'Roc 本地工作台'}</strong>
                   <p>{researchContext?.projectTitle ? '在当前研究项目中提问或启动任务' : '问问 Roc 或交给它一个任务'}</p>
                 </header>
               ) : null}

@@ -61,20 +61,19 @@ export function ResearchManuscriptPanel({
       <div className="research-tool-heading">
         <div>
           <h2>主张与正文</h2>
-          <p>把证据绑定到段落主张，保存后生成可审核的 LaTeX 正文。</p>
         </div>
         <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-manuscript-create" onClick={onCreate}>新建正文</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-manuscript-list">
-          {manuscripts.length === 0 ? <div className="research-loading">还没有正文。先新建一份，再写入主张。</div> : manuscripts.map((artifact) => (
+          {manuscripts.length === 0 ? <div className="research-empty-inline" role="status">还没有正文。先新建一份，再写入主张。</div> : manuscripts.map((artifact) => (
             <button className={artifact.id === selectedArtifactId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={artifact.id} type="button" onClick={() => onSelect(artifact.id)}>
               <strong>{artifact.title}</strong>
               <span>{artifact.status === 'approved' ? '已批准' : artifact.status === 'superseded' ? '已替换' : '草稿'}</span>
             </button>
           ))}
         </div>
-        {selectedArtifactId === null ? <div className="research-loading">选择一份正文开始编辑。</div> : (
+        {selectedArtifactId === null ? <div className="research-empty-inline" role="status">选择一份正文开始编辑。</div> : (
           <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
             <label>
               主张内容
@@ -98,7 +97,7 @@ export function ResearchManuscriptPanel({
               <button className="action-button" disabled={writeBlocked || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
             </div>
             <div className="research-literature-list" data-testid="research-claim-list">
-              {claims.length === 0 ? <div className="research-loading">还没有主张。</div> : claims.map((claim) => (
+              {claims.length === 0 ? <div className="research-empty-inline" role="status">还没有主张。</div> : claims.map((claim) => (
                 <label className="research-literature-row" key={claim.id}>
                   <input type="checkbox" data-testid={`research-claim-toggle-${claim.id}`} checked={draft.selectedClaimIds.includes(claim.id)} onChange={() => onChange(toggleClaim(draft, claim.id))} />
                   <strong>{claim.content}</strong>

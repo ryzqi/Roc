@@ -35,7 +35,6 @@ export function ResearchKnowledgePanel({
       <div className="research-tool-heading">
         <div>
           <h2>知识库</h2>
-          <p>关键词和向量混合召回，使用 RRF 合并排序。命中片段可捕获为当前项目证据。</p>
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
           <TextInput aria-label="搜索知识库" data-testid="research-knowledge-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
@@ -52,7 +51,7 @@ export function ResearchKnowledgePanel({
         <span data-testid="research-evidence-count">已捕获 {evidence.length}</span>
       </div>
       <div className="research-knowledge-list">
-        {result === null ? <div className="research-loading">输入查询开始召回证据。</div> : result.hits.map((hit) => (
+        {result === null ? <div className="research-empty-inline" role="status">输入查询开始召回证据。</div> : result.hits.map((hit) => (
           <article className="research-knowledge-row" key={hit.chunkId}>
             <div className="research-knowledge-rank">RRF {hit.rrfScore.toFixed(4)}</div>
             <h3>{hit.title}</h3>

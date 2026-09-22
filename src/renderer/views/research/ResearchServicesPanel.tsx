@@ -20,6 +20,19 @@ export function ResearchServicesPanel({
             key={service.id}
             type="button"
             onClick={() => onOpenService(service)}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+                return;
+              }
+              const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-service-row') ?? []];
+              const index = buttons.indexOf(event.currentTarget);
+              const next = buttons[index + (event.key === 'ArrowDown' ? 1 : -1)];
+              if (next === undefined) {
+                return;
+              }
+              event.preventDefault();
+              next.focus();
+            }}
           >
             <strong>{service.label}</strong>
             <span>{service.description}</span>

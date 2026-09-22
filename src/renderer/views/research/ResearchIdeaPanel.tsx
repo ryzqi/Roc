@@ -71,20 +71,19 @@ export function ResearchIdeaPanel({
       <div className="research-tool-heading">
         <div>
           <h2>构思画布</h2>
-          <p>分别记录问题、假设、新颖性、证据、实验和风险。已批准版本可晋升为新项目。</p>
         </div>
         <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-idea-create" onClick={onCreate}>新建画布</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-idea-list">
-          {canvases.length === 0 ? <div className="research-loading">还没有构思画布。先新建或让构思角色生成一份。</div> : canvases.map((artifact) => (
+          {canvases.length === 0 ? <div className="research-empty-inline" role="status">还没有构思画布。先新建或让构思角色生成一份。</div> : canvases.map((artifact) => (
             <button className={artifact.id === selectedArtifactId ? 'research-literature-row research-library-row--active' : 'research-literature-row'} key={artifact.id} type="button" onClick={() => onSelect(artifact.id)}>
               <strong>{artifact.title}</strong>
               <span>{artifact.status === 'approved' ? '已批准' : artifact.status === 'superseded' ? '已替换' : '草稿'}</span>
             </button>
           ))}
         </div>
-        {draft === null ? <div className="research-loading">选择一份画布开始编辑。</div> : (
+        {draft === null ? <div className="research-empty-inline" role="status">选择一份画布开始编辑。</div> : (
           <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
             {fieldKeys.map((key, index) => {
               const field = draft.fields[index]!;
