@@ -76,6 +76,7 @@ import { registerResearchRunCapabilities, researchRunCapabilities } from './run-
 import type { ResearchRoleExecutor } from './role-executor';
 import { ResearchStageRuntime } from './stage-runtime';
 import { createResearchHumanGate } from './human-gate';
+import { applyResearchWorkflowTransition, shutdownResearchPlugin } from './research-plugin-lifecycle';
 import { createResearchProductionJob } from './research-production-job';
 
 const pluginId = '@roc/plugin-research';
@@ -242,14 +243,12 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         return researchRepository.deleteProject(request.id);
       });
       context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));
-      context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => {
-        const request = researchWorkflowTransitionRequestSchema.parse(input);
-        const snapshot = request.action === 'complete' || request.action === 'approve' || request.action === 'reject'
-          ? await humanGate[request.action](request)
-          : runtime.transition(request);
-        researchExports.projectChanged(request.projectId);
-        return snapshot;
-      });
+      context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => applyResearchWorkflowTransition({
+        request: researchWorkflowTransitionRequestSchema.parse(input),
+        gate: humanGate,
+        runtime,
+        exports: researchExports
+      }));
       context.capabilities.register(pluginId, workbenchCapabilities.stageRole, async (input) =>
         getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
       );
@@ -269,21 +268,21 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       researchIndexer.start();
     },
     shutdown: async () => {
-      // productionJob.shutdown is a facade over figures/exports/experiments; plugin shutdown owns the real list.
-      const results = await Promise.allSettled([productionInputs?.shutdown(), exports?.shutdown(), figures?.shutdown(), experiments?.shutdown(), indexer?.shutdown(), embeddings?.shutdown(), stageRuntime?.shutdown(), templates?.shutdown(), documents?.shutdown(), library?.shutdown()]);
-      productionInputs = null;
-      exports = null;
-      figures = null;
-      experiments = null;
-      indexer = null;
-      embeddings = null;
-      documents = null;
-      library = null;
-      templates = null;
-      stageRuntime = null;
-      repository = null;
-      const errors: unknown[] = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (errors.length > 0) throw new AggregateError(errors, 'research_shutdown_failed');
+      try {
+        await shutdownResearchPlugin({ productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library });
+      } finally {
+        productionInputs = null;
+        exports = null;
+        figures = null;
+        experiments = null;
+        indexer = null;
+        embeddings = null;
+        documents = null;
+        library = null;
+        templates = null;
+        stageRuntime = null;
+        repository = null;
+      }
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
