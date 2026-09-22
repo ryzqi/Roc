@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { researchExportExecutionSchema, type ResearchExportExecution, type ResearchExportPrepare } from '../../../shared/schemas/research-exports';
 import type { ResearchArtifact } from '../../../shared/types';
+import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
 type Row = { snapshot_json: string; root_path: string };
@@ -127,6 +128,18 @@ export class ResearchExportRepository {
     if (project.currentStage !== 'export') throw new Error('research_export_stage_inactive');
     const cycle = this.research.reviews.requireForStage(project.id, 'export');
     if (cycle === null || cycle.manuscriptArtifactId !== request.manuscriptArtifactId) throw new Error('research_export_manuscript_changed');
+  }
+
+  reviewSignature(projectId: string): string {
+    const workflow = this.research.getWorkflow(projectId);
+    const stage = workflow.stages.find((entry) => entry.stage === 'export');
+    if (stage === undefined) throw new Error('research_stage_not_found');
+    const exports = stage.artifactIds.map((id) => {
+      const artifact = this.research.getArtifact(id);
+      const record = this.forArtifact(artifact);
+      return { artifactId: artifact.id, status: artifact.status, path: artifact.path, exportId: record.id, sourceHash: record.sourceHash };
+    }).sort((left, right) => left.artifactId.localeCompare(right.artifactId));
+    return researchContentHash(JSON.stringify({ stage: workflow.currentStage, projectStatus: workflow.projectStatus, exports }));
   }
 
   private row(id: string): Row {

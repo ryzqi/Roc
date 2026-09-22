@@ -1,5 +1,4 @@
 import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
-import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
 export type ResearchProductionVerifier = {
@@ -26,12 +25,12 @@ export function createResearchHumanGate(input: {
     if (current.stage === 'figure' || current.stage === 'export') {
       if (input.production === undefined) throw new Error(current.stage === 'figure' ? 'research_figure_verify_unavailable' : 'research_export_verify_unavailable');
       const signature = current.stage === 'figure'
-        ? figureSignature(input.repository, request.projectId)
-        : exportSignature(input.repository, request.projectId);
+        ? input.repository.figures.reviewSignature(request.projectId)
+        : input.repository.exports.reviewSignature(request.projectId);
       await input.production.verifyStage(request.projectId);
       const next = current.stage === 'figure'
-        ? figureSignature(input.repository, request.projectId)
-        : exportSignature(input.repository, request.projectId);
+        ? input.repository.figures.reviewSignature(request.projectId)
+        : input.repository.exports.reviewSignature(request.projectId);
       if (signature !== next) throw new Error(current.stage === 'figure' ? 'research_figure_review_changed' : 'research_export_review_changed');
     }
     return input.repository.transitionWorkflow(request);
@@ -42,27 +41,4 @@ export function createResearchHumanGate(input: {
     approve(request) { return submit(request, 'approve'); },
     reject(request) { return submit(request, 'reject'); }
   };
-}
-
-function figureSignature(repository: ResearchRepository, projectId: string): string {
-  const workflow = repository.getWorkflow(projectId);
-  const stage = workflow.stages.find((entry) => entry.stage === 'figure');
-  if (stage === undefined) throw new Error('research_stage_not_found');
-  const artifacts = stage.artifactIds.map((id) => ({
-    artifact: repository.getArtifact(id),
-    claims: repository.evidence.listClaims({ projectId, artifactId: id })
-  }));
-  return researchContentHash(JSON.stringify({
-    currentStage: workflow.currentStage, projectStatus: workflow.projectStatus, stage, artifacts
-  }));
-}
-
-function exportSignature(repository: ResearchRepository, projectId: string): string {
-  const workflow = repository.getWorkflow(projectId);
-  const stage = workflow.stages.find((entry) => entry.stage === 'export');
-  if (stage === undefined) throw new Error('research_stage_not_found');
-  return researchContentHash(JSON.stringify({
-    currentStage: workflow.currentStage, projectStatus: workflow.projectStatus, stage,
-    artifacts: stage.artifactIds.map((id) => repository.getArtifact(id))
-  }));
 }

@@ -5,6 +5,7 @@ import { researchFigurePublicationSchema, researchFigureRunSchema, type Research
 import { researchFigureValidationSchema, type ResearchFigureValidation } from '../../../shared/schemas/research-plotting';
 import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
 import { figureRendererPath } from './figure-runner';
+import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
 type Row = { snapshot_json: string };
@@ -102,6 +103,21 @@ export class ResearchFigureRepository {
       throw new Error('research_figure_artifact_invalid');
     }
     return record;
+  }
+
+  reviewSignature(projectId: string): string {
+    const workflow = this.research.getWorkflow(projectId);
+    const stage = workflow.stages.find((entry) => entry.stage === 'figure');
+    if (stage === undefined) throw new Error('research_stage_not_found');
+    const figures = stage.artifactIds.map((id) => {
+      const artifact = this.research.getArtifact(id);
+      const record = this.forArtifact(artifact);
+      const claims = this.research.evidence.listClaims({ projectId, artifactId: id }).map((claim) => ({
+        id: claim.id, status: claim.status, content: claim.content, evidenceIds: [...claim.evidenceIds].sort()
+      })).sort((left, right) => left.id.localeCompare(right.id));
+      return { artifactId: artifact.id, status: artifact.status, path: artifact.path, figureId: record.id, manifestHash: record.manifestHash, claims };
+    }).sort((left, right) => left.artifactId.localeCompare(right.artifactId));
+    return researchContentHash(JSON.stringify({ stage: workflow.currentStage, projectStatus: workflow.projectStatus, figures }));
   }
 }
 
