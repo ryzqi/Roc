@@ -31,10 +31,11 @@ export function WindowWorkband({
           {inProject ? (
             <div className="workband-chat-actions">
               <button
+                aria-keyshortcuts="Meta+[ Control+["
                 aria-label="所有项目"
                 className="workband-chat-action"
                 data-testid="research-shell-all-projects"
-                title="所有项目"
+                title="返回所有项目（⌘[）"
                 type="button"
                 onClick={onReturnToProjects}
               >

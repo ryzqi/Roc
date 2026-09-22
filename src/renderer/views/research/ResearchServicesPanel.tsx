@@ -1,5 +1,15 @@
-import type { ResearchServiceEntry } from './research-services';
+import { CircleAlert, CircleCheck, CircleDashed, LoaderCircle, PauseCircle, Settings2 } from 'lucide-react';
+import type { ResearchServiceEntry, ResearchServiceStatus } from './research-services';
 import { researchStageLabels } from './research-workflow';
+
+const STATUS_ICON: Record<ResearchServiceStatus, typeof CircleCheck> = {
+  available: CircleCheck,
+  needs_setup: Settings2,
+  running: LoaderCircle,
+  blocked: PauseCircle,
+  failed: CircleAlert,
+  disabled: CircleDashed
+};
 
 export function ResearchServicesPanel({
   onOpenService,
@@ -34,9 +44,16 @@ export function ResearchServicesPanel({
               next.focus();
             }}
           >
+            <span className="research-service-status" data-status={service.status}>
+              {(() => {
+                const Icon = STATUS_ICON[service.status];
+                return <Icon aria-hidden="true" size={14} />;
+              })()}
+              <em>{service.statusLabel}</em>
+            </span>
             <strong>{service.label}</strong>
             <span>{service.description}</span>
-            <em>{service.statusLabel}{service.stage === null ? '' : ` · ${researchStageLabels[service.stage]}`}</em>
+            {service.stage === null ? null : <em>{researchStageLabels[service.stage]}</em>}
           </button>
         ))}
       </div>

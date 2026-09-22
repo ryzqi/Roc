@@ -1,4 +1,4 @@
-import { CircleAlert, FolderSearch, Plus, X } from 'lucide-react';
+import { Activity, CircleAlert, FolderSearch, Plus, Settings, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
@@ -343,11 +343,15 @@ export function ResearchAppShell({
       }
       if (event.key === '2') {
         event.preventDefault();
-        applyRoute({ view: 'activity' });
+        setActivityOpen(true);
       }
       if (event.key === '3') {
         event.preventDefault();
         applyRoute({ view: 'provenance' });
+      }
+      if (event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        setServicesOpen(true);
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -509,26 +513,46 @@ export function ResearchAppShell({
       <header className="page-strip research-shell-banner">
         {shellState === 'project' && context.project !== null ? (
           <>
-            <h1 className="visually-hidden" data-testid="research-shell-current-title">{context.project.title}</h1>
-            <div className="page-flags research-shell-banner-actions" role="toolbar" aria-label="科研工具">
+            <div className="page-copy">
+              <p className="page-meta">研究项目</p>
+              <h1 className="page-title" data-testid="research-shell-current-title">{context.project.title}</h1>
+              <p className="page-meta" data-testid="research-shell-heading-stage">
+                {context.workflow === null ? '阶段未加载' : `当前阶段：${researchStageLabels[context.workflow.currentStage]}`}
+                {context.project.workspacePath === null ? '' : ` · ${context.project.workspacePath}`}
+              </p>
+            </div>
+            <div className="page-flags research-shell-banner-actions" role="toolbar" aria-label="项目操作">
               {onOpenAssistant === undefined ? null : (
-                <button className="research-toolbar-button" data-testid="research-shell-assistant" type="button" onClick={onOpenAssistant}>
+                <button className="research-toolbar-button" data-testid="research-shell-assistant" title="打开研究助手" type="button" onClick={onOpenAssistant}>
                   研究助手
                 </button>
               )}
-              {compact ? (
-                <button aria-expanded={servicesOpen} className="research-toolbar-button" data-testid="research-shell-services-toggle" type="button" onClick={() => setServicesOpen(true)}>
-                  科研服务
-                </button>
-              ) : null}
-              <button aria-pressed={activityOpen} className={activityOpen ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'} data-testid="research-shell-activity-toggle" type="button" onClick={() => setActivityOpen((open) => !open)}>
-                活动与运行
+              <button
+                aria-expanded={servicesOpen}
+                aria-keyshortcuts="S"
+                className="research-toolbar-button"
+                data-testid="research-shell-services-toggle"
+                title="打开科研服务（S）"
+                type="button"
+                onClick={() => setServicesOpen(true)}
+              >
+                <Settings aria-hidden="true" size={15} />
+                科研服务
               </button>
-              <button aria-pressed={canvasView === 'overview'} className={canvasView === 'overview' ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'} data-testid="research-shell-overview" type="button" onClick={() => applyRoute({ view: 'overview' })}>项目总览</button>
-              <button aria-pressed={canvasView === 'provenance'} className={canvasView === 'provenance' ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'} data-testid="research-shell-provenance" type="button" onClick={() => applyRoute({ view: 'provenance' })}>溯源</button>
-              <button aria-pressed={canvasView === 'stage' && stageGroup === 'settings'} className={canvasView === 'stage' && stageGroup === 'settings' ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'} data-testid="research-shell-settings" type="button" onClick={() => openStageGroup('settings')}>项目设置</button>
+              <button
+                aria-pressed={activityOpen}
+                aria-keyshortcuts="2"
+                className={activityOpen ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'}
+                data-testid="research-shell-activity-toggle"
+                title="显示最近活动（2）"
+                type="button"
+                onClick={() => setActivityOpen((open) => !open)}
+              >
+                <Activity aria-hidden="true" size={15} />
+                最近活动
+              </button>
+              <button className="research-toolbar-button research-toolbar-button--danger" data-testid="research-shell-delete-project" type="button" onClick={() => setDeleteConfirmOpen(true)}>删除项目</button>
             </div>
-            <button className="research-toolbar-button research-toolbar-button--danger" data-testid="research-shell-delete-project" type="button" onClick={() => setDeleteConfirmOpen(true)}>删除项目</button>
           </>
         ) : (
           <>
@@ -677,6 +701,14 @@ export function ResearchAppShell({
           ].filter((value) => value.length > 0).join(' ')}
           data-testid="research-shell-project"
         >
+          {onOpenService === undefined ? null : (
+            <aside className="research-shell-services" data-testid="research-shell-services-rail">
+              <ResearchServicesPanel
+                onOpenService={onOpenService}
+                services={services}
+              />
+            </aside>
+          )}
           <main className="research-shell-canvas">
             {context.workflow === null ? null : (
               <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
@@ -685,8 +717,7 @@ export function ResearchAppShell({
                   const selected = stageGroup === group.id && canvasView === 'stage';
                   return (
                     <button
-                      aria-current={current ? 'step' : undefined}
-                      aria-pressed={selected}
+                      aria-current={selected ? 'page' : undefined}
                       className={[
                         'research-shell-stage',
                         selected ? 'research-shell-stage--selected' : '',
@@ -712,7 +743,7 @@ export function ResearchAppShell({
                       }}
                     >
                       <strong>{group.label}</strong>
-                      {current || selected ? <em>{current ? '当前阶段' : '正在查看'}</em> : null}
+                      <em>{current ? '当前阶段' : selected ? '正在查看' : '未打开'}</em>
                     </button>
                   );
                 })}
@@ -800,7 +831,7 @@ export function ResearchAppShell({
         </div>
       ) : null}
       <Drawer onClose={() => setServicesOpen(false)} open={compact && servicesOpen} title="科研服务">
-        {onOpenService === undefined ? null : (
+        {onOpenService === undefined || !compact ? null : (
           <ResearchServicesPanel
             onOpenService={(service) => {
               setServicesOpen(false);
