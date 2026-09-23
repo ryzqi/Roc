@@ -9,6 +9,7 @@ import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
+import { FileImageFrame } from './file-image-frame';
 import { flattenTreeEntries, isImagePreview, parentRelativePath, previewTextBody } from './file-tree-helpers';
 import { resolveResizeSeparatorKeyWidth } from './resize-separator-keyboard';
 
@@ -138,14 +139,12 @@ export function FilesWorkbench({
         <p>从左侧文件树选择一个文件后，这里会显示原内容、图片或不可直接阅读的说明。</p>
       </div>
     ) : isImagePreview(state.filePreview) ? (
-      <div className="workbench-file-image-stage" data-testid="workbench-file-preview">
-        <img
-          alt={state.filePreview.relativePath}
-          className="workbench-file-image-preview"
-          data-testid="workbench-file-image-preview"
-          src={state.filePreview.content}
-        />
-      </div>
+      <FileImageFrame
+        alt={state.filePreview.relativePath}
+        imageTestId="workbench-file-image-preview"
+        src={state.filePreview.content}
+        stageTestId="workbench-file-preview"
+      />
     ) : state.filePreview.kind === 'binary' ? (
       <div className="workbench-file-empty" data-testid="workbench-file-preview">
         <strong>该文件不能直接作为文本阅读</strong>

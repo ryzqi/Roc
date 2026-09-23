@@ -2,6 +2,7 @@ import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import type { LazyLoadState } from '../../app/types';
+import { FileImageFrame } from '../../workbench/file-image-frame';
 import { isImagePreview, previewTextBody } from '../../workbench/file-tree-helpers';
 import type { LoadedState } from '../../loaded-state';
 
@@ -37,14 +38,11 @@ export function PreviewView({
   const previewBody = previewTextBody(state.filePreview);
   const previewStage =
     isImagePreview(state.filePreview) ? (
-      <div className="workbench-file-image-stage">
-        <img
-          alt={state.filePreview.relativePath}
-          className="workbench-file-image-preview"
-          data-testid="preview-view-image"
-          src={state.filePreview.content}
-        />
-      </div>
+      <FileImageFrame
+        alt={state.filePreview.relativePath}
+        imageTestId="preview-view-image"
+        src={state.filePreview.content}
+      />
     ) : (
       <div className="code-preview">{state.filePreview === null ? '当前没有加载可预览内容。' : state.filePreview.content}</div>
     );

@@ -13,6 +13,7 @@ import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
 import { SkillsView as SkillControlView, buildSkillManagementViewModel, type SkillFilterId } from '../../skills-view';
 import { SkillDrawer, type SkillBrowserViewState } from '../../skill-drawer';
+import { FileImageFrame } from '../../workbench/file-image-frame';
 import { flattenTreeEntries, isImagePreview, previewTextBody } from '../../workbench/file-tree-helpers';
 
 export function SkillsHostView({
@@ -271,13 +272,11 @@ export function SkillsHostView({
           {browser.loadingPreview ? '正在读取文件…' : '请选择左侧文件以预览。'}
         </div>
       ) : isImagePreview(browser.preview) ? (
-        <div className="workbench-file-image-stage" data-testid="skill-drawer-image">
-          <img
-            alt={browser.preview.relativePath}
-            className="workbench-file-image-preview"
-            src={browser.preview.content}
-          />
-        </div>
+        <FileImageFrame
+          alt={browser.preview.relativePath}
+          src={browser.preview.content}
+          stageTestId="skill-drawer-image"
+        />
       ) : browser.preview.kind === 'binary' ? (
         <div className="muted" data-testid="skill-drawer-binary">
           二进制文件，无法直接预览。

@@ -420,6 +420,17 @@
   box-shadow: none;
 }
 
+.workbench-file-image-fallback {
+  position: absolute;
+  inset: var(--space-5);
+  margin: 0;
+  overflow: auto;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .workbench-file-pdf-stage {
   min-height: 0;
   display: grid;
