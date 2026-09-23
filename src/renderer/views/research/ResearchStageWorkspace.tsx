@@ -209,7 +209,7 @@ function ResearchStageWorkspace({
             ) : null}
           </div>
         ) : null}
-        <Suspense fallback={<div className="research-loading" role="status">正在加载阶段面板…</div>}>
+        <Suspense fallback={<div className="view-loading" role="status">正在加载阶段面板…</div>}>
         {tab === 'library' ? (
           <ResearchLibraryPanel
             bibliographyFormat={librarySnapshot.bibliographyFormat}

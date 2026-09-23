@@ -87,7 +87,7 @@ export function ViewContent({
   researchServiceContext?: ResearchServiceContext | null;
 }): React.JSX.Element {
   function renderLazyView(node: React.JSX.Element): React.JSX.Element {
-    return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
+    return <Suspense fallback={<div className="view-loading" role="status">正在加载视图…</div>}>{node}</Suspense>;
   }
 
   function renderServiceView(node: React.JSX.Element): React.JSX.Element {

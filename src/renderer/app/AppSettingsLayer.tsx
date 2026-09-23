@@ -41,7 +41,7 @@ export function AppSettingsLayer({
       <AnimatePresence onExitComplete={onExitComplete}>
       {open ? (
         <SettingsModal key="settings-modal" onClose={requestClose}>
-          <Suspense fallback={<div className="boot">Roc 正在加载设置</div>}>
+          <Suspense fallback={<div className="view-loading" role="status">Roc 正在加载设置</div>}>
             <SettingsFeature
               client={client}
               onProviderDirtyChange={setProviderDirty}

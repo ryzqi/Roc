@@ -778,7 +778,7 @@ export function ResearchAppShell({
                 workflow={context.workflow}
               />
             ) : (
-              <Suspense fallback={<div className="research-loading" role="status">正在加载视图…</div>}>
+              <Suspense fallback={<div className="view-loading" role="status">正在加载视图…</div>}>
                 {canvasView === 'activity' ? (
                   <ResearchActivityView
                     events={snapshot.events}
