@@ -50,6 +50,14 @@
   color: var(--subtle);
 }
 
+.git-commit-message:focus-visible,
+.git-branch-search:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .git-commit-button {
   min-height: var(--control-height);
   padding: 0 14px;

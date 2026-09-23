@@ -173,6 +173,15 @@
   overflow: hidden;
 }
 
+.memory-editor-textarea:focus-visible,
+.memory-file-textarea:focus-visible,
+.memory-session-input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .memory-editor-actions {
   display: flex;
   align-items: center;
@@ -344,9 +353,6 @@
   outline: none;
 }
 
-.memory-file-textarea:focus {
-  border-color: var(--accent);
-}
 
 .memory-file-actions {
   display: flex;
@@ -453,9 +459,6 @@
   box-shadow: var(--shadow-input);
 }
 
-.memory-session-input:focus {
-  border-color: var(--accent);
-}
 
 .memory-session-results {
   display: grid;
