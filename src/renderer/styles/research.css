@@ -1,7 +1,7 @@
 .research-page {
   display: grid;
   gap: 16px;
-  padding: 12px 20px 28px;
+  padding: 16px 28px 42px;
 }
 
 .research-project-heading,
@@ -102,8 +102,9 @@
 .research-tool-heading h2 {
   margin: 0;
   color: var(--ink);
-  font-size: var(--font-h3-size);
+  font-size: var(--font-h2-size);
   font-weight: 500;
+  line-height: 1.3;
 }
 
 .research-tool-heading p {
@@ -957,7 +958,7 @@ pre.research-reader-content {
 
 .research-shell-banner > .research-shell-project-copy {
   flex: 1 1 180px;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 140px;
 }
 
