@@ -149,7 +149,7 @@ source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel �
 | `--ink` | `#1f2937` | 标题、强调正文 |
 | `--text` | `#2c3440` | 默认正文 |
 | `--muted` | `#58606b` | 辅助说明、元信息 |
-| `--subtle` | `#7a8390` | 更弱提示、占位 |
+| `--subtle` | `#6b7280` | 更弱提示、占位。浅色纸面上对比不低于 4.5:1 |
 | `--bg` | `#fcfcfd` | 窗口底，接近纸面 |
 | `--bg-soft` | `#f6f7f9` | 次级底、只读输入 |
 | `--surface` | `#ffffff` | 面板、卡片、设置浮层 |
