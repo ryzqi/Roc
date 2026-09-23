@@ -367,7 +367,7 @@
   align-items: flex-start;
   margin: 0;
   color: var(--muted);
-  background: var(--bg);
+  background: transparent;
 }
 
 .canvas:not(.canvas--chat) .canvas-scroll > .view-loading,

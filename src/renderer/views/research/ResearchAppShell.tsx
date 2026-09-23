@@ -1,5 +1,5 @@
 import { CircleAlert, FolderSearch, Plus, X } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
@@ -39,6 +39,39 @@ const ResearchProvenanceView = lazy(() => import('./ResearchProvenanceView').the
 const ResearchStageWorkspace = lazy(() => import('./ResearchStageWorkspace').then((module) => ({ default: module.ResearchStageWorkspace })));
 import type { ResearchStageWorkspaceHandle } from './ResearchStageWorkspace';
 
+const canvasModules = new Map<'activity' | 'provenance' | 'stage', ComponentType<any>>();
+
+function loadCanvasModule(view: ResearchCanvasView): Promise<void> {
+  if (view === 'overview' || canvasModules.has(view)) {
+    return Promise.resolve();
+  }
+  const loading = view === 'activity'
+    ? import('./ResearchActivityView').then((module) => module.ResearchActivityView)
+    : view === 'provenance'
+      ? import('./ResearchProvenanceView').then((module) => module.ResearchProvenanceView)
+      : import('./ResearchStageWorkspace').then((module) => module.ResearchStageWorkspace);
+  return loading.then((component) => {
+    canvasModules.set(view, component);
+  });
+}
+
+
+
+function LoadedActivityView(props: React.ComponentProps<typeof ResearchActivityView>): React.JSX.Element {
+  const View = canvasModules.get('activity') as React.ComponentType<React.ComponentProps<typeof ResearchActivityView>>;
+  return <View {...props} />;
+}
+
+function LoadedProvenanceView(props: React.ComponentProps<typeof ResearchProvenanceView>): React.JSX.Element {
+  const View = canvasModules.get('provenance') as React.ComponentType<React.ComponentProps<typeof ResearchProvenanceView>>;
+  return <View {...props} />;
+}
+
+function LoadedStageWorkspace(props: React.ComponentProps<typeof ResearchStageWorkspace>): React.JSX.Element {
+  const View = canvasModules.get('stage') as React.ComponentType<React.ComponentProps<typeof ResearchStageWorkspace>>;
+  return <View {...props} />;
+}
+
 export function ResearchAppShell({
   client,
   onContextChange,
@@ -74,6 +107,12 @@ export function ResearchAppShell({
   const [activityOpen, setActivityOpen] = useState(false);
   const initialRoute = readResearchRoute();
   const [canvasView, setCanvasView] = useState<ResearchCanvasView>(initialRoute.view);
+  const [shownCanvas, setShownCanvas] = useState<ResearchCanvasView | null>(initialRoute.view === 'overview' ? 'overview' : null);
+  const canvasReady = canvasView === 'overview' || canvasModules.has(canvasView);
+  if (canvasReady && shownCanvas !== canvasView) {
+    setShownCanvas(canvasView);
+  }
+  const paintedCanvas = canvasReady ? canvasView : shownCanvas;
   const [stageGroup, setStageGroup] = useState<ResearchStageGroupId>(initialRoute.stageGroup);
   const [stageTab, setStageTab] = useState<ResearchStageTab>(initialRoute.stageTab);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -195,11 +234,27 @@ export function ResearchAppShell({
   }, [context.projectId]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('.canvas:not(.canvas--chat) .canvas-scroll')?.scrollTo(0, 0);
+    if (canvasView === 'overview' || canvasModules.has(canvasView)) {
+      return;
+    }
+    let cancelled = false;
+    const requested = canvasView;
+    void loadCanvasModule(requested).then(() => {
+      if (!cancelled) {
+        setShownCanvas(requested);
+      }
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      cancelled = true;
+    };
   }, [canvasView]);
+
+  useLayoutEffect(() => {
+    if (paintedCanvas === null) {
+      return;
+    }
+    document.querySelector<HTMLElement>('.canvas:not(.canvas--chat) .canvas-scroll')?.scrollTo(0, 0);
+  }, [paintedCanvas]);
 
   useEffect(() => {
     const route = researchRouteFromState({
@@ -758,7 +813,9 @@ export function ResearchAppShell({
           data-testid="research-shell-project"
         >
           <main className="research-shell-canvas">
-            {context.workflow === null ? null : canvasView === 'overview' ? (
+            {context.workflow === null ? null : paintedCanvas === null ? (
+              <div className="view-loading" role="status">正在加载视图…</div>
+            ) : paintedCanvas === 'overview' ? (
               <ResearchOverviewView
                 artifacts={snapshot.artifacts}
                 context={context}
@@ -777,38 +834,34 @@ export function ResearchAppShell({
                 project={context.project}
                 workflow={context.workflow}
               />
+            ) : paintedCanvas === 'activity' ? (
+              <LoadedActivityView
+                events={snapshot.events}
+                onSelectEvent={openEvent}
+                runs={snapshot.runs}
+                selectedEventId={selectedEventId}
+              />
+            ) : paintedCanvas === 'provenance' ? (
+              <LoadedProvenanceView
+                artifacts={snapshot.artifacts}
+                evidence={evidence}
+                onSelectArtifact={setSelectedArtifactId}
+                onBackToOverview={() => applyRoute({ view: 'overview' })}
+                provenance={provenance}
+                runs={snapshot.runs}
+                selectedArtifactId={selectedArtifactId}
+              />
             ) : (
-              <Suspense fallback={<div className="view-loading" role="status">正在加载视图…</div>}>
-                {canvasView === 'activity' ? (
-                  <ResearchActivityView
-                    events={snapshot.events}
-                    onSelectEvent={openEvent}
-                    runs={snapshot.runs}
-                    selectedEventId={selectedEventId}
-                  />
-                ) : canvasView === 'provenance' ? (
-                  <ResearchProvenanceView
-                    artifacts={snapshot.artifacts}
-                    evidence={evidence}
-                    onSelectArtifact={setSelectedArtifactId}
-                    onBackToOverview={() => applyRoute({ view: 'overview' })}
-                    provenance={provenance}
-                    runs={snapshot.runs}
-                    selectedArtifactId={selectedArtifactId}
-                  />
-                ) : (
-                  <ResearchStageWorkspace
-                    ref={stageWorkspaceRef}
-                    groupId={stageGroup}
-                    onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
-                    session={session}
-                    state={state}
-                    tab={stageTab}
-                  />
-                )}
-              </Suspense>
+              <LoadedStageWorkspace
+                ref={stageWorkspaceRef}
+                groupId={stageGroup}
+                onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
+                session={session}
+                state={state}
+                tab={stageTab}
+              />
             )}
-            {canvasView === 'provenance' && provenanceError !== null ? (
+            {paintedCanvas === 'provenance' && provenanceError !== null ? (
               <div className="research-alert" role="alert" data-testid="research-provenance-error">
                 <span>{provenanceError} 返回总览后可重试。</span>
                 <button aria-label="关闭错误" className="research-toolbar-button" type="button" onClick={() => setProvenanceError(null)}>
@@ -816,7 +869,7 @@ export function ResearchAppShell({
                 </button>
               </div>
             ) : null}
-            {canvasView === 'stage' && stageGroup === 'settings' ? (
+            {paintedCanvas === 'stage' && stageGroup === 'settings' ? (
               <section className="research-danger-zone" data-testid="research-project-danger-zone">
                 <h2>危险操作</h2>
                 <p>删除后无法恢复该研究项目及其工作台状态。</p>

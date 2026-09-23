@@ -393,18 +393,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     state
   });
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      document
-        .querySelectorAll<HTMLElement>('.canvas:not(.canvas--chat) .canvas-scroll')
-        .forEach(resetScrollPosition);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [activeView]);
-
   // 工作台工具切换只重置工作台内部滚动面。
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
