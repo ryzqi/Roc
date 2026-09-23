@@ -1,5 +1,5 @@
 import { CompactStatusPill } from '../../components/CompactStatusPill';
-import { EmptyState } from '../../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import { TreeItem } from '../../components/TreeItem';
@@ -53,7 +53,7 @@ export function WorkspaceView({
       <>
         <PageHeading title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
-          <EmptyState testId="workspace-load-error" title="工作区数据加载失败" tone="error" />
+          <EmptyState detail={loadFailureDetail(loadState.error)} testId="workspace-load-error" title="工作区数据加载失败" tone="error" />
           <WorkspaceStatusPanels state={state} />
         </section>
       </>

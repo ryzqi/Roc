@@ -1,4 +1,4 @@
-import { EmptyState } from '../../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import type { LazyLoadState } from '../../app/types';
@@ -28,7 +28,7 @@ export function PreviewView({
       <>
         <PageHeading title="文件预览" />
         <section className="canvas-stage stage-grid" data-testid="preview-view">
-          <EmptyState testId="preview-load-error" title="文件预览加载失败" tone="error" />
+          <EmptyState detail={loadFailureDetail(loadState.error)} testId="preview-load-error" title="文件预览加载失败" tone="error" />
         </section>
       </>
     );

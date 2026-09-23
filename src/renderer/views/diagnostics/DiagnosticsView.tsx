@@ -1,4 +1,4 @@
-import { EmptyState } from '../../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import { StatusPill } from '../../components/StatusPill';
@@ -31,7 +31,7 @@ export function DiagnosticsView({
       <>
         <PageHeading title="任务诊断包" />
         <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
-          <EmptyState testId="diagnostics-load-error" title="诊断数据加载失败" tone="error" />
+          <EmptyState detail={loadFailureDetail(loadState.error)} testId="diagnostics-load-error" title="诊断数据加载失败" tone="error" />
         </section>
       </>
     );

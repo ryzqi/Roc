@@ -192,7 +192,7 @@ export function TerminalWorkbench({
   if (state.workspace === null) {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-terminal-empty" title="未选择工作区" />
+        <EmptyState detail="先在研究项目里绑定工作目录，再打开终端。" testId="workbench-terminal-empty" title="未选择工作区" />
       </section>
     );
   }

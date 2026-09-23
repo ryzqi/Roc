@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { FilePreviewResult, FileTreeResult, FilesWorkbenchPdfPreviewResult } from '../../shared/types';
 import { CompactStatusPill } from '../components/CompactStatusPill';
-import { EmptyState } from '../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../components/EmptyState';
 import { TreeItem } from '../components/TreeItem';
 import type { LazyLoadState, WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
@@ -99,7 +99,7 @@ export function FilesWorkbench({
   if (state.workspace === null) {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-files-empty" title="未选择工作区" />
+        <EmptyState detail="先在研究项目里绑定工作目录，再打开文件。" testId="workbench-files-empty" title="未选择工作区" />
       </section>
     );
   }
@@ -115,7 +115,7 @@ export function FilesWorkbench({
   if (loadState.status === 'error') {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-files-load-error" title="文件工作台加载失败" tone="error" />
+        <EmptyState detail={loadFailureDetail(loadState.error)} testId="workbench-files-load-error" title="文件工作台加载失败" tone="error" />
       </section>
     );
   }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { EmptyState } from '../../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
 import { visibleMemoryLabel } from '../../app/view-routing';
@@ -39,7 +39,7 @@ export function MemoryView({
       <>
         <PageHeading title="记忆中心" />
         <section className="canvas-stage stage-grid" data-testid="memory-view">
-          <EmptyState testId="memory-load-error" title="记忆中心加载失败" tone="error" />
+          <EmptyState detail={loadFailureDetail(loadState.error)} testId="memory-load-error" title="记忆中心加载失败" tone="error" />
         </section>
       </>
     );

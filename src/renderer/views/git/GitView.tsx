@@ -1,4 +1,4 @@
-import { EmptyState } from '../../components/EmptyState';
+import { EmptyState, loadFailureDetail } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
@@ -29,7 +29,7 @@ export function GitView({
       <>
         <PageHeading title="Git 面板" />
         <section className="canvas-stage stage-grid" data-testid="git-view">
-          <EmptyState testId="git-load-error" title="Git 状态加载失败" tone="error" />
+          <EmptyState detail={loadFailureDetail(loadState.error)} testId="git-load-error" title="Git 状态加载失败" tone="error" />
         </section>
       </>
     );
