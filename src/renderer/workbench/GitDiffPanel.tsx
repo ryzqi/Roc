@@ -35,7 +35,7 @@ export function GitDiffPanel({
     return (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
         <strong>{selectedChange.relativePath}</strong>
-        <p>当前文件 diff 加载失败。</p>
+        <p role="alert">当前文件 diff 加载失败。重新选择该文件后再试。</p>
       </div>
     );
   }
@@ -44,7 +44,7 @@ export function GitDiffPanel({
     return (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
         <strong>{selectedChange.relativePath}</strong>
-        <p>正在读取当前文件 diff。</p>
+        <p role="status">正在读取当前文件 diff。</p>
       </div>
     );
   }
