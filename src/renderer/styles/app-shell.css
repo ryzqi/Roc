@@ -350,6 +350,18 @@
   scrollbar-width: auto;
 }
 
+.canvas:not(.canvas--chat) .canvas-scroll {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-5) var(--space-7);
+}
+
+.canvas:not(.canvas--chat) .canvas-scroll > .canvas-stage {
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
 .canvas--chat {
   padding: 0;
 }
@@ -359,13 +371,13 @@
 }
 
 .canvas-stage {
-  min-height: calc(100% - 10px);
+  min-height: 0;
   position: relative;
   background: transparent;
 }
 
 .stage-grid {
   display: grid;
-  gap: 24px;
-  padding: 24px 0 8px;
+  gap: var(--space-6);
+  padding: 0;
 }
