@@ -947,12 +947,43 @@ pre.research-reader-content {
 .research-page .page-strip.research-shell-banner {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 0 6px;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+  padding: 0 0 10px;
   margin-bottom: 0;
   border-bottom: 1px solid var(--line-soft);
+}
+
+.research-shell-banner > .research-shell-project-copy {
+  flex: 1 1 180px;
+  gap: 2px;
+  min-width: 140px;
+}
+
+.research-shell-project-copy .page-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-shell-project-copy .page-meta {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-feature-settings: var(--font-feature-mono);
+}
+
+.research-shell-banner-tools {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  margin-left: auto;
 }
 
 .research-app-shell[data-shell-state="list"] .research-shell-banner,
@@ -1195,10 +1226,14 @@ pre.research-reader-content {
   background: var(--overlay-active);
 }
 
-.research-shell-stage--current,
-.research-shell-stage--selected {
+.research-shell-stage--current {
   background: var(--accent-soft);
   box-shadow: inset var(--stripe-width) 0 0 var(--accent);
+}
+
+.research-shell-stage--selected:not(.research-shell-stage--current) {
+  background: var(--surface-card-hover);
+  box-shadow: inset var(--stripe-width) 0 0 var(--line-strong);
 }
 
 .research-shell-stage--current:active,
@@ -1223,9 +1258,14 @@ pre.research-reader-content {
   color: var(--muted);
 }
 
-.research-shell-stage--current em {
+.research-shell-stage--current em,
+.research-shell-stage--selected em {
   color: var(--accent);
   font-weight: 600;
+}
+
+.research-shell-stage--selected:not(.research-shell-stage--current) em {
+  color: var(--muted);
 }
 
 .research-shell-search-empty.empty-state {
@@ -1260,8 +1300,40 @@ pre.research-reader-content {
   min-height: 0;
 }
 
+.research-shell-layout:has(.research-shell-services) {
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+}
+
+.research-shell-services {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.research-shell-layout:has(.research-shell-services) > .research-shell-services {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.research-shell-layout:has(.research-shell-services) > .research-shell-canvas {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.research-shell-layout--activity:has(.research-shell-services) > .research-shell-activity {
+  grid-column: 3;
+  grid-row: 1;
+}
+
 .research-shell-layout--activity {
   grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+}
+
+.research-shell-layout--activity:has(.research-shell-services) {
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(180px, 240px);
 }
 
 .research-shell-canvas {
@@ -1474,6 +1546,44 @@ pre.research-reader-content {
   color: var(--muted);
   font-size: var(--font-meta-size);
   font-style: normal;
+}
+
+.research-service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.research-service-status svg {
+  flex: 0 0 auto;
+}
+
+.research-service-row[data-status='available'] .research-service-status,
+.research-service-row[data-status='available'] .research-service-status span {
+  color: var(--st-ok);
+}
+
+.research-service-row[data-status='running'] .research-service-status,
+.research-service-row[data-status='running'] .research-service-status span {
+  color: var(--accent-tint);
+}
+
+.research-service-row[data-status='needs_setup'] .research-service-status,
+.research-service-row[data-status='needs_setup'] .research-service-status span,
+.research-service-row[data-status='blocked'] .research-service-status,
+.research-service-row[data-status='blocked'] .research-service-status span {
+  color: var(--st-warn);
+}
+
+.research-service-row[data-status='failed'] .research-service-status,
+.research-service-row[data-status='failed'] .research-service-status span {
+  color: var(--st-bad);
+}
+
+.research-service-row[data-status='disabled'] .research-service-status,
+.research-service-row[data-status='disabled'] .research-service-status span {
+  color: var(--subtle);
 }
 
 .research-service-context {
