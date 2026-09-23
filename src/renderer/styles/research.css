@@ -395,7 +395,7 @@
 .research-project-card-title {
   color: var(--ink);
   font-size: var(--font-body-size);
-  font-weight: 600;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 

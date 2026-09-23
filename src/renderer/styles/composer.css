@@ -3,10 +3,10 @@
   min-height: 164px;
   display: grid;
   grid-template-rows: 1fr auto;
-  gap: 14px;
-  padding: 18px;
+  gap: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--composer-border);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-md);
   background: var(--surface);
   box-shadow: none;
 }
@@ -21,7 +21,7 @@
   padding: 10px 10px 8px 14px;
   overflow: visible;
   border: 1px solid var(--composer-border);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-md);
   background: var(--surface);
   box-shadow: var(--shadow-input);
   width: min(100%, 760px);

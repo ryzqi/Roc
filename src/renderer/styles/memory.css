@@ -4,16 +4,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface);
   color: var(--muted);
   font-size: var(--font-ui-size);
 }
 .memory-library-layout {
   grid-template-columns: 318px minmax(0, 1fr);
-  gap: 22px;
+  gap: var(--space-6);
   min-height: 0;
 }
 
@@ -95,11 +95,11 @@
 
 .memory-editor-stage {
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface);
-  padding: 22px 24px 24px;
+  padding: var(--space-5) var(--space-6) var(--space-6);
   display: grid;
-  gap: 18px;
+  gap: var(--space-5);
 }
 
 .memory-editor-topline {
@@ -164,7 +164,7 @@
   resize: none;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-xs);
   background: var(--surface);
   color: var(--text);
   font-size: var(--font-ui-size);

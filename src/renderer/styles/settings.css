@@ -31,10 +31,10 @@
 .settings-sidebar-card {
   display: grid;
   align-content: start;
-  gap: 6px;
-  padding: 10px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface);
   box-shadow: none;
 }

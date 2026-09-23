@@ -2,7 +2,7 @@
   min-height: 0;
   margin: 0;
   padding: 16px;
-  background: linear-gradient(180deg, var(--terminal-bg), var(--terminal-bg-end));
+  background: var(--terminal-bg);
   color: var(--terminal-text);
   font-family: var(--font-mono);
   font-size: var(--font-code-size);

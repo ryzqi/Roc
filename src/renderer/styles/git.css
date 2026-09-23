@@ -340,9 +340,9 @@
 .git-selection-panel,
 .git-selection-empty {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface);
 }
 

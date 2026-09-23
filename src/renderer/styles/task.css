@@ -384,7 +384,7 @@
   justify-items: center;
   padding: 20px 18px 10px;
   border: 1px dashed var(--line);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-md);
   background: var(--bg-soft);
 }
 

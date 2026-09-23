@@ -79,8 +79,6 @@
   --r-sm: 8px;
   --r-md: 10px;
   --r-lg: 14px;
-  --r-xl: 16px;
-  --r-2xl: 20px;
   --radius-xs: var(--r-xs);
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
@@ -147,12 +145,10 @@
 
   /* 页面 / 气泡 */
   --bg-gradient: var(--bg);
-  --chat-bubble-radius: 14px;
-  --chat-bubble-radius-tight: 14px;
+  --chat-bubble-radius: var(--r-md);
+  --chat-bubble-radius-tight: var(--r-md);
   --chat-gap: 28px;
   --chat-avatar-size: 30px;
-  --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-ring: rgba(120, 144, 184, 0.18);
   --chat-bubble-assistant-bg: transparent;
   --chat-bubble-assistant-border: var(--line);
   --chat-bubble-assistant-shadow: none;
@@ -175,7 +171,6 @@
 
   /* 终端（两套主题下均为深色终端面板） */
   --terminal-bg: #101726;
-  --terminal-bg-end: #192235;
   --terminal-text: #dce4ef;
   --terminal-line: rgba(122, 167, 255, 0.18);
   --terminal-line-strong: rgba(122, 167, 255, 0.36);
@@ -242,7 +237,6 @@
   --syntax-comment: #8b9bb4;
   --syntax-number: #e5bd6c;
   --terminal-bg: #0c121e;
-  --terminal-bg-end: #141c2c;
   color-scheme: dark;
 }
 
