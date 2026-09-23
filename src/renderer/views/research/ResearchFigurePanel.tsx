@@ -82,7 +82,7 @@ export function ResearchFigurePanel({
         <div>
           <h2>图稿渲染</h2>
         </div>
-        <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-figure-refresh" onClick={onRefresh}>刷新</button>
+        <button className="ui-button ui-button--secondary" disabled={working || projectId === null} type="button" data-testid="research-figure-refresh" onClick={onRefresh}>刷新</button>
       </div>
       <div className="research-library-layout">
         <form className="research-idea-form" onSubmit={(event) => { event.preventDefault(); onStart(); }}>
@@ -110,7 +110,7 @@ export function ResearchFigurePanel({
             <TextInput data-testid="research-figure-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
-            <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-figure-start">
+            <button className="ui-button ui-button--secondary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-figure-start">
               <Play aria-hidden="true" size={15} />
               渲染
             </button>
@@ -126,25 +126,25 @@ export function ResearchFigurePanel({
               </button>
               <div className="research-stage-actions">
                 {['preparing', 'running'].includes(run.status) ? (
-                  <button className="action-button" disabled={writeBlocked} type="button" data-testid={`research-figure-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
+                  <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid={`research-figure-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
                     <Square aria-hidden="true" size={14} />
                     取消
                   </button>
                 ) : null}
                 {run.status === 'completed' ? (
-                  <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-figure-publish-${run.id}`} onClick={() => onPublish(run.id)}>
+                  <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid={`research-figure-publish-${run.id}`} onClick={() => onPublish(run.id)}>
                     <Send aria-hidden="true" size={14} />
                     发布图稿
                   </button>
                 ) : null}
                 {run.files.some((file) => file.area === 'log') ? (
-                  <button className="action-button" disabled={working} type="button" data-testid={`research-figure-log-${run.id}`} onClick={() => onReadLog(run.id)}>查看日志</button>
+                  <button className="ui-button ui-button--secondary" disabled={working} type="button" data-testid={`research-figure-log-${run.id}`} onClick={() => onReadLog(run.id)}>查看日志</button>
                 ) : null}
               </div>
             </article>
           ))}
           {page.remaining === 0 ? null : (
-            <button className="action-button" data-testid="research-figure-more" type="button" onClick={page.showMore}>
+            <button className="ui-button ui-button--secondary" data-testid="research-figure-more" type="button" onClick={page.showMore}>
               继续加载图稿（剩余 {page.remaining}）
             </button>
           )}

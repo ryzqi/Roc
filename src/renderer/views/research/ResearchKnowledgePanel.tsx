@@ -38,7 +38,7 @@ export function ResearchKnowledgePanel({
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
           <TextInput aria-label="搜索知识库" data-testid="research-knowledge-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索证据、笔记或论文片段" />
-          <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-knowledge-search">
+          <button className="ui-button ui-button--secondary" disabled={working} type="submit" data-testid="research-knowledge-search">
             <Send aria-hidden="true" size={15} />
             搜索
           </button>
@@ -60,7 +60,7 @@ export function ResearchKnowledgePanel({
               <span>{hit.sourceType} · {hit.sourceId}</span>
               <span>{hit.locator ?? '未定位'}</span>
               {capturedChunkIds.has(hit.chunkId) ? <span data-testid={`research-evidence-captured-${hit.chunkId}`}>已捕获</span> : (
-                <button className="action-button" disabled={writeBlocked || projectId === null} type="button" data-testid={`research-evidence-capture-${hit.chunkId}`} onClick={() => onCapture(hit.chunkId)}>捕获证据</button>
+                <button className="ui-button ui-button--secondary" disabled={writeBlocked || projectId === null} type="button" data-testid={`research-evidence-capture-${hit.chunkId}`} onClick={() => onCapture(hit.chunkId)}>捕获证据</button>
               )}
             </div>
           </article>

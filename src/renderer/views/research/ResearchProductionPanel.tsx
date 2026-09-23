@@ -74,7 +74,7 @@ export function ResearchProductionPanel({
             导出标题
             <TextInput data-testid="research-export-title" value={title} onChange={(event) => onChangeTitle(event.target.value)} />
           </label>
-          <button className="action-button action-button--primary" disabled={writeBlocked || manuscript === null || title.trim().length === 0} type="submit" data-testid="research-export-prepare">
+          <button className="ui-button ui-button--secondary" disabled={writeBlocked || manuscript === null || title.trim().length === 0} type="submit" data-testid="research-export-prepare">
             <Send aria-hidden="true" size={15} />
             准备导出
           </button>
@@ -93,12 +93,12 @@ export function ResearchProductionPanel({
             )}
             <div className="research-stage-actions">
               {record.status === 'ready' && record.approval === 'unpublished' ? (
-                <button className="action-button" type="button" data-testid={`research-export-publish-${record.id}`} disabled={writeBlocked} onClick={() => onPublishExport(record.id)}>发布审核</button>
+                <button className="ui-button ui-button--secondary" type="button" data-testid={`research-export-publish-${record.id}`} disabled={writeBlocked} onClick={() => onPublishExport(record.id)}>发布审核</button>
               ) : null}
               {record.approval === 'approved' ? (
                 <>
                   <TextInput data-testid={`research-export-destination-${record.id}`} value={destinationPath} onChange={(event) => onChangeDestination(event.target.value)} placeholder="/absolute/path/paper.zip" />
-                  <button className="action-button action-button--primary" type="button" data-testid={`research-export-write-${record.id}`} disabled={writeBlocked || destinationPath.trim().length === 0} onClick={() => onWriteExport(record.id)}>保存 ZIP</button>
+                  <button className="ui-button ui-button--secondary" type="button" data-testid={`research-export-write-${record.id}`} disabled={writeBlocked || destinationPath.trim().length === 0} onClick={() => onWriteExport(record.id)}>保存 ZIP</button>
                 </>
               ) : null}
             </div>

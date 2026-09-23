@@ -47,7 +47,7 @@ export function ResearchActivityView({
         </div>
       ))}
       {runPage.remaining === 0 ? null : (
-        <button className="action-button" data-testid="research-activity-more-runs" type="button" onClick={runPage.showMore}>
+        <button className="ui-button ui-button--secondary" data-testid="research-activity-more-runs" type="button" onClick={runPage.showMore}>
           继续加载运行（剩余 {runPage.remaining}）
         </button>
       )}
@@ -66,7 +66,7 @@ export function ResearchActivityView({
         </button>
       ))}
       {eventPage.remaining === 0 ? null : (
-        <button className="action-button" data-testid="research-activity-more-events" type="button" onClick={eventPage.showMore}>
+        <button className="ui-button ui-button--secondary" data-testid="research-activity-more-events" type="button" onClick={eventPage.showMore}>
           继续加载活动（剩余 {eventPage.remaining}）
         </button>
       )}

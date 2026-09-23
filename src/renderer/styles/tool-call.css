@@ -50,10 +50,8 @@
 .tool-call-modern__badge {
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: var(--font-nano-size);
+  font-size: var(--font-meta-size);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   flex-shrink: 0;
 }
 

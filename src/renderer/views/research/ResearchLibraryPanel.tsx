@@ -71,7 +71,7 @@ export function ResearchLibraryPanel({
         </div>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
           <TextInput aria-label="检索或筛选文献" data-testid="research-library-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="主题、问题或 DOI" />
-          <button className="action-button action-button--primary" disabled={working} type="submit">
+          <button className="ui-button ui-button--secondary" disabled={working} type="submit">
             <Send aria-hidden="true" size={15} />
             检索
           </button>
@@ -88,7 +88,7 @@ export function ResearchLibraryPanel({
         </label>
         <form className="research-search-form" onSubmit={(event) => { event.preventDefault(); onImportDoi(); }}>
           <TextInput aria-label="导入 DOI" data-testid="research-library-doi" value={doi} onChange={(event) => onChangeDoi(event.target.value)} placeholder="10.xxxx/xxxx" />
-          <button className="action-button" disabled={writeBlocked || doi.trim().length === 0} type="submit">导入 DOI</button>
+          <button className="ui-button ui-button--secondary" disabled={writeBlocked || doi.trim().length === 0} type="submit">导入 DOI</button>
         </form>
         <label>
           参考文献格式
@@ -98,8 +98,8 @@ export function ResearchLibraryPanel({
             <option value="csl-json">CSL JSON</option>
           </Select>
         </label>
-        <button className="action-button" disabled={writeBlocked} type="button" data-testid="research-library-import-file" onClick={onImportFile}>导入文件</button>
-        <button className="action-button" disabled={writeBlocked || selectedIds.length === 0} type="button" data-testid="research-library-export" onClick={onExport}>导出选中</button>
+        <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-library-import-file" onClick={onImportFile}>导入文件</button>
+        <button className="ui-button ui-button--secondary" disabled={writeBlocked || selectedIds.length === 0} type="button" data-testid="research-library-export" onClick={onExport}>导出选中</button>
       </div>
 
       {results.length === 0 ? null : (
@@ -112,12 +112,12 @@ export function ResearchLibraryPanel({
               <div className="research-literature-meta">
                 <span>{record.authors.slice(0, 3).join('、') || '作者信息待补充'}</span>
                 <span>{record.doi ?? '无 DOI'}</span>
-                <button className="action-button" type="button" disabled={writeBlocked} onClick={() => onImportRecord(record)}>导入文献库</button>
+                <button className="ui-button ui-button--secondary" type="button" disabled={writeBlocked} onClick={() => onImportRecord(record)}>导入文献库</button>
               </div>
             </article>
           ))}
           {resultPage.remaining === 0 ? null : (
-            <button className="action-button" data-testid="research-library-more-results" type="button" onClick={resultPage.showMore}>
+            <button className="ui-button ui-button--secondary" data-testid="research-library-more-results" type="button" onClick={resultPage.showMore}>
               继续加载检索结果（剩余 {resultPage.remaining}）
             </button>
           )}
@@ -137,11 +137,11 @@ export function ResearchLibraryPanel({
               <div className="research-literature-meta">
                 <span>{item.metadata.authors.slice(0, 3).join('、') || '作者信息待补充'}</span>
                 <span>{item.metadata.doi ?? '无 DOI'}</span>
-                <button className="action-button" type="button" data-testid={`research-library-open-${item.id}`} onClick={() => onOpen(item)}>
+                <button className="ui-button ui-button--secondary" type="button" data-testid={`research-library-open-${item.id}`} onClick={() => onOpen(item)}>
                   <BookOpen aria-hidden="true" size={14} />
                   阅读
                 </button>
-                <button className="action-button" type="button" data-testid={`research-library-link-${item.id}`} disabled={writeBlocked || projectId === null} onClick={() => onLink(item, projectId !== null && !item.projectIds.includes(projectId))}>
+                <button className="ui-button ui-button--secondary" type="button" data-testid={`research-library-link-${item.id}`} disabled={writeBlocked || projectId === null} onClick={() => onLink(item, projectId !== null && !item.projectIds.includes(projectId))}>
                   {projectId !== null && item.projectIds.includes(projectId) ? <Unlink aria-hidden="true" size={14} /> : <Link2 aria-hidden="true" size={14} />}
                   {projectId !== null && item.projectIds.includes(projectId) ? '取消关联' : '关联项目'}
                 </button>
@@ -149,7 +149,7 @@ export function ResearchLibraryPanel({
             </article>
           ))}
           {itemPage.remaining === 0 ? null : (
-            <button className="action-button" data-testid="research-library-more-items" type="button" onClick={itemPage.showMore}>
+            <button className="ui-button ui-button--secondary" data-testid="research-library-more-items" type="button" onClick={itemPage.showMore}>
               继续加载文献（剩余 {itemPage.remaining}）
             </button>
           )}
@@ -161,7 +161,7 @@ export function ResearchLibraryPanel({
               <h3>{openItem.metadata.title}</h3>
               <p>{openDocuments.length === 0 ? '还没有解析附件。导入 PDF/HTML 后可在这里阅读定位文本。' : `${openDocuments.length} 个附件`}</p>
               <div className="research-stage-actions">
-                <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-document-import" onClick={onImportDocument}>导入附件</button>
+                <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-document-import" onClick={onImportDocument}>导入附件</button>
               </div>
               {openDocuments.map((document) => (
                 <p className={document.status === 'failed' ? 'research-stage-error' : 'research-stage-copy'} key={document.id} data-testid={`research-document-status-${document.id}`}>

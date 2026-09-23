@@ -1,6 +1,5 @@
 import { Plus, Settings, SquarePen } from 'lucide-react';
 import type React from 'react';
-import { PreviewIcon } from '../components/PreviewIcon';
 import type { ResearchServiceContext } from '../views/research/research-services';
 
 export function WindowWorkband({
@@ -25,9 +24,6 @@ export function WindowWorkband({
     <header className="window-workband" data-testid="window-workband">
       <div className="workband-drag-region">
         <div className="workband-primary">
-          <div className="brand">
-            <div className="brand-mark">R</div>
-          </div>
           {inProject ? (
             <div className="workband-chat-actions">
               <button
@@ -71,7 +67,6 @@ export function WindowWorkband({
         </div>
       </div>
       <div className="thread-meta">
-        <PreviewIcon name="microscope" />
         <span>{inProject ? researchContext.projectTitle : topMeta}</span>
       </div>
       <div className="workband-chat-actions">

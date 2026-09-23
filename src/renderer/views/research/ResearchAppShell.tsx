@@ -9,7 +9,7 @@ import { createResearchSession, type ResearchSession } from './research-session'
 import { formatResearchTime, researchProjectStatusLabels, researchStageLabels } from './research-workflow';
 import type { ResearchEvidence, ResearchProject, ResearchProvenance } from '../../../shared/types';
 import { EmptyState } from '../../components/EmptyState';
-import { ConfirmDialog, Drawer, Select, TextArea, TextInput } from '../../components/ui';
+import { Button, ConfirmDialog, Drawer, Select, TextArea, TextInput } from '../../components/ui';
 import { useResearchLayout } from './research-layout';
 import { ResearchOverviewView } from './ResearchOverviewView';
 import { ResearchServicesPanel } from './ResearchServicesPanel';
@@ -152,6 +152,10 @@ export function ResearchAppShell({
     [context, state.workspace?.path]
   );
   const services = useMemo(() => buildResearchServices(state, serviceContext), [serviceContext, state]);
+  const shellServices = useMemo(
+    () => services.filter((service) => service.id !== 'assistant' && service.id !== 'tasks'),
+    [services]
+  );
   useEffect(() => {
     onContextChange?.(buildResearchTopMeta(context));
   }, [context, onContextChange]);
@@ -509,12 +513,6 @@ export function ResearchAppShell({
       <header className="page-strip research-shell-banner">
         {shellState === 'project' && context.project !== null ? (
           <>
-            <div className="page-copy research-shell-project-copy">
-              <h1 className="page-title" data-testid="research-shell-current-title">{context.project.title}</h1>
-              <p className="page-meta" data-testid="research-shell-heading-stage">
-                {context.workflow === null ? '阶段未加载' : `当前阶段：${researchStageLabels[context.workflow.currentStage]}`}
-              </p>
-            </div>
             <div className="research-shell-banner-tools">
               <div className="page-flags research-shell-banner-actions" role="toolbar" aria-label="科研工具">
                 {onOpenAssistant === undefined ? null : (
@@ -522,7 +520,7 @@ export function ResearchAppShell({
                     研究助手
                   </button>
                 )}
-                {compact && onOpenService !== undefined ? (
+                {onOpenService !== undefined ? (
                   <button
                     aria-expanded={servicesOpen}
                     className="research-toolbar-button"
@@ -573,7 +571,6 @@ export function ResearchAppShell({
                   项目设置
                 </button>
               </div>
-              <button className="research-toolbar-button research-toolbar-button--danger" data-testid="research-shell-delete-project" type="button" onClick={() => setDeleteConfirmOpen(true)}>删除项目</button>
             </div>
           </>
         ) : (
@@ -582,10 +579,9 @@ export function ResearchAppShell({
               <h1 className="page-title">研究项目</h1>
             </div>
             <div className="page-flags research-shell-banner-actions">
-              <button className={creating ? 'action-button' : 'action-button action-button--primary'} data-testid="research-shell-new-project" type="button" onClick={() => setCreating(true)}>
-                <Plus aria-hidden="true" size={16} />
+              <Button data-testid="research-shell-new-project" icon={<Plus aria-hidden="true" size={16} />} variant={creating ? 'secondary' : 'primary'} onClick={() => setCreating(true)}>
                 新建研究项目
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -595,9 +591,9 @@ export function ResearchAppShell({
         <div className="research-alert" role="alert">
           <CircleAlert aria-hidden="true" size={16} />
           <span>{snapshot.error}</span>
-          <button aria-label="关闭错误" className="action-button" type="button" onClick={() => workbench.clearError()}>
+          <Button aria-label="关闭错误" size="compact" variant="ghost" onClick={() => workbench.clearError()}>
             <X aria-hidden="true" size={15} />
-          </button>
+          </Button>
         </div>
       )}
 
@@ -656,25 +652,23 @@ export function ResearchAppShell({
                 工作目录
                 <TextInput data-testid="research-shell-workspace-path" readOnly value={workspacePath} />
               </label>
-              <button className="action-button" data-testid="research-shell-choose-workspace" type="button" onClick={() => void chooseWorkspace()}>
+              <Button data-testid="research-shell-choose-workspace" variant="secondary" onClick={() => void chooseWorkspace()}>
                 选择目录
-              </button>
+              </Button>
               <div className="research-form-actions">
-                <button className="action-button" type="button" onClick={() => setCreating(false)}>取消</button>
-                <button className="action-button action-button--primary" type="submit">
-                  <Plus aria-hidden="true" size={16} />
+                <Button variant="secondary" onClick={() => setCreating(false)}>取消</Button>
+                <Button icon={<Plus aria-hidden="true" size={16} />} type="submit" variant="primary">
                   创建研究项目
-                </button>
+                </Button>
               </div>
             </form>
           ) : null}
           {snapshot.projects.length === 0 && !creating ? (
             <EmptyState
               action={(
-                <button className="action-button action-button--primary" data-testid="research-shell-empty-create" type="button" onClick={() => setCreating(true)}>
-                  <Plus aria-hidden="true" size={16} />
+                <Button data-testid="research-shell-empty-create" icon={<Plus aria-hidden="true" size={16} />} variant="primary" onClick={() => setCreating(true)}>
                   新建研究项目
-                </button>
+                </Button>
               )}
               className="research-empty"
               detail="新建研究项目后才会进入该项目的科研工作台。"
@@ -691,7 +685,7 @@ export function ResearchAppShell({
             <EmptyState
               action={(
                 <button
-                  className="action-button"
+                  className="ui-button ui-button--secondary"
                   data-testid="research-shell-clear-search"
                   type="button"
                   onClick={() => {
@@ -745,7 +739,6 @@ export function ResearchAppShell({
                     }
                     event.preventDefault();
                     next.focus();
-                    next.click();
                   }}
                 >
                   <strong>{group.label}</strong>
@@ -770,14 +763,14 @@ export function ResearchAppShell({
                 artifacts={snapshot.artifacts}
                 context={context}
                 events={snapshot.events}
-                onOpenActivity={() => {
-                  applyRoute({ view: 'activity' });
-                  setActivityOpen(true);
-                }}
+                onOpenActivity={() => applyRoute({ view: 'activity' })}
+                onOpenArtifacts={() => applyRoute({ view: 'provenance' })}
+                onOpenIndex={() => applyRoute({ view: 'stage', stageGroup: 'discover', stageTab: 'knowledge' })}
                 onOpenProvenance={(artifactId) => {
                   setSelectedArtifactId(artifactId);
                   applyRoute({ view: 'provenance' });
                 }}
+                onOpenRuns={() => applyRoute({ view: 'activity' })}
                 onBindWorkspace={() => void bindWorkspace()}
                 onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
                 onDownloadModels={() => void downloadModels()}
@@ -823,15 +816,14 @@ export function ResearchAppShell({
                 </button>
               </div>
             ) : null}
+            {canvasView === 'stage' && stageGroup === 'settings' ? (
+              <section className="research-danger-zone" data-testid="research-project-danger-zone">
+                <h2>危险操作</h2>
+                <p>删除后无法恢复该研究项目及其工作台状态。</p>
+                <Button data-testid="research-shell-delete-project" variant="danger" onClick={() => setDeleteConfirmOpen(true)}>删除项目</Button>
+              </section>
+            ) : null}
           </main>
-          {!compact && onOpenService !== undefined ? (
-            <aside aria-label="科研服务" className="research-shell-services" data-testid="research-shell-services-rail">
-              <ResearchServicesPanel
-                onOpenService={onOpenService}
-                services={services}
-              />
-            </aside>
-          ) : null}
           {activityOpen ? (
             <aside aria-label="活动与运行" className="research-shell-activity" data-testid="research-shell-activity">
               <div className="research-section-label">最近活动</div>
@@ -855,14 +847,14 @@ export function ResearchAppShell({
         </div>
         </>
       ) : null}
-      <Drawer onClose={() => setServicesOpen(false)} open={compact && servicesOpen} title="科研服务">
-        {onOpenService === undefined || !compact || !servicesOpen ? null : (
+      <Drawer onClose={() => setServicesOpen(false)} open={servicesOpen} title="科研服务">
+        {onOpenService === undefined || !servicesOpen ? null : (
           <ResearchServicesPanel
             onOpenService={(service) => {
               setServicesOpen(false);
               onOpenService(service);
             }}
-            services={services}
+            services={shellServices}
           />
         )}
       </Drawer>

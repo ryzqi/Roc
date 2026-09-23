@@ -114,7 +114,7 @@ export function ResearchPolicyPanel({
             <TextInput data-testid="research-policy-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
-            <button className="action-button action-button--primary" disabled={working} type="submit" data-testid="research-policy-save">
+            <button className="ui-button ui-button--secondary" disabled={working} type="submit" data-testid="research-policy-save">
               <Send aria-hidden="true" size={15} />
               保存策略
             </button>

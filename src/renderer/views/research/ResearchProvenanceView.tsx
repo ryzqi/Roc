@@ -66,7 +66,7 @@ export function ResearchProvenanceView({
           </button>
         ))}
         {artifactPage.remaining === 0 ? null : (
-          <button className="action-button" data-testid="research-provenance-more" type="button" onClick={artifactPage.showMore}>
+          <button className="ui-button ui-button--secondary" data-testid="research-provenance-more" type="button" onClick={artifactPage.showMore}>
             继续加载产物（剩余 {artifactPage.remaining}）
           </button>
         )}
@@ -76,7 +76,7 @@ export function ResearchProvenanceView({
           <div className="research-tool-heading">
             <h2 data-testid="research-provenance-title">{selected.title}</h2>
             {onBackToOverview === undefined ? null : (
-              <button className="action-button" data-testid="research-provenance-back" type="button" onClick={onBackToOverview}>返回总览</button>
+              <button className="ui-button ui-button--secondary" data-testid="research-provenance-back" type="button" onClick={onBackToOverview}>返回总览</button>
             )}
           </div>
           <p className="research-rail-item">{researchStageLabels[selected.stage]} · {artifactStatusLabel(selected.status)} · {formatResearchTime(selected.updatedAt)}</p>

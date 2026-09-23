@@ -100,7 +100,7 @@ export function ResearchExperimentPanel({
         <div>
           <h2>实验运行</h2>
         </div>
-        <button className="action-button" disabled={working || projectId === null} type="button" data-testid="research-experiment-refresh" onClick={onRefresh}>刷新</button>
+        <button className="ui-button ui-button--secondary" disabled={working || projectId === null} type="button" data-testid="research-experiment-refresh" onClick={onRefresh}>刷新</button>
       </div>
 
       <div className="research-library-layout">
@@ -168,7 +168,7 @@ export function ResearchExperimentPanel({
             <TextInput data-testid="research-experiment-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => onChange({ ...draft, timeoutMs: event.target.value })} />
           </label>
           <div className="research-form-actions">
-            <button className="action-button action-button--primary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
+            <button className="ui-button ui-button--secondary" disabled={writeBlocked || projectId === null || draft.sourcePath.trim().length === 0} type="submit" data-testid="research-experiment-start">
               <Play aria-hidden="true" size={15} />
               启动
             </button>
@@ -185,25 +185,25 @@ export function ResearchExperimentPanel({
               </button>
               <div className="research-stage-actions">
                 {['preparing', 'running'].includes(run.status) ? (
-                  <button className="action-button" disabled={writeBlocked} type="button" data-testid={`research-experiment-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
+                  <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid={`research-experiment-cancel-${run.id}`} onClick={() => onCancel(run.id)}>
                     <Square aria-hidden="true" size={14} />
                     取消
                   </button>
                 ) : null}
                 {run.status === 'completed' ? (
-                  <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-${run.id}`} onClick={() => onPublish(run.id)}>
+                  <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid={`research-experiment-publish-${run.id}`} onClick={() => onPublish(run.id)}>
                     <Send aria-hidden="true" size={14} />
                     发布实验
                   </button>
                 ) : null}
                 {run.files.some((file) => file.area === 'log') ? (
-                  <button className="action-button" disabled={working} type="button" data-testid={`research-experiment-log-${run.id}`} onClick={() => onReadLog(run.id)}>查看日志</button>
+                  <button className="ui-button ui-button--secondary" disabled={working} type="button" data-testid={`research-experiment-log-${run.id}`} onClick={() => onReadLog(run.id)}>查看日志</button>
                 ) : null}
               </div>
             </article>
           ))}
           {experimentPage.remaining === 0 ? null : (
-            <button className="action-button" data-testid="research-experiment-more" type="button" onClick={experimentPage.showMore}>
+            <button className="ui-button ui-button--secondary" data-testid="research-experiment-more" type="button" onClick={experimentPage.showMore}>
               继续加载实验（剩余 {experimentPage.remaining}）
             </button>
           )}

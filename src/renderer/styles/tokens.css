@@ -34,6 +34,7 @@
   --fill-strong: var(--ink);
   --fill-strong-hover: var(--accent-deep);
   --fill-strong-text: #ffffff;
+  --control-thumb: #ffffff;
 
   /* 主色上的文字与加深态别名，页面不再各写 --accent-contrast / --accent-strong */
   --on-accent: #ffffff;
@@ -93,10 +94,7 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-7: 32px;
-  --space-xs: 6px;
-  --space-sm: 10px;
   --space-md: 16px;
-  --space-lg: 22px;
   --space-xl: 32px;
 
   /* 阴影 */
@@ -137,7 +135,6 @@
   --font-ui-size: 13px;
   --font-meta-size: 11.5px;
   --font-micro-size: 10.5px;
-  --font-nano-size: 9px;
   --font-read-size: 14.5px;
   --font-lead-size: 15px;
   --font-code-size: 12.5px;
@@ -154,8 +151,6 @@
   --chat-bubble-radius-tight: 14px;
   --chat-gap: 28px;
   --chat-avatar-size: 30px;
-  --surface-glass: rgba(255, 255, 255, 0.72);
-  --surface-glass-strong: rgba(255, 255, 255, 0.86);
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-ring: rgba(120, 144, 184, 0.18);
   --chat-bubble-assistant-bg: transparent;
@@ -293,6 +288,4 @@
 
 :root[data-reduced-transparency='true'] {
   --surface-translucent: var(--surface);
-  --surface-glass: var(--surface);
-  --surface-glass-strong: var(--surface);
 }

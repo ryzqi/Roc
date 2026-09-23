@@ -266,15 +266,15 @@
   position: absolute;
   top: -1px;
   right: -1px;
-  min-width: 13px;
-  height: 13px;
+  min-width: 16px;
+  height: 16px;
   padding: 0 3px;
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  font-size: var(--font-nano-size);
+  font-size: var(--font-meta-size);
   font-weight: 600;
   border: 1.5px solid var(--surface);
   font-feature-settings: 'tnum' 1;
@@ -497,7 +497,7 @@
 
 .model-pill-chevron {
   color: var(--muted);
-  font-size: var(--font-nano-size);
+  font-size: var(--font-meta-size);
   margin-left: -2px;
   line-height: 1;
 }

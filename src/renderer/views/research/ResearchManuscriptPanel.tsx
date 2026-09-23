@@ -62,7 +62,7 @@ export function ResearchManuscriptPanel({
         <div>
           <h2>主张与正文</h2>
         </div>
-        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-manuscript-create" onClick={onCreate}>新建正文</button>
+        <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-manuscript-create" onClick={onCreate}>新建正文</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-manuscript-list">
@@ -94,7 +94,7 @@ export function ResearchManuscriptPanel({
               </Select>
             </label>
             <div className="research-form-actions">
-              <button className="action-button" disabled={writeBlocked || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked || draft.content.trim().length === 0} type="button" data-testid="research-claim-create" onClick={onCreateClaim}>添加主张</button>
             </div>
             <div className="research-literature-list" data-testid="research-claim-list">
               {claims.length === 0 ? <div className="research-empty-inline" role="status">还没有主张。</div> : claims.map((claim) => (
@@ -110,7 +110,7 @@ export function ResearchManuscriptPanel({
               <TextInput data-testid="research-manuscript-section" value={draft.sectionTitle} onChange={(event) => onChange({ ...draft, sectionTitle: event.target.value })} />
             </label>
             <div className="research-form-actions">
-              <button className="action-button action-button--primary" disabled={writeBlocked || draft.sectionTitle.trim().length === 0 || draft.selectedClaimIds.length === 0} type="submit" data-testid="research-manuscript-save">
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked || draft.sectionTitle.trim().length === 0 || draft.selectedClaimIds.length === 0} type="submit" data-testid="research-manuscript-save">
                 <Send aria-hidden="true" size={15} />
                 保存正文
               </button>

@@ -64,7 +64,7 @@ describe('ResearchAppShell', () => {
       workspacePath: '/tmp/roc',
       language: 'zh'
     });
-    expect(text('research-shell-project-title')).toBe('新课题');
+    expect(text('research-overview-goal')).toBe('从空态创建。');
     expect(new URL(window.location.href).searchParams.get('project')).toBe('research_new');
   });
 
@@ -72,11 +72,13 @@ describe('ResearchAppShell', () => {
     const api = createResearchApi();
     await renderShell(api);
     await openListedProject('research_1');
-    expect(text('research-shell-project-title')).toBe('证据图');
+    expect(text('research-overview-goal')).toContain('把想法变成可追溯项目。');
     expect(text('research-shell-stage')).toBe('写作');
-    expect(text('research-shell-gates')).toBe('1');
-    expect(text('research-shell-runs')).toBe('0');
-    expect(text('research-shell-artifacts')).toBe('1');
+    expect(document.querySelector('[data-testid="research-shell-gates"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-overview-gates"]')?.getAttribute('data-count')).toBe('1');
+    expect(text('research-overview-gates')).not.toMatch(/\s0$/);
+    expect(text('research-shell-runs')).toBe('0 个运行');
+    expect(text('research-shell-artifacts')).toBe('1 个产物');
     expect(text('research-shell-stages')).toContain('写作与审阅');
     expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-current')).toBe('step');
     expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-pressed')).toBe('false');
@@ -86,7 +88,12 @@ describe('ResearchAppShell', () => {
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
     expect(text('research-overview-goal')).toContain('把想法变成可追溯项目。');
     expect(text('research-overview-next')).toContain('审核当前产物');
-    expect(text('research-pipeline')).toContain('写作');
+    expect(document.querySelector('[data-testid="research-pipeline"]')).toBeNull();
+    expect(text('research-overview-stage')).toContain('写作');
+    await click('research-shell-index');
+    await waitUntil(() => document.querySelector('[data-testid="research-knowledge-panel"]') !== null);
+    await click('research-shell-overview');
+    await waitUntil(() => document.querySelector('[data-testid="research-overview"]') !== null);
     await click('research-overview-event');
     await waitUntil(() => document.querySelector('[data-testid="research-activity-view"]') !== null);
     await click('research-activity-filter-gates');
@@ -122,17 +129,24 @@ describe('ResearchAppShell', () => {
   it('lists research services for the selected project', async () => {
     const api = createResearchApi();
     const onOpenService = vi.fn();
-    await renderShell(api, undefined, onOpenService);
+    const onOpenAssistant = vi.fn();
+    await renderShell(api, undefined, onOpenService, onOpenAssistant);
     await openListedProject('research_1');
-    expect(text('research-services')).toContain('研究助手');
-    expect(text('research-service-tasks')).toContain('活动与运行');
-    await click('research-service-assistant');
+    expect(document.querySelector('[data-testid="research-shell-services-rail"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-services"]')).toBeNull();
+    await click('research-shell-services-toggle');
+    expect(text('research-services')).toContain('文件与代码');
+    expect(text('research-services')).not.toContain('研究助手');
+    expect(document.querySelector('[data-testid="research-service-tasks"]')).toBeNull();
+    await click('research-service-files');
     expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'assistant',
-      view: 'chat',
+      id: 'files',
+      view: 'workspace',
       projectId: 'research_1',
       stage: 'writing'
     }));
+    await click('research-shell-assistant');
+    expect(onOpenAssistant).toHaveBeenCalledOnce();
   });
 
   it('opens the current stage workspace from overview and keeps other groups read-only', async () => {
@@ -167,7 +181,8 @@ describe('ResearchAppShell', () => {
     await act(async () => {
       writing?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     });
-    await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group') === 'experiment');
+    expect(document.querySelector('[data-testid="research-stage-workspace"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
     expect(document.activeElement).toBe(document.querySelector('[data-testid="research-stage-group-experiment"]'));
   });
 
@@ -240,7 +255,7 @@ describe('ResearchAppShell', () => {
     await waitUntil(() => document.querySelector('[data-testid="research-shell-list"]') !== null);
     await openListedProject('research_2');
     expect(document.querySelector('[data-testid="research-overview"]')).not.toBeNull();
-    expect(text('research-shell-project-title')).toBe('第二项目');
+    expect(text('research-overview-goal')).toContain('另一个问题。');
     expect(text('research-overview-stage')).toBe('阅读');
   });
 
@@ -263,7 +278,6 @@ describe('ResearchAppShell', () => {
     window.history.replaceState({}, '', '/?page=research&project=research_2&view=stage&stage=knowledge');
     await renderShell(api);
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
-    expect(text('research-shell-current-title')).toBe('第二项目');
     expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('discover');
     expect(document.querySelector('[data-testid="research-library-panel"]')).toBeNull();
     await waitUntil(() => document.querySelector('[data-testid="research-knowledge-panel"]') !== null);
@@ -298,17 +312,22 @@ describe('ResearchAppShell', () => {
     expect(new URL(window.location.href).searchParams.get('page')).toBe('research');
   });
 
-  it('moves services into a drawer below 1100px', async () => {
+  it('opens services from a drawer on a narrow project page', async () => {
     stubLayoutMedia(true, false);
     const api = createResearchApi();
     const onOpenService = vi.fn();
-    await renderShell(api, undefined, onOpenService);
+    const onOpenAssistant = vi.fn();
+    await renderShell(api, undefined, onOpenService, onOpenAssistant);
     await openListedProject('research_1');
+    expect(document.querySelector('[data-testid="research-shell-services-rail"]')).toBeNull();
     expect(document.querySelector('[data-testid="research-services"]')).toBeNull();
     await click('research-shell-services-toggle');
-    expect(text('research-services')).toContain('研究助手');
-    await click('research-service-assistant');
-    expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant' }));
+    expect(text('research-services')).toContain('文件与代码');
+    expect(text('research-services')).not.toContain('研究助手');
+    await click('research-service-files');
+    expect(onOpenService).toHaveBeenCalledWith(expect.objectContaining({ id: 'files' }));
+    await click('research-shell-assistant');
+    expect(onOpenAssistant).toHaveBeenCalledOnce();
   });
 
   it('returns to the project list from an open project', async () => {
@@ -344,6 +363,9 @@ describe('ResearchAppShell', () => {
     api.deleteProject.mockResolvedValue({ ok: true, data: { id: 'research_1', deleted: true } });
     await renderShell(api);
     await openListedProject('research_1');
+    expect(document.querySelector('[data-testid="research-shell-delete-project"]')).toBeNull();
+    await click('research-shell-settings');
+    await waitUntil(() => document.querySelector('[data-testid="research-shell-delete-project"]') !== null);
     await click('research-shell-delete-project');
     expect(api.deleteProject).not.toHaveBeenCalled();
     const dialog = document.querySelector('.ui-confirm-dialog');
@@ -472,12 +494,14 @@ function indexStatus(): ResearchIndexStatus {
 async function renderShell(
   research: ReturnType<typeof createResearchApi>,
   onContextChange?: (meta: string) => void,
-  onOpenService?: (service: { id: string }) => void
+  onOpenService?: (service: { id: string }) => void,
+  onOpenAssistant?: () => void
 ): Promise<void> {
   await act(async () => {
     root.render(React.createElement(ResearchAppShell, {
       client: { api: { research, workspace: { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { path: '/tmp/roc' } }) } } as never },
       onContextChange,
+      onOpenAssistant,
       onOpenService,
       state: createLoadedState({ workspace: { id: 'ws', path: '/tmp/roc', label: 'Roc' } as never })
     }));

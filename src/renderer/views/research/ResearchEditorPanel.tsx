@@ -40,7 +40,7 @@ export function ResearchEditorPanel({
         <div>
           <h2>文稿编辑器</h2>
         </div>
-        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-template-import" onClick={onImport}>导入模板</button>
+        <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-template-import" onClick={onImport}>导入模板</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-template-list">
@@ -68,8 +68,8 @@ export function ResearchEditorPanel({
               </label>
             )}
             <div className="research-stage-actions">
-              <button className="action-button" disabled={writeBlocked || openFile === null} type="button" data-testid="research-template-save" onClick={onSave}>保存文件</button>
-              <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-template-compile" onClick={onCompile}>
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked || openFile === null} type="button" data-testid="research-template-save" onClick={onSave}>保存文件</button>
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-template-compile" onClick={onCompile}>
                 <Send aria-hidden="true" size={15} />
                 编译预览
               </button>

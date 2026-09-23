@@ -52,7 +52,7 @@ export function ResearchEmbeddingPanel({
         <label className="research-config-wide">接口密钥<TextInput type="password" value={apiKey} onChange={(event) => onApiKeyChange(event.target.value)} placeholder="保存时写入本地加密存储" /></label>
       </div>
       <div className="research-form-actions">
-        <button className="action-button action-button--primary" disabled={working} type="button" onClick={onSave}>保存配置</button>
+        <button className="ui-button ui-button--secondary" disabled={working} type="button" onClick={onSave}>保存配置</button>
       </div>
       <div className="research-config-list">
         {configs.map((config) => <div className="research-config-row" key={config.id}><strong>{config.name}</strong><span>{config.model} · {config.dimensions} 维 · {config.keyConfigured ? 'Key 已配置' : '缺少 Key'}</span></div>)}

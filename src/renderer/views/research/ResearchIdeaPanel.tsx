@@ -72,7 +72,7 @@ export function ResearchIdeaPanel({
         <div>
           <h2>构思画布</h2>
         </div>
-        <button className="action-button action-button--primary" disabled={writeBlocked} type="button" data-testid="research-idea-create" onClick={onCreate}>新建画布</button>
+        <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-idea-create" onClick={onCreate}>新建画布</button>
       </div>
       <div className="research-library-layout">
         <div className="research-literature-list" data-testid="research-idea-list">
@@ -121,16 +121,16 @@ export function ResearchIdeaPanel({
               <TextInput data-testid="research-idea-workspace-path" readOnly value={workspacePath} />
             </label>
             <div className="research-form-actions">
-              <button className="action-button action-button--primary" disabled={writeBlocked} type="submit" data-testid="research-idea-save">
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="submit" data-testid="research-idea-save">
                 <Send aria-hidden="true" size={15} />
                 保存画布
               </button>
-              <button className="action-button" disabled={writeBlocked} type="button" data-testid="research-idea-choose-workspace" onClick={() => {
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked} type="button" data-testid="research-idea-choose-workspace" onClick={() => {
                 void onChooseWorkspace().then((path) => {
                   if (path !== null) setWorkspacePath(path);
                 });
               }}>选择目录</button>
-              <button className="action-button" disabled={writeBlocked || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={() => onPromote(workspacePath)}>晋升为项目</button>
+              <button className="ui-button ui-button--secondary" disabled={writeBlocked || canvas?.artifactId !== draft.artifactId} type="button" data-testid="research-idea-promote" onClick={() => onPromote(workspacePath)}>晋升为项目</button>
             </div>
           </form>
         )}

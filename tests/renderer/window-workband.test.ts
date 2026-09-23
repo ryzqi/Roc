@@ -19,6 +19,8 @@ describe('WindowWorkband', () => {
     expect(html).toContain('data-testid="research-top-new-project"');
     expect(html).toContain('data-testid="settings-gear"');
     expect(html).toContain('研究项目');
+    expect(html).not.toContain('brand-mark');
+    expect(html).not.toContain('microscope');
     expect(html).not.toContain('data-testid="research-shell-all-projects"');
     expect(html).not.toContain('data-testid="chat-new-conversation"');
   });
