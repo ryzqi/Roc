@@ -360,6 +360,7 @@
   flex: 1 0 auto;
   width: 100%;
   min-width: 0;
+  align-content: start;
 }
 
 .view-loading {
@@ -394,6 +395,7 @@
 
 .stage-grid {
   display: grid;
+  align-content: start;
   gap: var(--space-6);
   padding: 0;
 }

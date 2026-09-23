@@ -12,6 +12,8 @@
 
 .ui-button {
   display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
   min-height: var(--control-height);
   align-items: center;
   justify-content: center;

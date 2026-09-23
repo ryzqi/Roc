@@ -114,6 +114,7 @@
 
 .task-detail-page {
   display: grid;
+  align-content: start;
   gap: 18px;
 }
 
@@ -380,8 +381,11 @@
 
 .task-empty-shell {
   display: grid;
+  align-content: start;
+  align-items: center;
   gap: 12px;
   justify-items: center;
+  width: min(560px, 100%);
   padding: 20px 18px 10px;
   border: 1px dashed var(--line);
   border-radius: var(--r-md);
