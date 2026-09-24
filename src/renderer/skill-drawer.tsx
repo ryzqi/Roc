@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import type React from 'react';
 import type { SkillFileEntry, SkillFilePreviewResult, SkillSnapshot } from '../shared/types';
-import { drawerSlideIn, drawerTransition, resolveMotionTransition } from './animations';
+import { drawerSlideIn, resolveMotionTransition, resolveMotionVariants } from './animations';
 
 export type SkillBrowserViewState = {
   rootEntries: SkillFileEntry[] | null;
@@ -44,8 +44,8 @@ export function SkillDrawer({
       data-testid="skill-drawer"
       exit="exit"
       initial="initial"
-      transition={resolveMotionTransition(drawerTransition)}
-      variants={drawerSlideIn}
+      transition={resolveMotionTransition()}
+      variants={resolveMotionVariants(drawerSlideIn)}
     >
       <header className="skill-drawer-header">
         <div className="skill-drawer-headline">

@@ -205,7 +205,6 @@
   transition:
     background var(--transition-base),
     border-color var(--transition-base),
-    box-shadow var(--transition-base),
     transform var(--duration-base) var(--easing-standard);
 }
 
@@ -330,7 +329,7 @@
 }
 
 .row:active {
-  transform: translateY(1px);
+  transform: var(--press-shift);
 }
 
 .row:last-child {
@@ -420,5 +419,5 @@
 .action-row button:active,
 .action-strip button:active,
 .capability-strip button:active {
-  transform: var(--press-scale);
+  transform: var(--press-shift);
 }

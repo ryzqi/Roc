@@ -109,7 +109,7 @@
   --overlay-scrim: rgba(20, 40, 80, 0.32);
   --stripe-width: 3px;
   --lift-hover: none;
-  --press-scale: scale(0.98);
+  --press-shift: translateY(1px);
 
   /* 语义别名（不引入新色，仅命名） */
   --composer-border: var(--line);

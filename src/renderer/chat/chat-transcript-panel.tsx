@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 import type { ChatResumeDecision } from '../../shared/types';
-import { resolveMotionTransition, scrollBottomFade, scrollBottomTransition } from '../animations';
+import { resolveMotionTransition, resolveMotionVariants, scrollBottomFade } from '../animations';
 import type { ChatTranscriptMessage } from '../chat-transcript';
 import { ChatMessageRow } from './chat-message-row';
 
@@ -126,8 +126,8 @@ export function ChatTranscriptPanel({
             initial="initial"
             animate="animate"
             exit="exit"
-            variants={scrollBottomFade}
-            transition={resolveMotionTransition(scrollBottomTransition)}
+            variants={resolveMotionVariants(scrollBottomFade)}
+            transition={resolveMotionTransition()}
             onClick={handleScrollBottomClick}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">

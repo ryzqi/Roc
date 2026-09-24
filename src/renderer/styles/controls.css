@@ -7,7 +7,7 @@
   font-size: var(--font-ui-size);
   font-weight: 500;
   cursor: default;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .ui-button {
@@ -82,7 +82,7 @@
   font: inherit;
   font-size: var(--font-ui-size);
   box-shadow: var(--shadow-input);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .ui-input, .ui-select { min-height: var(--control-height-input); padding: 0 var(--control-pad-x); }
 .ui-textarea { min-height: var(--control-height-textarea); padding: 9px var(--control-pad-x); line-height: 1.55; resize: vertical; }

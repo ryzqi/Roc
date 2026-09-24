@@ -1,13 +1,4 @@
-import { lazy, memo, Suspense } from 'react';
-import { motion } from 'motion/react';
-import {
-  approvalCardEnter,
-  approvalCardTransition,
-  assistantBubbleEnter,
-  bubbleEnterTransition,
-  resolveMotionTransition,
-  userBubbleEnter
-} from '../animations';
+import { lazy, memo, Suspense, useLayoutEffect, type AnimationEvent } from 'react';
 import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat-transcript';
 import type { ChatPendingInterrupt, ChatResumeDecision } from '../../shared/types';
 import { CopyAnswerButton } from './CopyAnswerButton';
@@ -25,8 +16,54 @@ type ChatMessageRowProps = {
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
 
-export function messageInitial(source: ChatTranscriptMessage['source']): false | 'initial' {
-  return source === 'persisted' ? false : 'initial';
+const finishedEnterKeys = new Set<string>();
+const enterMountTokens = new Map<string, number>();
+
+function motionSuppressed(): boolean {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+  if (document.documentElement.dataset.motion === 'conserve') {
+    return true;
+  }
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function shouldPlayEnter(key: string, source: ChatTranscriptMessage['source']): boolean {
+  if (source === 'persisted' || finishedEnterKeys.has(key)) {
+    return false;
+  }
+  if (motionSuppressed()) {
+    finishedEnterKeys.add(key);
+    return false;
+  }
+  return true;
+}
+
+function commitEnter(key: string, event: AnimationEvent<HTMLDivElement>): void {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+  finishedEnterKeys.add(key);
+}
+
+function useFinishEnterOnUnmount(key: string, active: boolean): void {
+  useLayoutEffect(() => {
+    if (!active) {
+      return;
+    }
+    const token = (enterMountTokens.get(key) ?? 0) + 1;
+    enterMountTokens.set(key, token);
+    return () => {
+      queueMicrotask(() => {
+        if (enterMountTokens.get(key) !== token) {
+          return;
+        }
+        finishedEnterKeys.add(key);
+        enterMountTokens.delete(key);
+      });
+    };
+  }, [active, key]);
 }
 
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
@@ -46,15 +83,11 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
               isStreaming: message.isStreaming
             } satisfies ChatTranscriptActivityBlock
           ];
-  const bubbleClassName = [
-    isAssistant ? 'chat-bubble chat-bubble--assistant' : 'chat-bubble chat-bubble--user',
-    message.isStreaming ? 'is-streaming' : ''
-  ]
-    .filter((part) => part.length > 0)
-    .join(' ');
+  const bubbleClassName = isAssistant ? 'chat-bubble chat-bubble--assistant' : 'chat-bubble chat-bubble--user';
   const rowClassName = isAssistant ? 'chat-message-row chat-message-row--assistant' : 'chat-message-row chat-message-row--user';
   const testId = isAssistant ? 'chat-message-assistant' : 'chat-message-user';
-  const animateEntry = messageInitial(message.source) === 'initial';
+  const animateEntry = shouldPlayEnter(message.key, message.source);
+  useFinishEnterOnUnmount(message.key, animateEntry);
   const body = (
     <article className={bubbleClassName}>
       {isAssistant ? (
@@ -97,25 +130,15 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       )}
     </article>
   );
-  if (!animateEntry) {
-    return (
-      <div className={rowClassName} data-role={message.role} data-testid={testId}>
-        {body}
-      </div>
-    );
-  }
   return (
-    <motion.div
-      animate="animate"
-      className={rowClassName}
+    <div
+      className={animateEntry ? `${rowClassName} chat-message-row--enter` : rowClassName}
       data-role={message.role}
       data-testid={testId}
-      initial="initial"
-      transition={resolveMotionTransition(bubbleEnterTransition)}
-      variants={isAssistant ? assistantBubbleEnter : userBubbleEnter}
+      onAnimationEnd={animateEntry ? (event) => commitEnter(message.key, event) : undefined}
     >
       {body}
-    </motion.div>
+    </div>
   );
 }
 
@@ -139,6 +162,11 @@ function ChatInterruptView(input: {
   source: ChatTranscriptMessage['source'];
 }): React.JSX.Element {
   const { interrupt } = input;
+  const approvalKey = `approval:${interrupt.interruptId}`;
+  const animateApproval = interrupt.kind === 'question' || isTaskApproval(interrupt)
+    ? false
+    : shouldPlayEnter(approvalKey, input.source);
+  useFinishEnterOnUnmount(approvalKey, animateApproval);
   if (interrupt.kind === 'question') {
     return <QuestionInterruptCard question={interrupt} />;
   }
@@ -193,24 +221,14 @@ function ChatInterruptView(input: {
       </div>
     </>
   );
-  if (messageInitial(input.source) === false) {
-    return (
-      <div className="chat-approval-card" data-testid="chat-approval-card">
-        {approvalBody}
-      </div>
-    );
-  }
   return (
-    <motion.div
-      className="chat-approval-card"
+    <div
+      className={animateApproval ? 'chat-approval-card chat-approval-card--enter' : 'chat-approval-card'}
       data-testid="chat-approval-card"
-      initial="initial"
-      animate="animate"
-      variants={approvalCardEnter}
-      transition={resolveMotionTransition(approvalCardTransition)}
+      onAnimationEnd={animateApproval ? (event) => commitEnter(approvalKey, event) : undefined}
     >
       {approvalBody}
-    </motion.div>
+    </div>
   );
 }
 

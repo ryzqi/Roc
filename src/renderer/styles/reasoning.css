@@ -93,7 +93,7 @@
 }
 
 .copy-answer-button:active {
-  transform: var(--press-scale);
+  transform: var(--press-shift);
 }
 
 .copy-answer-button:focus-visible {

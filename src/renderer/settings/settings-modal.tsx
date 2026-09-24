@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import type React from 'react';
-import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../animations';
+import { modalBackdropFade, modalPop, resolveMotionTransition, resolveMotionVariants } from '../animations';
 import { focusDialogInitialElement, trapDialogTabFocus } from '../dialog-focus';
 
 export function SettingsModal({
@@ -43,8 +43,8 @@ export function SettingsModal({
         initial="initial"
         onClick={onClose}
         role="presentation"
-        transition={resolveMotionTransition({ duration: 0.16 })}
-        variants={modalBackdropFade}
+        transition={resolveMotionTransition()}
+        variants={resolveMotionVariants(modalBackdropFade)}
       >
         <motion.div
           animate="animate"
@@ -58,8 +58,8 @@ export function SettingsModal({
           ref={panelRef}
           role="dialog"
           tabIndex={-1}
-          transition={resolveMotionTransition(modalPopTransition)}
-          variants={modalPop}
+          transition={resolveMotionTransition()}
+          variants={resolveMotionVariants(modalPop)}
         >
           <header className="settings-modal-titlebar">
             <span className="settings-modal-title">设置</span>

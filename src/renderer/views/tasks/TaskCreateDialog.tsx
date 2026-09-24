@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../../animations';
+import { modalBackdropFade, modalPop, resolveMotionTransition, resolveMotionVariants } from '../../animations';
 import { focusDialogInitialElement, trapDialogTabFocus } from '../../dialog-focus';
 import { Button, TextArea } from '../../components/ui';
 
@@ -86,8 +86,8 @@ export function TaskCreateDialog({
           initial="initial"
           onClick={onClose}
           role="presentation"
-          transition={resolveMotionTransition({ duration: 0.16 })}
-          variants={modalBackdropFade}
+          transition={resolveMotionTransition()}
+          variants={resolveMotionVariants(modalBackdropFade)}
         >
           <motion.div
             animate="animate"
@@ -101,8 +101,8 @@ export function TaskCreateDialog({
             ref={panelRef}
             role="dialog"
             tabIndex={-1}
-            transition={resolveMotionTransition(modalPopTransition)}
-            variants={modalPop}
+            transition={resolveMotionTransition()}
+            variants={resolveMotionVariants(modalPop)}
           >
             <div className="task-create-dialog-shell" data-testid="task-create-dialog-shell">
               <div className="task-create-dialog" data-testid="task-create-dialog">

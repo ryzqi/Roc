@@ -10,23 +10,42 @@
   }
 }
 
-/* 流式打字光标 */
+/* 流式打字光标。1px 对齐 Retina 设备像素；paint containment 把闪烁限制在光标盒内。 */
 .chat-typing-cursor {
   display: inline-block;
-  width: 1.5px;
+  width: 1px;
   height: 1em;
   margin-left: 3px;
   vertical-align: -0.15em;
   background: var(--ink);
   border-radius: 1px;
+  pointer-events: none;
+  contain: paint;
   animation: chat-cursor-blink 1.2s ease-in-out infinite;
+}
+
+/* 只在首次插入时跑。结束后 fill-mode 默认 none，不把 transform 留在行上。 */
+@keyframes chat-message-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.chat-message-row--enter,
+.chat-approval-card--enter {
+  animation: chat-message-enter 160ms var(--easing-standard);
 }
 
 /* 统一 hover / press 微交互
  * 三档语义：
- *   卡片面（.card / .task-board-card，定义在各自文件）：hover 抬升 + 阴影，press 落回
+ *   卡片面：阴影瞬间切换，不插值 box-shadow；位移只走 transform
  *   列表行：hover 底色，press 下压 1px
- *   紧凑控件：hover 抬升，press 缩放回弹
+ *   紧凑控件：press 下压 1px，不用 scale，避免 Retina 文字发糊
  * 位于 main.css 之后，覆盖各页面局部覆写，保证跨页面一致。 */
 .nav-button,
 .history-row,
@@ -41,7 +60,6 @@
     background var(--transition-fast),
     border-color var(--transition-fast),
     color var(--transition-fast),
-    box-shadow var(--transition-fast),
     transform var(--duration-fast) var(--easing-standard);
 }
 
@@ -55,7 +73,7 @@
 .workbench-tab:active,
 .memory-record:active,
 .memory-file-row:active {
-  transform: translateY(1px);
+  transform: var(--press-shift);
 }
 
 .ui-button,
@@ -84,7 +102,6 @@
     background var(--transition-fast),
     border-color var(--transition-fast),
     color var(--transition-fast),
-    box-shadow var(--transition-fast),
     transform var(--duration-fast) var(--easing-standard);
 }
 
@@ -133,7 +150,7 @@
 .send-button:active:not(:disabled),
 .git-commit-button:active:not(:disabled),
 .task-create-dialog-actions button:active:not(:disabled) {
-  transform: var(--press-scale);
+  transform: var(--press-shift);
 }
 
 /* 窗口隐藏后停掉无限动画，避免托盘常驻空转 */
@@ -144,11 +161,11 @@ html[data-window-hidden='true'] *::after {
   transition: none !important;
 }
 
-/* 系统级减弱动效兼容 */
+/* 系统级减弱动效：只留显隐，不位移。 */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --lift-hover: none;
-    --press-scale: none;
+    --press-shift: none;
   }
 
   *,
@@ -159,4 +176,28 @@ html[data-window-hidden='true'] *::after {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  .chat-message-row--enter,
+  .chat-approval-card--enter,
+  .chat-typing-cursor,
+  .terminal-badge-dot {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .chat-typing-cursor {
+    opacity: 0.9;
+  }
+}
+
+/* 低功耗 / 低配：停装饰性循环和入场，功能型旋转指示保留。 */
+html[data-motion='conserve'] .chat-typing-cursor,
+html[data-motion='conserve'] .terminal-badge-dot,
+html[data-motion='conserve'] .chat-message-row--enter,
+html[data-motion='conserve'] .chat-approval-card--enter {
+  animation: none;
+}
+
+html[data-motion='conserve'] .chat-typing-cursor {
+  opacity: 0.9;
 }

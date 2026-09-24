@@ -257,9 +257,6 @@
   font-weight: 500;
 }
 
-.chat-bubble--assistant.is-streaming {
-  opacity: 0.92;
-}
 
 .chat-bubble-activity {
   min-width: 0;
@@ -314,7 +311,6 @@
   color: var(--muted);
   font-size: var(--font-body-size);
   line-height: 1.6;
-  animation: reasoning-expand var(--duration-slow) var(--ease-soft);
 }
 
 .chat-bubble-activity .reasoning-body p,
@@ -387,11 +383,6 @@
   line-height: 1.55;
   white-space: pre;
   overflow-x: auto;
-}
-
-@keyframes reasoning-expand {
-  from { opacity: 0; transform: translateY(-2px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .chat-scroll-bottom {

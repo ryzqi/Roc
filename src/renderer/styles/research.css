@@ -317,7 +317,7 @@ label.research-literature-source {
   width: 8px;
   height: 8px;
   margin-right: 8px;
-  border: 1.5px solid var(--line-strong);
+  border: 1px solid var(--line-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
   vertical-align: 1px;

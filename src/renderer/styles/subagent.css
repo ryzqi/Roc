@@ -189,7 +189,6 @@
   min-width: 0;
   padding: 8px 0 0 30px;
   border-top: 1px solid var(--line-soft);
-  animation: tool-expand var(--duration-base) var(--easing-standard);
 }
 
 .subagent-card__summary {

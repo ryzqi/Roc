@@ -318,8 +318,7 @@
 .chat-workspace-scale-host[data-chat-scale-active="true"] .chat-workspace-scale-frame {
   width: var(--chat-workspace-base-width);
   height: calc(100% / var(--chat-workspace-scale));
-  transform: scale(var(--chat-workspace-scale));
-  transform-origin: top left;
+  zoom: var(--chat-workspace-scale);
 }
 
 .workspace-main {

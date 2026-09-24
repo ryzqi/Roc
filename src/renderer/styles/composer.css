@@ -25,7 +25,7 @@
   background: var(--surface);
   box-shadow: var(--shadow-input);
   width: min(100%, 760px);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  transition: border-color var(--transition-base);
 }
 
 .composer--chat:focus-within {
