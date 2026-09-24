@@ -180,7 +180,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
         fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
       );
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[25], async (input) =>
-        fileService.searchByName(input as FileNameSearchRequest)
+        await fileService.searchByName(input as FileNameSearchRequest)
       );
     },
     shutdown: async () => {

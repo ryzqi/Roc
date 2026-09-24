@@ -19,7 +19,7 @@ export function registerFileCapabilities(
     fileService.listTree(input as FileTreeRequest)
   );
   context.capabilities.register(pluginId, descriptors[1], async (input) =>
-    fileService.search(input as FileSearchRequest)
+    await fileService.search(input as FileSearchRequest)
   );
   context.capabilities.register(pluginId, descriptors[2], async (input) =>
     await fileService.readPreview(input as FilePreviewRequest)

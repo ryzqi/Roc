@@ -13,7 +13,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
-import { open, readFile, stat } from 'node:fs/promises';
+import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -117,7 +117,7 @@ export class FileService {
     };
   }
 
-  search(request: FileSearchRequest): FileSearchResult {
+  async search(request: FileSearchRequest): Promise<FileSearchResult> {
     const query = request.query.trim();
     if (query.length === 0) {
       throw new RocDomainError({
@@ -135,7 +135,7 @@ export class FileService {
     let truncated = false;
     let visitedFiles = 0;
     let scannedBytes = 0;
-    this.visitFiles(workspace.path, (absolutePath) => {
+    await this.visitFiles(workspace.path, async (absolutePath) => {
       if (matches.length >= maxResults) {
         truncated = true;
         return true;
@@ -146,7 +146,7 @@ export class FileService {
       }
       visitedFiles += 1;
       const remainingBytes = defaultSearchMaxBytes - scannedBytes;
-      const buffer = this.readSearchBuffer(absolutePath, remainingBytes);
+      const buffer = await this.readSearchBuffer(absolutePath, remainingBytes);
       if (buffer === null) {
         return false;
       }
@@ -184,7 +184,7 @@ export class FileService {
     };
   }
 
-  searchByName(request: FileNameSearchRequest): FileNameSearchResult {
+  async searchByName(request: FileNameSearchRequest): Promise<FileNameSearchResult> {
     const query = request.query.trim();
     const workspace = this.workspaceService.requireWorkspace();
     const maxResults = this.positiveLimit(request.maxResults, defaultNameSearchLimit);
@@ -192,7 +192,7 @@ export class FileService {
     const candidates: FileNameSearchCandidate[] = [];
     let truncated = false;
     let visitedFiles = 0;
-    this.visitFiles(workspace.path, (absolutePath) => {
+    await this.visitFiles(workspace.path, (absolutePath) => {
       if (visitedFiles >= defaultNameSearchMaxVisitedFiles) {
         truncated = true;
         return true;
@@ -427,10 +427,10 @@ export class FileService {
     return recoveryPoint;
   }
 
-  private visitFiles(root: string, visit: (absolutePath: string) => boolean): boolean {
+  private async visitFiles(root: string, visit: (absolutePath: string) => boolean | Promise<boolean>): Promise<boolean> {
     let entries;
     try {
-      entries = readdirSync(root, { withFileTypes: true });
+      entries = await readdir(root, { withFileTypes: true });
     } catch (error) {
       if (this.isRecoverableFileSystemError(error)) {
         return false;
@@ -445,13 +445,13 @@ export class FileService {
 
       const absolutePath = join(root, entry.name);
       if (entry.isDirectory()) {
-        if (this.visitFiles(absolutePath, visit)) {
+        if (await this.visitFiles(absolutePath, visit)) {
           return true;
         }
         continue;
       }
       if (entry.isFile()) {
-        if (visit(absolutePath)) {
+        if (await visit(absolutePath)) {
           return true;
         }
       }
@@ -459,14 +459,14 @@ export class FileService {
     return false;
   }
 
-  private readSearchBuffer(absolutePath: string, maxBytes: number): (Buffer & { truncated: boolean }) | null {
+  private async readSearchBuffer(absolutePath: string, maxBytes: number): Promise<(Buffer & { truncated: boolean }) | null> {
     try {
-      const stat = statSync(absolutePath);
-      if (!stat.isFile()) {
+      const fileStat = await stat(absolutePath);
+      if (!fileStat.isFile()) {
         return null;
       }
-      const buffer = this.readFilePrefix(absolutePath, Math.min(stat.size, maxBytes)) as Buffer & { truncated: boolean };
-      buffer.truncated = stat.size > buffer.byteLength;
+      const buffer = await this.readFilePrefixAsync(absolutePath, Math.min(fileStat.size, maxBytes)) as Buffer & { truncated: boolean };
+      buffer.truncated = fileStat.size > buffer.byteLength;
       return buffer;
     } catch (error) {
       if (this.isRecoverableFileSystemError(error)) {
