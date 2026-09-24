@@ -87,7 +87,7 @@ describe('ResearchAppShell', () => {
     await click('research-shell-activity-toggle');
     expect(text('research-shell-activity')).toContain('阶段产物等待用户审核。');
     expect(text('research-overview-goal')).toContain('把想法变成可追溯项目。');
-    expect(text('research-overview-next')).toContain('审核当前产物');
+    expect(text('research-next-action')).toContain('确认通过');
     expect(document.querySelector('[data-testid="research-pipeline"]')).toBeNull();
     expect(text('research-overview-stage')).toContain('写作');
     await click('research-shell-index');
@@ -153,7 +153,7 @@ describe('ResearchAppShell', () => {
     const api = createResearchApi();
     await renderShell(api);
     await openListedProject('research_1');
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     expect(document.querySelector('[data-testid="research-stage-workspace"]')?.getAttribute('data-group')).toBe('write');
     expect(document.querySelector('[data-testid="research-stage-group-write"]')?.getAttribute('aria-pressed')).toBe('true');
@@ -192,7 +192,7 @@ describe('ResearchAppShell', () => {
     await renderShell(api);
     await openListedProject('research_1');
     await click('research-shell-provenance');
-    await act(async () => { await Promise.resolve(); });
+    await waitUntil(() => document.querySelector('[data-testid="research-provenance-error"]') !== null);
     expect(text('research-provenance-error')).toContain('溯源记录加载失败。');
   });
 
@@ -249,7 +249,7 @@ describe('ResearchAppShell', () => {
     }));
     await renderShell(api);
     await openListedProject('research_1');
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     await click('research-shell-all-projects');
     await waitUntil(() => document.querySelector('[data-testid="research-shell-list"]') !== null);
@@ -302,7 +302,7 @@ describe('ResearchAppShell', () => {
     const api = createResearchApi();
     await renderShell(api);
     await openListedProject('research_1');
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await waitUntil(() => document.querySelector('[data-testid="research-stage-workspace"]') !== null);
     expect(new URL(window.location.href).searchParams.get('view')).toBe('stage');
     expect(new URL(window.location.href).searchParams.get('stage')).toBe('write');
@@ -405,11 +405,14 @@ describe('ResearchAppShell', () => {
     });
     await renderShell(api);
     await openListedProject('research_1');
-    expect(text('research-overview-models')).toContain('解析模型未安装');
-    await click('research-overview-download-models');
+    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-parse-models"]') !== null);
+    expect(text('research-parse-models')).toContain('解析模型未安装');
+    await click('research-parse-download-models');
     expect(api.downloadModels).toHaveBeenCalled();
     await act(async () => { await Promise.resolve(); });
-    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-parse-models"]')).toBeNull();
   });
 });
 

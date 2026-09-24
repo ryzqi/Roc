@@ -1044,6 +1044,34 @@ pre.research-reader-content {
   margin: 0;
 }
 
+.research-next-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.research-next-strip__status,
+.research-next-strip__summary {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-next-strip__actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+}
+
 .research-shell-stages {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

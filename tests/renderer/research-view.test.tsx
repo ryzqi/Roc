@@ -36,14 +36,12 @@ describe('research workbench dashboard', () => {
     const api = createResearchApi();
     await renderView(api);
     expect(text('research-current-stage')).toBe('写作');
-    expect(text('research-next-action')).toContain('审核当前产物');
+    expect(text('research-next-action')).toContain('确认通过');
+    expect(text('research-next-summary')).toContain('Results');
     expect(text('research-timeline')).toContain('阶段产物等待用户审核。');
     expect(text('research-artifacts')).toContain('Results');
     expect(text('research-index-phase')).toBe('空闲');
     expect(text('research-index-counts')).toContain('已就绪 2');
-    expect(document.querySelector('[data-testid="research-approve"]')).toBeNull();
-    await click('research-overview-open-stage');
-    await waitUntil(() => document.querySelector('[data-testid="research-stage-current-actions"]') !== null);
     await click('research-approve');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve' }));
   });
@@ -60,11 +58,14 @@ describe('research workbench dashboard', () => {
     });
     await renderView(api);
     await act(async () => { await Promise.resolve(); });
-    expect(text('research-overview-models')).toContain('解析模型未安装');
-    await click('research-overview-download-models');
+    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
+    await click('research-stage-group-discover');
+    await waitUntil(() => document.querySelector('[data-testid="research-parse-models"]') !== null);
+    expect(text('research-parse-models')).toContain('解析模型未安装');
+    await click('research-parse-download-models');
     expect(api.downloadModels).toHaveBeenCalled();
     await act(async () => { await Promise.resolve(); });
-    expect(document.querySelector('[data-testid="research-overview-models"]')).toBeNull();
+    expect(document.querySelector('[data-testid="research-parse-models"]')).toBeNull();
   });
 
   it('pauses and rebuilds the project index from the dashboard', async () => {
@@ -144,7 +145,7 @@ describe('research workbench dashboard', () => {
     api.getManuscript.mockResolvedValue({ ok: true, data: null });
     api.saveManuscript.mockResolvedValue({ ok: true, data: saved });
     await renderView(api);
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await waitUntil(() => document.querySelector('[data-testid="research-manuscript-panel"]') !== null);
     await click('research-manuscript-create');
     expect(api.createArtifact).toHaveBeenCalledWith(expect.objectContaining({ stage: 'writing', kind: 'manuscript' }));
@@ -223,9 +224,7 @@ describe('research workbench dashboard', () => {
     const api = createResearchApi({ workflow: snapshot });
     await renderView(api);
     expect(text('research-current-stage')).toBe('审稿');
-    expect(document.querySelector('[data-testid="research-review-accept"]')).toBeNull();
-    await click('research-overview-open-stage');
-    await waitUntil(() => document.querySelector('[data-testid="research-stage-current-actions"]') !== null);
+    expect(text('research-next-action')).toContain('接受稿件');
     await click('research-review-accept');
     expect(api.transitionWorkflow).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve', reviewDecision: 'accept', expectedStage: 'review' }));
   });
@@ -522,7 +521,7 @@ describe('research workbench dashboard', () => {
     api.compileTemplate.mockResolvedValue({ ok: true, data: ready });
     const files = { selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: { filePaths: ['/tmp/source'] } }) };
     await renderView(api, files);
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await click('research-stage-tab-editor');
     await waitUntil(() => document.querySelector('[data-testid="research-editor-panel"]') !== null);
     await click('research-template-import');
@@ -544,7 +543,7 @@ describe('research workbench dashboard', () => {
     });
     await renderView(api);
     expect(document.querySelector('[data-testid="research-run-input"]')).toBeNull();
-    await click('research-overview-open-stage');
+    await click('research-stage-group-write');
     await waitUntil(() => document.querySelector('[data-testid="research-run-input"]') !== null);
     setValue('research-run-input', '写出可追溯的检索策略。');
     await click('research-start-run');

@@ -58,7 +58,7 @@ export type ResearchWorkbench = {
   refresh(): Promise<void>;
   setInstruction(value: string): void;
   transition(action: ResearchWorkflowTransitionRequest['action'], options?: { targetStage?: ResearchWorkflowSnapshot['currentStage']; reviewDecision?: 'accept' | 'revise' }): Promise<void>;
-  startRun(): Promise<void>;
+  startRun(instruction?: string): Promise<void>;
   cancelRun(): Promise<void>;
   retryRun(): Promise<void>;
   controlIndex(action: 'pause' | 'resume' | 'rebuild' | 'retry'): Promise<void>;
@@ -330,10 +330,11 @@ export function createResearchWorkbench(
         await refreshInternal(token);
       }, { busy: '当前命令仍在进行。', failed: '科研流程更新失败。' });
     },
-    async startRun() {
+    async startRun(instruction?: string) {
       await projection.runExclusive(async (token) => {
         const snapshot = projection.peek();
-        if (snapshot.instruction.trim().length === 0) {
+        const text = (instruction ?? snapshot.instruction).trim() || snapshot.project?.description.trim() || '';
+        if (text.length === 0) {
           throw new Error('阶段指令不能为空。');
         }
         const project = snapshot.project;
@@ -342,7 +343,7 @@ export function createResearchWorkbench(
         await adapter.startStageRun({
           projectId: project.id,
           expectedStage: workflow.currentStage,
-          instruction: snapshot.instruction.trim(),
+          instruction: text,
           requestId: createId()
         });
         if (!projection.isCurrent(token)) return;

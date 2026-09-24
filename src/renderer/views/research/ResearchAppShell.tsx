@@ -11,7 +11,9 @@ import type { ResearchEvidence, ResearchProject, ResearchProvenance } from '../.
 import { EmptyState } from '../../components/EmptyState';
 import { Button, ConfirmDialog, Drawer, Select, TextArea, TextInput } from '../../components/ui';
 import { useResearchLayout } from './research-layout';
+import { ResearchNextStrip } from './ResearchNextStrip';
 import { ResearchOverviewView } from './ResearchOverviewView';
+import { buildResearchNextStrip, type ResearchStripCommand } from './research-next-strip';
 import { ResearchServicesPanel } from './ResearchServicesPanel';
 import {
   buildResearchServices,
@@ -563,6 +565,43 @@ export function ResearchAppShell({
     setModelsError(result.data.error);
   }
 
+  const nextStrip = context.workflow === null || context.project === null ? null : buildResearchNextStrip({
+    workflow: context.workflow,
+    runs: snapshot.runs,
+    artifacts: snapshot.artifacts,
+    description: context.project.description
+  });
+
+  async function performStrip(command: ResearchStripCommand): Promise<void> {
+    if (command.type === 'start' || command.type === 'restart') {
+      const typed = snapshot.instruction.trim();
+      const instruction = typed || (command.type === 'restart' ? command.instruction : context.project?.description.trim() ?? '');
+      await workbench.startRun(instruction);
+      return;
+    }
+    if (command.type === 'retry') {
+      await workbench.retryRun();
+      return;
+    }
+    if (command.type === 'cancel') {
+      await workbench.cancelRun();
+      return;
+    }
+    if (command.type === 'reject') {
+      await workbench.transition('reject');
+      return;
+    }
+    if (command.type === 'revise') {
+      await workbench.transition('approve', { reviewDecision: 'revise' });
+      return;
+    }
+    if (command.type === 'approve') {
+      await workbench.transition('approve', command.reviewDecision === undefined ? undefined : { reviewDecision: command.reviewDecision });
+      return;
+    }
+    await workbench.transition('complete');
+  }
+
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
       <header className="page-strip research-shell-banner">
@@ -803,6 +842,13 @@ export function ResearchAppShell({
             })}
           </nav>
         )}
+        {nextStrip === null ? null : (
+          <ResearchNextStrip
+            disabled={snapshot.working || context.project?.status === 'archived'}
+            model={nextStrip}
+            onCommand={(command) => { void performStrip(command); }}
+          />
+        )}
         <div
           className={[
             'research-shell-layout',
@@ -829,8 +875,6 @@ export function ResearchAppShell({
                 }}
                 onOpenRuns={() => applyRoute({ view: 'activity' })}
                 onBindWorkspace={() => void bindWorkspace()}
-                onOpenStage={() => openStageGroup(stageGroupForStage(context.currentStage))}
-                onDownloadModels={() => void downloadModels()}
                 project={context.project}
                 workflow={context.workflow}
               />
@@ -856,6 +900,9 @@ export function ResearchAppShell({
                 ref={stageWorkspaceRef}
                 groupId={stageGroup}
                 onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
+                modelsDownloading={modelsDownloading}
+                modelsReady={modelsReady}
+                onDownloadModels={() => void downloadModels()}
                 session={session}
                 state={state}
                 tab={stageTab}

@@ -15,11 +15,9 @@ import {
   currentStageState,
   formatResearchTime,
   latestCurrentRun,
-  nextActionLabel,
   researchRunStatusLabels,
   researchStageLabels,
-  researchStageStatusLabels,
-  reviewDecisionRequired
+  researchStageStatusLabels
 } from './research-workflow';
 
 const ResearchEditorPanel = lazy(() => import('./ResearchEditorPanel').then((module) => ({ default: module.ResearchEditorPanel })));
@@ -39,6 +37,9 @@ export type ResearchStageWorkspaceHandle = {
 
 type ResearchStageWorkspaceProps = {
   groupId: ResearchStageGroupId;
+  modelsDownloading: boolean;
+  modelsReady: boolean | null;
+  onDownloadModels: () => void;
   onTabChange: (tab: ResearchStageTab) => void;
   session: ResearchSession;
   state: LoadedState;
@@ -48,6 +49,9 @@ type ResearchStageWorkspaceProps = {
 export const ResearchStageWorkspace = forwardRef<ResearchStageWorkspaceHandle, ResearchStageWorkspaceProps>(
 function ResearchStageWorkspace({
   groupId,
+  modelsDownloading,
+  modelsReady,
+  onDownloadModels,
   onTabChange,
   session,
   state,
@@ -164,49 +168,18 @@ function ResearchStageWorkspace({
             </button>
           </div>
         )}
-        {currentGroup && snapshot.workflow !== null && current !== undefined ? (
+        {groupId === 'discover' && modelsReady === false ? (
+          <div className="research-alert" role="status" data-testid="research-parse-models">
+            <span>解析模型未安装。解析文档前需要下载。</span>
+            <button className="ui-button ui-button--secondary" data-testid="research-parse-download-models" disabled={modelsDownloading} type="button" onClick={onDownloadModels}>下载模型</button>
+          </div>
+        ) : null}
+        {currentGroup && snapshot.workflow !== null && current !== undefined && (current.status === 'ready' || current.status === 'running' || current.status === 'paused' || current.status === 'failed' || current.status === 'blocked') && (currentRun === null || !['queued', 'running'].includes(currentRun.status)) ? (
           <div className="research-stage-actions" data-testid="research-stage-current-actions">
-            <p className="research-stage-copy">{nextActionLabel(snapshot.workflow)}</p>
-            {current.status === 'ready' ? (
-              <button className="ui-button ui-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('start')}>开始阶段</button>
-            ) : null}
-            {current.status === 'running' ? (
-              <>
-                <button className="ui-button ui-button--secondary" disabled={working} type="button" onClick={() => void session.workbench.transition('pause')}>暂停</button>
-                <button className="ui-button ui-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('complete')}>{current.gateRequired ? '提交审核' : '完成阶段'}</button>
-              </>
-            ) : null}
-            {current.status === 'paused' ? (
-              <button className="ui-button ui-button--primary" disabled={working} type="button" onClick={() => void session.workbench.transition('resume')}>继续</button>
-            ) : null}
-            {current.status === 'waiting_approval' && !reviewDecisionRequired(snapshot.workflow) ? (
-              <>
-                <button className="ui-button ui-button--secondary" disabled={working} type="button" onClick={() => void session.workbench.transition('reject')}>退回修改</button>
-                <button className="ui-button ui-button--primary" disabled={working} type="button" data-testid="research-approve" onClick={() => void session.workbench.transition('approve')}>确认通过</button>
-              </>
-            ) : null}
-            {reviewDecisionRequired(snapshot.workflow) ? (
-              <>
-                <button className="ui-button ui-button--secondary" disabled={working} type="button" onClick={() => void session.workbench.transition('reject')}>退回修改</button>
-                <button className="ui-button ui-button--secondary" disabled={working} type="button" data-testid="research-review-revise" onClick={() => void session.workbench.transition('approve', { reviewDecision: 'revise' })}>要求修订</button>
-                <button className="ui-button ui-button--primary" disabled={working} type="button" data-testid="research-review-accept" onClick={() => void session.workbench.transition('approve', { reviewDecision: 'accept' })}>接受稿件</button>
-              </>
-            ) : null}
-            {(current.status === 'ready' || current.status === 'running' || current.status === 'paused' || current.status === 'failed' || current.status === 'blocked') && (currentRun === null || !['queued', 'running'].includes(currentRun.status)) ? (
-              <label className="research-run-instruction">
-                角色指令
-                <TextArea data-testid="research-run-input" spellCheck={true} value={snapshot.instruction} onChange={(event) => session.workbench.setInstruction(event.target.value)} rows={3} placeholder="例如：基于已有证据形成可检验假设。" />
-              </label>
-            ) : null}
-            {currentRun === null || !['queued', 'running', 'failed', 'cancelled', 'interrupted'].includes(currentRun.status) ? (
-              <button className="ui-button ui-button--secondary" disabled={working || snapshot.instruction.trim().length === 0} type="button" data-testid="research-start-run" onClick={() => void session.workbench.startRun()}>启动角色</button>
-            ) : null}
-            {currentRun !== null && ['queued', 'running'].includes(currentRun.status) ? (
-              <button className="ui-button ui-button--secondary" disabled={working} type="button" data-testid="research-cancel-run" onClick={() => void session.workbench.cancelRun()}>取消运行</button>
-            ) : null}
-            {currentRun !== null && ['failed', 'cancelled', 'interrupted'].includes(currentRun.status) ? (
-              <button className="ui-button ui-button--secondary" disabled={working} type="button" data-testid="research-retry-run" onClick={() => void session.workbench.retryRun()}>重试运行</button>
-            ) : null}
+            <label className="research-run-instruction">
+              阶段指令
+              <TextArea data-testid="research-run-input" spellCheck={true} value={snapshot.instruction} onChange={(event) => session.workbench.setInstruction(event.target.value)} rows={3} placeholder="留空则使用研究目标。" />
+            </label>
           </div>
         ) : null}
         <Suspense fallback={<div className="view-loading" role="status">正在加载阶段面板…</div>}>

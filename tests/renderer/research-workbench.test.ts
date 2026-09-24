@@ -196,13 +196,18 @@ describe('research workbench', () => {
     expect(workbench.getSnapshot().error).toBeNull();
   });
 
-  it('rejects empty instruction without starting a run', async () => {
+  it('uses the research goal when the stage instruction is empty', async () => {
     const store = createStore();
-    const workbench = createResearchWorkbench(store.adapter);
+    const workbench = createResearchWorkbench(store.adapter, { createId: () => 'req_goal' });
     await workbench.load('research_1');
     await workbench.startRun();
-    expect(workbench.getSnapshot().error).toBe('阶段指令不能为空。');
-    expect(store.adapter.startStageRun).not.toHaveBeenCalled();
+    expect(store.adapter.startStageRun).toHaveBeenCalledWith({
+      projectId: 'research_1',
+      expectedStage: 'writing',
+      instruction: '把想法变成可追溯项目。',
+      requestId: 'req_goal'
+    });
+    expect(workbench.getSnapshot().error).toBeNull();
   });
 
   it('cancels the latest queued parent run', async () => {

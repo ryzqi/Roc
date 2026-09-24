@@ -12,7 +12,6 @@ import {
   currentStageState,
   formatResearchTime,
   indexPhaseLabel,
-  nextActionLabel,
   researchStageLabels,
   researchStageStatusLabels
 } from './research-workflow';
@@ -27,8 +26,6 @@ export function ResearchOverviewView({
   onOpenIndex,
   onOpenProvenance,
   onOpenRuns,
-  onOpenStage,
-  onDownloadModels,
   project,
   workflow
 }: {
@@ -41,8 +38,6 @@ export function ResearchOverviewView({
   onOpenIndex: () => void;
   onOpenProvenance: (artifactId: string) => void;
   onOpenRuns: () => void;
-  onOpenStage?: () => void;
-  onDownloadModels?: () => void;
   project: ResearchProject;
   workflow: ResearchWorkflowSnapshot;
 }): React.JSX.Element {
@@ -50,7 +45,6 @@ export function ResearchOverviewView({
   const stageArtifacts = currentArtifacts(artifacts, workflow);
   const indexStatus = context.indexStatus;
   const stageLabel = researchStageLabels[workflow.currentStage];
-  const nextAction = nextActionLabel(workflow);
   const recentEvents = events.slice(0, 4);
   const gateText = context.pendingGates.length === 0
     ? '没有待确认'
@@ -73,25 +67,10 @@ export function ResearchOverviewView({
             </span>
           </strong>
           <span data-testid="research-overview-status">{researchStageStatusLabels[current.status]}</span>
-          {onOpenStage === undefined ? null : (
-            <Button data-testid="research-overview-open-stage" variant="primary" onClick={onOpenStage}>进入阶段工作区</Button>
-          )}
         </div>
       </header>
 
-      <p className="research-stage-copy" data-testid="research-overview-next">
-        <span data-testid="research-next-action">{stageLabel}，{researchStageStatusLabels[current.status]}。下一步：{nextAction}</span>
-      </p>
-      {current.lastError === null ? null : <p className="research-stage-error">{current.lastError}</p>}
-
-      {context.serviceHealth.modelsReady === false ? (
-        <div className="research-alert" role="status" data-testid="research-overview-models">
-          <span>解析模型未安装，文档解析前需先配置。</span>
-          {onDownloadModels === undefined ? null : (
-            <Button data-testid="research-overview-download-models" variant="secondary" onClick={onDownloadModels}>下载模型</Button>
-          )}
-        </div>
-      ) : null}
+      {current.lastError === null ? null : <p className="research-stage-error" data-testid="research-overview-error">{current.lastError}</p>}
 
       {project.workspacePath === null ? (
         <div className="research-alert" role="status" data-testid="research-overview-bind-workspace">
