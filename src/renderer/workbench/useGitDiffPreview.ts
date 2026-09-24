@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDiff, type FileData as GitDiffFileData } from 'react-diff-view';
 import type { GitFileDiffResult, GitStatusChange } from '../../shared/types';
 import type { WorkspaceData } from '../app/types';
-import { buildGitDiffCacheKey, normalizeGitDiffText, selectGitDiffFile } from '../git-diff-adapter';
+import { buildGitDiffCacheKey, normalizeGitDiffText, rememberGitDiffParse, selectGitDiffFile } from '../git-diff-adapter';
 import { buildGitDiffPreviewRequest } from '../git-workbench';
 import { unwrap, type IpcLikeResult } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -159,13 +159,9 @@ export function useGitDiffPreview({
       return [];
     }
     const cacheKey = buildGitDiffCacheKey(selectionPreview);
-    const cachedFiles = diffParseCacheRef.current.get(cacheKey);
-    if (cachedFiles !== undefined) {
-      return cachedFiles;
-    }
-    const files = parseDiff(normalizeGitDiffText(selectionPreview.patch), { nearbySequences: 'zip' });
-    diffParseCacheRef.current.set(cacheKey, files);
-    return files;
+    return rememberGitDiffParse(diffParseCacheRef.current, cacheKey, () =>
+      parseDiff(normalizeGitDiffText(selectionPreview.patch), { nearbySequences: 'zip' })
+    );
   }, [selectionPreview]);
 
   const selectedDiffFile = useMemo(() => {
