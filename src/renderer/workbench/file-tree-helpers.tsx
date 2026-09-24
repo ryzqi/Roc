@@ -21,6 +21,30 @@ export type TreeNode = {
   depth: number;
 };
 
+export function directoryTreePathIsInside(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}/`);
+}
+
+export function collapseDirectoryTreeState<T>(input: {
+  children: Record<string, T>;
+  expanded: Set<string>;
+  relativePath: string;
+}): { children: Record<string, T>; expanded: Set<string> } {
+  const expanded = new Set<string>();
+  for (const path of input.expanded) {
+    if (!directoryTreePathIsInside(input.relativePath, path)) {
+      expanded.add(path);
+    }
+  }
+  const children: Record<string, T> = {};
+  for (const [path, value] of Object.entries(input.children)) {
+    if (!directoryTreePathIsInside(input.relativePath, path)) {
+      children[path] = value;
+    }
+  }
+  return { children, expanded };
+}
+
 export function parentRelativePath(relativePath: string): string | null {
   const parts = relativePath.split('/').filter((part) => part.length > 0);
   if (parts.length <= 1) {

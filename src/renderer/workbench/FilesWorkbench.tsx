@@ -10,7 +10,7 @@ import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
 import { FileImageFrame } from './file-image-frame';
-import { flattenTreeEntries, isImagePreview, parentRelativePath, previewTextBody } from './file-tree-helpers';
+import { collapseDirectoryTreeState, flattenTreeEntries, isImagePreview, parentRelativePath, previewTextBody } from './file-tree-helpers';
 import { resolveResizeSeparatorKeyWidth } from './resize-separator-keyboard';
 
 const FILE_PANE_MIN_WIDTH = 228;
@@ -59,11 +59,13 @@ export function FilesWorkbench({
 
   async function toggleDirectory(relativePath: string): Promise<void> {
     if (expandedDirectories.has(relativePath)) {
-      setExpandedDirectories((current) => {
-        const next = new Set(current);
-        next.delete(relativePath);
-        return next;
+      const collapsed = collapseDirectoryTreeState({
+        children: directoryChildren,
+        expanded: expandedDirectories,
+        relativePath
       });
+      setDirectoryChildren(collapsed.children);
+      setExpandedDirectories(collapsed.expanded);
       return;
     }
 
