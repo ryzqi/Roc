@@ -1255,10 +1255,10 @@ pre.research-reader-content {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
   width: 100%;
-  min-height: 32px;
-  padding: 8px 8px;
+  min-height: var(--control-height);
+  padding: var(--gap-inline);
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;

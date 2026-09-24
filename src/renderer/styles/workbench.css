@@ -290,8 +290,8 @@
 
 .git-section-header button,
 .icon-ghost-button {
-  width: 28px;
-  height: 28px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   display: inline-flex;
   align-items: center;
   justify-content: center;

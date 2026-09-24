@@ -390,9 +390,9 @@
   right: 24px;
   bottom: 24px;
   z-index: 5;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
+  width: var(--control-hit);
+  height: var(--control-hit);
+  border-radius: var(--r-control);
   border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);

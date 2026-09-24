@@ -68,8 +68,8 @@
 .task-create-dialog-close {
   display: inline-grid;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 50%;
