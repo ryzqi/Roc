@@ -22,7 +22,7 @@ export function registerFileCapabilities(
     fileService.search(input as FileSearchRequest)
   );
   context.capabilities.register(pluginId, descriptors[2], async (input) =>
-    fileService.readPreview(input as FilePreviewRequest)
+    await fileService.readPreview(input as FilePreviewRequest)
   );
   context.capabilities.register(pluginId, descriptors[3], async (input) =>
     fileService.readPdfWorkbenchPreview(input as FilesWorkbenchPdfPreviewRequest)

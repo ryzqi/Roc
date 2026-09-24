@@ -13,6 +13,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
+import { open, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -233,11 +234,11 @@ export class FileService {
     };
   }
 
-  readPreview(request: FilePreviewRequest): FilePreviewResult {
+  async readPreview(request: FilePreviewRequest): Promise<FilePreviewResult> {
     const relativePath = this.normalizeRelativePath(request.relativePath);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    const stat = statSync(absolutePath);
-    if (!stat.isFile()) {
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
       throw new RocDomainError({
         code: 'file_preview_target_not_file',
         message: '文件预览目标必须是文件。',
@@ -250,17 +251,17 @@ export class FileService {
     const maxBytes = this.positiveLimit(request.maxBytes, defaultPreviewBytes);
     const imageMediaType = this.imageMediaTypeForPath(relativePath);
     if (imageMediaType !== null) {
-      if (stat.size > maxBytes) {
+      if (fileStat.size > maxBytes) {
         return {
           relativePath,
           kind: 'binary',
           mediaType: imageMediaType,
           content: '',
           truncated: true,
-          sizeBytes: stat.size
+          sizeBytes: fileStat.size
         };
       }
-      const imageBuffer = readFileSync(absolutePath);
+      const imageBuffer = await readFile(absolutePath);
       return {
         relativePath,
         kind: 'image',
@@ -277,17 +278,17 @@ export class FileService {
         mediaType: 'application/pdf',
         content: 'PDF 文件需要在文件工作台中预览。',
         truncated: false,
-        sizeBytes: stat.size
+        sizeBytes: fileStat.size
       };
     }
-    const buffer = this.readFilePrefix(absolutePath, Math.min(stat.size, Math.max(maxBytes, binaryProbeBytes)));
+    const buffer = await this.readFilePrefixAsync(absolutePath, Math.min(fileStat.size, Math.max(maxBytes, binaryProbeBytes)));
     if (this.isBinaryBuffer(buffer)) {
       return {
         relativePath,
         kind: 'binary',
         content: '',
-        truncated: stat.size > buffer.byteLength,
-        sizeBytes: stat.size
+        truncated: fileStat.size > buffer.byteLength,
+        sizeBytes: fileStat.size
       };
     }
 
@@ -295,8 +296,8 @@ export class FileService {
       relativePath,
       kind: 'text',
       content: buffer.subarray(0, maxBytes).toString('utf8'),
-      truncated: stat.size > maxBytes,
-      sizeBytes: stat.size
+      truncated: fileStat.size > maxBytes,
+      sizeBytes: fileStat.size
     };
   }
 
@@ -472,6 +473,18 @@ export class FileService {
         return null;
       }
       throw error;
+    }
+  }
+
+  private async readFilePrefixAsync(absolutePath: string, byteLimit: number): Promise<Buffer> {
+    const targetBytes = Math.max(0, byteLimit);
+    const handle = await open(absolutePath, 'r');
+    try {
+      const buffer = Buffer.alloc(targetBytes);
+      const { bytesRead } = await handle.read(buffer, 0, targetBytes, 0);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
     }
   }
 
