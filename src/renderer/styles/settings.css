@@ -1,8 +1,8 @@
 .settings-list {
   display: grid;
   align-content: start;
-  gap: 4px;
-  padding: 8px 6px;
+  gap: var(--gap-inline);
+  padding: var(--gap-inline);
   background: var(--surface-strong);
 }
 
@@ -10,8 +10,8 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: 2px 2px 10px;
-  margin-bottom: 4px;
+  padding: 0 0 var(--gap-inline);
+  margin-bottom: var(--gap-inline);
   background: transparent;
   border-bottom: 0;
 }
@@ -31,10 +31,10 @@
 .settings-sidebar-card {
   display: grid;
   align-content: start;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  gap: var(--gap-inline);
+  padding: var(--pad-card);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: none;
 }
@@ -42,20 +42,25 @@
 .settings-item {
   position: relative;
   width: 100%;
-  min-height: 40px;
+  min-height: var(--control-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0 14px;
+  gap: var(--gap-inline);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
   font-weight: 500;
   text-align: left;
   transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }
 
 .settings-item:hover {
@@ -73,8 +78,8 @@
   content: '';
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
+  top: var(--gap-inline);
+  bottom: var(--gap-inline);
   width: var(--stripe-width);
   border-radius: 999px;
   background: var(--accent);
@@ -86,28 +91,28 @@
 
 .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--gap-card);
 }
 
 .settings-panel-stack,
 .settings-form {
   display: grid;
-  gap: 12px;
+  gap: var(--gap-card);
   min-height: 0;
 }
 
 .settings-panel-stack .card {
-  padding: 22px 24px;
+  padding: var(--pad-window);
 }
 
 .settings-panel-stack--compact {
-  gap: 10px;
+  gap: var(--gap-card);
   align-content: start;
   min-height: 0;
 }
 
 .settings-panel-stack--compact .card {
-  padding: 18px 20px;
+  padding: var(--pad-card);
 }
 
 .settings-section-panel {
@@ -116,8 +121,8 @@
 
 .settings-subsection {
   display: grid;
-  gap: 12px;
-  padding-top: 14px;
+  gap: var(--gap-card);
+  padding-top: var(--gap-card);
   border-top: 1px solid var(--line);
 }
 
