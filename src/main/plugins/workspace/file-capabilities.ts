@@ -16,7 +16,7 @@ export function registerFileCapabilities(
   fileService: FileService
 ): void {
   context.capabilities.register(pluginId, descriptors[0], async (input) =>
-    fileService.listTree(input as FileTreeRequest)
+    await fileService.listTree(input as FileTreeRequest)
   );
   context.capabilities.register(pluginId, descriptors[1], async (input) =>
     await fileService.search(input as FileSearchRequest)

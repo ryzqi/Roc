@@ -78,12 +78,12 @@ export class FileService {
     private readonly workspaceService: WorkspaceService
   ) {}
 
-  listTree(request: FileTreeRequest): FileTreeResult {
+  async listTree(request: FileTreeRequest): Promise<FileTreeResult> {
     const workspace = this.workspaceService.requireWorkspace();
     const relativePath = this.normalizeRelativePath(request.relativePath);
     const target = this.workspaceService.resolveInsideWorkspace(relativePath);
-    const stat = statSync(target);
-    if (!stat.isDirectory()) {
+    const directoryStat = await stat(target);
+    if (!directoryStat.isDirectory()) {
       throw new RocDomainError({
         code: 'file_tree_target_not_directory',
         message: '文件树目标必须是目录。',
@@ -94,25 +94,26 @@ export class FileService {
     }
 
     const limit = this.positiveLimit(request.limit, defaultListLimit);
-    const children = readdirSync(target, { withFileTypes: true })
+    const children = (await readdir(target, { withFileTypes: true }))
       .filter((entry) => !ignoredDirectoryNames.has(entry.name))
       .sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
     const visibleChildren = children.slice(0, limit);
+    const entries = await Promise.all(visibleChildren.map(async (entry) => {
+      const absolutePath = join(target, entry.name);
+      const entryStat = await stat(absolutePath);
+      return {
+        name: entry.name,
+        relativePath: this.toWorkspaceRelativePath(workspace.path, absolutePath),
+        type: entry.isDirectory() ? 'directory' as const : 'file' as const,
+        size: entryStat.size,
+        updatedAt: entryStat.mtime.toISOString()
+      };
+    }));
 
     return {
       workspacePath: workspace.path,
       relativePath,
-      entries: visibleChildren.map((entry) => {
-        const absolutePath = join(target, entry.name);
-        const entryStat = statSync(absolutePath);
-        return {
-          name: entry.name,
-          relativePath: this.toWorkspaceRelativePath(workspace.path, absolutePath),
-          type: entry.isDirectory() ? 'directory' : 'file',
-          size: entryStat.size,
-          updatedAt: entryStat.mtime.toISOString()
-        };
-      }),
+      entries,
       truncated: children.length > visibleChildren.length
     };
   }
