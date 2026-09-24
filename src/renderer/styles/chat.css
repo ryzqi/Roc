@@ -77,8 +77,8 @@
 .chat-wait-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-soft);
@@ -179,7 +179,7 @@
   min-width: 0;
   max-width: 100%;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 0;
   border-radius: 0;
   border: 0;
@@ -209,7 +209,7 @@
   border: 0;
   box-shadow: none;
   border-radius: var(--chat-bubble-radius);
-  padding: 10px 14px;
+  padding: 8px 12px;
   max-width: min(100%, 560px);
 }
 
@@ -307,7 +307,7 @@
 
 .chat-bubble-activity .reasoning-body,
 .chat-bubble-activity .activity-body {
-  padding: 6px 0 4px;
+  padding: 6px 0 8px;
   color: var(--muted);
   font-size: var(--font-body-size);
   line-height: 1.6;
@@ -358,7 +358,7 @@
   display: grid;
   min-width: 0;
   max-width: 100%;
-  gap: 4px;
+  gap: 8px;
 }
 
 .activity-json-section + .activity-json-section {
@@ -374,7 +374,7 @@
 
 .activity-json-section pre {
   margin: 0;
-  padding: 8px 10px;
+  padding: 8px 8px;
   border-radius: var(--r-sm);
   background: var(--code-surface);
   color: var(--code-text);

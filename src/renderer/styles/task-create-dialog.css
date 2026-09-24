@@ -37,7 +37,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
   padding: 24px 24px 20px;
   border-bottom: 1px solid var(--line);
 }
@@ -92,8 +92,8 @@
 
 .task-create-section {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-soft);
@@ -120,7 +120,7 @@
 
 .task-create-form-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 

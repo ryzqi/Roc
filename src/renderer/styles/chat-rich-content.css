@@ -48,7 +48,7 @@
   min-width: 0;
   max-width: 100%;
   gap: 6px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: var(--r-md);
   background: transparent;
   border: 1px solid var(--line-soft);
@@ -74,7 +74,7 @@
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  padding: 8px 10px;
+  padding: 8px 8px;
   border-radius: var(--r-sm);
   background: var(--code-surface);
   color: var(--code-text);
@@ -100,7 +100,7 @@
 
 .approval-btn {
   min-height: var(--control-height);
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--r-md);
   font-size: var(--font-ui-size);
@@ -185,7 +185,7 @@
 
 .code-card-copy {
   min-height: 24px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -209,7 +209,7 @@
 
 .code-card pre {
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 12px;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -245,7 +245,7 @@
 }
 
 .capability-strip--visible {
-  gap: 10px;
+  gap: 8px;
   padding: 0 0 2px;
 }
 
@@ -259,7 +259,7 @@
 .chat-bubble--assistant h4,
 .chat-bubble--assistant h5,
 .chat-bubble--assistant h6 {
-  margin: 14px 0 6px;
+  margin: 12px 0 6px;
   font-weight: 500;
   line-height: 1.35;
   color: var(--ink);
@@ -276,13 +276,13 @@
 .chat-bubble--assistant ul,
 .chat-bubble--assistant ol {
   margin: 0;
-  padding-left: 22px;
+  padding-left: 20px;
   font-size: var(--font-read-size);
   line-height: 1.72;
 }
 
 .chat-bubble--assistant li + li {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .chat-bubble--assistant blockquote {
@@ -332,7 +332,7 @@
 
 .chat-bubble--assistant th,
 .chat-bubble--assistant td {
-  padding: 8px 10px;
+  padding: 8px 8px;
   border: 0;
   border-bottom: 1px solid var(--line);
   text-align: left;

@@ -9,14 +9,14 @@
 
 .timeline {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 16px;
 }
 
 .step {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: start;
 }
 

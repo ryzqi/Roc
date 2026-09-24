@@ -2,11 +2,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .action-strip--tray {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .action-strip--tray button {
@@ -45,7 +45,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: var(--muted);

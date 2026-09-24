@@ -13,7 +13,7 @@
   width: auto;
   height: auto;
   clip: auto;
-  padding: 4px 8px;
+  padding: 8px 8px;
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
@@ -46,7 +46,7 @@
   align-items: center;
   gap: var(--control-gap);
   min-height: 52px;
-  padding: 0 86px;
+  padding: 0 86px; /* 红绿灯占位，不能收进 8px 网格 */
   border-bottom: 1px solid var(--workband-border);
   /* 窗口不透明，顶栏后面没有内容，不做假玻璃。 */
   background: transparent;
@@ -244,7 +244,7 @@
 }
 
 .workspace--chat {
-  padding-bottom: 4px;
+  padding-bottom: 8px;
 }
 
 .workspace-shell {

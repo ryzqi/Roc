@@ -129,7 +129,7 @@
 .ui-drawer__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--gap-card); padding: var(--pad-card); border-bottom: 1px solid var(--separator); }
 .ui-drawer__heading { min-width: 0; }
 .ui-drawer__heading h2 { margin: 0; color: var(--label-primary); font-family: var(--font-display); font-size: var(--font-h2-size); font-weight: 600; line-height: 1.4; }
-.ui-drawer__heading p { margin: 4px 0 0; color: var(--muted); font-size: var(--font-meta-size); overflow-wrap: anywhere; }
+.ui-drawer__heading p { margin: 8px 0 0; color: var(--muted); font-size: var(--font-meta-size); overflow-wrap: anywhere; }
 .ui-drawer__body { min-height: 0; overflow-y: auto; padding: var(--pad-card) var(--pad-card) var(--gap-section); }
 .ui-drawer__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--control-gap); padding: var(--pad-card); border-top: 1px solid var(--separator); background: var(--surface-translucent); }
 

@@ -793,7 +793,7 @@ button.research-literature-row:focus-visible {
 }
 
 .research-reader-content p {
-  margin: 4px 0 0;
+  margin: 8px 0 0;
   color: var(--text);
   line-height: 1.6;
 }
@@ -1258,7 +1258,7 @@ pre.research-reader-content {
   align-items: baseline;
   width: 100%;
   min-height: 32px;
-  padding: 4px 8px;
+  padding: 8px 8px;
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;

@@ -28,14 +28,14 @@
 
 .git-header {
   display: grid;
-  gap: 10px;
-  padding: 20px 18px 12px;
+  gap: 8px;
+  padding: 20px 16px 12px;
   border-bottom: 1px solid var(--line-soft);
 }
 
 .git-commit-message {
   min-height: 124px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -60,7 +60,7 @@
 
 .git-commit-button {
   min-height: var(--control-height);
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: transparent;
@@ -124,14 +124,14 @@
 .git-changes-pane {
   min-height: 0;
   overflow: auto;
-  padding: 12px 14px 14px;
+  padding: 12px 12px 12px;
 }
 
 .git-section-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 14px 0 10px;
+  gap: 8px;
+  margin: 12px 0 8px;
   color: var(--muted);
   font-size: var(--font-meta-size);
   font-weight: 500;
@@ -177,7 +177,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-height: var(--control-height);
   padding: 6px 8px;
   border-radius: var(--r-sm);
@@ -232,7 +232,7 @@
   width: 332px;
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -277,7 +277,7 @@
 
 .git-branch-list {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   max-height: 160px;
   overflow: auto;
 }
@@ -287,7 +287,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--control-height);
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: var(--r-sm);
   color: var(--text);
   text-align: left;
@@ -325,7 +325,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: 12px;
-  padding: 20px 18px 16px;
+  padding: 20px 16px 16px;
   background: var(--surface);
 }
 
@@ -358,7 +358,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 0;
+  padding: 12px 16px 0;
 }
 
 .git-diff-toolbar {
@@ -415,7 +415,7 @@
 }
 
 .git-selection-empty {
-  padding: 12px 14px;
+  padding: 12px 12px;
 }
 
 .git-selection-title {
@@ -432,7 +432,7 @@
 .git-last-result {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   color: var(--muted);
   font-size: var(--font-meta-size);
 }

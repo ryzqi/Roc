@@ -24,13 +24,13 @@
 
 .memory-library-sidebar {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   align-content: start;
 }
 
 .memory-library-workspace {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   align-content: start;
 }
 
@@ -41,17 +41,17 @@
 }
 
 .memory-list-head {
-  padding: 0 0 10px;
+  padding: 0 0 8px;
 }
 
 .memory-list-body {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .memory-record-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .memory-record {
@@ -59,7 +59,7 @@
   text-align: left;
   display: grid;
   gap: 8px;
-  padding: 12px 12px 10px;
+  padding: 12px 12px 8px;
   border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -139,13 +139,13 @@
 .memory-editor-panel {
   min-height: 0;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
 }
 
 .memory-preview-surface {
   min-height: 120px;
-  padding: 14px 0 14px 14px;
+  padding: 12px 0 12px 12px;
   border-left: 2px solid var(--line-strong);
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -162,7 +162,7 @@
   width: 100%;
   min-height: 220px;
   resize: none;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-xs);
   background: var(--surface);
@@ -229,7 +229,7 @@
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
 
 .memory-tabs .tab {
@@ -283,7 +283,7 @@
   width: 100%;
   display: grid;
   gap: 6px;
-  padding: 11px 12px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -342,7 +342,7 @@
   width: 100%;
   min-height: 46vh;
   resize: vertical;
-  padding: 13px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -357,7 +357,7 @@
 .memory-file-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -372,7 +372,7 @@
 }
 
 .memory-error-banner {
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--st-bad-line);
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--st-bad) 9%, transparent);
@@ -383,7 +383,7 @@
 }
 
 .memory-warn-banner {
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--st-warn-line);
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--st-warn) 9%, transparent);
@@ -394,7 +394,7 @@
 }
 
 .memory-info-banner {
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--st-info-line);
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--st-info) 9%, transparent);
@@ -424,7 +424,7 @@
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 120px 92px auto;
   align-items: end;
-  gap: 10px;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {
@@ -436,7 +436,7 @@
 
 .memory-session-field {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
   color: var(--muted);
   font-size: var(--font-meta-size);
@@ -462,7 +462,7 @@
 
 .memory-session-results {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -474,7 +474,7 @@
 .memory-session-result {
   display: grid;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -501,7 +501,7 @@
   min-height: 46vh;
   overflow: auto;
   margin: 0;
-  padding: 13px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
@@ -522,14 +522,14 @@
 
 .memory-auto-records {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .memory-auto-record {
   display: grid;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);

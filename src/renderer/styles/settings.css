@@ -149,7 +149,7 @@
 }
 
 .settings-advanced {
-  padding: 12px 14px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-soft);
@@ -228,7 +228,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -274,8 +274,8 @@
   min-width: 0;
   min-height: var(--control-height);
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: transparent;
@@ -309,7 +309,7 @@
 
 .settings-page-actions button {
   min-height: var(--control-height);
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   background: transparent;
@@ -366,7 +366,7 @@
   display: block;
   font-size: var(--font-meta-size);
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 /* === 模型供应商详情面板：字段控件 / 字段标题 / 跨列字段 / 折叠器视觉统一 === */
@@ -439,8 +439,8 @@
 
 .provider-advanced,
 .provider-nvidia-advanced {
-  margin-top: 4px;
-  padding: 12px 14px;
+  margin-top: 8px;
+  padding: 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-soft);
@@ -482,8 +482,8 @@
 }
 
 .provider-nvidia-note {
-  margin: -6px 0 10px;
-  padding: 10px 12px;
+  margin: -6px 0 8px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-soft);
@@ -493,7 +493,7 @@
 }
 
 .provider-nvidia-note code {
-  padding: 0 4px;
+  padding: 0 8px;
   border-radius: 3px;
   background: var(--code-surface-soft);
   font-family: var(--font-mono);
@@ -535,7 +535,7 @@
 }
 .provider-row-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
 }
 
 /* settings entry: gear button in sidebar footer */

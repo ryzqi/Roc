@@ -3,9 +3,9 @@
   min-width: 0;
   max-width: 100%;
   display: grid;
-  gap: 7px;
-  margin: 3px 0;
-  padding: 9px 10px;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 8px;
   border: 1px solid var(--line-soft);
   border-left-width: var(--stripe-width);
   border-radius: var(--r-sm);
@@ -96,7 +96,7 @@
   min-height: 22px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   color: var(--text);
   font-size: var(--font-code-size);
   font-weight: 600;
@@ -167,12 +167,12 @@
 .subagent-card__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  padding-left: 30px;
+  gap: 8px;
+  padding-left: 32px;
 }
 
 .subagent-card__chip {
-  padding: 2px 7px;
+  padding: 2px 8px;
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   background: var(--bg-soft);
@@ -185,9 +185,9 @@
 
 .subagent-card__body {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
-  padding: 8px 0 0 30px;
+  padding: 8px 0 0 32px;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -201,7 +201,7 @@
 
 .subagent-card__error {
   margin: 0;
-  padding: 8px 10px;
+  padding: 8px 8px;
   border: 1px solid color-mix(in srgb, var(--tool-st-error-text) 28%, var(--line-soft));
   border-radius: var(--r-xs);
   background: var(--tool-st-error-bg);

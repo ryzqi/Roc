@@ -1,5 +1,5 @@
 .task-board-page {
-  gap: 18px;
+  gap: 16px;
 }
 
 .task-board-grid {
@@ -13,7 +13,7 @@
   display: grid;
   gap: 12px;
   min-width: 0;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-soft);
@@ -23,8 +23,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 10px;
+  gap: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -37,7 +37,7 @@
 
 .task-board-column-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   content-visibility: auto;
   contain-intrinsic-size: 0 240px;
@@ -45,7 +45,7 @@
 
 .task-board-column-empty {
   margin: 0;
-  padding: 14px 10px;
+  padding: 12px 8px;
   border: 1px dashed var(--line);
   border-radius: var(--radius-sm);
   color: var(--muted);
@@ -59,7 +59,7 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -114,14 +114,14 @@
 .task-detail-page {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 16px;
 }
 
 .task-detail-page-head {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line-soft);
@@ -134,7 +134,7 @@
 
 .task-detail-content-shell {
   min-width: 0;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -158,7 +158,7 @@
 .task-detail-main-column,
 .task-detail-side-column {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -216,13 +216,13 @@
 .task-detail-metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .task-detail-metric {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line-soft);
@@ -255,7 +255,7 @@
   grid-template-columns: 92px minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
-  padding: 10px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -296,7 +296,7 @@
 
 .task-detail-followup {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -326,7 +326,7 @@
   display: grid;
   gap: 8px;
   min-width: 0;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -385,7 +385,7 @@
   gap: 12px;
   justify-items: center;
   width: min(560px, 100%);
-  padding: 20px 18px 10px;
+  padding: 20px 16px 8px;
   border: 1px dashed var(--line);
   border-radius: var(--r-md);
   background: var(--bg-soft);
@@ -395,7 +395,7 @@
   box-sizing: border-box;
   width: min(520px, 100%);
   max-width: none;
-  padding: 28px 22px;
+  padding: 24px 20px;
   border-radius: var(--radius-sm);
   background: var(--surface);
 }

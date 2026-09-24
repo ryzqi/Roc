@@ -347,7 +347,7 @@
 }
 
 .row-sub {
-  margin-top: 4px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: var(--font-meta-size);
   line-height: 1.5;
