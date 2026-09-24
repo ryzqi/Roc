@@ -38,12 +38,32 @@ export function normalizeSequencedChatRunEvent(event: ChatRunEvent | SequencedCh
   return event;
 }
 
-export function shouldApplySequencedRunEvent(seen: Map<string, number>, event: SequencedChatRunEvent): boolean {
+// 每个运行只留一个序号。聊天会话不重置时，旧运行号不能无限留在 renderer。
+export const maxSeenRunSequences = 64;
+
+export function shouldApplySequencedRunEvent(
+  seen: Map<string, number>,
+  event: SequencedChatRunEvent,
+  maxEntries = maxSeenRunSequences
+): boolean {
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw new Error('chat_run_sequence_limit_invalid');
+  }
   const previous = seen.get(event.runId);
   if (previous !== undefined && event.sequence <= previous) {
     return false;
   }
+  if (seen.has(event.runId)) {
+    seen.delete(event.runId);
+  }
   seen.set(event.runId, event.sequence);
+  while (seen.size > maxEntries) {
+    const oldest = seen.keys().next().value;
+    if (oldest === undefined || oldest === event.runId) {
+      break;
+    }
+    seen.delete(oldest);
+  }
   return true;
 }
 
