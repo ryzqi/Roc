@@ -6,9 +6,11 @@ import type {
   AppSettings,
   ApprovalMode,
   McpServerSnapshot,
+  ResearchProject,
   SkillSnapshot,
   Workspace
 } from '../../../shared/types';
+import { RocDomainError } from '../../services/errors';
 import {
   agentCapabilityPreviewRequestSchema,
   agentCapabilityPreviewSchema,
@@ -129,7 +131,8 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         runEventLog,
         status: options.status,
         statusProvider: options.statusProvider,
-        workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {})
+        workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {}),
+        researchProjectProvider: (projectId) => loadResearchProjectWorkspace(context, projectId)
       });
       registerAgentCapabilities(context, runtime, options);
     },
@@ -141,6 +144,35 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
+}
+
+
+async function loadResearchProjectWorkspace(
+  context: RocPluginContext,
+  projectId: string
+): Promise<{ workspacePath: string | null } | null> {
+  try {
+    const project = await context.capabilities.invoke<{ id: string }, ResearchProject>('research.projects.get', { id: projectId });
+    return { workspacePath: project.workspacePath };
+  } catch (error) {
+    if (error instanceof RocDomainError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'capability_not_found' || message === 'capability_not_ready') {
+      throw new RocDomainError({
+        code: 'research_project_unavailable',
+        message: '研究项目服务还没准备好，无法开始对话。',
+        category: 'degraded',
+        retryable: true,
+        userAction: '稍后再发送。'
+      });
+    }
+    if (message.startsWith('research_project_not_found')) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 function createCapabilityPreviewProvider(

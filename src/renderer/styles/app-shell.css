@@ -279,8 +279,10 @@
 .research-assistant-overlay {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   border-left: 1px solid var(--line);
   background: var(--surface);
 }
@@ -296,8 +298,54 @@
 }
 
 .research-assistant-overlay-body {
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  display: grid;
+  overflow: hidden;
+  padding: 12px var(--gap-card) var(--gap-card);
+}
+
+.research-assistant-overlay-body > .chat-stage {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.research-assistant-overlay .chat-page-shell,
+.research-assistant-overlay .chat-feedback-stack,
+.research-assistant-overlay .chat-bottom-stack,
+.research-assistant-overlay .composer--chat {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.research-assistant-overlay .chat-page-shell {
+  padding-top: 4px;
+}
+
+.research-assistant-overlay .chat-research-context,
+.research-assistant-overlay .chat-empty-copy,
+.research-assistant-overlay .inline-warning {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.research-assistant-overlay .composer--chat .composer-bottom {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.research-assistant-overlay .composer-left,
+.research-assistant-overlay .composer-right {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.research-assistant-overlay .composer-right {
+  margin-left: auto;
 }
 
 .chat-workspace-scale-host {

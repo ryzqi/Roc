@@ -28,6 +28,7 @@ import type { RocEventBus } from '../../kernel/types';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
+import { RocDomainError } from '../../services/errors';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
 import { prepareChatImageAttachments } from './chat-image-attachments';
@@ -122,6 +123,7 @@ export type AgentPluginRuntimeOptions = {
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
   workspaceProvider?: () => Promise<Workspace | null>;
+  researchProjectProvider?: (projectId: string) => Promise<{ workspacePath: string | null } | null>;
 };
 
 export class AgentPluginRuntime {
@@ -997,6 +999,11 @@ export class AgentPluginRuntime {
 
   private async resolveRunWorkspace(request: ChatStartRunRequest): Promise<Workspace | null> {
     const currentWorkspace = this.options.workspaceProvider === undefined ? null : await this.options.workspaceProvider();
+    if (typeof request.researchProjectId === 'string' && request.researchProjectId.length > 0) {
+      // 研究助手的目录只认项目记录，忽略渲染进程附带的 workspacePath。
+      const projectPath = await this.resolveResearchProjectWorkspacePath(request.researchProjectId);
+      return this.workspaceFromPath(projectPath, currentWorkspace);
+    }
     if (request.workspacePath === undefined || request.workspacePath === null) {
       return currentWorkspace;
     }
@@ -1007,6 +1014,34 @@ export class AgentPluginRuntime {
     if (workspacePath.length === 0) {
       throw new Error('agent_workspace_path_empty');
     }
+    return this.workspaceFromPath(workspacePath, currentWorkspace);
+  }
+
+  private async resolveResearchProjectWorkspacePath(projectId: string): Promise<string> {
+    if (this.options.researchProjectProvider === undefined) {
+      throw new RocDomainError({
+        code: 'research_project_unavailable',
+        message: '研究项目服务还没准备好，无法开始对话。',
+        category: 'degraded',
+        retryable: true,
+        userAction: '稍后再发送。'
+      });
+    }
+    const project = await this.options.researchProjectProvider(projectId);
+    const workspacePath = project?.workspacePath?.trim() ?? '';
+    if (project === null || workspacePath.length === 0) {
+      throw new RocDomainError({
+        code: project === null ? 'research_project_not_found' : 'research_project_workspace_required',
+        message: project === null ? '当前研究项目不存在，无法开始对话。' : '当前研究项目没有工作目录，无法开始对话。',
+        category: project === null ? 'not_found' : 'validation',
+        retryable: false,
+        userAction: project === null ? '重新打开研究项目后再试。' : '先为研究项目选择工作目录。'
+      });
+    }
+    return workspacePath;
+  }
+
+  private workspaceFromPath(workspacePath: string, currentWorkspace: Workspace | null): Workspace {
     if (currentWorkspace !== null && currentWorkspace.path === workspacePath) {
       return currentWorkspace;
     }
