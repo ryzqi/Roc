@@ -48,7 +48,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--control-gap);
   min-width: 0;
 }
 
@@ -66,20 +66,21 @@
 
 .research-tabs {
   display: flex;
-  gap: 4px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
+  align-items: center;
+  gap: var(--gap-inline);
+  padding-bottom: var(--gap-inline);
+  border-bottom: 1px solid var(--separator);
   overflow-x: auto;
 }
 
 .research-tab {
   display: inline-flex;
-  min-height: var(--control-height-compact);
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
-  padding: 0 13px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -104,7 +105,7 @@
 
 .research-tool-panel {
   display: grid;
-  gap: 12px;
+  gap: var(--gap-card);
   min-width: 0;
 }
 
@@ -113,9 +114,9 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--gap-card);
   min-width: 0;
-  min-height: 36px;
+  min-height: var(--control-height);
 }
 
 .research-tool-heading > :first-child {
@@ -155,16 +156,16 @@
 .research-knowledge-list,
 .research-config-list {
   display: grid;
-  gap: 10px;
+  gap: var(--gap-inline);
 }
 
 .research-literature-row,
 .research-knowledge-row,
 .research-config-row {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   width: 100%;
-  padding: 10px 0;
+  padding: var(--gap-inline) 0;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   background: transparent;
@@ -232,9 +233,9 @@ label.research-literature-source {
 
 .research-knowledge-summary {
   gap: var(--space-4);
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-card);
   background: var(--surface);
 }
 
@@ -252,7 +253,7 @@ label.research-literature-source {
 
 .research-config-grid label {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-meta-size);
 }
@@ -273,11 +274,11 @@ label.research-literature-source {
 .research-alert {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 10px;
+  gap: var(--gap-inline);
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-card);
   background: color-mix(in srgb, var(--st-warn) 8%, transparent);
   box-shadow: inset var(--stripe-width) 0 0 var(--st-warn);
   color: var(--st-warn);
@@ -333,11 +334,11 @@ label.research-literature-source {
 
 .research-filter {
   display: inline-flex;
-  min-height: 30px;
+  min-height: var(--control-height);
   align-items: center;
-  padding: 0 10px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -378,7 +379,7 @@ label.research-literature-source {
 .research-projects {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: var(--gap-inline);
   min-width: 180px;
   padding-right: 12px;
   border-right: 1px solid var(--line-soft);
@@ -435,9 +436,9 @@ label.research-literature-source {
 }
 
 .research-project-card-title {
-  color: var(--ink);
+  color: var(--label-primary);
   font-size: var(--font-body-size);
-  font-weight: 500;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -469,9 +470,9 @@ label.research-literature-source {
 
 .research-project-row {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
-  padding: 11px 10px;
+  padding: var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -509,7 +510,7 @@ button.research-literature-row:focus-visible {
 .research-main {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: var(--gap-card);
   min-width: 0;
 }
 
@@ -531,8 +532,8 @@ button.research-literature-row:focus-visible {
 
 .research-stage-panel {
   display: grid;
-  gap: 12px;
-  padding: 0 0 12px;
+  gap: var(--gap-card);
+  padding: 0 0 var(--gap-card);
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   border-radius: 0;
@@ -543,8 +544,8 @@ button.research-literature-row:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
-  padding: 0 9px;
+  min-height: 24px;
+  padding: 0 var(--gap-inline);
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
@@ -571,7 +572,7 @@ button.research-literature-row:focus-visible {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--gap-inline);
   padding-top: var(--space-4);
   border-top: 1px solid var(--line-soft);
   color: var(--muted);
@@ -601,7 +602,7 @@ button.research-literature-row:focus-visible {
 
   .research-last-event {
     grid-template-columns: 1fr;
-    gap: 5px;
+    gap: var(--gap-inline);
   }
 
   .research-tool-heading {
@@ -645,7 +646,7 @@ button.research-literature-row:focus-visible {
 
 .research-run-instruction {
   display: grid;
-  gap: 7px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-meta-size);
 }
@@ -657,7 +658,7 @@ button.research-literature-row:focus-visible {
 .research-stage-error {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--gap-inline);
   margin: 0;
   color: var(--st-bad);
   font-size: var(--font-meta-size);
@@ -676,10 +677,10 @@ button.research-literature-row:focus-visible {
 .research-timeline-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: var(--gap-inline);
   align-items: baseline;
-  min-height: 32px;
-  padding: 4px 0;
+  min-height: var(--control-height);
+  padding: var(--gap-inline) 0;
   border-bottom: 1px solid var(--line-soft);
   color: var(--muted);
   font-size: var(--font-meta-size);
@@ -691,7 +692,7 @@ button.research-literature-row:focus-visible {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  min-height: 28px;
+  min-height: var(--control-height);
   padding: 0;
   border: 0;
   background: transparent;
@@ -726,7 +727,7 @@ button.research-literature-row:focus-visible {
   .research-artifact-list li,
   .research-timeline-item {
     grid-template-columns: 1fr;
-    gap: 4px;
+    gap: var(--space-1);
   }
 }
 
@@ -745,7 +746,7 @@ button.research-literature-row:focus-visible {
 
 .research-library-toolbar label {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-meta-size);
 }
@@ -768,7 +769,7 @@ button.research-literature-row:focus-visible {
 .research-reader {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: var(--gap-card);
   min-width: 0;
 }
 
@@ -811,7 +812,7 @@ button.research-literature-row:focus-visible {
 
 .research-idea-form label {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-meta-size);
 }
@@ -824,12 +825,12 @@ button.research-literature-row:focus-visible {
 .research-idea-form span {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--gap-inline);
 }
 
 .research-editor {
   display: grid;
-  gap: 12px;
+  gap: var(--gap-card);
   min-width: 0;
 }
 
@@ -901,16 +902,16 @@ pre.research-reader-content {
   color: var(--ink);
   font-family: var(--font-display);
   font-size: var(--font-h1-size);
-  font-weight: 500;
-  line-height: 1.25;
+  font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0;
 }
 
 .research-shell-back {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -930,15 +931,15 @@ pre.research-reader-content {
 
 .research-shell-banner p {
   max-width: 680px;
-  margin: 8px 0 0;
-  color: var(--muted);
+  margin: var(--gap-inline) 0 0;
+  color: var(--label-secondary);
   font-size: var(--font-body-size);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .research-shell-create {
   display: grid;
-  gap: 12px;
+  gap: var(--gap-card);
   width: min(100%, 480px);
   margin: 0;
   text-align: left;
@@ -946,7 +947,7 @@ pre.research-reader-content {
 
 .research-shell-create label {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-ui-size);
 }
@@ -990,16 +991,16 @@ pre.research-reader-content {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: var(--gap-inline);
 }
 
 .research-toolbar-button {
   display: inline-flex;
-  min-height: 30px;
+  min-height: var(--control-height);
   align-items: center;
-  padding: 0 10px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -1034,7 +1035,7 @@ pre.research-reader-content {
 .research-shell-search,
 .research-shell-workspace {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-ui-size);
 }
@@ -1069,7 +1070,7 @@ pre.research-reader-content {
 .research-next-strip__actions {
   display: flex;
   flex: none;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .research-shell-stages {
@@ -1086,7 +1087,7 @@ pre.research-reader-content {
 
 .research-shell-stage {
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
   min-height: 48px;
   padding: var(--space-2) var(--space-3);
@@ -1170,7 +1171,7 @@ pre.research-reader-content {
 .research-shell-activity {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: var(--gap-inline);
   min-width: 0;
   padding-left: 12px;
   border-left: 1px solid var(--line-soft);
@@ -1178,7 +1179,7 @@ pre.research-reader-content {
 
 .research-shell-activity-row {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .research-shell-layout {
@@ -1196,7 +1197,7 @@ pre.research-reader-content {
 .research-shell-canvas {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: var(--gap-card);
   min-width: 0;
   container: research-canvas / inline-size;
 }
@@ -1321,7 +1322,7 @@ pre.research-reader-content {
 
 .research-rail-item {
   margin: 0;
-  padding: 6px 0;
+  padding: var(--gap-inline) 0;
   border-bottom: 1px solid var(--line-soft);
   color: var(--text);
   font-size: var(--font-meta-size);
@@ -1332,7 +1333,7 @@ pre.research-reader-content {
 .research-stage-main .research-tabs {
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--gap-inline);
   padding: 0;
   border: 0;
   overflow: visible;
@@ -1341,9 +1342,9 @@ pre.research-reader-content {
 .research-stage-context .research-tab {
   justify-content: flex-start;
   width: 100%;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: var(--r-sm);
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border-radius: var(--r-control);
   text-align: left;
 }
 
@@ -1364,13 +1365,13 @@ pre.research-reader-content {
 .research-services,
 .research-service-list {
   display: grid;
-  gap: 2px;
+  gap: var(--gap-inline);
   min-width: 0;
 }
 
 .research-service-row {
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
   width: 100%;
   min-height: 40px;
   padding: var(--space-2) var(--space-3);
