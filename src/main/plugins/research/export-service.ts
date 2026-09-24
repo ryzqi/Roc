@@ -46,6 +46,11 @@ export class ResearchExportService {
     return this.repository.exports.finish(projectId, id, { ...record, status: 'cancelled', error: 'research_export_cancelled' });
   }
 
+  releaseProject(projectId: string): void {
+    if (this.session.isClosed) return;
+    this.preparing.abortMatching((_id, task) => task.projectId === projectId);
+  }
+
   projectChanged(projectId: string): void {
     if (this.session.isClosed) return;
     const scope = this.projectScope(projectId);

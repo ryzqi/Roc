@@ -76,6 +76,10 @@ export class ResearchFigureService {
 
   abort(id: string): void { this.executions.abort(id); }
 
+  releaseProject(projectId: string): void {
+    this.executions.abortMatching((_id, task) => task.projectId === projectId);
+  }
+
   projectChanged(projectId: string): void {
     const project = this.repository.getProject(projectId);
     this.executions.abortMatching((id, task) => {

@@ -58,6 +58,14 @@ export class ResearchStageRuntime {
     return this.repository.transitionWorkflow(request);
   }
 
+  releaseProject(projectId: string): void {
+    for (const entry of this.active.values()) {
+      if (entry.projectId !== projectId) continue;
+      entry.controller.abort(new Error('research_project_deleted'));
+      void entry.pending.catch(() => undefined);
+    }
+  }
+
   async shutdown(): Promise<void> {
     const pending = [...this.active.values()].map((entry) => entry.cleanup);
     for (const [runId, entry] of this.active) {

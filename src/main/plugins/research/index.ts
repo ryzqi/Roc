@@ -242,6 +242,10 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         const request = researchProjectIdRequestSchema.parse(input);
         const result = researchRepository.deleteProject(request.id);
         researchIndexer.releaseProject(request.id);
+        researchExperiments.releaseProject(request.id);
+        researchFigures.releaseProject(request.id);
+        researchExports.releaseProject(request.id);
+        runtime.releaseProject(request.id);
         return result;
       });
       context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));

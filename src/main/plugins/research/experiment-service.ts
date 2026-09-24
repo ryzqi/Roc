@@ -83,6 +83,10 @@ export class ResearchExperimentService {
     return this.repository.experiments.finish(projectId, id, { status: 'cancelled', files: run.files, exitCode: null, error: 'research_experiment_cancelled' });
   }
 
+  releaseProject(projectId: string): void {
+    this.executions.abortMatching((_id, task) => task.projectId === projectId);
+  }
+
   projectChanged(projectId: string): void {
     const project = this.repository.getProject(projectId);
     this.executions.abortMatching((id, task) => {
