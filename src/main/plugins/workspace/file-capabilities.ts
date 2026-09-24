@@ -28,9 +28,9 @@ export function registerFileCapabilities(
     fileService.readPdfWorkbenchPreview(input as FilesWorkbenchPdfPreviewRequest)
   );
   context.capabilities.register(pluginId, descriptors[4], async (input) =>
-    fileService.writeTextFile(input as FileWriteTextRequest)
+    await fileService.writeTextFile(input as FileWriteTextRequest)
   );
   context.capabilities.register(pluginId, descriptors[5], async (input) =>
-    fileService.deleteFile((input as { relativePath: string }).relativePath)
+    await fileService.deleteFile((input as { relativePath: string }).relativePath)
   );
 }

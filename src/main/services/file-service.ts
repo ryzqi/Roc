@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
   createReadStream,
+  createWriteStream,
   existsSync,
   mkdirSync,
   openSync,
@@ -13,9 +14,10 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
-import { open, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
   FileDeleteResult,
@@ -302,13 +304,13 @@ export class FileService {
     };
   }
 
-  writeTextFile(request: FileWriteTextRequest): FileWriteResult {
+  async writeTextFile(request: FileWriteTextRequest): Promise<FileWriteResult> {
     const relativePath = this.normalizeRelativePath(request.relativePath);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    const recoveryPoint = this.createRecoveryPoint(relativePath, absolutePath, request.source);
+    const recoveryPoint = await this.createRecoveryPoint(relativePath, absolutePath, request.source);
 
-    mkdirSync(dirname(absolutePath), { recursive: true });
-    writeFileSync(absolutePath, request.content, 'utf8');
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, request.content, 'utf8');
 
     return {
       relativePath,
@@ -317,21 +319,26 @@ export class FileService {
     };
   }
 
-  deleteFile(relativePathInput: string): FileDeleteResult {
+  async deleteFile(relativePathInput: string): Promise<FileDeleteResult> {
     const relativePath = this.normalizeRelativePath(relativePathInput);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    if (!existsSync(absolutePath)) {
-      throw new RocDomainError({
-        code: 'delete_file_target_missing',
-        message: '要删除的目标不存在。',
-        category: 'not_found',
-        retryable: false,
-        userAction: '请确认目标路径后重试。'
-      });
+    let fileStat;
+    try {
+      fileStat = await stat(absolutePath);
+    } catch (error) {
+      if (this.isRecoverableFileSystemError(error) && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new RocDomainError({
+          code: 'delete_file_target_missing',
+          message: '要删除的目标不存在。',
+          category: 'not_found',
+          retryable: false,
+          userAction: '请确认目标路径后重试。'
+        });
+      }
+      throw error;
     }
-    const stat = statSync(absolutePath);
-    if (stat.isDirectory()) {
-      const children = readdirSync(absolutePath);
+    if (fileStat.isDirectory()) {
+      const children = await readdir(absolutePath);
       if (children.length > 0) {
         throw new RocDomainError({
           code: 'delete_file_target_not_empty',
@@ -342,11 +349,11 @@ export class FileService {
         });
       }
     }
-    const recoveryPoint = this.createRecoveryPoint(relativePath, absolutePath, 'agent.delete_file');
-    if (stat.isDirectory()) {
-      rmdirSync(absolutePath);
+    const recoveryPoint = await this.createRecoveryPoint(relativePath, absolutePath, 'agent.delete_file');
+    if (fileStat.isDirectory()) {
+      await rmdir(absolutePath);
     } else {
-      unlinkSync(absolutePath);
+      await unlink(absolutePath);
     }
     return {
       relativePath,
@@ -398,15 +405,39 @@ export class FileService {
     });
   }
 
-  private createRecoveryPoint(relativePath: string, absolutePath: string, source: string): RecoveryPoint {
+
+  private async copyRecoverySnapshot(sourcePath: string, snapshotPath: string): Promise<string> {
+    try {
+      await stat(sourcePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        await writeFile(snapshotPath, Buffer.alloc(0));
+        return createHash('sha256').update(Buffer.alloc(0)).digest('hex');
+      }
+      throw error;
+    }
+    const hash = createHash('sha256');
+    await pipeline(
+      createReadStream(sourcePath),
+      async function* (chunks: AsyncIterable<Buffer | string>) {
+        for await (const chunk of chunks) {
+          const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+          hash.update(buffer);
+          yield buffer;
+        }
+      },
+      createWriteStream(snapshotPath)
+    );
+    return hash.digest('hex');
+  }
+
+  private async createRecoveryPoint(relativePath: string, absolutePath: string, source: string): Promise<RecoveryPoint> {
     const createdAt = new Date().toISOString();
     const id = `recovery_${randomUUID()}`;
     const snapshotDir = join(this.paths.tasksDir, 'recovery', id);
-    mkdirSync(snapshotDir, { recursive: true });
-    const originalContent = existsSync(absolutePath) ? readFileSync(absolutePath) : Buffer.from('');
+    await mkdir(snapshotDir, { recursive: true });
     const snapshotPath = join(snapshotDir, 'original');
-    writeFileSync(snapshotPath, originalContent);
-    const contentSha256 = createHash('sha256').update(originalContent).digest('hex');
+    const contentSha256 = await this.copyRecoverySnapshot(absolutePath, snapshotPath);
     const recoveryPoint: RecoveryPoint = {
       id,
       relativePath,
