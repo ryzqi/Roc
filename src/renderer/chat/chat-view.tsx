@@ -335,9 +335,12 @@ export function ChatView({
                 messages={chatTranscript}
                 prependRevision={history.prependRevision}
                 trimRevision={history.trimRevision}
+                windowEpoch={history.windowEpoch}
+                tailTrimmed={history.tailTrimmed}
                 hasMoreBefore={history.hasMoreBefore}
                 loadingOlder={history.loadingOlder}
                 loadOlder={history.loadOlder}
+                onJumpToLatest={history.reloadLatest}
                 scrollContainerRef={transcriptScrollRef}
                 onApprovalDecision={(approvalId, decisions) => {
                   void handleApprovalDecision(approvalId, decisions);

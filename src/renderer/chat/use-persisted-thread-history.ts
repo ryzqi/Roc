@@ -19,19 +19,33 @@ export function retainRecentPersistedEvents<T>(events: readonly T[], maxEvents =
   return { events: events.slice(dropped), dropped };
 }
 
+export function retainOldestPersistedEvents<T>(events: readonly T[], maxEvents = maxRetainedPersistedEvents): { events: T[]; dropped: number } {
+  if (!Number.isInteger(maxEvents) || maxEvents < 1) {
+    throw new Error('persisted_thread_history_limit_invalid');
+  }
+  if (events.length <= maxEvents) {
+    return { events: [...events], dropped: 0 };
+  }
+  const dropped = events.length - maxEvents;
+  return { events: events.slice(0, maxEvents), dropped };
+}
+
 export type PersistedThreadHistory = {
   threadId: string | null;
   events: PersistedTaskEvent[];
   prependRevision: number;
   trimRevision: number;
   hasMoreBefore: boolean;
+  tailTrimmed: boolean;
+  windowEpoch: number;
   loadingInitial: boolean;
   loadingOlder: boolean;
   error: string | null;
   loadOlder(): Promise<void>;
+  reloadLatest(): Promise<void>;
 };
 
-type HistoryState = Omit<PersistedThreadHistory, 'loadOlder'>;
+type HistoryState = Omit<PersistedThreadHistory, 'loadOlder' | 'reloadLatest'>;
 
 export function usePersistedThreadHistory(input: {
   client: RocClient;
@@ -71,6 +85,8 @@ export function usePersistedThreadHistory(input: {
           prependRevision: 0,
           trimRevision: 0,
           hasMoreBefore: page.hasMoreBefore,
+          tailTrimmed: false,
+          windowEpoch: 0,
           loadingInitial: false,
           loadingOlder: false,
           error: null
@@ -147,12 +163,14 @@ export function usePersistedThreadHistory(input: {
       if (newest !== undefined && newest.sequence >= oldest.sequence) {
         throw new Error('task_history_before_cursor_not_decreased');
       }
-      const events = mergePersistedEvents(stateRef.current.events, page.items);
+      const merged = mergePersistedEvents(stateRef.current.events, page.items);
+      const retained = retainOldestPersistedEvents(merged);
       replaceState({
         ...stateRef.current,
-        events,
+        events: retained.events,
         prependRevision: stateRef.current.prependRevision + 1,
         hasMoreBefore: page.hasMoreBefore,
+        tailTrimmed: stateRef.current.tailTrimmed || retained.dropped > 0,
         loadingOlder: false,
         error: null
       });
@@ -164,7 +182,38 @@ export function usePersistedThreadHistory(input: {
     }
   }, [input.client, replaceState]);
 
-  return { ...state, loadOlder };
+  const reloadLatest = useCallback(async (): Promise<void> => {
+    const current = stateRef.current;
+    if (current.threadId === null || !current.tailTrimmed || current.loadingInitial) {
+      return;
+    }
+    const generation = generationRef.current;
+    const threadId = current.threadId;
+    try {
+      const page = await requestPage(input.client, { threadId, limit: historyPageLimit, cursor: null });
+      if (generationRef.current !== generation) {
+        return;
+      }
+      validatePersistedPage(page, threadId);
+      replaceState({
+        ...stateRef.current,
+        threadId,
+        events: page.items,
+        hasMoreBefore: page.hasMoreBefore,
+        tailTrimmed: false,
+        windowEpoch: stateRef.current.windowEpoch + 1,
+        loadingOlder: false,
+        error: null
+      });
+    } catch (error) {
+      if (generationRef.current !== generation) {
+        return;
+      }
+      replaceState({ ...stateRef.current, error: errorMessage(error) });
+    }
+  }, [input.client, replaceState]);
+
+  return { ...state, loadOlder, reloadLatest };
 }
 
 async function loadAfterPages(
@@ -201,6 +250,7 @@ async function loadAfterPages(
       events: retained.events,
       trimRevision: retained.dropped > 0 ? stateRef.current.trimRevision + 1 : stateRef.current.trimRevision,
       hasMoreBefore: stateRef.current.hasMoreBefore || retained.dropped > 0,
+      tailTrimmed: page.hasMoreAfter ? stateRef.current.tailTrimmed : false,
       error: null
     });
     hasMoreAfter = page.hasMoreAfter;
@@ -278,6 +328,8 @@ function emptyHistoryState(threadId: string | null): HistoryState {
     prependRevision: 0,
     trimRevision: 0,
     hasMoreBefore: false,
+    tailTrimmed: false,
+    windowEpoch: 0,
     loadingInitial: false,
     loadingOlder: false,
     error: null

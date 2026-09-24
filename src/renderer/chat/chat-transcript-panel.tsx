@@ -12,9 +12,12 @@ type ChatTranscriptPanelProps = {
   messages: ChatTranscriptMessage[];
   prependRevision: number;
   trimRevision: number;
+  windowEpoch: number;
+  tailTrimmed: boolean;
   hasMoreBefore: boolean;
   loadingOlder: boolean;
   loadOlder(): Promise<void>;
+  onJumpToLatest(): Promise<void>;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
@@ -46,9 +49,12 @@ export function ChatTranscriptPanel({
   messages,
   prependRevision,
   trimRevision,
+  windowEpoch,
+  tailTrimmed,
   hasMoreBefore,
   loadingOlder,
   loadOlder,
+  onJumpToLatest,
   scrollContainerRef,
   onApprovalDecision
 }: ChatTranscriptPanelProps): React.JSX.Element {
@@ -60,9 +66,11 @@ export function ChatTranscriptPanel({
     messageCount: messages.length,
     messageKeys: messages.map((message) => message.key),
     prependRevision,
-    trimRevision
+    trimRevision,
+    windowEpoch
   });
   const previousThreadIdRef = useRef<string | null>(threadId);
+  const previousEpochRef = useRef(windowEpoch);
   const initialWindowRef = useRef<TranscriptVirtuosoWindow>(
     buildTranscriptVirtuosoWindow({
       firstItemIndex: virtualIndex,
@@ -75,8 +83,9 @@ export function ChatTranscriptPanel({
   }, [scrollContainerRef]);
 
   // threadId 变化时重新计算初始窗口
-  if (previousThreadIdRef.current !== threadId) {
+  if (previousThreadIdRef.current !== threadId || previousEpochRef.current !== windowEpoch) {
     previousThreadIdRef.current = threadId;
+    previousEpochRef.current = windowEpoch;
     initialWindowRef.current = buildTranscriptVirtuosoWindow({
       firstItemIndex: virtualIndex,
       messageCount: messages.length
@@ -84,6 +93,10 @@ export function ChatTranscriptPanel({
   }
 
   function handleScrollBottomClick(): void {
+    if (tailTrimmed) {
+      void onJumpToLatest();
+      return;
+    }
     virtuosoRef.current?.scrollToIndex({
       index: 'LAST',
       behavior: 'auto'
@@ -93,7 +106,7 @@ export function ChatTranscriptPanel({
   return (
     <>
       <Virtuoso
-        key={`${threadId === null ? 'none' : threadId}:${messages.length === 0 ? 'empty' : 'loaded'}`}
+        key={`${threadId === null ? 'none' : threadId}:${windowEpoch}:${messages.length === 0 ? 'empty' : 'loaded'}`}
         ref={virtuosoRef}
         className="chat-transcript"
         data-testid="chat-transcript"
@@ -144,6 +157,15 @@ export function ChatTranscriptPanel({
   );
 }
 
+export function countLeadingKeysAdded(previous: readonly string[], next: readonly string[]): number {
+  const firstPrevious = previous[0];
+  if (firstPrevious === undefined) {
+    return 0;
+  }
+  const index = next.indexOf(firstPrevious);
+  return index === -1 ? 0 : index;
+}
+
 export function countLeadingKeysRemoved(previous: readonly string[], next: readonly string[]): number {
   if (previous.length === 0) {
     return 0;
@@ -165,6 +187,7 @@ export function useTranscriptFirstItemIndex(input: {
   messageKeys: readonly string[];
   prependRevision: number;
   trimRevision: number;
+  windowEpoch: number;
 }): number {
   const state = useRef({
     threadId: input.threadId,
@@ -172,16 +195,18 @@ export function useTranscriptFirstItemIndex(input: {
     messageCount: input.messageCount,
     messageKeys: input.messageKeys,
     prependRevision: input.prependRevision,
-    trimRevision: input.trimRevision
+    trimRevision: input.trimRevision,
+    windowEpoch: input.windowEpoch
   });
-  if (state.current.threadId !== input.threadId) {
+  if (state.current.threadId !== input.threadId || state.current.windowEpoch !== input.windowEpoch) {
     state.current = {
       threadId: input.threadId,
       index: 1_000_000,
       messageCount: input.messageCount,
       messageKeys: input.messageKeys,
       prependRevision: input.prependRevision,
-      trimRevision: input.trimRevision
+      trimRevision: input.trimRevision,
+      windowEpoch: input.windowEpoch
     };
   } else {
     if (state.current.trimRevision !== input.trimRevision) {
@@ -189,8 +214,7 @@ export function useTranscriptFirstItemIndex(input: {
       state.current.trimRevision = input.trimRevision;
     }
     if (state.current.prependRevision !== input.prependRevision) {
-      const prependedRows = Math.max(0, input.messageCount - state.current.messageCount);
-      state.current.index -= prependedRows;
+      state.current.index -= countLeadingKeysAdded(state.current.messageKeys, input.messageKeys);
       state.current.prependRevision = input.prependRevision;
     }
     state.current.messageCount = input.messageCount;
