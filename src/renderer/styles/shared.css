@@ -124,9 +124,9 @@
 
 .stat-row {
   display: grid;
-  gap: var(--space-5);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 0 0 12px;
+  gap: var(--gap-card);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  padding: 0 0 var(--gap-card);
   border-bottom: 1px solid var(--line);
 }
 
@@ -336,8 +336,11 @@
   border-bottom: 0;
 }
 
-.row-copy {
+.row-copy,
+.row-title,
+.row-sub {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .row-title {
