@@ -18,11 +18,11 @@
 
 .page-title {
   margin: 0;
-  color: var(--ink);
+  color: var(--label-primary);
   font-family: var(--font-display);
   font-size: var(--font-h1-size);
-  font-weight: 500;
-  line-height: 1.25;
+  font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0;
 }
 
@@ -34,8 +34,8 @@
 .page-subtitle {
   max-width: 760px;
   margin: 0;
-  color: var(--muted);
-  font-size: var(--font-meta-size);
+  color: var(--label-secondary);
+  font-size: var(--font-ui-size);
   line-height: 1.5;
 }
 
@@ -147,18 +147,18 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--gap-card);
   padding: 0 0 var(--space-3);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--separator);
 }
 
 .section-title {
   margin: 0;
-  color: var(--ink);
+  color: var(--label-primary);
   font-family: var(--font-display);
   font-size: var(--font-h3-size);
-  font-weight: 500;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0;
 }
 
@@ -169,11 +169,11 @@
 
 .single-panel {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--gap-card);
   min-width: 0;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  padding: var(--pad-card);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-card);
   background: var(--surface);
 }
 
@@ -187,8 +187,8 @@
 
 .empty-state,
 .memory-search-box {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: none;
 }
@@ -196,9 +196,9 @@
 .card {
   position: relative;
   min-width: 0;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  padding: var(--pad-card);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -244,14 +244,14 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--gap-card);
   min-height: var(--control-height);
   margin-bottom: var(--space-3);
   padding: 0 0 var(--space-3);
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
+  border-bottom: 1px solid var(--separator);
+  color: var(--label-primary);
   font-size: var(--font-h3-size);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -310,13 +310,13 @@
 }
 
 .row {
-  min-height: 52px;
+  min-height: 48px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--gap-card);
   align-items: center;
-  padding: 14px 8px;
-  margin: 0 -8px;
+  padding: var(--gap-inline) var(--gap-inline);
+  margin: 0 calc(var(--gap-inline) * -1);
   border-bottom: 1px solid var(--line);
   border-radius: var(--radius-xs);
   transition:
@@ -369,7 +369,7 @@
   justify-content: center;
   min-width: 48px;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border-radius: 999px;
   border: 1px solid var(--line);
   background: transparent;
@@ -387,14 +387,14 @@
 .action-strip button,
 .capability-strip button {
   display: inline-flex;
-  min-width: 58px;
+  min-width: 44px;
   min-height: var(--control-height);
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: var(--gap-inline);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);

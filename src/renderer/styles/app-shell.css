@@ -27,7 +27,7 @@
   width: 100vw;
   height: 100vh;
   min-height: 100vh;
-  grid-template-rows: 40px 1fr;
+  grid-template-rows: minmax(52px, auto) 1fr;
   margin: 0;
   overflow: hidden;
   border-radius: 0;
@@ -44,10 +44,11 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
+  gap: var(--control-gap);
+  min-height: 52px;
   padding: 0 86px;
   border-bottom: 1px solid var(--workband-border);
+  /* 窗口不透明，顶栏后面没有内容，不做假玻璃。 */
   background: transparent;
   -webkit-app-region: drag;
 }
@@ -80,20 +81,25 @@
 
 .workband-chat-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--control-gap);
   -webkit-app-region: no-drag;
+}
+
+.window-workband > .workband-chat-actions {
+  justify-self: end;
 }
 
 .workband-chat-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   padding: 0;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   line-height: 1;
@@ -102,9 +108,9 @@
 
 .workband-chat-action:not(.icon-button) {
   width: auto;
-  min-width: 28px;
-  padding: 0 8px;
-  font-size: var(--font-meta-size);
+  min-width: var(--control-hit);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font-size: var(--font-ui-size);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -146,9 +152,9 @@
 .thread-meta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--gap-inline);
   max-width: min(420px, 38vw);
-  height: 28px;
+  height: var(--control-hit);
   padding: 0;
   overflow: hidden;
   color: var(--muted);
@@ -184,12 +190,12 @@
 
 .icon-button {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   cursor: default;
@@ -283,9 +289,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
+  gap: var(--gap-inline);
+  min-height: 48px;
+  padding: var(--gap-inline) var(--gap-card);
+  border-bottom: 1px solid var(--separator);
 }
 
 .research-assistant-overlay-body {
@@ -399,3 +406,4 @@
   gap: var(--space-6);
   padding: 0;
 }
+

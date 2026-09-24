@@ -45,12 +45,15 @@
   --st-good: var(--st-ok);
   --st-good-line: var(--st-ok-line);
 
-  /* 控件尺寸：按钮 36 / 紧凑 30 / 输入 38 / 文本域 88 */
-  --control-height: 36px;
-  --control-height-compact: 30px;
-  --control-height-input: 38px;
-  --control-height-textarea: 88px;
-  --control-pad-x: 11px;
+  /* 控件：高宽至少 44，内边距 6×12。按钮组间隙 16，使 44px 宽按钮的中心距为 60。 */
+  --control-height: 44px;
+  --control-height-compact: 44px;
+  --control-height-input: 44px;
+  --control-height-textarea: 96px;
+  --control-pad-y: 6px;
+  --control-pad-x: 12px;
+  --control-gap: 16px;
+  --control-hit: 44px;
 
   /* 状态 */
   --st-ok: #166c4a;
@@ -74,17 +77,20 @@
   --tool-st-error-bg: #ffebee;
   --tool-st-error-text: #9c3a3a;
 
-  /* 圆角 */
-  --r-xs: 6px;
-  --r-sm: 8px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  /* 圆角：控件 6 / 卡片 8 / 窗口与浮层 10。系统窗口圆角仍交给 Electron。 */
+  --r-control: 6px;
+  --r-card: 8px;
+  --r-window: 10px;
+  --r-xs: var(--r-control);
+  --r-sm: var(--r-card);
+  --r-md: var(--r-card);
+  --r-lg: var(--r-window);
   --radius-xs: var(--r-xs);
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
 
-  /* 间距 */
+  /* 间距：8px 网格。窗口 20，区块 24，卡片 16，紧间隙 8，卡片内可 12。 */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -94,6 +100,11 @@
   --space-7: 32px;
   --space-md: 16px;
   --space-xl: 32px;
+  --pad-window: var(--space-5);
+  --gap-section: var(--space-6);
+  --gap-card: var(--space-4);
+  --gap-inline: var(--space-2);
+  --pad-card: var(--space-4);
 
   /* 阴影 */
   --shadow-modal: 0 12px 32px rgba(20, 40, 80, 0.1);
@@ -111,6 +122,20 @@
   --lift-hover: none;
   --press-shift: translateY(1px);
 
+  /* Apple 系统色。控件着色仍用 --accent（跟随系统强调色），正文不用 systemGray，对比不够。 */
+  --system-blue: #007aff;
+  --system-gray: #8e8e93;
+  --system-gray-2: #aeaeb2;
+  --system-gray-3: #c7c7cc;
+  --system-gray-4: #d1d1d6;
+  --system-gray-5: #e5e5ea;
+  --system-gray-6: #f2f2f7;
+  --label-primary: var(--ink);
+  --label-secondary: var(--muted);
+  --label-tertiary: var(--subtle);
+  --separator: var(--line);
+  --control-bg: var(--surface-strong);
+
   /* 语义别名（不引入新色，仅命名） */
   --composer-border: var(--line);
   --composer-border-focus: color-mix(in srgb, var(--accent) 42%, transparent);
@@ -126,16 +151,16 @@
   --transition-fast: var(--duration-fast) var(--easing-standard);
 
   /* 排版 */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
-  --font-body-size: 13.5px;
+  --font-body-size: 13px;
   --font-ui-size: 13px;
-  --font-meta-size: 11.5px;
-  --font-micro-size: 10.5px;
-  --font-read-size: 14.5px;
+  --font-meta-size: 12px;
+  --font-micro-size: 11px;
+  --font-read-size: 14px;
   --font-lead-size: 15px;
-  --font-code-size: 12.5px;
+  --font-code-size: 12px;
   --font-h1-size: 24px;
   --font-h2-size: 18px;
   --font-h3-size: 14px;
@@ -145,10 +170,10 @@
 
   /* 页面 / 气泡 */
   --bg-gradient: var(--bg);
-  --chat-bubble-radius: var(--r-md);
-  --chat-bubble-radius-tight: var(--r-md);
-  --chat-gap: 28px;
-  --chat-avatar-size: 30px;
+  --chat-bubble-radius: var(--r-card);
+  --chat-bubble-radius-tight: var(--r-card);
+  --chat-gap: 24px;
+  --chat-avatar-size: 32px;
   --chat-bubble-assistant-bg: transparent;
   --chat-bubble-assistant-border: var(--line);
   --chat-bubble-assistant-shadow: none;
@@ -196,6 +221,13 @@
   --line-soft: rgba(190, 205, 228, 0.12);
   --line: rgba(190, 205, 228, 0.2);
   --line-strong: rgba(190, 205, 228, 0.32);
+  --system-blue: #0a84ff;
+  --system-gray: #8e8e93;
+  --system-gray-2: #636366;
+  --system-gray-3: #48484a;
+  --system-gray-4: #3a3a3c;
+  --system-gray-5: #2c2c2e;
+  --system-gray-6: #1c1c1e;
   --accent-tint: color-mix(in srgb, var(--accent) 58%, #ffffff);
   --accent-soft: color-mix(in srgb, var(--accent-tint) 18%, transparent);
   --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 30%, transparent);

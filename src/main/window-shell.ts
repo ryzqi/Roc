@@ -34,7 +34,7 @@ export function buildMainWindowOptions(
     minHeight: minMainWindowSize.height,
     show: false,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 13 },
+    trafficLightPosition: { x: 16, y: 19 },
     backgroundColor: mainWindowStaticBackground,
     title: 'Roc',
     webPreferences: {
