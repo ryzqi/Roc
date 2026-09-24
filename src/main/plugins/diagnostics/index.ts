@@ -37,6 +37,7 @@ import {
   type DiagnosticsPerformanceAdapter,
   type DiagnosticsPerformanceAdapterOptions
 } from './performance-adapter';
+import { pruneDiagnosticPackages } from './retention';
 
 const pluginId = '@roc/plugin-diagnostics';
 const capabilityVersion = '1.0.0';
@@ -239,6 +240,10 @@ async function createDiagnosticPackage(
        VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(packageId, taskId, filePath, createdAt, JSON.stringify(includes), 1);
+  pruneDiagnosticPackages({
+    db: input.db,
+    diagnosticsDir: input.paths.diagnosticsDir
+  });
 
   return diagnosticPackage;
 }

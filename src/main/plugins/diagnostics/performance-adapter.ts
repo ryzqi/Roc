@@ -16,6 +16,7 @@ import { RocDomainError } from '../../services/errors';
 import { MetricsService } from '../../services/metrics-service';
 import { PerformanceObserverService } from '../../services/performance-observer-service';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './runtime-metrics';
+import { prunePerformanceSamples } from './retention';
 
 const emptyRuntimeMetricsProvider: RuntimeMetricsProvider = {
   getBrowserWindowCount: () => 0,
@@ -115,6 +116,7 @@ export function createDiagnosticsPerformanceAdapter(
           sample.memoryBudgetMb,
           sample.exceedsBudget ? 1 : 0
         );
+      prunePerformanceSamples(options.db);
 
       return sample;
     },
