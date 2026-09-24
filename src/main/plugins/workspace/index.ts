@@ -177,7 +177,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService);
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
-        fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
+        await fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
       );
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[25], async (input) =>
         await fileService.searchByName(input as FileNameSearchRequest)

@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, realpath, statSync } from 'node:fs';
+import { promisify } from 'node:util';
+
+const realpathNative = promisify(realpath.native);
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Workspace } from '../../shared/types';
 import type { RocSettings } from './config-service';
@@ -89,10 +92,10 @@ export class WorkspaceService {
     return this.isInsideWorkspace(resolve(path), workspace.path);
   }
 
-  assertRealPathInsideWorkspace(path: string): void {
+  async assertRealPathInsideWorkspace(path: string): Promise<void> {
     const workspace = this.requireWorkspace();
-    const realWorkspace = realpathSync.native(workspace.path);
-    const realTarget = realpathSync.native(path);
+    const realWorkspace = await realpathNative(workspace.path);
+    const realTarget = await realpathNative(path);
     if (!this.isInsideWorkspace(realTarget, realWorkspace)) {
       throw new RocDomainError({
         code: 'workspace_real_path_outside',

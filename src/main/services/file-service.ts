@@ -10,7 +10,6 @@ import {
   readSync,
   readdirSync,
   rmdirSync,
-  statSync,
   unlinkSync,
   writeFileSync
 } from 'node:fs';
@@ -361,12 +360,12 @@ export class FileService {
     };
   }
 
-  readPdfWorkbenchPreview(request: FilesWorkbenchPdfPreviewRequest): FilesWorkbenchPdfPreviewResult {
+  async readPdfWorkbenchPreview(request: FilesWorkbenchPdfPreviewRequest): Promise<FilesWorkbenchPdfPreviewResult> {
     const relativePath = this.normalizeRelativePath(request.relativePath);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
-    const stat = statSync(absolutePath);
-    if (!stat.isFile() || !this.isPdfPath(relativePath)) {
+    await this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile() || !this.isPdfPath(relativePath)) {
       throw new RocDomainError({
         code: 'file_preview_not_pdf',
         message: 'PDF 预览目标必须是 PDF 文件。',
@@ -378,20 +377,20 @@ export class FileService {
     return {
       relativePath,
       resourceUrl: `roc-preview://workspace/pdf/${encodeURIComponent(relativePath)}#toolbar=0&navpanes=0&scrollbar=0`,
-      sizeBytes: stat.size,
+      sizeBytes: fileStat.size,
       mediaType: 'application/pdf'
     };
   }
 
-  streamPdfPreviewResource(relativePathInput: string): Response {
+  async streamPdfPreviewResource(relativePathInput: string): Promise<Response> {
     const relativePath = this.normalizeRelativePath(decodeURIComponent(relativePathInput));
     if (!this.isPdfPath(relativePath)) {
       return new Response('Not found', { status: 404 });
     }
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
-    const stat = statSync(absolutePath);
-    if (!stat.isFile()) {
+    await this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
       return new Response('Not found', { status: 404 });
     }
     // Node 和 DOM 的 ReadableStream 类型声明不互通；Response 运行时接受这个 Web stream。

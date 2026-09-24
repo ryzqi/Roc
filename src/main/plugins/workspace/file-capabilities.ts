@@ -25,7 +25,7 @@ export function registerFileCapabilities(
     await fileService.readPreview(input as FilePreviewRequest)
   );
   context.capabilities.register(pluginId, descriptors[3], async (input) =>
-    fileService.readPdfWorkbenchPreview(input as FilesWorkbenchPdfPreviewRequest)
+    await fileService.readPdfWorkbenchPreview(input as FilesWorkbenchPdfPreviewRequest)
   );
   context.capabilities.register(pluginId, descriptors[4], async (input) =>
     await fileService.writeTextFile(input as FileWriteTextRequest)
