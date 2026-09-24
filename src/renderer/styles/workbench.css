@@ -3,7 +3,8 @@
   top: 0;
   right: 0;
   z-index: 4;
-  padding: 72px 8px 18px 0;
+  width: 100%;
+  padding: var(--gap-card) 0;
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
@@ -16,35 +17,35 @@
 }
 
 .rail {
-  width: 50px;
-  padding: 10px 0;
+  width: 100%;
+  padding: var(--gap-inline) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  border-radius: var(--r-md);
+  gap: var(--control-gap);
+  border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: var(--shadow-popover);
   pointer-events: auto;
 }
 
 .rail--chat {
-  width: 48px;
-  padding: 10px 0;
-  gap: var(--space-2);
-  border-radius: var(--r-md);
+  width: 100%;
+  padding: var(--gap-inline) 0;
+  gap: var(--control-gap);
+  border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: var(--shadow-popover);
 }
 
 .rail-button {
-  width: 36px;
-  height: 36px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
 }
@@ -55,14 +56,21 @@
 }
 
 .rail--chat .rail-button {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-md);
+  width: var(--control-hit);
+  height: var(--control-hit);
+  border-radius: var(--r-control);
 }
 
 .rail--chat .rail-button svg {
   width: 15px;
   height: 15px;
+}
+
+.rail-button:focus-visible,
+.workbench-tab:focus-visible,
+.workbench-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }
 
 .rail-button:hover,
@@ -108,11 +116,11 @@
 }
 
 .workbench-bar {
-  min-height: var(--control-height-input);
+  min-height: 52px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px 5px;
+  gap: var(--control-gap);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border-bottom: 1px solid var(--line);
   background: transparent;
 }
@@ -122,20 +130,20 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--gap-inline);
   overflow-x: auto;
   padding-bottom: 2px;
 }
 
 .workbench-tab {
   flex: 0 0 auto;
-  height: 30px;
+  height: var(--control-height);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 10px;
+  gap: var(--gap-inline);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid transparent;
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   white-space: nowrap;
@@ -158,13 +166,13 @@
 }
 
 .workbench-close {
-  width: 30px;
-  height: 30px;
+  width: var(--control-hit);
+  height: var(--control-hit);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
 }
