@@ -58,9 +58,10 @@
   width: 100%;
   text-align: left;
   display: grid;
-  gap: 8px;
-  padding: 12px 12px 8px;
-  border-radius: var(--r-md);
+  gap: var(--gap-inline);
+  min-height: var(--control-height);
+  padding: var(--pad-card);
+  border-radius: var(--r-card);
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -84,7 +85,8 @@
 .memory-record-title {
   color: var(--ink);
   font-size: var(--font-ui-size);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .memory-record-copy {
@@ -113,8 +115,8 @@
 .memory-editor-title {
   color: var(--ink);
   font-size: var(--font-h1-size);
-  font-weight: 500;
-  line-height: 1.1;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .memory-editor-subtitle {
@@ -162,13 +164,13 @@
   width: 100%;
   min-height: 220px;
   resize: none;
-  padding: 12px;
+  padding: var(--gap-inline) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--surface);
   color: var(--text);
   font-size: var(--font-ui-size);
-  line-height: 1.72;
+  line-height: 1.5;
   outline: none;
   overflow: hidden;
 }
@@ -186,17 +188,18 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--control-gap);
 }
 
 .memory-chip-button {
-  min-height: var(--control-height-compact);
-  padding: 0 12px;
+  min-width: var(--control-hit);
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-control);
   background: var(--surface);
   color: var(--muted);
-  font-size: var(--font-meta-size);
+  font-size: var(--font-ui-size);
 }
 
 .memory-chip-button.primary {
@@ -227,19 +230,19 @@
 .memory-tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--control-gap);
   border-bottom: 1px solid var(--line);
   padding-bottom: 8px;
 }
 
 .memory-tabs .tab {
-  min-height: var(--control-height-compact);
-  padding: 0 12px;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: var(--surface);
   color: var(--muted);
-  font-size: var(--font-meta-size);
+  font-size: var(--font-ui-size);
 }
 
 .memory-tabs .tab.active {
@@ -589,4 +592,11 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 500;
+}
+
+.memory-chip-button:focus-visible,
+.memory-tabs .tab:focus-visible,
+.memory-record:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }

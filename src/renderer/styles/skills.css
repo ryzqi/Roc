@@ -1,13 +1,13 @@
 .selection-chip {
   display: inline-flex;
-  min-width: 72px;
-  min-height: var(--control-height-compact);
+  min-width: var(--control-hit);
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: var(--gap-inline);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);
@@ -27,7 +27,7 @@
   align-items: center;
   align-content: flex-start;
   align-self: start;
-  gap: 8px;
+  gap: var(--control-gap);
 }
 
 .skills-filter-strip .selection-chip {
@@ -67,15 +67,15 @@
 .skill-drawer-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 8px;
+  gap: var(--control-gap);
   align-items: center;
-  padding: 12px 16px;
+  padding: var(--gap-inline) var(--gap-card);
   border-bottom: 1px solid var(--line);
 }
 
 .skill-drawer-headline {
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -86,7 +86,8 @@
 
 .skill-drawer-name {
   font-size: var(--font-h3-size);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.4;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,22 +95,27 @@
 }
 
 .skill-drawer-close {
-  min-width: 36px;
-  padding: 0 8px;
-  font-size: var(--font-lead-size);
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-hit);
+  height: var(--control-hit);
+  min-width: var(--control-hit);
+  padding: 0;
+  border-radius: var(--r-control);
+  font-size: var(--font-ui-size);
   line-height: 1;
 }
 
 .skill-drawer-action {
   display: inline-flex;
-  min-width: 58px;
+  min-width: var(--control-hit);
   min-height: var(--control-height);
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: var(--gap-inline);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);
@@ -190,18 +196,19 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 6px;
+  gap: var(--gap-card);
 }
 
 .skill-row-button {
   width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--gap-card);
   align-items: center;
-  padding: 8px 12px;
+  min-height: var(--control-height);
+  padding: var(--gap-inline) var(--gap-card);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-card);
   background: var(--surface);
   font: inherit;
   text-align: left;
@@ -225,7 +232,8 @@
 .skill-row-name {
   color: var(--ink);
   font-size: var(--font-ui-size);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -235,4 +243,12 @@
   color: var(--st-warn);
   font-size: var(--font-meta-size);
   line-height: 1.45;
+}
+
+.selection-chip:focus-visible,
+.skill-drawer-close:focus-visible,
+.skill-drawer-action:focus-visible,
+.skill-row-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }

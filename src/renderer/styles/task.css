@@ -180,17 +180,18 @@
 }
 
 .task-detail-panel-head h2 {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--ink);
   font-size: var(--font-h3-size);
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .task-detail-kicker {
   color: var(--subtle);
   font-family: var(--font-mono);
   font-size: var(--font-micro-size);
-  line-height: 1.3;
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
@@ -306,13 +307,13 @@
 .task-detail-followup textarea {
   width: 100%;
   min-height: var(--control-height-textarea);
-  padding: 9px var(--control-pad-x);
+  padding: var(--gap-inline) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: var(--surface-strong);
   color: var(--ink);
   font-size: var(--font-ui-size);
-  line-height: 1.55;
+  line-height: 1.5;
   resize: vertical;
   box-shadow: var(--shadow-input);
 }
@@ -324,7 +325,7 @@
 
 .task-detail-actions {
   display: grid;
-  gap: 8px;
+  gap: var(--control-gap);
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
@@ -405,9 +406,9 @@
   align-items: center;
   justify-content: center;
   width: max-content;
-  min-width: 88px;
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 16px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   white-space: nowrap;
 }
 

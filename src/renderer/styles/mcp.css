@@ -34,7 +34,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--control-gap);
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
@@ -43,19 +43,20 @@
 .mcp-approval-mode-group {
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 1fr));
-  gap: 6px;
+  gap: var(--control-gap);
   min-width: min(100%, 360px);
 }
 
 .mcp-approval-mode-option {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 2px 6px;
+  gap: var(--space-1) var(--gap-inline);
   align-items: center;
   min-width: 0;
-  padding: 6px 8px;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: var(--bg-soft);
   color: var(--ink);
   font-size: var(--font-ui-size);
@@ -74,11 +75,11 @@
 
 .mcp-approval-mode-title {
   display: flex;
-  gap: 6px;
+  gap: var(--gap-inline);
   align-items: center;
   min-width: 0;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .mcp-approval-mode-title strong {
@@ -116,10 +117,11 @@
 .mcp-server-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: var(--gap-card);
   align-items: center;
   min-width: 0;
-  padding: 8px 12px;
+  min-height: var(--control-height);
+  padding: var(--gap-inline) var(--gap-card);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   cursor: default;
@@ -271,8 +273,8 @@
 
 .mcp-server-actions {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: var(--control-gap);
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
@@ -280,15 +282,15 @@
 
 .mcp-server-actions button {
   display: inline-grid;
-  grid-template-columns: 15px auto;
-  gap: 6px;
+  grid-template-columns: 16px auto;
+  gap: var(--gap-inline);
   align-items: center;
   justify-content: center;
-  min-width: 64px;
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);
@@ -407,3 +409,10 @@
   }
 }
 
+
+.mcp-approval-mode-option:focus-visible,
+.mcp-server-row:focus-visible,
+.mcp-server-actions button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+}

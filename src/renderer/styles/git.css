@@ -59,10 +59,11 @@
 }
 
 .git-commit-button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -153,9 +154,10 @@
 
 .git-stage-all-button {
   margin-left: auto;
-  min-height: var(--control-height-compact);
-  padding: 0 12px;
-  border-radius: 999px;
+  min-width: var(--control-hit);
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border-radius: var(--r-control);
   border: 1px solid var(--line-strong);
   background: transparent;
   font-size: var(--font-meta-size);
@@ -164,7 +166,7 @@
 
 .git-change-list {
   display: grid;
-  gap: 6px;
+  gap: var(--gap-inline);
 }
 
 .git-change-empty {
@@ -177,10 +179,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--gap-inline);
   min-height: var(--control-height);
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border-radius: var(--r-card);
 }
 
 .git-change-card.selected {
@@ -300,22 +302,25 @@
 .git-branch-create-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px;
+  gap: var(--control-gap);
+  align-items: center;
 }
 
 .git-branch-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-height: var(--control-height);
+  gap: var(--gap-inline);
   color: var(--muted);
   font-size: var(--font-meta-size);
 }
 
 .git-branch-create-button,
 .git-stage-all-button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
-  border-radius: var(--r-md);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--accent);
   font-weight: 500;
@@ -456,4 +461,13 @@
     right: 12px;
     width: auto;
   }
+}
+
+.git-commit-button:focus-visible,
+.git-stage-all-button:focus-visible,
+.git-change-card:focus-visible,
+.git-branch-option:focus-visible,
+.git-branch-create-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }

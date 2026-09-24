@@ -145,7 +145,7 @@
 .task-form-field textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-control);
   background: var(--surface-strong);
   color: var(--ink);
   font-size: var(--font-ui-size);
@@ -160,8 +160,8 @@
 
 .task-form-field textarea {
   min-height: var(--control-height-textarea);
-  padding: 9px var(--control-pad-x);
-  line-height: 1.55;
+  padding: var(--gap-inline) var(--control-pad-x);
+  line-height: 1.5;
   resize: vertical;
 }
 
