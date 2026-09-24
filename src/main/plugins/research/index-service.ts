@@ -38,6 +38,11 @@ export class ResearchIndexService {
     this.pump();
   }
 
+  releaseProject(projectId: string): void {
+    if (this.closed) return;
+    this.cancelProject(projectId);
+  }
+
   projectChanged(projectId: string): void {
     if (this.closed) return;
     if (this.repository.indexing.syncProject(projectId)) {

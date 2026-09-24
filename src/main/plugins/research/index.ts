@@ -240,7 +240,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       });
       context.capabilities.register(pluginId, workbenchCapabilities.deleteProject, async (input) => {
         const request = researchProjectIdRequestSchema.parse(input);
-        return researchRepository.deleteProject(request.id);
+        const result = researchRepository.deleteProject(request.id);
+        researchIndexer.releaseProject(request.id);
+        return result;
       });
       context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));
       context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => applyResearchWorkflowTransition({
