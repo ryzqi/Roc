@@ -17,7 +17,25 @@ type ChatMessageRowProps = {
 };
 
 const finishedEnterKeys = new Set<string>();
+const finishedEnterOrder: string[] = [];
 const enterMountTokens = new Map<string, number>();
+
+// 历史窗口会丢掉旧消息，但进场 key 原先一直留着。只记最近一批，避免 renderer 按运行次数一直涨。
+export const maxFinishedEnterKeys = 200;
+
+export function rememberFinishedEnterKey(key: string): void {
+  if (finishedEnterKeys.has(key)) {
+    return;
+  }
+  finishedEnterKeys.add(key);
+  finishedEnterOrder.push(key);
+  while (finishedEnterOrder.length > maxFinishedEnterKeys) {
+    const oldest = finishedEnterOrder.shift();
+    if (oldest !== undefined) {
+      finishedEnterKeys.delete(oldest);
+    }
+  }
+}
 
 function motionSuppressed(): boolean {
   if (typeof document === 'undefined') {
@@ -34,7 +52,7 @@ function shouldPlayEnter(key: string, source: ChatTranscriptMessage['source']): 
     return false;
   }
   if (motionSuppressed()) {
-    finishedEnterKeys.add(key);
+    rememberFinishedEnterKey(key);
     return false;
   }
   return true;
@@ -44,7 +62,7 @@ function commitEnter(key: string, event: AnimationEvent<HTMLDivElement>): void {
   if (event.target !== event.currentTarget) {
     return;
   }
-  finishedEnterKeys.add(key);
+  rememberFinishedEnterKey(key);
 }
 
 function useFinishEnterOnUnmount(key: string, active: boolean): void {
@@ -59,7 +77,7 @@ function useFinishEnterOnUnmount(key: string, active: boolean): void {
         if (enterMountTokens.get(key) !== token) {
           return;
         }
-        finishedEnterKeys.add(key);
+        rememberFinishedEnterKey(key);
         enterMountTokens.delete(key);
       });
     };
