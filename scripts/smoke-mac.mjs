@@ -110,7 +110,7 @@ try {
       trayScales: icon.getScaleFactors()
     };
   });
-  assert.deepEqual(windowControls.position, { x: 14, y: 13 });
+  assert.deepEqual(windowControls.position, { x: 16, y: 19 });
   assert.equal(windowControls.fullscreenable, true);
   assert.deepEqual(windowControls.tray, { empty: false, template: true, size: { width: 16, height: 16 } });
   assert.ok(windowControls.trayVisiblePixels > 0 && windowControls.trayVisiblePixels < 256);

@@ -231,8 +231,8 @@ export function buildRendererBoundaryCapabilities(ctx) {
       appShellFrameEvidence.gapBottom <= 1 &&
       appShellFrameEvidence.gapLeft <= 1,
     nativeWindowControls:
-      nativeWindowEvidence.trafficLightPosition?.x === 14 &&
-      nativeWindowEvidence.trafficLightPosition?.y === 13 && nativeWindowEvidence.fullscreenable,
+      nativeWindowEvidence.trafficLightPosition?.x === 16 &&
+      nativeWindowEvidence.trafficLightPosition?.y === 19 && nativeWindowEvidence.fullscreenable,
     windowPlacementPersisted:
       windowPlacementEvidence.persisted &&
       windowPlacementEvidence.snapshot?.maximized === false &&
