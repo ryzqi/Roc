@@ -144,6 +144,7 @@ export function TaskDetailView({
                 threadId={loadedDetail.threadId}
                 messages={transcript}
                 prependRevision={history.prependRevision}
+                trimRevision={history.trimRevision}
                 hasMoreBefore={history.hasMoreBefore}
                 loadingOlder={history.loadingOlder}
                 loadOlder={history.loadOlder}

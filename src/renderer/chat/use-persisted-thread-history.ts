@@ -5,10 +5,25 @@ import type { RocClient } from '../shared/roc-client';
 
 const historyPageLimit = 100;
 
+// 向前追平新事件时只留最近这一窗。更早的仍可向上分页取回。
+export const maxRetainedPersistedEvents = 400;
+
+export function retainRecentPersistedEvents<T>(events: readonly T[], maxEvents = maxRetainedPersistedEvents): { events: T[]; dropped: number } {
+  if (!Number.isInteger(maxEvents) || maxEvents < 1) {
+    throw new Error('persisted_thread_history_limit_invalid');
+  }
+  if (events.length <= maxEvents) {
+    return { events: [...events], dropped: 0 };
+  }
+  const dropped = events.length - maxEvents;
+  return { events: events.slice(dropped), dropped };
+}
+
 export type PersistedThreadHistory = {
   threadId: string | null;
   events: PersistedTaskEvent[];
   prependRevision: number;
+  trimRevision: number;
   hasMoreBefore: boolean;
   loadingInitial: boolean;
   loadingOlder: boolean;
@@ -54,6 +69,7 @@ export function usePersistedThreadHistory(input: {
           threadId,
           events: page.items,
           prependRevision: 0,
+          trimRevision: 0,
           hasMoreBefore: page.hasMoreBefore,
           loadingInitial: false,
           loadingOlder: false,
@@ -178,8 +194,15 @@ async function loadAfterPages(
     if (pageNewest !== undefined && pageNewest.sequence <= newest.sequence) {
       throw new Error('task_history_after_cursor_not_advanced');
     }
-    const events = mergePersistedEvents(stateRef.current.events, page.items);
-    replaceState({ ...stateRef.current, events, error: null });
+    const merged = mergePersistedEvents(stateRef.current.events, page.items);
+    const retained = retainRecentPersistedEvents(merged);
+    replaceState({
+      ...stateRef.current,
+      events: retained.events,
+      trimRevision: retained.dropped > 0 ? stateRef.current.trimRevision + 1 : stateRef.current.trimRevision,
+      hasMoreBefore: stateRef.current.hasMoreBefore || retained.dropped > 0,
+      error: null
+    });
     hasMoreAfter = page.hasMoreAfter;
     if (!hasMoreAfter) {
       return;
@@ -253,6 +276,7 @@ function emptyHistoryState(threadId: string | null): HistoryState {
     threadId,
     events: [],
     prependRevision: 0,
+    trimRevision: 0,
     hasMoreBefore: false,
     loadingInitial: false,
     loadingOlder: false,

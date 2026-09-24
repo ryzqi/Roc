@@ -334,6 +334,7 @@ export function ChatView({
                 threadId={activeThreadId}
                 messages={chatTranscript}
                 prependRevision={history.prependRevision}
+                trimRevision={history.trimRevision}
                 hasMoreBefore={history.hasMoreBefore}
                 loadingOlder={history.loadingOlder}
                 loadOlder={history.loadOlder}
