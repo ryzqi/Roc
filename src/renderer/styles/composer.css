@@ -77,8 +77,8 @@
   min-width: 0;
   max-width: 100%;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 2px 8px 0 0;
+  gap: var(--control-gap);
+  padding: 0 var(--gap-inline) 0 0;
 }
 
 .chat-attachment-pill {
