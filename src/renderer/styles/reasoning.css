@@ -79,7 +79,7 @@
 }
 
 .copy-answer-button--icon-only {
-  min-width: 32px;
+  min-width: var(--control-hit);
 }
 
 .copy-answer-button svg {

@@ -164,7 +164,7 @@
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--control-gap);
   align-items: center;
 }
 
@@ -180,8 +180,9 @@
 }
 
 .settings-actions button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   font-weight: 500;
 }
 
@@ -302,16 +303,17 @@
 .settings-page-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--control-gap);
   flex-wrap: wrap;
   margin-left: auto;
 }
 
 .settings-page-actions button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);

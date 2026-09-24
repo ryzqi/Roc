@@ -33,15 +33,16 @@
 
 .provider-toolbar-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--control-gap);
   flex: 0 0 auto;
 }
 
 .provider-toolbar-actions button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);
@@ -299,18 +300,18 @@
 .provider-type-segmented {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 8px;
+  gap: var(--control-gap);
+  padding: var(--gap-inline);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-card);
   background: var(--bg-soft);
 }
 
 .provider-type-option {
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid transparent;
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--muted);
   font-size: var(--font-ui-size);
@@ -417,17 +418,18 @@
 
 .provider-detail-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--control-gap);
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 6px;
+  margin-top: var(--gap-inline);
 }
 
 .provider-detail-actions button {
+  min-width: var(--control-hit);
   min-height: var(--control-height);
-  padding: 0 12px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text);
   font-size: var(--font-ui-size);
