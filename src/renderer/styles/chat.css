@@ -50,16 +50,17 @@
 .chat-plan-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--control-gap);
 }
 
 .chat-plan-action-primary,
 .chat-plan-action-secondary {
-  min-height: var(--control-height-compact);
-  padding: 0 12px;
-  border-radius: var(--r-md);
+  min-width: var(--control-hit);
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border-radius: var(--r-control);
   font: inherit;
-  font-size: var(--font-meta-size);
+  font-size: var(--font-ui-size);
 }
 
 .chat-plan-action-primary {
@@ -414,5 +415,11 @@
 
 .chat-scroll-bottom:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-plan-action-primary:focus-visible,
+.chat-plan-action-secondary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: 2px;
 }
