@@ -19,6 +19,22 @@ export type ResearchIndexWatch = (path: string, listener: (event: string, filena
 type ScanTask = { controller: AbortController; promise: Promise<void> };
 type ActiveJob = { job: IndexJob; controller: AbortController };
 
+
+export const maxResearchIndexWatchers = 4;
+
+export function watcherIdsToEvict(idsInOrder: readonly string[], incomingId: string, maxEntries = maxResearchIndexWatchers): string[] {
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw new Error('research_index_watcher_limit_invalid');
+  }
+  const next = idsInOrder.filter((id) => id !== incomingId);
+  next.push(incomingId);
+  const overflow = next.length - maxEntries;
+  if (overflow <= 0) {
+    return [];
+  }
+  return next.slice(0, overflow);
+}
+
 export class ResearchIndexService {
   private closed = false;
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -173,7 +189,7 @@ export class ResearchIndexService {
       this.requireActive(signal);
       if (await researchWorkspace(this.repository.getProject(projectId).workspacePath) !== root) throw new Error('research_index_workspace_changed');
       this.repository.indexing.reconcile(projectId, scan, files, scan.force, this.embeddings.selectedConfiguration(settings.embeddingConfigId), parserKeys);
-      if (watchError !== null || settings.watch && !this.watchers.has(projectId)) this.repository.indexing.error(projectId, 'research_index_watch_failed');
+      if (watchError !== null) this.repository.indexing.error(projectId, 'research_index_watch_failed');
       const active = this.activeFor(projectId);
       if (active !== null && this.repository.indexing.job(active.job.id).status !== 'running') active.controller.abort();
     } catch (error) {
@@ -185,7 +201,11 @@ export class ResearchIndexService {
 
   private setupWatch(projectId: string, root: string, enabled: boolean, storage: string): string | null {
     if (!enabled) { this.closeWatcher(projectId); return null; }
-    if (this.watchers.get(projectId)?.root === root) return null;
+    const existing = this.watchers.get(projectId);
+    if (existing?.root === root) {
+      this.retainWatcher(projectId, existing);
+      return null;
+    }
     this.closeWatcher(projectId);
     try {
       let handle: WatchHandle | null = null;
@@ -199,10 +219,12 @@ export class ResearchIndexService {
             const options = this.repository.indexing.settings(projectId);
             if (options.exclude.some((pattern) => matchesGlob(path, pattern) || matchesGlob(`${path}/`, pattern))) return;
           }
+          const current = this.watchers.get(projectId);
+          if (current !== undefined) this.retainWatcher(projectId, current);
           this.schedule(projectId, false);
         } catch (error) { this.logger.warn('Research index watcher notification failed.', { projectId, error: failureCode(error) }); }
       });
-      this.watchers.set(projectId, { root, handle });
+      this.retainWatcher(projectId, { root, handle });
       handle.on('error', () => {
         if (this.closed || this.watchers.get(projectId)?.handle !== handle) return;
         this.closeWatcher(projectId);
@@ -318,6 +340,14 @@ export class ResearchIndexService {
     this.activeFor(projectId)?.controller.abort();
     this.closeWatcher(projectId);
   }
+  private retainWatcher(projectId: string, watcher: { root: string; handle: WatchHandle }): void {
+    for (const id of watcherIdsToEvict([...this.watchers.keys()], projectId)) {
+      this.closeWatcher(id);
+    }
+    this.watchers.delete(projectId);
+    this.watchers.set(projectId, watcher);
+  }
+
   private closeWatcher(projectId: string): void {
     const watcher = this.watchers.get(projectId);
     this.watchers.delete(projectId);
