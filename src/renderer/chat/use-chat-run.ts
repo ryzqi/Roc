@@ -99,6 +99,22 @@ type PendingChatRunEventsRef = {
   current: ChatRunEvent[];
 };
 
+// 窗口隐藏时 requestAnimationFrame 不会刷新。只 push 会让整段运行的增量事件留在 renderer。
+export const maxPendingChatRunEvents = 64;
+
+export function appendCoalescedChatRunEvent(pending: readonly ChatRunEvent[], event: ChatRunEvent): ChatRunEvent[] {
+  const last = pending.at(-1);
+  if (last === undefined) {
+    return [event];
+  }
+  const mergedTail = coalesceChatRunEvents([last, event]);
+  const merged = mergedTail[0];
+  if (mergedTail.length === 1 && merged !== undefined) {
+    return [...pending.slice(0, -1), merged];
+  }
+  return [...pending, event];
+}
+
 type RafHandleRef = {
   current: number | null;
 };
@@ -169,7 +185,7 @@ export function useChatRun(client: RocClient): ChatRunController {
         }
       }
       const event = normalizeSequencedChatRunEvent(rawEvent);
-      pendingEventsRef.current.push(event);
+      pendingEventsRef.current = appendCoalescedChatRunEvent(pendingEventsRef.current, event);
 
       if (event.type === 'run_started') {
         setErrorMessage(null);
@@ -177,7 +193,7 @@ export function useChatRun(client: RocClient): ChatRunController {
         setErrorMessage(event.message);
       }
 
-      if (isTerminalChatRunEvent(event)) {
+      if (isTerminalChatRunEvent(event) || pendingEventsRef.current.length >= maxPendingChatRunEvents) {
         if (rafHandleRef.current !== null) {
           cancelAnimationFrame(rafHandleRef.current);
           rafHandleRef.current = null;
