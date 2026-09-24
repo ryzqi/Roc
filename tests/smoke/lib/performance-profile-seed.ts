@@ -1,10 +1,7 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { afterAll, describe, expect, it } from 'vitest';
-
-import { DatabasePool } from '../../src/main/infrastructure/database-pool';
+import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
 import {
   applyAgentDatabaseSchema,
   applyCoreDatabaseSchema,
@@ -12,39 +9,30 @@ import {
   applyMemoryDatabaseSchema,
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema
-} from '../../src/main/infrastructure/database-schemas';
+} from '../../../src/main/infrastructure/database-schemas';
 
-const temporaryRoots: string[] = [];
+type PerformanceProfileRoots = {
+  empty: string;
+  profile1000: string;
+  profile10000: string;
+};
 
-afterAll(() => {
-  for (const root of temporaryRoots) {
-    rmSync(root, { recursive: true, force: true });
+export function seedPerformanceProfiles(roots: PerformanceProfileRoots): void {
+  seedProfile(roots.empty, 0, 'thread-profile-empty');
+  seedProfile(roots.profile1000, 1_000, 'thread-profile-1000');
+  seedProfile(roots.profile10000, 10_000, 'thread-profile-10000');
+  if (countEvents(roots.profile1000) !== 1_000) {
+    throw new Error('performance_profile_1000_seed_mismatch');
   }
-});
+  if (countEvents(roots.profile10000) !== 10_000) {
+    throw new Error('performance_profile_10000_seed_mismatch');
+  }
+}
 
-describe('performance profile seed', () => {
-  it('creates deterministic empty, 1k, and 10k data roots', () => {
-    const roots = readProfileRoots();
-
-    seedProfile(roots.empty, 0, 'thread-profile-empty');
-    seedProfile(roots.profile1000, 1_000, 'thread-profile-1000');
-    seedProfile(roots.profile10000, 10_000, 'thread-profile-10000');
-
-    expect(countEvents(roots.profile1000)).toBe(1_000);
-    expect(countEvents(roots.profile10000)).toBe(10_000);
-  });
-});
-
-function readProfileRoots(): { empty: string; profile1000: string; profile10000: string } {
+function readProfileRoots(): PerformanceProfileRoots {
   const raw = process.env.ROC_PERFORMANCE_PROFILE_ROOTS;
-  if (raw === undefined) {
-    const suffixRoot = mkdtempSync(join(tmpdir(), 'roc-performance-profile-seed-'));
-    temporaryRoots.push(suffixRoot);
-    return {
-      empty: join(suffixRoot, 'empty'),
-      profile1000: join(suffixRoot, 'profile-1000'),
-      profile10000: join(suffixRoot, 'profile-10000')
-    };
+  if (raw === undefined || raw.trim().length === 0) {
+    throw new Error('performance_profile_roots_missing');
   }
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   if (
@@ -119,4 +107,8 @@ function countEvents(dataRoot: string): number {
   } finally {
     pool.closeAll();
   }
+}
+
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  seedPerformanceProfiles(readProfileRoots());
 }

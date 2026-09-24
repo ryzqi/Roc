@@ -1,13 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   verifyWorkspaceBetterSqlite3
 } from './lib/native-packaging.mjs';
 
 let exitCode = 0;
+const projectRoot = dirname(fileURLToPath(new URL('..', import.meta.url)));
 const profileRoot = mkdtempSync(join(tmpdir(), 'roc-performance-profiles-'));
+const seedBundle = join(projectRoot, '.runtime', 'performance-profile-seed.mjs');
 const profileRoots = {
   empty: join(profileRoot, 'empty'),
   profile1000: join(profileRoot, 'profile-1000'),
@@ -34,14 +37,29 @@ function run(command, args, options = { exitOnFailure: true }) {
 }
 
 try {
+  mkdirSync(dirname(seedBundle), { recursive: true });
   exitCode = run(
     'pnpm',
-    ['test', 'tests/smoke/performance-profile-seed.test.ts'],
-    {
+    [
+      'exec',
+      'esbuild',
+      'tests/smoke/lib/performance-profile-seed.ts',
+      '--bundle',
+      '--platform=node',
+      '--format=esm',
+      `--outfile=${seedBundle}`,
+      '--external:better-sqlite3'
+    ],
+    { exitOnFailure: false }
+  );
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
+  } else {
+    exitCode = run('node', [seedBundle], {
       exitOnFailure: false,
       env: { ...process.env, ROC_PERFORMANCE_PROFILE_ROOTS: profileRootsJson }
-    }
-  );
+    });
+  }
   if (exitCode !== 0) {
     process.exitCode = exitCode;
   } else {
@@ -56,6 +74,7 @@ try {
   }
 } finally {
   rmSync(profileRoot, { recursive: true, force: true });
+  rmSync(seedBundle, { force: true });
 }
 
 process.exit(exitCode);

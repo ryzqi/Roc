@@ -61,5 +61,7 @@ await research.promoteIdeaCanvas({
 ## 验证
 
 ```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/idea-canvas.test.ts
+rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
 ```
+
+成功后读取 `.artifacts/wave1/electron-smoke.json`。

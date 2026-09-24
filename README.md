@@ -176,10 +176,12 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 
 ## 测试
 
-- Vitest，位于 `tests/**`
-- 断言钉业务结果与错误分支
-- bug fix 优先 red-green
-- UI 改动补 renderer 测试
+端到端是唯一测试机制。不写单元测试。每次结束都留下可复核、可重复的工件。
+
+- `pnpm test`：应用端到端，工件 `.artifacts/wave1/electron-smoke.json`
+- `pnpm smoke:performance`：长会话端到端，工件 `.artifacts/wave1/performance-smoke.json`
+- `pnpm smoke:mac`：已打包应用端到端，工件 `.artifacts/mac-package/result.json` 与截图
+- 科研工具链：`node scripts/research/smoke.ts`，工件为输出目录中的 `result.json`
 
 ---
 

@@ -3,7 +3,7 @@ import { _electron as electron } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { prepareArtifactDir } from './lib/artifacts.mjs';
+import { prepareArtifactDir, writeSmokeResult } from './lib/artifacts.mjs';
 import { runSmokeBoundaryProbes } from './lib/electron-smoke-boundary-probes.mjs';
 import { runSmokeCapabilityViews } from './lib/electron-smoke-capabilities.mjs';
 import { runSmokeChatDiagnosticsChecks } from './lib/electron-smoke-chat-diagnostics.mjs';
@@ -97,6 +97,15 @@ try {
   await runSmokeBoundaryProbes(ctx);
   await runSmokeInteractionChecks(ctx);
   writeElectronSmokeResult(ctx);
+} catch (error) {
+  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  writeSmokeResult(artifactDir, {
+    passed: false,
+    checkedAt: new Date().toISOString(),
+    error: error instanceof Error ? error.message : String(error)
+  });
+  console.error(message);
+  process.exitCode = 1;
 } finally {
   if (app !== undefined) {
     await app.close();

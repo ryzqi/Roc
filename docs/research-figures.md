@@ -52,14 +52,8 @@ roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf
 
 ## 验证
 
-常规生命周期、迁移和协议回归不需要私有工具链：
-
 ```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/figure-service.test.ts /Users/Apple_501/Desktop/Roc/Roc/tests/main/pdf-preview-protocol.test.ts
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```
 
-真实 IPC 测试需要已准备的私有工具链，保留图像与审核证据：
-
-```bash
-rtk proxy env PYTHONDONTWRITEBYTECODE=1 ROC_RESEARCH_TOOLCHAIN=/Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 ROC_RESEARCH_ARTIFACT_ROOT=/Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-figure-integration pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/figure-ipc.test.ts
-```
+成功后读取该输出目录的 `result.json`。图稿渲染证据留在同一目录的 PNG、SVG 和 PDF。

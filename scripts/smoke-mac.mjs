@@ -284,9 +284,19 @@ try {
   assert.deepEqual(resources.missingImages, []);
   assert.deepEqual(errors, []);
 
-  const result = { appPath, rendererReadyMs, signature: 'verified', appearance: { accentColor: expectedAccent, notificationReceived: true }, native, workflow, windowControls, layout, lifecycle, resources, errors };
+  const result = { passed: true, checkedAt: new Date().toISOString(), appPath, rendererReadyMs, signature: 'verified', appearance: { accentColor: expectedAccent, notificationReceived: true }, native, workflow, windowControls, layout, lifecycle, resources, errors };
   writeFileSync(join(artifactDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
   console.log(JSON.stringify(result, null, 2));
+} catch (error) {
+  const failure = {
+    passed: false,
+    checkedAt: new Date().toISOString(),
+    appPath,
+    error: error instanceof Error ? error.message : String(error),
+    errors
+  };
+  writeFileSync(join(artifactDir, 'result.json'), `${JSON.stringify(failure, null, 2)}\n`, 'utf8');
+  throw error;
 } finally {
   try {
     if (application !== undefined) await application.close();

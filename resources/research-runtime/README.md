@@ -13,7 +13,6 @@ Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识�
 ```bash
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --arch arm64 --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/manifest.ts --root /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run tests/scripts/research tests/main/native-packaging.test.ts
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/fetch-models.ts --lock /Users/Apple_501/Desktop/Roc/Roc/resources/research-runtime/models.lock.json --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```

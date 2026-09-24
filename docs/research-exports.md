@@ -71,9 +71,7 @@ await research.writeExport({ projectId, exportId, destinationPath: '/absolute/de
 ## 验证
 
 ```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-service.test.ts /Users/Apple_501/Desktop/Roc/Roc/tests/main/pdf-preview-protocol.test.ts
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-archive.test.ts
-rtk proxy env PYTHONDONTWRITEBYTECODE=1 ROC_RESEARCH_TOOLCHAIN=/Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 ROC_RESEARCH_ARTIFACT_ROOT=/Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-export-integration pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test /Users/Apple_501/Desktop/Roc/Roc/tests/main/plugins/research/export-ipc.test.ts
+rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```
 
-真实测试需要已准备的私有工具链，验证中文 PDF、批准图稿、BibTeX 引用、ZIP 内容、用户模板及禁止覆盖。科研页导出面板选择批准正文与图稿后准备 ZIP、发布审核，再保存到新文件。
+成功后读取该输出目录的 `result.json`，其中保留 PDF、页面图和解析结果。应用端到端另见 `pnpm test` 的 `.artifacts/wave1/electron-smoke.json`。

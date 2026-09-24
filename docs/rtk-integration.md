@@ -43,14 +43,9 @@ rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/r
 rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
 ```
 
-运行 RTK 测试：
-
-```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run tests/rtk-integration
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc exec vitest run --coverage tests/rtk-integration
-```
-
 运行完整验证：
+
+`pnpm test` 写 `.artifacts/wave1/electron-smoke.json`。`smoke:mac` 写 `.artifacts/mac-package/result.json`。
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
