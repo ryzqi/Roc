@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { z } from 'zod';
 import type {
   DefaultModelState,
   PermissionsConfig,
@@ -14,15 +13,8 @@ import { parseProviderModelKey } from '../../shared/provider-model-key';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import { requireText } from './validation';
-import { defaultMcpConfig, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
-import {
-  isCurrentSettingsDocument,
-  isLegacyUnifiedSettingsDocument,
-  migrateLegacySplitConfig,
-  migrateLegacyUnifiedDocument,
-  normalizeCurrentSettingsDocument,
-  normalizeLegacyMcpConfig
-} from './config/migration';
+import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
+import { isCurrentSettingsDocument } from './config/migration';
 import {
   defaultModelStateForProviders,
   deleteProviderFromConfig,
@@ -35,7 +27,6 @@ import {
   SettingsDocumentSchema,
   SettingsSaveRequestSchema,
   SettingsSchema,
-  ShortcutsConfigSchema,
   ProviderSchema
 } from './config/schema';
 
@@ -327,23 +318,27 @@ export class ConfigService {
 
   private ensureSettingsDocument(): void {
     const rawSettings = this.readJsonIfExists('settings.json');
-    if (rawSettings !== undefined && isCurrentSettingsDocument(rawSettings)) {
-      this.writeSettingsDocument(normalizeCurrentSettingsDocument(rawSettings as Record<string, unknown>));
+    if (rawSettings === undefined) {
+      this.writeSettingsDocument({
+        schemaVersion: 4,
+        settings: defaultSettings,
+        providers: defaultProviders,
+        mcp: defaultMcpConfig,
+        permissions: defaultPermissions,
+        shortcuts: defaultShortcuts
+      });
       return;
     }
-    if (rawSettings !== undefined && isLegacyUnifiedSettingsDocument(rawSettings)) {
-      this.writeSettingsDocument(migrateLegacyUnifiedDocument(rawSettings as Record<string, unknown>));
-      return;
+    if (!isCurrentSettingsDocument(rawSettings)) {
+      throw new RocDomainError({
+        code: 'settings_schema_current_required',
+        message: '设置文件不是当前 schema。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请使用当前版本的设置文件，或删除设置文件后重新启动。'
+      });
     }
-    this.writeSettingsDocument(
-      migrateLegacySplitConfig({
-        rawSettings,
-        legacyProviders: this.readLegacyConfig('providers.json', defaultProviders),
-        legacyMcp: this.readJsonIfExists('mcp.servers.json'),
-        legacyPermissions: this.readJsonIfExists('permissions.json'),
-        legacyShortcuts: this.readLegacyConfigStrict('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
-      })
-    );
+    this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
   }
 
   private getSettingsDocument(): RocSettingsDocument {
@@ -354,15 +349,6 @@ export class ConfigService {
 
     const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
     const document = SettingsDocumentSchema.parse(parsed);
-    const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
-    if (JSON.stringify(normalizedMcp) !== JSON.stringify(document.mcp)) {
-      const normalizedDocument: RocSettingsDocument = {
-        ...document,
-        mcp: normalizedMcp
-      };
-      this.writeSettingsDocument(normalizedDocument);
-      return this.cloneSettingsDocument(normalizedDocument);
-    }
     return this.setSettingsDocumentCache(document);
   }
 
@@ -374,15 +360,6 @@ export class ConfigService {
 
     const parsed = JSON.parse(await readFile(this.filePath('settings.json'), 'utf8')) as unknown;
     const document = SettingsDocumentSchema.parse(parsed);
-    const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
-    if (JSON.stringify(normalizedMcp) !== JSON.stringify(document.mcp)) {
-      const normalizedDocument: RocSettingsDocument = {
-        ...document,
-        mcp: normalizedMcp
-      };
-      await this.writeSettingsDocumentAsync(normalizedDocument);
-      return this.cloneSettingsDocument(normalizedDocument);
-    }
     return this.setSettingsDocumentCache(document);
   }
 
@@ -419,22 +396,6 @@ export class ConfigService {
 
   private cloneSettingsDocument(document: RocSettingsDocument): RocSettingsDocument {
     return SettingsDocumentSchema.parse(JSON.parse(JSON.stringify(document)) as unknown);
-  }
-
-  private readLegacyConfig(name: string, fallback: RocProviders): unknown {
-    const parsed = this.readJsonIfExists(name);
-    if (parsed === undefined) {
-      return fallback;
-    }
-    return parsed;
-  }
-
-  private readLegacyConfigStrict<T>(name: string, schema: z.ZodType<T>, fallback: T): T {
-    const parsed = this.readJsonIfExists(name);
-    if (parsed === undefined) {
-      return fallback;
-    }
-    return schema.parse(parsed);
   }
 
   private readJsonIfExists(name: string): unknown | undefined {

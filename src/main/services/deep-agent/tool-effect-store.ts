@@ -41,7 +41,6 @@ type StoredToolEffectRow = {
   updated_at: string;
 };
 
-type LegacyToolEffectRow = Omit<StoredToolEffectRow, 'execution_path' | 'checkpoint_id' | 'effect_class' | 'reconcile_strategy'>;
 
 export type ReusableToolEffect = { status: 'succeeded'; result: unknown };
 
@@ -155,10 +154,6 @@ export class AgentToolEffectStore {
     }
     const columns = readSourceRows<{ name: string }>(source, 'PRAGMA table_info(agent_tool_effects)');
     if (columns.length === 0) {
-      return;
-    }
-    if (!columns.some((column) => column.name === 'execution_path')) {
-      this.restoreLegacyRows(source);
       return;
     }
     const rows = readSourceRows<StoredToolEffectRow>(
@@ -286,39 +281,6 @@ export class AgentToolEffectStore {
     }
     return row;
   }
-
-  private restoreLegacyRows(source: DatabaseConnection): void {
-    const rows = readSourceRows<LegacyToolEffectRow>(
-      source,
-      `SELECT run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at
-       FROM agent_tool_effects`
-    );
-    const insert = this.db.prepare(
-      `INSERT OR IGNORE INTO agent_tool_effects (
-        run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-      )
-       VALUES (?, ?, 'legacy-main', 'legacy-checkpoint', ?, ?, ?, 'external_call', 'manual_confirmation', ?, ?, ?, ?, ?)`
-    );
-    for (const row of rows) {
-      try {
-        insert.run(
-          row.run_id,
-          row.thread_id,
-          row.tool_call_id,
-          row.tool_name,
-          row.input_hash,
-          mapLegacyToolEffectStatus(row.status),
-          row.result_json,
-          row.error_json,
-          row.created_at,
-          row.updated_at
-        );
-      } catch {
-        continue;
-      }
-    }
-  }
 }
 
 export function hashToolInput(input: unknown): string {
@@ -399,19 +361,6 @@ function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
   } catch {
     return [];
   }
-}
-
-function mapLegacyToolEffectStatus(status: string): string {
-  if (status === 'success') {
-    return 'succeeded';
-  }
-  if (status === 'error') {
-    return 'failed_final';
-  }
-  if (status === 'in_progress') {
-    return 'unknown';
-  }
-  return status;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

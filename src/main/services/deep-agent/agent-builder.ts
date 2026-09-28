@@ -18,7 +18,7 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshotV2 } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
 import type { RocHookMiddlewareOptions } from '../hooks';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -38,7 +38,7 @@ import type { AgentToolEffectStore } from './tool-effect-store';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
-  snapshot: RunExecutionSnapshotV2;
+  snapshot: RunExecutionSnapshot;
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -62,7 +62,7 @@ type SubagentTools = NonNullable<SubAgent['tools']>;
 type DeepAgentBuildPolicy = {
   runId: string;
   threadId: string;
-  mode: RunExecutionSnapshotV2['mode'];
+  mode: RunExecutionSnapshot['mode'];
   capabilityManifest: RunCapabilityManifestV1;
   /**
    * 运行时注册进 ToolNode 的工具名全集：自定义工具 ∪ deepagents 内置工具。
@@ -100,7 +100,7 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
 }
 
 function compileInterruptPolicy(
-  snapshot: RunExecutionSnapshotV2
+  snapshot: RunExecutionSnapshot
 ): DeepAgentBuildPolicy['interruptOn'] {
   const interruptOn: NonNullable<DeepAgentBuildPolicy['interruptOn']> = {};
   for (const tool of snapshot.capabilityManifest.tools) {

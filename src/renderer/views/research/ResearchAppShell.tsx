@@ -131,7 +131,6 @@ export function ResearchAppShell({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const projectSearchRef = useRef<HTMLInputElement>(null);
   const stageWorkspaceRef = useRef<ResearchStageWorkspaceHandle>(null);
-  const projectTypeaheadRef = useRef({ prefix: '', at: 0 });
 
   useEffect(() => workbench.subscribe(setSnapshot), [workbench]);
   useEffect(() => {

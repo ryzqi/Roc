@@ -12,7 +12,7 @@ import type {
   ChatRunEvent,
   FileDeleteResult,
   RunCapabilityManifestV1,
-  RunExecutionSnapshotV2,
+  RunExecutionSnapshot,
   ShellConfirmationRequest,
   ShellConfirmationResult,
   TaskDetail,
@@ -74,7 +74,7 @@ export type RunHarnessRequest = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   modelHandle: { langChainHandle?: LangChainChatModelHandle; modelId: string };
   run: TaskRun;
-  snapshot: RunExecutionSnapshotV2;
+  snapshot: RunExecutionSnapshot;
 };
 
 /** SessionStart hook 可以拦掉整轮运行，所以装配结果是"可跑"与"被拦"两态，而不是一个可能半成品的对象。 */
@@ -238,7 +238,7 @@ export async function buildRunHarness(
 
 function emitContextMaintenanceEvent(
   request: RunHarnessRequest,
-  mode: RunExecutionSnapshotV2['mode'],
+  mode: RunExecutionSnapshot['mode'],
   event: ContextMaintenanceEvent
 ): void {
   request.emitRuntimeEvent({
@@ -263,7 +263,7 @@ async function runSessionStartHook(input: {
     cwd: string;
     modelId: string;
     source: 'chat' | 'background_task';
-    workflowHint: RunExecutionSnapshotV2['workflowHint'];
+    workflowHint: RunExecutionSnapshot['workflowHint'];
     workspacePath: string | null;
   };
 }): Promise<{ kind: 'ready'; contexts: string[] } | { kind: 'blocked'; reason: string }> {
@@ -355,7 +355,7 @@ async function deriveConservativeContextBudgetProfile(input: {
   );
 }
 
-function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV2): Workspace | null {
+function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshot): Workspace | null {
   if (snapshot.workspace === null) {
     return null;
   }
@@ -381,7 +381,7 @@ async function createExecutorTools(input: {
   selfConfigService?: SelfConfigService;
   shellExecutionService: AgentExecuteAdapter;
   shellAllowedCommands?: readonly string[];
-  mode: RunExecutionSnapshotV2['mode'];
+  mode: RunExecutionSnapshot['mode'];
 }): Promise<{ runTools: ClientTool[]; webReadTool: StringDynamicStructuredTool }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
@@ -494,11 +494,11 @@ async function loadSelectedMcpTools(
   });
 }
 
-function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): boolean {
+function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshot): boolean {
   return snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change';
 }
 
-function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): void {
+function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshot): void {
   if (!isBackgroundTaskWorkflow(snapshot)) {
     return;
   }

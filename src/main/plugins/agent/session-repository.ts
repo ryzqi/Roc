@@ -8,7 +8,7 @@ import type {
   ChatResumeDecision,
   ChatRunEvent,
   EnabledCapabilities,
-  RunExecutionSnapshotV2,
+  RunExecutionSnapshot,
   SessionMessageEntry,
   SessionMessagePhase,
   SessionMessageSearchRequest,
@@ -394,7 +394,7 @@ export class AgentSessionRepository {
     };
   }
 
-  getRunExecutionSnapshot(runId: string): RunExecutionSnapshotV2 {
+  getRunExecutionSnapshot(runId: string): RunExecutionSnapshot {
     const row = this.db
       .prepare(
         `SELECT id, thread_id, status, state_version, provider_id, model_id,

@@ -10,7 +10,6 @@ import type {
 } from '../shared/types';
 import { setLogService } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
-import { deleteLegacyMonolithData } from './infrastructure/legacy-data-cleanup';
 import type { DatabasePool } from './infrastructure/database-pool';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';
@@ -105,9 +104,6 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const modelFactory = new LangChainModelFactory(configService, secretService, logService);
   const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
   const runtime = new KernelRuntime({
-    activateMigration: async () => {
-      await deleteLegacyMonolithData(paths.root);
-    },
     rootDir: pluginDataDir,
     createPlugins: (databasePool) =>
       options.plugins ??

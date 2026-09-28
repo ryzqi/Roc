@@ -21,8 +21,7 @@ import type {
   TaskRun,
   WorkflowHint,
   Workspace,
-  RunExecutionSnapshotV1,
-  RunExecutionSnapshotV2
+  RunExecutionSnapshot
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
@@ -80,7 +79,7 @@ type AgentResumePayload = Record<string, AgentResumeValue>;
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
-    snapshot: RunExecutionSnapshotV2;
+    snapshot: RunExecutionSnapshot;
     resumePayload?: AgentResumePayload;
     resumeFromCheckpoint?: boolean;
     run: TaskRun;
@@ -108,7 +107,7 @@ type ExecuteRunInput = {
   validatedAttachments?: ChatValidatedImageAttachment[];
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
   enabledCapabilities: EnabledCapabilities;
-  snapshot: RunExecutionSnapshotV2;
+  snapshot: RunExecutionSnapshot;
 };
 
 export type AgentPluginRuntimeOptions = {
@@ -895,7 +894,7 @@ export class AgentPluginRuntime {
   }
 
   private async executeDeepAgentRun(input: {
-    snapshot: RunExecutionSnapshotV2;
+    snapshot: RunExecutionSnapshot;
     resumePayload?: AgentResumePayload;
     resumeFromCheckpoint: boolean;
     executionStream?: AgentDeepAgentExecution;
@@ -982,7 +981,7 @@ export class AgentPluginRuntime {
 
   private getOrCreateRunTelemetry(
     run: TaskRun,
-    snapshot: RunExecutionSnapshotV2
+    snapshot: RunExecutionSnapshot
   ): AgentRunTelemetryAccumulator {
     const current = this.runTelemetry.get(run.id);
     if (current !== undefined) {
@@ -1153,7 +1152,7 @@ function requireAgentExecution(value: unknown): AgentDeepAgentExecution {
 }
 
 function createRunExecutionSnapshotSeed(input: {
-  capabilityManifest: RunExecutionSnapshotV1['capabilityManifest'];
+  capabilityManifest: RunExecutionSnapshot['capabilityManifest'];
   dispatchKey: string | null;
   explicitSkillIds: string[];
   modelHandle: AgentModelHandle;
@@ -1211,7 +1210,7 @@ function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskR
   };
 }
 
-function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV2['runOrigin'] {
+function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshot['runOrigin'] {
   if (request.taskSource === 'background_schedule') {
     return 'background_schedule';
   }
@@ -1229,7 +1228,7 @@ function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV2[
 
 function normalizeExplicitSkillIds(
   explicitSkillIds: ChatStartRunRequest['explicitSkillIds'],
-  capabilityManifest: RunExecutionSnapshotV2['capabilityManifest']
+  capabilityManifest: RunExecutionSnapshot['capabilityManifest']
 ): string[] {
   if (explicitSkillIds === undefined) {
     return [];

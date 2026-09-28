@@ -26,10 +26,6 @@ export type LogEvent = {
   metadata?: Record<string, unknown>;
   durationMs?: number;
   memoryMb?: number;
-  /**
-   * 兼容旧日志调用。新日志调用应使用 metadata。
-   */
-  data?: unknown;
 };
 
 export type LogEventContext = Omit<Partial<LogEvent>, 'level' | 'message'>;

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Database as DatabaseConnection } from 'better-sqlite3';
+import Database, { type Database as DatabaseConnection } from 'better-sqlite3';
 
 import type { RocLogicalDatabaseName } from './database-pragmas';
 
@@ -29,29 +29,22 @@ export function applyDatabaseMigrations(
   ensureLedgerTables(db);
   validateMigrationList(input.migrations);
   const applied = readAppliedMigrations(db, input.dbName);
-  validateAppliedMigrations(applied, input.migrations);
-  const applyPending = db.transaction(() => {
-    for (const migration of input.migrations) {
-      const checksum = checksumMigration(migration);
-      const existing = applied.get(migration.version);
-      if (existing !== undefined) {
-        if (existing.checksum !== checksum) {
-          throw new Error('database_migration_checksum_drift');
-        }
-        if (existing.name !== migration.name) {
-          throw new Error('database_migration_checksum_drift');
-        }
-        continue;
-      }
-      db.exec(migration.sql);
-      db.prepare(
-        `INSERT INTO schema_migrations (db_name, version, name, checksum, applied_at)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(input.dbName, migration.version, migration.name, checksum, now());
+  if (schemaObjectsMatch(db, input.migrations)) {
+    if (!appliedMigrationsMatch(applied, input.migrations)) {
+      recordCurrentMigrations(db, input.dbName, input.migrations, now);
     }
-    writeMetadata(db, input.dbName, input.migrations, now());
+    return;
+  }
+  if (applied.size !== 0 || readSchemaObjectsFromDatabase(db).size !== 0) {
+    throw new Error('database_schema_rebuild_required');
+  }
+  const applyCurrent = db.transaction(() => {
+    for (const migration of input.migrations) {
+      db.exec(migration.sql);
+    }
+    writeCurrentMigrationRows(db, input.dbName, input.migrations, now);
   });
-  applyPending();
+  applyCurrent();
 }
 
 export function readSchemaMetadata(db: DatabaseConnection, dbName: RocLogicalDatabaseName): RocSchemaMetadata | null {
@@ -130,16 +123,89 @@ function readAppliedMigrations(
   return new Map(rows.map((row) => [row.version, { name: row.name, checksum: row.checksum }]));
 }
 
-function validateAppliedMigrations(
+function appliedMigrationsMatch(
   applied: ReadonlyMap<number, { name: string; checksum: string }>,
   migrations: readonly RocDatabaseMigration[]
+): boolean {
+  if (applied.size !== migrations.length) {
+    return false;
+  }
+  return migrations.every((migration) => {
+    const existing = applied.get(migration.version);
+    return existing !== undefined && existing.name === migration.name && existing.checksum === checksumMigration(migration);
+  });
+}
+
+function recordCurrentMigrations(
+  db: DatabaseConnection,
+  dbName: RocLogicalDatabaseName,
+  migrations: readonly RocDatabaseMigration[],
+  now: () => string
 ): void {
-  const knownVersions = new Set(migrations.map((migration) => migration.version));
-  for (const version of applied.keys()) {
-    if (!knownVersions.has(version)) {
-      throw new Error('database_migration_unknown_applied_version');
+  const record = db.transaction(() => {
+    writeCurrentMigrationRows(db, dbName, migrations, now);
+  });
+  record();
+}
+
+function writeCurrentMigrationRows(
+  db: DatabaseConnection,
+  dbName: RocLogicalDatabaseName,
+  migrations: readonly RocDatabaseMigration[],
+  now: () => string
+): void {
+  db.prepare('DELETE FROM schema_migrations WHERE db_name = ?').run(dbName);
+  for (const migration of migrations) {
+    db.prepare(
+      `INSERT INTO schema_migrations (db_name, version, name, checksum, applied_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(dbName, migration.version, migration.name, checksumMigration(migration), now());
+  }
+  writeMetadata(db, dbName, migrations, now());
+}
+
+function schemaObjectsMatch(db: DatabaseConnection, migrations: readonly RocDatabaseMigration[]): boolean {
+  const expected = readSchemaObjects(migrations.map((migration) => migration.sql).join('\n'));
+  const actual = readSchemaObjectsFromDatabase(db);
+  if (expected.size !== actual.size) {
+    return false;
+  }
+  for (const [name, sql] of expected) {
+    if (actual.get(name) !== sql) {
+      return false;
     }
   }
+  return true;
+}
+
+function readSchemaObjects(sql: string): Map<string, string> {
+  const probe = new Database(':memory:');
+  try {
+    probe.exec(sql);
+    return readSchemaObjectsFromDatabase(probe);
+  } finally {
+    probe.close();
+  }
+}
+
+function readSchemaObjectsFromDatabase(db: DatabaseConnection): Map<string, string> {
+  const rows = db
+    .prepare(
+      `SELECT name, sql
+       FROM sqlite_master
+       WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'schema_%'
+       ORDER BY name`
+    )
+    .all() as Array<{ name: string; sql: string }>;
+  return new Map(
+    rows
+      .filter((row) => !row.name.includes('_fts_'))
+      .map((row) => [row.name, normalizeSchemaSql(row.sql)])
+  );
+}
+
+function normalizeSchemaSql(sql: string): string {
+  return sql.replace(/\s+/gu, ' ').trim();
 }
 
 function writeMetadata(

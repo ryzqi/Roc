@@ -4,7 +4,7 @@ import { Command } from '@langchain/langgraph';
 import type {
   ChatRunEvent,
   ChatValidatedImageAttachment,
-  RunExecutionSnapshotV2
+  RunExecutionSnapshot
 } from '../../../shared/types';
 import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agent-stream-adapter';
 import {
@@ -380,7 +380,7 @@ function createOutcomeTextCollector(hookDisplayTexts: readonly string[]): {
 function recordPromptCacheMetrics(input: {
   metricsService: Pick<MetricsService, 'recordPromptCacheMetrics'> | undefined;
   usageAccumulator: ReturnType<typeof createUsageAccumulator>;
-  mode: RunExecutionSnapshotV2['mode'];
+  mode: RunExecutionSnapshot['mode'];
   source: 'chat' | 'background_task';
   providerId: string;
   modelId: string;

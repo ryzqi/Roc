@@ -21,7 +21,6 @@ import type {
   SkillSnapshot
 } from '../../shared/types';
 import { RocDomainError } from './errors';
-import type { LogService } from './log-service';
 import type { RocPaths } from './paths';
 import { requireText } from './validation';
 
@@ -109,44 +108,6 @@ export class SkillService {
       });
     }
     return imported;
-  }
-
-  migrateLegacySkills(input: { legacySkillsDir: string; logService?: Pick<LogService, 'info'> }): void {
-    const legacyRoot = resolve(input.legacySkillsDir);
-    const currentRoot = resolve(this.paths.skillsDir);
-    if (legacyRoot === currentRoot || !existsSync(legacyRoot)) {
-      return;
-    }
-
-    const entries = readdirSync(legacyRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-    if (entries.length === 0) {
-      return;
-    }
-
-    mkdirSync(this.paths.skillsDir, { recursive: true });
-    const summary = {
-      scannedSkills: entries.length,
-      createdSkills: 0,
-      copiedFiles: 0,
-      updatedFiles: 0,
-      skippedFiles: 0
-    };
-
-    for (const entry of entries) {
-      const sourceDir = join(legacyRoot, entry.name);
-      const targetDir = join(this.paths.skillsDir, entry.name);
-      if (!existsSync(targetDir)) {
-        summary.createdSkills += 1;
-      }
-      mkdirSync(targetDir, { recursive: true });
-      this.mergeSkillDirectory(sourceDir, targetDir, summary);
-    }
-
-    input.logService?.info('Migrated legacy root-scoped skills into the canonical user skill library.', {
-      service: 'skill-service',
-      component: 'migrateLegacySkills',
-      metadata: summary
-    });
   }
 
   setEnabled(id: string, enabled: boolean): SkillSnapshot {
@@ -439,46 +400,5 @@ export class SkillService {
 
   private isSkillBinaryBuffer(buffer: Buffer): boolean {
     return buffer.subarray(0, 4096).includes(0);
-  }
-
-  private mergeSkillDirectory(
-    sourceDir: string,
-    targetDir: string,
-    summary: { copiedFiles: number; updatedFiles: number; skippedFiles: number }
-  ): void {
-    for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
-      const sourcePath = join(sourceDir, entry.name);
-      const targetPath = join(targetDir, entry.name);
-      if (entry.isDirectory()) {
-        mkdirSync(targetPath, { recursive: true });
-        this.mergeSkillDirectory(sourcePath, targetPath, summary);
-        continue;
-      }
-
-      if (!entry.isFile()) {
-        continue;
-      }
-
-      if (!existsSync(targetPath)) {
-        cpSync(sourcePath, targetPath);
-        summary.copiedFiles += 1;
-        continue;
-      }
-
-      if (entry.name === 'roc.skill.json') {
-        summary.skippedFiles += 1;
-        continue;
-      }
-
-      const sourceStat = statSync(sourcePath);
-      const targetStat = statSync(targetPath);
-      if (sourceStat.mtimeMs > targetStat.mtimeMs) {
-        cpSync(sourcePath, targetPath, { force: true });
-        summary.updatedFiles += 1;
-        continue;
-      }
-
-      summary.skippedFiles += 1;
-    }
   }
 }

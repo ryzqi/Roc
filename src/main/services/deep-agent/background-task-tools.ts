@@ -65,8 +65,7 @@ const enabledCapabilitiesSchema = z.object({
 
 export const proposeToolInputSchema = z.strictObject({
   goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
-  trigger: modelTriggerSchema,
-  workspacePath: z.string().min(1).optional().describe('兼容旧模型输出；实际后台任务 workspacePath 始终由 runtime 注入。')
+  trigger: modelTriggerSchema
 });
 
 const fullProposeInputSchema = z.strictObject({

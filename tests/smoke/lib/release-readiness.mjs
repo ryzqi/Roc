@@ -26,12 +26,6 @@ export function buildReleaseReadinessSnapshot(input) {
     /\bcreateMainKernelBootstrap\b/u.test(sourceText) &&
     /\bnew\s+KernelRuntime\s*\(/u.test(sourceText) &&
     /\brootDir\s*:\s*pluginDataDir\b/u.test(sourceText);
-  const hasLegacyDataCleanup =
-    /\bdeleteLegacyMonolithData\b/u.test(sourceText) &&
-    /\broc\.sqlite\b/u.test(sourceText) &&
-    /\broc\.sqlite-wal\b/u.test(sourceText) &&
-    /\broc\.sqlite-shm\b/u.test(sourceText);
-
   return {
     identity: readReleaseIdentity(input),
     runtime: {
@@ -41,12 +35,6 @@ export function buildReleaseReadinessSnapshot(input) {
           ? 'Main process starts KernelRuntime through createMainKernelBootstrap.'
           : 'Main process microkernel runtime activation evidence was not included in release readiness.'
       },
-      legacyMonolithDataCleanup: {
-        status: hasLegacyDataCleanup ? 'present' : 'absent',
-        evidence: hasLegacyDataCleanup
-          ? 'Runtime deletes legacy monolith database files before plugin runtime activation.'
-          : 'Legacy monolith database cleanup evidence was not included in release readiness.'
-      }
     },
     integrations: {
       appProtocol: {

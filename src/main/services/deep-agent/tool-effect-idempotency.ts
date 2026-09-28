@@ -136,9 +136,10 @@ function requireEffectPolicy(tool: RunCapabilityManifestToolV1): {
   if (tool.effectClass === 'none') {
     throw new Error(`agent_tool_effect_manifest_class_invalid:${tool.modelVisibleName}`);
   }
-  const reconcileStrategy = tool.reconcileStrategy === undefined
-    ? resolveLegacyReconcileStrategy(tool.effectClass)
-    : tool.reconcileStrategy;
+  if (tool.reconcileStrategy === undefined) {
+    throw new Error(`agent_tool_effect_manifest_reconcile_missing:${tool.modelVisibleName}`);
+  }
+  const reconcileStrategy = tool.reconcileStrategy;
   if (reconcileStrategy === 'none') {
     throw new Error(`agent_tool_effect_manifest_reconcile_invalid:${tool.modelVisibleName}`);
   }
@@ -146,12 +147,6 @@ function requireEffectPolicy(tool: RunCapabilityManifestToolV1): {
     effectClass: tool.effectClass,
     reconcileStrategy
   };
-}
-
-function resolveLegacyReconcileStrategy(
-  effectClass: RunCapabilityManifestToolV1['effectClass']
-): Exclude<RunCapabilityReconcileStrategyV1, 'none'> {
-  return effectClass === 'network_read' ? 'retry_safe' : 'manual_confirmation';
 }
 
 function createEffectErrorMessage(toolName: string, toolCallId: string, content: string): ToolMessage {

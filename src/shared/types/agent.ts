@@ -12,8 +12,7 @@ export type {
   DeepAgentConfigPreview,
   EnabledCapabilities,
   InterruptDecisionType,
-  RunBudgetV1,
-  RunBudgetV2,
+  RunBudget,
   RunCapabilityApprovalPolicyV1,
   RunCapabilityEffectClassV1,
   RunCapabilityExecutionScopeV1,
@@ -23,7 +22,6 @@ export type {
   RunCapabilityProvenanceV1,
   RunCapabilityReconcileStrategyV1,
   RunExecutionMode,
-  RunExecutionSnapshotV1,
-  RunExecutionSnapshotV2,
+  RunExecutionSnapshot,
   SkippedCapability
 } from '../schemas/agent';

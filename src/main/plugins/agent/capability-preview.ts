@@ -30,7 +30,6 @@ export function buildAgentCapabilityPreview(input: {
     throw new Error('default_model_missing');
   }
 
-  // 使用 ManifestBuilder 替代直接调用 compileRunCapabilityManifest
   const compiled = ManifestBuilder
     .forMode(input.mode)
     .withMcp(input.mcpServers, input.mcpApprovalMode)
@@ -66,7 +65,6 @@ export function buildDeepAgentConfigPreview(input: {
     throw new Error('default_model_missing');
   }
 
-  // 使用 ManifestBuilder
   const compiled = ManifestBuilder
     .forMode(input.mode)
     .withDeleteFileApproval(input.deleteFileApprovalMode)

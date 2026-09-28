@@ -194,10 +194,6 @@ export function buildManifestFromPolicy(input: {
   };
 }
 
-/**
- * 旧接口：保持向后兼容
- * 内部调用新接口，使用默认策略
- */
 export function compileRunCapabilityManifest(input: {
   deleteFileApprovalMode: ApprovalMode;
   explicitSkillIds?: readonly string[];

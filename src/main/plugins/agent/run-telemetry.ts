@@ -1,7 +1,7 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import { z } from 'zod';
 
-import type { ChatAssistantBlock, ChatRunEvent, RunExecutionSnapshotV2, TaskRun, TokenUsage } from '../../../shared/types';
+import type { ChatAssistantBlock, ChatRunEvent, RunExecutionSnapshot, TaskRun, TokenUsage } from '../../../shared/types';
 import { tokenUsageSchema } from '../../../shared/schemas/token-usage';
 
 const nullableCountSchema = z.number().int().nonnegative().nullable();
@@ -150,7 +150,7 @@ export class AgentRunTelemetryAccumulator {
   constructor(input: {
     existing: AgentRunTelemetryV1 | null;
     run: TaskRun;
-    snapshot: RunExecutionSnapshotV2;
+    snapshot: RunExecutionSnapshot;
   }) {
     if (input.existing !== null) {
       assertAgentRunTelemetryIdentity(input.existing, input.run, input.snapshot);
@@ -295,7 +295,7 @@ export class AgentRunTelemetryAccumulator {
   }
 }
 
-function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshotV2): AgentRunTelemetryV1 {
+function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshot): AgentRunTelemetryV1 {
   return {
     schemaVersion: 1,
     correlation: {
@@ -354,7 +354,7 @@ function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshotV2): A
 export function assertAgentRunTelemetryIdentity(
   telemetry: AgentRunTelemetryV1,
   run: TaskRun,
-  snapshot: RunExecutionSnapshotV2
+  snapshot: RunExecutionSnapshot
 ): void {
   const correlation = telemetry.correlation;
   if (

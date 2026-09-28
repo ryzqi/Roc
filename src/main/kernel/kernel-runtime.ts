@@ -21,7 +21,6 @@ export type KernelRuntimeOptions = {
   rootDir: string;
   createPlugins(databasePool: DatabasePool): readonly RocPlugin[];
   safeStorage: SafeStorageBackend;
-  activateMigration?: () => Promise<void> | void;
 };
 
 export type KernelRuntimeStatus = {
@@ -62,10 +61,6 @@ export class KernelRuntime {
     let databasePoolToClose: DatabasePool | null = null;
     let loggerToClose: InfrastructureLogger | null = null;
     try {
-      if (this.options.activateMigration !== undefined) {
-        await this.options.activateMigration();
-      }
-
       const databasePool = new DatabasePool(this.options.rootDir);
       databasePoolToClose = databasePool;
       const fastProbe = runDatabaseFastProbe({

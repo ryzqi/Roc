@@ -1,20 +1,16 @@
-import type { ChatRunMode, ChatStartRunRequest, RunExecutionSnapshotV1, RunExecutionSnapshotV2, TaskRun, WorkflowHint } from '../../../shared/types';
-import {
-  runExecutionSnapshotSchema,
-  runExecutionSnapshotV1Schema,
-  runExecutionSnapshotV2Schema
-} from '../../../shared/schemas/agent';
+import type { ChatRunMode, ChatStartRunRequest, RunExecutionSnapshot, TaskRun, WorkflowHint } from '../../../shared/types';
+import { runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
 import { isRunCapabilityManifestIntegrityValid } from './run-capability-manifest';
 
-export { runExecutionSnapshotV1Schema, runExecutionSnapshotV2Schema };
+export { runExecutionSnapshotSchema };
 
-export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshotV2, 'runId' | 'threadId' | 'inputMessageId'>;
+export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshot, 'runId' | 'threadId' | 'inputMessageId'>;
 
-export function toRunExecutionMode(mode: ChatRunMode): RunExecutionSnapshotV2['mode'] {
+export function toRunExecutionMode(mode: ChatRunMode): RunExecutionSnapshot['mode'] {
   return mode === 'chat' ? 'run' : mode;
 }
 
-export function toChatRunMode(mode: RunExecutionSnapshotV2['mode']): ChatRunMode {
+export function toChatRunMode(mode: RunExecutionSnapshot['mode']): ChatRunMode {
   return mode === 'run' ? 'chat' : mode;
 }
 
@@ -23,7 +19,7 @@ export function createRunExecutionSnapshot(input: {
   threadId: string;
   inputMessageId: string;
   snapshot: RunExecutionSnapshotSeed;
-}): RunExecutionSnapshotV2 {
+}): RunExecutionSnapshot {
   return parseRunExecutionSnapshot({
     ...input.snapshot,
     runId: input.runId,
@@ -32,41 +28,24 @@ export function createRunExecutionSnapshot(input: {
   });
 }
 
-export function parseRunExecutionSnapshot(value: unknown): RunExecutionSnapshotV2 {
+export function parseRunExecutionSnapshot(value: unknown): RunExecutionSnapshot {
   const snapshot = runExecutionSnapshotSchema.parse(value);
-  if (snapshot.schemaVersion === 1) {
-    return migrateRunExecutionSnapshotV1(snapshot);
-  }
   if (!isRunCapabilityManifestIntegrityValid(snapshot.capabilityManifest)) {
     throw new Error('run_execution_snapshot_manifest_hash_invalid');
   }
   return snapshot;
 }
 
-function migrateRunExecutionSnapshotV1(snapshot: RunExecutionSnapshotV1): RunExecutionSnapshotV2 {
-  if (!isRunCapabilityManifestIntegrityValid(snapshot.capabilityManifest)) {
-    throw new Error('run_execution_snapshot_manifest_hash_invalid');
-  }
-  return {
-    ...snapshot,
-    schemaVersion: 2,
-    budget: {
-      contextBudgetTokens: snapshot.budget.contextBudgetTokens
-    },
-    shellAllowedCommands: snapshot.runOrigin === 'background_schedule' ? [] : undefined
-  };
-}
-
 export function createRunBudget(input: {
   contextBudgetTokens: number | null;
-}): RunExecutionSnapshotV2['budget'] {
+}): RunExecutionSnapshot['budget'] {
   return {
     contextBudgetTokens: input.contextBudgetTokens
   };
 }
 
 export function createChatStartRunRequestFromSnapshot(
-  snapshot: RunExecutionSnapshotV2,
+  snapshot: RunExecutionSnapshot,
   run: TaskRun
 ): ChatStartRunRequest {
   const request: ChatStartRunRequest = {
@@ -100,7 +79,7 @@ export function createChatStartRunRequestFromSnapshot(
   return request;
 }
 
-export function readShellAllowedCommands(snapshot: RunExecutionSnapshotV2): string[] {
+export function readShellAllowedCommands(snapshot: RunExecutionSnapshot): string[] {
   return snapshot.shellAllowedCommands === undefined ? [] : [...snapshot.shellAllowedCommands];
 }
 

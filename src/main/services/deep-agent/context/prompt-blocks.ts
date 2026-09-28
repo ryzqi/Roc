@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '../../../../shared/types';
+import type { ChatStartRunRequest, RunExecutionSnapshot, WorkflowHint } from '../../../../shared/types';
 import { ROC_FILE_TOOL_PROMPT_LINES } from '../filesystem-tool-contract';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from '../prompt';
 import { ROC_SHELL_TOOL_DESCRIPTION_LINES } from '../shell-policy';
@@ -51,7 +51,7 @@ export function serializePromptBlocks(blocks: readonly PromptBlock[]): string {
 }
 
 export function buildPromptBlocks(input: {
-  mode: RunExecutionSnapshotV2['mode'];
+  mode: RunExecutionSnapshot['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
   workflowHint: WorkflowHint;
@@ -89,7 +89,7 @@ export function buildPromptBlocks(input: {
   ];
 }
 
-function buildStaticPrompt(mode: RunExecutionSnapshotV2['mode']): string {
+function buildStaticPrompt(mode: RunExecutionSnapshot['mode']): string {
   return [
     'You are Roc, a macOS coding agent. Be concise; claim only inspected evidence.',
     'Inspect relevant source, tests, and config before edits. Keep changes scoped to the request.',
@@ -123,7 +123,7 @@ function buildMemoryWritePromptLines(): string[] {
   ];
 }
 
-function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSnapshotV2['mode']): string {
+function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSnapshot['mode']): string {
   if (workspacePath === null) {
     if (mode === 'plan') {
       return [

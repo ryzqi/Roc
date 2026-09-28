@@ -155,13 +155,7 @@ export const deepAgentConfigPreviewSchema = z
 
 export const runExecutionModeSchema = z.enum(['plan', 'run', 'task']);
 
-export const runBudgetV1Schema = z
-  .object({
-    contextBudgetTokens: z.number().int().positive().nullable()
-  })
-  .strict();
-
-export const runBudgetV2Schema = z
+export const runBudgetSchema = z
   .object({
     contextBudgetTokens: z.number().int().positive().nullable()
   })
@@ -192,27 +186,14 @@ const runExecutionSnapshotShape = {
   dispatchKey: identifierSchema.nullable()
 } as const;
 
-export const runExecutionSnapshotV1Schema = z
-  .object({
-    schemaVersion: z.literal(1),
-    ...runExecutionSnapshotShape,
-    budget: runBudgetV1Schema
-  })
-  .strict();
-
-export const runExecutionSnapshotV2Schema = z
+export const runExecutionSnapshotSchema = z
   .object({
     schemaVersion: z.literal(2),
     ...runExecutionSnapshotShape,
-    budget: runBudgetV2Schema,
+    budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()
   })
   .strict();
-
-export const runExecutionSnapshotSchema = z.discriminatedUnion('schemaVersion', [
-  runExecutionSnapshotV1Schema,
-  runExecutionSnapshotV2Schema
-]);
 
 export const defaultModelStateSchema = z
   .object({
@@ -295,9 +276,7 @@ export type RunCapabilityReconcileStrategyV1 = NonNullable<z.infer<typeof runCap
 export type RunCapabilityManifestToolV1 = z.infer<typeof runCapabilityManifestToolSchema>;
 export type RunCapabilityManifestSkillV1 = z.infer<typeof runCapabilityManifestSkillSchema>;
 export type RunCapabilityManifestV1 = z.infer<typeof runCapabilityManifestSchema>;
-export type RunBudgetV1 = z.infer<typeof runBudgetV1Schema>;
-export type RunBudgetV2 = z.infer<typeof runBudgetV2Schema>;
+export type RunBudget = z.infer<typeof runBudgetSchema>;
 export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
-export type RunExecutionSnapshotV1 = z.infer<typeof runExecutionSnapshotV1Schema>;
-export type RunExecutionSnapshotV2 = z.infer<typeof runExecutionSnapshotV2Schema>;
+export type RunExecutionSnapshot = z.infer<typeof runExecutionSnapshotSchema>;
 export type AgentRuntimeStatus = z.infer<typeof agentRuntimeStatusSchema>;
