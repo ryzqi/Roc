@@ -128,10 +128,6 @@ function readWorkspacePathFromMessages(messages) {
   }
   for (const message of [...messages].reverse()) {
     const text = readMessageText(message);
-    const legacyMatch = /^当前工作区：(.+)$/mu.exec(text);
-    if (legacyMatch !== null) {
-      return legacyMatch[1].trim();
-    }
     const systemPromptMatch = /^Workspace: (.+)$/mu.exec(text);
     if (systemPromptMatch !== null && systemPromptMatch[1].trim() !== 'not selected.') {
       return systemPromptMatch[1].trim();
