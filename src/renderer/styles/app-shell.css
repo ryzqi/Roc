@@ -104,6 +104,10 @@
   color: var(--muted);
   line-height: 1;
   cursor: default;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--duration-fast) var(--easing-standard);
 }
 
 .workband-chat-action:not(.icon-button) {
@@ -133,6 +137,7 @@
 
 .workband-chat-action:active {
   background: var(--overlay-active);
+  transform: var(--press-shift);
 }
 
 .brand-mark {
@@ -214,6 +219,13 @@
 
 .icon-button:active {
   background: var(--overlay-active);
+}
+
+.icon-button.workband-chat-action {
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--duration-fast) var(--easing-standard);
 }
 
 .status-pill,
@@ -454,4 +466,3 @@
   gap: var(--space-6);
   padding: 0;
 }
-
