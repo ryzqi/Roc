@@ -553,6 +553,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       <a className="skip-to-canvas" href="#roc-main">跳到内容</a>
       <WindowWorkband
         activeView={activeView}
+        canGoBack={activeView === 'research' && researchServiceContext?.projectId !== undefined && researchServiceContext.projectId !== null}
         onNewConversation={startNewConversation}
         onNewProject={() => {
           setActiveView('research');

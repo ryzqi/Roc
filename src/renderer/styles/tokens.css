@@ -13,11 +13,17 @@
   --surface-card: #ffffff;
   --surface-card-hover: #f8f9fb;
   --surface-translucent: rgba(255, 255, 255, 0.92);
+  --material-window: rgba(245, 245, 247, 0.72);
+  --material-titlebar: rgba(250, 250, 252, 0.66);
+  --material-sidebar: rgba(246, 246, 248, 0.74);
+  --material-list: rgba(250, 250, 252, 0.78);
+  --material-detail: rgba(255, 255, 255, 0.9);
 
   /* 描边阶 */
   --line-soft: rgba(120, 144, 184, 0.14);
   --line: rgba(120, 144, 184, 0.22);
   --line-strong: rgba(120, 144, 184, 0.34);
+  --mac-hairline: rgba(0, 0, 0, 0.08);
 
   /* 主调 */
   --system-accent: #2d477a;
@@ -139,7 +145,7 @@
   /* 语义别名（不引入新色，仅命名） */
   --composer-border: var(--line);
   --composer-border-focus: color-mix(in srgb, var(--accent) 42%, transparent);
-  --workband-border: var(--line-soft);
+  --workband-border: var(--mac-hairline);
 
   /* 动效 */
   --duration-fast: 120ms;
@@ -218,9 +224,15 @@
   --surface-card: #172235;
   --surface-card-hover: #1d2a3e;
   --surface-translucent: rgba(21, 31, 48, 0.92);
+  --material-window: rgba(28, 28, 30, 0.72);
+  --material-titlebar: rgba(37, 37, 40, 0.66);
+  --material-sidebar: rgba(37, 37, 40, 0.74);
+  --material-list: rgba(28, 28, 30, 0.78);
+  --material-detail: rgba(28, 28, 30, 0.9);
   --line-soft: rgba(190, 205, 228, 0.12);
   --line: rgba(190, 205, 228, 0.2);
   --line-strong: rgba(190, 205, 228, 0.32);
+  --mac-hairline: rgba(255, 255, 255, 0.1);
   --system-blue: #0a84ff;
   --system-gray: #8e8e93;
   --system-gray-2: #636366;
@@ -289,6 +301,11 @@
   --surface-strong: Canvas;
   --surface-card: Canvas;
   --surface-card-hover: Canvas;
+  --material-window: Canvas;
+  --material-titlebar: Canvas;
+  --material-sidebar: Canvas;
+  --material-list: Canvas;
+  --material-detail: Canvas;
   --line-soft: GrayText;
   --line: GrayText;
   --line-strong: CanvasText;
@@ -314,4 +331,9 @@
 
 :root[data-reduced-transparency='true'] {
   --surface-translucent: var(--surface);
+  --material-window: var(--bg);
+  --material-titlebar: var(--surface);
+  --material-sidebar: var(--bg-soft);
+  --material-list: var(--bg-soft);
+  --material-detail: var(--surface);
 }

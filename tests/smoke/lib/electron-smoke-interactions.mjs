@@ -35,12 +35,12 @@ export async function runSmokeInteractionChecks(ctx) {
   await openChatView(page);
   buttonInteractionEvidence.chatTopbarActionsGrouped = await page.evaluate(() => {
     const workband = document.querySelector('[data-testid="window-workband"]');
-    const brand = workband?.querySelector('.brand');
+    const primary = workband?.querySelector('.workband-primary');
     const newConversation = document.querySelector('[data-testid="chat-new-conversation"]');
     const settings = document.querySelector('[data-testid="settings-gear"]');
     if (
       !(workband instanceof HTMLElement) ||
-      !(brand instanceof HTMLElement) ||
+      !(primary instanceof HTMLElement) ||
       !(newConversation instanceof HTMLElement) ||
       !(settings instanceof HTMLElement)
     ) {
@@ -50,7 +50,7 @@ export async function runSmokeInteractionChecks(ctx) {
       workband.contains(newConversation) &&
       workband.contains(settings) &&
       document.querySelector('.sidebar') === null &&
-      newConversation.getBoundingClientRect().left > brand.getBoundingClientRect().right
+      newConversation.getBoundingClientRect().left >= primary.getBoundingClientRect().left
     );
   });
   buttonInteractionEvidence.chatNewConversationVisible =

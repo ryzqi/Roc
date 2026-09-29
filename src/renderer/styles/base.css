@@ -14,7 +14,7 @@ body {
   font-size: var(--font-body-size);
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg);
+  background: transparent;
   cursor: default;
   letter-spacing: 0;
   overflow: hidden;

@@ -1,9 +1,10 @@
-import { Plus, Settings, SquarePen } from 'lucide-react';
+import { ChevronLeft, Plus, Settings, SquarePen } from 'lucide-react';
 import type React from 'react';
 import type { ResearchServiceContext } from '../views/research/research-services';
 
 export function WindowWorkband({
   activeView,
+  canGoBack,
   onNewConversation,
   onNewProject,
   onOpenSettings,
@@ -12,6 +13,7 @@ export function WindowWorkband({
   topMeta
 }: {
   activeView: string;
+  canGoBack: boolean;
   onNewConversation: () => void;
   onNewProject: () => void;
   onOpenSettings: (opener: HTMLElement) => void;
@@ -24,19 +26,20 @@ export function WindowWorkband({
     <header className="window-workband" data-testid="window-workband">
       <div className="workband-drag-region">
         <div className="workband-primary">
+          {canGoBack ? (
+            <button
+              aria-label={inProject ? '返回所有项目' : '返回项目列表'}
+              className="workband-chat-action"
+              data-testid="research-shell-all-projects"
+              title="返回（⌘[）"
+              type="button"
+              onClick={onReturnToProjects}
+            >
+              <ChevronLeft aria-hidden="true" className="icon-svg" size={17} strokeWidth={1.8} />
+            </button>
+          ) : null}
           {inProject ? (
             <div className="workband-chat-actions">
-              <button
-                aria-keyshortcuts="Meta+[ Control+["
-                aria-label="所有项目"
-                className="workband-chat-action"
-                data-testid="research-shell-all-projects"
-                title="返回所有项目（⌘[）"
-                type="button"
-                onClick={onReturnToProjects}
-              >
-                所有项目
-              </button>
               {activeView === 'chat' ? (
                 <button
                   aria-label="新建对话"
@@ -50,19 +53,6 @@ export function WindowWorkband({
                 </button>
               ) : null}
             </div>
-          ) : activeView === 'research' ? (
-            <div className="workband-chat-actions">
-              <button
-                aria-label="新建研究项目"
-                className="icon-button workband-chat-action"
-                data-testid="research-top-new-project"
-                title="新建研究项目"
-                type="button"
-                onClick={onNewProject}
-              >
-                <Plus aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
-              </button>
-            </div>
           ) : null}
         </div>
       </div>
@@ -70,6 +60,20 @@ export function WindowWorkband({
         <span>{inProject ? researchContext.projectTitle : topMeta}</span>
       </div>
       <div className="workband-chat-actions">
+        <button
+          aria-label={activeView === 'research' ? '新建研究项目' : '新建'}
+          className="icon-button workband-chat-action"
+          data-testid="research-top-new-project"
+          title={activeView === 'research' ? '新建研究项目' : '新建'}
+          type="button"
+          onClick={activeView === 'research' ? onNewProject : onNewConversation}
+        >
+          {activeView === 'research' ? (
+            <Plus aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+          ) : (
+            <SquarePen aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+          )}
+        </button>
         <button
           aria-label="打开设置"
           className="icon-button workband-chat-action"

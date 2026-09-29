@@ -18,7 +18,7 @@ const minMainWindowSize = {
   height: 640
 };
 
-export const mainWindowStaticBackground = '#f7f8f5';
+export const mainWindowStaticBackground = '#00000000';
 
 export function buildMainWindowOptions(
   preloadPath: string,
@@ -36,6 +36,9 @@ export function buildMainWindowOptions(
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 19 },
     backgroundColor: mainWindowStaticBackground,
+    transparent: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'followWindow',
     title: 'Roc',
     webPreferences: {
       preload: preloadPath,

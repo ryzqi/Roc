@@ -31,7 +31,7 @@
   margin: 0;
   overflow: hidden;
   border-radius: 0;
-  background: var(--bg);
+  background: var(--material-window);
   box-shadow: none;
 }
 
@@ -42,15 +42,22 @@
 
 .window-workband {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   gap: var(--control-gap);
   min-height: 52px;
-  padding: 0 86px; /* 红绿灯占位，不能收进 8px 网格 */
-  border-bottom: 1px solid var(--workband-border);
-  /* 窗口不透明，顶栏后面没有内容，不做假玻璃。 */
-  background: transparent;
+  padding: 0 12px 0 80px; /* 红绿灯占位，不能收进 8px 网格 */
+  border-bottom: 1px solid var(--mac-hairline);
+  background: var(--material-titlebar);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
   -webkit-app-region: drag;
+}
+
+:root[data-reduced-transparency='true'] .window-workband,
+:root[data-forced-colors='true'] .window-workband {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .workband-drag-region {
@@ -64,8 +71,12 @@
 .workband-primary {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-2);
   min-width: 0;
+}
+
+.window-workband > .workband-chat-actions {
+  justify-self: end;
 }
 
 .brand {
@@ -83,12 +94,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--space-2);
   -webkit-app-region: no-drag;
-}
-
-.window-workband > .workband-chat-actions {
-  justify-self: end;
 }
 
 .workband-chat-action {
@@ -104,6 +111,7 @@
   color: var(--muted);
   line-height: 1;
   cursor: default;
+  -webkit-app-region: no-drag;
   transition:
     background var(--transition-fast),
     color var(--transition-fast),
@@ -249,6 +257,7 @@
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);
   padding: 0;
+  background: transparent;
 }
 
 .workspace--no-sidebar {
