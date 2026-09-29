@@ -151,7 +151,9 @@ export function createResearchWorkbench(
   }
 
   async function selectInternal(projectId: string, token: number): Promise<void> {
-    const project = projection.peek().projects.find((item) => item.id === projectId) ?? null;
+    const current = projection.peek();
+    const project = current.projects.find((item) => item.id === projectId)
+      ?? (current.project?.id === projectId ? current.project : null);
     projection.assign({ project, instruction: '', error: null });
     await refreshInternal(token, { resetInstruction: false });
   }

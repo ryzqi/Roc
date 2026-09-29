@@ -20,6 +20,21 @@ export async function runSmokeTaskFlow(ctx) {
   await page.reload();
   await waitForAppReady(page, 'after-skill-import', artifactDir);
   await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 5000 });
+  const smokeProject = await page.evaluate(async (workspacePath) => {
+    const result = await window.roc.research.createProject({
+      title: 'Smoke Research Project',
+      description: 'Electron smoke research project',
+      workspacePath,
+      language: 'zh'
+    });
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    return result.data.id;
+  }, workspaceRoot);
+  if (typeof smokeProject !== 'string' || smokeProject.length === 0) {
+    throw new Error('Smoke research project creation mismatch.');
+  }
   const selectedWorkspace = await page.evaluate(async (workspacePath) => {
     const result = await window.roc.workspace.select({ path: workspacePath });
     if (!result.ok) {

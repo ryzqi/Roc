@@ -24,15 +24,20 @@ export async function openChatView(page) {
 }
 
 export async function openResearchService(page, serviceId) {
-  const selector = `[data-testid="research-service-${serviceId}"]`;
-  if ((await page.locator(selector).count()) === 0) {
-    const card = page.locator('[data-testid^="research-shell-project-"]').first();
-    if ((await card.count()) > 0) {
-      await card.click();
-      await page.waitForSelector('[data-testid="research-shell-project"]', { timeout: 5000 });
-    }
+  await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 5000 });
+  const shellState = await page.locator('[data-testid="research-app-shell"]').getAttribute('data-shell-state');
+  if (shellState !== 'project') {
+    const projectCard = page.locator('.research-project-card').first();
+    await projectCard.waitFor({ state: 'visible', timeout: 5000 });
+    await projectCard.click();
   }
-  await clickSmokeControl(page, selector);
+  await page.locator('[data-testid="research-app-shell"][data-shell-state="project"]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.evaluate(async (targetServiceId) => {
+    const result = await window.roc.app.openMainPage(targetServiceId === 'tasks' ? 'tasks-board' : targetServiceId);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+  }, serviceId);
 }
 
 export async function clickComposerPopoverChoice(page, triggerSelector, choiceSelector) {
@@ -52,4 +57,3 @@ export async function hoverComposerPopoverContent(page, triggerSelector, popover
   await page.mouse.move(box.x + Math.min(28, box.width / 2), box.y + Math.min(28, box.height / 2), { steps: 12 });
   await popover.waitFor({ state: 'visible', timeout: 5000 });
 }
-

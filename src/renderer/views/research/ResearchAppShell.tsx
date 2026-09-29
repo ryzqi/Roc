@@ -328,11 +328,6 @@ export function ResearchAppShell({
     };
   }, [canvasView, client, context.projectId]);
 
-  useEffect(() => {
-    if (!compact) {
-      setServicesOpen(false);
-    }
-  }, [compact]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -450,9 +445,11 @@ export function ResearchAppShell({
 
   function renderProjectCard(project: ResearchProject): React.JSX.Element {
     const goal = project.description.trim();
+    const selected = context.projectId === project.id;
     return (
       <button
-        className="research-project-card"
+        aria-current={selected ? 'true' : undefined}
+        className={selected ? 'research-project-card research-project-card--selected' : 'research-project-card'}
         data-testid={`research-shell-project-${project.id}`}
         key={project.id}
         type="button"
@@ -603,9 +600,77 @@ export function ResearchAppShell({
 
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
-      <header className="page-strip research-shell-banner">
-        {shellState === 'project' && context.project !== null ? (
-          <>
+      {shellState === 'loading' ? null : (
+        <aside aria-label="研究项目列表" className="research-project-sidebar" data-testid="research-project-sidebar">
+        <div className="research-project-list" data-testid="research-shell-list">
+          {snapshot.projects.length > 0 ? (
+            <div className="research-project-list-toolbar">
+              <label className="research-shell-search">
+                搜索项目
+                <TextInput data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} ref={projectSearchRef} value={projectQuery} />
+              </label>
+              <label className="research-shell-search">
+                状态
+                <Select
+                  data-testid="research-shell-status-filter"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setStatusFilter(value === 'all' || value === 'archived' ? value : 'active');
+                  }}
+                  value={statusFilter}
+                >
+                  <option value="active">进行中</option>
+                  <option value="archived">已归档</option>
+                  <option value="all">全部</option>
+                </Select>
+              </label>
+            </div>
+          ) : null}
+          <button
+            className="research-toolbar-button research-project-new"
+            data-testid="research-shell-new-project"
+            type="button"
+            onClick={() => setCreating(true)}
+          >
+            <Plus aria-hidden="true" size={16} />新建研究项目
+          </button>
+          {snapshot.projects.length === 0 ? (
+            <p className="research-project-sidebar-hint">先创建项目，再进入项目工作台。</p>
+          ) : (
+            <div className="research-project-grid" data-testid="research-shell-project-grid">
+              {visibleProjects.map(renderProjectCard)}
+            </div>
+          )}
+          {snapshot.projects.length > 0 && visibleProjects.length === 0 ? (
+            <EmptyState
+              action={(
+                <button
+                  className="ui-button ui-button--secondary"
+                  data-testid="research-shell-clear-search"
+                  type="button"
+                  onClick={() => {
+                    setProjectQuery('');
+                    setStatusFilter('active');
+                    projectSearchRef.current?.focus();
+                  }}
+                >
+                  清空搜索
+                </button>
+              )}
+              className="research-shell-search-empty"
+              detail="换个关键词，或把状态改成全部。"
+              icon={FolderSearch}
+              testId="research-shell-search-empty"
+              title="没有匹配的项目"
+            />
+          ) : null}
+        </div>
+        </aside>
+      )}
+
+      <section className="research-shell-main" aria-label="研究项目工作区">
+        <header className="page-strip research-shell-banner">
+          {shellState === 'project' && context.project !== null ? (
             <div className="research-shell-banner-tools">
               <div className="page-flags research-shell-banner-actions" role="toolbar" aria-label="科研工具">
                 {onOpenAssistant === undefined ? null : (
@@ -620,7 +685,7 @@ export function ResearchAppShell({
                     data-testid="research-shell-services-toggle"
                     title="打开科研服务"
                     type="button"
-                    onClick={() => setServicesOpen(true)}
+                    onClick={() => setServicesOpen((open) => !open)}
                   >
                     科研服务
                   </button>
@@ -665,59 +730,26 @@ export function ResearchAppShell({
                 </button>
               </div>
             </div>
-          </>
-        ) : (
-          <>
+          ) : (
             <div className="page-copy">
               <h1 className="page-title">研究项目</h1>
             </div>
-            <div className="page-flags research-shell-banner-actions">
-              <Button data-testid="research-shell-new-project" icon={<Plus aria-hidden="true" size={16} />} variant={creating ? 'secondary' : 'primary'} onClick={() => setCreating(true)}>
-                新建研究项目
-              </Button>
-            </div>
-          </>
+          )}
+        </header>
+
+        {snapshot.error === null ? null : (
+          <div className="research-alert" role="alert">
+            <CircleAlert aria-hidden="true" size={16} />
+            <span>{snapshot.error}</span>
+            <Button aria-label="关闭错误" size="compact" variant="ghost" onClick={() => workbench.clearError()}>
+              <X aria-hidden="true" size={15} />
+            </Button>
+          </div>
         )}
-      </header>
 
-      {snapshot.error === null ? null : (
-        <div className="research-alert" role="alert">
-          <CircleAlert aria-hidden="true" size={16} />
-          <span>{snapshot.error}</span>
-          <Button aria-label="关闭错误" size="compact" variant="ghost" onClick={() => workbench.clearError()}>
-            <X aria-hidden="true" size={15} />
-          </Button>
-        </div>
-      )}
+        {shellState === 'loading' ? <div className="research-loading" role="status">正在读取科研项目…</div> : null}
 
-      {shellState === 'loading' ? <div className="research-loading" role="status">正在读取科研项目…</div> : null}
-
-      {shellState === 'list' ? (
-        <div className="research-project-list" data-testid="research-shell-list">
-          {snapshot.projects.length > 0 ? (
-            <div className="research-project-list-toolbar">
-              <label className="research-shell-search">
-                搜索项目
-                <TextInput data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} ref={projectSearchRef} value={projectQuery} />
-              </label>
-              <label className="research-shell-search">
-                状态
-                <Select
-                  data-testid="research-shell-status-filter"
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setStatusFilter(value === 'all' || value === 'archived' ? value : 'active');
-                  }}
-                  value={statusFilter}
-                >
-                  <option value="active">进行中</option>
-                  <option value="archived">已归档</option>
-                  <option value="all">全部</option>
-                </Select>
-              </label>
-            </div>
-          ) : null}
-          {creating ? (
+        {shellState === 'list' && creating ? (
             <form
               className="research-shell-create"
               data-testid="research-shell-create"
@@ -755,50 +787,7 @@ export function ResearchAppShell({
                 </Button>
               </div>
             </form>
-          ) : null}
-          {snapshot.projects.length === 0 && !creating ? (
-            <EmptyState
-              action={(
-                <Button data-testid="research-shell-empty-create" icon={<Plus aria-hidden="true" size={16} />} variant="primary" onClick={() => setCreating(true)}>
-                  新建研究项目
-                </Button>
-              )}
-              className="research-empty"
-              detail="新建研究项目后才会进入该项目的科研工作台。"
-              icon={FolderSearch}
-              testId="research-shell-empty"
-              title="还没有研究项目"
-            />
-          ) : (
-            <div className="research-project-grid" data-testid="research-shell-project-grid">
-              {visibleProjects.map(renderProjectCard)}
-            </div>
-          )}
-          {snapshot.projects.length > 0 && visibleProjects.length === 0 ? (
-            <EmptyState
-              action={(
-                <button
-                  className="ui-button ui-button--secondary"
-                  data-testid="research-shell-clear-search"
-                  type="button"
-                  onClick={() => {
-                    setProjectQuery('');
-                    setStatusFilter('active');
-                    projectSearchRef.current?.focus();
-                  }}
-                >
-                  清空搜索
-                </button>
-              )}
-              className="research-shell-search-empty"
-              detail="换个关键词，或把状态改成全部。"
-              icon={FolderSearch}
-              testId="research-shell-search-empty"
-              title="没有匹配的项目"
-            />
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
 
       {shellState === 'project' && context.project !== null ? (
         <>
@@ -965,6 +954,7 @@ export function ResearchAppShell({
         open={deleteConfirmOpen}
         title="删除研究项目"
       />
+    </section>
     </section>
   );
 }
