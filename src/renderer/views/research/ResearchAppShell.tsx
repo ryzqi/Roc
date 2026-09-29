@@ -600,7 +600,7 @@ export function ResearchAppShell({
 
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
-      {shellState === 'loading' ? null : (
+      {shellState === 'list' ? (
         <aside aria-label="研究项目列表" className="research-project-sidebar" data-testid="research-project-sidebar">
         <div className="research-project-list" data-testid="research-shell-list">
           {snapshot.projects.length > 0 ? (
@@ -666,7 +666,7 @@ export function ResearchAppShell({
           ) : null}
         </div>
         </aside>
-      )}
+      ) : null}
 
       <section className="research-shell-main" aria-label="研究项目工作区">
         <header className="page-strip research-shell-banner">
@@ -791,52 +791,61 @@ export function ResearchAppShell({
 
       {shellState === 'project' && context.project !== null ? (
         <>
-        {context.workflow === null ? null : (
-          <nav aria-label="研究阶段" className="research-shell-stages" data-testid="research-shell-stages">
-            {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {
-              const current = isCurrentStageGroup(group.id, context.currentStage);
-              const selected = stageGroup === group.id && canvasView === 'stage';
-              return (
-                <button
-                  aria-current={current ? 'step' : undefined}
-                  aria-pressed={selected}
-                  className={[
-                    'research-shell-stage',
-                    selected ? 'research-shell-stage--selected' : '',
-                    current ? 'research-shell-stage--current' : ''
-                  ].filter((value) => value.length > 0).join(' ')}
-                  data-testid={`research-stage-group-${group.id}`}
-                  key={group.id}
-                  type="button"
-                  onClick={() => openStageGroup(group.id)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
-                      return;
-                    }
-                    const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-shell-stage') ?? []];
-                    const index = buttons.indexOf(event.currentTarget);
-                    const next = buttons[index + (event.key === 'ArrowRight' ? 1 : -1)];
-                    if (next === undefined) {
-                      return;
-                    }
-                    event.preventDefault();
-                    next.focus();
-                  }}
-                >
-                  <strong>{group.label}</strong>
-                  {current || selected ? <em>{current ? '当前阶段' : '正在查看'}</em> : null}
-                </button>
-              );
-            })}
-          </nav>
-        )}
-        {nextStrip === null ? null : (
-          <ResearchNextStrip
-            disabled={snapshot.working || context.project?.status === 'archived'}
-            model={nextStrip}
-            onCommand={(command) => { void performStrip(command); }}
-          />
-        )}
+        <div className="research-shell-workbench" data-testid="research-shell-workbench">
+          <aside aria-label="研究阶段" className="research-shell-stage-nav">
+            {context.workflow === null ? null : (
+              <nav className="research-shell-stages" data-testid="research-shell-stages">
+                {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {
+                  const current = isCurrentStageGroup(group.id, context.currentStage);
+                  const selected = stageGroup === group.id && canvasView === 'stage';
+                  return (
+                    <button
+                      aria-current={current ? 'step' : undefined}
+                      aria-pressed={selected}
+                      className={[
+                        'research-shell-stage',
+                        selected ? 'research-shell-stage--selected' : '',
+                        current ? 'research-shell-stage--current' : ''
+                      ].filter((value) => value.length > 0).join(' ')}
+                      data-testid={`research-stage-group-${group.id}`}
+                      key={group.id}
+                      type="button"
+                      onClick={() => openStageGroup(group.id)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== 'ArrowDown' &&
+                          event.key !== 'ArrowUp' &&
+                          event.key !== 'ArrowRight' &&
+                          event.key !== 'ArrowLeft'
+                        ) {
+                          return;
+                        }
+                        const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-shell-stage') ?? []];
+                        const index = buttons.indexOf(event.currentTarget);
+                        const delta = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
+                        const next = buttons[index + delta];
+                        if (next === undefined) {
+                          return;
+                        }
+                        event.preventDefault();
+                        next.focus();
+                      }}
+                    >
+                      <strong>{group.label}</strong>
+                      {current || selected ? <em>{current ? '当前阶段' : '正在查看'}</em> : null}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+            {nextStrip === null ? null : (
+              <ResearchNextStrip
+                disabled={snapshot.working || context.project?.status === 'archived'}
+                model={nextStrip}
+                onCommand={(command) => { void performStrip(command); }}
+              />
+            )}
+          </aside>
         <div
           className={[
             'research-shell-layout',
@@ -932,6 +941,7 @@ export function ResearchAppShell({
               </button>
             </aside>
           ) : null}
+        </div>
         </div>
         </>
       ) : null}
