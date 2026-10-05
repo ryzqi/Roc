@@ -75,6 +75,7 @@ function LoadedStageWorkspace(props: React.ComponentProps<typeof ResearchStageWo
 }
 
 export function ResearchAppShell({
+  chatPane,
   client,
   onContextChange,
   onOpenAssistant,
@@ -82,6 +83,7 @@ export function ResearchAppShell({
   onServiceContextChange,
   state
 }: {
+  chatPane?: React.ReactNode;
   client: RocClient;
   onContextChange?: (meta: string) => void;
   onOpenAssistant?: () => void;
@@ -790,160 +792,188 @@ export function ResearchAppShell({
         ) : null}
 
       {shellState === 'project' && context.project !== null ? (
-        <>
-        <div className="research-shell-workbench" data-testid="research-shell-workbench">
-          <aside aria-label="研究阶段" className="research-shell-stage-nav">
-            {context.workflow === null ? null : (
-              <nav className="research-shell-stages" data-testid="research-shell-stages">
-                {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {
-                  const current = isCurrentStageGroup(group.id, context.currentStage);
-                  const selected = stageGroup === group.id && canvasView === 'stage';
-                  return (
-                    <button
-                      aria-current={current ? 'step' : undefined}
-                      aria-pressed={selected}
-                      className={[
-                        'research-shell-stage',
-                        selected ? 'research-shell-stage--selected' : '',
-                        current ? 'research-shell-stage--current' : ''
-                      ].filter((value) => value.length > 0).join(' ')}
-                      data-testid={`research-stage-group-${group.id}`}
-                      key={group.id}
-                      type="button"
-                      onClick={() => openStageGroup(group.id)}
-                      onKeyDown={(event) => {
-                        if (
-                          event.key !== 'ArrowDown' &&
-                          event.key !== 'ArrowUp' &&
-                          event.key !== 'ArrowRight' &&
-                          event.key !== 'ArrowLeft'
-                        ) {
-                          return;
-                        }
-                        const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-shell-stage') ?? []];
-                        const index = buttons.indexOf(event.currentTarget);
-                        const delta = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
-                        const next = buttons[index + delta];
-                        if (next === undefined) {
-                          return;
-                        }
-                        event.preventDefault();
-                        next.focus();
-                      }}
-                    >
-                      <strong>{group.label}</strong>
-                      {current || selected ? <em>{current ? '当前阶段' : '正在查看'}</em> : null}
-                    </button>
-                  );
-                })}
-              </nav>
-            )}
-            {nextStrip === null ? null : (
-              <ResearchNextStrip
-                disabled={snapshot.working || context.project?.status === 'archived'}
-                model={nextStrip}
-                onCommand={(command) => { void performStrip(command); }}
-              />
+        <div className="research-shell-workbench research-cockpit" data-testid="research-shell-workbench">
+          <aside aria-label="研究项目与会话" className="research-cockpit-projects" data-testid="research-shell-project-rail">
+            <div className="research-cockpit-projects-head">
+              <button
+                className="research-toolbar-button research-project-new"
+                data-testid="research-shell-new-project"
+                type="button"
+                onClick={() => {
+                  returnToList();
+                  setCreating(true);
+                }}
+              >
+                <Plus aria-hidden="true" size={16} />新建研究项目
+              </button>
+            </div>
+            {snapshot.projects.length === 0 ? (
+              <p className="research-project-sidebar-hint">先创建项目，再进入项目工作台。</p>
+            ) : (
+              <div className="research-cockpit-project-list" data-testid="research-shell-project-grid">
+                {visibleProjects.map(renderProjectCard)}
+              </div>
             )}
           </aside>
-        <div
-          className={[
-            'research-shell-layout',
-            activityOpen ? 'research-shell-layout--activity' : '',
-            compact ? 'research-shell-layout--compact' : '',
-            narrow ? 'research-shell-layout--narrow' : ''
-          ].filter((value) => value.length > 0).join(' ')}
-          data-testid="research-shell-project"
-        >
-          <main className="research-shell-canvas">
-            {context.workflow === null ? null : paintedCanvas === null ? (
-              <div className="view-loading" role="status">正在加载视图…</div>
-            ) : paintedCanvas === 'overview' ? (
-              <ResearchOverviewView
-                artifacts={snapshot.artifacts}
-                context={context}
-                events={snapshot.events}
-                onOpenActivity={() => applyRoute({ view: 'activity' })}
-                onOpenArtifacts={() => applyRoute({ view: 'provenance' })}
-                onOpenIndex={() => applyRoute({ view: 'stage', stageGroup: 'discover', stageTab: 'knowledge' })}
-                onOpenProvenance={(artifactId) => {
-                  setSelectedArtifactId(artifactId);
-                  applyRoute({ view: 'provenance' });
-                }}
-                onOpenRuns={() => applyRoute({ view: 'activity' })}
-                onBindWorkspace={() => void bindWorkspace()}
-                project={context.project}
-                workflow={context.workflow}
-              />
-            ) : paintedCanvas === 'activity' ? (
-              <LoadedActivityView
-                events={snapshot.events}
-                onSelectEvent={openEvent}
-                runs={snapshot.runs}
-                selectedEventId={selectedEventId}
-              />
-            ) : paintedCanvas === 'provenance' ? (
-              <LoadedProvenanceView
-                artifacts={snapshot.artifacts}
-                evidence={evidence}
-                onSelectArtifact={setSelectedArtifactId}
-                onBackToOverview={() => applyRoute({ view: 'overview' })}
-                provenance={provenance}
-                runs={snapshot.runs}
-                selectedArtifactId={selectedArtifactId}
-              />
-            ) : (
-              <LoadedStageWorkspace
-                ref={stageWorkspaceRef}
-                groupId={stageGroup}
-                onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
-                modelsDownloading={modelsDownloading}
-                modelsReady={modelsReady}
-                onDownloadModels={() => void downloadModels()}
-                session={session}
-                state={state}
-                tab={stageTab}
-              />
-            )}
-            {paintedCanvas === 'provenance' && provenanceError !== null ? (
-              <div className="research-alert" role="alert" data-testid="research-provenance-error">
-                <span>{provenanceError} 返回总览后可重试。</span>
-                <button aria-label="关闭错误" className="research-toolbar-button" type="button" onClick={() => setProvenanceError(null)}>
-                  <X aria-hidden="true" size={15} />
-                </button>
-              </div>
-            ) : null}
-            {paintedCanvas === 'stage' && stageGroup === 'settings' ? (
-              <section className="research-danger-zone" data-testid="research-project-danger-zone">
-                <h2>危险操作</h2>
-                <p>删除后无法恢复该研究项目及其工作台状态。</p>
-                <Button data-testid="research-shell-delete-project" variant="danger" onClick={() => setDeleteConfirmOpen(true)}>删除项目</Button>
-              </section>
-            ) : null}
-          </main>
-          {activityOpen ? (
-            <aside aria-label="活动与运行" className="research-shell-activity" data-testid="research-shell-activity">
-              <div className="research-section-label">最近活动</div>
-              {snapshot.events.length === 0 ? <p className="research-empty-inline" role="status">暂无活动。</p> : snapshot.events.slice(0, 6).map((entry) => (
-                <button
-                  className={entry.id === selectedEventId ? 'research-overview-event research-overview-event--active' : 'research-overview-event'}
-                  key={entry.id}
-                  type="button"
-                  onClick={() => openEvent(entry.id)}
-                >
-                  <span>{researchStageLabels[entry.stage]}</span>
-                  <strong>{entry.message}</strong>
-                  <time>{formatResearchTime(entry.createdAt)}</time>
-                </button>
-              ))}
-              <button className="research-toolbar-button" data-testid="research-shell-open-activity" type="button" onClick={() => applyRoute({ view: 'activity' })}>
-                打开活动详情
-              </button>
+
+          <section className="research-cockpit-chat" aria-label="研究助手对话" data-testid="research-shell-chat">
+            {chatPane === null || chatPane === undefined ? (
+              <div className="research-cockpit-chat-empty" role="status">选择研究项目后开始对话。</div>
+            ) : chatPane}
+          </section>
+
+          <div className="research-cockpit-workspace" data-testid="research-shell-project">
+            <aside aria-label="研究阶段" className="research-shell-stage-nav">
+              {context.workflow === null ? null : (
+                <nav className="research-shell-stages" data-testid="research-shell-stages">
+                  {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {
+                    const current = isCurrentStageGroup(group.id, context.currentStage);
+                    const selected = stageGroup === group.id && canvasView === 'stage';
+                    return (
+                      <button
+                        aria-current={current ? 'step' : undefined}
+                        aria-pressed={selected}
+                        className={[
+                          'research-shell-stage',
+                          selected ? 'research-shell-stage--selected' : '',
+                          current ? 'research-shell-stage--current' : ''
+                        ].filter((value) => value.length > 0).join(' ')}
+                        data-testid={`research-stage-group-${group.id}`}
+                        key={group.id}
+                        type="button"
+                        onClick={() => openStageGroup(group.id)}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key !== 'ArrowDown' &&
+                            event.key !== 'ArrowUp' &&
+                            event.key !== 'ArrowRight' &&
+                            event.key !== 'ArrowLeft'
+                          ) {
+                            return;
+                          }
+                          const buttons = [...event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.research-shell-stage') ?? []];
+                          const index = buttons.indexOf(event.currentTarget);
+                          const delta = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
+                          const next = buttons[index + delta];
+                          if (next === undefined) {
+                            return;
+                          }
+                          event.preventDefault();
+                          next.focus();
+                        }}
+                      >
+                        <strong>{group.label}</strong>
+                        {current || selected ? <em>{current ? '当前阶段' : '正在查看'}</em> : null}
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
+              {nextStrip === null ? null : (
+                <ResearchNextStrip
+                  disabled={snapshot.working || context.project?.status === 'archived'}
+                  model={nextStrip}
+                  onCommand={(command) => { void performStrip(command); }}
+                />
+              )}
             </aside>
-          ) : null}
+            <div
+              className={[
+                'research-shell-layout',
+                activityOpen ? 'research-shell-layout--activity' : '',
+                compact ? 'research-shell-layout--compact' : '',
+                narrow ? 'research-shell-layout--narrow' : ''
+              ].filter((value) => value.length > 0).join(' ')}
+            >
+              <main className="research-shell-canvas">
+                {context.workflow === null ? null : paintedCanvas === null ? (
+                  <div className="view-loading" role="status">正在加载视图…</div>
+                ) : paintedCanvas === 'overview' ? (
+                  <ResearchOverviewView
+                    artifacts={snapshot.artifacts}
+                    context={context}
+                    events={snapshot.events}
+                    onOpenActivity={() => applyRoute({ view: 'activity' })}
+                    onOpenArtifacts={() => applyRoute({ view: 'provenance' })}
+                    onOpenIndex={() => applyRoute({ view: 'stage', stageGroup: 'discover', stageTab: 'knowledge' })}
+                    onOpenProvenance={(artifactId) => {
+                      setSelectedArtifactId(artifactId);
+                      applyRoute({ view: 'provenance' });
+                    }}
+                    onOpenRuns={() => applyRoute({ view: 'activity' })}
+                    onBindWorkspace={() => void bindWorkspace()}
+                    project={context.project}
+                    workflow={context.workflow}
+                  />
+                ) : paintedCanvas === 'activity' ? (
+                  <LoadedActivityView
+                    events={snapshot.events}
+                    onSelectEvent={openEvent}
+                    runs={snapshot.runs}
+                    selectedEventId={selectedEventId}
+                  />
+                ) : paintedCanvas === 'provenance' ? (
+                  <LoadedProvenanceView
+                    artifacts={snapshot.artifacts}
+                    evidence={evidence}
+                    onSelectArtifact={setSelectedArtifactId}
+                    onBackToOverview={() => applyRoute({ view: 'overview' })}
+                    provenance={provenance}
+                    runs={snapshot.runs}
+                    selectedArtifactId={selectedArtifactId}
+                  />
+                ) : (
+                  <LoadedStageWorkspace
+                    ref={stageWorkspaceRef}
+                    groupId={stageGroup}
+                    onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
+                    modelsDownloading={modelsDownloading}
+                    modelsReady={modelsReady}
+                    onDownloadModels={() => void downloadModels()}
+                    session={session}
+                    state={state}
+                    tab={stageTab}
+                  />
+                )}
+                {paintedCanvas === 'provenance' && provenanceError !== null ? (
+                  <div className="research-alert" role="alert" data-testid="research-provenance-error">
+                    <span>{provenanceError} 返回总览后可重试。</span>
+                    <button aria-label="关闭错误" className="research-toolbar-button" type="button" onClick={() => setProvenanceError(null)}>
+                      <X aria-hidden="true" size={15} />
+                    </button>
+                  </div>
+                ) : null}
+                {paintedCanvas === 'stage' && stageGroup === 'settings' ? (
+                  <section className="research-danger-zone" data-testid="research-project-danger-zone">
+                    <h2>危险操作</h2>
+                    <p>删除后无法恢复该研究项目及其工作台状态。</p>
+                    <Button data-testid="research-shell-delete-project" variant="danger" onClick={() => setDeleteConfirmOpen(true)}>删除项目</Button>
+                  </section>
+                ) : null}
+              </main>
+              {activityOpen ? (
+                <aside aria-label="活动与运行" className="research-shell-activity" data-testid="research-shell-activity">
+                  <div className="research-section-label">最近活动</div>
+                  {snapshot.events.length === 0 ? <p className="research-empty-inline" role="status">暂无活动。</p> : snapshot.events.slice(0, 6).map((entry) => (
+                    <button
+                      className={entry.id === selectedEventId ? 'research-overview-event research-overview-event--active' : 'research-overview-event'}
+                      key={entry.id}
+                      type="button"
+                      onClick={() => openEvent(entry.id)}
+                    >
+                      <span>{researchStageLabels[entry.stage]}</span>
+                      <strong>{entry.message}</strong>
+                      <time>{formatResearchTime(entry.createdAt)}</time>
+                    </button>
+                  ))}
+                  <button className="research-toolbar-button" data-testid="research-shell-open-activity" type="button" onClick={() => applyRoute({ view: 'activity' })}>
+                    打开活动详情
+                  </button>
+                </aside>
+              ) : null}
+            </div>
+          </div>
         </div>
-        </div>
-        </>
       ) : null}
       <Drawer onClose={() => setServicesOpen(false)} open={servicesOpen} title="科研服务">
         {onOpenService === undefined || !servicesOpen ? null : (

@@ -1819,3 +1819,95 @@ pre.research-reader-content {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* --- 对话为主的三栏工作台（research cockpit） --- */
+.research-shell-workbench.research-cockpit,
+.research-shell-workbench.research-cockpit:has(.research-shell-layout--activity) {
+  grid-template-columns: minmax(200px, 240px) minmax(360px, 1fr) minmax(0, 1.1fr);
+}
+
+.research-cockpit-projects {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid var(--mac-hairline);
+  background: var(--material-sidebar);
+}
+
+.research-cockpit-projects-head {
+  min-width: 0;
+}
+
+.research-cockpit-project-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.research-cockpit-chat {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--mac-hairline);
+  background: var(--material-detail);
+}
+
+.research-cockpit-chat .chat-stage {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.research-cockpit-chat .chat-page-shell,
+.research-cockpit-chat .chat-feedback-stack,
+.research-cockpit-chat .chat-bottom-stack,
+.research-cockpit-chat .composer--chat {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.research-cockpit-chat-empty {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 24px;
+  color: var(--muted);
+  font-size: var(--font-body-size);
+}
+
+.research-cockpit-workspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1099px) {
+  .research-shell-workbench.research-cockpit,
+  .research-shell-workbench.research-cockpit:has(.research-shell-layout--activity) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .research-cockpit-chat {
+    border-right: 0;
+    border-bottom: 1px solid var(--mac-hairline);
+    min-height: 320px;
+  }
+
+  .research-cockpit-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}

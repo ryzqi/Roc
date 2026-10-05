@@ -37,7 +37,14 @@ function loadView(view: ViewId): Promise<ComponentType<any>> {
     case 'settings':
       return import('../features/chat').then((module) => module.ChatFeature);
     case 'research':
-      return import('./research/ResearchAppShell').then((module) => module.ResearchAppShell);
+      // 项目内三栏把对话嵌进 research 壳，需要提前把 chat 组件装进缓存。
+      return Promise.all([
+        import('../features/chat').then((module) => {
+          viewCache.set('chat', module.ChatFeature);
+          return module.ChatFeature;
+        }),
+        import('./research/ResearchAppShell').then((module) => module.ResearchAppShell)
+      ]).then(([, researchShell]) => researchShell);
     case 'tasks-board':
     case 'task-detail':
       return import('../features/tasks').then((module) => {
@@ -214,8 +221,24 @@ export function ViewContent({
   }
   if (shownView === 'research') {
     const ResearchShell = cachedView('research');
+    const Chat = cachedView('chat');
+    const researchProjectId = researchServiceContext?.projectId ?? null;
     return (
       <ResearchShell
+        chatPane={
+          researchProjectId === null ? null : (
+            <Chat
+              key={researchProjectId}
+              chatSelectionVersion={chatSelectionVersion}
+              client={client}
+              onSubmitChatTask={onSubmitChatTask}
+              selectedThreadId={selectedThreadId}
+              state={state}
+              updateLoadedState={updateLoadedState}
+              researchContext={researchServiceContext}
+            />
+          )
+        }
         client={client}
         onContextChange={onResearchContextChange}
         onOpenAssistant={onOpenResearchAssistant}
