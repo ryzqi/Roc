@@ -1,4 +1,4 @@
-import { CircleAlert, FolderSearch, Plus, X } from 'lucide-react';
+import { ChevronLeft, CircleAlert, FolderSearch, Plus, X } from 'lucide-react';
 import { lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
@@ -800,6 +800,15 @@ export function ResearchAppShell({
         <div className="research-shell-workbench research-cockpit" data-testid="research-shell-workbench">
           <aside aria-label="研究项目与会话" className="research-cockpit-projects" data-testid="research-shell-project-rail">
             <div className="research-cockpit-projects-head">
+              <button
+                className="research-toolbar-button research-cockpit-all-projects"
+                data-testid="research-shell-rail-all-projects"
+                type="button"
+                onClick={() => returnToList()}
+              >
+                <ChevronLeft aria-hidden="true" size={16} />所有研究项目
+              </button>
+              <span className="research-cockpit-projects-label">项目对话</span>
               <button
                 className="research-toolbar-button research-project-new"
                 data-testid="research-shell-new-project"

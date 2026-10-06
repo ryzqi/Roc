@@ -1925,3 +1925,26 @@ pre.research-reader-content {
   align-items: center;
   gap: 6px;
 }
+
+.research-cockpit-projects-head {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.research-cockpit-all-projects,
+.research-cockpit-projects-head .research-project-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
+.research-cockpit-projects-label {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  padding: 2px 2px 0;
+}
