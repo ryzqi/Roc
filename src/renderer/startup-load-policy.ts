@@ -40,7 +40,7 @@ export function getStartupLoadIntent(input: StartupLoadPolicyInput): StartupLoad
   }
 
   if (
-    input.activeView === 'chat' &&
+    (input.activeView === 'chat' || input.activeView === 'research') &&
     input.workbenchVisible &&
     WORKSPACE_WORKBENCH_TOOLS.has(input.activeWorkbenchTool)
   ) {

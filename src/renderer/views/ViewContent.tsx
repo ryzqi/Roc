@@ -1,7 +1,7 @@
 import { lazy, useEffect, useLayoutEffect, useState, type ComponentType } from 'react';
 import type { ChatRunState } from '../chat-run-state';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
-import type { LazyLoadState, ViewId } from '../app/types';
+import type { LazyLoadState, ViewId, WorkbenchTool } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import type { TaskBoardUiState } from '../features/tasks';
@@ -132,6 +132,7 @@ export function ViewContent({
   workspaceLoadState,
   onResearchContextChange,
   onOpenResearchAssistant,
+  onOpenCanvasTool,
   onOpenResearchService,
   onResearchServiceContextChange,
   researchServiceContext
@@ -160,6 +161,7 @@ export function ViewContent({
   workspaceLoadState: LazyLoadState;
   onResearchContextChange?: (meta: string) => void;
   onOpenResearchAssistant?: () => void;
+  onOpenCanvasTool?: (tool: WorkbenchTool) => void;
   onOpenResearchService?: (service: ResearchServiceEntry) => void;
   onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
   researchServiceContext?: ResearchServiceContext | null;
@@ -242,6 +244,7 @@ export function ViewContent({
         client={client}
         onContextChange={onResearchContextChange}
         onOpenAssistant={onOpenResearchAssistant}
+        onOpenCanvasTool={onOpenCanvasTool}
         onOpenService={onOpenResearchService}
         onServiceContextChange={onResearchServiceContextChange}
         state={state}

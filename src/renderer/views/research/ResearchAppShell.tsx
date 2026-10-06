@@ -2,6 +2,7 @@ import { CircleAlert, FolderSearch, Plus, X } from 'lucide-react';
 import { lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 
 import type { LoadedState } from '../../loaded-state';
+import type { WorkbenchTool } from '../../app/types';
 import type { RocClient } from '../../shared/roc-client';
 import { unwrap } from '../../loaded-state';
 import { buildResearchTopMeta, createResearchContext } from './research-context';
@@ -9,6 +10,8 @@ import { createResearchSession, type ResearchSession } from './research-session'
 import { formatResearchTime, researchProjectStatusLabels, researchStageLabels } from './research-workflow';
 import type { ResearchEvidence, ResearchProject, ResearchProvenance } from '../../../shared/types';
 import { EmptyState } from '../../components/EmptyState';
+import { PreviewIcon } from '../../components/PreviewIcon';
+import { WORKBENCH_TOOLS } from '../../app/view-routing';
 import { Button, ConfirmDialog, Drawer, Select, TextArea, TextInput } from '../../components/ui';
 import { useResearchLayout } from './research-layout';
 import { ResearchNextStrip } from './ResearchNextStrip';
@@ -79,6 +82,7 @@ export function ResearchAppShell({
   client,
   onContextChange,
   onOpenAssistant,
+  onOpenCanvasTool,
   onOpenService,
   onServiceContextChange,
   state
@@ -87,6 +91,7 @@ export function ResearchAppShell({
   client: RocClient;
   onContextChange?: (meta: string) => void;
   onOpenAssistant?: () => void;
+  onOpenCanvasTool?: (tool: WorkbenchTool) => void;
   onOpenService?: (service: ResearchServiceEntry) => void;
   onServiceContextChange?: (context: ResearchServiceContext | null) => void;
   state: LoadedState;
@@ -824,6 +829,23 @@ export function ResearchAppShell({
 
           <div className="research-cockpit-workspace" data-testid="research-shell-project">
             <aside aria-label="研究阶段" className="research-shell-stage-nav">
+              {onOpenCanvasTool === undefined ? null : (
+                <div className="research-cockpit-canvas-tools" data-testid="research-shell-canvas-tools" role="toolbar" aria-label="工作区工具">
+                  {WORKBENCH_TOOLS.map((tool) => (
+                    <button
+                      className="research-toolbar-button"
+                      data-testid={`research-shell-canvas-tool-${tool.id}`}
+                      key={tool.id}
+                      title={tool.label}
+                      type="button"
+                      onClick={() => onOpenCanvasTool(tool.id)}
+                    >
+                      <PreviewIcon name={tool.icon} />
+                      <span>{tool.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {context.workflow === null ? null : (
                 <nav className="research-shell-stages" data-testid="research-shell-stages">
                   {RESEARCH_STAGE_GROUPS.filter((group) => group.id !== 'settings').map((group) => {

@@ -1911,3 +1911,17 @@ pre.research-reader-content {
     grid-template-rows: auto minmax(0, 1fr);
   }
 }
+
+.research-cockpit-canvas-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.research-cockpit-canvas-tools .research-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

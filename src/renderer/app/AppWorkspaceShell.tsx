@@ -65,6 +65,7 @@ interface AppWorkspaceShellProps {
   onOpenResearchAssistant?: () => void;
   onOpenResearchService?: (service: ResearchServiceEntry) => void;
   onResearchServiceContextChange?: (context: ResearchServiceContext | null) => void;
+  onOpenCanvasTool?: (tool: WorkbenchTool) => void;
   researchServiceContext?: ResearchServiceContext | null;
 }
 
@@ -106,13 +107,14 @@ export function AppWorkspaceShell({
   onCloseResearchAssistant,
   onOpenResearchAssistant,
   onOpenResearchService,
+  onOpenCanvasTool,
   onResearchServiceContextChange,
   researchServiceContext
 }: AppWorkspaceShellProps): React.JSX.Element {
   const overlayAssistant = assistantOpen && activeView === 'research';
   const hasWorkbench = overlayAssistant
     ? workbenchVisible
-    : activeView === 'chat'
+    : activeView === 'chat' || activeView === 'research'
       ? workbenchVisible
       : WORKBENCH_VIEWS.has(activeView);
   const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as CSSProperties : undefined;
@@ -161,6 +163,12 @@ export function AppWorkspaceShell({
               onResearchContextChange={onResearchContextChange}
               onOpenResearchAssistant={onOpenResearchAssistant}
               onOpenResearchService={onOpenResearchService}
+              onOpenCanvasTool={
+                onOpenCanvasTool ?? ((tool) => {
+                  setActiveWorkbenchTool(tool);
+                  setWorkbenchVisible(true);
+                })
+              }
               onResearchServiceContextChange={onResearchServiceContextChange}
               researchServiceContext={researchServiceContext}
             />
@@ -227,7 +235,7 @@ export function AppWorkspaceShell({
             client={client}
             onToolChange={setActiveWorkbenchTool}
             onClose={() => {
-              if (overlayAssistant) {
+              if (overlayAssistant || activeView === 'research') {
                 setWorkbenchVisible(false);
                 return;
               }

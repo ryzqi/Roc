@@ -341,6 +341,27 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setActiveView(service.view);
   }, [applySelectedWorkspace, client, setError, startNewConversation]);
 
+  const openCanvasTool = useCallback((tool: WorkbenchTool): void => {
+    const workspacePath = researchServiceContext?.workspacePath ?? null;
+    if (researchServiceContext?.projectId == null || workspacePath === null) {
+      setError('打开文件与代码前必须先绑定工作目录。');
+      return;
+    }
+    setActiveWorkbenchTool(tool);
+    setWorkbenchVisible(true);
+    if (state?.workspace?.path === workspacePath) {
+      return;
+    }
+    void (async () => {
+      const selected = await client.api.workspace.select({ path: workspacePath });
+      if (!selected.ok) {
+        setError(selected.error.message);
+        return;
+      }
+      await applySelectedWorkspace(selected.data);
+    })();
+  }, [applySelectedWorkspace, client, researchServiceContext?.projectId, researchServiceContext?.workspacePath, setError, state?.workspace?.path]);
+
   const openTaskDetail = useCallback((taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }): void => {
     if (boardUiState !== undefined) {
       setTaskBoardUiState(boardUiState);
@@ -534,6 +555,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       onCloseResearchAssistant={() => setAssistantOpen(false)}
       onOpenResearchAssistant={startNewConversation}
       onOpenResearchService={openResearchService}
+      onOpenCanvasTool={openCanvasTool}
       onResearchServiceContextChange={setResearchServiceContext}
       researchServiceContext={researchServiceContext}
       submitTaskDetailInput={submitTaskDetailInput}
