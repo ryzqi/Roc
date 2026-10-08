@@ -18,14 +18,25 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 项目内快捷键：`1` 总览，`2` 活动，`3` 溯源。`Escape` 关闭抽屉、活动栏或错误条。
 
+## 对话驱动阶段
+
+研究助手是主入口，拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`）：`research_overview`、`research_list_artifacts`、`research_read_artifact`、`research_list_evidence`、`research_search_knowledge`、`research_search_literature`、`research_capture_evidence`、`research_stage_runs`、`research_run_stage`、`research_cancel_stage_run`、`research_approve_gate`。
+
+工具名与权限进入本轮能力清单（`researchProjectId` 写进运行快照），所以运行时的工具集和冻结的清单一致。阶段推进仍然是服务端的阶段角色运行（`research_run_stage` 启动，后台继续，不阻塞对话）；阶段角色运行降级为对话代理调用的内部工具。
+
+人工闸门没有取消：`research_approve_gate` 用 LangGraph `interrupt` 在对话里发出批准/退回卡片，用户决定后才调用 `research.workflow.transition`，与界面阶段条按钮同一条路径（含图稿/导出校验）。
+
+论文正文的真身是项目工作目录里的 LaTeX 文件，对话代理用文件工具改、用 shell 编译；右栏读工作区 git diff 显示改动。
+
 ## 壳层视图
 
 | `view` | 界面 | 内容 |
 | --- | --- | --- |
+| `changes` | `ResearchChangesView` | 本次对话产生的文件改动（工作目录 diff）、阶段产物和阶段运行。默认视图。 |
 | `overview` | `ResearchOverviewView` | 研究目标、当前阶段、闸门、索引、流水线、最近活动。只读。 |
 | `activity` | `ResearchActivityView` | 流程事件与阶段运行。 |
 | `provenance` | `ResearchProvenanceView` | 工件、证据、来源。 |
-| `stage` | `ResearchStageWorkspace` | 当前阶段组的可编辑面板。 |
+| `stage` | `ResearchStageWorkspace` | 当前阶段组的可编辑面板。二级视图。 |
 
 非当前阶段组只读。设置组（嵌入配置、阶段模型）始终可写。
 
@@ -48,7 +59,7 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 | 服务 | 视图 | 说明 |
 | --- | --- | --- |
-| 研究助手 | `chat` | 绑定当前项目与阶段的对话 |
+| 研究助手 | `chat` | 绑定当前项目、驱动阶段的对话。中间栏。 |
 | 活动与运行 | `tasks-board` | 任务、审批、后台运行 |
 | 文件与代码 | `workspace` | 项目文件、Git、终端 |
 | 连接器 | `mcp` | MCP 授权 |
@@ -56,7 +67,7 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 | 项目记忆 | `memory` | 会话与自动记忆 |
 | 运行诊断 | `diagnostics` | 失败运行与主机状态 |
 
-窄屏下服务进抽屉。研究助手从壳层按钮打开对话，不替换项目上下文。
+窄屏下服务进抽屉。研究助手在中间栏，是改论文和推进阶段的主入口。
 
 ## 阶段角色
 

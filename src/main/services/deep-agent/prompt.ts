@@ -26,7 +26,8 @@ export function buildSystemPrompt(input: {
       workflowHint: input.workflowHint,
       tools: [],
       explicitSkillContexts: [],
-      referencedFileContexts: []
+      referencedFileContexts: [],
+      researchProjectId: null
     })
   );
 }

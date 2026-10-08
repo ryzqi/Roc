@@ -1,12 +1,8 @@
 import type {
-  AgentCapabilityCard,
-  AgentInterruptPolicy,
-  AgentSubagentPreview,
   ApprovalMode,
   ChatRunMode,
   EnabledCapabilities,
   McpServerSnapshot,
-  RunCapabilityManifestV1,
   SkillSnapshot,
   WorkflowHint
 } from '../../../shared/types';
@@ -33,6 +29,7 @@ export class ManifestBuilder {
   private workflowHint: WorkflowHint = null;
   private requestedCapabilities: EnabledCapabilities = { mcpServers: [], skills: [] };
   private toolSelectionPolicy: ToolSelectionPolicy = new DefaultToolSelectionPolicy();
+  private researchProjectId: string | null = null;
 
   /**
    * 静态工厂：为指定模式创建 builder
@@ -109,6 +106,14 @@ export class ManifestBuilder {
   }
 
   /**
+   * 绑定研究项目：非空时本轮对话额外拿到科研工具。
+   */
+  withResearchProject(projectId: string | null): this {
+    this.researchProjectId = projectId;
+    return this;
+  }
+
+  /**
    * 注入自定义工具选择策略（用于测试或特殊场景）
    */
   withToolSelectionPolicy(policy: ToolSelectionPolicy): this {
@@ -131,7 +136,8 @@ export class ManifestBuilder {
       shellAllowedCommands: this.shellAllowedCommands,
       workflowHint: this.workflowHint,
       requestedCapabilities: this.requestedCapabilities,
-      toolSelectionPolicy: this.toolSelectionPolicy
+      toolSelectionPolicy: this.toolSelectionPolicy,
+      researchProjectId: this.researchProjectId
     });
   }
 }

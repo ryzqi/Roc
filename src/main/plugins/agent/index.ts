@@ -184,7 +184,7 @@ function createCapabilityPreviewProvider(
   }
   const capabilityPreviewOptions = options.capabilityPreview;
   const selfConfigAvailable = isSelfConfigAvailable(options.deepAgentExecutor);
-  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, workflowHint }) =>
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, workflowHint, researchProjectId }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
       explicitSkillIds,
@@ -196,7 +196,8 @@ function createCapabilityPreviewProvider(
       shellAllowedCommands,
       runtimeStatus,
       skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
-      workflowHint
+      workflowHint,
+      researchProjectId: researchProjectId ?? null
     });
 }
 
@@ -293,9 +294,10 @@ function resolveDependencies(options: AgentPluginOptions): string[] {
 }
 
 // memory 插件反向依赖 agent，不能放进 dependencies（会成环），只能声明为运行时能力依赖。
+// research 同理：绑定项目的对话运行会在装配阶段调用 research.* 能力，但不静态依赖该插件模块。
 function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
   if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
-    return ['@roc/plugin-task', '@roc/plugin-memory'];
+    return ['@roc/plugin-task', '@roc/plugin-memory', '@roc/plugin-research'];
   }
   return [];
 }

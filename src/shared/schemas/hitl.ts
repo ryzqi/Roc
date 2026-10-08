@@ -3,7 +3,7 @@ import { z } from 'zod';
 const identifierSchema = z.string().trim().min(1);
 const jsonObjectSchema = z.record(z.string(), z.json());
 
-export const hitlDecisionTypeSchema = z.enum(['approve', 'edit', 'reject']);
+export const hitlDecisionTypeSchema = z.enum(['approve', 'edit', 'reject', 'revise']);
 
 export const hitlActionSchema = z
   .object({
@@ -43,6 +43,13 @@ export const hitlResumeDecisionSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('edit'),
       editedAction: hitlActionSchema
+    })
+    .strict(),
+  // 科研闸门的第三态：既不是全盘接受，也不是全盘退回，而是要求修订后重审。
+  z
+    .object({
+      type: z.literal('revise'),
+      message: identifierSchema.optional()
     })
     .strict()
 ]);

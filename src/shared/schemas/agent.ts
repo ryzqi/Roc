@@ -183,7 +183,9 @@ const runExecutionSnapshotShape = {
   workflowHint: workflowHintSchema,
   explicitSkillIds: z.array(z.string()),
   inputMessageId: identifierSchema,
-  dispatchKey: identifierSchema.nullable()
+  dispatchKey: identifierSchema.nullable(),
+  // 对话绑定研究项目后，科研工具与闸门权限由这个 id 在装配阶段决定。旧快照没有该字段。
+  researchProjectId: identifierSchema.nullable().optional()
 } as const;
 
 export const runExecutionSnapshotSchema = z

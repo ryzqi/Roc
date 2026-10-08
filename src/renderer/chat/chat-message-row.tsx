@@ -3,6 +3,7 @@ import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat
 import type { ChatPendingInterrupt, ChatResumeDecision } from '../../shared/types';
 import { CopyAnswerButton } from './CopyAnswerButton';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
+import { isResearchGateApproval, ResearchGateApprovalCard } from './ResearchGateCard';
 import { HookCallBlock } from './hook-call/HookCallBlock';
 import { QuestionInterruptCard } from './QuestionInterruptCard';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
@@ -84,23 +85,32 @@ function useFinishEnterOnUnmount(key: string, active: boolean): void {
   }, [active, key]);
 }
 
+/** 有结构化块就用块；否则把裸 reasoning 当成一个块渲染，让历史消息也能显示推理。 */
+function resolveActivityBlocks(
+  message: ChatTranscriptMessage,
+  blocks: ChatTranscriptActivityBlock[]
+): ChatTranscriptActivityBlock[] {
+  if (blocks.length > 0) {
+    return blocks;
+  }
+  if (message.reasoning === null) {
+    return [];
+  }
+  return [
+    {
+      id: `${message.key}-reasoning`,
+      kind: 'reasoning',
+      content: message.reasoning,
+      isStreaming: message.isStreaming
+    } satisfies ChatTranscriptActivityBlock
+  ];
+}
+
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
   const isAssistant = message.role === 'assistant';
   const blocks = message.blocks ?? [];
   const attachments = message.attachments === undefined ? [] : message.attachments;
-  const activityBlocks =
-    blocks.length > 0
-      ? blocks
-      : message.reasoning === null
-        ? []
-        : [
-            {
-              id: `${message.key}-reasoning`,
-              kind: 'reasoning',
-              content: message.reasoning,
-              isStreaming: message.isStreaming
-            } satisfies ChatTranscriptActivityBlock
-          ];
+  const activityBlocks = resolveActivityBlocks(message, blocks);
   const bubbleClassName = isAssistant ? 'chat-bubble chat-bubble--assistant' : 'chat-bubble chat-bubble--user';
   const rowClassName = isAssistant ? 'chat-message-row chat-message-row--assistant' : 'chat-message-row chat-message-row--user';
   const testId = isAssistant ? 'chat-message-assistant' : 'chat-message-user';
@@ -181,7 +191,7 @@ function ChatInterruptView(input: {
 }): React.JSX.Element {
   const { interrupt } = input;
   const approvalKey = `approval:${interrupt.interruptId}`;
-  const animateApproval = interrupt.kind === 'question' || isTaskApproval(interrupt)
+  const animateApproval = interrupt.kind === 'question' || isTaskApproval(interrupt) || isResearchGateApproval(interrupt)
     ? false
     : shouldPlayEnter(approvalKey, input.source);
   useFinishEnterOnUnmount(approvalKey, animateApproval);
@@ -190,6 +200,9 @@ function ChatInterruptView(input: {
   }
   if (isTaskApproval(interrupt)) {
     return <TaskApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />;
+  }
+  if (isResearchGateApproval(interrupt)) {
+    return <ResearchGateApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />;
   }
   const editableAction = interrupt.actionRequests.length === 1 ? interrupt.actionRequests[0] : undefined;
   const approvalBody = (

@@ -61,6 +61,9 @@ export function createChatStartRunRequestFromSnapshot(
   if (snapshot.workspace !== null) {
     request.workspacePath = snapshot.workspace.path;
   }
+  if (snapshot.researchProjectId !== undefined && snapshot.researchProjectId !== null) {
+    request.researchProjectId = snapshot.researchProjectId;
+  }
   if (snapshot.runOrigin === 'background_schedule') {
     request.taskSource = 'background_schedule';
   } else if (snapshot.runOrigin === 'workbench_creation' || snapshot.mode === 'task') {

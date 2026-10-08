@@ -1948,3 +1948,207 @@ pre.research-reader-content {
   text-transform: none;
   padding: 2px 2px 0;
 }
+
+/* 改动与产物面板：对话产生的文件改动、阶段产物和阶段运行。 */
+.research-changes {
+  display: grid;
+  align-content: start;
+  gap: var(--gap-section);
+  min-width: 0;
+  padding: var(--space-5) var(--space-6);
+}
+
+.research-changes-head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.research-changes-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-lead-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.research-changes-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-changes-section {
+  display: grid;
+  gap: var(--gap-inline);
+  min-width: 0;
+}
+
+.research-changes-section > .research-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.research-changes-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-card);
+  color: var(--muted);
+  font-size: var(--font-micro-size);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.execution-change-list,
+.research-changes-list {
+  display: grid;
+  gap: var(--gap-inline);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-inline);
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: 1px solid transparent;
+  border-radius: var(--r-card);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.execution-change:hover {
+  background: var(--surface-card-hover);
+}
+
+.execution-change:active {
+  background: var(--accent-soft);
+}
+
+.execution-change--selected {
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+}
+
+.execution-change-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+}
+
+.execution-change-state {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-changes-row {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: 1px solid transparent;
+  border-radius: var(--r-card);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.research-changes-row:hover {
+  background: var(--surface-card-hover);
+}
+
+.research-changes-row:active {
+  background: var(--accent-soft);
+}
+
+.research-changes-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-size);
+}
+
+.research-changes-row-meta {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+}
+
+.research-changes-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--control-pad-x);
+  font-size: var(--font-meta-size);
+}
+
+.research-changes-run-stage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.research-changes-run-status {
+  color: var(--muted);
+}
+
+.research-changes-run-time {
+  color: var(--subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.research-changes-run-error {
+  grid-column: 1 / -1;
+  color: var(--st-bad);
+  overflow-wrap: anywhere;
+}
+
+.research-change-diff {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
+}
+
+.research-change-diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-inline);
+  padding: var(--space-2) var(--control-pad-x);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-micro-size);
+}
+
+.research-change-diff-body {
+  max-height: 340px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-code-size);
+}
+
+.execution-change:focus-visible,
+.research-changes-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+}

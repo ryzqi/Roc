@@ -41,21 +41,24 @@ import {
 
 const ResearchActivityView = lazy(() => import('./ResearchActivityView').then((module) => ({ default: module.ResearchActivityView })));
 const ResearchProvenanceView = lazy(() => import('./ResearchProvenanceView').then((module) => ({ default: module.ResearchProvenanceView })));
+const ResearchChangesView = lazy(() => import('./ResearchChangesView').then((module) => ({ default: module.ResearchChangesView })));
 const ResearchStageWorkspace = lazy(() => import('./ResearchStageWorkspace').then((module) => ({ default: module.ResearchStageWorkspace })));
 import type { ResearchStageWorkspaceHandle } from './ResearchStageWorkspace';
 
-const canvasModules = new Map<'activity' | 'provenance' | 'stage', ComponentType<any>>();
+const canvasModules = new Map<'activity' | 'provenance' | 'changes' | 'stage', ComponentType<any>>();
+
+const canvasLoaders: Record<'activity' | 'provenance' | 'changes' | 'stage', () => Promise<ComponentType<any>>> = {
+  activity: () => import('./ResearchActivityView').then((module) => module.ResearchActivityView),
+  provenance: () => import('./ResearchProvenanceView').then((module) => module.ResearchProvenanceView),
+  changes: () => import('./ResearchChangesView').then((module) => module.ResearchChangesView),
+  stage: () => import('./ResearchStageWorkspace').then((module) => module.ResearchStageWorkspace)
+};
 
 function loadCanvasModule(view: ResearchCanvasView): Promise<void> {
   if (view === 'overview' || canvasModules.has(view)) {
     return Promise.resolve();
   }
-  const loading = view === 'activity'
-    ? import('./ResearchActivityView').then((module) => module.ResearchActivityView)
-    : view === 'provenance'
-      ? import('./ResearchProvenanceView').then((module) => module.ResearchProvenanceView)
-      : import('./ResearchStageWorkspace').then((module) => module.ResearchStageWorkspace);
-  return loading.then((component) => {
+  return canvasLoaders[view]().then((component) => {
     canvasModules.set(view, component);
   });
 }
@@ -67,6 +70,11 @@ function LoadedActivityView(props: React.ComponentProps<typeof ResearchActivityV
   return <View {...props} />;
 }
 
+function LoadedChangesView(props: React.ComponentProps<typeof ResearchChangesView>): React.JSX.Element {
+  const View = canvasModules.get('changes') as React.ComponentType<React.ComponentProps<typeof ResearchChangesView>>;
+  return <View {...props} />;
+}
+
 function LoadedProvenanceView(props: React.ComponentProps<typeof ResearchProvenanceView>): React.JSX.Element {
   const View = canvasModules.get('provenance') as React.ComponentType<React.ComponentProps<typeof ResearchProvenanceView>>;
   return <View {...props} />;
@@ -75,6 +83,29 @@ function LoadedProvenanceView(props: React.ComponentProps<typeof ResearchProvena
 function LoadedStageWorkspace(props: React.ComponentProps<typeof ResearchStageWorkspace>): React.JSX.Element {
   const View = canvasModules.get('stage') as React.ComponentType<React.ComponentProps<typeof ResearchStageWorkspace>>;
   return <View {...props} />;
+}
+
+function resolveShellState(loading: boolean, projectId: string | null): 'loading' | 'list' | 'project' {
+  if (loading) {
+    return 'loading';
+  }
+  if (projectId === null) {
+    return 'list';
+  }
+  return 'project';
+}
+
+function resolveGridKeyDelta(key: string, columns: number): number {
+  if (key === 'ArrowRight') {
+    return 1;
+  }
+  if (key === 'ArrowLeft') {
+    return -1;
+  }
+  if (key === 'ArrowDown') {
+    return columns;
+  }
+  return -columns;
 }
 
 export function ResearchAppShell({
@@ -175,7 +206,7 @@ export function ResearchAppShell({
     () => createResearchContext(snapshot, { modelsReady, modelsDownloading, modelsError }),
     [modelsDownloading, modelsError, modelsReady, snapshot]
   );
-  const shellState = snapshot.loading ? 'loading' : context.projectId === null ? 'list' : 'project';
+  const shellState = resolveShellState(snapshot.loading, context.projectId);
   const visibleProjects = [...snapshot.projects]
     .filter((project) => {
       if (statusFilter === 'active') {
@@ -472,7 +503,7 @@ export function ResearchAppShell({
           }
           const grid = event.currentTarget.parentElement;
           const columns = grid === null ? 1 : Math.max(1, Math.round(grid.clientWidth / Math.max(event.currentTarget.offsetWidth, 1)));
-          const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowDown' ? columns : -columns;
+          const delta = resolveGridKeyDelta(event.key, columns);
           const next = cards[index + delta];
           if (next === undefined) {
             return;
@@ -605,6 +636,91 @@ export function ResearchAppShell({
     await workbench.transition('complete');
   }
 
+  // 画布分支写成早返回，避免嵌套三元；改动与产物是默认视图。
+  function renderCanvas(): React.JSX.Element | null {
+    if (context.workflow === null || context.project === null) {
+      return null;
+    }
+    const project = context.project;
+    const workflow = context.workflow;
+    if (paintedCanvas === null) {
+      return <div className="view-loading" role="status">正在加载视图…</div>;
+    }
+    if (paintedCanvas === 'overview') {
+      return (
+        <ResearchOverviewView
+          artifacts={snapshot.artifacts}
+          context={context}
+          events={snapshot.events}
+          onOpenActivity={() => applyRoute({ view: 'activity' })}
+          onOpenArtifacts={() => applyRoute({ view: 'provenance' })}
+          onOpenIndex={() => applyRoute({ view: 'stage', stageGroup: 'discover', stageTab: 'knowledge' })}
+          onOpenProvenance={(artifactId) => {
+            setSelectedArtifactId(artifactId);
+            applyRoute({ view: 'provenance' });
+          }}
+          onOpenRuns={() => applyRoute({ view: 'activity' })}
+          onBindWorkspace={() => void bindWorkspace()}
+          project={project}
+          workflow={workflow}
+        />
+      );
+    }
+    if (paintedCanvas === 'changes') {
+      return (
+        <LoadedChangesView
+          artifacts={snapshot.artifacts}
+          client={client}
+          onOpenArtifact={(artifactId) => {
+            setSelectedArtifactId(artifactId);
+            applyRoute({ view: 'provenance' });
+          }}
+          onOpenRuns={() => applyRoute({ view: 'activity' })}
+          project={project}
+          runs={snapshot.runs}
+          state={state}
+          workflow={workflow}
+        />
+      );
+    }
+    if (paintedCanvas === 'activity') {
+      return (
+        <LoadedActivityView
+          events={snapshot.events}
+          onSelectEvent={openEvent}
+          runs={snapshot.runs}
+          selectedEventId={selectedEventId}
+        />
+      );
+    }
+    if (paintedCanvas === 'provenance') {
+      return (
+        <LoadedProvenanceView
+          artifacts={snapshot.artifacts}
+          evidence={evidence}
+          onSelectArtifact={setSelectedArtifactId}
+          onBackToOverview={() => applyRoute({ view: 'overview' })}
+          provenance={provenance}
+          runs={snapshot.runs}
+          selectedArtifactId={selectedArtifactId}
+        />
+      );
+    }
+    return (
+      <LoadedStageWorkspace
+        ref={stageWorkspaceRef}
+        groupId={stageGroup}
+        onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
+        modelsDownloading={modelsDownloading}
+        modelsReady={modelsReady}
+        onDownloadModels={() => void downloadModels()}
+        session={session}
+        state={state}
+        tab={stageTab}
+      />
+    );
+  }
+
   return (
     <section className="canvas-stage research-page research-app-shell" data-shell-state={shellState} data-testid="research-app-shell">
       {shellState === 'list' ? (
@@ -612,14 +728,15 @@ export function ResearchAppShell({
         <div className="research-project-list" data-testid="research-shell-list">
           {snapshot.projects.length > 0 ? (
             <div className="research-project-list-toolbar">
-              <label className="research-shell-search">
+              <label className="research-shell-search" htmlFor="research-project-search">
                 搜索项目
-                <TextInput data-testid="research-shell-project-search" onChange={(event) => setProjectQuery(event.target.value)} ref={projectSearchRef} value={projectQuery} />
+                <TextInput data-testid="research-shell-project-search" id="research-project-search" onChange={(event) => setProjectQuery(event.target.value)} ref={projectSearchRef} value={projectQuery} />
               </label>
-              <label className="research-shell-search">
+              <label className="research-shell-search" htmlFor="research-status-filter">
                 状态
                 <Select
                   data-testid="research-shell-status-filter"
+                  id="research-status-filter"
                   onChange={(event) => {
                     const value = event.target.value;
                     setStatusFilter(value === 'all' || value === 'archived' ? value : 'active');
@@ -685,7 +802,7 @@ export function ResearchAppShell({
                     研究助手
                   </button>
                 )}
-                {onOpenService !== undefined ? (
+                {onOpenService === undefined ? null : (
                   <button
                     aria-expanded={servicesOpen}
                     className="research-toolbar-button"
@@ -696,7 +813,7 @@ export function ResearchAppShell({
                   >
                     科研服务
                   </button>
-                ) : null}
+                )}
                 <button
                   aria-pressed={activityOpen}
                   className={activityOpen ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'}
@@ -706,6 +823,15 @@ export function ResearchAppShell({
                   onClick={() => setActivityOpen((open) => !open)}
                 >
                   活动与运行
+                </button>
+                <button
+                  aria-pressed={canvasView === 'changes'}
+                  className={canvasView === 'changes' ? 'research-toolbar-button research-toolbar-button--selected' : 'research-toolbar-button'}
+                  data-testid="research-shell-changes"
+                  type="button"
+                  onClick={() => applyRoute({ view: 'changes' })}
+                >
+                  改动与产物
                 </button>
                 <button
                   aria-pressed={canvasView === 'overview'}
@@ -765,24 +891,24 @@ export function ResearchAppShell({
                 void createProject();
               }}
             >
-              <label>
+              <label htmlFor="research-project-title">
                 项目标题
-                <TextInput data-testid="research-shell-title" onChange={(event) => setTitle(event.target.value)} value={title} />
+                <TextInput data-testid="research-shell-title" id="research-project-title" onChange={(event) => setTitle(event.target.value)} value={title} />
               </label>
-              <label>
+              <label htmlFor="research-project-description">
                 研究目标
-                <TextArea data-testid="research-shell-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
+                <TextArea data-testid="research-shell-description" id="research-project-description" onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
               </label>
-              <label>
+              <label htmlFor="research-project-language">
                 项目语言
-                <Select data-testid="research-shell-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
+                <Select data-testid="research-shell-language" id="research-project-language" onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'zh')} value={language}>
                   <option value="zh">中文</option>
                   <option value="en">英文</option>
                 </Select>
               </label>
-              <label>
+              <label htmlFor="research-project-workspace">
                 工作目录
-                <TextInput data-testid="research-shell-workspace-path" readOnly value={workspacePath} />
+                <TextInput data-testid="research-shell-workspace-path" id="research-project-workspace" readOnly value={workspacePath} />
               </label>
               <Button data-testid="research-shell-choose-workspace" variant="secondary" onClick={() => void chooseWorkspace()}>
                 选择目录
@@ -917,55 +1043,7 @@ export function ResearchAppShell({
               ].filter((value) => value.length > 0).join(' ')}
             >
               <main className="research-shell-canvas">
-                {context.workflow === null ? null : paintedCanvas === null ? (
-                  <div className="view-loading" role="status">正在加载视图…</div>
-                ) : paintedCanvas === 'overview' ? (
-                  <ResearchOverviewView
-                    artifacts={snapshot.artifacts}
-                    context={context}
-                    events={snapshot.events}
-                    onOpenActivity={() => applyRoute({ view: 'activity' })}
-                    onOpenArtifacts={() => applyRoute({ view: 'provenance' })}
-                    onOpenIndex={() => applyRoute({ view: 'stage', stageGroup: 'discover', stageTab: 'knowledge' })}
-                    onOpenProvenance={(artifactId) => {
-                      setSelectedArtifactId(artifactId);
-                      applyRoute({ view: 'provenance' });
-                    }}
-                    onOpenRuns={() => applyRoute({ view: 'activity' })}
-                    onBindWorkspace={() => void bindWorkspace()}
-                    project={context.project}
-                    workflow={context.workflow}
-                  />
-                ) : paintedCanvas === 'activity' ? (
-                  <LoadedActivityView
-                    events={snapshot.events}
-                    onSelectEvent={openEvent}
-                    runs={snapshot.runs}
-                    selectedEventId={selectedEventId}
-                  />
-                ) : paintedCanvas === 'provenance' ? (
-                  <LoadedProvenanceView
-                    artifacts={snapshot.artifacts}
-                    evidence={evidence}
-                    onSelectArtifact={setSelectedArtifactId}
-                    onBackToOverview={() => applyRoute({ view: 'overview' })}
-                    provenance={provenance}
-                    runs={snapshot.runs}
-                    selectedArtifactId={selectedArtifactId}
-                  />
-                ) : (
-                  <LoadedStageWorkspace
-                    ref={stageWorkspaceRef}
-                    groupId={stageGroup}
-                    onTabChange={(tab) => applyRoute({ view: 'stage', stageTab: tab })}
-                    modelsDownloading={modelsDownloading}
-                    modelsReady={modelsReady}
-                    onDownloadModels={() => void downloadModels()}
-                    session={session}
-                    state={state}
-                    tab={stageTab}
-                  />
-                )}
+                {renderCanvas()}
                 {paintedCanvas === 'provenance' && provenanceError !== null ? (
                   <div className="research-alert" role="alert" data-testid="research-provenance-error">
                     <span>{provenanceError} 返回总览后可重试。</span>

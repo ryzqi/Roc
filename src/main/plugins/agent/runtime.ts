@@ -72,6 +72,7 @@ export type AgentCapabilityPreviewProvider = (input: {
   shellAllowedCommands?: readonly string[];
   runtimeStatus: AgentRuntimeStatus;
   workflowHint: WorkflowHint;
+  researchProjectId?: string | null;
 }) => Promise<AgentCapabilityPreview>;
 
 type AgentResumeValue = HITLResponse | { answer: string };
@@ -154,6 +155,7 @@ export class AgentPluginRuntime {
     requestedCapabilities: EnabledCapabilities;
     shellAllowedCommands?: readonly string[];
     workflowHint?: WorkflowHint;
+    researchProjectId?: string | null;
   }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider === undefined) {
       throw new Error('agent_capability_preview_unavailable');
@@ -164,7 +166,8 @@ export class AgentPluginRuntime {
       requestedCapabilities: input.requestedCapabilities,
       shellAllowedCommands: input.shellAllowedCommands,
       runtimeStatus: this.getStatus(),
-      workflowHint: input.workflowHint === undefined ? null : input.workflowHint
+      workflowHint: input.workflowHint === undefined ? null : input.workflowHint,
+      researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
     });
   }
 
@@ -192,7 +195,8 @@ export class AgentPluginRuntime {
       requestedCapabilities: request.enabledCapabilities,
       shellAllowedCommands,
       workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
-      modelHandle
+      modelHandle,
+      researchProjectId: request.researchProjectId === undefined ? null : request.researchProjectId
     });
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
     const workspace = await this.resolveRunWorkspace(request);
@@ -1060,6 +1064,7 @@ export class AgentPluginRuntime {
     shellAllowedCommands?: readonly string[];
     workflowHint: WorkflowHint;
     modelHandle: AgentModelHandle;
+    researchProjectId?: string | null;
   }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider !== undefined) {
       return await this.getCapabilityPreview({
@@ -1067,7 +1072,8 @@ export class AgentPluginRuntime {
         mode: input.mode,
         requestedCapabilities: input.requestedCapabilities,
         shellAllowedCommands: input.shellAllowedCommands,
-        workflowHint: input.workflowHint
+        workflowHint: input.workflowHint,
+        researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
       });
     }
     if (input.requestedCapabilities.mcpServers.length > 0 || input.requestedCapabilities.skills.length > 0) {
@@ -1086,7 +1092,8 @@ export class AgentPluginRuntime {
       selfConfigAvailable: false,
       shellAllowedCommands: input.shellAllowedCommands,
       skills: [],
-      workflowHint: input.workflowHint
+      workflowHint: input.workflowHint,
+      researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
     });
     return {
       runnable: false,
@@ -1140,9 +1147,12 @@ function requireAgentExecution(value: unknown): AgentDeepAgentExecution {
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
     throw new Error('agent_deep_agent_execution_invalid');
   }
-  const events = Reflect.get(value, 'events');
-  const outcome = Reflect.get(value, 'outcome');
-  if ((typeof events !== 'object' && typeof events !== 'function') || events === null || typeof Reflect.get(events, Symbol.asyncIterator) !== 'function') {
+  // value 来自未经类型化的执行器返回值，这里按名字探它的两个成员，不假设结构形状。
+  const candidate = value as { events?: unknown; outcome?: unknown };
+  const events = candidate.events;
+  const outcome = candidate.outcome;
+  if ((typeof events !== 'object' && typeof events !== 'function') || events === null
+    || typeof (events as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] !== 'function') {
     throw new Error('agent_deep_agent_execution_invalid');
   }
   if (!(outcome instanceof Promise)) {
@@ -1180,7 +1190,8 @@ function createRunExecutionSnapshotSeed(input: {
       }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,
-    dispatchKey: input.dispatchKey
+    dispatchKey: input.dispatchKey,
+    researchProjectId: input.request.researchProjectId === undefined ? null : input.request.researchProjectId
   };
 }
 

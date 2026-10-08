@@ -18,46 +18,15 @@ import type {
   SkippedCapability
 } from '../../../shared/types';
 import type { WorkflowHint } from '../../../shared/types';
-import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-tool-exposure';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
 import type { ToolSelectionPolicy } from './tool-selection-policy';
 import { DefaultToolSelectionPolicy } from './tool-selection-policy';
+import { RESEARCH_TOOL_DESCRIPTORS } from './research-tools';
 
 const deleteFileAllowedDecisions: InterruptDecisionType[] = ['approve', 'edit', 'reject'];
 const selfConfigCardId = 'builtin:roc_self_config';
 const mcpAllowedDecisions: InterruptDecisionType[] = ['approve', 'reject'];
-const runtimeManifestToolNames = [
-  'ask_user',
-  'cancel_background_task',
-  'edit_file',
-  'glob',
-  'grep',
-  'ls',
-  'memory_search',
-  'propose_background_task',
-  'read_context_artifact',
-  'read_background_task',
-  'read_file',
-  'remember',
-  'resolve_background_task_time',
-  'schedule_background_task',
-  'session_search',
-  'task',
-  'update_background_task',
-  'write_file',
-  'write_todos'
-] as const;
-const reservedMcpModelVisibleToolNames = new Set<string>([
-  ...DEEP_AGENT_BUILT_IN_TOOLS,
-  ...runtimeManifestToolNames,
-  'ask_user',
-  'delete_file',
-  'execute',
-  'roc_self_config',
-  'run_shell_command',
-  'web_read'
-]);
-
+// 保留名守卫的唯一实现在 tool-selection-policy.ts；这里不再重复一份死名单。
 export type CompiledRunCapabilityManifest = {
   manifest: RunCapabilityManifestV1;
   toolCards: AgentCapabilityCard[];
@@ -83,6 +52,7 @@ export function buildManifestFromPolicy(input: {
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
   toolSelectionPolicy: ToolSelectionPolicy;
+  researchProjectId: string | null;
 }): CompiledRunCapabilityManifest {
   const requestedCapabilities = normalizeRequestedCapabilities(input.requestedCapabilities);
   const skippedCapabilities: SkippedCapability[] = [];
@@ -174,6 +144,10 @@ export function buildManifestFromPolicy(input: {
       ...createRuntimeManifestTools({
         mode: input.mode,
         workflowHint: input.workflowHint
+      }),
+      ...createResearchManifestTools({
+        mode: input.mode,
+        researchProjectId: input.researchProjectId
       })
     ],
     skills: compileManifestSkills(manifestSkills),
@@ -205,6 +179,7 @@ export function compileRunCapabilityManifest(input: {
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
   skills: SkillSnapshot[];
+  researchProjectId?: string | null;
 }): CompiledRunCapabilityManifest {
   return buildManifestFromPolicy({
     mode: input.mode,
@@ -217,7 +192,8 @@ export function compileRunCapabilityManifest(input: {
     shellAllowedCommands: input.shellAllowedCommands,
     workflowHint: input.workflowHint,
     requestedCapabilities: input.requestedCapabilities,
-    toolSelectionPolicy: new DefaultToolSelectionPolicy()
+    toolSelectionPolicy: new DefaultToolSelectionPolicy(),
+    researchProjectId: input.researchProjectId ?? null
   });
 }
 
@@ -298,6 +274,31 @@ function compileManifestTools(
       resourceScope: card.scope
     };
   });
+}
+
+/**
+ * 绑定研究项目的对话运行额外拿到科研工具。工具名、资源域和副作用等级都从 research-tools 的描述表读，
+ * 避免 manifest 与真实装配的工具两处漂移。计划模式不装配副作用工具。
+ */
+function createResearchManifestTools(input: {
+  mode: ChatRunMode;
+  researchProjectId: string | null;
+}): RunCapabilityManifestToolV1[] {
+  if (input.researchProjectId === null || input.mode === 'plan') {
+    return [];
+  }
+  return RESEARCH_TOOL_DESCRIPTORS.map((descriptor) => ({
+    canonicalIdentity: `research:${descriptor.name}`,
+    modelVisibleName: descriptor.name,
+    provenance: { kind: 'builtin' as const, source: 'roc' as const },
+    executionScopes: [...descriptor.executionScopes],
+    riskLevel: descriptor.riskLevel,
+    effectClass: descriptor.effectClass,
+    approvalPolicy: { kind: 'none' as const },
+    idempotencyStrategy: descriptor.effectClass === 'none' ? ('none' as const) : ('tool_call' as const),
+    reconcileStrategy: resolveReconcileStrategy(descriptor.effectClass),
+    resourceScope: descriptor.scope
+  }));
 }
 
 function createRuntimeManifestTools(input: {

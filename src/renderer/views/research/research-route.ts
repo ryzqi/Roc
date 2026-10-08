@@ -5,7 +5,7 @@ import {
   type ResearchStageTab
 } from './research-stage-groups';
 
-export type ResearchCanvasView = 'overview' | 'activity' | 'provenance' | 'stage';
+export type ResearchCanvasView = 'overview' | 'activity' | 'provenance' | 'changes' | 'stage';
 
 export type ResearchRoute = {
   projectId: string | null;
@@ -14,7 +14,7 @@ export type ResearchRoute = {
   stageTab: ResearchStageTab;
 };
 
-const CANVAS_VIEWS = new Set<ResearchCanvasView>(['overview', 'activity', 'provenance', 'stage']);
+const CANVAS_VIEWS = new Set<ResearchCanvasView>(['overview', 'activity', 'provenance', 'changes', 'stage']);
 const STAGE_GROUPS = new Set<ResearchStageGroupId>(RESEARCH_STAGE_GROUPS.map((group) => group.id));
 const STAGE_TABS = new Set<ResearchStageTab>(RESEARCH_STAGE_GROUPS.flatMap((group) => group.tabs.map((tab) => tab.id)));
 
@@ -35,13 +35,19 @@ export function readResearchRoute(): ResearchRoute {
 }
 
 export function writeResearchRoute(route: ResearchRoute, mode: 'replace' | 'push' = 'replace'): void {
-  const url = new URL(window.location.href);
+  let url: URL;
+  try {
+    url = new URL(window.location.href);
+  } catch {
+    // 渲染进程里 location.href 总是合法；真遇到畸形地址也不要因为写路由把视图弄崩。
+    return;
+  }
   if (route.projectId === null) {
     url.searchParams.delete('project');
   } else {
     url.searchParams.set('project', route.projectId);
   }
-  if (route.view === 'overview') {
+  if (route.view === 'changes') {
     url.searchParams.delete('view');
   } else {
     url.searchParams.set('view', route.view);
@@ -91,7 +97,8 @@ function parseCanvasView(value: string | null): ResearchCanvasView {
   if (value !== null && CANVAS_VIEWS.has(value as ResearchCanvasView)) {
     return value as ResearchCanvasView;
   }
-  return 'overview';
+  // 进入项目默认落在改动与产物：对话产生的改动才是先要看的东西。
+  return 'changes';
 }
 
 function parseStage(value: string | null): { group: ResearchStageGroupId; tab: ResearchStageTab } {

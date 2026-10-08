@@ -24,6 +24,7 @@ export function buildAgentCapabilityPreview(input: {
   skills: SkillSnapshot[];
   mode: ChatRunMode;
   workflowHint: WorkflowHint;
+  researchProjectId?: string | null;
 }): AgentCapabilityPreview {
   const defaultModelState = input.runtimeStatus.defaultModelState;
   if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
@@ -40,6 +41,7 @@ export function buildAgentCapabilityPreview(input: {
     .withSelfConfig(input.selfConfigAvailable ?? false)
     .withWorkflowHint(input.workflowHint)
     .withRequestedCapabilities(input.requestedCapabilities)
+    .withResearchProject(input.researchProjectId ?? null)
     .build();
 
   return {
@@ -70,6 +72,7 @@ export function buildDeepAgentConfigPreview(input: {
     .withDeleteFileApproval(input.deleteFileApprovalMode)
     .withSelfConfig(false)
     .withRequestedCapabilities({ mcpServers: [], skills: [] })
+    .withResearchProject(null)
     .build();
 
   return {

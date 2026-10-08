@@ -154,6 +154,19 @@
   border-color: var(--accent);
 }
 
+/* 中性第三态（如审稿闸门的「要求修订」）：既不是通过也不是退回。 */
+.approval-btn--neutral {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.approval-btn--neutral:hover {
+  background: var(--bg-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .code-card {
   min-width: 0;
   max-width: 100%;
@@ -389,4 +402,72 @@
 
 .chat-bubble--assistant del {
   color: var(--subtle);
+}
+
+/* 科研人工闸门的确认卡：显示阶段与产物，决定推进还是退回。 */
+.chat-gate-card {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-left: var(--stripe-width) solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.chat-gate-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.chat-gate-eyebrow {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--font-micro-size);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.chat-gate-stage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 600;
+}
+
+.chat-gate-summary {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-meta-size);
+}
+
+.chat-gate-artifacts {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-gate-artifacts li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-xs);
+  background: var(--code-surface);
+  color: var(--text);
+  font-size: var(--font-meta-size);
+}
+
+.chat-gate-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }

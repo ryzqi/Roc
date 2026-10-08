@@ -34,6 +34,7 @@ import { createBackend } from '../../services/deep-agent/backend';
 import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import { toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocCommandTool } from '../../services/deep-agent/command-tool';
+import { createResearchTools } from './research-tools';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import type {
@@ -134,7 +135,9 @@ export async function buildRunHarness(
     selfConfigService: services.selfConfigService,
     shellExecutionService,
     shellAllowedCommands,
-    mode
+    mode,
+    abortSignal: request.abortSignal,
+    researchProjectId: request.snapshot.researchProjectId ?? null
   });
   const explicitSkillContexts = loadExplicitSkillContexts({
     explicitSkillIds: request.snapshot.explicitSkillIds,
@@ -174,7 +177,8 @@ export async function buildRunHarness(
     runId: request.run.id,
     threadId: request.run.threadId,
     explicitSkillContexts,
-    referencedFileContexts
+    referencedFileContexts,
+    researchProjectId: request.snapshot.researchProjectId ?? null
   });
   const contextWindowTokens = request.snapshot.budget.contextBudgetTokens;
   if (contextWindowTokens === null) {
@@ -317,7 +321,7 @@ async function deriveConservativeContextBudgetProfile(input: {
     return {
       name: tool.name,
       description: tool.description,
-      schema: Reflect.get(tool, 'schema')
+      schema: (tool as { schema?: unknown }).schema
     };
   });
   const profiles = await Promise.all([
@@ -382,6 +386,8 @@ async function createExecutorTools(input: {
   shellExecutionService: AgentExecuteAdapter;
   shellAllowedCommands?: readonly string[];
   mode: RunExecutionSnapshot['mode'];
+  abortSignal: AbortSignal;
+  researchProjectId: string | null;
 }): Promise<{ runTools: ClientTool[]; webReadTool: StringDynamicStructuredTool }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
@@ -409,10 +415,32 @@ async function createExecutorTools(input: {
       createDeleteFileTool(input.capabilities),
       ...selfConfigTools,
       ...shellTools,
+      ...createManifestAuthorizedResearchTools(input),
       ...mcpTools
     ],
     webReadTool
   };
+}
+
+/**
+ * 科研工具只在快照里绑了研究项目、且清单确实声明了它时才装配。
+ * 按清单过滤而不是按项目 id 直接信任，保证运行时工具集与冻结的清单一致。
+ */
+function createManifestAuthorizedResearchTools(input: {
+  capabilities: RocCapabilityRegistry;
+  capabilityManifest: RunCapabilityManifestV1;
+  abortSignal: AbortSignal;
+  researchProjectId: string | null;
+}): ClientTool[] {
+  if (input.researchProjectId === null) {
+    return [];
+  }
+  const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
+  return createResearchTools({
+    capabilities: input.capabilities,
+    projectId: input.researchProjectId,
+    signal: input.abortSignal
+  }).filter((tool) => manifestToolNames.has(tool.name)) as ClientTool[];
 }
 
 function requireSelfConfigService(selfConfigService: SelfConfigService | undefined): SelfConfigService {
@@ -508,7 +536,7 @@ function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionS
 }
 
 function isClientTool(value: unknown): value is ClientTool {
-  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'name') === 'string';
+  return typeof value === 'object' && value !== null && typeof (value as { name?: unknown }).name === 'string';
 }
 
 function resolveManifestMcpToolName(
