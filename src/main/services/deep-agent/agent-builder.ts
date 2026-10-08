@@ -18,7 +18,7 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
+import type { InterruptDecisionType, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
 import type { RocHookMiddlewareOptions } from '../hooks';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -77,6 +77,23 @@ type DeepAgentBuildPolicy = {
   contextBudgetTokens: number | undefined;
 };
 
+/**
+ * langchain 的 interruptOn 只接受 approve/edit/reject；Roc 的能力清单多一个科研闸门的
+ * 'revise'（由闸门工具在 resume 后自己解析）。这里在交给 langchain 前收敛，
+ * 并保证至少保留 approve/reject，避免全部被过滤后触发 langchain 建 schema 失败。
+ */
+function toLangchainAllowedDecisions(
+  allowedDecisions: readonly InterruptDecisionType[]
+): Array<'approve' | 'edit' | 'reject'> {
+  const decisions = allowedDecisions.filter(
+    (decision): decision is 'approve' | 'edit' | 'reject' => decision !== 'revise'
+  );
+  if (decisions.length > 0) {
+    return decisions;
+  }
+  return allowedDecisions.includes('reject') ? ['reject'] : ['approve'];
+}
+
 function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuildPolicy {
   const { snapshot } = input;
   return {
@@ -106,7 +123,7 @@ function compileInterruptPolicy(
   for (const tool of snapshot.capabilityManifest.tools) {
     if (tool.approvalPolicy.kind === 'required') {
       interruptOn[tool.modelVisibleName] = {
-        allowedDecisions: tool.approvalPolicy.allowedDecisions
+        allowedDecisions: toLangchainAllowedDecisions(tool.approvalPolicy.allowedDecisions)
       };
     }
   }

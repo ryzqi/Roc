@@ -1,4 +1,5 @@
 import type { HITLResponse } from 'langchain';
+import type { ChatResumeDecision } from '../../../shared/types';
 
 import type {
   ActiveChatRun,
@@ -77,6 +78,32 @@ export type AgentCapabilityPreviewProvider = (input: {
 
 type AgentResumeValue = HITLResponse | { answer: string };
 type AgentResumePayload = Record<string, AgentResumeValue>;
+
+/**
+ * Roc 的 resume 决定多出科研闸门的第三态 'revise'，而 langchain 的 HITLResponse
+ * 只认 approve/edit/reject。两者在运行期是同一份 payload（闸门工具自己解析 'revise'），
+ * 所以只在进入 langchain API 的边界上收敛类型，不在共享 schema 里删掉这一态。
+ */
+function toHitlResumeValue(decisions: ChatResumeDecision[]): AgentResumeValue {
+  const hitlDecisions = decisions.filter(
+    (decision): decision is HITLResponse['decisions'][number] => decision.type !== 'revise'
+  );
+  if (hitlDecisions.length === 0) {
+    return { answer: decisions.map((decision) => ('message' in decision && decision.message !== undefined ? decision.message : decision.type)).join('\n') };
+  }
+  return { decisions: hitlDecisions };
+}
+
+/** 已落库的 resume 记录同样只可能是 'revise' 在 langchain 边界上不合法，重新过一道同一个收敛函数。 */
+function toAgentResumePayload(
+  recorded: Record<string, { decisions: ChatResumeDecision[] } | { answer: string }>
+): AgentResumePayload {
+  const payload: AgentResumePayload = {};
+  for (const [interruptId, value] of Object.entries(recorded)) {
+    payload[interruptId] = 'answer' in value ? { answer: value.answer } : toHitlResumeValue(value.decisions);
+  }
+  return payload;
+}
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
@@ -398,9 +425,9 @@ export class AgentPluginRuntime {
     const deepAgentExecutor = this.options.deepAgentExecutor;
     const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
     const resumeValue: AgentResumeValue =
-      request.kind === 'approval' ? { decisions: request.decisions } : { answer: request.answer };
+      request.kind === 'approval' ? toHitlResumeValue(request.decisions) : { answer: request.answer };
     const resumePayload: AgentResumePayload = {
-      ...this.options.repository.getRecordedResumePayload(run.id),
+      ...toAgentResumePayload(this.options.repository.getRecordedResumePayload(run.id)),
       [request.interruptId]: resumeValue
     };
     const resumeAudit: ResumeDispatchAudit =
