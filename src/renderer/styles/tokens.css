@@ -51,15 +51,16 @@
   --st-good: var(--st-ok);
   --st-good-line: var(--st-ok-line);
 
-  /* 控件：高宽至少 44，内边距 6×12。按钮组间隙 16，使 44px 宽按钮的中心距为 60。 */
-  --control-height: 44px;
-  --control-height-compact: 44px;
-  --control-height-input: 44px;
-  --control-height-textarea: 96px;
-  --control-pad-y: 6px;
-  --control-pad-x: 12px;
-  --control-gap: 16px;
-  --control-hit: 44px;
+  /* 控件：桌面密度，默认高 32，紧凑 28，输入 32。热区不小于 28，指针不是触摸目标。 */
+  --control-height: 32px;
+  --control-height-compact: 28px;
+  --control-height-input: 32px;
+  --control-height-textarea: 88px;
+  --control-pad-y: 4px;
+  --control-pad-x: 10px;
+  --control-gap: 8px;
+  --control-hit: 32px;
+  --control-hit-min: 28px;
 
   /* 状态 */
   --st-ok: #166c4a;
@@ -119,9 +120,9 @@
   --shadow-card: 0 1px 2px rgba(20, 40, 80, 0.04);
   --shadow-card-hover: 0 4px 14px rgba(20, 40, 80, 0.09);
 
-  /* 交互层（hover / press / 遮罩 / 强调条） */
-  --overlay-hover: rgba(15, 23, 42, 0.06);
-  --overlay-active: rgba(15, 23, 42, 0.12);
+  /* 交互层（hover / press / 遮罩 / 强调条）。hover 要能看见，press 要比 hover 更深。 */
+  --overlay-hover: rgba(15, 23, 42, 0.08);
+  --overlay-active: rgba(15, 23, 42, 0.16);
   --overlay-backdrop: rgba(15, 23, 42, 0.28);
   --overlay-scrim: rgba(20, 40, 80, 0.32);
   --stripe-width: 3px;

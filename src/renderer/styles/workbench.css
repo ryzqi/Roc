@@ -116,7 +116,7 @@
 }
 
 .workbench-bar {
-  min-height: 52px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: var(--control-gap);
@@ -234,7 +234,7 @@
 }
 
 .pane-header {
-  min-height: 52px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;

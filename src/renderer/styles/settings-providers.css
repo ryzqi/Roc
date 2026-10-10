@@ -16,6 +16,7 @@
 
 .provider-search {
   flex: 1 1 auto;
+  max-width: 320px;
   min-height: var(--control-height-input);
   padding: 0 var(--control-pad-x);
   border: 1px solid var(--line);
@@ -484,7 +485,7 @@
   position: relative;
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 320px;
   align-items: center;
 }
 .provider-search-wrap > svg { position: absolute; left: 11px; color: var(--muted); pointer-events: none; }

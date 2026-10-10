@@ -14,7 +14,7 @@
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
-  min-width: 44px;
+  min-width: var(--control-hit);
   min-height: var(--control-height);
   align-items: center;
   justify-content: center;

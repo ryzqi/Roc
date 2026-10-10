@@ -13,7 +13,7 @@
   width: min(1100px, 92vw);
   height: min(86vh, 760px);
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
   background: var(--surface);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-modal);

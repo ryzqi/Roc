@@ -310,7 +310,7 @@
 }
 
 .row {
-  min-height: 48px;
+  min-height: var(--control-hit);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--gap-card);
@@ -370,9 +370,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
-  height: 24px;
-  padding: 0 var(--space-3);
+  min-width: var(--control-hit-min);
+  height: 20px;
+  padding: 0 var(--space-2);
   border-radius: 999px;
   border: 1px solid var(--line);
   background: transparent;
@@ -390,7 +390,7 @@
 .action-strip button,
 .capability-strip button {
   display: inline-flex;
-  min-width: 44px;
+  min-width: var(--control-hit);
   min-height: var(--control-height);
   align-items: center;
   justify-content: center;

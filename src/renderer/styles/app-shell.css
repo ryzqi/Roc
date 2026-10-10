@@ -27,7 +27,7 @@
   width: 100vw;
   height: 100vh;
   min-height: 100vh;
-  grid-template-rows: minmax(52px, auto) 1fr;
+  grid-template-rows: minmax(40px, auto) 1fr;
   margin: 0;
   overflow: hidden;
   border-radius: 0;
@@ -44,8 +44,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
-  gap: var(--control-gap);
-  min-height: 52px;
+  gap: var(--space-2);
+  min-height: 40px;
   padding: 0 12px 0 80px; /* 红绿灯占位，不能收进 8px 网格 */
   border-bottom: 1px solid var(--mac-hairline);
   background: var(--material-titlebar);
@@ -313,7 +313,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-inline);
-  min-height: 48px;
+  min-height: var(--control-hit);
   padding: var(--gap-inline) var(--gap-card);
   border-bottom: 1px solid var(--separator);
 }

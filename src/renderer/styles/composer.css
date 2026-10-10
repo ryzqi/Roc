@@ -46,7 +46,7 @@
 
 .composer-input {
   width: 100%;
-  min-height: 56px;
+  min-height: 44px;
   max-height: 200px;
   resize: none;
   border: 0;
@@ -155,20 +155,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: var(--gap-inline);
   padding: 0 8px 0 0;
+  min-width: 0;
 }
 
 .composer-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--gap-inline);
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .composer-mode-toggle {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex: 0 0 auto;
   padding: 2px;
   border: 1px solid var(--line);
   border-radius: var(--r-xs);
@@ -195,6 +200,8 @@
   display: flex;
   align-items: center;
   gap: var(--control-gap);
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .composer-popover-anchor {
@@ -462,8 +469,11 @@
 }
 
 .model-pill--composer {
-  min-width: 110px;
-  max-width: 180px;
+  /* 模型名是可截断的次要信息，不能把发送键挤出工具栏。 */
+  min-width: 0;
+  max-width: 168px;
+  flex: 0 1 auto;
+  overflow: hidden;
   height: var(--control-height);
   padding: 0 var(--gap-inline);
   gap: var(--gap-inline);
