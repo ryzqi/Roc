@@ -9,7 +9,7 @@ source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel �
 
 # Roc Design System Master
 
-本文是 Roc 的全局视觉与交互规范。页面实现先读本文件；`design-system/pages/` 下的页面覆盖优先于本文件。本文件只定义规范，不改代码。
+本文是 Roc 的全局视觉与交互规范。页面实现先读本文件。本文件只定义规范，不改代码。当前不存在页面级覆盖；确需特例时按 `design-system/pages/<page>.md` 约定新增，新增后该页面覆盖优先于本文件。
 
 **产品一句话：** Roc 是面向个人研究者的 macOS 本地科研工作台。入口是研究项目，不是对话。
 
@@ -619,7 +619,7 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 | 菜单 | `src/main/application-menu.ts` |
 | 产品词 | `CONTEXT.md`, `docs/research-workbench.md` |
 
-后续改 UI：先改 token 和本文件，再改组件。页面特例写到 `design-system/pages/<page>.md`。
+后续改 UI：先改 token 和本文件，再改组件。页面特例按约定写到 `design-system/pages/<page>.md`（该目录当前不存在）。
 
 ---
 

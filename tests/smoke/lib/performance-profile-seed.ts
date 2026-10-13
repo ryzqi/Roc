@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -7,6 +8,7 @@ import {
   applyCoreDatabaseSchema,
   applyDiagnosticsDatabaseSchema,
   applyMemoryDatabaseSchema,
+  applyResearchDatabaseSchema,
   applyTaskDatabaseSchema,
   applyWorkspaceDatabaseSchema
 } from '../../../src/main/infrastructure/database-schemas';
@@ -55,6 +57,10 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
     applyTaskDatabaseSchema(pool.getConnection('@roc/plugin-task'));
     applyWorkspaceDatabaseSchema(pool.getConnection('@roc/plugin-workspace'));
     applyDiagnosticsDatabaseSchema(pool.getConnection('@roc/plugin-diagnostics'));
+    applyResearchDatabaseSchema(pool.getConnection('@roc/plugin-research'));
+    // 默认入口是项目列表（ADR 0002：项目列表作为入口），不自动进入上次或第一个项目；
+    // 没有项目就没有项目服务视图，对话输入也不会挂载。所以每个剖面都要带一个研究项目。
+    seedResearchProject(pool, dataRoot, eventCount);
     if (eventCount === 0) {
       return;
     }
@@ -98,6 +104,27 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
   } finally {
     pool.closeAll();
   }
+}
+
+function seedResearchProject(pool: DatabasePool, dataRoot: string, eventCount: number): void {
+  const workspacePath = join(dataRoot, 'workspace');
+  mkdirSync(workspacePath, { recursive: true });
+  const timestamp = '2026-07-10T00:00:00.000Z';
+  pool
+    .getConnection('@roc/plugin-research')
+    .prepare(
+      `INSERT INTO research_projects
+       (id, title, description, workspace_path, status, current_stage, created_at, updated_at, language)
+       VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?, 'zh')`
+    )
+    .run(
+      `project-performance-${eventCount}`,
+      `Performance Profile ${eventCount}`,
+      'performance profile project',
+      workspacePath,
+      timestamp,
+      timestamp
+    );
 }
 
 function countEvents(dataRoot: string): number {

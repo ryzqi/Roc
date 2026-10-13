@@ -1851,6 +1851,12 @@ pre.research-reader-content {
   grid-template-columns: minmax(200px, 240px) minmax(360px, 1fr) minmax(0, 1.1fr);
 }
 
+/* 助手叠层打开时壳里不再渲染对话列，网格同步收成两列，避免工作区被挤到空列。 */
+.research-shell-workbench.research-cockpit.research-cockpit--no-chat,
+.research-shell-workbench.research-cockpit.research-cockpit--no-chat:has(.research-shell-layout--activity) {
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1.1fr);
+}
+
 .research-cockpit-projects {
   display: grid;
   align-content: start;
@@ -1923,6 +1929,12 @@ pre.research-reader-content {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
     overflow: auto;
+  }
+
+  .research-shell-workbench.research-cockpit.research-cockpit--no-chat,
+  .research-shell-workbench.research-cockpit.research-cockpit--no-chat:has(.research-shell-layout--activity) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .research-cockpit-chat {

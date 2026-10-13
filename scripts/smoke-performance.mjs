@@ -1,14 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   verifyWorkspaceBetterSqlite3
 } from './lib/native-packaging.mjs';
 
 let exitCode = 0;
-const projectRoot = dirname(fileURLToPath(new URL('..', import.meta.url)));
+// new URL('..', import.meta.url) 已经指向仓库根（带尾斜杠），再套 dirname 会多剥一层，
+// 以前因此把 seed bundle 写到仓库外的 ../.runtime/，那里解析不到 better-sqlite3。
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const profileRoot = mkdtempSync(join(tmpdir(), 'roc-performance-profiles-'));
 const seedBundle = join(projectRoot, '.runtime', 'performance-profile-seed.mjs');
 const profileRoots = {

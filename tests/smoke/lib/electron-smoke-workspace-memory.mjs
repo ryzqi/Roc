@@ -1,5 +1,6 @@
 import { waitForTextContent } from './assertions.mjs';
 import { readMainPageText } from './ipc.mjs';
+import { openResearchService } from './ui-actions.mjs';
 
 export async function runSmokeWorkspaceMemoryChecks(ctx) {
   const { page } = ctx;
@@ -80,7 +81,7 @@ export async function runSmokeWorkspaceMemoryChecks(ctx) {
       rtk: rtk.data
     };
   });
-  await page.click('[data-testid="nav-memory"]');
+  await openResearchService(page, 'memory');
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="memory-tab-files"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="memory-view"]', 'USER.md');

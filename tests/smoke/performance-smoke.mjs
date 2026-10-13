@@ -68,6 +68,10 @@ async function runProfile(input) {
     const page = await app.firstWindow();
     await waitForAppReady(page, `performance-${input.name}`, artifactDir);
     const rendererReadyMs = performance.now() - launchStartedAt;
+    // 默认入口是项目列表（ADR 0002）：冷启动不会自动进入项目，
+    // 而对话输入挂在项目内，所以先显式进入项目，再量对话输入的可用延迟。
+    await page.locator('.research-project-card').first().click();
+    await page.waitForSelector('[data-testid="research-app-shell"][data-shell-state="project"]', { timeout: 5_000 });
     const mainInputStartedAt = performance.now();
     await page.waitForSelector('[data-testid="chat-input"]', { timeout: 500 });
     const mainInputReadyMs = performance.now() - mainInputStartedAt;

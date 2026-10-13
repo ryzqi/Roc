@@ -1,8 +1,9 @@
 import { waitForTextContent } from './assertions.mjs';
+import { openResearchService } from './ui-actions.mjs';
 
 export async function runSmokeCapabilityViews(ctx) {
   const { page } = ctx;
-  await page.click('[data-testid="nav-mcp"]');
+  await openResearchService(page, 'mcp');
   await page.waitForSelector('[data-testid="mcp-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-management"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-test-smoke-mcp"]', { timeout: 5000 });
@@ -14,7 +15,7 @@ export async function runSmokeCapabilityViews(ctx) {
   if (mcpText === null) {
     throw new Error('Smoke could not read MCP view text.');
   }
-  await page.click('[data-testid="nav-skills"]');
+  await openResearchService(page, 'skills');
   await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
   await page.click('[data-testid="skills-filter-enabled"]');

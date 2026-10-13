@@ -1,6 +1,6 @@
 import type { ChatPendingApproval, ChatResumeDecision } from '../../shared/types';
 
-export const researchGateToolName = 'research_approve_gate';
+const researchGateToolName = 'research_approve_gate';
 
 /** 闸门卡只会发出这三种决定；不要把 hitl 的 'edit' 混进来。 */
 type GateDecisionType = 'approve' | 'revise' | 'reject';

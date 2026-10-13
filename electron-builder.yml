@@ -51,9 +51,9 @@ mac:
   executableName: Roc
   icon: resources/icon.icns
   category: public.app-category.productivity
+  # 只产出 .app：package:mac 与 package:dir 都传 --dir，不打 zip/dmg。
   target:
-    - zip
-  artifactName: Roc-${version}-mac-${arch}.${ext}
+    - dir
   files:
     - dist/**
     - package.json

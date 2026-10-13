@@ -1,4 +1,4 @@
-import { lazy, useEffect, useLayoutEffect, useState, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useState, type ComponentType } from 'react';
 import type { ChatRunState } from '../chat-run-state';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId, WorkbenchTool } from '../app/types';
@@ -10,24 +10,7 @@ import type { TaskPromptSubmission } from './tasks/TasksView';
 import type { ResearchServiceContext, ResearchServiceEntry } from './research/research-services';
 import { ResearchServiceContextBanner } from './research/ResearchServiceContextBanner';
 
-const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
-const ChatFeature = lazy(() => import('../features/chat').then((module) => ({ default: module.ChatFeature })));
-const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
-const PreviewView = lazy(() => import('./preview/PreviewView').then((module) => ({ default: module.PreviewView })));
-const DiagnosticsFeature = lazy(() => import('../features/diagnostics').then((module) => ({ default: module.DiagnosticsFeature })));
-const MemoryFeature = lazy(() => import('../features/memory').then((module) => ({ default: module.MemoryFeature })));
-const McpFeature = lazy(() => import('../features/mcp').then((module) => ({ default: module.McpFeature })));
-const SkillsFeature = lazy(() => import('../features/skills').then((module) => ({ default: module.SkillsFeature })));
-const TaskDetailFeature = lazy(() =>
-  import('../features/tasks').then((module) => ({ default: module.TaskDetailFeature }))
-);
-const TasksBoardFeature = lazy(() =>
-  import('../features/tasks').then((module) => ({ default: module.TasksBoardFeature }))
-);
-const WorkspaceFeature = lazy(() =>
-  import('../features/workspace').then((module) => ({ default: module.WorkspaceFeature }))
-);
-const ResearchAppShell = lazy(() => import('./research/ResearchAppShell').then((module) => ({ default: module.ResearchAppShell })));
+// 视图一律通过 loadView 的动态 import 注册进 viewCache；顶部不要再放 lazy(...) 常量，它们没有读取方。
 
 const viewCache = new Map<ViewId, ComponentType<any>>();
 
@@ -109,6 +92,7 @@ function cachedView(view: ViewId): ComponentType<any> {
 
 export function ViewContent({
   activeView,
+  assistantOverlayOpen = false,
   chatSelectionVersion,
   client,
   liveTaskRun,
@@ -138,6 +122,11 @@ export function ViewContent({
   researchServiceContext
 }: {
   activeView: ViewId;
+  /**
+   * true 时场景由 research 壳改成「研究壳 + 右侧助手叠层」。此时对话已经由叠层里的 Chat 承担，
+   * 壳里不能再挂一个 Chat，否则会同时存在两个 chat-view / 两个 composer。
+   */
+  assistantOverlayOpen?: boolean;
   chatSelectionVersion: number;
   client: RocClient;
   liveTaskRun: ChatRunState | null;
@@ -228,7 +217,7 @@ export function ViewContent({
     return (
       <ResearchShell
         chatPane={
-          researchProjectId === null ? null : (
+          researchProjectId === null || assistantOverlayOpen ? null : (
             <Chat
               key={researchProjectId}
               chatSelectionVersion={chatSelectionVersion}
@@ -242,6 +231,7 @@ export function ViewContent({
           )
         }
         client={client}
+        hideChatColumn={assistantOverlayOpen}
         onContextChange={onResearchContextChange}
         onOpenAssistant={onOpenResearchAssistant}
         onOpenCanvasTool={onOpenCanvasTool}

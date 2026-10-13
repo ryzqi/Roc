@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+
+/**
+ * 查询本机结构化应用日志 `~/.roc/logs/app.jsonl`。
+ *
+ * 用法：`pnpm logs:query --level error --grep <keyword>`
+ * 过滤器：`--level`、`--service`、`--traceId`、`--runId`、`--since`、`--grep`，按 `--key value` 成对传入。
+ */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

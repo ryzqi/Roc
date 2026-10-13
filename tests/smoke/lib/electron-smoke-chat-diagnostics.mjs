@@ -389,7 +389,13 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
     hasMemoryRecordLabel: false,
     hasTaskRecordLabel: false
   };
-  await page.evaluate(() => { window.history.replaceState({}, '', '/?page=diagnostics&project=research_smoke'); });
+  // 不能写根绝对路径：应用跑在 file:// 下，'/?page=...' 会变成 file:///?page=... ，reload 直接 ERR_FILE_NOT_FOUND。
+  await page.evaluate(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', 'diagnostics');
+    url.searchParams.set('project', 'research_smoke');
+    window.history.replaceState({}, '', url);
+  });
   await page.reload();
   await page.waitForSelector('[data-testid="diagnostics-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="diagnostic-package-status"]', { timeout: 5000 });

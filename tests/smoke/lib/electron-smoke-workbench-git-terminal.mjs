@@ -319,7 +319,8 @@ export async function runSmokeWorkbenchGitTerminalChecks(ctx) {
     throw new Error('Smoke could not capture terminal session id from output events.');
   }
   await page.evaluate(async (sessionId) => {
-    const result = await window.roc.terminal.writeInput({ sessionId, data: 'dir\rpwd\r' });
+    // `ls` 而不是 `dir`：macOS/zsh 没有 dir 命令，写 dir 只会得到 command not found。
+    const result = await window.roc.terminal.writeInput({ sessionId, data: 'ls\rpwd\r' });
     if (!result.ok) {
       throw new Error(`terminal writeInput failed: ${result.error.message}`);
     }

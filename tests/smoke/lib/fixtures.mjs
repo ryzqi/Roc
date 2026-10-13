@@ -241,11 +241,12 @@ function isTaskProposalRequest(parsedBody, taskProposalGoal) {
   return hasTaskProposalTools(parsedBody) && lastUserText.includes(taskProposalGoal);
 }
 
-function buildSmokeTaskProposal(workspacePath, trigger, taskProposalGoal) {
+function buildSmokeTaskProposal(trigger, taskProposalGoal) {
+  // 不带 workspacePath：proposeToolInputSchema 是 strictObject，只接受 goal + trigger，
+  // 工作区由 runtime 从会话注入。多传一个键会被判为 unrecognized_keys，整次工具调用失败。
   return {
     goal: taskProposalGoal,
-    trigger,
-    workspacePath
+    trigger
   };
 }
 
@@ -350,6 +351,7 @@ function writeStreamingToolCallResponse(response, toolCall) {
 }
 
 function writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoal, now) {
+  // 仍然断言 prompt 里给过工作区：runtime 注入 workspacePath 时有值，否则 propose 会报 background_task_workspace_required。
   const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
   if (workspacePath === null || workspacePath.length === 0) {
     throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
@@ -357,7 +359,7 @@ function writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoa
   writeStreamingToolCallResponse(response, {
     id: 'call_smoke_propose_background_task',
     name: 'propose_background_task',
-    args: buildSmokeTaskProposal(workspacePath, buildSmokeCronTrigger(taskProposalGoal, now), taskProposalGoal)
+    args: buildSmokeTaskProposal(buildSmokeCronTrigger(taskProposalGoal, now), taskProposalGoal)
   });
 }
 

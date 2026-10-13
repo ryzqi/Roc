@@ -110,6 +110,7 @@ function resolveGridKeyDelta(key: string, columns: number): number {
 
 export function ResearchAppShell({
   chatPane,
+  hideChatColumn = false,
   client,
   onContextChange,
   onOpenAssistant,
@@ -119,6 +120,8 @@ export function ResearchAppShell({
   state
 }: {
   chatPane?: React.ReactNode;
+  /** 助手叠层打开时，对话由叠层承载，壳里不再渲染对话列。 */
+  hideChatColumn?: boolean;
   client: RocClient;
   onContextChange?: (meta: string) => void;
   onOpenAssistant?: () => void;
@@ -923,7 +926,10 @@ export function ResearchAppShell({
         ) : null}
 
       {shellState === 'project' && context.project !== null ? (
-        <div className="research-shell-workbench research-cockpit" data-testid="research-shell-workbench">
+        <div
+          className={hideChatColumn ? 'research-shell-workbench research-cockpit research-cockpit--no-chat' : 'research-shell-workbench research-cockpit'}
+          data-testid="research-shell-workbench"
+        >
           <aside aria-label="研究项目与会话" className="research-cockpit-projects" data-testid="research-shell-project-rail">
             <div className="research-cockpit-projects-head">
               <button
@@ -956,11 +962,13 @@ export function ResearchAppShell({
             )}
           </aside>
 
-          <section className="research-cockpit-chat" aria-label="研究助手对话" data-testid="research-shell-chat">
-            {chatPane === null || chatPane === undefined ? (
-              <div className="research-cockpit-chat-empty" role="status">选择研究项目后开始对话。</div>
-            ) : chatPane}
-          </section>
+          {hideChatColumn ? null : (
+            <section className="research-cockpit-chat" aria-label="研究助手对话" data-testid="research-shell-chat">
+              {chatPane === null || chatPane === undefined ? (
+                <div className="research-cockpit-chat-empty" role="status">选择研究项目后开始对话。</div>
+              ) : chatPane}
+            </section>
+          )}
 
           <div className="research-cockpit-workspace" data-testid="research-shell-project">
             <aside aria-label="研究阶段" className="research-shell-stage-nav">

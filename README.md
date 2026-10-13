@@ -10,7 +10,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
 - 包管理：`pnpm@12.5.1`
 
-术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。
+术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。视觉与交互规范见 [design-system/MASTER.md](design-system/MASTER.md)。
 
 ---
 
@@ -57,6 +57,7 @@ src/
 tests/
 scripts/
 resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill
+design-system/    # 全局视觉与交互规范
 ```
 
 进程边界：renderer 只做 UI；preload 白名单 IPC；main 负责文件系统、网络、密钥、Agent 与科研生产。
@@ -179,9 +180,36 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 端到端是唯一测试机制。不写单元测试。每次结束都留下可复核、可重复的工件。
 
 - `pnpm test`：应用端到端，工件 `.artifacts/wave1/electron-smoke.json`
-- `pnpm smoke:performance`：长会话端到端，工件 `.artifacts/wave1/performance-smoke.json`
+- `pnpm smoke:performance`：长会话端到端，工件 `.artifacts/wave1/performance-smoke.json`（当前为已知红，见下）
 - `pnpm smoke:mac`：已打包应用端到端，工件 `.artifacts/mac-package/result.json` 与截图
 - 科研工具链：`node scripts/research/smoke.ts`，工件为输出目录中的 `result.json`
+
+`pnpm test` 的工件里除了 `failedChecks` 还有 `retiredChecks`：这些检查描述的是已退役的「对话优先」独立视图（`.rail-button` 导轨、`workspace-shell--chat-collapsed`、旧 workband 的 chat-new-conversation 按钮），在当前产品里结构性不可达 —— 导航会把 `openMainPage('chat')` 解析成 `research` + 助手叠层。它们仍会被计算并写进 `rendererBoundary`，也带原因记入 `retiredChecks`，但不参与 `passed`。重新做布局前先读 [docs/research-workbench.md](docs/research-workbench.md) 的「研究助手入口与叠层」。
+
+### 已知红：`pnpm smoke:performance`
+
+这条命令现在能跑起来了，但还跑不完。两个剩余原因已定位：
+
+1. 交互测量用的 `history-thread-<id>` 选择器在 renderer 里已经不存在，线程历史搬到了项目记忆的会话面（`memory-tab-sessions`），`interactiveMs` 需要重新定义。
+2. 三个剖面串行启动 Electron，但 `ROC_DATA_ROOT` 不决定 Electron 的 `userData`，而 `initializeProcessIdentity()` 无条件申请单实例锁，所以后续剖面可能拿不到窗口，表现为 `Target page, context or browser has been closed`。修法是让 `userData` 跟随 data root，或在 smoke 下跳过单实例锁。
+
+已修好的部分：seed bundle 以前写到仓库外的 `../.runtime/`（`dirname` 在带尾斜杠的 URL 上多剥一层），那里解析不到 `better-sqlite3`，所以这条命令从未真正跑起来过；剖面现在也会种一个研究项目 —— 默认入口是项目列表，不自动进入项目就没有对话输入。
+
+---
+
+## 本机维护
+
+针对本机 `~/.roc` 运行态的维护命令。用于排查和重置本地数据，不进入打包流程。
+
+| 命令 | 作用 | 副作用 |
+| --- | --- | --- |
+| `pnpm database:backup` / `database:restore` | 备份 / 还原 `~/.roc` 数据库 | 就地覆盖；需先 `pnpm build`，因为跑的是 `dist/` 里的 JS |
+| `pnpm database:migrate` | 把 `~/.roc` 各插件库迁到代码里的最新 schema 版本 | 就地升级 schema |
+| `pnpm database:clear-agent-history` | 清空 agent / task 历史表，保留 schema 与配置 | 破坏性：删除前自动备份到 `~/.roc/plugin-data/backups/manual-clear-history-<时间戳>/` |
+| `pnpm logs:query --level error --grep <关键字>` | 查询 `~/.roc/logs/app.jsonl` | 只读；过滤器另有 `--service`、`--traceId`、`--runId`、`--since` |
+| `pnpm audit:layout` | 多视口 UI 布局审查，产出 `.artifacts/layout-audit/` | 需先 `pnpm build`；`release/` 里已有打包应用时优先用它 |
+
+`database:clear-agent-history` 在直接 `node` 调用时另需显式传 `--all-thread-kinds`，作为二次确认。
 
 ---
 

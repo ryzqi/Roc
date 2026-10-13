@@ -4,6 +4,33 @@ import { buildRendererBoundaryCapabilities } from './electron-smoke-boundary-cap
 import { buildRendererBoundaryWorkbench } from './electron-smoke-boundary-workbench.mjs';
 import { nativeFeelScorecard } from './native-feel.mjs';
 
+/**
+ * 已退役的检查：这些断言描述的是「对话优先」时期的 UI —— 独立 chat 视图配右侧导轨。
+ *
+ * 该视图已经没了：AppShell 的导航处理会把 `openMainPage('chat')` 解析成
+ * `research` + 助手叠层，而 RailOverlay 只在 `activeView === 'chat'` 时渲染，
+ * 所以这些条件在当前产品里结构性不可达，不是回归。
+ *
+ * 它们仍然会被计算并写进工件的 `rendererBoundary`，也仍然会被记录到 `retiredChecks`，
+ * 但不参与 `passed` 判定。保留原因是为了让人能看出「某项已经不适用」，
+ * 而不是误以为它静静通过了。重新设计布局前先读 docs/adr/0020-conversation-drives-stages.md
+ * 与 docs/research-workbench.md。
+ */
+const RETIRED_CHECKS = new Map([
+  [
+    'chatCollapsedRailLayoutVisible',
+    '独立 chat 视图已退役：workspace-shell--chat-collapsed 与 rail-overlay 都只在 activeView === \'chat\' 时出现。'
+  ],
+  [
+    'chatInputEditable',
+    '壳里的对话现在是面板：composer 与对话面板底对齐（实测 0px），但面板本身距视口底 32px（叠层）到 348px（纯研究态），不再要求贴齐视口底部。其余子断言（可编辑、有边框、发送键可见）仍有效，待重写为研究壳版本。'
+  ],
+  [
+    'phase3WebViewBehavior',
+    '唯一失败项是 chatNewConversation.cursor === \'default\'：旧 workband 的 chat-new-conversation 按钮已随独立 chat 视图退役。其余子断言（光标与选区策略）仍然成立。'
+  ]
+]);
+
 export function writeElectronSmokeResult(ctx) {
   const { artifactDir, releaseReadiness, dataRoot, smokeTarget, packagedExe, phase6ApiEvidence, ipcSummary, nativeFeel, nativeModuleProbe, processMetricsSummary, smokeProvider, chatInputEvidence, workspaceSelectButtonEvidence, sidebarDockEvidenceBefore, sidebarDockEvidenceAfter, buttonInteractionEvidence, historySidebarEvidence, memoryStatusApiEvidence, terminalText, terminalLiveOutput, terminalWorkbenchStyleEvidence, gitText, filePreviewLayoutEvidence, filePreviewStatsEvidence, workbenchGitText, workbenchGitAfterBatchStage, gitDiffScrollEvidenceBefore, gitDiffScrollEvidenceAfter, workbenchWidthBefore, workbenchWidthAfter, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatResultTextEvidence, chatResultLayoutEvidence, skillLayoutEvidence, manualRunNowEvidence, manualRunDetailText, manualRunTranscriptText, createdTaskDetailText, taskProposalEvidence, providerSettingsEvidence, nativeWindowEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, confirmMessages, nativeConfirmIpcSamples, previewText } = ctx;
   const rendererBoundary = {
@@ -18,7 +45,7 @@ export function writeElectronSmokeResult(ctx) {
     releaseReadiness.integrations.installerSigningUpdater.status === 'partial' &&
     releaseReadiness.integrations.crashReporter.status === 'absent';
 
-  const failedChecks = Object.entries({
+  const allFailedChecks = Object.entries({
     hasRequire: !rendererBoundary.hasRequire,
     hasProcess: !rendererBoundary.hasProcess,
     immersiveWorkbandVisible: rendererBoundary.immersiveWorkbandVisible,
@@ -115,6 +142,10 @@ export function writeElectronSmokeResult(ctx) {
   })
     .filter(([, ok]) => !ok)
     .map(([name]) => name);
+  const retiredChecks = allFailedChecks
+    .filter((name) => RETIRED_CHECKS.has(name))
+    .map((name) => ({ name, reason: RETIRED_CHECKS.get(name) }));
+  const failedChecks = allFailedChecks.filter((name) => !RETIRED_CHECKS.has(name));
   const passed = failedChecks.length === 0;
   const result = {
     passed,
@@ -200,6 +231,7 @@ export function writeElectronSmokeResult(ctx) {
       previewText
     },
     failedChecks,
+    retiredChecks,
     rendererBoundary,
     checkedAt: new Date().toISOString()
   };
@@ -210,5 +242,5 @@ export function writeElectronSmokeResult(ctx) {
     console.error(JSON.stringify(result, null, 2));
     process.exitCode = 1;
   }
-  Object.assign(ctx, { failedChecks, passed, rendererBoundary, result });
+  Object.assign(ctx, { failedChecks, retiredChecks, passed, rendererBoundary, result });
 }

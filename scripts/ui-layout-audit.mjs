@@ -1,10 +1,16 @@
+/**
+ * 多视口 UI 布局审查（Playwright + Electron）。
+ *
+ * 先用 `pnpm build` 产出 `dist/main/index.js`（或先 `package:mac` 用已打包的 .app），
+ * 目标选择逻辑见 `tests/smoke/lib/smoke-target.mjs`：优先已打包应用，其次 dist。
+ * 结果写入 `.artifacts/layout-audit/`（JSON + 各视口截图）。
+ */
 import { _electron as electron } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { auditLayout, writeLayoutAudit } from '../tests/smoke/lib/electron-smoke-layout-audit.mjs';
 import { waitForAppReady } from '../tests/smoke/lib/assertions.mjs';
-import { openChatView } from '../tests/smoke/lib/ui-actions.mjs';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 
 const artifactDir = resolve('.artifacts/layout-audit');

@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 
+/**
+ * 清空本机 Roc 的 agent / task 历史表，保留 schema 与配置。
+ *
+ * 破坏性操作，必须显式传 `--all-thread-kinds`（`pnpm database:clear-agent-history` 已带上）。
+ * 删除前会无条件把 agent 与 task 库备份到 `~/.roc/plugin-data/backups/manual-clear-history-<时间戳>/`，
+ * 所以 `--backup` 这类开关不存在：备份不可关闭。
+ *
+ * 参数：`--root <dir>`（默认 `~/.roc`）、`--all-thread-kinds`。
+ */
+
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -107,9 +117,6 @@ function readOptions(argv) {
     }
     if (arg === '--all-thread-kinds') {
       allThreadKinds = true;
-      continue;
-    }
-    if (arg === '--backup') {
       continue;
     }
     throw new Error(`clear_agent_history_unknown_arg:${arg}`);

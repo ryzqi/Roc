@@ -4,7 +4,8 @@ export async function runSmokeWorkbenchFileChecks(ctx) {
   const { page } = ctx;
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await openChatView(page);
-  await page.click('.rail-button[data-tool-button="files"]');
+  // 独立 chat 视图已退役（openMainPage('chat') 会解析成 research + 助手叠层），工作台改用研究壳的画布工具入口。
+  await page.click('[data-testid="research-shell-canvas-tool-files"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="workbench-panel"]', { timeout: 5000 });
   const chatWorkbenchLayoutVisible =

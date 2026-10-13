@@ -137,6 +137,7 @@ export function AppWorkspaceShell({
           <div className="canvas-scroll">
             <ViewContent
               activeView={overlayAssistant ? 'research' : activeView}
+              assistantOverlayOpen={overlayAssistant}
               chatSelectionVersion={chatSelectionVersion}
               client={client}
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}

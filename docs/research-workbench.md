@@ -59,7 +59,7 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 | 服务 | 视图 | 说明 |
 | --- | --- | --- |
-| 研究助手 | `chat` | 绑定当前项目、驱动阶段的对话。中间栏。 |
+| 研究助手 | `chat`（解析为 research + 助手叠层） | 绑定当前项目、驱动阶段的对话 |
 | 活动与运行 | `tasks-board` | 任务、审批、后台运行 |
 | 文件与代码 | `workspace` | 项目文件、Git、终端 |
 | 连接器 | `mcp` | MCP 授权 |
@@ -67,7 +67,13 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 | 项目记忆 | `memory` | 会话与自动记忆 |
 | 运行诊断 | `diagnostics` | 失败运行与主机状态 |
 
-窄屏下服务进抽屉。研究助手在中间栏，是改论文和推进阶段的主入口。
+窄屏下服务进抽屉。研究助手是改论文和推进阶段的主入口，开在助手叠层里。
+
+## 研究助手入口与叠层
+
+没有独立的「对话优先」主视图。`openMainPage('chat')` 不会切到独立对话页：AppShell 的导航处理把它解析成 `activeView = research` 加助手叠层（URL 写成 `?page=research&assistant=1`）。因此 `RailOverlay` 的导轨按钮（`.rail-button`）在当前产品里不渲染；打开右侧工作台走研究壳的画布工具（`research-shell-canvas-tools` 里的「文件 / Git / 终端」，对应 `research-shell-canvas-tool-<tool>`），它会设 `workbenchVisible` 而不改 `activeView`。
+
+叠层打开时对话归叠层：研究壳自己不再渲染对话列（`research-cockpit-chat`），也不会挂第二个 `Chat`，所以全局只有一个 `chat-view` 与一个 composer；壳网格同步收成两列（`.research-cockpit--no-chat`）。`research-shell-assistant` 这个入口同时承担「新建对话」（`onOpenResearchAssistant` 接的是 `startNewConversation`）。
 
 ## 阶段角色
 
