@@ -42,7 +42,8 @@ export default defineConfig({
   main: {
     build: {
       outDir: 'dist/main',
-      rollupOptions: {
+      // Vite 8 已弃用 build.rollupOptions（别名），electron-vite 6 的规范键是 rolldownOptions。
+      rolldownOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'database-maintenance-cli': resolve(__dirname, 'src/main/infrastructure/database-maintenance-cli.ts'),
@@ -55,7 +56,7 @@ export default defineConfig({
   preload: {
     build: {
       outDir: 'dist/preload',
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
         },
@@ -73,7 +74,7 @@ export default defineConfig({
     build: {
       outDir: 'dist/renderer',
       manifest: true,
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           index: resolve(__dirname, 'index.html')
         },

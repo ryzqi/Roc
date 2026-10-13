@@ -550,11 +550,19 @@ function resolveManifestMcpToolName(
     if (tool.provenance.serverId === 'exa-hosted' && isExaHostedWebSearchName(runtimeName)) {
       return tool.modelVisibleName === 'web_search' ? tool.modelVisibleName : null;
     }
-    if (runtimeName === `${tool.provenance.serverId}__${tool.modelVisibleName}`) {
+    if (isMcpRuntimeToolName(runtimeName, tool.provenance.serverId, tool.modelVisibleName)) {
       return tool.modelVisibleName;
     }
   }
   return null;
+}
+
+/**
+ * mcp-adapters 2.0.1 起用单个下划线连接服务器名与工具名（`server_tool`），
+ * 1.x 为双下划线（`server__tool`）。两种都接受，避免升级后 MCP 工具被静默丢弃。
+ */
+function isMcpRuntimeToolName(runtimeName: string, serverId: string, modelVisibleName: string): boolean {
+  return runtimeName === `${serverId}_${modelVisibleName}` || runtimeName === `${serverId}__${modelVisibleName}`;
 }
 
 function isExaHostedWebSearchName(name: string): boolean {
@@ -562,6 +570,8 @@ function isExaHostedWebSearchName(name: string): boolean {
     name === 'web_search' ||
     name === 'web_search_exa' ||
     name === 'web_search_advanced_exa' ||
+    name === 'exa-hosted_web_search_exa' ||
+    name === 'exa-hosted_web_search_advanced_exa' ||
     name === 'exa-hosted__web_search_exa' ||
     name === 'exa-hosted__web_search_advanced_exa'
   );

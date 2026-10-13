@@ -1,9 +1,13 @@
 strictPeerDependencies: false
 
+# 同一版本按 peer 变体被重复实例化时（如 zod@4.6.5 / zod@4.6.7），
+# langgraph 的 StateSchema 含 private symbol 属名义类型，跨实例会导致类型不兼容与运行时判等失败。
+dedupePeerDependents: true
+
 overrides:
   # 仅构建 macOS，移除非目标平台打包器。
   'app-builder-lib>electron-builder-squirrel-windows': '-'
-  '@langchain/langgraph': 1.4.16
+  '@langchain/langgraph': 1.5.0
 
 ignoredOptionalDependencies:
   - '@esbuild/win32-*'
@@ -47,7 +51,15 @@ storeDir: .runtime/pnpm-store
 cacheDir: .runtime/pnpm-cache
 virtualStoreDir: node_modules/.pnpm
 
-# pnpm 12 默认 minimumReleaseAge=1d。这两个包发布时间不足 24h。
+# pnpm 12 默认 minimumReleaseAge=1d。下列目标版本发布时间不足 24h。
 minimumReleaseAgeExclude:
-  - '@langchain/core@1.2.12'
-  - react-virtuoso@4.18.14
+  - '@langchain/langgraph@1.5.0'
+  - lucide-react@1.56.0
+  - motion@14.2.0
+  - react-virtuoso@4.18.19
+  - zod@4.6.7
+  - '@langchain/langgraph-checkpoint@1.2.0'
+  - '@langchain/langgraph-sdk@1.12.4'
+  - framer-motion@14.2.0
+  - motion-dom@14.2.0
+  - motion-utils@14.1.1

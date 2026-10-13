@@ -220,8 +220,8 @@ async function loadAfterPages(
   client: RocClient,
   threadId: string,
   generation: number,
-  generationRef: React.MutableRefObject<number>,
-  stateRef: React.MutableRefObject<HistoryState>,
+  generationRef: React.RefObject<number>,
+  stateRef: React.RefObject<HistoryState>,
   replaceState: (state: HistoryState) => void
 ): Promise<void> {
   let newest = stateRef.current.events.at(-1);

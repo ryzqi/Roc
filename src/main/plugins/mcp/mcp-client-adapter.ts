@@ -1,9 +1,9 @@
-import { MultiServerMCPClient } from '@langchain/mcp-adapters';
+import { MCPAdapter } from '@langchain/mcp-adapters';
 
 import type { McpServerConfig } from '../../../shared/types';
 
 type LangChainMcpClient = {
-  getTools(): Promise<unknown[]>;
+  listTools(): Promise<unknown[]>;
   close(): Promise<void>;
 };
 
@@ -14,15 +14,20 @@ type McpServerConnectionConfig =
       args: string[];
     }
   | {
-      transport: 'http' | 'sse';
+      transport: 'http';
+      url: string;
+    }
+  | {
+      transport: 'sse';
       url: string;
     };
 
-type MultiServerMcpClientConfig = {
+type McpAdapterConfig = {
   throwOnLoadError: boolean;
   onConnectionError: 'ignore';
-  useStandardContentBlocks: boolean;
-  mcpServers: Record<string, McpServerConnectionConfig>;
+  // mcp-adapters 2.x 用 servers（1.x 的 mcpServers 已弃用，两者同时传会直接报错）。
+  // 2.x 移除了 useStandardContentBlocks：多模态内容默认就是标准 content block。
+  servers: Record<string, McpServerConnectionConfig>;
 };
 
 export type McpClientAdapter = {
@@ -43,14 +48,13 @@ class LangChainMcpClientAdapter implements McpClientAdapter {
     if (enabledServers.length === 0) {
       return [];
     }
-    const config: MultiServerMcpClientConfig = {
+    const config: McpAdapterConfig = {
       throwOnLoadError: false,
       onConnectionError: 'ignore',
-      useStandardContentBlocks: true,
-      mcpServers: Object.fromEntries(enabledServers.map((server) => [server.id, toConnectionConfig(server)]))
+      servers: Object.fromEntries(enabledServers.map((server) => [server.id, toConnectionConfig(server)]))
     };
-    this.client = new MultiServerMCPClient(config);
-    return await this.client.getTools();
+    this.client = new MCPAdapter(config);
+    return await this.client.listTools();
   }
 
   async close(): Promise<void> {
@@ -77,10 +81,10 @@ function toConnectionConfig(server: McpServerConfig): McpServerConnectionConfig 
   if (server.url === undefined) {
     throw new Error('mcp_url_missing');
   }
-  return {
-    transport: server.transport,
-    url: server.url
-  };
+  // mcp-adapters 2.x 把 http 与 sse 拆成两个独立判定联合成员，transport 必须是字面量。
+  return server.transport === 'http'
+    ? { transport: 'http', url: server.url }
+    : { transport: 'sse', url: server.url };
 }
 
 function parseCommandLine(commandLine: string): { executable: string; args: string[] } {
