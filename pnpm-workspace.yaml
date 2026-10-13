@@ -53,7 +53,11 @@ storeDir: .runtime/pnpm-store
 cacheDir: .runtime/pnpm-cache
 virtualStoreDir: node_modules/.pnpm
 
-# pnpm 12 默认 minimumReleaseAge=1d。下列目标版本发布时间不足 24h。
+# pnpm 12 默认 minimumReleaseAge=1d。下列条目用于让 frozen install 通过年龄门禁：
+# 前 5 条为人工声明，后 5 条由 `pnpm install` 自动追加（pnpm CHANGELOG #13687：install 会把
+# 年龄门禁下挑中的版本写回本清单）。全部版本于 2026-10-14T11:33Z 之后成熟。
+# 注意：pnpm 的 minimumReleaseAgeExcludePrune 只清理“锁文件中已不存在的版本”，
+# 而下列版本仍被 pnpm-lock.yaml 钉住，因此不会自动清理；成熟后保留无害（仅影响安装期的年龄校验）。
 minimumReleaseAgeExclude:
   - '@langchain/langgraph@1.5.0'
   - lucide-react@1.56.0
