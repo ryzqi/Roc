@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { ArrowLeft, BookOpen, FolderTree, Loader2, MessagesSquare, Moon, RotateCcw, Sliders, Sun, SunMoon } from 'lucide-react';
 import type { SidebarTab } from '../app/ui-state';
+import { SessionListView } from '../assistant/SessionListView';
 import { FileSidebarPanel } from '../canvas/files/FileSidebarPanel';
 import type { RocClient } from '../shared/roc-client';
 import type { BoundWorkspace } from '../workspace/use-bound-workspace';
@@ -34,6 +35,11 @@ export type LeftSidebarProps = {
   /** Workspace-relative path of the file open in the canvas, if any. */
   openFile: string | null;
   onOpenFile: (relativePath: string) => void;
+  /** Selected assistant conversation (owned by the shell). */
+  activeThreadId: string | null;
+  onSelectThread: (threadId: string) => void;
+  onStartNewThread: () => void;
+  onThreadDeleted: (threadId: string) => void;
   onSelectWorkspace: () => void;
   workspacePending: boolean;
   /** Directory-picker or project-update failure, with the backend's own message. */
@@ -50,17 +56,12 @@ const TABS: Array<{ id: SidebarTab; label: string; icon: typeof FolderTree }> = 
   { id: 'sessions', label: '会话', icon: MessagesSquare }
 ];
 
-/** Hints for the two tabs P4/P5 have not filled yet. */
-const PLACEHOLDER_HINTS: Record<'literature' | 'sessions', { title: string; description: string; phase: string }> = {
+/** Hints for the tab P5 has not filled yet. */
+const PLACEHOLDER_HINTS: Record<'literature', { title: string; description: string; phase: string }> = {
   literature: {
     title: '尚无文献',
     description: '导入 PDF 或 BibTeX 后，文献会出现在这里。',
     phase: 'P5 实现'
-  },
-  sessions: {
-    title: '暂无会话',
-    description: '在助手面板发送第一条指令时会自动建立会话。',
-    phase: 'P4 实现'
   }
 };
 
@@ -215,6 +216,10 @@ export function LeftSidebar({
   writable,
   openFile,
   onOpenFile,
+  activeThreadId,
+  onSelectThread,
+  onStartNewThread,
+  onThreadDeleted,
   onSelectWorkspace,
   workspacePending,
   workspaceError,
@@ -323,16 +328,24 @@ export function LeftSidebar({
             workspacePending={workspacePending}
             workspaceError={workspaceError}
           />
+        ) : activeTab === 'sessions' ? (
+          <SessionListView
+            client={client}
+            activeThreadId={activeThreadId}
+            onSelectThread={onSelectThread}
+            onStartNewThread={onStartNewThread}
+            onThreadDeleted={onThreadDeleted}
+          />
         ) : (
           <>
             <EmptyState
               compact
               icon={TABS.find((tab) => tab.id === activeTab)?.icon}
-              title={PLACEHOLDER_HINTS[activeTab].title}
-              description={PLACEHOLDER_HINTS[activeTab].description}
-              testId={`sidebar-empty-${activeTab}`}
+              title={PLACEHOLDER_HINTS.literature.title}
+              description={PLACEHOLDER_HINTS.literature.description}
+              testId="sidebar-empty-literature"
             />
-            <p className="px-3 pb-3 text-subtle text-[var(--font-micro-size)]">{PLACEHOLDER_HINTS[activeTab].phase}</p>
+            <p className="px-3 pb-3 text-subtle text-[var(--font-micro-size)]">{PLACEHOLDER_HINTS.literature.phase}</p>
           </>
         )}
       </div>

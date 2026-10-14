@@ -97,6 +97,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
+  // The selected conversation lives here because two surfaces need it: the sidebar lists
+  // threads, the assistant panel renders one. Cleared when the project changes (gate 6).
+  const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
   // Mount-on-demand latches; see the lazy block comment above.
   const [assistantMounted, setAssistantMounted] = useState(false);
   const [managementMounted, setManagementMounted] = useState(false);
@@ -125,6 +128,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
    * project exists (a stale deep link or a deleted project is the common case).
    */
   const projectLoadFailed = inProject && currentProject.status === 'error';
+
+  // A conversation belongs to one project, so a project switch drops the selection.
+  useEffect(() => {
+    setAssistantThreadId(null);
+  }, [route.projectId]);
 
   const reloadCurrentProject = currentProject.reload;
   const workspaceBinding = useProjectWorkspace(client, project, reloadCurrentProject);
@@ -333,6 +341,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               writable={projectWritable}
               openFile={route.openFile}
               onOpenFile={openFileInCanvas}
+              activeThreadId={assistantThreadId}
+              onSelectThread={setAssistantThreadId}
+              onStartNewThread={() => setAssistantThreadId(null)}
+              onThreadDeleted={(threadId) =>
+                setAssistantThreadId((current) => (current === threadId ? null : current))
+              }
               onSelectWorkspace={workspaceBinding.bind}
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}
@@ -382,6 +396,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             assistantMounted ? (
               <Suspense fallback={<DelayedFallback label="正在加载助手…" />}>
                 <AssistantPanel
+                  client={client}
+                  projectId={route.projectId}
+                  threadId={assistantThreadId}
+                  onThreadIdChange={setAssistantThreadId}
+                  workspacePath={boundWorkspace.path}
                   projectName={projectName}
                   onOpenSettings={() => navigate({ ...route, page: 'settings' })}
                 />

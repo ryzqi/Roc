@@ -242,3 +242,174 @@
   --diff-omit-gutter-line-color: var(--st-warn);
   font-size: var(--font-code-size);
 }
+
+/*
+ * highlight.js token colours (P4). The `.hljs-*` classes are grouped the same way
+ * the legacy `styles/syntax-highlight.css` grouped them, but mapped onto the
+ * `--syntax-*` tokens that already existed in `tokens.css` — so this is a port of
+ * a theme, not a second theme. Scoped to `.roc-code` so it cannot leak onto
+ * anything else, and no colour is written here.
+ */
+.roc-code .hljs-keyword,
+.roc-code .hljs-selector-tag,
+.roc-code .hljs-literal,
+.roc-code .hljs-section,
+.roc-code .hljs-link {
+  color: var(--syntax-keyword);
+}
+
+.roc-code .hljs-string,
+.roc-code .hljs-title,
+.roc-code .hljs-name,
+.roc-code .hljs-type,
+.roc-code .hljs-attribute {
+  color: var(--syntax-string);
+}
+
+.roc-code .hljs-comment,
+.roc-code .hljs-quote,
+.roc-code .hljs-meta {
+  color: var(--syntax-comment);
+}
+
+.roc-code .hljs-number,
+.roc-code .hljs-symbol,
+.roc-code .hljs-bullet {
+  color: var(--syntax-number);
+}
+
+.roc-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.roc-code .hljs-strong {
+  font-weight: 600;
+}
+
+/*
+ * Markdown body (P4). `react-markdown` and `streamdown` both emit plain HTML
+ * elements and rely on the host for styling, so one token-driven scope covers both —
+ * no prose plugin, no second stylesheet, and light/dark follow automatically.
+ */
+.roc-prose {
+  color: var(--text);
+  font-size: var(--font-read-size);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.roc-prose > *:first-child {
+  margin-top: 0;
+}
+
+.roc-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.roc-prose p {
+  margin: 0.6em 0;
+}
+
+.roc-prose h1,
+.roc-prose h2,
+.roc-prose h3,
+.roc-prose h4 {
+  color: var(--ink);
+  margin: 1.1em 0 0.5em;
+  line-height: 1.35;
+}
+
+.roc-prose h1 {
+  font-size: var(--font-h1-size);
+}
+
+.roc-prose h2 {
+  font-size: var(--font-h2-size);
+}
+
+.roc-prose h3,
+.roc-prose h4 {
+  font-size: var(--font-h3-size);
+}
+
+.roc-prose ul,
+.roc-prose ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.roc-prose ul {
+  list-style: disc;
+}
+
+.roc-prose ol {
+  list-style: decimal;
+}
+
+.roc-prose li {
+  margin: 0.2em 0;
+}
+
+.roc-prose li > ul,
+.roc-prose li > ol {
+  margin: 0.2em 0;
+}
+
+.roc-prose blockquote {
+  border-left: var(--stripe-width) solid var(--line-strong);
+  color: var(--muted);
+  margin: 0.6em 0;
+  padding: 0.1em 0 0.1em 0.8em;
+}
+
+.roc-prose code {
+  background: var(--code-surface-soft);
+  border-radius: var(--r-control);
+  font-family: var(--font-mono);
+  font-size: var(--font-code-size);
+  padding: 0.1em 0.35em;
+}
+
+/* The fenced block already has its own frame; an inline pill inside it would nest. */
+.roc-prose pre code,
+.roc-prose .roc-code code {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+.roc-prose table {
+  border-collapse: collapse;
+  display: block;
+  margin: 0.6em 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.roc-prose th,
+.roc-prose td {
+  border: 1px solid var(--line);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+
+.roc-prose th {
+  background: var(--bg-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.roc-prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1em 0;
+}
+
+.roc-prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.roc-prose em {
+  font-style: italic;
+}

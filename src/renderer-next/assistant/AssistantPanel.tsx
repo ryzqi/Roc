@@ -1,21 +1,49 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
+import type { ChatRunMode } from '../../shared/types';
+import { buildProviderModelKey } from '../../shared/provider-model-key';
+import { useAsyncResource } from '../app/use-async-resource';
+import type { RocClient } from '../shared/roc-client';
+import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
+import { AssistantComposer, type ComposerSkill } from './composer';
+import { isImageInputSupported, type ImageSupportSnapshot, type RendererImageAttachment } from './image-attachments';
+import { ChatTranscriptPanel } from './transcript-panel';
+import { useChatSession } from './use-chat-session';
 
 /**
- * Assistant panel placeholder (P1). P4 replaces the body with the real
- * transcript + composer.
+ * The assistant panel (T4.2–T4.6).
  *
- * The header row is already the final shape from MASTER v2 §6.3 —
- * `当前项目 · 当前阶段 · 模型` then the thinking toggle — because P4 has to fit
- * its model selector and context line into exactly this space. The composer
- * placeholder exists so the panel's vertical rhythm (header / transcript flex /
- * composer) is real rather than approximated.
+ * Structure is the final shape P1 reserved: `header / transcript (flex) / composer`.
  *
- * P4 owns: `chat.startRun` + `chat.onRunEvent`, the reused `chat-run-state`
- * reducer, the migrated rich blocks, transcript virtualisation, HITL cards,
- * session list, attachments, and the model list from `settings.get`.
+ * What is real here versus what is deliberately deferred:
+ *
+ *   - **Real**: one `settings.get` call supplies the model label, whether the current model
+ *     takes images, and the enabled skills — so the composer's `/` completion and the image
+ *     affordance are driven by configuration rather than hard-coded (T4.6: the legacy shell's
+ *     four invented models are gone).
+ *   - **Real**: the run wiring, transcript, HITL cards, history paging and reconnection all
+ *     come from `useChatSession` + the ported layers.
+ *   - **Deferred**: switching the model writes through the settings centre (P8 owns the
+ *     canonical settings surface and its write path), so the header links there instead of
+ *     duplicating a half-write. Stage label arrives with P6; until then only the project name
+ *     is shown rather than a guessed stage.
+ *
+ * `threadId` is component state and is cleared when the project changes: a thread belongs to
+ * one project's conversation, and carrying it across projects would be exactly the leak gate 6
+ * is about.
  */
-
 export type AssistantPanelProps = {
+  client: RocClient;
+  projectId: string | null;
+  /**
+   * Selected conversation, owned by the shell: the sidebar lists threads and chooses one, and
+   * a single owner is what keeps the two panels from disagreeing about "the current thread".
+   */
+  threadId: string | null;
+  onThreadIdChange: (threadId: string | null) => void;
+  /** Bound workspace path, so a run is scoped to the directory the user is looking at. */
+  workspacePath: string | null;
   projectName: string | null;
   /** Current workflow stage label, when a project is open (P6 supplies it). */
   stageLabel?: string | null;
@@ -23,58 +51,249 @@ export type AssistantPanelProps = {
 };
 
 export function AssistantPanel({
+  client,
+  projectId,
+  threadId,
+  onThreadIdChange,
+  workspacePath,
   projectName,
   stageLabel = null,
   onOpenSettings
 }: AssistantPanelProps): React.JSX.Element {
+  const settings = useAsyncResource('assistant:settings', () => client.api.settings.get(), {
+    label: '读取模型设置'
+  });
+  const [mode, setMode] = useState<ChatRunMode>('chat');
+  const [attachments, setAttachments] = useState<RendererImageAttachment[]>([]);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // A thread belongs to the project it was created in (gate 6); the shell clears the
+  // selection, this only drops the drafts that belonged to it.
+  useEffect(() => {
+    setAttachments([]);
+  }, [projectId, threadId]);
+
+  const session = useChatSession({
+    client,
+    threadId,
+    projectId,
+    workspacePath,
+    onThreadId: (next) => onThreadIdChange(next)
+  });
+
+  /**
+   * Restores a suspended run once per thread, not once per render.
+   *
+   * `session.restoreActiveRun` is a fresh closure on every render (it depends on the run
+   * controller, which is itself a new object each time), so putting it in the dependency list
+   * would fire `chat.getActiveRun` every frame — and, worse, re-apply a replay on top of live
+   * events that were buffered while the window was hidden. The ref keys the attempt to the
+   * thread it belongs to.
+   */
+  const restoredThreadRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (restoredThreadRef.current === threadId) {
+      return;
+    }
+    restoredThreadRef.current = threadId;
+    // A different thread means a different run: without this, a suspended run's
+    // `waiting_user` status would keep the next thread's input disabled.
+    session.resetRun();
+    void session.restoreActiveRun();
+  }, [session, threadId]);
+
+  const snapshot = settings.data;
+  const imageSupport: ImageSupportSnapshot | null = useMemo(
+    () =>
+      snapshot === null
+        ? null
+        : {
+            defaultModelId: snapshot.defaultModelId,
+            providers: snapshot.providers.map((provider) => ({
+              id: provider.id,
+              models: provider.models.map((model) => ({ id: model.id, supportsImages: model.supportsImages }))
+            }))
+          },
+    [snapshot]
+  );
+  const skills: ComposerSkill[] = useMemo(
+    () =>
+      (snapshot?.skills ?? [])
+        .filter((skill) => skill.enabled && skill.status === 'ready')
+        .map((skill) => ({ id: skill.id, name: skill.name })),
+    [snapshot]
+  );
+  const modelLabel = useMemo(() => {
+    if (snapshot === null) {
+      return settings.status === 'loading' ? '读取模型…' : '模型未配置';
+    }
+    if (snapshot.defaultModelId === null) {
+      return '模型未配置';
+    }
+    for (const provider of snapshot.providers) {
+      // The settings key format is `provider:model` (`buildProviderModelKey`), not `provider/model`.
+      const model = provider.models.find(
+        (item) => buildProviderModelKey(provider.id, item.id) === snapshot.defaultModelId
+      );
+      if (model !== undefined) {
+        return `${model.displayName} · ${provider.name}`;
+      }
+    }
+    return snapshot.defaultModelId;
+  }, [settings.status, snapshot]);
+
+  const runStatus = session.runState.status;
+  const activeRun = runStatus === 'running' || runStatus === 'recovering';
+  const pendingQuestion = session.runState.pendingInterrupts.find((interrupt) => interrupt.kind === 'question') ?? null;
+  const replyMode = pendingQuestion !== null;
+  const waitingUser = session.runState.pendingInterrupts.length > 0;
+  const statusLabel =
+    runStatus === 'idle'
+      ? null
+      : runStatus === 'recovering'
+        ? `运行恢复中${session.runState.recoveryAttempt === null ? '' : `（第 ${session.runState.recoveryAttempt} 次）`}`
+        : runStatus === 'waiting_user'
+          ? '等待你的决定'
+          : runStatus === 'running'
+            ? '运行中'
+            : runStatus === 'completed'
+              ? '已完成'
+              : runStatus === 'cancelled'
+                ? '已取消'
+                : '运行失败';
+
+  const onApprovalDecision = useCallback(
+    (interruptId: string, decisions: Parameters<typeof session.resumeApproval>[1]) => {
+      void session.resumeApproval(interruptId, decisions);
+    },
+    [session]
+  );
+
+  const header = (
+    <div className="flex shrink-0 flex-col gap-1 border-b border-line px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-meta-size)]" data-testid="assistant-context">
+          {projectName === null ? '未进入项目' : projectName}
+          {stageLabel === null ? '' : ` · ${stageLabel}`}
+        </span>
+        {statusLabel === null ? null : (
+          <span
+            className={
+              runStatus === 'failed' || runStatus === 'recovering'
+                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-1.5 py-0.5 text-[var(--tool-st-error-text)] text-[var(--font-micro-size)]'
+                : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]'
+            }
+            data-testid="assistant-run-status"
+            data-status={runStatus}
+          >
+            {runStatus === 'running' || runStatus === 'recovering' ? (
+              <Loader2 size={10} aria-hidden="true" className="mr-1 inline animate-spin" />
+            ) : null}
+            {statusLabel}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="模型与思考开关在设置中心（唯一可写位置）"
+          data-testid="assistant-model-settings"
+          className="h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 truncate rounded-control border border-line px-2 font-mono text-muted text-[var(--font-micro-size)] hover:text-ink"
+        >
+          {modelLabel}
+        </button>
+      </div>
+    </div>
+  );
+
+  const errorMessages = [
+    session.errorMessage,
+    session.history.error,
+    settings.status === 'error' ? (settings.error ?? '读取模型设置失败') : null
+  ].filter((message): message is string => message !== null && message.length > 0);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg-soft" data-testid="assistant-panel">
-      <div className="flex shrink-0 flex-col gap-1 border-b border-line px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-meta-size)]" data-testid="assistant-context">
-            {projectName === null ? '未进入项目' : projectName}
-            {stageLabel === null ? '' : ` · ${stageLabel}`}
-          </span>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            title="模型与思考开关在设置中心（唯一可写位置）"
-            data-testid="assistant-model-settings"
-            className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 font-mono text-muted text-[var(--font-micro-size)] hover:text-ink"
-          >
-            模型未配置
-          </button>
+      {header}
+
+      {errorMessages.length === 0 ? null : (
+        <div className="shrink-0 px-2 pt-2" data-testid="assistant-errors">
+          <ErrorBar error={{ level: 'page', message: errorMessages[0] ?? '', retry: () => void session.restoreActiveRun() }} />
         </div>
-      </div>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto" data-testid="assistant-transcript">
-        <EmptyState
-          title="助手尚未接入"
-          description="消息流、推理、工具调用、子代理与审批卡片将在这一栏渲染。"
-          testId="assistant-placeholder"
-        />
-        <p className="px-6 text-center text-subtle text-[var(--font-micro-size)]">P4 实现</p>
-      </div>
-
-      <div className="shrink-0 border-t border-line p-2.5" data-testid="assistant-composer">
-        <div className="flex items-end gap-2 rounded-card border border-line bg-surface px-2.5 py-2">
-          <textarea
-            rows={3}
-            disabled
-            aria-label="给助手的指令"
-            placeholder="P4 接入 chat.startRun 后可用"
-            className="min-h-[3rem] min-w-0 flex-1 resize-none bg-transparent text-ink placeholder:text-subtle disabled:opacity-60"
+      <div ref={scrollContainerRef} className="relative flex min-h-0 flex-1 flex-col">
+        {session.messages.length === 0 ? (
+          <EmptyState
+            title={session.history.loadingInitial ? '正在读取会话…' : '开始一段研究对话'}
+            description={
+              session.history.loadingInitial
+                ? undefined
+                : '提问、让助手跑工具、或在任务/计划模式下发起一次结构化的运行。'
+            }
+            tone={session.history.loadingInitial ? 'loading' : 'empty'}
+            testId={session.history.loadingInitial ? 'assistant-history-loading' : 'assistant-empty'}
           />
-          <button
-            type="button"
-            disabled
-            className="h-[var(--control-height)] shrink-0 rounded-control border border-line px-3 text-muted disabled:opacity-50"
-          >
-            发送
-          </button>
-        </div>
-        <p className="mt-1 text-subtle text-[var(--font-micro-size)]">Enter 发送 · Shift+Enter 换行 · ⌘Enter 也发送</p>
+        ) : (
+          <ChatTranscriptPanel
+            threadId={threadId}
+            messages={session.messages}
+            prependRevision={session.history.prependRevision}
+            trimRevision={session.history.trimRevision}
+            windowEpoch={session.history.windowEpoch}
+            tailTrimmed={session.history.tailTrimmed}
+            hasMoreBefore={session.history.hasMoreBefore}
+            loadingOlder={session.history.loadingOlder}
+            loadOlder={session.history.loadOlder}
+            onJumpToLatest={session.history.reloadLatest}
+            scrollContainerRef={scrollContainerRef}
+            onApprovalDecision={onApprovalDecision}
+          />
+        )}
       </div>
+
+      {waitingUser ? (
+        <p className="shrink-0 border-t border-line px-3 py-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="assistant-waiting-note">
+          <AlertTriangle size={10} aria-hidden="true" className="mr-1 inline" />
+          运行已挂起，等待你在上面的卡片里做出决定；刷新后仍会回到这里。
+        </p>
+      ) : null}
+
+      <AssistantComposer
+        mode={mode}
+        onModeChange={setMode}
+        skills={skills}
+        attachments={attachments}
+        onAttachmentsChange={setAttachments}
+        imageInputSupported={imageSupport === null ? false : isImageInputSupported(imageSupport)}
+        sending={session.sending}
+        running={activeRun}
+        replyMode={replyMode}
+        onSend={async (input) => {
+          // A suspended question takes the text as its answer; everything else starts a new run.
+          if (pendingQuestion !== null) {
+            return await session.resumeQuestion(pendingQuestion.interruptId, input.text);
+          }
+          return await session.send({
+            text: input.text,
+            mode,
+            skillIds: input.explicitSkillIds,
+            attachments: input.attachments
+          });
+        }}
+        onStop={() => void session.cancel()}
+      />
+
+      {settings.status === 'error' ? (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="shrink-0 px-3 pb-2 text-left text-accent text-[var(--font-micro-size)]"
+          data-testid="assistant-open-settings-hint"
+        >
+          <Settings2 size={10} aria-hidden="true" className="mr-1 inline" />
+          打开设置检查 provider 与模型
+        </button>
+      ) : null}
     </div>
   );
 }
