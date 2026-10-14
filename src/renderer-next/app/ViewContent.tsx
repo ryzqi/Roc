@@ -1,100 +1,78 @@
-import { Suspense, lazy, useEffect, useState, type ComponentType } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import type { AppViewId } from './routes';
+import { DelayedFallback } from '../shell/DelayedFallback';
+import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProps } from './view-registry';
 
 /**
- * Lazy view host, ported from the legacy shell's `loadView` / `viewCache`
- * pattern.
+ * Lazy view host with hysteresis.
  *
- * A view module is fetched at most once per session (module-level cache), so
- * switching canvas views never refetches a chunk that is already resident.
+ * Two properties, both ported from the legacy shell's
+ * `loadView` / `viewCache` / `useShownView` pattern because both are user-visible:
  *
- * P0 registers placeholder views only; P1–P9 swap each entry for a real
- * `() => import('...')` of the owning module. Until then these in-memory
- * factories ship inside the eager entry — which is fine for placeholders, but
- * **the assistant, settings, and the Markdown/KaTeX families must be real
- * dynamic imports** or `check-renderer-chunks.mjs`'s
- * `forbidden = /markdown|streamdown|highlight|settings/iu` guard fires
- * (R4 / ADR-M11).
+ *   1. **A view module is fetched at most once per session** — the cache lives in
+ *      `view-registry.ts`.
+ *   2. **The canvas never blanks while switching.** If the requested view's chunk
+ *      is already resident it renders immediately; otherwise the *previous* view
+ *      stays mounted while the next chunk is fetched, and the swap happens once
+ *      it resolves.
+ *
+ * The prefetch deliberately does **not** mount the incoming view inside a hidden
+ * boundary: React would unmount and remount it on the swap, running its effects
+ * twice — two IPC round-trips per first visit once P3+ lands real views.
+ *
+ * The canvas is a single scroll surface (MASTER v2 §5), so its offset resets when
+ * the *shown* view changes — not when the requested one does, so a slow load
+ * cannot jump the view the user is still reading.
  */
 
-export type ViewProps = {
-  view: AppViewId;
-  projectId: string | null;
-  stageHint: string | null;
-};
-
-type ViewModule = { default: ComponentType<ViewProps> };
-
-function placeholderView(title: string, phase: string): ComponentType<ViewProps> {
-  return function Placeholder() {
-    return (
-      <div className="flex h-full w-full items-center justify-center p-6" data-testid="view-placeholder">
-        <div className="rounded-card border border-line bg-surface px-5 py-4 text-center">
-          <p className="text-ink">{title}</p>
-          <p className="mt-1 text-muted">尚未实现 · {phase}</p>
-        </div>
-      </div>
-    );
-  };
-}
-
-const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
-  overview: async () => ({ default: placeholderView('项目总览', 'P6 实现') }),
-  stage: async () => ({ default: placeholderView('阶段工作区', 'P6 实现') }),
-  activity: async () => ({ default: placeholderView('活动流', 'P6 实现') }),
-  provenance: async () => ({ default: placeholderView('溯源', 'P7 实现') }),
-  changes: async () => ({ default: placeholderView('改动与产物', 'P1 实现') }),
-  literature: async () => ({ default: placeholderView('文献中心', 'P5 实现') }),
-  latex: async () => ({ default: placeholderView('文稿', 'P7 实现') }),
-  terminal: async () => ({ default: placeholderView('终端', 'P3 实现') }),
-  files: async () => ({ default: placeholderView('文件', 'P3 实现') }),
-  tasks: async () => ({ default: placeholderView('任务看板', 'P6 实现') }),
-  diagnostics: async () => ({ default: placeholderView('运行诊断', 'P6 实现') }),
-  mcp: async () => ({ default: placeholderView('MCP', 'P9 实现') }),
-  skills: async () => ({ default: placeholderView('技能', 'P9 实现') }),
-  memory: async () => ({ default: placeholderView('记忆', 'P9 实现') })
-};
-
-const viewCache = new Map<AppViewId, ComponentType<ViewProps>>();
-
-function loadView(view: AppViewId): ComponentType<ViewProps> {
-  const cached = viewCache.get(view);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const component = lazy(viewLoaders[view]);
-  viewCache.set(view, component);
-  return component;
-}
-
-/**
- * Waits 200ms before showing anything (MASTER v2 §10): a chunk that resolves
- * faster than that must not flash a placeholder. After the threshold the text
- * stays mounted until the suspended subtree commits.
- */
-function DelayedViewFallback(): React.JSX.Element | null {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const handle = window.setTimeout(() => setVisible(true), 200);
-    return () => window.clearTimeout(handle);
-  }, []);
-  if (!visible) {
-    return null;
-  }
-  return (
-    <div className="flex h-full w-full items-center justify-center p-6 text-muted" data-testid="view-loading" role="status">
-      正在加载视图…
-    </div>
-  );
-}
+export type { ViewProps };
 
 export function ViewContent({ view, projectId, stageHint }: ViewProps): React.JSX.Element {
-  const Current = loadView(view);
+  // Subscribing makes the resolution moment observable, which is what drives the
+  // warm-up to completion.
+  useViewResolution();
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [shownView, setShownView] = useState<AppViewId>(view);
+  const requestedResident = isViewResolved(view);
+  const warming = view !== shownView;
+
+  useEffect(() => {
+    if (warming && !requestedResident) {
+      preloadView(view);
+      return;
+    }
+    if (warming && requestedResident) {
+      setShownView(view);
+    }
+  }, [warming, requestedResident, view]);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (element !== null) {
+      element.scrollTop = 0;
+      element.scrollLeft = 0;
+    }
+  }, [shownView]);
+
+  const Shown = loadView(shownView);
+
   return (
-    <Suspense fallback={<DelayedViewFallback />}>
-      <div className="h-full w-full" data-view={view} data-project={projectId ?? ''} data-stage={stageHint ?? ''}>
-        <Current view={view} projectId={projectId} stageHint={stageHint} />
-      </div>
-    </Suspense>
+    <div
+      ref={scrollRef}
+      className="h-full w-full overflow-y-auto"
+      data-view={view}
+      data-shown-view={shownView}
+      data-project={projectId ?? ''}
+      data-stage={stageHint ?? ''}
+    >
+      <Suspense fallback={<DelayedFallback />}>
+        <Shown
+          view={shownView}
+          projectId={projectId}
+          stageHint={shownView === view ? stageHint : null}
+        />
+      </Suspense>
+    </div>
   );
 }

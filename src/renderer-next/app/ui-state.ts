@@ -16,8 +16,6 @@ export const uiStateKeys = {
   sidebarCollapsed: `${UI_STATE_PREFIX}sidebar.collapsed`,
   sidebarTab: `${UI_STATE_PREFIX}sidebar.tab`,
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
-  assistantOpen: `${UI_STATE_PREFIX}assistant.open`,
-  canvasTab: `${UI_STATE_PREFIX}canvas.tab`,
   lastProjectId: `${UI_STATE_PREFIX}project.last`,
   themeOverride: `${UI_STATE_PREFIX}theme.override`,
   /** Local-only pinning. Not product data; the backend has no star field (B1). */
@@ -30,7 +28,16 @@ export type UiStateKey = (typeof uiStateKeys)[keyof typeof uiStateKeys];
 
 export type ThemeOverride = 'system' | 'light' | 'dark';
 export type SidebarTab = 'files' | 'literature' | 'sessions';
-export type CanvasTab = 'literature' | 'latex' | 'terminal';
+
+/*
+ * Deliberately NOT stored here:
+ *
+ *   canvas tab  — the current view is `?view=` in the URL (ADR-M05)
+ *   assistant   — open/closed is `?assistant=1` in the URL (ADR-M05)
+ *
+ * A second copy would let the two disagree after a reload, so the URL wins and
+ * neither key exists under `roc.ui.*`.
+ */
 
 /**
  * Legacy keys written by the pre-migration shell and by research-studio's
@@ -161,30 +168,6 @@ export function readAssistantWidth(): number {
 
 export function writeAssistantWidth(width: number): void {
   writeRaw(uiStateKeys.assistantWidth, String(Math.round(Math.max(width, ASSISTANT_WIDTH.min))));
-}
-
-export function readAssistantOpen(): boolean | null {
-  const raw = readRaw(uiStateKeys.assistantOpen);
-  if (raw === null) {
-    return null;
-  }
-  return raw === '1';
-}
-
-export function writeAssistantOpen(open: boolean): void {
-  writeRaw(uiStateKeys.assistantOpen, open ? '1' : '0');
-}
-
-export function readCanvasTab(): CanvasTab {
-  const raw = readRaw(uiStateKeys.canvasTab);
-  if (raw === 'literature' || raw === 'latex' || raw === 'terminal') {
-    return raw;
-  }
-  return 'literature';
-}
-
-export function writeCanvasTab(tab: CanvasTab): void {
-  writeRaw(uiStateKeys.canvasTab, tab);
 }
 
 /* ------------------------------------------------------------------ */

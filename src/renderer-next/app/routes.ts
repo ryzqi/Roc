@@ -126,10 +126,6 @@ function parsePage(value: string | null): { page: AppPage; newProject: boolean }
 }
 
 function parseView(value: string | null): AppViewId {
-  if (value === 'service') {
-    // Legacy alias used by the old shell for "stage workspace".
-    return 'stage';
-  }
   if (value !== null && APP_VIEW_IDS.has(value as AppViewId)) {
     return value as AppViewId;
   }
@@ -202,8 +198,12 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
   const view: AppViewId = portal ? DEFAULT_VIEW : route.view;
   const parsedStage = view === 'stage' ? normalizeStagePair(route.stageGroup, route.stageTab) : parseStage(null);
   const tool: WorkbenchTool | null = viewCarriesTool(view) ? route.tool : null;
-  // Settings is an overlay on top of whatever is open, and the create form only
-  // belongs to a project-less portal, so neither can coexist with the other.
+  // `newProject` is a one-shot *request* to open the portal's create form, so it
+  // is only meaningful on a project-less portal. The form's open state and its
+  // draft are component state in `ProjectPortalView`; that is what keeps an
+  // accidental ⌘, from discarding typed input (settings is an overlay, so the
+  // portal stays mounted underneath). Keeping it out of the URL also keeps
+  // parse∘write identity, since `page` can only hold one value.
   const newProject = page === 'research' && portal ? route.newProject : false;
 
   return {
