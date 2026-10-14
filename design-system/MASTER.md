@@ -1,15 +1,18 @@
 ---
 name: Roc
-version: 1.0.0
+version: 2.0.0
 platform: macOS desktop
-stack: Electron + React
-generated: 2026-09-22
-source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel 校准
+stack: Electron + React + Tailwind 4
+generated: 2026-10-14
+source: research-studio 前端（设计权威）+ AGENTS.md 硬约束 + 旧 MASTER.md 保留条目
+supersedes: 1.0.0
 ---
 
 # Roc Design System Master
 
-本文是 Roc 的全局视觉与交互规范。页面实现先读本文件。本文件只定义规范，不改代码。当前不存在页面级覆盖；确需特例时按 `design-system/pages/<page>.md` 约定新增，新增后该页面覆盖优先于本文件。
+本文是 Roc 的全局视觉与交互规范。页面实现先读本文件。
+
+**v2 是一次有意的规范替换，不是增补。** v1 规定「无全局左栏」「阶段条为签名元素」；v2 采纳新前端的 IA：**项目门户 → 三栏工作台（左栏 / 助手 / 画布）+ 抽屉与浮层**。两份规范不能同时生效，v1 中被 v2 取代的条目在 §1.4 明确列出。
 
 **产品一句话：** Roc 是面向个人研究者的 macOS 本地科研工作台。入口是研究项目，不是对话。
 
@@ -23,51 +26,35 @@ source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel �
 
 ### 功能地图
 
-| 层 | 现有入口 | 职责 | 不是什么 |
+| 层 | 入口 | 职责 | 不是什么 |
 |---|---|---|---|
-| 窗口壳 | `AppShell` + `WindowWorkband` | 40px 顶栏、设置浮层、科研画布 | 全局侧栏、一级 Chat/Code tab |
-| 项目列表 | `ResearchAppShell` `shellState=list` | 默认入口；卡片网格；搜索/筛选/新建 | 自动进入上次项目、空态直接摊开表单 |
-| 科研工作台 | `ResearchAppShell` `shellState=project` | 进入某一个研究项目后的产品壳 | 项目列表、全局对话页 |
-| 研究项目工作台 | `ResearchOverviewView` | 当前阶段状态句、闸门、索引、最近活动；只读 | 文献/实验/文稿编辑面 |
-| 阶段工作区 | `ResearchStageWorkspace` | 文献、知识、构思、实验、图稿、正文、文稿、导出 | 独立产品页 |
-| 科研服务 | `research-services.ts` | 助手、文件与代码、活动、连接器、技能、记忆、诊断 | 一级导航 |
-| 设置 | `SettingsModal` + `SettingsView` | 模型、默认模型、应用基础、任务、授权、Hooks、记忆 | 独立全屏页、默认工作区 |
+| 窗口壳 | `MacWindowChrome` | 窗口拖拽区、面包屑、搜索（⌘K）、助手/管理/Git/设置入口 | 一级导航、阶段条 |
+| 项目门户 | `ProjectPortalView` | 默认入口；卡片网格；搜索/状态筛选/新建 | 自动进入上次项目、空态直接摊开表单 |
+| 三栏工作台 | `AppShell` | 左栏 + 助手 + 画布；可拖拽、可折叠；断点收合 | 第二套导航层级 |
+| 左栏 | `LeftSidebar` | 文件 / 文献 / 会话三个 tab；主题与管理入口 | 科研服务全集、阶段导航 |
+| 助手 | `AssistantPanel` | DeepAgent run 的执行面；富块渲染 | 唯一的执行入口、欢迎英雄区 |
+| 画布 | `WorkspaceCanvas` | 一级 tab：文献 / LaTeX / 终端；项目内视图与阶段位置 | 独立产品页 |
+| 项目内视图 | `ViewContent` | 总览 · 阶段工作区 · 活动 · 溯源 · 改动 · 文献 · 文稿 · 终端 · 文件 · 任务 · 诊断 · MCP · 技能 · 记忆 | 一级导航项的全集 |
+| 抽屉与浮层 | `SystemDrawer` / `SearchPaletteModal` / `FilePreviewModal` / `ManagementPanel` / `SettingsModal` | 临时工作面，不卸载当前项目 | 新窗口、路由页 |
 
-阶段组：发现与阅读、构思与计划、实验与检查、写作与审阅、发布与复现、项目设置。11 个流程阶段走人工闸门，不由模型自行跨过。
+阶段组：发现与阅读、构思与计划、实验与检查、写作与审阅、发布与复现、项目设置。11 个流程阶段走人工闸门，不由模型自行跨过。分组定义的真身是 `src/renderer-next/canvas/workflow/stage-groups.ts`。
 
 ### 页面结构
 
 ```
-+---------------------------------------------------------------+
-| traffic lights | 所有项目 / 新建 | 当前项目名 | 设置  Cmd+, |  40px
-+---------------------------------------------------------------+
-|                                                               |
-|  项目列表：搜索 + 状态筛选 + 卡片网格                           |
-|  或                                                           |
-|  科研工作台：阶段条 -> 科研画布 -> 可选活动栏 / 助手分栏         |
-|                                                               |
-+---------------------------------------------------------------+
++-----------------------------------------------------------------------+
+| traffic lights | 所有项目 / 新建 | 项目名 | 🔍 ⌘K | 助手 管理 Git 设置   44px
++----------+--------------------------------------------+---------------+
+| 左栏     | 画布                                        | 助手           |
+| 180-400  | 一级 tab：文献 / LaTeX / 终端                 | 280-…          |
+| 文件     | 阶段条（项目内）                              | 对话头部       |
+| 文献     | 项目内视图                                    | 转录           |
+| 会话     |                                             | 输入区         |
++----------+--------------------------------------------+---------------+
+        门户态：画布换成项目卡网格（左栏与助手不出现）
 ```
 
-科研工作台内：
-
-```
-阶段条（发现 / 构思 / 实验 / 写作 / 发布）
-+----------------------+--------------+
-| 科研画布             | 活动栏 可选  |
-| overview / stage /   | 最近事件     |
-| activity / provenance|              |
-| 科研服务入口         |              |
-+----------------------+--------------+
-研究助手：宽屏右侧 320-420px 分栏；窄屏抽屉盖在画布上
-文件与代码：替换画布，不卸掉当前项目
-```
-
-断点沿用现有查询：
-
-- `> 1099px` 完整工作台
-- `<= 1099px` 紧凑：活动栏改纵向。科研服务在任何宽度都从抽屉打开，不占左栏
-- `<= 799px` 窄窗：阶段工作区单列，顶栏按钮换行
+抽屉（Git / 管理 / 文件预览）与浮层（搜索 / 设置）盖在最上层，关闭后回到触发元素。
 
 ### 用户流程
 
@@ -78,29 +65,53 @@ source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel �
 新建
   -> 点新建才出表单（标题、研究目标、语言、工作目录）
   -> 必须选目录；一目录同时只属一个项目
-  -> 创建成功立刻进入该项目总览
+  -> 创建成功立刻进入该项目
 进入项目
-  -> 顶栏变成「所有项目」+ 项目名 + 设置
-  -> 默认总览；阶段条切工作区；1/2/3 切总览/活动/溯源
+  -> 顶栏变成「所有项目 / 项目名 / 分支」
+  -> 默认落总览（P6 前先落文献中心）；阶段条切工作区
+  -> 左栏给文件/文献/会话；画布给内容；助手默认关闭
+助手
+  -> 叠在画布右侧，不替换画布，不离开当前项目
+  -> ⌘J 开关；窄窗改抽屉
 科研服务
-  -> 研究助手叠在画布右侧，默认关闭
-  -> 文件与代码先绑定工作目录，再替换画布
-  -> 活动、连接器、技能、记忆、诊断不离开当前项目
+  -> 活动、连接器、技能、记忆、诊断替换画布，不离开当前项目
 返回
-  -> 「所有项目」卸掉当前项目；助手和文件都不留在列表页
+  -> 「所有项目」卸掉当前项目；助手与对话不留在门户
 设置
-  -> 列表页和项目内都能开浮层；Cmd+,；未保存关闭要确认
+  -> 门户和项目内都能开浮层；Cmd+,；未保存关闭要确认
 归档项目
   -> 默认可进但只读；需先恢复才能改产物
 ```
 
-路由合同：`page=research` 是默认；`project` 决定列表/工作台；`view` 为 overview/activity/provenance/stage；`stage` 为阶段组或面板；无 `project` 的服务地址回列表。
+路由合同见 §6.5 与 `src/renderer-next/app/routes.ts`。
+
+### 1.4 相对 v1 的取代关系
+
+| v1 条目 | v2 处置 |
+|---|---|
+| 「全局左侧 App 导航」被禁止 | **废弃。** 见 §1.5 |
+| 阶段条是签名元素、进入项目的唯一主导航 | **降级。** 阶段条是项目内主视图之一，与总览/活动/溯源并列；签名元素改为「三栏工作台 + 阶段条」的组合 |
+| 默认浅色、跟随系统 | **改为默认深色**，保留浅色与跟随系统；首次启动读系统外观，不锁死深色 |
+| 强调色 `#2d477a` | 改为跟随系统 accent（`--system-accent`），浅色兜底 `#2d477a` |
+| `--r-md` 10px / `--r-lg` 14px | 收敛为 6 / 8 / 10（`--r-control` / `--r-card` / `--r-window`） |
+| 界面正文 13.5px | 统一 13px（`--font-ui-size`） |
+| 顶栏高 40px | 44px（macOS hidden title bar 的 traffic-light 让位） |
+
+### 1.5 为什么 v2 允许全局左栏
+
+v1 禁用左栏的理由是「避免做成 SaaS 仪表盘，避免 Chat/文件/任务变成一级页」。这个风险是真的，但把它变成「禁止左栏」是错的解法：
+
+- 研究者进入项目后最高频的三件事是**看文件、看文献、切换会话**。这三件在 v1 里被推向抽屉与浮层，每次都要多一次开关。
+- 新前端的实测形态（左栏 180–400px + 助手 + 画布）把这三件事与画布拉平，同时**没有**引入一级 Chat/文件/任务页：左栏的三个 tab 都是当前项目的从属视图，不是全局导航。
+- 真正的「SaaS 味道」来自 KPI 卡片、装饰渐变、营销式空态，而不是栏位数量。这些禁令在 §1 全部保留。
+
+因此 v2 的约束是：**左栏只属于项目上下文**。门户态不显示左栏；左栏不出现在没有项目的路由；左栏的 tab 数量固定为三个，新增 tab 需要改本文件。
 
 ---
 
 ## 1. 视觉风格
 
-**名称：** 实验室工作台（Lab Bench）
+**名称：** 实验台（Lab Bench）
 
 **判断：** 这是长时间盯着阶段、闸门、文献和产物的本地工具，不是营销页，也不是聊天产品。界面必须像一张干净的实验台：纸面、墨迹、金属边、系统控件。装饰只允许出现在当前阶段和闸门上。
 
@@ -113,101 +124,70 @@ source: 现有 renderer 壳层 + ui-ux-pro-max / frontend-design / native-feel �
 - 金属边：hairline 分隔，不用厚描边或彩色色块分区
 - 仪器灯：状态用小胶囊 + 文字，不用大色条或霓虹
 
-**签名元素：** 阶段条。它是进入项目后的主导航，也是产品记忆点。当前阶段用系统强调色左边条 + 「当前阶段」副文案；其余阶段保持安静。不要把品牌色铺满顶栏或卡片。
+**签名元素：** 三栏工作台骨架 + 项目内的阶段条。两者合起来是进入项目后的产品记忆点：左栏给上下文，中间给当前阶段，右侧给执行。当前阶段用系统强调色左边条 + 「当前阶段」副文案；其余阶段保持安静。不要把品牌色铺满顶栏或卡片。
 
-**风格校准（相对检索结果）：**
-
-| 来源 | 建议 | 本系统采用 |
-|---|---|---|
-| ui-ux-pro-max `--design-system` | Flat Design + 青绿 `#0D9488` + 橙 CTA + Crimson Pro | 弃用。偏移动海报，不像 macOS 科研工具 |
-| style 检索 | Swiss Modernism 2.0 | 取网格、单强调色、无装饰 |
-| color 检索 | 职业海军蓝 + 蓝 CTA | 弃用整页深蓝。强调色跟系统 accent |
-| typography 检索 | Inter / Poppins / 学术衬线 | 弃用网页字体。用 SF / PingFang |
-| native-feel | 系统材料、系统字体、无 pointer 行 | 全部采用 |
-
-**明确禁止：**
+**明确禁止（与 v1 相同，全部保留）：**
 
 - 青绿、薄荷底、奶油衬线、酸绿暗色、霓虹赛博、新拟态双阴影
 - 渐变英雄区、彩色 orbs、大圆角营销卡、emoji 当图标
 - 网页字体、负字距、把项目卡片做成 SaaS 仪表盘 KPI
-- 全局左侧 App 导航。Roc 没有一级 Chat / 文件 / 任务页
+- 阶段条做成 pill tab bar；把状态做成只有颜色的圆点
 
-**图标：** 只用 Lucide，描边 1.7-1.9。同一层级不混填充/描边。图标按钮必须有 `aria-label`。
+**图标：** 只用 Lucide，描边 1.7-1.9。同一层级不混填充/描边。图标按钮必须有 `aria-label`。禁止 emoji 当图标。
 
-**控件：** 优先现有 `ui-button` / `ui-input` / `ui-select` / `ui-switch`。不要为品牌重做 macOS 按钮皮肤。
+**控件：** 优先共享 `ui-*` 原语。不要为品牌重做 macOS 按钮皮肤。
 
 ---
 
 ## 2. 色彩变量
 
-语义 token 映射现有 `src/renderer/styles/tokens.css`。组件里禁止写死 hex，只用这些名字。强调色跟系统 accent，不锁品牌蓝。
+真身是 `src/renderer-next/styles/tokens.css`，两层结构：
 
-### 浅色
+1. **palette 层**：`--app-zinc-50..950` / `--app-slate-50..900`，浅深各一套。深色下 zinc 阶是**反相**的（`--app-zinc-900` 是深面，`--app-zinc-100` 是亮字），与 `research-studio` 一致，因此组件里 `bg-zinc-900 text-zinc-100` 在两套主题下语义相同。
+2. **semantics 层**：`--ink` / `--text` / `--muted` / `--bg` / `--surface` / `--line` / `--accent` / `--st-*` 等别名，由 palette 推导。**组件只用语义层或 Tailwind 语义类名，禁止写死 hex。**
 
-| Token | Hex / 公式 | 用途 |
-|---|---|---|
-| `--ink` | `#1f2937` | 标题、强调正文 |
-| `--text` | `#2c3440` | 默认正文 |
-| `--muted` | `#58606b` | 辅助说明、元信息 |
-| `--subtle` | `#6b7280` | 更弱提示、占位。浅色纸面上对比不低于 4.5:1 |
-| `--bg` | `#fcfcfd` | 窗口底，接近纸面 |
-| `--bg-soft` | `#f6f7f9` | 次级底、只读输入 |
-| `--surface` | `#ffffff` | 面板、卡片、设置浮层 |
-| `--surface-strong` | `#ffffff` | 输入底 |
-| `--surface-card` | `#ffffff` | 项目卡片 |
-| `--surface-card-hover` | `#f8f9fb` | 卡片 hover |
-| `--line-soft` | `rgba(120, 144, 184, 0.14)` | 行分隔 |
-| `--line` | `rgba(120, 144, 184, 0.22)` | 默认描边 |
-| `--line-strong` | `rgba(120, 144, 184, 0.34)` | 强描边、hover 边 |
-| `--accent` | `var(--system-accent)` 默认 `#2d477a` | 当前阶段、主按钮、焦点 |
-| `--accent-deep` | `color-mix(in srgb, var(--accent) 78%, #000)` | 主按钮 hover |
-| `--on-accent` | `#ffffff` | 强调色上的字 |
-| `--accent-soft` | accent 10% | 选中底、弱高亮 |
-| `--st-ok` | `#166c4a` | 完成、可用 |
-| `--st-warn` | `#8a5a17` | 待确认、闸门 |
-| `--st-bad` | `#9c3a3a` | 失败、阻断 |
-| `--overlay-hover` | `rgba(15, 23, 42, 0.06)` | 行 hover |
-| `--overlay-active` | `rgba(15, 23, 42, 0.12)` | 按下 |
-| `--overlay-scrim` | `rgba(20, 40, 80, 0.32)` | 设置/确认遮罩 |
+Tailwind 映射在 `src/renderer-next/styles/index.css` 的 `@theme`。调用链只有一条：`@theme` → CSS 变量 → 组件类名。禁止同时引入旧 `src/renderer/styles/*.css`（R5）。
 
-### 深色
+### 关键语义 token
 
-| Token | Hex / 公式 | 用途 |
-|---|---|---|
-| `--ink` | `#f4f7fb` | 标题 |
-| `--text` | `#e7edf5` | 正文 |
-| `--muted` | `#b5c0ce` | 辅助 |
-| `--subtle` | `#8f9bad` | 更弱 |
-| `--bg` | `#111827` | 窗口底，避开纯黑 |
-| `--bg-soft` | `#172033` | 次级底 |
-| `--surface` | `#151f30` | 面板 |
-| `--surface-card` | `#172235` | 卡片 |
-| `--line` | `rgba(190, 205, 228, 0.2)` | 描边 |
-| `--accent-tint` | accent 与白 58% 混合 | 深色淡底，避免深色叠深色消失 |
-| `--st-ok` | `#79d2a6` | 完成 |
-| `--st-warn` | `#e5bd6c` | 闸门 |
-| `--st-bad` | `#ee9292` | 失败 |
-| `--overlay-scrim` | `rgba(6, 11, 20, 0.62)` | 浮层遮罩 |
+| Token | 用途 |
+|---|---|
+| `--ink` | 标题、强调正文 |
+| `--text` | 默认正文 |
+| `--muted` | 辅助说明、元信息 |
+| `--subtle` | 更弱提示、占位。正文位置对比不低于 4.5:1 |
+| `--bg` / `--bg-soft` | 窗口底 / 次级底、只读输入 |
+| `--surface` / `--surface-strong` / `--surface-card` / `--surface-card-hover` | 面板 / 输入底 / 卡片 / 卡片 hover |
+| `--line-soft` / `--line` / `--line-strong` | 行分隔 / 默认描边 / 强描边 |
+| `--accent` / `--accent-deep` / `--accent-soft` / `--accent-soft-strong` / `--on-accent` | 主操作、焦点、选中底 |
+| `--system-accent` | macOS 强调色，由外观桥注入 |
+| `--st-ok` / `--st-warn` / `--st-bad` / `--st-info` | 状态四色 |
+| `--tool-st-*-bg` / `--tool-st-*-text` | 工具调用四态（start / progress / end / error） |
+| `--overlay-hover` / `--overlay-active` / `--overlay-backdrop` / `--overlay-scrim` | 交互层与遮罩 |
+| `--terminal-bg` / `--terminal-text` | 终端（两套主题都深色） |
+| `--scrollbar-thumb` / `--scrollbar-thumb-hover` | 滚动条 |
+| `--glass-bg` | 浮层材料底 |
+
+颜色值以 `tokens.css` 为准；本表只定义语义，不重复 hex。深色底深于 `#111827` 族（`--app-zinc-950` 为 `#0e0e11`），**不用纯黑**，避免 OLED 拖影和边框消失。
 
 ### 使用规则
 
 - 正文对比 >= 4.5:1，大标题 >= 3:1。深色单独测，不从浅色反相。
 - 状态不能只靠颜色：闸门 = 警告色 + 「待确认」；失败 = 错误色 + 图标 + 原因。
 - 主按钮浅色用 `--accent` / `--on-accent`；深色实心按钮走 `--fill-strong` 反转，避免深蓝底深蓝字。
-- 终端面板两套主题都保持深色：`--terminal-bg #101726`。
 - 强制色：`data-forced-colors=true` 时全部退回 `Canvas` / `CanvasText` / `Highlight`。
-- 代码高亮浅色：关键字 `#8b3dff`，字符串 `#087f5b`，数字 `#b45309`；深色对应提亮，不新造第三套。
+- 代码高亮两套主题各一套 token，不新造第三套。
 
 ---
 
 ## 3. 字体和字号层级
 
-macOS 本地应用跟系统字体走，不加载网页字体。
+macOS 本地应用跟系统字体走，**不加载网页字体**。
 
 | 角色 | Token | 字体栈 |
 |---|---|---|
-| UI / 正文 | `--font-sans` | `-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif` |
-| 页面标题 | `--font-display` | 同上。字重 500，不加衬线论文体 |
+| UI / 正文 | `--font-sans` | `-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif` |
+| 页面标题 | `--font-display` | 同上，字体栈换 SF Pro Display |
 | 数据 / 路径 / DOI / 时间 | `--font-mono` | `'SFMono-Regular', Menlo, Monaco, monospace` + `'tnum' 1` |
 
 字距必须为 0。不要负 tracking。
@@ -218,12 +198,12 @@ macOS 本地应用跟系统字体走，不加载网页字体。
 | 区块标题 | `--font-h2-size` | 18px | 500 | 1.3 | 总览块、阶段面板、设置分组 |
 | 小组标题 | `--font-h3-size` | 14px | 500 | 1.35 | 设置浮层标题、卡片内小节 |
 | 引导 | `--font-lead-size` | 15px | 500 | 1.45 | 当前阶段名 |
-| 阅读正文 | `--font-read-size` | 14.5px | 400 | 1.6 | 文稿、笔记、长说明 |
-| 界面正文 | `--font-body-size` | 13.5px | 400 | 1.5-1.65 | 默认 |
+| 阅读正文 | `--font-read-size` | 14px | 400 | 1.6 | 文稿、长说明、阅读器 |
+| 界面正文 | `--font-body-size` | 13px | 400 | 1.5-1.65 | 默认 |
 | 控件 | `--font-ui-size` | 13px | 500 | 1 | 按钮、输入、导航 |
-| 元信息 | `--font-meta-size` | 11.5px | 400-600 | 1.45 | 阶段、状态、时间、卡片副文 |
-| 微型 | `--font-micro-size` | 10.5px | 500 | 1 | 代码和计数，不用于第二套阶段导航 |
-| 代码 | `--font-code-size` | 12.5px | 400 | 1.5 | 终端、diff、LaTeX 源 |
+| 元信息 | `--font-meta-size` | 12px | 400-600 | 1.45 | 阶段、状态、时间、卡片副文 |
+| 微型 | `--font-micro-size` | 11px | 500 | 1 | 代码和计数，不用于第二套阶段导航 |
+| 代码 | `--font-code-size` | 12px | 400 | 1.5 | 终端、diff、LaTeX 源 |
 
 **中文：** PingFang SC 承担界面和长文。英文专名、模型 id、路径保持原文大小写。
 **数字：** 时间、计数、阶段编号必须 tabular nums，避免列表跳动。
@@ -238,48 +218,33 @@ macOS 本地应用跟系统字体走，不加载网页字体。
 | Token | 值 | 用途 |
 |---|---|---|
 | `--space-1` | 4px | 紧凑堆叠、标签内边距 |
-| `--space-2` | 8px | 控件间隙、按钮组 |
-| `--space-3` | 12px | 表单行、卡片内 |
-| `--space-4` / `--space-md` | 16px | 区块内边距 |
-| `--space-5` | 20px | 画布水平内边距 |
-| `--space-6` | 24px | 区块之间 |
+| `--space-2` / `--gap-inline` | 8px | 控件间隙、图标与文字、按钮组 |
+| `--space-3` | 12px | 表单行、卡片内、行内次级间隙 |
+| `--space-4` / `--space-md` / `--pad-card` | 16px | 区块内边距 |
+| `--space-5` / `--pad-window` | 20px | 画布水平内边距 |
+| `--space-6` / `--gap-section` | 24px | 区块之间 |
 | `--space-7` / `--space-xl` | 32px | 页底、浮层外边距 |
-| `--space-2` | 8px | 图标与文字、紧间隙。不要再用 6 / 10 / 22 |
-| `--space-3` | 12px | 行内次级间隙 |
 
 **页面节奏：**
 
-- 顶栏高 40px，左右为红绿灯让出 86px
-- 项目列表/工作台内容区：28-30px 水平，底 42px
-- 卡片网格：`auto-fill, minmax(240px, 1fr)`，间隙 12px
+- 顶栏高 **44px**，左侧为红绿灯让出 86px（`titleBarStyle: 'hidden'`）
+- 项目门户内容区：28-30px 水平，底 42px
+- 卡片网格：`auto-fill, minmax(240px, 1fr)`，间隙 8-12px
+- 左栏行高 36-40px，圆角 `--r-card`
 - 阶段工作区三栏：160-210 / 1fr / 170-220，间隙 18px
 - 设置浮层：`min(1100px, 92vw)` x `min(86vh, 760px)`，侧栏 220px
 
-**圆角（桌面克制，卡片不超过 10px）：**
+**圆角（桌面克制，不超过 10px）：**
 
 | Token | 值 | 用途 |
 |---|---|---|
-| `--r-xs` | 6px | 输入、小标签、列表行 |
-| `--r-sm` | 8px | 默认控件、阶段块 |
-| `--r-md` | 10px | 项目卡片、主按钮、设置项 |
-| `--r-lg` | 14px | 设置浮层、确认框。窗口圆角交给系统 |
-| `--r-xl` / `--r-2xl` | 16 / 20px | 不用在工作台卡片上 |
+| `--r-control` / `--r-xs` | 6px | 输入、小标签、列表行 |
+| `--r-card` / `--r-sm` / `--r-md` | 8px | 默认控件、项目卡片、阶段块、按钮 |
+| `--r-window` / `--r-lg` | 10px | 抽屉、设置浮层、确认框。窗口圆角交给系统 |
 
 胶囊只用于状态 pill。不要把阶段条做成 pill tab bar。
 
-**阴影：** 窗口阴影由系统画。界面只用：
-
-- `--shadow-input` 输入
-- `--shadow-card` 项目卡片
-- `--shadow-card-hover` 卡片悬停
-- `--shadow-popover` 弹出层
-- `--shadow-modal` 设置/确认
-
-禁止给整窗或主画布加 `box-shadow`。
-
-**控件尺寸（实现 token）：** 按钮 32 / 紧凑 28 / 输入 32 / 文本域 88；行高 `--control-hit: 32px`。
-可点区域不小于 28px（`--control-hit-min`）。图标按钮 32×32，顶栏同高。
-口径以 `src/renderer/styles/tokens.css` 为准；本段与 token 冲突时改 token 或改本段，不许两边各说一套。
+**阴影：** 窗口阴影由系统画。界面只用 `--shadow-input` / `--shadow-card` / `--shadow-card-hover` / `--shadow-popover` / `--shadow-modal`。禁止给整窗或主画布加 `box-shadow`。
 
 ---
 
@@ -288,12 +253,11 @@ macOS 本地应用跟系统字体走，不加载网页字体。
 窗口是单一文档窗，不是浏览器站点。
 
 ```
-grid-template-rows: 40px 1fr
-无全局侧栏
-主列 = 当前页的干活面
+grid-template-rows: 44px 1fr
+行内：左栏 | 画布 | 助手（画布 flex-1 min-w-0）
 ```
 
-### 项目列表
+### 项目门户
 
 ```
 顶栏：新建 + 设置
@@ -303,24 +267,33 @@ grid-template-rows: 40px 1fr
 空：图标 + 一句 + 新建（表单默认折叠）
 ```
 
-卡片只显示：标题、当前阶段、项目状态、最近更新；研究目标最多一行截断。上次项目可以高亮或置顶，但不自动进入。
+卡片只显示：标题、当前阶段、项目状态、最近更新；研究目标最多一行截断。上次项目可以高亮或置顶，但**不自动进入**。计数（文献数/文件数/字数）只在能懒加载取到时显示，取不到就不显示该项，**不造假数**。
 
-### 科研工作台
+### 三栏工作台
 
 ```
-顶栏：所有项目 + 项目名 + 设置
-阶段条：五个流程组（项目设置走独立按钮）
-画布：总览 | 阶段工作区 | 活动 | 溯源
-可选：右侧活动栏 180-240px
-可选：研究助手 320-420px
-文件与代码：画布被工作台替换，阶段条仍在
+顶栏：所有项目 + 项目名 + 搜索 + 助手/管理/Git/设置
+左栏：文件 | 文献 | 会话；底部主题与管理
+画布：一级 tab（文献 / LaTeX / 终端）+ 项目内视图 + 阶段条
+助手：叠层分栏，默认关闭，⌘J
 ```
+
+- 宽度：左栏 180–400（默认 256），助手 280–(窗宽 − 左栏 − 360)（默认 440），画布 `flex-1 min-w-0`
+- 双击分隔条复位；宽度与折叠写 `ui-state.ts`（`roc.ui.`）
+- 断点：`> 1099` 三栏；`800–1099` 助手默认收合；`≤ 799` 左栏与助手均改抽屉
+- 只有一个主滚动面；切 view 重置该面滚动
+
+### 画布与项目内视图
+
+`overview`（总览，只读投影）· `stage`（阶段工作区）· `activity` · `provenance` · `changes` · `literature` · `latex` · `terminal` · `files` · `tasks` · `diagnostics` · `mcp` · `skills` · `memory`。
 
 总览是投影，只读。编辑发生在阶段工作区。非当前阶段组只读；项目设置组始终可写。
 
-### 画布服务
+### 抽屉与浮层
 
-活动与运行、连接器、技能、项目记忆、运行诊断替换画布，不新开产品壳。研究助手例外：叠层，不替换。
+活动与运行、连接器、技能、项目记忆、运行诊断替换画布，不新开产品壳。研究助手例外：叠层，不替换。Git、文件预览、管理用右侧抽屉；搜索与设置用模态浮层。
+
+统一模态行为：focus trap、`Escape` 逐层关闭（抽屉 → 抽屉 → 浮层）、关闭后焦点回到触发元素、`aria-modal`。
 
 ### 滚动
 
@@ -332,48 +305,53 @@ grid-template-rows: 40px 1fr
 
 ## 6. 壳层规范
 
-### 顶栏 / 工具栏
+### 6.1 窗口壳 / 顶栏
 
 顶栏是唯一全局工具栏。`-webkit-app-region: drag`；按钮 `no-drag`。
 
 | 场景 | 左 | 中 | 右 |
 |---|---|---|---|
-| 项目列表 | 品牌标 + 新建 | 上下文「研究项目」 | 设置 |
-| 科研工作台 | 所有项目 | 当前项目名（等宽/截断） | 设置 |
-| 助手打开 | 所有项目 + 新建对话 | 项目名 | 设置 |
+| 项目门户 | 品牌标 + 新建 | 上下文「研究项目」 | 搜索 · 管理 · 设置 |
+| 项目内 | 所有项目 | 项目名 / 分支（等宽截断） | 搜索 · 助手 · 管理 · Git · 设置 |
 
 规则：
 
+- **红绿灯是系统控件**（`titleBarStyle: 'hidden'`）：不自绘假红绿灯，左侧留 86px。绿键 zoom 由系统处理。
 - 顶栏不放产品介绍、不放阶段条、不放科研服务全集
-- 图标按钮 28-32px，hover 用浅底，不要 pointer 光标
-- 当前页主操作最多一个实心按钮（列表页的新建）
+- 图标按钮 ≥ 28×28，有 `aria-label`，hover 用浅底，不要 pointer 光标
+- 当前页主操作最多一个实心按钮（门户页是「新建研究项目」）
 - 删除项目、放弃修改等破坏操作远离主按钮，用危险样式
+- 窗口状态（maximized）由 `window.getState` 驱动，不在 renderer 猜测
 
-项目内次级工具放在科研页 banner：研究助手、活动与运行、项目总览、溯源、项目设置、按需打开的科研服务。宽屏不放左侧服务栏。研究助手和活动与运行只留 banner 这一个入口，不进服务列表。服务从抽屉打开。
+### 6.2 左栏
 
-### 侧边栏
+左栏属于项目上下文（§1.5）。三个 tab 固定：文件 / 文献 / 会话。
 
-Roc 没有全局 App 侧栏。允许的侧栏只有三种：
-
-1. **阶段上下文 / 阶段轨道**（阶段工作区内 160-210px）：当前阶段、面板 tab、只读提示
-2. **活动栏**（180-240px）：最近事件，可关
-3. **设置侧栏**（220px）：分区列表，仅存在于设置浮层
-
-行规则：
-
-- 高 36-40px，圆角 `--r-sm`
+- 项目头部：项目名 + 返回门户按钮
+- 底部：主题切换 + 管理面板入口
+- 行高 36-40px，圆角 `--r-card`
 - hover：`--overlay-hover` 或 `--accent-soft`，光标保持 default
-- 选中：浅强调底 `--accent-soft`。不要一律加 3px 左条。强调色左条只属于当前阶段 `.research-shell-stage--current`
+- 选中：浅强调底 `--accent-soft`。不要一律加 3px 左条；强调色左条只属于当前阶段 `.stage-bar--current`
 - 不要 `cursor: pointer`，不要下划线
+- 面板宽度持久化到 `ui-state.ts`
 
-研究助手不是侧栏导航，是内容分栏。文件树属于文件服务，不属于全局导航。
+### 6.3 助手面板
 
-### 列表
+不是侧栏导航，是内容分栏。
+
+- 头部一行：当前项目 · 当前阶段 · 模型（点击跳设置）；思考开关
+- 转录区：富块渲染（推理 / 工具调用 / 子代理 / 审批 / 提问 / 计划 / todo / Hooks / 护栏 / 上下文压缩 / 恢复 / 失败）
+- 输入区：多行自适应 3 行起步，`Enter` 发送，`Shift+Enter` 换行，`⌘Enter` 也发送
+- 空态直接聚焦输入框，不放欢迎英雄区
+- 运行中「停止」为次级操作，不做成第二颗主按钮
+
+### 6.4 列表
 
 | 列表 | 形态 | 选中 | 主字段 |
 |---|---|---|---|
-| 项目卡片 | 网格卡片，最小 240x108 | 边框转 accent | 标题 |
+| 项目卡片 | 网格卡片，最小 240×108 | 边框转 accent | 标题 |
 | 文献 / 知识 | 通栏行，底部分隔 | 行边框 accent | 题名 |
+| 会话 | 通栏行 | 浅强调底 | 标题 / 首句 |
 | 活动 / 溯源 | 三列：标记 · 摘要 · 时间 | 浅底，无左条 | 事件/工件名 |
 | 任务看板 | 列内卡片 | 焦点环 | 任务标题 |
 | 设置分区 | 40px 行 | 浅底，无左条 | 分区名 |
@@ -382,12 +360,16 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 共同规则：
 
 - 用稳定 id 做 key
-- 超过 50 条虚拟化
+- 超过 50 条虚拟化；文件树超过 200 行虚拟化
 - 打字可跳到匹配项（项目列表、设置分区、文件树）
 - 元信息用 `--muted` + meta 字号；状态用 pill，不把整行染色
 - 卡片/行 hover 可以变底，但按下必须另有 `--overlay-active`
 
-### 详情页
+### 6.5 路由合同
+
+`page` / `project` / `view` / `stage` / `tool` / `assistant` 查询参数是路由真身（ADR-M05），与旧壳语义一致，因为 `src/main/application-menu.ts`、`app.onNavigate` 与深链都依赖它。写入用 `history.replaceState`。
+
+### 6.6 详情页
 
 详情不是新窗口，是画布替换或分栏。
 
@@ -406,9 +388,9 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 - 长文 60-75 字宽，不要拉满超宽窗
 - 人工闸门放在内容附近，不用全局 modal 打断阅读，除非是破坏性确认
 
-### 设置页
+### 6.7 设置页
 
-设置是浮层，不是路由页。列表和工作台都能打开。Cmd+,。
+设置是浮层，不是路由页。门户和工作台都能打开。Cmd+,。
 
 ```
 + 设置                          X +
@@ -420,7 +402,7 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 +---------------------------------+
 ```
 
-分区顺序固定：模型提供商、默认模型、应用基础、任务与调度、授权与安全、Hooks、记忆策略。
+分区顺序固定：模型与服务、默认模型、向量与 RAG、文献与解析、编译与沙箱、智能体安全、应用基础、任务与调度、授权与安全、Hooks、记忆策略、偏好与备份。
 
 规则：
 
@@ -430,17 +412,38 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 - 高影响项（默认模型、开机启动、全局快捷键）保存前可扫 impact 列表
 - 关闭后焦点回到设置齿轮
 - 不要在设置里恢复「默认工作区」。工作目录属于研究项目
+- 密钥字段只显示「已配置 / 未配置 + 掩码尾号」，明文只经 `settings.setProviderSecret` 进 `safeStorage`
 
 ---
 
-## 7. 深色模式
+## 7. 单一真理源：设置中心
 
-主题跟系统走：`applySystemAppearance` 写 `data-theme`、`data-theme-source`、`data-forced-colors`、`data-high-contrast`、`data-reduced-transparency`，并把 `--system-accent` 设成系统强调色。
+（源自 AI Studio 方案的结论，v2 转正为规范。）
+
+**规则：一个配置项只有一个可写位置。**
+
+| 配置 | 唯一可写位置 | 业务页行为 |
+|---|---|---|
+| 模型、密钥、默认模型 | 设置中心「模型与服务 / 默认模型」 | 助手头部只读显示 + 「打开设置」 |
+| 嵌入配置、分块、RRF 权重、reranker、阈值 | 设置中心「向量与 RAG」（写 `research.embedding.save` / `research.index.configure`） | RAG Studio 只读显示当前生效值 + 跳转 |
+| MinerU 模式、公式/表格开关、解析模型 | 设置中心「文献与解析」 | 导入弹窗不再出现这些开关 |
+| LaTeX 引擎、自动编译、防抖、synctex | 设置中心「编译与沙箱」 | 编辑器内不放引擎选择 |
+| 审稿循环、阶段模型角色 | 项目设置阶段组（项目级） | 设置中心只放全局默认 |
+
+业务页里出现「内联配置」是缺陷，不是灵活性：它会让同一次导入用两套参数、让索引配置与设置不一致、让审计查不到真值。
+
+编辑器字号、自动切换画布等纯 UI 偏好按 ADR-M06 归 `ui-state.ts`；其余一律进后端设置。
+
+---
+
+## 8. 深色模式
+
+主题跟系统走：外观桥读 `app.getStatus().appearance` 与 `app.onAppearanceUpdated`，写 `data-theme`、`data-theme-source`、`data-forced-colors`、`data-high-contrast`、`data-reduced-transparency`、`data-theme-override`，并把 `--system-accent` 设成系统强调色。
 
 规则：
 
-- 默认 `themeSource = system`。应用内可覆盖，但切换不能闪一帧白底
-- 深色不是浅色反相。底用 `#111827` 族，不用 `#000`，避免 OLED 拖影和边框消失
+- 默认 `themeSource = system`。应用内可覆盖（⌘D，`ui-state.ts`），但切换不能闪一帧白底
+- 深色不是浅色反相。底用 `--app-zinc-950`（`#0e0e11`），不用 `#000`，避免 OLED 拖影和边框消失
 - 深色强调色提亮为 `--accent-tint`，选中底用 tint 的透明色
 - 边框在深色要仍可见；禁止靠阴影代替描边
 - 状态色改用更浅的绿/琥珀/红，保证 4.5:1
@@ -452,7 +455,7 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 
 ---
 
-## 8. 键盘快捷键和焦点状态
+## 9. 键盘快捷键和焦点状态
 
 ### 系统与菜单
 
@@ -469,41 +472,34 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 
 全局热键走设置里的 `globalHotkey`，由 `macos-host-service` 注册。冲突时设置页显示注册失败，不静默吞掉。
 
-### 科研工作台
+### 工作台
 
 | 快捷键 | 行为 | 条件 |
 |---|---|---|
-| `1` | 项目总览 | 已进入项目，且焦点不在输入框 |
-| `2` | 活动与运行 | 同上 |
-| `3` | 溯源 | 同上 |
-| Escape | 依次关：服务抽屉 -> 活动栏 -> 错误条 | 输入框里只响应 Escape |
+| Cmd+B | 折叠/展开左栏 | 项目内 |
+| Cmd+J | 折叠/展开助手 | 项目内 |
+| Cmd+K | 打开搜索面板 | 始终 |
+| Cmd+D | 循环主题（跟随系统 → 深色 → 浅色） | 始终 |
+| Cmd+N | 门户新建研究项目 | 门户态；项目内忽略 |
+| `1` / `2` / `3` | 总览 / 活动 / 溯源 | 已进入项目，且焦点不在输入框 |
+| Space / Enter | 激活聚焦的卡片或行 | 列表 |
+| Escape | 依次关：抽屉 → 抽屉 → 浮层 | 输入框里只响应 Escape |
 
 不要用 Cmd+1.. 抢系统窗口快捷键。数字键只在无修饰键时生效。
 
-建议补齐（尚未作为合同，实现时再写入菜单）：
-
-| 快捷键 | 行为 |
-|---|---|
-| Cmd+N | 列表页新建研究项目 |
-| Cmd+F | 聚焦当前页搜索 |
-| Cmd+[ | 返回项目列表 |
-| Cmd+L | 聚焦项目搜索 |
-| Space / Enter | 激活聚焦的卡片或行 |
-
 ### 焦点
 
-- Tab 顺序 = 视觉顺序：顶栏 -> 阶段条 -> 画布主操作 -> 列表 -> 助手
+- Tab 顺序 = 视觉顺序：顶栏 → 左栏 → 画布 → 助手
 - 只显示 `:focus-visible`。鼠标点击不留焦点环
-- 焦点环：`outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 2px`
-- 输入框额外 `box-shadow: 0 0 0 3px var(--accent-soft)`
+- 焦点环：`outline: 2px solid var(--accent); outline-offset: 1px`（`styles/index.css` 的 `:focus-visible`）
 - 模态必须 trap focus；关闭后回到打开它的按钮
-- 跳过重复导航：键盘用户应能从顶栏一键进画布（实现可用 skip 目标 `main`）
+- 键盘用户应能从顶栏一键进画布（skip 目标 `main`）
 - 列表支持方向键。项目网格：左右换卡片，Enter 进入
 - 不要用 `outline: none` 除非已替换
 
 ---
 
-## 9. 空状态、错误状态和加载状态
+## 10. 空状态、错误状态和加载状态
 
 口吻：短、具体、给下一步。不道歉，不讲架构。
 
@@ -511,14 +507,17 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 
 | 场景 | 标题 | 说明 | 动作 |
 |---|---|---|---|
-| 无研究项目 | 还没有研究项目 | 新建研究项目后才会进入该项目的科研工作台。 | 新建研究项目 |
+| 无研究项目 | 还没有研究项目 | 新建研究项目后才会进入该项目的工作台。 | 新建研究项目 |
 | 搜索无匹配 | 没有匹配的项目 | - | 清空搜索 / 改筛选 |
 | 无活动 | 暂无活动。 | 一句即可 | 无或「打开活动详情」 |
 | 无任务 | 暂无任务 | - | 从当前阶段创建运行 |
+| 无会话 | 暂无会话 | - | 直接进输入框 |
 | 未绑定目录 | 未选择工作区 | 打开文件与代码前必须先绑定工作目录。 | 选择目录 |
+| 无概念页 | 尚无概念页 | 先导入文献并捕获证据。 | 打开文献库 |
+| 图谱无数据 | 图谱暂无节点 | 导入文献或创建主张后才会出现节点。 | 打开文献库 |
 | 助手空会话 | 直接进输入框 | 不放欢迎英雄区 | 发送即建会话 |
 
-形态：图标 + 一行标题 + 可选一句 + 一个动作。不要插画，不要多段说明。
+形态：图标 + 一行标题 + 可选一句 + 一个动作。不要插画，不要多段说明，**不用示意数据填充**（派生视图尤其如此，R12）。
 
 ### 错误
 
@@ -526,13 +525,13 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 |---|---|---|
 | 启动失败 | 全屏 `.fatal` | Roc 启动失败：… |
 | 页面错误 | `role="alert"` 条，可关 | 工作目录冲突、溯源加载失败 |
-| 字段错误 | 字段下红字 | 提供商草稿无效 |
+| 字段错误 | 字段下红字 | 提供商草稿无效、目录已被占用 |
 | 运行失败 | 状态 pill + 原因 + 重试 | 阶段运行失败 |
-| 阻断 | 画布内说明 + 动作 | 默认模型未配置、模型未下载 |
+| 阻断 | 画布内说明 + 动作 | 默认模型未配置、模型未下载、无证据的主张不能导出 |
 
 规则：
 
-- 写原因和下一步，不写「出错了」
+- 写原因和下一步，不写「出错了」；后端错误原文优先照抄
 - 关闭错误用 Escape 或条内关闭
 - 破坏操作先确认；提供商未保存关闭要确认
 - 颜色 + 图标 + 文字三件套
@@ -546,24 +545,24 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 | > 2s | 进度或可取消（模型下载、编译、长运行） |
 | 路由懒加载 | `正在加载视图…`，不要骨架屏闪一下 |
 
-启动：`Roc 正在加载本地工作台`。设置懒加载：`Roc 正在加载设置`。Git/文件/记忆/诊断沿用 `EmptyState tone=loading|error`。
+启动：`Roc 正在加载本地工作台`。设置懒加载：`Roc 正在加载设置`。
 
 禁止：为很快的切换做骨架屏；用进度条装饰空闲界面；加载时挡住整个窗口无法取消。
 
 ---
 
-## 10. macOS 风格的交互细节
+## 11. macOS 风格的交互细节
 
 目标：看 30 秒应觉得这是普通 Mac 应用，不是套了主题的网页。
 
 ### 窗口与材料
 
-- 红绿灯在左。绿键是 zoom，不是默认全屏
-- 顶栏可拖。真正标题栏区域不要手绘假红绿灯
+- 红绿灯在左，是系统控件。绿键是 zoom，不是默认全屏
+- 顶栏可拖。不要手绘假红绿灯
 - 记住窗口位置和尺寸
 - 点 Dock 图标应回到现有窗口
 - 窗口圆角和阴影交给系统
-- 背景用现有 `--bg`；有系统 vibrancy 再升级，不要 CSS 假毛玻璃铺满
+- 背景用 `--bg` / `--material-*`；`--glass-bg` 只给浮层，不要 CSS 假毛玻璃铺满
 
 ### 指针与选择
 
@@ -577,7 +576,7 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 
 - 普通按钮：无 hover 变色也可以；必须有 pressed
 - 无边框工具栏图标：hover 浅底，pressed 更深
-- 开关、复选、下拉跟现有 `ui-*`，不要做成网页大号 pill
+- 开关、复选、下拉跟共享 `ui-*`，不要做成网页大号 pill
 - 主操作每屏一个。删除/归档用 `--st-bad`，并和保存分开
 
 ### 运动
@@ -585,14 +584,14 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 - 视图切换直接切，不做路由 fade
 - 微交互 120-180ms，`cubic-bezier(0.2, 0.8, 0.2, 1)`
 - 退出比进入短
-- `prefers-reduced-motion` 时只留显隐，不位移
+- `prefers-reduced-motion` 时只留显隐，不位移。根节点统一挂 `MotionConfig reducedMotion="user"`，组件不自行判断
 - 动画可打断，不挡输入
 
 ### 系统集成
 
 - 确认框优先 `ConfirmDialog`；特别破坏的操作可升到原生 alert
 - 后台完成、失败走系统通知，不用网页 toast 抢焦点
-- 选目录用原生 open panel
+- 选目录用原生 open panel（`workspace.selectFromDialog` / `files.selectFromDialog`）
 - 拖放文件到 Dock 图标应打开/绑定到项目流程，而不是静默忽略
 - IME 候选窗跟在插入符后
 
@@ -602,24 +601,50 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 - 同一动作全程同词。创建成功不说「提交成功」
 - Sentence case 的中文短句。不要全大写英文标签
 - 阶段名用产品词：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出
+- 派生视图（Wiki / 图谱）必须在页脚标注数据来源接口名
+
+---
+
+## 12. `data-testid` 约定
+
+（P10 收敛后生效；P1–P9 新增元素按此命名，不做事后别名映射。）
+
+| 前缀 | 归属 | 例 |
+|---|---|---|
+| `roc-` | 应用根与启动门 | `roc-app`、`roc-app-startup`、`roc-app-startup-error` |
+| `shell-` | 顶栏、左栏、画布、助手容器 | `shell-titlebar`、`shell-sidebar`、`shell-canvas`、`shell-assistant` |
+| `portal-` | 项目门户与新建 | `portal-grid`、`portal-card`、`portal-create-form` |
+| `canvas-` | 画布一级 tab 与内容 | `canvas-tab-literature`、`canvas-view` |
+| `workflow-` | 阶段条、总览、闸门 | `workflow-stage-bar`、`workflow-next-action`、`workflow-gate` |
+| `assistant-` | 助手头部、转录、输入区、富块 | `assistant-composer`、`assistant-block-tool-call`、`assistant-interrupt` |
+| `files-` / `git-` / `terminal-` | 工作区服务 | `files-tree`、`git-status`、`terminal-session` |
+| `lit-` | 文献中心 | `lit-import`、`lit-reader`、`lit-index-status` |
+| `settings-` | 设置浮层 | `settings-modal`、`settings-section-rag`、`settings-dirty-bar` |
+| `mgmt-` | 管理面板 | `mgmt-memory`、`mgmt-mcp-servers` |
+| `view-` | 通用视图状态 | `view-loading`、`view-placeholder` |
+
+新增 testid 必须唯一且稳定；不要用索引或文案做后缀。
 
 ---
 
 ## 实现对照
 
-| 规范 | 现有落点 |
+| 规范 | 落点 |
 |---|---|
-| Token | `src/renderer/styles/tokens.css` |
-| 窗口壳 | `src/renderer/app/AppShell.tsx`, `WindowWorkband.tsx` |
-| 科研壳 | `src/renderer/views/research/ResearchAppShell.tsx` |
-| 路由 | `research-route.ts`, `view-routing.ts` |
-| 设置 | `src/renderer/settings/`, `settings-modal.tsx` |
-| 空态 | `src/renderer/components/EmptyState.tsx` |
-| 外观 | `src/renderer/system-appearance.ts` |
+| Token | `src/renderer-next/styles/tokens.css` |
+| Tailwind 映射与全局基础 | `src/renderer-next/styles/index.css` |
+| 壳层 | `src/renderer-next/app/AppShell.tsx`、`app/routes.ts`、`app/ui-state.ts` |
+| 外观桥 | `src/renderer-next/shell/appearance.ts` |
+| 视图懒加载 | `src/renderer-next/app/ViewContent.tsx` |
+| 阶段语义 | `src/renderer-next/canvas/workflow/stage-groups.ts` |
+| 错误分级 | `src/renderer-next/app/errors.ts` |
+| 异步结果与懒加载态 | `src/renderer-next/app/loaded-state.ts` |
 | 菜单 | `src/main/application-menu.ts` |
-| 产品词 | `CONTEXT.md`, `docs/research-workbench.md` |
+| 产品词 | `CONTEXT.md`、`docs/research-workbench.md` |
 
 后续改 UI：先改 token 和本文件，再改组件。页面特例按约定写到 `design-system/pages/<page>.md`（该目录当前不存在）。
+
+P10 完成后，本表的 `renderer-next` 路径收敛为 `renderer`。
 
 ---
 
@@ -630,8 +655,10 @@ Roc 没有全局 App 侧栏。允许的侧栏只有三种：
 - [ ] chrome 不可选中，内容区可选中
 - [ ] 浅色/深色正文对比 >= 4.5:1，状态不只靠颜色
 - [ ] `:focus-visible` 环可见，Tab 顺序等于视觉顺序
-- [ ] Escape 能退出当前层
+- [ ] Escape 能退出当前层，模态 trap focus，关闭后回到触发元素
 - [ ] 空态有动作，错误有原因和下一步
 - [ ] < 200ms 操作不闪骨架屏
 - [ ] `prefers-reduced-motion` / 系统 accent / 深色跟随均生效
-- [ ] 无全局侧栏、无列表页对话残留、无自动进入上次项目
+- [ ] 组件里没有写死的 hex，没有第二条 CSS 链
+- [ ] 没有自动进入上次项目；没有假数据填充空态
+- [ ] 每个配置项只有一个可写位置（§7）

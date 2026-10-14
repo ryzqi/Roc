@@ -1,3 +1,10 @@
+/*
+ * 旧壳 token（v1 规范）。
+ *
+ * 迁移期：新壳的色彩真身是 `src/renderer-next/styles/tokens.css`（两层结构，
+ * 见 design-system/MASTER.md v2 §2）。本文件只服务尚未迁走的旧 renderer，
+ * P10 随旧壳一起删除，不做两边共享。新壳禁止 import 本文件。
+ */
 :root {
   /* 文字阶 */
   --ink: #1f2937;

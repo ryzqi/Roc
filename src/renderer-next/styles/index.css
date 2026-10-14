@@ -1,0 +1,211 @@
+/*
+ * Tailwind 4 entry for the Roc renderer-next shell.
+ *
+ * Single chain, no parallel systems (R5): Tailwind `@theme` -> CSS variables
+ * (tokens.css) -> component classes. The legacy `src/renderer/styles/**`
+ * stylesheets are never imported here.
+ */
+
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme {
+  /* The palette is theme-flipped (see tokens.css), so `bg-zinc-900` means
+     "surface" in both themes, exactly as in research-studio. */
+  --color-zinc-50: var(--app-zinc-50);
+  --color-zinc-100: var(--app-zinc-100);
+  --color-zinc-200: var(--app-zinc-200);
+  --color-zinc-300: var(--app-zinc-300);
+  --color-zinc-400: var(--app-zinc-400);
+  --color-zinc-500: var(--app-zinc-500);
+  --color-zinc-600: var(--app-zinc-600);
+  --color-zinc-700: var(--app-zinc-700);
+  --color-zinc-800: var(--app-zinc-800);
+  --color-zinc-850: var(--app-zinc-850);
+  --color-zinc-900: var(--app-zinc-900);
+  --color-zinc-950: var(--app-zinc-950);
+
+  --color-slate-50: var(--app-slate-50);
+  --color-slate-100: var(--app-slate-100);
+  --color-slate-200: var(--app-slate-200);
+  --color-slate-300: var(--app-slate-300);
+  --color-slate-400: var(--app-slate-400);
+  --color-slate-500: var(--app-slate-500);
+  --color-slate-600: var(--app-slate-600);
+  --color-slate-700: var(--app-slate-700);
+  --color-slate-800: var(--app-slate-800);
+  --color-slate-900: var(--app-slate-900);
+
+  /* Semantic color tokens: preferred over the raw palette in new code. */
+  --color-ink: var(--ink);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-line-soft: var(--line-soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-strong: var(--accent-soft-strong);
+  --color-on-accent: var(--on-accent);
+  --color-st-ok: var(--st-ok);
+  --color-st-warn: var(--st-warn);
+  --color-st-bad: var(--st-bad);
+  --color-st-info: var(--st-info);
+
+  --radius-control: var(--r-control);
+  --radius-card: var(--r-card);
+  --radius-window: var(--r-window);
+
+  /* Written as literals, not `var(--font-sans)`: a `@theme` entry that reads
+     its own name is a cycle that only resolves because tokens.css is
+     imported unlayered and therefore outranks `@layer theme`. Keep the two
+     definitions in sync by hand if the stack ever changes. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  html {
+    background-color: var(--bg);
+    color-scheme: var(--color-scheme);
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--font-ui-size);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Text surfaces opt back in explicitly; chrome stays non-selectable like a
+     native app. */
+  input,
+  textarea,
+  [contenteditable='true'],
+  [data-selectable='true'] {
+    user-select: text;
+  }
+
+  ::selection {
+    background: var(--accent-soft-strong);
+    color: var(--ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  /* One visible focus ring for every focusable thing. Never removed. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: var(--r-control);
+  }
+
+  /* Mouse users do not get a ring; keyboard users always do. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  a {
+    color: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Overlays use a translucent material; it degrades to an opaque surface when
+     the system asks for reduced transparency (tokens.css handles the value). */
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+}
+
+/* KaTeX display math scrolls instead of overflowing the canvas. */
+.katex-display {
+  margin: 0.6em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}

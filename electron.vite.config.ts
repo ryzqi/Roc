@@ -1,5 +1,6 @@
 import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 
 export const rendererChunkRules = [
@@ -10,8 +11,22 @@ export const rendererChunkRules = [
   {
     chunk: 'renderer-diff',
     packages: ['react-diff-view']
+  },
+  {
+    chunk: 'renderer-katex',
+    packages: ['katex']
   }
 ] as const;
+
+/**
+ * Temporary entry switch for the parallel migration period (ADR-M01).
+ *
+ * The renderer keeps exactly one build entry - `index.html` - so
+ * `check-renderer-chunks.mjs` stays deterministic (it locates "the" entry by
+ * `isEntry === true`). With `ROC_RENDERER=next`, the module the entry imports is
+ * aliased to the new shell. P10 deletes this together with the legacy shell.
+ */
+const useNextRenderer = process.env.ROC_RENDERER === 'next';
 
 export function resolveRendererManualChunk(id: string): string | undefined {
   const normalizedId = id;
@@ -70,7 +85,12 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: useNextRenderer
+        ? [{ find: '/src/renderer/main.tsx', replacement: resolve(__dirname, 'src/renderer-next/main.tsx') }]
+        : []
+    },
     build: {
       outDir: 'dist/renderer',
       manifest: true,
