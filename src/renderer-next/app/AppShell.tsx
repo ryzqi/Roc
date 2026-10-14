@@ -10,10 +10,14 @@ import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
 import type { ManagementTabId } from '../management/ManagementPanel';
-import { ProjectPortalView, type ProjectStatusFilter } from '../project/ProjectPortalView';
+import { ProjectPortalView } from '../project/ProjectPortalView';
+import { useCurrentProject } from '../project/use-projects';
+import { useProjectWorkspace } from '../project/use-project-workspace';
+import { isProjectWritable } from '../project/project-store';
 import type { RocClient } from '../shared/roc-client';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { EmptyState } from '../shell/EmptyState';
+import { ErrorBar } from '../shell/ErrorBar';
 import { LeftSidebar } from '../shell/LeftSidebar';
 import { ModalShell } from '../shell/ModalShell';
 import { SearchPaletteModal, type SearchGroup } from '../shell/SearchPaletteModal';
@@ -99,8 +103,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
-  const [portalQuery, setPortalQuery] = useState('');
-  const [portalFilter, setPortalFilter] = useState<ProjectStatusFilter>('active');
   // Mount-on-demand latches; see the lazy block comment above.
   const [assistantMounted, setAssistantMounted] = useState(false);
   const [managementMounted, setManagementMounted] = useState(false);
@@ -110,6 +112,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const { route, navigate } = useAppRoute();
   const layout = useLayoutState();
   const windowState = useWindowState(client);
+  // The chrome and the read-only gate need the real project, not the raw id.
+  const currentProject = useCurrentProject(client, route.projectId);
 
   useAppNavigateBridge(client, { route, navigate });
   useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
@@ -118,6 +122,18 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
   const inProject = route.projectId !== null;
   const settingsOpen = route.page === 'settings';
+  const project = currentProject.data;
+  const projectName = project?.title ?? null;
+  const projectWritable = isProjectWritable(project);
+  /**
+   * A project that failed to load must not silently render an empty workspace.
+   * ADR-M07: surface the backend message with a retry instead of pretending the
+   * project exists (a stale deep link or a deleted project is the common case).
+   */
+  const projectLoadFailed = inProject && currentProject.status === 'error';
+
+  const reloadCurrentProject = currentProject.reload;
+  const workspaceBinding = useProjectWorkspace(client, project, reloadCurrentProject);
 
   // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
   // nothing reads these values, we just stop them from accumulating.
@@ -209,8 +225,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       </a>
 
       <WindowChrome
-        // P2 replaces the raw id with the real title from `research.projects.get`.
-        projectName={route.projectId}
+        projectName={projectName}
         onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
         onOpenSearch={() => setSearchOpen(true)}
         sidebarCollapsed={layout.sidebarCollapsed}
@@ -226,7 +241,28 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         backgroundRunLabel={backgroundRunLabel}
       />
 
-      {inProject ? (
+      {projectLoadFailed ? (
+        <main id="roc-main" className="flex min-h-0 flex-1 flex-col p-4" data-testid="project-load-error" tabIndex={-1}>
+          <ErrorBar
+            error={{
+              level: 'page',
+              message: currentProject.error ?? '读取当前科研项目失败',
+              retry: currentProject.reload,
+              actionLabel: '也可以返回项目列表'
+            }}
+          />
+          <div className="mt-2">
+            <button
+              type="button"
+              data-testid="project-load-error-back"
+              onClick={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              className="h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            >
+              返回项目列表
+            </button>
+          </div>
+        </main>
+      ) : inProject ? (
         <WorkspaceLayout
           layout={layout}
           assistantOpen={route.assistantOpen}
@@ -237,7 +273,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             <LeftSidebar
               activeTab={layout.sidebarTab}
               onTabChange={layout.setSidebarTab}
-              projectName={route.projectId ?? ''}
+              projectName={projectName ?? route.projectId ?? ''}
+              workspacePath={project?.workspacePath ?? null}
+              onSelectWorkspace={workspaceBinding.bind}
+              workspacePending={workspaceBinding.pending}
+              workspaceError={workspaceBinding.error}
               onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
               themeOverride={override}
               onCycleTheme={cycleTheme}
@@ -248,22 +288,33 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             />
           }
           canvas={
-            <WorkspaceCanvas
-              activeTab={canvasTabForView(route.view)}
-              onTabChange={(tab) => navigate({ ...route, view: tab })}
-            >
-              <ViewContent
-                view={route.view}
-                projectId={route.projectId}
-                stageHint={route.view === 'stage' ? route.stageTab : null}
-              />
-            </WorkspaceCanvas>
+            <div className="flex h-full min-h-0 flex-col">
+              {project !== null && !projectWritable ? (
+                <p
+                  role="note"
+                  data-testid="project-readonly-banner"
+                  className="shrink-0 border-b border-line bg-bg-soft px-3 py-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]"
+                >
+                  项目已归档，仅可阅读：无法启动阶段运行、修改产物或写入文件。恢复项目后才能继续。
+                </p>
+              ) : null}
+              <WorkspaceCanvas
+                activeTab={canvasTabForView(route.view)}
+                onTabChange={(tab) => navigate({ ...route, view: tab })}
+              >
+                <ViewContent
+                  view={route.view}
+                  projectId={route.projectId}
+                  stageHint={route.view === 'stage' ? route.stageTab : null}
+                />
+              </WorkspaceCanvas>
+            </div>
           }
           assistant={
             assistantMounted ? (
               <Suspense fallback={<DelayedFallback label="正在加载助手…" />}>
                 <AssistantPanel
-                  projectName={route.projectId}
+                  projectName={projectName}
                   onOpenSettings={() => navigate({ ...route, page: 'settings' })}
                 />
               </Suspense>
@@ -273,12 +324,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       ) : (
         <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
           <ProjectPortalView
+            client={client}
             createFormRequested={route.newProject}
             onRequestConsumed={(requested) => navigate({ ...route, newProject: requested })}
-            searchQuery={portalQuery}
-            onSearchQueryChange={setPortalQuery}
-            statusFilter={portalFilter}
-            onStatusFilterChange={setPortalFilter}
+            onOpenProject={(projectId) => navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' })}
           />
         </main>
       )}

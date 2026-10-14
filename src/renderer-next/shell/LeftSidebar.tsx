@@ -21,6 +21,12 @@ export type LeftSidebarProps = {
   activeTab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
   projectName: string;
+  /** Bound project workspace, or null when the project has none (P2/T2.5). */
+  workspacePath: string | null;
+  onSelectWorkspace: () => void;
+  workspacePending: boolean;
+  /** Panel or update failure, with the backend's own message. */
+  workspaceError: string | null;
   onBackToPortal: () => void;
   themeOverride: 'system' | 'light' | 'dark';
   onCycleTheme: () => void;
@@ -51,6 +57,16 @@ const TAB_HINTS: Record<SidebarTab, { title: string; description: string; phase:
   }
 };
 
+/** The 文件 tab's hint depends on whether a workspace is bound. */
+const VARYING_HINT: Record<SidebarTab, (workspacePath: string | null) => string> = {
+  files: (workspacePath) =>
+    workspacePath === null
+      ? '绑定项目工作目录后，这里显示真实的文件树。'
+      : '文件树在 P3 接入 files.listTree 后显示。',
+  literature: () => TAB_HINTS.literature.description,
+  sessions: () => TAB_HINTS.sessions.description
+};
+
 function themeIcon(override: 'system' | 'light' | 'dark'): React.JSX.Element {
   if (override === 'light') {
     return <Sun size={13} aria-hidden="true" />;
@@ -75,6 +91,10 @@ export function LeftSidebar({
   activeTab,
   onTabChange,
   projectName,
+  workspacePath,
+  onSelectWorkspace,
+  workspacePending,
+  workspaceError,
   onBackToPortal,
   themeOverride,
   onCycleTheme,
@@ -168,14 +188,36 @@ export function LeftSidebar({
         className="min-h-0 flex-1 overflow-y-auto"
         data-testid={`sidebar-panel-${activeTab}`}
       >
-        <EmptyState
-          compact
-          icon={TABS.find((tab) => tab.id === activeTab)?.icon}
-          title={TAB_HINTS[activeTab].title}
-          description={TAB_HINTS[activeTab].description}
-          testId={`sidebar-empty-${activeTab}`}
-        />
-        <p className="px-3 pb-3 text-subtle text-[var(--font-micro-size)]">{TAB_HINTS[activeTab].phase}</p>
+        {activeTab === 'files' && workspacePath === null ? (
+          /* T2.5: an unbound project must say so and offer the fix, rather than
+             showing a generic "coming soon" panel or an empty tree. */
+          <>
+            <EmptyState
+              compact
+              icon={FolderTree}
+              title="未选择工作区"
+              description="打开文件与代码前必须先绑定工作目录。"
+              action={{ label: '选择目录', onClick: onSelectWorkspace, disabled: workspacePending }}
+              testId="sidebar-files-no-workspace"
+            />
+            {workspaceError === null ? null : (
+              <p role="alert" className="px-3 pb-2 text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="sidebar-files-workspace-error">
+                {workspaceError}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <EmptyState
+              compact
+              icon={TABS.find((tab) => tab.id === activeTab)?.icon}
+              title={TAB_HINTS[activeTab].title}
+              description={VARYING_HINT[activeTab](workspacePath)}
+              testId={`sidebar-empty-${activeTab}`}
+            />
+            <p className="px-3 pb-3 text-subtle text-[var(--font-micro-size)]">{TAB_HINTS[activeTab].phase}</p>
+          </>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1 border-t border-line px-2 py-2">
