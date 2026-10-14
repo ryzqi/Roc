@@ -25,18 +25,29 @@ import { previewFile, previewPdf, writeTextFile } from '../../workspace/workspac
  * project is archived, editing is disabled rather than failing later — that is
  * the write-side half of the read-only gate (see `isProjectWritable`).
  *
- * ## Assumption to verify in the P10 manual pass
+ * ## Image contract (verified against the real backend, P3 gate run)
  *
- * For `kind: 'image'` the schema is `{ content: string, mediaType?: string }`,
- * i.e. the bytes arrive as text. This renders them as a base64 data URL, which is
- * the only encoding a string payload can carry for an image. If the backend
- * instead returns something else, the `<img onError>` path below degrades to an
- * explicit message rather than showing a broken image.
+ * For `kind: 'image'` the backend returns `content` already **as a complete
+ * `data:<mediaType>;base64,…` URL** (`FileService.preview` builds it). Prepending
+ * the prefix again produced `data:image/png;base64,data:image/png;base64,…`, which
+ * the browser rejects with `ERR_INVALID_URL` and renders as nothing. So the value
+ * is used as-is when it is already a data URL, and only built from raw base64 when
+ * it is not; an oversized image comes back as `kind: 'binary'` with a `mediaType`
+ * and never reaches this branch.
  */
 
 export type FilePreviewProps = {
   client: RocClient;
   relativePath: string;
+  /**
+   * Bound workspace, used as part of the resource key.
+   *
+   * The same relative path exists in every workspace, so without this the preview
+   * of `README.md` in project A would stay on screen after switching to project B
+   * — a leak that today is masked only by `useBoundWorkspace` clearing the bound
+   * path while rebinding. Correctness must not depend on that transient state.
+   */
+  workspacePath: string | null;
   /** Archived projects are read-only: no editing, no saving. */
   writable: boolean;
   /** Reports unsaved state so the shell can warn before closing. */
@@ -48,18 +59,20 @@ const WRITE_SOURCE = 'renderer-next:file-preview';
 export function FilePreview({
   client,
   relativePath,
+  workspacePath,
   writable,
   onDirtyChange
 }: FilePreviewProps): React.JSX.Element {
   const kind = previewKindFor(relativePath);
   const isPdf = kind === 'pdf';
+  const resourceKey = workspacePath === null ? null : JSON.stringify([workspacePath, relativePath]);
 
   // PDFs take a different call; using the wrong resource here would be invisible
   // in a typecheck, so the branch is explicit.
-  const pdfResource = useAsyncResource(isPdf ? relativePath : null, () => previewPdf(client, relativePath), {
+  const pdfResource = useAsyncResource(isPdf ? resourceKey : null, () => previewPdf(client, relativePath), {
     label: '读取 PDF 预览'
   });
-  const textResource = useAsyncResource(isPdf ? null : relativePath, () => previewFile(client, relativePath), {
+  const textResource = useAsyncResource(isPdf ? null : resourceKey, () => previewFile(client, relativePath), {
     label: '读取文件预览'
   });
 
@@ -143,10 +156,15 @@ export function FilePreview({
           />
         );
       }
+      // The backend already hands out a full data URL; building one again would
+      // double the prefix (see the contract note above).
+      const source = loaded.content.startsWith('data:')
+        ? loaded.content
+        : `data:${loaded.mediaType ?? 'image/png'};base64,${loaded.content}`;
       return (
         <div className="flex h-full items-center justify-center overflow-auto p-4">
           <img
-            src={`data:${loaded.mediaType ?? 'image/png'};base64,${loaded.content}`}
+            src={source}
             alt={relativePath}
             data-testid="file-preview-image"
             onError={() => setImageFailed(true)}
@@ -175,7 +193,7 @@ export function FilePreview({
           spellCheck={false}
           aria-label={`编辑 ${relativePath}`}
           data-testid="file-preview-editor"
-          className="h-full w-full resize-none bg-code-surface p-3 font-mono text-[var(--font-code-size)] text-[var(--code-text)] outline-none"
+          className="h-full w-full resize-none bg-code-surface p-3 font-mono text-[var(--font-code-size)] text-[var(--code-text)]"
         />
       );
     }

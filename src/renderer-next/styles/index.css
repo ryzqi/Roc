@@ -209,3 +209,36 @@
   overflow-y: hidden;
   padding: 4px 0;
 }
+
+/*
+ * react-diff-view ships light-theme insert/delete greens and reds as variable
+ * defaults (`--diff-code-insert-background-color` etc.). Mapping them onto the
+ * semantic tokens here is what makes the diff legible on a dark surface without
+ * a second stylesheet or a hard-coded colour in a component. Scoped to
+ * `.roc-diff` so it cannot leak onto anything else.
+ */
+.roc-diff {
+  --diff-background-color: var(--code-surface);
+  --diff-text-color: var(--code-text);
+  --diff-font-family: var(--font-mono);
+  --diff-selection-background-color: var(--accent-soft-strong);
+  --diff-selection-text-color: var(--code-text);
+  --diff-gutter-insert-background-color: color-mix(in srgb, var(--st-ok) 20%, transparent);
+  --diff-gutter-insert-text-color: var(--code-text);
+  --diff-gutter-delete-background-color: color-mix(in srgb, var(--st-bad) 20%, transparent);
+  --diff-gutter-delete-text-color: var(--code-text);
+  --diff-gutter-selected-background-color: var(--accent-soft);
+  --diff-gutter-selected-text-color: var(--code-text);
+  --diff-code-insert-background-color: color-mix(in srgb, var(--st-ok) 14%, transparent);
+  --diff-code-insert-text-color: var(--code-text);
+  --diff-code-insert-edit-background-color: color-mix(in srgb, var(--st-ok) 30%, transparent);
+  --diff-code-insert-edit-text-color: var(--code-text);
+  --diff-code-delete-background-color: color-mix(in srgb, var(--st-bad) 14%, transparent);
+  --diff-code-delete-text-color: var(--code-text);
+  --diff-code-delete-edit-background-color: color-mix(in srgb, var(--st-bad) 30%, transparent);
+  --diff-code-delete-edit-text-color: var(--code-text);
+  --diff-code-selected-background-color: var(--accent-soft);
+  --diff-code-selected-text-color: var(--code-text);
+  --diff-omit-gutter-line-color: var(--st-warn);
+  font-size: var(--font-code-size);
+}

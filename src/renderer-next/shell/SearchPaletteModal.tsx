@@ -112,7 +112,7 @@ export function SearchPaletteModal({
             placeholder="搜索项目、文献、文件、会话、技能、概念、产物"
             aria-label="搜索"
             data-testid="search-palette-input"
-            className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-subtle"
+            className="min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
           />
           {query.length === 0 ? null : (
             <button
@@ -126,8 +126,15 @@ export function SearchPaletteModal({
         </div>
 
         <div className="min-h-[8rem]">
-          {groups.length === 0 ? (
-            <p className="px-1 py-6 text-center text-muted">输入关键词开始搜索。</p>
+          {query.trim().length === 0 ? (
+            /* An empty query is not a search that found nothing: rendering the
+               groups here would show "没有匹配的文件名" the moment ⌘K opens, which
+               reads as "your files are gone" rather than "type something". */
+            <p className="px-1 py-6 text-center text-muted" data-testid="search-palette-idle">
+              输入关键词开始搜索。
+            </p>
+          ) : groups.length === 0 ? (
+            <p className="px-1 py-6 text-center text-muted">尚未接入任何搜索分组。</p>
           ) : (
             groups.map((group) => (
               <section key={group.id} className="mb-3" data-testid={`search-group-${group.id}`} data-status={group.status}>

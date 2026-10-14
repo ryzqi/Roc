@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { AppStatus } from '../../shared/types';
 import { errorMessage } from './loaded-state';
 import type { AppViewId } from './routes';
@@ -8,6 +8,7 @@ import { useKeyboardShortcuts } from './shortcuts';
 import { purgeLegacyStorage } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
+import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
 import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
 import type { ManagementTabId } from '../management/ManagementPanel';
 import { ProjectPortalView } from '../project/ProjectPortalView';
@@ -16,16 +17,17 @@ import { useProjectWorkspace } from '../project/use-project-workspace';
 import { isProjectWritable } from '../project/project-store';
 import type { RocClient } from '../shared/roc-client';
 import { DelayedFallback } from '../shell/DelayedFallback';
-import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LeftSidebar } from '../shell/LeftSidebar';
 import { ModalShell } from '../shell/ModalShell';
-import { SearchPaletteModal, type SearchGroup } from '../shell/SearchPaletteModal';
+import { SearchPaletteModal } from '../shell/SearchPaletteModal';
+import { useSearchGroups } from '../shell/use-search-groups';
 import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
 import { WindowChrome } from '../shell/WindowChrome';
 import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
 import { useTraySummaryLabel } from '../shell/use-tray-summary';
 import { useWindowState } from '../shell/use-window-state';
+import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 
 /**
  * The application shell (P1).
@@ -81,21 +83,13 @@ function canvasTabForView(view: AppViewId): CanvasTabId | null {
 const AssistantPanel = lazy(async () => ({ default: (await import('../assistant/AssistantPanel')).AssistantPanel }));
 const SettingsModal = lazy(async () => ({ default: (await import('../settings/SettingsModal')).SettingsModal }));
 const ManagementPanel = lazy(async () => ({ default: (await import('../management/ManagementPanel')).ManagementPanel }));
-
 /**
- * Search groups in P1. Every domain reports *why* it is unavailable rather than
- * showing an empty result that implies "nothing matched". P5/T5.8 replaces each
- * entry with a real concurrent query that degrades on its own.
+ * The Git drawer pulls in `react-diff-view` (a manual chunk, ~50 KB). It is lazy
+ * for the same reason as the panels above, and it needs no mount latch: the
+ * drawer's `ModalShell` renders `null` while closed, so the module is only
+ * fetched when the drawer actually opens.
  */
-const P1_SEARCH_GROUPS: SearchGroup[] = [
-  { id: 'projects', label: '项目', status: 'unavailable', items: [], unavailableReason: 'P2 接入 research.projects.list' },
-  { id: 'literature', label: '文献', status: 'unavailable', items: [], unavailableReason: 'P5 接入 research.library.list' },
-  { id: 'files', label: '文件', status: 'unavailable', items: [], unavailableReason: 'P3 接入 files.searchByName' },
-  { id: 'sessions', label: '会话', status: 'unavailable', items: [], unavailableReason: 'P4 接入 agent.sessions.search' },
-  { id: 'skills', label: '技能', status: 'unavailable', items: [], unavailableReason: 'P9 接入 skills.list' },
-  { id: 'concepts', label: '概念', status: 'unavailable', items: [], unavailableReason: 'P5 接入派生 wiki' },
-  { id: 'artifacts', label: '产物', status: 'unavailable', items: [], unavailableReason: 'P6 接入 research.artifacts.list' }
-];
+const GitPanel = lazy(async () => ({ default: (await import('../canvas/git/GitPanel')).GitPanel }));
 
 export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
@@ -134,6 +128,55 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
   const reloadCurrentProject = currentProject.reload;
   const workspaceBinding = useProjectWorkspace(client, project, reloadCurrentProject);
+  // T3.1: the project's `workspacePath` is inert data until `workspace.select`
+  // scopes the backend to it. Every file/Git/terminal call is keyed on the
+  // **bound** path, so a project switch rebuilds all three (gate 6).
+  const boundWorkspace = useBoundWorkspace(client, project);
+
+  const openFileInCanvas = (relativePath: string): void => {
+    // `tool: 'files'` explicitly rather than `route.tool ?? 'files'`: opening a file
+    // from the tree is the files workbench, so it must not inherit `git` (which would
+    // pop the Git drawer over the preview the user just asked for).
+    navigate({ ...route, view: 'files', tool: 'files', openFile: relativePath });
+  };
+
+  /**
+   * The canvas data scope (P3). Memoised because every view reads it and a new
+   * identity on each render would re-render them all on unrelated shell state
+   * changes (the tray label updates on background task ticks).
+   */
+  const scope = useMemo<WorkspaceScope>(
+    () => ({
+      client,
+      projectId: route.projectId,
+      projectTitle: projectName,
+      writable: projectWritable,
+      workspacePath: boundWorkspace.path,
+      workspaceStatus: boundWorkspace.status,
+      workspaceError: boundWorkspace.error,
+      rebindWorkspace: boundWorkspace.rebind,
+      openFile: route.openFile,
+      openFileInCanvas
+    }),
+    [
+      client,
+      route.projectId,
+      route.openFile,
+      projectName,
+      projectWritable,
+      boundWorkspace.path,
+      boundWorkspace.status,
+      boundWorkspace.error,
+      boundWorkspace.rebind
+    ]
+  );
+
+  const searchGroups = useSearchGroups({
+    client,
+    query: searchQuery,
+    workspacePath: boundWorkspace.path,
+    openFile: openFileInCanvas
+  });
 
   // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
   // nothing reads these values, we just stop them from accumulating.
@@ -206,7 +249,17 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     return <StartupFailure message={boot.message} />;
   }
 
-  const gitDrawerOpen = route.tool === 'git';
+  /**
+   * The Git surface is rendered **once** (M-2).
+   *
+   * `?tool=git` drives the drawer, which is what P1 built and the capability
+   * matrix documents. The canvas `changes` view renders the same `GitPanel` in its
+   * wide layout, so when that view is already on screen the drawer stays closed —
+   * otherwise both would mount, each with its own `useGitWorkspace` (two sets of
+   * status/diffStat/listBranches calls and two states that disagree after an
+   * action).
+   */
+  const gitDrawerOpen = route.tool === 'git' && route.view !== 'changes';
 
   return (
     <div
@@ -273,8 +326,13 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             <LeftSidebar
               activeTab={layout.sidebarTab}
               onTabChange={layout.setSidebarTab}
+              client={client}
+              projectId={route.projectId}
               projectName={projectName ?? route.projectId ?? ''}
-              workspacePath={project?.workspacePath ?? null}
+              binding={boundWorkspace}
+              writable={projectWritable}
+              openFile={route.openFile}
+              onOpenFile={openFileInCanvas}
               onSelectWorkspace={workspaceBinding.bind}
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}
@@ -300,13 +358,23 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               ) : null}
               <WorkspaceCanvas
                 activeTab={canvasTabForView(route.view)}
-                onTabChange={(tab) => navigate({ ...route, view: tab })}
+                onTabChange={(tab) =>
+                  // Switching tabs retargets the workbench tool instead of leaving
+                  // the previous one open behind an unrelated view (the terminal
+                  // tab carries its own tool; the other two carry none). No canvas
+                  // tab is the files view, so this cannot drop an open file.
+                  navigate({ ...route, view: tab, tool: tab === 'terminal' ? 'terminal' : null })
+                }
               >
-                <ViewContent
-                  view={route.view}
-                  projectId={route.projectId}
-                  stageHint={route.view === 'stage' ? route.stageTab : null}
-                />
+                {/* The scope is what lazily loaded views read; the routing
+                    props stay on `ViewContent` (see workspace-scope.tsx). */}
+                <WorkspaceScopeProvider value={scope}>
+                  <ViewContent
+                    view={route.view}
+                    projectId={route.projectId}
+                    stageHint={route.view === 'stage' ? route.stageTab : null}
+                  />
+                </WorkspaceScopeProvider>
               </WorkspaceCanvas>
             </div>
           }
@@ -347,7 +415,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         onClose={() => setSearchOpen(false)}
         query={searchQuery}
         onQueryChange={setSearchQuery}
-        groups={P1_SEARCH_GROUPS}
+        groups={searchGroups}
       />
 
       {managementMounted ? (
@@ -369,14 +437,14 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         widthClassName="w-[520px]"
         testId="git-drawer"
       >
-        <EmptyState
-          title="尚无工作区改动"
-          description="绑定项目工作目录后，这里显示分支、暂存区与提交。"
-          testId="git-placeholder"
-        />
-        <p className="px-6 text-center text-[var(--font-micro-size)] text-subtle">
-          P3 接入 git.status / git.diffStat / git.fileDiff
-        </p>
+        <Suspense fallback={<DelayedFallback label="正在加载 Git 面板…" />}>
+          <GitPanel
+            client={client}
+            workspacePath={boundWorkspace.path}
+            writable={projectWritable}
+            layout="drawer"
+          />
+        </Suspense>
       </ModalShell>
     </div>
   );

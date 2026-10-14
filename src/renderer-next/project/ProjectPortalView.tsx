@@ -201,7 +201,7 @@ export function ProjectPortalView({
               placeholder="搜索项目"
               aria-label="搜索项目"
               data-testid="portal-search"
-              className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-subtle"
+              className="min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
             />
             {query.length === 0 ? null : (
               <button

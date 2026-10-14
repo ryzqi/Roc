@@ -63,7 +63,7 @@ export function AssistantPanel({
             disabled
             aria-label="给助手的指令"
             placeholder="P4 接入 chat.startRun 后可用"
-            className="min-h-[3rem] min-w-0 flex-1 resize-none bg-transparent text-ink outline-none placeholder:text-subtle disabled:opacity-60"
+            className="min-h-[3rem] min-w-0 flex-1 resize-none bg-transparent text-ink placeholder:text-subtle disabled:opacity-60"
           />
           <button
             type="button"

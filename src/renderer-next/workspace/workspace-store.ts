@@ -30,11 +30,6 @@ export function selectWorkspace(client: RocClient, path: string): Promise<IpcLik
   return client.api.workspace.select({ path });
 }
 
-/** Native directory panel; `null` means the user cancelled. */
-export function selectWorkspaceFromDialog(client: RocClient): Promise<IpcLikeResult<Workspace | null>> {
-  return client.api.workspace.selectFromDialog();
-}
-
 function reject<R>(relativePath: string): IpcLikeResult<R> | null {
   const check = checkRelativePath(relativePath);
   if (check.ok) {

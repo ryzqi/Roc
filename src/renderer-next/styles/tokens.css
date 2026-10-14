@@ -287,11 +287,31 @@
   --syntax-comment: #8b9bb4;
   --syntax-number: #e5bd6c;
 
-  /* Terminal stays dark in both themes. */
+  /* Terminal stays dark in both themes (a light-theme terminal is unreadable as
+     a terminal). ANSI slots are tokens rather than component literals so the
+     palette can be retuned in one place. */
   --terminal-bg: #0c121e;
   --terminal-text: #dce4ef;
+  --terminal-cursor: #7aa7ff;
+  --terminal-selection: rgba(122, 167, 255, 0.28);
   --terminal-line: rgba(122, 167, 255, 0.18);
   --terminal-line-strong: rgba(122, 167, 255, 0.36);
+  --term-ansi-black: #1f2430;
+  --term-ansi-red: #e06c75;
+  --term-ansi-green: #98c379;
+  --term-ansi-yellow: #e5c07b;
+  --term-ansi-blue: #61afef;
+  --term-ansi-magenta: #c678dd;
+  --term-ansi-cyan: #56b6c2;
+  --term-ansi-white: #dce4ef;
+  --term-ansi-bright-black: #5c6773;
+  --term-ansi-bright-red: #ef8a96;
+  --term-ansi-bright-green: #b4d39a;
+  --term-ansi-bright-yellow: #f0d399;
+  --term-ansi-bright-blue: #82c0f5;
+  --term-ansi-bright-magenta: #d7a3e8;
+  --term-ansi-bright-cyan: #7fcdd5;
+  --term-ansi-bright-white: #ffffff;
 }
 
 /* ------------------------------------------------------------------ */

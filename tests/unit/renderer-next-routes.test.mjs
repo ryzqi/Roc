@@ -61,6 +61,8 @@ const ALL_VIEWS = [
 ];
 
 const ALL_TOOLS = [null, 'files', 'git', 'terminal'];
+/** Only meaningful for `view=files`; the normaliser must drop it everywhere else. */
+const ALL_OPEN_FILES = [null, 'src/a.ts', '目录/含 空格.md'];
 const STAGE_GROUPS = ['discover', 'plan', 'experiment', 'write', 'publish', 'settings'];
 const STAGE_TABS = [
   'library',
@@ -83,18 +85,21 @@ function* allRoutes() {
         for (const stageGroup of STAGE_GROUPS) {
           for (const stageTab of STAGE_TABS) {
             for (const tool of ALL_TOOLS) {
-              for (const assistantOpen of [false, true]) {
-                for (const newProject of [false, true]) {
-                  yield routes.normalizeAppRoute({
-                    page,
-                    projectId,
-                    view,
-                    stageGroup,
-                    stageTab,
-                    tool,
-                    assistantOpen,
-                    newProject
-                  });
+              for (const openFile of ALL_OPEN_FILES) {
+                for (const assistantOpen of [false, true]) {
+                  for (const newProject of [false, true]) {
+                    yield routes.normalizeAppRoute({
+                      page,
+                      projectId,
+                      view,
+                      stageGroup,
+                      stageTab,
+                      tool,
+                      openFile,
+                      assistantOpen,
+                      newProject
+                    });
+                  }
                 }
               }
             }
@@ -137,6 +142,7 @@ test('view=changes survives with its tool (the regression that motivated this gu
     stageGroup: 'discover',
     stageTab: 'library',
     tool: null,
+    openFile: null,
     assistantOpen: false,
     newProject: false
   });
@@ -163,11 +169,13 @@ test('no project means the portal: no view, tool, assistant or stage leaks into 
     stageGroup: 'settings',
     stageTab: 'policies',
     tool: 'git',
+    openFile: 'a.md',
     assistantOpen: true,
     newProject: false
   });
   assert.equal(search.get('view'), null);
   assert.equal(search.get('tool'), null);
+  assert.equal(search.get('file'), null);
   assert.equal(search.get('assistant'), null);
   assert.equal(search.get('stage'), null);
   assert.equal(search.get('project'), null);
@@ -182,4 +190,20 @@ test('stage is only written for view=stage', () => {
   assert.equal(withStage.view, 'overview');
   assert.equal(withStage.stageGroup, 'discover');
   assert.equal(toSearch(withStage).get('stage'), null);
+});
+
+test('file survives only in the files view, and round-trips through the URL', () => {
+  const deepLink = routes.parseAppRoute(
+    new URLSearchParams('page=research&project=p1&view=files&tool=files&file=a%20b/%E7%9B%AE.md')
+  );
+  assert.equal(deepLink.openFile, 'a b/目.md');
+  assert.equal(toSearch(deepLink).get('file'), 'a b/目.md');
+  assert.ok(routes.sameAppRoute(deepLink, routes.parseAppRoute(toSearch(deepLink))));
+
+  const elsewhere = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&view=terminal&file=a.md'));
+  assert.equal(elsewhere.openFile, null);
+  assert.equal(toSearch(elsewhere).get('file'), null);
+
+  const blank = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&view=files&file=%20%20'));
+  assert.equal(blank.openFile, null);
 });

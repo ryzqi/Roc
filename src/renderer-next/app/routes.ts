@@ -20,6 +20,7 @@ import {
  *   ?view=<canvas view>              canvas view inside a project
  *   ?stage=<group|tab|workflow stage> only meaningful when view=stage
  *   ?tool=files|git|terminal         workbench tool for files/changes/terminal views
+ *   ?file=<workspace-relative path>  file open in the files view (P3)
  *   ?assistant=1                     assistant panel open
  *
  * `page=research-new` (menu "新建研究项目") is normalised to `page=research`
@@ -69,6 +70,15 @@ export type AppRoute = {
   stageGroup: ResearchStageGroupId;
   stageTab: ResearchStageTab;
   tool: WorkbenchTool | null;
+  /**
+   * Workspace-**relative** path open in the files view (P3), or null.
+   *
+   * This is navigation state, not product data: it is what a "which file am I
+   * looking at" deep link means, and it lives in the URL for the same reason
+   * `stage` does — a reload must land on the same file, and the path is refused
+   * locally if it tries to escape the workspace (R10).
+   */
+  openFile: string | null;
   assistantOpen: boolean;
   /** Only ever true transiently: the create form is expanded on arrival. */
   newProject: boolean;
@@ -105,6 +115,11 @@ const TOOL_BEARING_VIEWS: ReadonlySet<AppViewId> = new Set<AppViewId>(['files', 
 
 export function viewCarriesTool(view: AppViewId): boolean {
   return TOOL_BEARING_VIEWS.has(view);
+}
+
+/** Only the files view can have a file open in it. */
+export function viewCarriesOpenFile(view: AppViewId): boolean {
+  return view === 'files';
 }
 
 function emptyToNull(value: string | null): string | null {
@@ -198,6 +213,9 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
   const view: AppViewId = portal ? DEFAULT_VIEW : route.view;
   const parsedStage = view === 'stage' ? normalizeStagePair(route.stageGroup, route.stageTab) : parseStage(null);
   const tool: WorkbenchTool | null = viewCarriesTool(view) ? route.tool : null;
+  // The open file belongs to the files view only; any other view drops it, which
+  // is what keeps `parse(write(r))` stable for the fields that remain.
+  const openFile = viewCarriesOpenFile(view) && !portal ? emptyToNull(route.openFile) : null;
   // `newProject` is a one-shot *request* to open the portal's create form, so it
   // is only meaningful on a project-less portal. The form's open state and its
   // draft are component state in `ProjectPortalView`; that is what keeps an
@@ -213,6 +231,7 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
     stageGroup: parsedStage.group,
     stageTab: parsedStage.tab,
     tool,
+    openFile,
     // The assistant lives in a project; with no project it cannot be open.
     assistantOpen: portal ? false : route.assistantOpen,
     newProject
@@ -229,6 +248,7 @@ export function parseAppRoute(search: URLSearchParams): AppRoute {
     stageGroup: parsedStage.group,
     stageTab: parsedStage.tab,
     tool: parseTool(search.get('tool')),
+    openFile: emptyToNull(search.get('file')),
     assistantOpen: search.get('assistant') === '1',
     newProject: parsedPage.newProject
   });
@@ -267,6 +287,10 @@ export function appRouteToSearch(route: AppRoute): string {
     params.set('tool', normalized.tool);
   }
 
+  if (normalized.openFile !== null) {
+    params.set('file', normalized.openFile);
+  }
+
   if (normalized.assistantOpen) {
     params.set('assistant', '1');
   }
@@ -302,6 +326,7 @@ export function sameAppRoute(left: AppRoute, right: AppRoute): boolean {
     left.projectId !== right.projectId ||
     left.view !== right.view ||
     left.tool !== right.tool ||
+    left.openFile !== right.openFile ||
     left.assistantOpen !== right.assistantOpen ||
     left.newProject !== right.newProject
   ) {

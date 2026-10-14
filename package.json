@@ -22,6 +22,8 @@
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",
     "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs",
+    "report:renderer-eager": "node scripts/report-renderer-eager-modules.mjs",
+    "verify:p3-workspace": "node scripts/verify-p3-workspace.mjs",
     "database:backup": "node dist/main/database-maintenance-cli.js backup",
     "database:restore": "node dist/main/database-maintenance-cli.js restore",
     "database:migrate": "node scripts/migrate-databases.mjs",

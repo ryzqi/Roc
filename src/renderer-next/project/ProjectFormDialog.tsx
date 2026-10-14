@@ -172,7 +172,7 @@ export function ProjectFormDialog({
             onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
             aria-invalid={errors.title !== undefined}
             data-testid="project-form-title"
-            className="h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-2.5 text-ink outline-none"
+            className="h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-2.5 text-ink"
           />
           {errors.title === undefined ? null : (
             <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-title-error">
@@ -189,7 +189,7 @@ export function ProjectFormDialog({
             onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
             aria-invalid={errors.description !== undefined}
             data-testid="project-form-description"
-            className="resize-none rounded-control border border-line bg-surface-strong px-2.5 py-2 text-ink outline-none"
+            className="resize-none rounded-control border border-line bg-surface-strong px-2.5 py-2 text-ink"
           />
           <span className="text-subtle text-[var(--font-micro-size)]">
             阶段运行与闸门判断都以它为依据；未写明运行时指令时也用它。

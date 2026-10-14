@@ -36,9 +36,35 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
     packages: ['@xterm/addon-fit', '@xterm/xterm']
   },
   {
-    chunk: 'renderer-diff',
-    packages: ['react-diff-view']
+    // React must be its own chunk (P3). Without an explicit rule rolldown's
+    // common-chunk heuristic decides, and the entry is the chunk that has to win.
+    chunk: 'renderer-react',
+    packages: ['react', 'react-dom', 'scheduler']
   },
+  /*
+   * `react-diff-view` deliberately has **no** rule (P3 amendment to ADR-M11).
+   *
+   * P0 gave it a `renderer-diff` chunk for a predictable name. That produced a
+   * silent eager-graph leak instead: react-diff-view is a CJS package, so the
+   * React it requires got inlined into the same manual chunk, and since the entry
+   * needs React it then **statically** imported the whole thing — react-diff-view,
+   * its CSS, and a duplicate React — on every launch, for a panel that is lazily
+   * loaded on both of its surfaces.
+   *
+   * Measured with the rule in place: `index.html` modulepreloaded
+   * `renderer-diff-*.js` together with its CSS, and react-diff-view was in the
+   * entry's static graph. Measured without it: 4 eager files, no diff preload,
+   * react-diff-view inside the lazy Git chunk. The exact byte totals are
+   * deliberately not repeated here — they change with every phase, and a stale
+   * number in a comment reads like a measurement. Run `pnpm check:renderer-chunks`
+   * (which now fails on this class of leak) or `pnpm report:renderer-eager` for the
+   * current numbers; the P3 baseline is recorded in `ADR-M11 修订`.
+   *
+   * The byte budget and the forbidden-name list both passed the leak, so
+   * `scripts/check-renderer-chunks.mjs` now also asserts that no lazily loaded
+   * package appears in the entry's static graph (`eagerForbiddenPackages`), and
+   * `scripts/report-renderer-eager-modules.mjs` prints the attribution by hand.
+   */
   {
     chunk: 'renderer-katex',
     packages: ['katex']

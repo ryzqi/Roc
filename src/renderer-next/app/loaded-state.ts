@@ -6,7 +6,20 @@
  * render an error bar with the backend's own message.
  */
 
-export type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
+export type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string; code?: string } };
+
+/**
+ * Backend error codes the renderer branches on.
+ *
+ * `rocErrorSchema` requires `code`, so it is always present at runtime; the
+ * contract widens it as optional here because some of these states are expected
+ * outcomes rather than failures — "this directory is not a Git repository" has
+ * to reach the UI as an explanation, not as a red error bar.
+ */
+export const BACKEND_ERROR_CODES = {
+  gitRepositoryMissing: 'git_repository_missing',
+  workspacePathMissing: 'workspace_path_missing'
+} as const;
 
 export class IpcCallError extends Error {
   constructor(

@@ -20,9 +20,14 @@ import { placeholderView } from './placeholder-view';
  *
  * P0–P9 register placeholders through `viewLoaders`; each phase replaces its
  * entry with a real `() => import('...')`. Until then the factories live in the
- * eager entry, which is fine for placeholders but **the assistant, settings and
- * the Markdown/KaTeX families must stay real dynamic imports**, or
- * `check-renderer-chunks.mjs`'s `forbidden` guard fails (R4 / ADR-M11).
+ * eager entry, which is fine for placeholders but **the assistant, settings, the
+ * terminal, the diff view and the Markdown/KaTeX families must stay real dynamic
+ * imports**, or `check-renderer-chunks.mjs`'s `forbidden` guard (or the eager
+ * budget) fails (R4 / ADR-M11).
+ *
+ * P3 turned `files` / `terminal` / `changes` into real imports. They no longer
+ * have a same-name placeholder factory in this file, so nothing keeps
+ * `@xterm/xterm` or `react-diff-view` reachable from the entry by accident.
  */
 
 export type ViewProps = {
@@ -38,11 +43,13 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   stage: async () => ({ default: placeholderView('阶段工作区', 'P6 实现') }),
   activity: async () => ({ default: placeholderView('活动流', 'P6 实现') }),
   provenance: async () => ({ default: placeholderView('溯源', 'P7 实现') }),
-  changes: async () => ({ default: placeholderView('改动与产物', 'P3 实现') }),
+  // P3 landed these three as real views. They are genuine `import()`s, not
+  // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
+  changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
   literature: async () => ({ default: placeholderView('文献中心', 'P5 实现') }),
   latex: async () => ({ default: placeholderView('文稿', 'P7 实现') }),
-  terminal: async () => ({ default: placeholderView('终端', 'P3 实现') }),
-  files: async () => ({ default: placeholderView('文件', 'P3 实现') }),
+  terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
+  files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
   tasks: async () => ({ default: placeholderView('任务看板', 'P6 实现') }),
   diagnostics: async () => ({ default: placeholderView('运行诊断', 'P6 实现') }),
   mcp: async () => ({ default: placeholderView('MCP', 'P9 实现') }),
