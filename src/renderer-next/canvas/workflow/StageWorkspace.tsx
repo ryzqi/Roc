@@ -1,4 +1,4 @@
-import { Database, Library, SlidersHorizontal } from 'lucide-react';
+import { Database, Library } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useWorkspaceScope } from '../../app/workspace-scope';
 import { EmptyState } from '../../shell/EmptyState';
@@ -17,6 +17,10 @@ import {
 } from './workflow-rules';
 import { indexPhaseLabel, researchStageStatusLabels } from './format';
 import { ArtifactPanel } from './ArtifactPanel';
+import { EvidenceClaimsPanel } from '../../production/EvidenceClaimsPanel';
+import { IdeasPanel } from '../../production/IdeasPanel';
+import { ManuscriptPanel } from '../../production/ManuscriptPanel';
+import { PoliciesPanel } from '../../production/PoliciesPanel';
 import { StageBar } from './StageBar';
 import { StageRunPanel } from './StageRunPanel';
 import { useWorkflow } from './workflow-scope';
@@ -40,23 +44,32 @@ import { useWorkflow } from './workflow-scope';
  * two surfaces cannot disagree — and the archived project is read-only everywhere.
  */
 
-type TabId = ResearchStageTab | 'runs' | 'artifacts';
+type TabId = ResearchStageTab | 'runs' | 'artifacts' | 'claims';
 
 const P6_TABS: Array<{ id: TabId; label: string }> = [
   { id: 'runs', label: '阶段运行' },
   { id: 'artifacts', label: '工件与生产输入' }
 ];
 
-/** Panels that exist today, and the phase that owns the rest. */
+/**
+ * Panels that apply to every stage group (P7's 证据与主张 is project-wide: evidence and claims
+ * are attached to the manuscript artifact, not to one stage's inputs).
+ */
+const P7_TABS: Array<{ id: TabId; label: string }> = [{ id: 'claims', label: '证据与主张' }];
+
+/**
+ * Tabs whose panel belongs to a later phase yet, with the phase that owns it.
+ *
+ * `ideas` / `manuscript` / `policies` used to be listed here; they now render real panels, so
+ * this table is the honest list of what is *still* missing rather than a placeholder for
+ * everything.
+ */
 const PANEL_OWNER: Partial<Record<TabId, string>> = {
-  ideas: '构思画布（P7）',
-  experiments: '实验运行（P7）',
-  figures: '图稿（P7）',
-  manuscript: '正文（P7）',
-  editor: '文稿（P7）',
-  production: '导出包（P7）',
-  embedding: '嵌入配置（P8 设置中心）',
-  policies: '阶段模型策略（P7）'
+  experiments: '实验运行（P7 剩余）',
+  figures: '图稿（P7 剩余）',
+  editor: '文稿与模板包（P7 剩余）',
+  production: '导出包（P7 剩余）',
+  embedding: '嵌入配置的写入（P8 设置中心；本组只显示只读摘要）'
 };
 
 export function StageWorkspace({ stageHint }: { stageHint: string | null }): React.JSX.Element {
@@ -112,7 +125,7 @@ export function StageWorkspace({ stageHint }: { stageHint: string | null }): Rea
   const current = currentStageState(workflow);
   const isCurrent = groupId === currentGroup;
   const writeAllowed = scope.writable && stageGroupWriteAllowed(groupId, workflow.currentStage, current.status);
-  const tabs: Array<{ id: TabId; label: string }> = [...group.tabs, ...P6_TABS];
+  const tabs: Array<{ id: TabId; label: string }> = [...group.tabs, ...P6_TABS, ...P7_TABS];
   const activeTab = tabs.some((item) => item.id === tab) ? tab : (tabs[0]?.id ?? 'runs');
   const latest = latestParentRun(store.runs, workflow);
   const stageArtifacts = currentArtifacts(store.artifacts, workflow);
@@ -125,13 +138,12 @@ export function StageWorkspace({ stageHint }: { stageHint: string | null }): Rea
         currentGroup={currentGroup}
         selectedGroup={groupId}
         projectWritable={scope.writable}
-        onSelectGroup={(next) => {
-          if (next === 'settings') {
-            // Configuration is not a workspace: it lives in the settings centre (P8).
-            scope.openSettings();
-            return;
-          }
-          scope.openStage(next);
+        onSelectGroup={(groupId) => {
+          // 项目设置组是**阶段工作区的一个组**（里面有「嵌入配置」与「阶段模型」两个 tab），
+          // 不是设置中心弹窗。P6 时这里指向 `openSettings()`，因为那一组还没有面板；P7 加了面板
+          // 之后那条映射就等于把两个真面板藏起来（只能手改 URL 到达）——探针实测发现。
+          // 设置中心仍然从窗口头部与面板内的「打开设置中心」进入。
+          scope.openStage(groupId);
         }}
       />
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
@@ -310,6 +322,18 @@ function MainPanel({
   if (tab === 'artifacts') {
     return <ArtifactPanel groupId={groupId} />;
   }
+  if (tab === 'claims') {
+    return <EvidenceClaimsPanel />;
+  }
+  if (tab === 'ideas') {
+    return <IdeasPanel />;
+  }
+  if (tab === 'manuscript') {
+    return <ManuscriptPanel />;
+  }
+  if (tab === 'policies') {
+    return <PoliciesPanel />;
+  }
   if (tab === 'runs') {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -380,12 +404,18 @@ function MainPanel({
       </section>
     );
   }
+  if (tab === 'embedding') {
+    // Read-only: `research.embedding.save` needs a plaintext key (B23) and the settings centre
+    // owns index configuration (MASTER v2 §7). The summary lives with the policy editor so the
+    // settings group has one "project configuration" surface.
+    return <PoliciesPanel />;
+  }
   const owner = PANEL_OWNER[tab] ?? '后续阶段';
   return (
     <EmptyState
-      icon={tab === 'embedding' || tab === 'policies' ? SlidersHorizontal : Database}
+      icon={Database}
       title={`${owner}`}
-      description={`「${groupId}」的这一面板还没有实现：P6 只交付阶段运行、工件与生产输入。它的接口与元素已在 capability-matrix §7 登记，会按阶段补齐，不会用示意数据填充。`}
+      description={`「${groupId}」的这一面板还没有实现。它的接口与元素已在 capability-matrix §7 登记，会按阶段补齐，不会用示意数据填充：本组已交付的是阶段运行、工件与生产输入、证据与主张，以及构思 / 正文 / 阶段模型（见左侧其它标签）。`}
       testId={`workflow-stage-panel-pending-${tab}`}
     />
   );

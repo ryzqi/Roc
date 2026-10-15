@@ -106,10 +106,10 @@ export function ProjectOverview(): React.JSX.Element {
         currentGroup={currentGroup}
         selectedGroup={currentGroup}
         onSelectGroup={(groupId) => {
-          if (groupId === 'settings') {
-            scope.openSettings();
-            return;
-          }
+          // 项目设置组是**阶段工作区的一个组**（里面有「嵌入配置」与「阶段模型」两个 tab），
+          // 不是设置中心弹窗。P6 时这里指向 `openSettings()`，因为那一组还没有面板；P7 加了面板
+          // 之后那条映射就等于把两个真面板藏起来（只能手改 URL 到达）——探针实测发现。
+          // 设置中心仍然从窗口头部与面板内的「打开设置中心」进入。
           scope.openStage(groupId);
         }}
         projectWritable={scope.writable}

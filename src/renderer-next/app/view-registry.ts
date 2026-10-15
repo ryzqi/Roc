@@ -42,7 +42,7 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   overview: async () => ({ default: (await import('../canvas/workflow/ProjectOverview')).ProjectOverview }),
   stage: async () => ({ default: (await import('../canvas/workflow/StageWorkspace')).StageWorkspace }),
   activity: async () => ({ default: (await import('../canvas/workflow/ActivityView')).ActivityView }),
-  provenance: async () => ({ default: placeholderView('溯源', 'P7 实现') }),
+  provenance: async () => ({ default: (await import('../production/ProvenanceView')).ProvenanceView }),
   // P3 landed these three as real views. They are genuine `import()`s, not
   // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
   changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
