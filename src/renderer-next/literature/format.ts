@@ -169,3 +169,123 @@ export function deriveCitationKey(input: { title: string; authors: readonly stri
 export function literatureRecordFromSearchHit(hit: ResearchLiterature): ResearchLiterature {
   return { ...hit };
 }
+
+/**
+ * Document extensions the backend accepts for `research.document.import`.
+ *
+ * Mirrors `documentMediaTypes` in `src/main/plugins/research/document-files.ts`.
+ * Duplicating it is deliberate and bounded: it exists so the import form can
+ * refuse a `.docx` with a specific message *before* an upload-shaped round trip,
+ * exactly like the workspace path checks in P3 (R10). If the backend list grows,
+ * the worst case is a local refusal for a file that would have worked — not a
+ * wrong result — and the two lists are one grep apart.
+ */
+export const DOCUMENT_EXTENSIONS: readonly string[] = [
+  '.pdf',
+  '.html',
+  '.htm',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.tif',
+  '.tiff',
+  '.bmp',
+  '.webp'
+];
+
+const IMAGE_EXTENSIONS: readonly string[] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp'];
+
+function lowerExtension(path: string): string {
+  const match = /\.[A-Za-z0-9]+$/u.exec(path.trim());
+  return match === null ? '' : match[0].toLowerCase();
+}
+
+export function isDocumentPathSupported(path: string): boolean {
+  return DOCUMENT_EXTENSIONS.includes(lowerExtension(path));
+}
+
+/** `PDF` / `HTML` / `图片` — the three shapes the import produces. */
+export function documentKindLabel(path: string): string {
+  const extension = lowerExtension(path);
+  if (extension === '.pdf') {
+    return 'PDF';
+  }
+  if (extension === '.html' || extension === '.htm') {
+    return 'HTML';
+  }
+  return IMAGE_EXTENSIONS.includes(extension) ? '图片' : '未知格式';
+}
+
+/**
+ * Author parsing for the manual-entry form.
+ *
+ * Separators are newline, `;`, and the BibTeX `and` — **not** the comma, because
+ * `"Vaswani, Ashish"` is one author and splitting on commas would turn a single
+ * person into two. That is the whole reason this is a function with tests instead
+ * of an inline `split(',')`.
+ */
+export function parseAuthorsInput(input: string): string[] {
+  return input
+    .split(/\r?\n|;|\band\b/iu)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * Year parsing: a 4-digit year between 1000 and 2999, or null.
+ *
+ * Null (not a guess, not the current year) is the honest answer for "not given" —
+ * `publishedYear` is nullable in the contract and the timeline derivation skips
+ * claims without a dated paper rather than inventing one.
+ */
+export function parseYearInput(input: string): number | null {
+  const trimmed = input.trim();
+  if (!/^\d{4}$/u.test(trimmed)) {
+    return null;
+  }
+  const year = Number.parseInt(trimmed, 10);
+  return year >= 1000 && year <= 2999 ? year : null;
+}
+
+/**
+ * Builds the `record` half of `importLibraryRecord` for the manual-entry form.
+ *
+ * The backend feeds this record through `normalizeBibliography` and then stores
+ * `{...record, title, authors}` (see `library-service.ts:importRecord`), so every
+ * required field of `researchLiteratureSchema` must be present even though the
+ * user only typed four of them. Two choices are worth stating:
+ *
+ *   - `source: 'local'` and `externalId = citationKey`, mirroring the backend's own
+ *     `localMetadata()` convention for locally sourced records;
+ *   - `id` is **derived** (`local:manual:<key>`), not random, so re-importing the
+ *     same entry is idempotent and the backend's duplicate detection can see it.
+ *     A `randomUUID()` here would guarantee the duplicate *is* counted as new.
+ *
+ * `now` is a parameter so this stays pure and testable.
+ */
+export function buildManualRecord(input: {
+  title: string;
+  authors: string[];
+  year: number | null;
+  doi: string | null;
+  url: string | null;
+  abstract: string | null;
+  citationKey: string;
+  now: string;
+}): ResearchLiterature {
+  return {
+    id: `local:manual:${input.citationKey}`,
+    source: 'local',
+    externalId: input.citationKey,
+    doi: input.doi,
+    title: input.title.trim(),
+    authors: input.authors,
+    abstract: input.abstract,
+    publishedYear: input.year,
+    citationCount: null,
+    url: input.url,
+    openAccessUrl: null,
+    importedAt: input.now,
+    updatedAt: input.now
+  };
+}

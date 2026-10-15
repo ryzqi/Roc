@@ -128,3 +128,86 @@ test('libraryItemTitle prefers metadata and never shows an empty row', () => {
   assert.equal(format.libraryItemTitle({ metadata: { title: '  ' }, bibliography: { title: ' B ' } }), 'B');
   assert.equal(format.libraryItemTitle({ metadata: { title: '' }, bibliography: { title: '' } }), '（无题名）');
 });
+
+test('document import support mirrors the backend extension list', () => {
+  // The backend refuses unknown extensions with `research_source_format_unsupported`;
+  // this check exists so the form can say *which* formats work before the round trip.
+  for (const path of ['a.pdf', 'a.PDF', '/tmp/x/y.html', 'scan.JPEG', 'a.tiff', 'a.webp']) {
+    assert.equal(format.isDocumentPathSupported(path), true, `${path} should be accepted`);
+  }
+  for (const path of ['a.docx', 'a.tex', 'a', 'a.bib', 'a.tar.gz']) {
+    assert.equal(format.isDocumentPathSupported(path), false, `${path} should be refused locally`);
+  }
+});
+
+test('documentKindLabel names the three shapes the importer produces', () => {
+  assert.equal(format.documentKindLabel('/tmp/paper.pdf'), 'PDF');
+  assert.equal(format.documentKindLabel('page.HTM'), 'HTML');
+  assert.equal(format.documentKindLabel('figure.png'), '图片');
+  assert.equal(format.documentKindLabel('notes.txt'), '未知格式');
+});
+
+test('parseAuthorsInput never splits on a comma', () => {
+  // "Vaswani, Ashish" is ONE author. Splitting on commas would turn every
+  // BibTeX-style name into two people, which then shows up as a wrong author list
+  // everywhere the record is rendered.
+  assert.deepEqual(format.parseAuthorsInput('Vaswani, Ashish'), ['Vaswani, Ashish']);
+  assert.deepEqual(format.parseAuthorsInput('A. One\nB. Two'), ['A. One', 'B. Two']);
+  assert.deepEqual(format.parseAuthorsInput('A. One; B. Two'), ['A. One', 'B. Two']);
+  assert.deepEqual(format.parseAuthorsInput('A. One and B. Two'), ['A. One', 'B. Two']);
+  assert.deepEqual(format.parseAuthorsInput('  \n ; \n '), []);
+  // A surname that *is* "and" must not be treated as a separator (word boundary).
+  assert.deepEqual(format.parseAuthorsInput('Andrews and Anders'), ['Andrews', 'Anders']);
+  assert.deepEqual(format.parseAuthorsInput('Anderson'), ['Anderson']);
+});
+
+test('parseYearInput accepts only real years and refuses to guess', () => {
+  assert.equal(format.parseYearInput('2024'), 2024);
+  assert.equal(format.parseYearInput(' 1999 '), 1999);
+  assert.equal(format.parseYearInput(''), null);
+  assert.equal(format.parseYearInput('24'), null);
+  assert.equal(format.parseYearInput('20x4'), null);
+  assert.equal(format.parseYearInput('0000'), null);
+  assert.equal(format.parseYearInput('3000'), null);
+});
+
+test('buildManualRecord is idempotent and fills the fields the backend requires', () => {
+  const record = format.buildManualRecord({
+    title: '  A title  ',
+    authors: ['A. One'],
+    year: 2024,
+    doi: '10.1000/xyz',
+    url: null,
+    abstract: null,
+    citationKey: 'one2024title',
+    now: '2026-01-01T00:00:00.000Z'
+  });
+  assert.equal(record.title, 'A title');
+  assert.equal(record.source, 'local');
+  assert.equal(record.externalId, 'one2024title');
+  // Derived, not random: re-importing the same entry must be detected as a
+  // duplicate rather than creating a second record.
+  assert.equal(record.id, 'local:manual:one2024title');
+  assert.equal(record.citationCount, null);
+  assert.equal(record.openAccessUrl, null);
+  assert.equal(record.importedAt, '2026-01-01T00:00:00.000Z');
+  assert.deepEqual(
+    Object.keys(record).sort(),
+    [
+      'abstract',
+      'authors',
+      'citationCount',
+      'doi',
+      'externalId',
+      'id',
+      'importedAt',
+      'openAccessUrl',
+      'publishedYear',
+      'source',
+      'title',
+      'updatedAt',
+      'url'
+    ],
+    'the record must carry exactly the researchLiteratureSchema fields (strict schema)'
+  );
+});
