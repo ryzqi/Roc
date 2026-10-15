@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FileNameSearchResult, FileSearchResult } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
+import { useDebouncedValue } from '../app/use-debounced-value';
 import { searchFileContents, searchFileNames } from './workspace-store';
 
 /**
@@ -25,15 +26,6 @@ export type QueryState<Result> = {
   error: string | null;
   reload: () => void;
 };
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 /** The empty payload a failed search degrades to, so `data` stays non-null. */
 const EMPTY_NAMES: FileNameSearchResult = { query: '', matches: [], truncated: false };

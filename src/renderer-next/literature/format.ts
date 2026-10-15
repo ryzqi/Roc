@@ -171,6 +171,39 @@ export function literatureRecordFromSearchHit(hit: ResearchLiterature): Research
 }
 
 /**
+ * The prompt behind the reader's 「问助手」 action (P5/T5.4).
+ *
+ * Deliberately **not** a fabricated paper summary: the run gets an identifier the
+ * assistant can act on (the library item id and the project id) plus the metadata
+ * the user can already see, and the answer must come from the research tools
+ * reading the real record. Pasting the title as "context" would look richer while
+ * actually preventing the assistant from opening anything (F16's rule: no invented
+ * data, including invented prompts).
+ */
+export function buildLiteratureAssistantPrompt(input: {
+  title: string;
+  authors: readonly string[];
+  year: number | null;
+  citationKey: string;
+  libraryItemId: string;
+  documentId: string | null;
+}): string {
+  const lines = [
+    `请围绕文献「${input.title}」回答问题：`, '',
+    `- 题名：${input.title}`,
+    `- 作者：${input.authors.length === 0 ? '未知' : input.authors.join('; ')}`,
+    `- 年份：${input.year === null ? '未知' : String(input.year)}`,
+    `- 引用 key：${input.citationKey}`,
+    `- 文献库条目 id：${input.libraryItemId}`
+  ];
+  if (input.documentId !== null) {
+    lines.push(`- 已导入文档 id：${input.documentId}（可用 research.document.* 读取解析出的章节）`);
+  }
+  lines.push('', '先用可用的科研工具读取这条记录的真实内容，再回答；不要凭标题推测内容。');
+  return lines.join('\n');
+}
+
+/**
  * Document extensions the backend accepts for `research.document.import`.
  *
  * Mirrors `documentMediaTypes` in `src/main/plugins/research/document-files.ts`.

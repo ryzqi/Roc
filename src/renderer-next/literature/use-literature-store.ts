@@ -10,11 +10,14 @@ import type {
   ResearchLiterature
 } from '../../shared/types';
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
+import { useDebouncedValue } from '../app/use-debounced-value';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import {
   archiveLibraryItem,
   cancelDocumentParse,
+  captureEvidence,
+  exportBibliography,
   getDocumentContent,
   importBibliographyFile,
   importDocument,
@@ -27,8 +30,11 @@ import {
   listEvidence,
   listLibrary,
   parseDocument,
-  setLibraryCitationKey
+  setLibraryCitationKey,
+  upsertKnowledgeDocument,
+  writeWorkspaceText
 } from './library-store';
+import { buildLiteratureAssistantPrompt, libraryItemTitle } from './format';
 
 /**
  * The one literature store, created once in `AppShell` and shared by the sidebar's
@@ -66,6 +72,21 @@ export type LiteratureActionState = {
   error: string | null;
 };
 
+/**
+ * State of the reader's 「问助手」 action.
+ *
+ * `threadId` is the shell's cue: the store starts a **real** run through
+ * `chat.startRun` (the same call the composer makes), and once a thread exists the
+ * shell selects it and opens the panel — which then finds the running run through
+ * P4's `getActiveRun` + event replay. Keeping the run here rather than in the view
+ * means the shell owns navigation while the store owns the IPC call.
+ */
+export type LiteratureAssistantState = {
+  pending: boolean;
+  error: string | null;
+  threadId: string | null;
+};
+
 export type LiteratureStore = {
   client: RocClient;
   projectId: string | null;
@@ -99,8 +120,49 @@ export type LiteratureStore = {
   }) => Promise<LiteratureImportOutcome>;
   addPdfToItem: (input: { sourcePath: string; libraryItemId: string }) => Promise<LiteratureImportOutcome>;
   startParse: (documentId: string) => Promise<boolean>;
+  /**
+   * The document whose parse this store started and has not seen finish.
+   *
+   * Needed because `document.parse` is a long backend job that the renderer does
+   * **not** await: the reader must show 「解析中」 (and offer 取消) while it runs, and
+   * the backend only reports `status: 'parsing'` after a document re-read — this
+   * field keeps the poll alive across that gap instead of leaving a dead button.
+   */
+  parseInFlight: string | null;
   cancelParse: (input: { documentId: string; parseId: string }) => Promise<boolean>;
   loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<DocumentContentResult>>;
+  /**
+   * Captures the chunk behind a retrieval hit as evidence.
+   *
+   * `chunkId` is mandatory in the contract (B15), so this is only reachable from a
+   * RAG hit — never from arbitrary text or a paragraph.
+   */
+  captureChunkEvidence: (chunkId: string) => Promise<boolean>;
+  /** Saves a retrieval hit as a knowledge document so it is retrievable later. */
+  saveKnowledgeNote: (input: {
+    title: string;
+    content: string;
+    locator: string | null;
+    sourceId: string;
+  }) => Promise<boolean>;
+  /**
+   * `library.export` serialization.
+   *
+   * Returns the content; there is no save-as dialog on this path (F16), so the
+   * caller copies it or writes it with `writeToWorkspace`.
+   */
+  exportItem: (
+    item: ResearchLibraryItem,
+    format: ResearchBibliographyFormat
+  ) => Promise<{ filename: string; content: string } | null>;
+  /** Writes text into the **bound workspace** and returns the relative path used. */
+  writeToWorkspace: (input: { relativePath: string; content: string }) => Promise<string | null>;
+  /** State of the reader's 「问助手」 run (see `LiteratureAssistantState`). */
+  assistant: LiteratureAssistantState;
+  /** Starts a real `chat.startRun` for the selected paper. */
+  askAssistantAboutSelected: () => Promise<void>;
+  /** Called by the shell once it has adopted `assistant.threadId`. */
+  adoptAssistantThread: () => void;
   /**
    * Claims + evidence for the current project, or `null` while unloaded.
    *
@@ -128,15 +190,6 @@ export type LiteratureStore = {
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
-
 /**
  * `library.list` needs all four fields, and the backend rejects a `limit` above
  * 500 — so the page size is a named constant rather than a magic number at the
@@ -151,8 +204,12 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const debouncedQuery = useDebouncedValue(query, LIBRARY_QUERY_DEBOUNCE_MS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [parseInFlight, setParseInFlight] = useState<string | null>(null);
   const [importRequestId, setImportRequestId] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [assistantPending, setAssistantPending] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
 
   const listKey = projectId === null ? null : `literature:${projectId}:${debouncedQuery}:${includeArchived ? '1' : '0'}`;
   const list = useAsyncResource(
@@ -215,8 +272,15 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    *
    * `document.parse` is a long backend job with no push channel, so the only
    * honest way to show progress is to re-read the documents. The interval exists
-   * only while `status === 'parsing'`, so an idle panel costs nothing — and a
-   * hidden window stops polling because the effect is tied to the React tree.
+   * only while something is actually parsing, so an idle panel costs nothing —
+   * and a hidden window stops polling because the effect is tied to the React
+   * tree.
+   *
+   * `parseInFlight` is part of the condition on purpose: `parse` does not return
+   * until the backend job finishes, so between the click and the next document
+   * re-read the row still says `imported`. Keying only on the loaded rows would
+   * stop the poll before it ever saw `parsing` — the 「解析中」/取消 state would be
+   * unreachable exactly when it matters.
    */
   const parsingDocumentIds = useMemo(
     () => (documents.data ?? []).filter((document) => document.status === 'parsing').map((document) => document.id),
@@ -224,7 +288,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
   // Joined into a string so the effect below depends on *which* documents are
   // parsing, not on the array identity that every poll recreates.
-  const parsingSignature = parsingDocumentIds.join(',');
+  const parsingSignature = [parseInFlight ?? '', ...parsingDocumentIds].join(',');
   useEffect(() => {
     if (parsingSignature.length === 0) {
       return;
@@ -239,15 +303,23 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     async <Result,>(run: () => Promise<IpcLikeResult<Result>>): Promise<Result | null> => {
       setPending(true);
       setActionError(null);
+      // Written **before** the await: the import wrappers read this ref in the same
+      // tick as the failure (they turn an outcome into their own message), and a
+      // ref that only mirrors state would still hold the previous render's value —
+      // the reason every failed import used to report the generic “导入失败”.
+      actionErrorRef.current = null;
       try {
         const result = await run();
         if (!result.ok) {
+          actionErrorRef.current = result.error.message;
           setActionError(result.error.message);
           return null;
         }
         return result.data;
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        actionErrorRef.current = message;
+        setActionError(message);
         return null;
       } finally {
         setPending(false);
@@ -373,16 +445,43 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     [client, projectId, reloadDocuments, reloadList, runAction]
   );
 
+  /**
+   * Starts the parse **without** blocking the reader on it.
+   *
+   * `document.parse` is a single long IPC call (the worker runs for minutes) and it
+   * resolves with the document once the job ends — success or failure. Awaiting it
+   * in the UI would freeze the reader on a disabled button with no progress and no
+   * way to cancel, which is exactly the fake-progress-free promise T5.3 makes. So
+   * the call is fired, `parseInFlight` keeps the poll alive, the backend's own
+   * `status: 'parsing'` takes over, and the final state arrives via a document
+   * re-read.
+   */
   const startParse = useCallback(
     async (documentId: string): Promise<boolean> => {
-      const document = await runAction(() => parseDocument(client, documentId));
-      if (document === null) {
-        return false;
-      }
+      setParseInFlight(documentId);
+      setActionError(null);
+      const settled = parseDocument(client, documentId)
+        .then((result) => {
+          if (!result.ok) {
+            setActionError(result.error.message);
+            return false;
+          }
+          return true;
+        })
+        .catch((error: unknown) => {
+          setActionError(error instanceof Error ? error.message : String(error));
+          return false;
+        })
+        .finally(() => {
+          setParseInFlight((current) => (current === documentId ? null : current));
+          reloadDocuments();
+        });
+      // One immediate re-read so a backend that already marked the run running is
+      // reflected without waiting a whole poll interval.
       reloadDocuments();
-      return true;
+      return await settled;
     },
-    [client, reloadDocuments, runAction]
+    [client, reloadDocuments]
   );
 
   const cancelParseAction = useCallback(
@@ -401,6 +500,122 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     async (documentId: string) => await getDocumentContentForLatestParse(client, documentId),
     [client]
   );
+
+  /**
+   * Captures a retrieval hit's chunk as evidence.
+   *
+   * Refreshes the derived snapshot on success so the 知识库 / 图谱 panels and the
+   * ⌘K 概念 group see the new evidence without a manual reload — they all read
+   * `derived`, which is why the evidence list lives in this store at all.
+   */
+  const captureChunkEvidence = useCallback(
+    async (chunkId: string): Promise<boolean> => {
+      if (projectId === null) {
+        setActionError('尚未进入项目，无法捕获证据。');
+        return false;
+      }
+      const captured = await runAction(() => captureEvidence(client, { projectId, chunkId }));
+      if (captured === null) {
+        return false;
+      }
+      derived.reload();
+      return true;
+    },
+    [client, derived, projectId, runAction]
+  );
+
+  /**
+   * Saves a retrieval hit as a knowledge document (`knowledge.upsert`).
+   *
+   * The id is derived from the source chunk so that "save the same hit twice" is
+   * an update rather than a second document — the backend replaces chunks for the
+   * same id, and an id with a random suffix would silently duplicate the content
+   * into the index.
+   */
+  const saveKnowledgeNote = useCallback(
+    async (input: { title: string; content: string; locator: string | null; sourceId: string }): Promise<boolean> => {
+      const saved = await runAction(() =>
+        upsertKnowledgeDocument(client, {
+          id: `note:${input.sourceId}`,
+          projectId,
+          sourceType: 'note',
+          sourceId: input.sourceId,
+          title: input.title,
+          content: input.content,
+          chunks: [{ content: input.content, locator: input.locator }],
+          embeddingConfigId: null
+        })
+      );
+      return saved !== null;
+    },
+    [client, projectId, runAction]
+  );
+
+  const exportItem = useCallback(
+    async (
+      item: ResearchLibraryItem,
+      format: ResearchBibliographyFormat
+    ): Promise<{ filename: string; content: string } | null> => {
+      const exported = await runAction(() => exportBibliography(client, { ids: [item.id], format }));
+      if (exported === null) {
+        return null;
+      }
+      return { filename: exported.filename, content: exported.content };
+    },
+    [client, runAction]
+  );
+
+  const writeToWorkspace = useCallback(
+    async (input: { relativePath: string; content: string }): Promise<string | null> => {
+      const written = await runAction(() =>
+        writeWorkspaceText(client, { ...input, source: 'literature-export' })
+      );
+      return written === null ? null : written.relativePath;
+    },
+    [client, runAction]
+  );
+
+  /**
+   * Starts a real assistant run about the selected paper.
+   *
+   * The workspace is deliberately left to the backend: with `researchProjectId`
+   * set, the agent resolves the project's own directory (and ignores a renderer
+   * supplied path), so passing one from here could only ever disagree with the
+   * project record.
+   */
+  const askAssistantAboutSelected = useCallback(async (): Promise<void> => {
+    if (projectId === null || selected === null) {
+      setAssistantError('先进入项目并选一条文献。');
+      return;
+    }
+    const activeDocument = (documents.data ?? [])[0] ?? null;
+    setAssistantPending(true);
+    setAssistantError(null);
+    try {
+      const result = await client.api.chat.startRun({
+        input: buildLiteratureAssistantPrompt({
+          title: libraryItemTitle(selected),
+          authors: selected.metadata.authors,
+          year: selected.metadata.publishedYear,
+          citationKey: selected.bibliography.citationKey,
+          libraryItemId: selected.id,
+          documentId: activeDocument?.id ?? null
+        }),
+        mode: 'chat',
+        enabledCapabilities: { mcpServers: [], skills: [] },
+        researchProjectId: projectId
+      });
+      if (!result.ok) {
+        setAssistantError(result.error.message);
+        return;
+      }
+      setAssistantThreadId(result.data.threadId);
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAssistantPending(false);
+    }
+  }, [client, documents.data, projectId, selected]);
 
   return {
     client,
@@ -439,7 +654,15 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     addPdfToItem,
     startParse,
     cancelParse: cancelParseAction,
-    loadDocumentContent
+    loadDocumentContent,
+    parseInFlight,
+    captureChunkEvidence,
+    saveKnowledgeNote,
+    exportItem,
+    writeToWorkspace,
+    assistant: { pending: assistantPending, error: assistantError, threadId: assistantThreadId },
+    askAssistantAboutSelected,
+    adoptAssistantThread: () => setAssistantThreadId(null)
   };
 }
 

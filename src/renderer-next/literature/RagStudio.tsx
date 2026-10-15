@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, DatabaseZap, ExternalLink, Loader2, Play, RefreshCw, Search, Square } from 'lucide-react';
-import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchResult } from '../../shared/types';
+import { AlertCircle, Bookmark, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
+import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
+import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
-import { controlIndex, getEvidenceIndexSource, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
+import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 
 /**
@@ -19,6 +20,14 @@ import type { LiteratureStore } from './use-literature-store';
  * fused RRF score all arrive from the backend, so nothing is re-scored here. The
  * legacy `ragEngine.ts` (local BM25, fake dense vectors, local RRF) is gone.
  *
+ * "Jump back to the source" is resolved from the hit's **own** fields rather than
+ * from a guessed id: the knowledge document id says which kind of source it is
+ * (`document:<parseId>` = a parsed document of a library item, `library:<id>` = a
+ * library record's metadata, `project-index:<fileId>` = a workspace file), which
+ * is exactly what decides between the reader and the files view. The legacy code
+ * asked `index.evidenceSource` with a **chunkId** — a method whose argument is an
+ * evidence id, so it could only ever throw `research_evidence_not_found` (F16).
+ *
  * Index configuration is **read-only** with a jump to the settings centre
  * (ADR-M09): the effective values are shown from `status.settings`, never edited.
  *
@@ -29,8 +38,12 @@ import type { LiteratureStore } from './use-literature-store';
 export type RagStudioProps = {
   literature: LiteratureStore;
   openInFilesView: (relativePath: string) => void;
-  /** Open the reader at a hit's locator (only meaningful for literature hits). */
-  onOpenInReader: (target: { documentId: string; libraryItemId: string | null; locator: string | null }) => void;
+  /**
+   * Open the reader for a hit. `parseId` is the hit's own parse when it named one
+   * (so an item with several documents opens the right one); `null` means "the
+   * selected item's first document".
+   */
+  onOpenInReader: (target: { parseId: string | null; libraryItemId: string | null; locator: string | null }) => void;
 };
 
 const PHASE_LABELS: Readonly<Record<ResearchIndexStatus['phase'], string>> = {
@@ -71,6 +84,8 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const [jumpError, setJumpError] = useState<string | null>(null);
   const [fileQuery, setFileQuery] = useState('');
   const [actionPending, setActionPending] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const scope = useWorkspaceScope();
 
   const statusResource = useAsyncResource(
     projectId === null ? null : `index-status:${projectId}`,
@@ -147,12 +162,16 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
     }
     setSearching(true);
     setSearchError(null);
+    setNote(null);
     try {
       const result = await searchKnowledge(client, {
         query: trimmed,
         projectId,
         limit: 20,
-        embeddingConfigId: null
+        // The configured embedding config, not a hard-coded null: without it the
+        // backend can only return keyword hits, and the panel is displaying the
+        // effective config right below the box.
+        embeddingConfigId: status?.settings.embeddingConfigId ?? null
       });
       if (!result.ok) {
         setResult(null);
@@ -165,20 +184,86 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
     }
   };
 
-  const openHit = async (chunkId: string, sourceType: string, sourceId: string, locator: string | null): Promise<void> => {
+  /**
+   * Opens a hit at its source.
+   *
+   * The knowledge document id prefix is the discriminator (it is the backend's own
+   * naming, not a guess):
+   *
+   *   - `document:<parseId>` → a parsed document; `sourceId` is the **library item**
+   *     id and `locator` is a real `blocks[].locator`, so the reader can align it;
+   *   - `library:<id>`      → the record's own metadata/abstract (no document block
+   *     carries that locator), so the item is opened *without* a locator rather
+   *     than reporting a false "position not found";
+   *   - `project-index:<id>` → a workspace file; the contract has no line numbers,
+   *     so the only honest jump is opening the file.
+   */
+  const openHit = (hit: ResearchKnowledgeSearchHit): void => {
     setJumpError(null);
-    if (sourceType === 'literature') {
-      // The chunk's `documentId` is what the reader needs; it is the evidence
-      // source resolution that knows it, so it is asked rather than guessed.
-      const source = await getEvidenceIndexSource(client, { projectId: projectId ?? '', evidenceId: chunkId });
-      if (!source.ok || source.data === null) {
-        setJumpError(source.ok ? '这条命中没有可打开的来源文件（可能已被删除或未索引）。' : source.error.message);
-        return;
-      }
-      onOpenInReader({ documentId: source.data.fileId, libraryItemId: sourceId, locator });
+    setNote(null);
+    /**
+     * Library-item hits have to be selectable to be readable.
+     *
+     * `knowledge.search` deliberately includes documents with `project_id = NULL`
+     * (parsed documents are stored that way), while `library.list` only returns
+     * items **linked** to the current project. Without this check a hit from another
+     * project would look clickable and then leave the reader on 「尚未选择文献」 —
+     * a no-op that explains nothing. The list is only consulted once it is
+     * `ready`, so a still-loading list cannot produce a false refusal.
+     */
+    const opensInReader = hit.documentId.startsWith('document:') || hit.documentId.startsWith('library:');
+    if (opensInReader && literature.status === 'ready' && !literature.items.some((item) => item.id === hit.sourceId)) {
+      setJumpError(
+        `这条命中来自文献库条目 ${hit.sourceId}，它没有关联到当前项目（检索会包含不属于本项目的文档），所以这里打不开它。`
+      );
       return;
     }
-    openInFilesView(sourceId);
+    if (hit.documentId.startsWith('document:')) {
+      literature.select(hit.sourceId);
+      onOpenInReader({
+        parseId: hit.documentId.slice('document:'.length),
+        libraryItemId: hit.sourceId,
+        locator: hit.locator
+      });
+      return;
+    }
+    if (hit.documentId.startsWith('library:')) {
+      literature.select(hit.sourceId);
+      onOpenInReader({ parseId: null, libraryItemId: hit.sourceId, locator: null });
+      return;
+    }
+    if (hit.documentId.startsWith('project-index:')) {
+      openInFilesView(hit.sourceId);
+      return;
+    }
+    setJumpError(
+      `这条命中的来源是「${hit.documentId.split(':', 1)[0]}」，契约只给出 documentId（${hit.documentId}），无法定位到具体位置。`
+    );
+  };
+
+  const captureHit = (hit: ResearchKnowledgeSearchHit): void => {
+    setNote(null);
+    void literature.captureChunkEvidence(hit.chunkId).then((ok) => {
+      if (ok) {
+        setNote(`已捕获为证据：${hit.title}`);
+      }
+    });
+  };
+
+  const saveHitAsNote = (hit: ResearchKnowledgeSearchHit): void => {
+    setNote(null);
+    void literature
+      .saveKnowledgeNote({
+        title: hit.title,
+        content: hit.content,
+        locator: hit.locator,
+        sourceId: hit.chunkId
+      })
+      .then((ok) => {
+        if (ok) {
+          setNote('已写入知识库（note 来源；重复保存会更新同一条）。');
+        }
+      });
   };
 
   if (projectId === null) {
@@ -292,6 +377,11 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
               {jumpError}
             </p>
           )}
+          {note === null && literature.action.error === null ? null : (
+            <p role="status" className="mt-1.5 text-muted text-[var(--font-micro-size)]" data-testid="rag-note">
+              {note ?? literature.action.error}
+            </p>
+          )}
 
           {result === null ? (
             <p className="mt-2 text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-search">
@@ -320,18 +410,39 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                       </span>
                     </header>
                     <p className="mt-1 whitespace-pre-wrap text-muted text-[var(--font-meta-size)]">{hit.content}</p>
-                    <footer className="mt-1.5 flex items-center gap-2">
+                    <footer className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <span className="min-w-0 flex-1 truncate font-mono text-subtle text-[var(--font-micro-size)]">
                         {hit.sourceType} · {hit.locator ?? '无 locator'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => void openHit(hit.chunkId, hit.sourceType, hit.sourceId, hit.locator)}
+                        onClick={() => openHit(hit)}
                         data-testid={`rag-hit-open-${hit.chunkId}`}
                         className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                       >
                         <ExternalLink size={10} aria-hidden="true" />
-                        {hit.sourceType === 'literature' ? '在阅读器里定位' : '打开来源文件'}
+                        {hit.documentId.startsWith('project-index:') ? '打开来源文件' : '在阅读器里定位'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={projectId === null}
+                        onClick={() => captureHit(hit)}
+                        title="research.evidence.capture 需要 chunkId，所以只能从命中发起（B15）"
+                        data-testid={`rag-hit-capture-${hit.chunkId}`}
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                      >
+                        <FlaskConical size={10} aria-hidden="true" />
+                        捕获为证据
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveHitAsNote(hit)}
+                        title="research.knowledge.upsert：把这条命中存成 note 来源的知识文档"
+                        data-testid={`rag-hit-save-${hit.chunkId}`}
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                      >
+                        <Bookmark size={10} aria-hidden="true" />
+                        写入知识库
                       </button>
                     </footer>
                   </li>
@@ -441,7 +552,18 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
         </section>
 
         <section>
-          <h3 className="mb-1.5 text-muted text-[var(--font-meta-size)]">生效配置（只读，写入口在设置中心 — ADR-M09）</h3>
+          <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[var(--font-meta-size)]">
+            生效配置（只读，写入口在设置中心 — ADR-M09）
+            <button
+              type="button"
+              onClick={() => scope.openSettings()}
+              data-testid="rag-open-settings"
+              className="ml-auto flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+            >
+              <Settings2 size={10} aria-hidden="true" />
+              打开设置中心
+            </button>
+          </h3>
           {status === null ? null : (
             <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[var(--font-micro-size)]" data-testid="rag-settings">
               <dt className="text-subtle">revision</dt>

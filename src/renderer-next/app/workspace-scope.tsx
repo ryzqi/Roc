@@ -38,6 +38,15 @@ export type WorkspaceScope = {
   openFile: string | null;
   /** Navigates the canvas to the files view with this file open. */
   openFileInCanvas: (relativePath: string) => void;
+  /**
+   * Opens the settings centre.
+   *
+   * Needed by panels that must *not* own a configuration (ADR-M09): RAG's index
+   * and embedding settings only show their effective values and send the user
+   * here. Navigation itself stays in the shell, so the route contract has one
+   * writer.
+   */
+  openSettings: () => void;
 };
 
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);

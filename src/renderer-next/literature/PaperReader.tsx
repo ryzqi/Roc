@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleAlert, Download, FileSearch, Loader2, RotateCcw, Square, Timer } from 'lucide-react';
+import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, RotateCcw, Save, Sparkles, Square, Timer, X } from 'lucide-react';
 import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
+import { useWorkspaceScope } from '../app/workspace-scope';
+import { useAsyncResource } from '../app/use-async-resource';
+import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { countParsedBlocks, parseDocumentBlocks, type ParsedBlockKind } from './parse-blocks';
+import { deriveCitationKey, formatDoi, isCitationKeyValid } from './format';
+import { downloadModels, getModelsStatus } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 
 /**
@@ -28,14 +33,19 @@ import type { LiteratureStore } from './use-literature-store';
  *     gives a hit a `locator` string and gives blocks their own `locator`, so the
  *     jump is a **text match** on that field: it either finds a block and scrolls to
  *     it, or reports that it could not (never a silent no-op).
+ *
+ * The header actions are the contract's own operations, each one named where it
+ * lands: `library.export` returns content (there is no save-as dialog — F16), so
+ * copying goes to the clipboard and writing goes through `files.writeText` into the
+ * bound workspace, and the message says which relative path was used.
  */
 
 export type PaperReaderProps = {
   literature: LiteratureStore;
   loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<{ run: ResearchDocumentRun; content: ResearchDocumentContent }>>;
   openInFilesView: (relativePath: string) => void;
-  /** Deep link from a retrieval hit: which parse to show. */
-  focusDocumentId?: string | null;
+  /** Deep link from a retrieval hit: the **parse** the hit came from (`document:<parseId>`). */
+  focusParseId?: string | null;
   /** Deep link from a retrieval hit: the locator to scroll to. */
   focusLocator?: string | null;
 };
@@ -60,32 +70,78 @@ export function PaperReader({
   literature,
   loadDocumentContent,
   openInFilesView,
-  focusDocumentId = null,
+  focusParseId = null,
   focusLocator = null
 }: PaperReaderProps): React.JSX.Element {
   const selected = literature.selected;
   const documents = literature.documents;
+  const scope = useWorkspaceScope();
+  const copy = useCopyFeedback();
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [content, setContent] = useState<ResearchDocumentContent | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  const [actionNote, setActionNote] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [keyDraft, setKeyDraft] = useState<string | null>(null);
+  const [downloadPending, setDownloadPending] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const jumpHandledFor = useRef<string | null>(null);
+
+  /**
+   * Parse-model state (`research.models.status`).
+   *
+   * Read here rather than in the store because only this panel gates an action on
+   * it, and it is two `stat` calls in main (no hashing), so a reader mount is a
+   * cheap place to ask.
+   */
+  const models = useAsyncResource('research-models', () => getModelsStatus(literature.client), {
+    label: '读取解析模型状态'
+  });
+  const modelsDownloading = downloadPending || models.data?.downloading === true;
+  const reloadModels = models.reload;
+
+  /**
+   * Polls while a download is running.
+   *
+   * `models.download` resolves only when every model is installed (hundreds of MB),
+   * so awaiting it in the click handler would freeze the button with no progress;
+   * the backend's `downloading` flag is the progress channel and this is what reads
+   * it. The interval exists only while something is downloading.
+   */
+  useEffect(() => {
+    if (!modelsDownloading) {
+      return;
+    }
+    const handle = window.setInterval(reloadModels, 2_500);
+    return () => window.clearInterval(handle);
+  }, [modelsDownloading, reloadModels]);
 
   // Follow the selection, but never render one document's content under another
   // document's header: a selection change clears the content immediately.
+  // A retrieval hit names the **parse** it came from (`document:<parseId>`), not a
+  // document id, so the target document is the one whose `currentParseId` /
+  // `activeParseId` equals it. An item can hold several documents, and falling back
+  // to `documents[0]` would open the wrong one — where the hit's locator either
+  // misses or, worse, matches an unrelated block that happens to share its text.
   useEffect(() => {
     setContent(null);
     setContentError(null);
     setActiveDocumentId((current) => {
-      if (focusDocumentId !== null && documents.some((document) => document.id === focusDocumentId)) {
-        return focusDocumentId;
+      if (focusParseId !== null) {
+        const targeted = documents.find(
+          (document) => document.currentParseId === focusParseId || document.activeParseId === focusParseId
+        );
+        if (targeted !== undefined) {
+          return targeted.id;
+        }
       }
       if (current !== null && documents.some((document) => document.id === current)) {
         return current;
       }
       return documents[0]?.id ?? null;
     });
-  }, [documents, focusDocumentId, selected?.id]);
+  }, [documents, focusParseId, selected?.id]);
 
   const readyDocument = useMemo(
     () => documents.find((document) => document.id === activeDocumentId && document.status === 'ready') ?? null,
@@ -174,6 +230,153 @@ export function PaperReader({
 
   const blocks = content === null ? [] : parseDocumentBlocks(content);
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? null;
+  // `null` when the record carries no DOI — never a placeholder, and never the
+  // bibliography copy when the metadata one is missing (they are equal by contract:
+  // `library-repository.import` rejects a mismatch).
+  const readerDoi = formatDoi(selected.metadata.doi);
+
+  /**
+   * The model row's single source of truth.
+   *
+   * `canDownload` is false when the backend reported no model directory at all
+   * (`models: []`): `models.download` would then throw `research_models_unavailable`,
+   * so the button is not offered — a disabled control with a stated reason beats a
+   * button that can only fail.
+   */
+  const modelsState = (() => {
+    const status = models.data;
+    const modelCount = status?.models.length ?? 0;
+    const downloading = downloadPending || status?.downloading === true;
+    if (models.status === 'error') {
+      return { label: models.error ?? '状态读取失败', ready: false, downloading, modelCount, canDownload: false, tone: 'bad' as const };
+    }
+    if (status === null) {
+      return { label: '读取中…', ready: false, downloading, modelCount, canDownload: false, tone: 'muted' as const };
+    }
+    if (downloadError !== null) {
+      // A failed download must not remove the only retry affordance: the row stays
+      // actionable as long as the backend reported a model directory at all.
+      return {
+        label: `未就绪（${downloadError}）`,
+        ready: false,
+        downloading,
+        modelCount,
+        canDownload: modelCount > 0,
+        tone: 'bad' as const
+      };
+    }
+    if (downloading) {
+      return { label: '下载中', ready: false, downloading, modelCount, canDownload: true, tone: 'muted' as const };
+    }
+    if (status.ready) {
+      return { label: '已就绪', ready: true, downloading, modelCount, canDownload: true, tone: 'muted' as const };
+    }
+    return {
+      label: status.error === null ? '未安装' : `未就绪（${status.error}）`,
+      ready: false,
+      downloading,
+      modelCount,
+      canDownload: modelCount > 0,
+      tone: modelCount > 0 ? ('muted' as const) : ('bad' as const)
+    };
+  })();
+
+  /**
+   * Starts the model download **without blocking** on it.
+   *
+   * The poll above turns the backend's `downloading` flag into progress, and the
+   * final status arrives through a re-read when the call settles.
+   */
+  const startModelDownload = (): void => {
+    setDownloadError(null);
+    setDownloadPending(true);
+    void downloadModels(literature.client)
+      .then((result) => {
+        if (!result.ok) {
+          setDownloadError(result.error.message);
+        }
+      })
+      .catch((error: unknown) => {
+        setDownloadError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setDownloadPending(false);
+        reloadModels();
+      });
+  };
+
+  /**
+   * Runs a header action and turns its outcome into the row's single status line.
+   *
+   * `null` means "the backend already reported why" — `literature.action.error`
+   * carries the backend's own message and is rendered by the hub, so repeating it
+   * here would be a second copy to keep in sync.
+   */
+  const runHeaderAction = async (run: () => Promise<string | null>): Promise<void> => {
+    setActionBusy(true);
+    setActionNote(null);
+    try {
+      setActionNote(await run());
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const copyBibtex = (): void => {
+    void runHeaderAction(async () => {
+      const exported = await literature.exportItem(selected, 'bibtex');
+      if (exported === null) {
+        return null;
+      }
+      copy.copy(exported.content);
+      return `已复制 BibTeX（${exported.filename}，${exported.content.length} 字符）`;
+    });
+  };
+
+  /**
+   * There is no save-as dialog on the export path (F16), so the only place an
+   * export can land is the bound workspace — and the message says exactly which
+   * relative path, with the absolute one the scope knows, rather than "导出成功".
+   */
+  const exportBibtexToWorkspace = (): void => {
+    void runHeaderAction(async () => {
+      const exported = await literature.exportItem(selected, 'bibtex');
+      if (exported === null) {
+        return null;
+      }
+      const written = await literature.writeToWorkspace({
+        relativePath: `literature/${exported.filename}`,
+        content: exported.content
+      });
+      if (written === null) {
+        return null;
+      }
+      return `已写入工作区：${scope.workspacePath ?? '(未绑定工作目录)'}/${written}`;
+    });
+  };
+
+  const saveCitationKey = (): void => {
+    const next = (keyDraft ?? '').trim();
+    if (!isCitationKeyValid(next)) {
+      setActionNote('这个引用 key 不符合后端规则（不能有空格、逗号、花括号、反斜杠、% 或 #）。');
+      return;
+    }
+    void runHeaderAction(async () => {
+      const ok = await literature.setCitationKey(selected, next);
+      if (!ok) {
+        return null;
+      }
+      setKeyDraft(null);
+      return `引用 key 已改为 ${next}`;
+    });
+  };
+
+  const askAssistant = (): void => {
+    void runHeaderAction(async () => {
+      await literature.askAssistantAboutSelected();
+      return null;
+    });
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="paper-reader" data-library-item={selected.id}>
@@ -190,6 +393,11 @@ export function PaperReader({
           <span className="rounded-control border border-line px-1 font-mono text-muted" data-testid="reader-citation-key">
             {selected.bibliography.citationKey}
           </span>
+          {readerDoi === null ? null : (
+            <span className="text-subtle" data-testid="reader-doi">
+              {readerDoi}
+            </span>
+          )}
           <span className="text-subtle" data-testid="reader-revision">
             revision {selected.revision}
           </span>
@@ -200,6 +408,100 @@ export function PaperReader({
           )}
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
         </p>
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-actions">
+          <button
+            type="button"
+            disabled={actionBusy}
+            onClick={copyBibtex}
+            data-testid="reader-copy-bibtex"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
+            {copy.copied ? '已复制' : '复制 BibTeX'}
+          </button>
+          <button
+            type="button"
+            disabled={actionBusy}
+            onClick={exportBibtexToWorkspace}
+            data-testid="reader-export-bibtex"
+            title="library.export 没有另存为对话框，只能写进绑定工作目录"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            <Save size={11} aria-hidden="true" />
+            导出 .bib 到工作区
+          </button>
+          <button
+            type="button"
+            disabled={actionBusy}
+            onClick={() => setKeyDraft(selected.bibliography.citationKey)}
+            data-testid="reader-edit-key"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            <Pencil size={11} aria-hidden="true" />
+            改引用 key
+          </button>
+          <button
+            type="button"
+            disabled={actionBusy || literature.assistant.pending}
+            onClick={askAssistant}
+            data-testid="reader-ask-assistant"
+            title="用 chat.startRun 启动一轮对话，携带这条文献的真实 id（不是拼接好的摘要）"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            {literature.assistant.pending ? (
+              <Loader2 size={11} aria-hidden="true" className="animate-spin" />
+            ) : (
+              <Sparkles size={11} aria-hidden="true" />
+            )}
+            问助手
+          </button>
+        </div>
+        {keyDraft === null ? null : (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-key-editor">
+            <input
+              value={keyDraft}
+              onChange={(event) => setKeyDraft(event.target.value)}
+              aria-label="引用 key"
+              data-testid="reader-key-input"
+              className="h-[var(--control-height-compact)] w-56 rounded-control border border-line bg-surface px-2 font-mono text-ink text-[var(--font-micro-size)]"
+            />
+            <button
+              type="button"
+              disabled={actionBusy}
+              onClick={saveCitationKey}
+              data-testid="reader-key-save"
+              className="h-[var(--control-height-compact)] rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            >
+              保存
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeyDraft(deriveCitationKey({
+                title: selected.metadata.title,
+                authors: selected.metadata.authors,
+                year: selected.metadata.publishedYear
+              }) ?? '')}
+              data-testid="reader-key-derive"
+              className="h-[var(--control-height-compact)] rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+            >
+              推导
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeyDraft(null)}
+              data-testid="reader-key-cancel"
+              className="flex h-[var(--control-height-compact)] items-center gap-0.5 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+            >
+              <X size={10} aria-hidden="true" />
+              取消
+            </button>
+          </div>
+        )}
+        {actionNote === null && copy.error === null && literature.assistant.error === null ? null : (
+          <p role="status" className="text-muted text-[var(--font-micro-size)]" data-testid="reader-action-note">
+            {actionNote ?? copy.error ?? literature.assistant.error}
+          </p>
+        )}
       </header>
 
       {documents.length === 0 ? (
@@ -265,13 +567,21 @@ export function PaperReader({
               ) : (
                 <button
                   type="button"
-                  disabled={literature.action.pending || literature.projectId === null}
+                  disabled={literature.parseInFlight !== null || literature.projectId === null}
                   onClick={() => void literature.startParse(activeDocument.id)}
                   data-testid="reader-start-parse"
                   className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                 >
-                  <Download size={11} aria-hidden="true" />
-                  {activeDocument.status === 'ready' ? '重新解析' : '解析'}
+                  {literature.parseInFlight === activeDocument.id ? (
+                    <Loader2 size={11} aria-hidden="true" className="animate-spin" />
+                  ) : (
+                    <Download size={11} aria-hidden="true" />
+                  )}
+                  {literature.parseInFlight === activeDocument.id
+                    ? '启动解析…'
+                    : activeDocument.status === 'ready'
+                      ? '重新解析'
+                      : '解析'}
                 </button>
               )}
               {activeDocument.error === null ? null : (
@@ -291,6 +601,49 @@ export function PaperReader({
               </button>
             </div>
           )}
+
+          {/*
+            Parse-model state (T5.3 / R11). Shown next to the document it gates,
+            because `document.parse` can only fail here when the models are missing —
+            and a disabled button with no reason would read as a broken reader.
+            `downloading` is the backend's own flag, so a download started elsewhere
+            is reflected here too.
+          */}
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[var(--font-micro-size)]"
+            data-testid="reader-models"
+          >
+            <span
+              className={modelsState.tone === 'bad' ? 'text-[var(--st-bad)]' : 'text-muted'}
+              data-testid="reader-models-state"
+              data-ready={modelsState.ready ? 'true' : 'false'}
+              data-downloading={modelsState.downloading ? 'true' : 'false'}
+            >
+              解析模型：{modelsState.label}
+            </span>
+            {modelsState.canDownload && !modelsState.ready ? (
+              <button
+                type="button"
+                disabled={modelsState.downloading || downloadPending}
+                onClick={startModelDownload}
+                data-testid="reader-models-download"
+                title="research.models.download：首次使用需要下载解析模型（体积很大）"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+              >
+                {modelsState.downloading || downloadPending ? (
+                  <Loader2 size={10} aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <Download size={10} aria-hidden="true" />
+                )}
+                {modelsState.downloading || downloadPending ? '下载中…' : '下载解析模型'}
+              </button>
+            ) : null}
+            {modelsState.modelCount === 0 ? null : (
+              <span className="font-mono text-subtle" data-testid="reader-models-count">
+                {modelsState.modelCount} 个模型
+              </span>
+            )}
+          </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
             {focusLocator !== null && matchedBlockId === null && content !== null ? (

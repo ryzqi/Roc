@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';import { errorMessage } from './loaded-state';
 import type { AppViewId } from './routes';
 import { useAppNavigateBridge, useAppRoute } from './use-app-route';
@@ -97,6 +97,15 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  /**
+   * Bumped on every palette open so the ⌘K groups re-read what can change while
+   * the palette is closed (the project list has no server-side query to key on).
+   */
+  const [searchToken, setSearchToken] = useState(0);
+  const openSearch = useCallback((): void => {
+    setSearchToken((current) => current + 1);
+    setSearchOpen(true);
+  }, []);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   // The selected conversation lives here because two surfaces need it: the sidebar lists
@@ -154,11 +163,25 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
    */
   const literature = useLiteratureStore(client, route.projectId);
 
+  /**
+   * Latest route, readable from callbacks that live inside the memoised scope.
+   *
+   * `navigate` compares against its own ref and writes the URL, but merging a change
+   * into the *current* route needs that route at call time. Reading `route` from the
+   * closure would freeze whatever was current when the scope was built: switching the
+   * canvas view does not change `projectId`/`openFile`, so the memo would not
+   * recompute and 「打开设置中心」 would merge `page=settings` into the view the user
+   * had left. (Opening a file had the same shape but overwrites `view`, so it was
+   * invisible there.)
+   */
+  const routeRef = useRef(route);
+  routeRef.current = route;
+
   const openFileInCanvas = (relativePath: string): void => {
     // `tool: 'files'` explicitly rather than `route.tool ?? 'files'`: opening a file
     // from the tree is the files workbench, so it must not inherit `git` (which would
     // pop the Git drawer over the preview the user just asked for).
-    navigate({ ...route, view: 'files', tool: 'files', openFile: relativePath });
+    navigate({ ...routeRef.current, view: 'files', tool: 'files', openFile: relativePath });
   };
 
   /**
@@ -177,12 +200,14 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       workspaceError: boundWorkspace.error,
       rebindWorkspace: boundWorkspace.rebind,
       openFile: route.openFile,
-      openFileInCanvas
+      openFileInCanvas,
+      openSettings: () => navigate({ ...routeRef.current, page: 'settings' })
     }),
     [
       client,
       route.projectId,
       route.openFile,
+      navigate,
       projectName,
       projectWritable,
       boundWorkspace.path,
@@ -228,8 +253,35 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     },
     onOpenConcept: () => {
       navigate({ ...route, view: 'literature' });
-    }
+    },
+    onOpenProject: (projectId) => {
+      navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' });
+    },
+    onOpenSession: (threadId) => {
+      setAssistantThreadId(threadId);
+      navigate({ ...route, assistantOpen: true });
+    },
+    searchToken
   });
+
+  /**
+   * Adopts the thread a literature-triggered run landed in.
+   *
+   * The reader's 「问助手」 button calls `chat.startRun` (from the shared store) and
+   * the run therefore exists **before** the panel is mounted; selecting the thread
+   * and opening the panel is what lets P4's `getActiveRun` + event replay pick the
+   * running run up. Navigation stays here because the URL has one writer
+   * (ADR-M05) — the store only reports which thread to show.
+   */
+  const literatureAssistantThreadId = literature.assistant.threadId;
+  useEffect(() => {
+    if (literatureAssistantThreadId === null) {
+      return;
+    }
+    setAssistantThreadId(literatureAssistantThreadId);
+    navigate({ ...route, assistantOpen: true });
+    literature.adoptAssistantThread();
+  }, [literature, literatureAssistantThreadId, navigate, route]);
 
   // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
   // nothing reads these values, we just stop them from accumulating.
@@ -286,7 +338,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   useKeyboardShortcuts({
     onToggleSidebar: layout.toggleSidebar,
     onToggleAssistant: toggleAssistant,
-    onOpenSearch: () => setSearchOpen(true),
+    onOpenSearch: openSearch,
     onCycleTheme: cycleTheme,
     projectViewSlotsEnabled: inProject,
     onProjectViewSlot: (slot) => {
@@ -333,7 +385,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       <WindowChrome
         projectName={projectName}
         onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
-        onOpenSearch={() => setSearchOpen(true)}
+        onOpenSearch={openSearch}
         sidebarCollapsed={layout.sidebarCollapsed}
         onToggleSidebar={layout.toggleSidebar}
         assistantOpen={route.assistantOpen}

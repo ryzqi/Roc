@@ -211,3 +211,36 @@ test('buildManualRecord is idempotent and fills the fields the backend requires'
     'the record must carry exactly the researchLiteratureSchema fields (strict schema)'
   );
 });
+
+test('buildLiteratureAssistantPrompt carries identifiers, not a fabricated summary', () => {
+  const prompt = format.buildLiteratureAssistantPrompt({
+    title: 'Attention Is All You Need',
+    authors: ['Ashish Vaswani', 'Noam Shazeer'],
+    year: 2017,
+    citationKey: 'vaswani2017attention',
+    libraryItemId: 'paper_abc',
+    documentId: 'document_xyz'
+  });
+  // The identifiers are what make the run able to *read* the record; pasting a
+  // summary instead would look richer and give the assistant nothing to open.
+  assert.match(prompt, /paper_abc/u);
+  assert.match(prompt, /document_xyz/u);
+  assert.match(prompt, /vaswani2017attention/u);
+  assert.match(prompt, /2017/u);
+  assert.match(prompt, /不要凭标题推测内容/u);
+});
+
+test('buildLiteratureAssistantPrompt says "unknown" rather than inventing metadata', () => {
+  const prompt = format.buildLiteratureAssistantPrompt({
+    title: 'Untitled draft',
+    authors: [],
+    year: null,
+    citationKey: 'untitled',
+    libraryItemId: 'paper_x',
+    documentId: null
+  });
+  assert.match(prompt, /作者：未知/u);
+  assert.match(prompt, /年份：未知/u);
+  // No document imported yet: the line must be absent, not a placeholder id.
+  assert.doesNotMatch(prompt, /已导入文档 id/u);
+});

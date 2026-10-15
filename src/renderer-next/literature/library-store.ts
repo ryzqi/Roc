@@ -1,4 +1,5 @@
 import type {
+  FileWriteResult,
   ResearchBibliographyFormat,
   ResearchClaim,
   ResearchDocument,
@@ -12,6 +13,7 @@ import type {
   ResearchIndexStatus,
   ResearchIndexedFile,
   ResearchIndexedSource,
+  ResearchKnowledgeDocumentUpsertRequest,
   ResearchKnowledgeSearchResult,
   ResearchLibraryExport,
   ResearchLibraryImportResult,
@@ -31,6 +33,12 @@ import type { RocClient } from '../shared/roc-client';
  * no caching, no derived state, no error swallowing. The contract corrections in
  * `findings.md` F16 are encoded here as types rather than as comments — e.g. the
  * bibliography import format union has no `ris`, because the backend has none.
+ *
+ * It is deliberately a **map of the whole contract**, so a few wrappers have no
+ * caller yet (`getLibraryItem`, `listEmbeddingConfigs`, `getEvidenceIndexSource`).
+ * Keep it that way: the alternative is components calling `client.api.research.*`
+ * directly, which puts preload names (which differ from capability names) back into
+ * views and lets two callers pass different shapes for the same method.
  *
  * Two rules that are easy to get wrong and are therefore called out per function:
  *
@@ -259,6 +267,34 @@ export function captureEvidence(
   input: { projectId: string; chunkId: string }
 ): Promise<IpcLikeResult<ResearchEvidence>> {
   return client.api.research.captureEvidence(input);
+}
+
+/**
+ * Stores a knowledge document that is not derived from an indexed source.
+ *
+ * `chunks` is required and each chunk carries its own locator, so a note saved
+ * this way is retrievable by `knowledge.search` on the same footing as an
+ * indexed file — which is the point of having it at all.
+ */
+export function upsertKnowledgeDocument(
+  client: RocClient,
+  input: ResearchKnowledgeDocumentUpsertRequest
+): Promise<IpcLikeResult<unknown>> {
+  return client.api.research.upsertKnowledgeDocument(input);
+}
+
+/**
+ * Writes text **into the bound workspace**.
+ *
+ * `research.library.export` returns `{format, filename, content}` and there is no
+ * save-as dialog on that path (F16), so this is the only way an export can reach
+ * disk. The caller must tell the user which relative path it used.
+ */
+export function writeWorkspaceText(
+  client: RocClient,
+  input: { relativePath: string; content: string; source: string }
+): Promise<IpcLikeResult<FileWriteResult>> {
+  return client.api.files.writeText(input);
 }
 
 export function listEvidence(client: RocClient, projectId: string): Promise<IpcLikeResult<ResearchEvidence[]>> {

@@ -53,8 +53,8 @@ export function LiteratureHubView(): React.JSX.Element {
   const [subView, setSubView] = useState<SubViewId>('reader');
   const [importOpen, setImportOpen] = useState(false);
   const [importTab, setImportTab] = useState<ImportTabRequest>('document');
-  const [focus, setFocus] = useState<{ documentId: string | null; locator: string | null }>({
-    documentId: null,
+  const [focus, setFocus] = useState<{ parseId: string | null; locator: string | null }>({
+    parseId: null,
     locator: null
   });
   /** Set when the user arrives at the graph from a wiki concept page. */
@@ -138,7 +138,7 @@ export function LiteratureHubView(): React.JSX.Element {
               literature={store}
               loadDocumentContent={store.loadDocumentContent}
               openInFilesView={scope.openFileInCanvas}
-              focusDocumentId={focus.documentId}
+              focusParseId={focus.parseId}
               focusLocator={focus.locator}
             />
           ) : null}
@@ -148,7 +148,7 @@ export function LiteratureHubView(): React.JSX.Element {
               literature={store}
               openInFilesView={scope.openFileInCanvas}
               onOpenInReader={(target) => {
-                setFocus({ documentId: target.documentId, locator: target.locator });
+                setFocus({ parseId: target.parseId, locator: target.locator });
                 if (target.libraryItemId !== null) {
                   store.select(target.libraryItemId);
                 }
@@ -165,7 +165,7 @@ export function LiteratureHubView(): React.JSX.Element {
                 libraryItems={store.items}
                 onOpenClaim={(claimId) => {
                   setGraphClaimFocusId(claimId);
-                  setFocus({ documentId: null, locator: null });
+                  setFocus({ parseId: null, locator: null });
                   setSubView('graph');
                 }}
               />
