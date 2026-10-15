@@ -662,6 +662,124 @@ function writeP4ManyModeResponse(response) {
   writeStreamingTextResponse(response, 'P4MANY-ACK');
 }
 
+/* ------------------------------------------------------------------ */
+/* P6 acceptance-gate modes (scripts/verify-p6-workflow.mjs)            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Marker strings for the P6 gates.
+ *
+ * Same idea as the P4 modes: the fake provider is one endpoint with no per-test
+ * configuration, so the *prompt* selects the scripted turn. A stage run's prompt is the role
+ * system prompt (`你是 Roc 科研工作流的…`) plus a JSON user message containing the run's
+ * `instruction`, which is where these markers travel.
+ *
+ *   ROC-P6-FAIL        → the provider fails the call, so the stage run really does fail
+ *                        (`research_role_execution_failed`) — the plan's gate 2 needs a
+ *                        genuine failure, not a mocked one.
+ *   ROC-P6-TAG:<tag>   → stamped into the produced artifact's title/markdown so the harness
+ *                        can prove *this* run's output reached the UI.
+ */
+const smokeP6FailPattern = /ROC-P6-FAIL/u;
+const smokeP6TagPattern = /ROC-P6-TAG:([A-Za-z0-9_-]+)/u;
+/** The role executor's system prompt is the only place this string appears. */
+const smokeP6StagePromptMarker = '你是 Roc 科研工作流的';
+
+function isResearchStageRequest(parsedBody) {
+  return containsText(parsedBody, smokeP6StagePromptMarker);
+}
+
+function readP6Tag(parsedBody) {
+  const match = containsText(parsedBody, 'ROC-P6-TAG:')
+    ? smokeP6TagPattern.exec(JSON.stringify(parsedBody?.messages ?? []))
+    : null;
+  return match === null ? 'P6' : match[1];
+}
+
+function readP6FailureRequested(parsedBody) {
+  return containsText(parsedBody, 'ROC-P6-FAIL') || smokeP6FailPattern.test(JSON.stringify(parsedBody ?? null));
+}
+
+/**
+ * The structured-output tool's name, read from the request.
+ *
+ * `toolStrategy(researchStageOutputSchema)` derives the name from the schema's title and
+ * falls back to a process-global counter (`extract-1`, `extract-2`, …), so the name is not a
+ * constant: the fixture must read it from the request it is answering, exactly like a real
+ * provider would. Name first, then a defensive check on the parameters.
+ */
+function readStructuredOutputToolName(parsedBody) {
+  const tools = Array.isArray(parsedBody?.tools) ? parsedBody.tools : [];
+  for (const tool of tools) {
+    const fn = tool?.function ?? tool;
+    if (typeof fn?.name === 'string' && /^extract-\d+$/u.test(fn.name)) {
+      return fn.name;
+    }
+  }
+  for (const tool of tools) {
+    const fn = tool?.function ?? tool;
+    const properties = fn?.parameters?.properties;
+    if (typeof fn?.name === 'string' && properties !== null && typeof properties === 'object' && 'verdict' in properties && 'claims' in properties) {
+      return fn.name;
+    }
+  }
+  return null;
+}
+
+function writeP6StageOutput(response, parsedBody) {
+  const toolName = readStructuredOutputToolName(parsedBody);
+  if (toolName === null) {
+    throw new Error('Smoke provider could not resolve the stage output tool name from the request.');
+  }
+  const tag = readP6Tag(parsedBody);
+  const output = {
+    title: `阶段产物 ${tag}`,
+    // The raw marker is echoed into the Markdown on purpose: the harness then has one string that
+    // can only come from *this* run's instruction, which is what proves the mounted artifact is
+    // this run's output rather than a leftover.
+    markdown: `## 阶段产物 ${tag}\n\nROC-P6-TAG:${tag}\n\n这是 P6 闸门夹具写出的真实结构化产物。`,
+    // No `claims` with status 'supported': a supported claim would need real evidence ids,
+    // and inventing them is the one thing the fixture must not do.
+    claims: [
+      {
+        subjectType: 'paragraph',
+        content: `夹具主张 ${tag}（待验证，不引用证据）`,
+        status: 'pending',
+        evidenceIds: []
+      }
+    ],
+    sections: [],
+    verdict: 'ready'
+  };
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              index: 0,
+              id: `call_p6_output_${tag}`,
+              type: 'function',
+              function: { name: toolName, arguments: JSON.stringify(output) }
+            }
+          ]
+        },
+        finish_reason: null
+      }
+    ]
+  });
+  writeSseFinish(response, 'tool_calls', { prompt_tokens: 64, completion_tokens: 48, total_tokens: 112 });
+}
+
+/** A real provider failure, so the run fails with `research_role_execution_failed`. */
+function writeP6FailureResponse(response) {
+  response.statusCode = 500;
+  response.setHeader('content-type', 'application/json');
+  response.end(JSON.stringify({ error: { message: 'smoke provider forced failure (ROC-P6-FAIL)', type: 'server_error' } }));
+}
+
 export async function startSmokeProvider(input = {}) {
   const taskProposalGoal = readTaskProposalGoal(input.taskProposalGoal);
   const now = readFixtureNow(input.now);
@@ -705,6 +823,17 @@ export async function startSmokeProvider(input = {}) {
             return;
           }
           throw new Error(`Smoke provider does not know P4 mode: ${p4Turn.mode}`);
+        }
+        // P6: research stage runs speak the role executor's protocol, not the chat one.
+        // Checked before the task-proposal fallback because a stage run's prompt is not a
+        // chat prompt at all (it is the role system prompt + a JSON user message).
+        if (isResearchStageRequest(parsedBody)) {
+          if (readP6FailureRequested(parsedBody)) {
+            writeP6FailureResponse(response);
+            return;
+          }
+          writeP6StageOutput(response, parsedBody);
+          return;
         }
         if (
           isTaskProposalRequest(parsedBody, taskProposalGoal) &&

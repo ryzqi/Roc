@@ -1,4 +1,6 @@
 import { createContext, useContext } from 'react';
+import type { AppViewId } from './routes';
+import type { ResearchStageGroupId, ResearchStageTab } from '../canvas/workflow/stage-groups';
 import type { RocClient } from '../shared/roc-client';
 import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
 
@@ -47,6 +49,17 @@ export type WorkspaceScope = {
    * writer.
    */
   openSettings: () => void;
+  /**
+   * Navigates the canvas to another view in the same project (P6).
+   *
+   * 总览's 「打开活动」 and 阶段工作区's group switch are navigation, not state: the
+   * view and the stage group are URL fields (ADR-M05), and only the shell writes them.
+   * Without this a view would have to synthesise a URL — which is how a second writer
+   * of the route contract appears.
+   */
+  openView: (view: AppViewId) => void;
+  /** Navigates to the stage workspace with a specific group (and tab) selected. */
+  openStage: (group: ResearchStageGroupId, tab?: ResearchStageTab) => void;
 };
 
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);

@@ -30,6 +30,9 @@ import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
 import { useLiteratureStore } from '../literature/use-literature-store';
 import { deriveWiki } from '../literature/derive-wiki';
+import { defaultTabForGroup } from '../canvas/workflow/stage-groups';
+import { WorkflowScopeProvider } from '../canvas/workflow/workflow-scope';
+import { useWorkflowStore } from '../canvas/workflow/use-workflow-store';
 
 /**
  * The application shell (P1).
@@ -164,6 +167,14 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const literature = useLiteratureStore(client, route.projectId);
 
   /**
+   * The research-workflow store (P6), created once for the same structural reason as
+   * the literature store: 总览 / 阶段工作区 / 活动流 are sibling canvas views that must
+   * agree on the stage, the in-flight run and the pending gate, and the contract has no
+   * push channel for stage runs (B11) — so exactly one poll must run.
+   */
+  const workflow = useWorkflowStore(client, route.projectId, project);
+
+  /**
    * Latest route, readable from callbacks that live inside the memoised scope.
    *
    * `navigate` compares against its own ref and writes the URL, but merging a change
@@ -201,7 +212,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       rebindWorkspace: boundWorkspace.rebind,
       openFile: route.openFile,
       openFileInCanvas,
-      openSettings: () => navigate({ ...routeRef.current, page: 'settings' })
+      openSettings: () => navigate({ ...routeRef.current, page: 'settings' }),
+      openView: (view) => navigate({ ...routeRef.current, view }),
+      // The group and its default tab are written together: the URL carries one `stage`
+      // value, and a group with a tab from another group would not round-trip (P1).
+      openStage: (group, tab) =>
+        navigate({ ...routeRef.current, view: 'stage', stageGroup: group, stageTab: tab ?? defaultTabForGroup(group) })
     }),
     [
       client,
@@ -424,6 +440,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         // One literature store for the sidebar's 文献 tab and the canvas hub (T5.1):
         // the provider sits *above* the layout so both subtrees read the same state.
         <LiteratureScopeProvider value={literature}>
+          <WorkflowScopeProvider value={workflow}>
           <WorkspaceLayout
           layout={layout}
           assistantOpen={route.assistantOpen}
@@ -518,6 +535,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             ) : null
           }
           />
+          </WorkflowScopeProvider>
         </LiteratureScopeProvider>
       ) : (
         <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>

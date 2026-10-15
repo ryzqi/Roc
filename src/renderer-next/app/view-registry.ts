@@ -39,9 +39,9 @@ export type ViewProps = {
 export type ViewModule = { default: ComponentType<ViewProps> };
 
 const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
-  overview: async () => ({ default: placeholderView('项目总览', 'P6 实现') }),
-  stage: async () => ({ default: placeholderView('阶段工作区', 'P6 实现') }),
-  activity: async () => ({ default: placeholderView('活动流', 'P6 实现') }),
+  overview: async () => ({ default: (await import('../canvas/workflow/ProjectOverview')).ProjectOverview }),
+  stage: async () => ({ default: (await import('../canvas/workflow/StageWorkspace')).StageWorkspace }),
+  activity: async () => ({ default: (await import('../canvas/workflow/ActivityView')).ActivityView }),
   provenance: async () => ({ default: placeholderView('溯源', 'P7 实现') }),
   // P3 landed these three as real views. They are genuine `import()`s, not
   // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
@@ -50,8 +50,8 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   latex: async () => ({ default: placeholderView('文稿', 'P7 实现') }),
   terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
   files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
-  tasks: async () => ({ default: placeholderView('任务看板', 'P6 实现') }),
-  diagnostics: async () => ({ default: placeholderView('运行诊断', 'P6 实现') }),
+  tasks: async () => ({ default: (await import('../tasks/TasksView')).TasksView }),
+  diagnostics: async () => ({ default: (await import('../diagnostics/DiagnosticsView')).DiagnosticsView }),
   mcp: async () => ({ default: placeholderView('MCP', 'P9 实现') }),
   skills: async () => ({ default: placeholderView('技能', 'P9 实现') }),
   memory: async () => ({ default: placeholderView('记忆', 'P9 实现') })
