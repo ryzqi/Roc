@@ -3,6 +3,8 @@ import { ArrowLeft, BookOpen, FolderTree, Loader2, MessagesSquare, Moon, RotateC
 import type { SidebarTab } from '../app/ui-state';
 import { SessionListView } from '../assistant/SessionListView';
 import { FileSidebarPanel } from '../canvas/files/FileSidebarPanel';
+import { LibraryList } from '../literature/LibraryList';
+import { useLiterature } from '../literature/literature-scope';
 import type { RocClient } from '../shared/roc-client';
 import type { BoundWorkspace } from '../workspace/use-bound-workspace';
 import { EmptyState } from './EmptyState';
@@ -45,6 +47,12 @@ export type LeftSidebarProps = {
   /** Directory-picker or project-update failure, with the backend's own message. */
   workspaceError: string | null;
   onBackToPortal: () => void;
+  /**
+   * Brings the canvas to the literature hub (P5). `null` item id means "just show
+   * the hub" — used by the tab's own 导入 button, which must land where the dialog
+   * lives.
+   */
+  onOpenLiterature: (libraryItemId: string | null) => void;
   themeOverride: 'system' | 'light' | 'dark';
   onCycleTheme: () => void;
   onOpenManagement: () => void;
@@ -56,14 +64,32 @@ const TABS: Array<{ id: SidebarTab; label: string; icon: typeof FolderTree }> = 
   { id: 'sessions', label: '会话', icon: MessagesSquare }
 ];
 
-/** Hints for the tab P5 has not filled yet. */
-const PLACEHOLDER_HINTS: Record<'literature', { title: string; description: string; phase: string }> = {
-  literature: {
-    title: '尚无文献',
-    description: '导入 PDF 或 BibTeX 后，文献会出现在这里。',
-    phase: 'P5 实现'
-  }
-};
+/**
+ * The 文献 tab (P5/T5.1).
+ *
+ * Reads the **shared** literature store — the same instance the canvas hub uses —
+ * so a row selected here is the row the reader shows, and an import performed in
+ * the hub is visible here without a refresh convention. The import button asks the
+ * store to open the dialog and hands navigation to the shell, because the dialog
+ * renders in the hub (a 256px column has no room for a five-tab form).
+ */
+function SidebarLiteratureTab({
+  onOpenLiterature
+}: {
+  onOpenLiterature: (libraryItemId: string | null) => void;
+}): React.JSX.Element {
+  const literature = useLiterature();
+  return (
+    <LibraryList
+      compact
+      onOpenItem={(id) => onOpenLiterature(id)}
+      onRequestImport={() => {
+        literature.requestImport();
+        onOpenLiterature(null);
+      }}
+    />
+  );
+}
 
 function themeIcon(override: 'system' | 'light' | 'dark'): React.JSX.Element {
   if (override === 'light') {
@@ -224,6 +250,7 @@ export function LeftSidebar({
   workspacePending,
   workspaceError,
   onBackToPortal,
+  onOpenLiterature,
   themeOverride,
   onCycleTheme,
   onOpenManagement
@@ -337,16 +364,7 @@ export function LeftSidebar({
             onThreadDeleted={onThreadDeleted}
           />
         ) : (
-          <>
-            <EmptyState
-              compact
-              icon={TABS.find((tab) => tab.id === activeTab)?.icon}
-              title={PLACEHOLDER_HINTS.literature.title}
-              description={PLACEHOLDER_HINTS.literature.description}
-              testId="sidebar-empty-literature"
-            />
-            <p className="px-3 pb-3 text-subtle text-[var(--font-micro-size)]">{PLACEHOLDER_HINTS.literature.phase}</p>
-          </>
+          <SidebarLiteratureTab onOpenLiterature={onOpenLiterature} />
         )}
       </div>
 

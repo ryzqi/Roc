@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ResearchBibliographyFormat,
+  ResearchClaim,
   ResearchDocument,
   ResearchDocumentContent,
   ResearchDocumentRun,
+  ResearchEvidence,
   ResearchLibraryItem,
   ResearchLiterature
 } from '../../shared/types';
@@ -19,8 +21,10 @@ import {
   importLibraryDoi,
   importLibraryRecord,
   linkLibraryItem,
+  listClaims,
   listDocumentParses,
   listDocuments,
+  listEvidence,
   listLibrary,
   parseDocument,
   setLibraryCitationKey
@@ -97,6 +101,29 @@ export type LiteratureStore = {
   startParse: (documentId: string) => Promise<boolean>;
   cancelParse: (input: { documentId: string; parseId: string }) => Promise<boolean>;
   loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<DocumentContentResult>>;
+  /**
+   * Claims + evidence for the current project, or `null` while unloaded.
+   *
+   * They live in the store rather than in the derived views because **three**
+   * consumers need the same snapshot: the wiki projection, the graph projection,
+   * and the ⌘K 概念 group. Fetching them per consumer would let the palette
+   * disagree with the panel behind it.
+   */
+  claims: ResearchClaim[] | null;
+  evidence: ResearchEvidence[] | null;
+  derivedStatus: AsyncStatus;
+  derivedError: string | null;
+  reloadDerived: () => void;
+  /**
+   * A request to open the import dialog, as a monotonic counter.
+   *
+   * The dialog lives in the canvas hub, but the 文献 tab in the sidebar has its own
+   * 导入 button, and both surfaces share this store. A counter (rather than a
+   * boolean) lets the hub react to *every* request, including two in a row, without
+   * the sidebar having to know anything about the hub's internal state.
+   */
+  importRequestId: number;
+  requestImport: () => void;
 };
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
@@ -124,6 +151,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const debouncedQuery = useDebouncedValue(query, LIBRARY_QUERY_DEBOUNCE_MS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [importRequestId, setImportRequestId] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const listKey = projectId === null ? null : `literature:${projectId}:${debouncedQuery}:${includeArchived ? '1' : '0'}`;
@@ -152,6 +180,31 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     documentsKey,
     () => listDocuments(client, selectedId ?? ''),
     { label: '读取文献文档' }
+  );
+
+  /**
+   * Claims + evidence for the whole project.
+   *
+   * Keyed on the project (not on the sub-view): switching to 知识库 / 图谱 must
+   * not re-fetch what the previous sub-view already had, and the ⌘K 概念 group
+   * reads the same snapshot. Both lists are small (ids, titles, locators).
+   */
+  const derived = useAsyncResource(
+    projectId === null ? null : `literature-derived:${projectId}`,
+    async (): Promise<IpcLikeResult<{ claims: ResearchClaim[]; evidence: ResearchEvidence[] }>> => {
+      const [claims, evidence] = await Promise.all([
+        listClaims(client, { projectId: projectId ?? '' }),
+        listEvidence(client, projectId ?? '')
+      ]);
+      if (!claims.ok) {
+        return { ok: false, error: claims.error };
+      }
+      if (!evidence.ok) {
+        return { ok: false, error: evidence.error };
+      }
+      return { ok: true, data: { claims: claims.data, evidence: evidence.data } };
+    },
+    { label: '读取主张与证据' }
   );
 
   const reloadDocuments = documents.reload;
@@ -375,6 +428,13 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     documentsStatus: documents.status,
     documentsError: documents.error,
     reloadDocuments,
+    claims: derived.data?.claims ?? null,
+    evidence: derived.data?.evidence ?? null,
+    derivedStatus: derived.status,
+    derivedError: derived.error,
+    reloadDerived: derived.reload,
+    importRequestId,
+    requestImport: () => setImportRequestId((current) => current + 1),
     addPdfToNewItem,
     addPdfToItem,
     startParse,

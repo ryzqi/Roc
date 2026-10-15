@@ -1,32 +1,43 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CircleAlert, Download, FileSearch, Loader2, RotateCcw, Square, Timer } from 'lucide-react';
 import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
-import { parseDocumentBlocks, type ParsedBlockKind } from './parse-blocks';
+import { countParsedBlocks, parseDocumentBlocks, type ParsedBlockKind } from './parse-blocks';
 import type { LiteratureStore } from './use-literature-store';
 
 /**
  * The paper reader (P5/T5.4).
  *
- * Scope, honestly stated: this renders what the contract can actually deliver —
- * metadata from the library record, and the parse's `blocks` (heading /
- * paragraph / table / formula / figure **as text**, plus `locator`). It does
- * **not** draw figures or embed the original PDF: the source bytes and assets are
- * not reachable from the renderer (no registered IPC method — B16). The panel
- * says so instead of rendering an empty box that looks like a missing image.
+ * Scope, stated honestly: this renders what the contract can actually deliver —
+ * metadata from the library record, and the parse's `blocks` (heading / paragraph /
+ * table / formula / figure **as text**, each with its `locator`). It does **not**
+ * draw figures or embed the original PDF, because the source bytes and assets are
+ * not reachable from the renderer (no registered IPC method — B16). The footer says
+ * so instead of leaving an empty box that reads as a broken image.
  *
- * Parse progress is the backend's own `document.runs` statuses; there are no
- * stage names in the contract, so no stage list is fabricated. The legacy
- * `MINERU_PIPELINE_STAGES` progression is gone.
+ * Parse progress is the backend's own `document.runs` statuses; the contract has no
+ * stage names, so none are invented. The legacy `MINERU_PIPELINE_STAGES` progression
+ * is gone — it used to advance on a timer, which is exactly the fake progress this
+ * phase is supposed to delete.
+ *
+ * Two entry points, both real:
+ *   - the parse blocks, rendered in order;
+ *   - `focusLocator`, set when the user arrives from a retrieval hit. The contract
+ *     gives a hit a `locator` string and gives blocks their own `locator`, so the
+ *     jump is a **text match** on that field: it either finds a block and scrolls to
+ *     it, or reports that it could not (never a silent no-op).
  */
 
 export type PaperReaderProps = {
   literature: LiteratureStore;
   loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<{ run: ResearchDocumentRun; content: ResearchDocumentContent }>>;
-  /** Preview the original when it is a workspace file (P3 protocol). */
   openInFilesView: (relativePath: string) => void;
+  /** Deep link from a retrieval hit: which parse to show. */
+  focusDocumentId?: string | null;
+  /** Deep link from a retrieval hit: the locator to scroll to. */
+  focusLocator?: string | null;
 };
 
 const STATUS_LABELS: Readonly<Record<ResearchDocument['status'], string>> = {
@@ -37,13 +48,6 @@ const STATUS_LABELS: Readonly<Record<ResearchDocument['status'], string>> = {
   cancelled: '解析已取消'
 };
 
-const RUN_STATUS_LABELS: Readonly<Record<ResearchDocumentRun['status'], string>> = {
-  running: '进行中',
-  ready: '完成',
-  failed: '失败',
-  cancelled: '已取消'
-};
-
 const BLOCK_STYLES: Readonly<Record<ParsedBlockKind, string>> = {
   heading: 'text-ink font-medium',
   paragraph: 'text-ink',
@@ -52,21 +56,36 @@ const BLOCK_STYLES: Readonly<Record<ParsedBlockKind, string>> = {
   figure: 'text-muted'
 };
 
-export function PaperReader({ literature, loadDocumentContent, openInFilesView }: PaperReaderProps): React.JSX.Element {
+export function PaperReader({
+  literature,
+  loadDocumentContent,
+  openInFilesView,
+  focusDocumentId = null,
+  focusLocator = null
+}: PaperReaderProps): React.JSX.Element {
   const selected = literature.selected;
   const documents = literature.documents;
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [content, setContent] = useState<ResearchDocumentContent | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  const jumpHandledFor = useRef<string | null>(null);
 
   // Follow the selection, but never render one document's content under another
-  // document's header: switching clears the content immediately.
+  // document's header: a selection change clears the content immediately.
   useEffect(() => {
     setContent(null);
     setContentError(null);
-    setActiveDocumentId(documents.length === 0 ? null : (documents[0]?.id ?? null));
-  }, [documents, selected?.id]);
+    setActiveDocumentId((current) => {
+      if (focusDocumentId !== null && documents.some((document) => document.id === focusDocumentId)) {
+        return focusDocumentId;
+      }
+      if (current !== null && documents.some((document) => document.id === current)) {
+        return current;
+      }
+      return documents[0]?.id ?? null;
+    });
+  }, [documents, focusDocumentId, selected?.id]);
 
   const readyDocument = useMemo(
     () => documents.find((document) => document.id === activeDocumentId && document.status === 'ready') ?? null,
@@ -103,6 +122,45 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
     };
   }, [readyDocument, loadDocumentContent]);
 
+  const counts = useMemo(() => (content === null ? null : countParsedBlocks(content)), [content]);
+
+  /**
+   * Jump to the locator from a retrieval hit.
+   *
+   * Runs once per (document, locator) pair: re-scrolling on every render would
+   * fight the user's own scrolling, and a repeated deep link is handled by the ref
+   * key rather than by a timer.
+   */
+  const matchedBlockId = useMemo(() => {
+    if (content === null || focusLocator === null) {
+      return null;
+    }
+    const blocks = parseDocumentBlocks(content);
+    const exact = blocks.find((block) => block.locator === focusLocator);
+    if (exact !== undefined) {
+      return exact.id;
+    }
+    // The hit's locator may be a prefix/heading of the block's own locator (e.g.
+    // "section 3" vs "section 3.2"). A substring match is the widest defensible
+    // fallback; anything looser would jump to a wrong place silently.
+    const loose = blocks.find((block) => block.locator.includes(focusLocator) || focusLocator.includes(block.locator));
+    return loose?.id ?? null;
+  }, [content, focusLocator]);
+
+  useEffect(() => {
+    if (matchedBlockId === null || activeDocumentId === null) {
+      return;
+    }
+    const key = `${activeDocumentId}:${focusLocator ?? ''}`;
+    if (jumpHandledFor.current === key) {
+      return;
+    }
+    jumpHandledFor.current = key;
+    document
+      .querySelector(`[data-block-id="${CSS.escape(matchedBlockId)}"]`)
+      ?.scrollIntoView({ block: 'center' });
+  }, [activeDocumentId, focusLocator, matchedBlockId]);
+
   if (selected === null) {
     return (
       <EmptyState
@@ -135,6 +193,11 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
           <span className="text-subtle" data-testid="reader-revision">
             revision {selected.revision}
           </span>
+          {counts === null ? null : (
+            <span className="text-subtle" data-testid="reader-block-counts">
+              {counts.total} 块 · 标题 {counts.headings} · 公式 {counts.formulas} · 表格 {counts.tables} · 图 {counts.figures} · 覆盖 {counts.pagesCovered} 页
+            </span>
+          )}
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
         </p>
       </header>
@@ -150,7 +213,7 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5" role="tablist" aria-label="文档">
+          <div role="tablist" aria-label="文档" className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
             {documents.map((document) => (
               <button
                 key={document.id}
@@ -193,7 +256,7 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
                       void literature.cancelParse({ documentId: activeDocument.id, parseId });
                     }}
                     data-testid="reader-cancel-parse"
-                    className="flex items-center gap-1 rounded-control border border-line px-2 text-[var(--st-warn)] text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-[var(--st-warn)] text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                   >
                     <Square size={11} aria-hidden="true" />
                     取消解析
@@ -205,7 +268,7 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
                   disabled={literature.action.pending || literature.projectId === null}
                   onClick={() => void literature.startParse(activeDocument.id)}
                   data-testid="reader-start-parse"
-                  className="flex items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                  className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                 >
                   <Download size={11} aria-hidden="true" />
                   {activeDocument.status === 'ready' ? '重新解析' : '解析'}
@@ -220,8 +283,8 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
                 type="button"
                 onClick={() => openInFilesView(activeDocument.filename)}
                 data-testid="reader-open-workspace-file"
-                title="导入的文档不在工作区里，这里只能尝试同名工作区文件；原始 PDF 目前没有 IPC 通道（B16）"
-                className="flex items-center gap-1 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+                title="导入的文档不在工作区里；原始 PDF 目前没有 IPC 通道（B16），这里只能试同名工作区文件"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
               >
                 <FileSearch size={11} aria-hidden="true" />
                 在工作区找同名文件
@@ -230,18 +293,18 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
+            {focusLocator !== null && matchedBlockId === null && content !== null ? (
+              <p role="note" className="mb-2 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="reader-jump-missed">
+                这次命中带的 locator「{focusLocator}」在解析块里找不到对应位置；下面是解析内容的开头。
+              </p>
+            ) : null}
             {loadingContent ? (
               <EmptyState tone="loading" icon={Loader2} title="正在读取解析内容…" testId="reader-content-loading" />
-            ) : contentError === null ? null : (
+            ) : contentError !== null ? (
               <ErrorBar
-                error={{
-                  level: 'blocked',
-                  message: contentError,
-                  actionLabel: '解析状态来自 research.document.runs'
-                }}
+                error={{ level: 'blocked', message: contentError, actionLabel: '解析状态来自 research.document.runs' }}
               />
-            )}
-            {contentError !== null ? null : content === null ? (
+            ) : content === null ? (
               activeDocument !== null && activeDocument.status !== 'ready' ? (
                 <EmptyState
                   icon={Timer}
@@ -257,9 +320,14 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
                 {blocks.map((block) => (
                   <section
                     key={block.id}
+                    id={`reader-block-${block.id}`}
                     data-testid={`reader-block-${block.kind}`}
+                    data-block-id={block.id}
                     data-locator={block.locator}
-                    className={BLOCK_STYLES[block.kind]}
+                    data-focused={block.id === matchedBlockId ? 'true' : undefined}
+                    className={`${BLOCK_STYLES[block.kind]} ${
+                      block.id === matchedBlockId ? 'rounded-control bg-[var(--accent-soft)] px-2 py-1' : ''
+                    }`}
                   >
                     {block.kind === 'heading' ? (
                       <h3 className="text-ink">{block.text}</h3>
@@ -270,7 +338,7 @@ export function PaperReader({ literature, loadDocumentContent, openInFilesView }
                     ) : (
                       <p className="whitespace-pre-wrap">
                         {block.kind === 'figure' ? <span className="text-subtle">[图] </span> : null}
-                        {block.text}
+                        {block.isBlank ? <span className="text-subtle">（空块）</span> : block.text}
                       </p>
                     )}
                     <p className="mt-0.5 font-mono text-subtle text-[var(--font-micro-size)]">

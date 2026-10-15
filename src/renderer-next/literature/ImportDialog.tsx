@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, Search, TriangleAlert } from 'lucide-react';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
 import { ModalShell } from '../shell/ModalShell';
+import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
 import {
@@ -39,6 +40,8 @@ import {
 
 export type ImportDialogProps = {
   open: boolean;
+  /** Which tab to show first; defaults to 文档. */
+  initialTab?: ImportTabRequest;
   onClose: () => void;
   /** Present when the user has a library item selected (enables "attach to it"). */
   selectedItem: { id: string; title: string } | null;
@@ -60,9 +63,9 @@ export type ImportDialogProps = {
   addDocumentToItem: (input: { sourcePath: string; libraryItemId: string }) => Promise<LiteratureImportOutcome>;
 };
 
-type ImportTab = 'document' | 'doi' | 'bibliography' | 'manual' | 'search';
 
-const TABS: Array<{ id: ImportTab; label: string }> = [
+
+const TABS: Array<{ id: ImportTabRequest; label: string }> = [
   { id: 'document', label: '文档' },
   { id: 'doi', label: 'DOI' },
   { id: 'bibliography', label: '参考文献文件' },
@@ -105,7 +108,7 @@ function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad';
 
 export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null {
   const { open, onClose } = props;
-  const [tab, setTab] = useState<ImportTab>('document');
+  const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
@@ -137,6 +140,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const titleRef = useRef<HTMLInputElement>(null);
+  const initialTab = props.initialTab ?? 'document';
 
   // Every tab starts clean: a leftover path or message from the previous opening
   // would look like it belonged to the new import.
@@ -160,8 +164,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setSearchQuery('');
     setSearchHits([]);
     setSearchError(null);
+    setTab(initialTab);
     setDocumentTarget(props.selectedItem === null ? 'new-item' : 'library-item');
-  }, [open, props.selectedItem]);
+  }, [initialTab, open, props.selectedItem]);
 
   const manualAuthorsParsed = useMemo(() => parseAuthorsInput(manualAuthors), [manualAuthors]);
   const manualYearParsed = useMemo(() => parseYearInput(manualYear), [manualYear]);

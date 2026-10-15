@@ -46,7 +46,7 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   // P3 landed these three as real views. They are genuine `import()`s, not
   // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
   changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
-  literature: async () => ({ default: placeholderView('文献中心', 'P5 实现') }),
+  literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
   latex: async () => ({ default: placeholderView('文稿', 'P7 实现') }),
   terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
   files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),

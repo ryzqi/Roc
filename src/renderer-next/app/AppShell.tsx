@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import type { AppStatus } from '../../shared/types';
-import { errorMessage } from './loaded-state';
+import type { AppStatus } from '../../shared/types';import { errorMessage } from './loaded-state';
 import type { AppViewId } from './routes';
 import { useAppNavigateBridge, useAppRoute } from './use-app-route';
 import { useLayoutState } from './use-layout-state';
@@ -28,6 +27,9 @@ import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
 import { useTraySummaryLabel } from '../shell/use-tray-summary';
 import { useWindowState } from '../shell/use-window-state';
 import { useBoundWorkspace } from '../workspace/use-bound-workspace';
+import { LiteratureScopeProvider } from '../literature/literature-scope';
+import { useLiteratureStore } from '../literature/use-literature-store';
+import { deriveWiki } from '../literature/derive-wiki';
 
 /**
  * The application shell (P1).
@@ -141,6 +143,17 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   // **bound** path, so a project switch rebuilds all three (gate 6).
   const boundWorkspace = useBoundWorkspace(client, project);
 
+  /**
+   * The literature store lives here, not in the literature view.
+   *
+   * The sidebar's 文献 tab and the canvas hub are siblings in different subtrees,
+   * and T5.1 requires them to share one state: importing from the canvas must show
+   * up in the sidebar, and selecting in one must select in the other. Creating the
+   * store once and providing it (like the workspace scope in P3) is what makes
+   * "shared" structural rather than a convention.
+   */
+  const literature = useLiteratureStore(client, route.projectId);
+
   const openFileInCanvas = (relativePath: string): void => {
     // `tool: 'files'` explicitly rather than `route.tool ?? 'files'`: opening a file
     // from the tree is the files workbench, so it must not inherit `git` (which would
@@ -179,11 +192,43 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     ]
   );
 
+  /**
+   * Concept rows for the ⌘K 概念 group.
+   *
+   * Derived with the same `deriveWiki` the 知识库 panel renders, from the same
+   * claims/evidence snapshot the store already holds — so the palette cannot claim
+   * a concept the panel would not show. Empty until the project's claims/evidence
+   * have loaded, which the group's own wording says.
+   */
+  const conceptRows = useMemo(() => {
+    const claims = literature.claims;
+    const evidence = literature.evidence;
+    if (claims === null || evidence === null) {
+      return [];
+    }
+    return deriveWiki({ claims, evidence, libraryItems: literature.items }).pages.map((page) => ({
+      id: page.claimId,
+      label: page.title,
+      subtitle: page.evidence.length === 0 ? '尚无引用证据' : `引用 ${page.evidence.length} 条证据`
+    }));
+  }, [literature.claims, literature.evidence, literature.items]);
+
   const searchGroups = useSearchGroups({
     client,
     query: searchQuery,
     workspacePath: boundWorkspace.path,
-    openFile: openFileInCanvas
+    openFile: openFileInCanvas,
+    projectId: route.projectId,
+    libraryItems: literature.items,
+    concepts: conceptRows,
+    conceptsLoaded: literature.claims !== null && literature.evidence !== null,
+    onOpenLiterature: (libraryItemId) => {
+      literature.select(libraryItemId);
+      navigate({ ...route, view: 'literature' });
+    },
+    onOpenConcept: () => {
+      navigate({ ...route, view: 'literature' });
+    }
   });
 
   // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
@@ -324,7 +369,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
           </div>
         </main>
       ) : inProject ? (
-        <WorkspaceLayout
+        // One literature store for the sidebar's 文献 tab and the canvas hub (T5.1):
+        // the provider sits *above* the layout so both subtrees read the same state.
+        <LiteratureScopeProvider value={literature}>
+          <WorkspaceLayout
           layout={layout}
           assistantOpen={route.assistantOpen}
           onToggleSidebar={layout.toggleSidebar}
@@ -351,6 +399,16 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}
               onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              onOpenLiterature={(libraryItemId) => {
+                // The sidebar tab has already selected the row in the shared store;
+                // re-selecting is a no-op (`setState` with the same value bails out)
+                // and keeps this callback correct if it is ever called without that
+                // first step.
+                if (libraryItemId !== null) {
+                  literature.select(libraryItemId);
+                }
+                navigate({ ...route, view: 'literature' });
+              }}
               themeOverride={override}
               onCycleTheme={cycleTheme}
               onOpenManagement={() => {
@@ -407,7 +465,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               </Suspense>
             ) : null
           }
-        />
+          />
+        </LiteratureScopeProvider>
       ) : (
         <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
           <ProjectPortalView
