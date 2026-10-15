@@ -46,6 +46,12 @@ export type AssistantComposerProps = {
   sending: boolean;
   running: boolean;
   /**
+   * The run is suspended on an **approval** interrupt: the decision belongs to the card, so the
+   * input is locked and neither 发送 nor 停止 is offered. (A question suspend is different — it
+   * sets `replyMode` instead, because the typed text *is* the answer.)
+   */
+  suspended?: boolean;
+  /**
    * The run is suspended on a **question** interrupt, so this text is an answer rather than a
    * new prompt: the input stays enabled and the submit button says 回复. (An approval interrupt
    * leaves the input disabled — that decision belongs to the card.)
@@ -77,12 +83,14 @@ export function AssistantComposer({
   imageInputSupported,
   sending,
   running,
+  suspended = false,
   replyMode,
   onSend,
   onStop
 }: AssistantComposerProps): React.JSX.Element {
-  // A suspended question is answerable even though a run exists; a plain running run is not.
-  const inputLocked = running && !replyMode;
+  // A suspended question is answerable even though a run exists; a plain running run is not,
+  // and an approval suspend is not answerable at all (the card owns that decision).
+  const inputLocked = (running || suspended) && !replyMode;
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -249,9 +257,11 @@ export function AssistantComposer({
           placeholder={
             replyMode
               ? '输入回答后发送，运行会继续'
-              : inputLocked
-                ? '运行中…可先停止再修改'
-                : '输入指令。Enter 发送 · Shift+Enter 换行 · / 选择技能'
+              : suspended
+                ? '运行已挂起，请先在上方卡片里决定'
+                : inputLocked
+                  ? '运行中…可先停止再修改'
+                  : '输入指令。Enter 发送 · Shift+Enter 换行 · / 选择技能'
           }
           data-testid="assistant-composer-input"
           onChange={(event) => {
@@ -299,15 +309,24 @@ export function AssistantComposer({
             </button>
           </div>
           {inputLocked ? (
-            <button
-              type="button"
-              onClick={onStop}
-              data-testid="assistant-composer-stop"
-              className="flex h-[var(--control-height)] items-center gap-1 rounded-control border border-line px-3 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
-            >
-              <Square size={11} aria-hidden="true" />
-              停止
-            </button>
+            suspended ? (
+              <span
+                className="flex h-[var(--control-height)] items-center rounded-control border border-line px-3 text-muted text-[var(--font-meta-size)]"
+                data-testid="assistant-composer-suspended"
+              >
+                等待审批决定
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onStop}
+                data-testid="assistant-composer-stop"
+                className="flex h-[var(--control-height)] items-center gap-1 rounded-control border border-line px-3 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+              >
+                <Square size={11} aria-hidden="true" />
+                停止
+              </button>
+            )
           ) : (
             <button
               type="button"

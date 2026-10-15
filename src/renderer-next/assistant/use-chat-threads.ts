@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TaskThread } from '../../shared/types';
 import { errorMessage } from '../app/loaded-state';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -57,6 +57,42 @@ export function useChatThreads(client: RocClient): ChatThreadsState {
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [localRemoved, setLocalRemoved] = useState<readonly string[]>([]);
   const reload = resource.reload;
+
+  /**
+   * Keep the list fresh against the snapshot it was read from.
+   *
+   * The list is a **snapshot read** (`tasks.getSnapshot`), and this component can stay mounted
+   * for the whole session — the selected sidebar tab is persisted in `ui-state`. Without a
+   * refresh, a list mounted before the first prompt existed would show 「暂无会话」 forever;
+   * the acceptance gate hit exactly that (the tab was already open, so the empty first
+   * snapshot was never replaced and the running thread stayed invisible).
+   *
+   * `tasks.onUpdated` is the push channel: main broadcasts it on
+   * `run_started` / `run_completed` / `run_failed` / `run_interrupted` / `run_resumed` and on
+   * background-task changes. Refreshes are coalesced to **one per animation frame** because a
+   * single run emits several of those events and each would otherwise cost an IPC round trip.
+   * `requestAnimationFrame` rather than a timer on purpose: gate 7 forbids timers under
+   * `src/renderer-next/assistant/`, and a hidden window should not refresh at all.
+   */
+  useEffect(() => {
+    let pendingFrame: number | null = null;
+    const unsubscribe = client.api.tasks.onUpdated(() => {
+      if (pendingFrame !== null) {
+        return;
+      }
+      pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = null;
+        reload();
+      });
+    });
+    return () => {
+      unsubscribe();
+      if (pendingFrame !== null) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = null;
+      }
+    };
+  }, [client, reload]);
 
   const threads = useMemo(() => {
     const all = resource.data?.threads ?? [];

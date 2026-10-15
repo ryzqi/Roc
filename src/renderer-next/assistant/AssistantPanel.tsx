@@ -147,6 +147,12 @@ export function AssistantPanel({
   const pendingQuestion = session.runState.pendingInterrupts.find((interrupt) => interrupt.kind === 'question') ?? null;
   const replyMode = pendingQuestion !== null;
   const waitingUser = session.runState.pendingInterrupts.length > 0;
+  /**
+   * Suspended on an approval: the run exists but is waiting, so the input must stay locked and
+   * the card is the only way forward. Without this the composer looked idle and a second
+   * `chat.startRun` could be fired on top of the suspended run.
+   */
+  const suspendedOnApproval = waitingUser && !replyMode;
   const statusLabel =
     runStatus === 'idle'
       ? null
@@ -221,7 +227,14 @@ export function AssistantPanel({
         </div>
       )}
 
-      <div ref={scrollContainerRef} className="relative flex min-h-0 flex-1 flex-col">
+      {/*
+        `overflow-y-auto` is load-bearing, not decoration: `ChatTranscriptPanel` passes this node
+        to Virtuoso as `customScrollParent`, so *this* element is the scroller. The legacy shell
+        got it from the `chat-empty-plane` class; without it nothing clips the list and the
+        transcript is painted over the composer (found by the P4 gate harness: clicking 停止 hit
+        a tool block's status pill instead of the button).
+      */}
+      <div ref={scrollContainerRef} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
         {session.messages.length === 0 ? (
           <EmptyState
             title={session.history.loadingInitial ? '正在读取会话…' : '开始一段研究对话'}
@@ -267,6 +280,7 @@ export function AssistantPanel({
         imageInputSupported={imageSupport === null ? false : isImageInputSupported(imageSupport)}
         sending={session.sending}
         running={activeRun}
+        suspended={suspendedOnApproval}
         replyMode={replyMode}
         onSend={async (input) => {
           // A suspended question takes the text as its answer; everything else starts a new run.

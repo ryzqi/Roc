@@ -91,6 +91,25 @@ function readRequestBody(request) {
 }
 
 const defaultSmokeTaskProposalGoal = '每天 19:40 抓取 AI 新闻并写入 docx';
+
+/**
+ * P4 acceptance-gate modes (scripts/verify-p4-assistant.mjs).
+ *
+ * Same idea as the task-proposal flow above: the *prompt* selects the scripted turn, because
+ * the fake provider is one HTTP endpoint with no per-test configuration. The marker is a plain
+ * substring so it survives the composer's `/skill` parser (which only consumes `/`-prefixed
+ * tokens) and stays readable in a failure report.
+ */
+const smokeP4ModePattern = /ROC-P4-MODE:([a-z]+)/u;
+// Every scripted P4 prompt carries its own nonce. Thread history is *shared* between runs, so
+// "find the newest marker in the transcript" would pick up the previous run's prompt and reuse
+// its tool-call id — which then looks like an already-answered tool call and skips the script.
+const smokeP4RunPattern = /ROC-P4-RUN:([A-Za-z0-9_-]+)/u;
+const smokeP4DeletePattern = /ROC-P4-DELETE:(\S+)/u;
+const smokeP4SlowPattern = /ROC-P4-SLOW:(\d+)x(\d+)/u;
+// Per-gate tag so a transcript that already holds an earlier run's stream cannot satisfy a
+// later gate's "did this come back" assertion.
+const smokeP4SlowTagPattern = /ROC-P4-SLOW-TAG:([A-Za-z0-9_-]+)/u;
 const smokeProviderText =
   'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
 const smokeTaskProposalClockPattern = /每天\s*(\d{1,2}):(\d{2})/;
@@ -137,6 +156,25 @@ function readWorkspacePathFromMessages(messages) {
 }
 
 function readToolResultJson(messages, toolCallId) {
+  const content = readToolResultText(messages, toolCallId);
+  if (content === null) {
+    return null;
+  }
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Raw tool result for the P4 modes.
+ *
+ * Deliberately not JSON-parsed: `ls` returns a plain listing and `ask_user` returns the answer
+ * string, so a JSON-only detector would report "no result yet" forever and the scripted model
+ * would repeat the same tool call on every turn.
+ */
+function readToolResultText(messages, toolCallId) {
   if (!Array.isArray(messages)) {
     return null;
   }
@@ -144,12 +182,7 @@ function readToolResultJson(messages, toolCallId) {
   if (message === undefined) {
     return null;
   }
-  const content = readTextContent(message.content);
-  try {
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
+  return readTextContent(message.content);
 }
 
 function readTaskProposalGoal(value) {
@@ -310,6 +343,70 @@ function writeStreamingTextResponse(response, content) {
   response.end('data: [DONE]\n\n');
 }
 
+function writeSseDelta(response, delta) {
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta,
+        finish_reason: null
+      }
+    ]
+  });
+}
+
+function writeSseFinish(response, finishReason, usage) {
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: finishReason
+      }
+    ],
+    usage
+  });
+  safeEndSse(response);
+}
+
+/**
+ * Writes a chunk only while the client is still there.
+ *
+ * Gate 4 (cancel) and gate 5 (close the panel) both disconnect a streaming response mid-flight,
+ * and a write to a destroyed socket throws `ERR_STREAM_WRITE_AFTER_END`. A test fixture that
+ * crashes the smoke provider when the product cancels a run would report the cancellation as a
+ * provider failure, which is the opposite of what it is.
+ */
+function safeWriteSseChunk(response, payload) {
+  if (response.writableEnded || response.destroyed) {
+    return false;
+  }
+  try {
+    writeSseChunk(response, payload);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeEndSse(response) {
+  if (response.writableEnded || response.destroyed) {
+    return;
+  }
+  try {
+    response.end('data: [DONE]\n\n');
+  } catch {
+    // The client is gone; nothing to clean up beyond letting the socket close itself.
+  }
+}
+
+function safeWriteSseFinish(response, finishReason, usage) {
+  if (!safeWriteSseChunk(response, { choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })) {
+    return;
+  }
+  safeEndSse(response);
+}
+
 function writeStreamingToolCallResponse(response, toolCall) {
   writeSseChunk(response, {
     choices: [
@@ -377,6 +474,194 @@ function writeTaskScheduleToolCallResponse(response, parsedBody) {
   });
 }
 
+/**
+ * Reads the newest scripted turn from the shared transcript.
+ *
+ * The prompt that carries a nonce decides the mode, the tool-call ids and every argument of that
+ * turn, so a previous run's history can never be mistaken for this one's progress.
+ */
+function readSmokeP4Turn(messages) {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+  for (const message of [...messages].reverse()) {
+    const text = readMessageText(message);
+    const run = smokeP4RunPattern.exec(text);
+    if (run === null) {
+      continue;
+    }
+    const mode = smokeP4ModePattern.exec(text);
+    if (mode === null) {
+      continue;
+    }
+    return {
+      nonce: run[1],
+      mode: mode[1],
+      deleteTarget: (smokeP4DeletePattern.exec(text) ?? [])[1] ?? null,
+      slow: smokeP4SlowPattern.exec(text),
+      tag: (smokeP4SlowTagPattern.exec(text) ?? [])[1] ?? 'P4SLOW'
+    };
+  }
+  return null;
+}
+
+function smokeP4CallId(kind, nonce) {
+  return `call_p4_${kind}_${nonce}`;
+}
+const smokeP4ReasoningText = 'P4 推理：先列出工作目录，再决定下一步。';
+const smokeP4ToolDoneMarker = 'P4-TOOL-DONE';
+const smokeP4ApprovalDoneMarker = 'P4-APPROVAL-DONE';
+const smokeP4QuestionPrefix = 'P4-QUESTION-ANSWER:';
+
+/**
+ * A tool call must be the **first** delta of its response.
+ *
+ * Measured (2026-10-15, P4 gates): when a `content` delta precedes the `tool_calls` delta in the
+ * same streamed response, the resulting `AIMessage.tool_calls` is **empty** — the raw call only
+ * survives in `additional_kwargs`, and Roc's `ForgeRescueParsingMiddleware` then rebuilds it.
+ * That rescue is invisible for a plain tool call, but it silently bypasses
+ * `HumanInTheLoopMiddleware`: HITL only inspects `AIMessage.tool_calls`, so an approval-required
+ * tool call that follows text in the same turn is executed **without an approval card**. The
+ * fixture therefore scripts the tool call alone and writes the prose in the closing turn.
+ */
+function writeStreamingToolCallOnlyResponse(response, toolCall, usage) {
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              index: 0,
+              id: toolCall.id,
+              type: 'function',
+              function: {
+                name: toolCall.name,
+                arguments: JSON.stringify(toolCall.args)
+              }
+            }
+          ]
+        },
+        finish_reason: null
+      }
+    ]
+  });
+  writeSseFinish(response, 'tool_calls', usage);
+}
+
+/**
+ * Gate 1: one **read-only** tool call, then a closing turn with reasoning + streaming text.
+ *
+ * `ls` is the deliberate choice: it is not in `interruptOn` under any permission mode, so the
+ * run cannot be approved-or-rejected by accident, and its output is real filesystem data — the
+ * assertion that a workspace filename shows up in the tool body is what proves the tool actually
+ * executed rather than being echoed by the renderer.
+ */
+function writeP4ToolModeResponse(response, parsedBody, turn) {
+  const callId = smokeP4CallId('ls', turn.nonce);
+  if (readToolResultText(parsedBody?.messages, callId) !== null) {
+    // Reasoning and text in the *closing* turn keep this turn free of tool calls, so the
+    // reasoning block and the streamed text are exercised without the shape issue documented
+    // on `writeStreamingToolCallOnlyResponse`.
+    writeSseDelta(response, { role: 'assistant', reasoning_content: smokeP4ReasoningText });
+    writeSseDelta(response, { content: '工具已返回，先记录看到的内容。' });
+    writeSseDelta(response, { content: `\n\n结论完成。${smokeP4ToolDoneMarker}` });
+    writeSseFinish(response, 'stop', { prompt_tokens: 42, completion_tokens: 24, total_tokens: 66 });
+    return;
+  }
+  writeStreamingToolCallOnlyResponse(
+    response,
+    { id: callId, name: 'ls', args: { path: '/workspace' } },
+    { prompt_tokens: 42, completion_tokens: 12, total_tokens: 54 }
+  );
+}
+
+/**
+ * Gate 2: one `delete_file` call, which only interrupts when `permissions.mode === 'default'`
+ * (`run-capability-manifest.ts` → `createInterruptPolicy`). The harness sets that mode through
+ * `settings.save` and asserts the card, then approves in one run and rejects in another.
+ */
+function writeP4ApprovalModeResponse(response, parsedBody, turn) {
+  const callId = smokeP4CallId('delete', turn.nonce);
+  if (readToolResultText(parsedBody?.messages, callId) !== null) {
+    writeStreamingTextResponse(response, `审批流程已结束。${smokeP4ApprovalDoneMarker}`);
+    return;
+  }
+  if (turn.deleteTarget === null) {
+    throw new Error('Smoke provider approval mode needs a ROC-P4-DELETE:/workspace/... marker.');
+  }
+  writeStreamingToolCallOnlyResponse(
+    response,
+    { id: callId, name: 'delete_file', args: { file_path: turn.deleteTarget } },
+    { prompt_tokens: 44, completion_tokens: 14, total_tokens: 58 }
+  );
+}
+
+/**
+ * Gate 3: one `ask_user` call, which interrupts with `kind: 'question'`.
+ *
+ * The closing turn echoes the **tool result**, which is the answer the user typed: that is what
+ * proves the answer travelled through `chat.resumeRun({kind:'question'})` and back into the
+ * model rather than only being rendered locally.
+ */
+function writeP4QuestionModeResponse(response, parsedBody, turn) {
+  const callId = smokeP4CallId('ask', turn.nonce);
+  const result = readToolResultText(parsedBody?.messages, callId);
+  if (result !== null) {
+    writeStreamingTextResponse(response, `收到回答：${result}\n\n${smokeP4QuestionPrefix}${result}`);
+    return;
+  }
+  writeStreamingToolCallOnlyResponse(
+    response,
+    {
+      id: callId,
+      name: 'ask_user',
+      args: {
+        question: '这次运行要按哪个口径继续？',
+        context: 'P4 提问中断的验收运行。',
+        suggestedResponses: ['按最小范围继续', '先补数据再继续']
+      }
+    },
+    { prompt_tokens: 48, completion_tokens: 18, total_tokens: 66 }
+  );
+}
+
+/**
+ * Gate 4/5: a long, slow text stream so the harness can cancel mid-run, close the panel and come
+ * back while the run is still going. Each chunk is individually addressable (`P4SLOW-0007`) so a
+ * later assertion can say which part of the stream it saw.
+ */
+async function writeP4SlowModeResponse(response, turn) {
+  const parsedSlow = turn.slow;
+  const totalChunks = parsedSlow === null ? 60 : Number.parseInt(parsedSlow[1], 10);
+  const stepMs = parsedSlow === null ? 150 : Number.parseInt(parsedSlow[2], 10);
+  const tag = turn.tag;
+  for (let index = 1; index <= totalChunks; index += 1) {
+    if (response.writableEnded || response.destroyed) {
+      return;
+    }
+    const wrote = safeWriteSseChunk(response, {
+      choices: [
+        {
+          index: 0,
+          delta: { content: `${tag}-${String(index).padStart(4, '0')} ` },
+          finish_reason: null
+        }
+      ]
+    });
+    if (!wrote) {
+      return;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, stepMs));
+  }
+  safeWriteSseFinish(response, 'stop', { prompt_tokens: 40, completion_tokens: totalChunks, total_tokens: 40 + totalChunks });
+}
+
+function writeP4ManyModeResponse(response) {
+  writeStreamingTextResponse(response, 'P4MANY-ACK');
+}
+
 export async function startSmokeProvider(input = {}) {
   const taskProposalGoal = readTaskProposalGoal(input.taskProposalGoal);
   const now = readFixtureNow(input.now);
@@ -397,6 +682,30 @@ export async function startSmokeProvider(input = {}) {
         response.setHeader('content-type', 'text/event-stream');
         response.setHeader('cache-control', 'no-cache');
         response.setHeader('connection', 'keep-alive');
+        const p4Turn = readSmokeP4Turn(parsedBody?.messages);
+        if (p4Turn !== null) {
+          if (p4Turn.mode === 'tool') {
+            writeP4ToolModeResponse(response, parsedBody, p4Turn);
+            return;
+          }
+          if (p4Turn.mode === 'approval') {
+            writeP4ApprovalModeResponse(response, parsedBody, p4Turn);
+            return;
+          }
+          if (p4Turn.mode === 'question') {
+            writeP4QuestionModeResponse(response, parsedBody, p4Turn);
+            return;
+          }
+          if (p4Turn.mode === 'slow') {
+            await writeP4SlowModeResponse(response, p4Turn);
+            return;
+          }
+          if (p4Turn.mode === 'many') {
+            writeP4ManyModeResponse(response);
+            return;
+          }
+          throw new Error(`Smoke provider does not know P4 mode: ${p4Turn.mode}`);
+        }
         if (
           isTaskProposalRequest(parsedBody, taskProposalGoal) &&
           readToolResultJson(parsedBody?.messages, 'call_smoke_propose_background_task') === null
@@ -437,9 +746,18 @@ export async function startSmokeProvider(input = {}) {
         })
       );
     })().catch((error) => {
-      response.statusCode = 500;
-      response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'provider failed' }));
+      // A cancelled run destroys the response before its handler finishes; that is a successful
+      // cancellation from the product's point of view, so do not try to answer on a dead socket.
+      if (response.writableEnded || response.destroyed) {
+        return;
+      }
+      try {
+        response.statusCode = 500;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'provider failed' }));
+      } catch {
+        // Socket went away between the check and the write.
+      }
     });
   });
 
