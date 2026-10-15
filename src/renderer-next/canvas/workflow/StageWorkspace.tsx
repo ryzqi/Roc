@@ -18,9 +18,14 @@ import {
 import { indexPhaseLabel, researchStageStatusLabels } from './format';
 import { ArtifactPanel } from './ArtifactPanel';
 import { EvidenceClaimsPanel } from '../../production/EvidenceClaimsPanel';
+import { ExperimentsPanel } from '../../production/ExperimentsPanel';
+import { ExportPanel } from '../../production/ExportPanel';
+import { FiguresPanel } from '../../production/FiguresPanel';
 import { IdeasPanel } from '../../production/IdeasPanel';
+import { LatexPanel } from '../../production/LatexPanel';
 import { ManuscriptPanel } from '../../production/ManuscriptPanel';
 import { PoliciesPanel } from '../../production/PoliciesPanel';
+import { TemplatePanel } from '../../production/TemplatePanel';
 import { StageBar } from './StageBar';
 import { StageRunPanel } from './StageRunPanel';
 import { useWorkflow } from './workflow-scope';
@@ -44,7 +49,7 @@ import { useWorkflow } from './workflow-scope';
  * two surfaces cannot disagree — and the archived project is read-only everywhere.
  */
 
-type TabId = ResearchStageTab | 'runs' | 'artifacts' | 'claims';
+type TabId = ResearchStageTab | 'runs' | 'artifacts' | 'claims' | 'template';
 
 const P6_TABS: Array<{ id: TabId; label: string }> = [
   { id: 'runs', label: '阶段运行' },
@@ -55,22 +60,17 @@ const P6_TABS: Array<{ id: TabId; label: string }> = [
  * Panels that apply to every stage group (P7's 证据与主张 is project-wide: evidence and claims
  * are attached to the manuscript artifact, not to one stage's inputs).
  */
-const P7_TABS: Array<{ id: TabId; label: string }> = [{ id: 'claims', label: '证据与主张' }];
+const P7_TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'claims', label: '证据与主张' },
+  { id: 'template', label: '模板包' }
+];
 
 /**
- * Tabs whose panel belongs to a later phase yet, with the phase that owns it.
- *
- * `ideas` / `manuscript` / `policies` used to be listed here; they now render real panels, so
- * this table is the honest list of what is *still* missing rather than a placeholder for
- * everything.
+ * Every `ResearchStageTab` now renders a real panel (P7 completed the set), so there is no
+ * "owned by a later phase" table any more — the only tab without a dedicated surface is
+ * `embedding`, whose *write* path belongs to the settings centre (B23 / MASTER v2 §7) and which
+ * therefore shows the read-only summary next to the policy editor.
  */
-const PANEL_OWNER: Partial<Record<TabId, string>> = {
-  experiments: '实验运行（P7 剩余）',
-  figures: '图稿（P7 剩余）',
-  editor: '文稿与模板包（P7 剩余）',
-  production: '导出包（P7 剩余）',
-  embedding: '嵌入配置的写入（P8 设置中心；本组只显示只读摘要）'
-};
 
 export function StageWorkspace({ stageHint }: { stageHint: string | null }): React.JSX.Element {
   const scope = useWorkspaceScope();
@@ -94,10 +94,16 @@ export function StageWorkspace({ stageHint }: { stageHint: string | null }): Rea
   const group = RESEARCH_STAGE_GROUPS.find((item) => item.id === groupId) ?? RESEARCH_STAGE_GROUPS[0]!;
   const [tab, setTab] = useState<TabId>(() => requestedTab ?? group.tabs[0]?.id ?? 'runs');
 
-  // Switching groups (from the stage bar above, or a deep link) must move the panel with it.
+
+  // Switching groups (from the stage bar above, or a deep link) must move the panel with it — and
+  // it re-reads the workflow, because the artifact-scoped panels (构思 / 正文 / 工件) depend on a
+  // list that only this store owns. Same reasoning as the polling rule: ask again when the thing
+  // you are looking at changes.
+  const refreshWorkflow = store.refresh;
   useEffect(() => {
     setTab(requestedTab ?? group.tabs[0]?.id ?? 'runs');
-  }, [requestedTab, group]);
+    refreshWorkflow();
+  }, [requestedTab, group, refreshWorkflow]);
 
   // Same guard order as 总览: a null workflow during a project switch is loading, not a failure.
   if (store.status === 'error') {
@@ -334,6 +340,22 @@ function MainPanel({
   if (tab === 'policies') {
     return <PoliciesPanel />;
   }
+  if (tab === 'experiments') {
+    return <ExperimentsPanel />;
+  }
+  if (tab === 'figures') {
+    return <FiguresPanel />;
+  }
+  if (tab === 'production') {
+    return <ExportPanel />;
+  }
+  if (tab === 'template') {
+    return <TemplatePanel />;
+  }
+  if (tab === 'editor') {
+    // 文稿：工作区里的 .tex/.bib 真文件编辑（编译在下面的模板面板里）。
+    return <LatexPanel />;
+  }
   if (tab === 'runs') {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -410,13 +432,14 @@ function MainPanel({
     // settings group has one "project configuration" surface.
     return <PoliciesPanel />;
   }
-  const owner = PANEL_OWNER[tab] ?? '后续阶段';
+  // Defence in depth: the `TabId` union is covered above, so this is only reachable if a tab is
+  // added without a panel. It names the tab instead of rendering an empty shell.
   return (
     <EmptyState
       icon={Database}
-      title={`${owner}`}
-      description={`「${groupId}」的这一面板还没有实现。它的接口与元素已在 capability-matrix §7 登记，会按阶段补齐，不会用示意数据填充：本组已交付的是阶段运行、工件与生产输入、证据与主张，以及构思 / 正文 / 阶段模型（见左侧其它标签）。`}
-      testId={`workflow-stage-panel-pending-${tab}`}
+      title={`${tab}（没有面板）`}
+      description={`「${groupId}」的 ${tab} 标签没有对应面板：这是接线缺口，不是空数据。`}
+      testId={`workflow-stage-panel-missing-${tab}`}
     />
   );
 }

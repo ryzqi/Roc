@@ -27,6 +27,7 @@
     "verify:p4-assistant": "node scripts/verify-p4-assistant.mjs",
     "verify:p5-literature": "node scripts/verify-p5-literature.mjs",
     "verify:p6-workflow": "node scripts/verify-p6-workflow.mjs",
+    "verify:p7-production": "node scripts/verify-p7-production.mjs",
     "database:backup": "node dist/main/database-maintenance-cli.js backup",
     "database:restore": "node dist/main/database-maintenance-cli.js restore",
     "database:migrate": "node scripts/migrate-databases.mjs",

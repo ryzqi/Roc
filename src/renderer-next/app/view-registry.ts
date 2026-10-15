@@ -47,7 +47,7 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
   changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
   literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
-  latex: async () => ({ default: placeholderView('文稿', 'P7 实现') }),
+  latex: async () => ({ default: (await import('../production/LatexPanel')).LatexPanel }),
   terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
   files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
   tasks: async () => ({ default: (await import('../tasks/TasksView')).TasksView }),
