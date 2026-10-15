@@ -84,8 +84,19 @@ const defaultDraft: Draft = {
   network: 'disabled'
 };
 
-export function ExperimentsPanel(): React.JSX.Element {
+export function ExperimentsPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const projectId = scope.projectId ?? '';
   const workspacePath = scope.workspacePath;
 
@@ -176,7 +187,6 @@ export function ExperimentsPanel(): React.JSX.Element {
     ...experimentStartBlockers({
       sourcePath: draft.sourcePath.length === 0 ? null : draft.sourcePath,
       environment,
-      environmentHashMatches: environment !== null,
       engine,
       runtime,
       label: draft.label
@@ -407,7 +417,7 @@ export function ExperimentsPanel(): React.JSX.Element {
           <button
             type="button"
             data-testid="production-experiment-run"
-            disabled={!scope.writable || run.pending || blockers.length > 0}
+            disabled={!canWrite || run.pending || blockers.length > 0}
             onClick={() => {
               void run.run({ runtime, environment }).then((started) => {
                 if (started !== null) {
@@ -517,7 +527,7 @@ export function ExperimentsPanel(): React.JSX.Element {
               <button
                 type="button"
                 data-testid="production-experiment-publish"
-                disabled={!scope.writable || publish.pending}
+                disabled={!canWrite || publish.pending}
                 onClick={() => void publish.run(selected.id).then(() => runs.reload())}
                 className={primaryButtonClass}
               >

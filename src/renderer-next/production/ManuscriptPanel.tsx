@@ -36,8 +36,19 @@ import {
 
 type SectionDraft = { title: string; claimIds: string[] };
 
-export function ManuscriptPanel(): React.JSX.Element {
+export function ManuscriptPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const workflow = useWorkflow();
   const artifact = useMemo(
     () => (workflow.artifacts ?? []).find((item) => item.kind === 'manuscript') ?? null,
@@ -62,6 +73,12 @@ export function ManuscriptPanel(): React.JSX.Element {
   );
 
   const [drafts, setDrafts] = useState<SectionDraft[] | null>(null);
+  /**
+   * 正文只接受 `supported` 且有真实证据的主张（`manuscript-repository.resolveManuscriptClaims` →
+   * `assertSupported`）。所以选择器只列这些；被排除的条数写在下面，避免用户以为「主张不见了」。
+   */
+  const supportedClaims = (claims.data ?? []).filter((claim) => claim.status === 'supported');
+  const excludedClaimCount = (claims.data ?? []).length - supportedClaims.length;
   const save = useAsyncAction(
     (sections: SectionDraft[]) =>
       saveManuscript(scope.client, {
@@ -120,7 +137,7 @@ export function ManuscriptPanel(): React.JSX.Element {
                 <input
                   data-testid={`production-manuscript-title-${index}`}
                   value={section.title}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onChange={(event) => {
                     const next = [...current];
                     next[index] = { ...section, title: event.target.value };
@@ -132,7 +149,7 @@ export function ManuscriptPanel(): React.JSX.Element {
                   type="button"
                   data-testid={`production-manuscript-remove-${index}`}
                   className={secondaryButtonClass}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onClick={() => setDrafts(current.filter((_, position) => position !== index))}
                 >
                   <Trash2 size={11} aria-hidden="true" />
@@ -140,7 +157,7 @@ export function ManuscriptPanel(): React.JSX.Element {
                 </button>
               </div>
               <div className="flex flex-wrap gap-1" data-testid={`production-manuscript-claims-${index}`}>
-                {(claims.data ?? []).map((claim) => {
+                {supportedClaims.map((claim) => {
                   const checked = section.claimIds.includes(claim.id);
                   const takenByOther = !checked && usedElsewhere(index).has(claim.id);
                   return (
@@ -156,7 +173,7 @@ export function ManuscriptPanel(): React.JSX.Element {
                         type="checkbox"
                         data-testid={`production-manuscript-claim-${index}-${claim.id}`}
                         checked={checked}
-                        disabled={takenByOther || !scope.writable}
+                        disabled={takenByOther || !canWrite}
                         onChange={(event) => {
                           const next = [...current];
                           const ids = event.target.checked
@@ -183,11 +200,17 @@ export function ManuscriptPanel(): React.JSX.Element {
           ))}
         </ol>
 
+        {excludedClaimCount === 0 ? null : (
+          <p className="text-subtle text-[var(--font-micro-size)]" data-testid="production-manuscript-excluded-claims">
+            还有 {excludedClaimCount} 条主张不是「有证据支持」状态：后端会拒（research_claim_unverified），
+            所以选择器不列它们 —— 先在「证据与主张」里补证据再定级为 supported。
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             data-testid="production-manuscript-add-section"
-            disabled={!scope.writable || current.length >= 100}
+            disabled={!canWrite || current.length >= 100}
             onClick={() => setDrafts([...current, { title: `段落 ${current.length + 1}`, claimIds: [] }])}
             className={secondaryButtonClass}
           >
@@ -197,7 +220,7 @@ export function ManuscriptPanel(): React.JSX.Element {
           <button
             type="button"
             data-testid="production-manuscript-save"
-            disabled={!scope.writable || save.pending || blockers.length > 0}
+            disabled={!canWrite || save.pending || blockers.length > 0}
             onClick={() => {
               void save.run(current).then((saved) => {
                 if (saved !== null) {

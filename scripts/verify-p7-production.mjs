@@ -1,7 +1,7 @@
 import { _electron as electron } from '@playwright/test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
 
@@ -87,6 +87,24 @@ writeFileSync(
   ['\\documentclass{article}', '\\begin{document}', '\\thisCommandDoesNotExist', '\\end{document}', ''].join('\n'),
   'utf8'
 );
+
+/**
+ * B17（P5 登记，P7 又撞上）：dev/dist 构建下 `ResearchToolchain.job()` 只要看到
+ * `dist/main/research-job-cli.js` 存在就走**沙箱子进程**，而该子进程在沙箱里读不到 repo 的
+ * `package.json` 与外部化依赖 → stdout 为空 → `research_json_invalid`。打包构建不受影响
+ * （asar 在 `Roc.app/Contents` 下）。
+ *
+ * 本闸门撞到的是**导出作业**：`prepare` 会因为同一个 `research_json_invalid` 直接 failed。
+ * 绕行与 P5 完全一致：把该构建入口改名，让 main 走它自己的 `jobInProcess` 回退；跑完在 finally
+ * 里恢复（上一轮被杀则本轮开头自愈）。
+ */
+const jobCliPath = resolve('dist/main/research-job-cli.js');
+const jobCliDisabledPath = `${jobCliPath}.b17-disabled`;
+if (!existsSync(jobCliPath) && existsSync(jobCliDisabledPath)) {
+  renameSync(jobCliDisabledPath, jobCliPath);
+  console.log(`（自愈）上一轮 B17 绕行留下的 ${jobCliDisabledPath} 已恢复`);
+}
+let jobCliDisabledByRun = false;
 
 const smokeProvider = await startSmokeProvider({});
 const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
@@ -573,12 +591,291 @@ try {
     prepareRefusal.ok === false,
     JSON.stringify(prepareRefusal)
   );
+  // ---- 闸门 7 的 B17 前置：导出作业在 dev/dist 下必须走 main 的 in-process 回退 --------------
+  const b17CliPresent = existsSync(jobCliPath);
+  if (b17CliPresent) {
+    renameSync(jobCliPath, jobCliDisabledPath);
+    jobCliDisabledByRun = true;
+  }
   record(
     '7 导出包',
-    'prepare → publish → 落盘 需要完整链路：证据（chunk → capture，B15）→ supported 主张 → 正文 → 写作闸门（生成审稿循环）→ 审稿 accept → 导出阶段',
+    b17CliPresent
+      ? '命中 B17（dev/dist 下导出作业走沙箱 CLI）→ 已改名构建入口，本轮走 main 的 in-process 回退'
+      : 'build 没有产出 JS 作业 CLI 入口（本轮测的就是 in-process 路径）',
     true,
-    '本轮把这条链上的每一段都断言为「被正确拒绝」，端到端落盘未测（见 phases/P7-production.md 的剩余项）',
+    b17CliPresent ? `cli → ${jobCliDisabledPath}` : jobCliPath,
     'info'
+  );
+
+  /**
+   * 闸门 7 的快乐路径：把整条链真的走一遍。
+   *
+   * 顺序是契约逼出来的（F21⑤⑥）：工作区文件 → 索引 → 检索命中拿 `chunkId` → `evidence.capture`
+   * → `supported` 主张 → 正文 → **写作闸门**（`afterApproval('writing')` 建立审稿循环）→ 审稿阶段
+   * 运行 + `approve(accept)`（循环转 accepted）→ 导出阶段 → `prepare` → `publish` → `write` 落盘。
+   * 任何一步失败都把错误码写进断言 detail，而不是笼统地说「链路失败」。
+   */
+  const chain = await page.evaluate(
+    async ({ id, artifactId, destination }) => {
+      const step = async (label, promise) => {
+        const result = await promise;
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: `${label}: ${result.error.message}` };
+      };
+      const written = await step(
+        'writeText',
+        window.roc.files.writeText({
+          relativePath: 'p7-evidence.md',
+          content: 'ROC-P7-EVIDENCE 这是一段用于证据捕获的正文。\n',
+          source: 'renderer-next/p7-harness'
+        })
+      );
+      if (!written.ok) {
+        return { error: written.error };
+      }
+      const status = await step('index.status', window.roc.research.getIndexStatus({ projectId: id }));
+      if (!status.ok) {
+        return { error: status.error };
+      }
+      // `expectedRevision` 是 **settings.revision**（`index-service.control` 比对的是设置版本），
+      // 状态里嵌着一层 `settings` —— 读顶层 `revision` 会直接得到 `research_index_settings_changed`。
+      const scan = await step(
+        'index.scan',
+        window.roc.research.controlIndex({ projectId: id, action: 'scan', expectedRevision: status.data.settings.revision })
+      );
+      if (!scan.ok) {
+        return { error: scan.error };
+      }
+      // 索引是后台作业，而且 `counts` 在扫描阶段还不反映排队量（实测 phase=queued 时 counts 全 0），
+      // 所以判据是 **phase + 至少一个 ready 文件**，不是 counts.queued。
+      const busyPhases = ['queued', 'scanning', 'indexing'];
+      const deadline = Date.now() + 240_000;
+      let index = scan.data;
+      while (Date.now() < deadline && (busyPhases.includes(index.phase) || index.counts.ready === 0)) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+        const polled = await step('index.status', window.roc.research.getIndexStatus({ projectId: id }));
+        if (!polled.ok) {
+          return { error: polled.error };
+        }
+        index = polled.data;
+        if (index.phase === 'failed' || index.phase === 'unavailable') {
+          break;
+        }
+      }
+      const search = await step(
+        'knowledge.search',
+        window.roc.research.searchKnowledge({
+          projectId: id,
+          query: 'ROC-P7-EVIDENCE',
+          limit: 5,
+          // 契约要求显式给嵌入配置 id（null = 只用关键词），不给会被入参校验拒掉。
+          embeddingConfigId: null
+        })
+      );
+      if (!search.ok) {
+        return { error: search.error };
+      }
+      const hit = search.data.hits[0];
+      if (hit === undefined) {
+        return { error: `knowledge.search 没有命中：indexed=${index.counts.ready} phase=${index.phase}` };
+      }
+      const evidence = await step('evidence.capture', window.roc.research.captureEvidence({ projectId: id, chunkId: hit.chunkId }));
+      if (!evidence.ok) {
+        return { error: evidence.error };
+      }
+      const claim = await step(
+        'claims.create',
+        window.roc.research.createClaim({
+          projectId: id,
+          artifactId,
+          subjectType: 'claim',
+          content: 'ROC-P7-CLAIM 索引证据支撑的主张',
+          status: 'supported',
+          evidenceIds: [evidence.data.id]
+        })
+      );
+      if (!claim.ok) {
+        return { error: claim.error };
+      }
+      const manuscript = await step(
+        'manuscript.save',
+        window.roc.research.saveManuscript({ artifactId, sections: [{ title: '第一段', claimIds: [claim.data.id] }] })
+      );
+      if (!manuscript.ok) {
+        return { error: manuscript.error };
+      }
+      return {
+        evidenceId: evidence.data.id,
+        chunkId: hit.chunkId,
+        claimId: claim.data.id,
+        latexLength: manuscript.data.latex.length,
+        indexedReady: index.counts.ready
+      };
+    },
+    { id: projectId, artifactId: evidenceRule.artifactId, destination: exportDestination }
+  );
+  if (chain.error !== undefined) {
+    fail('7 导出包', '完整链路（证据 → 主张 → 正文）', chain.error);
+  }
+  assertCheck('7 导出包', '索引 → 检索 → 捕获证据 → supported 主张 → 正文保存成功', chain.latexLength > 0, JSON.stringify(chain));
+
+  const gateChain = await page.evaluate(
+    async ({ id, currentStage, model }) => {
+      const transition = async (label, request) => {
+        const result = await window.roc.research.transitionWorkflow(request);
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: `${label}: ${result.error.message}` };
+      };
+      // 写作阶段的文字闸门：`complete` 要求阶段处于 running，所以先 start（ready→running）。
+      const startedWriting = await transition('writing.start', { projectId: id, action: 'start', expectedStage: 'writing' });
+      if (!startedWriting.ok) {
+        return { error: startedWriting.error };
+      }
+      const writing = await transition('writing.complete', { projectId: id, action: 'complete', expectedStage: 'writing' });
+      if (!writing.ok) {
+        return { error: writing.error };
+      }
+      const approvedWriting = await transition('writing.approve', { projectId: id, action: 'approve', expectedStage: 'writing' });
+      if (!approvedWriting.ok) {
+        return { error: approvedWriting.error };
+      }
+      if (approvedWriting.data.currentStage !== 'review') {
+        return { error: `写作闸门后没有进入 review：${approvedWriting.data.currentStage}` };
+      }
+      // 审稿阶段的运行会产生审稿子运行（`runs.createReviewChildren`），approve 需要这个审稿面板。
+      const started = await window.roc.research.startStageRun({
+        projectId: id,
+        expectedStage: 'review',
+        instruction: 'ROC-P7-REVIEW 审稿阶段闸门',
+        requestId: `p7-review-${Date.now()}`
+      });
+      if (!started.ok) {
+        return { error: `review.startRun: ${started.error.message}` };
+      }
+      const reviewDeadline = Date.now() + 240_000;
+      let workflow = approvedWriting.data;
+      while (Date.now() < reviewDeadline) {
+        const polled = await window.roc.research.getWorkflow({ id });
+        if (!polled.ok) {
+          return { error: `workflow.get: ${polled.error.message}` };
+        }
+        workflow = polled.data;
+        const review = workflow.stages.find((stage) => stage.stage === 'review');
+        if (review !== undefined && (review.status === 'waiting_approval' || review.status === 'failed' || review.lastError !== null)) {
+          break;
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+      }
+      const reviewState = workflow.stages.find((stage) => stage.stage === 'review');
+      if (reviewState?.status !== 'waiting_approval') {
+        return { error: `review 未进入 waiting_approval：${reviewState?.status ?? 'none'} err=${reviewState?.lastError ?? 'none'}` };
+      }
+      const accepted = await transition('review.approve', {
+        projectId: id,
+        action: 'approve',
+        expectedStage: 'review',
+        reviewDecision: 'accept'
+      });
+      if (!accepted.ok) {
+        return { error: accepted.error };
+      }
+      return { currentStage: accepted.data.currentStage, model };
+    },
+    { id: projectId, currentStage: 'writing', model: 'smoke' }
+  );
+  if (gateChain.error !== undefined) {
+    fail('7 导出包', '写作闸门 → 审稿运行 → accept', gateChain.error);
+  }
+  assertCheck('7 导出包', '写作闸门 → 审稿阶段运行 → approve(accept) → 导出阶段', gateChain.currentStage === 'export', JSON.stringify(gateChain));
+
+  const delivery = await page.evaluate(
+    async ({ id, artifactId, destination }) => {
+      const prepared = await window.roc.research.prepareExport({
+        projectId: id,
+        requestId: `p7-export-${Date.now()}`,
+        title: 'P7 端到端导出包',
+        manuscriptArtifactId: artifactId,
+        figureIds: [],
+        template: { kind: 'default', language: 'zh' }
+      });
+      if (!prepared.ok) {
+        return { error: `prepare: ${prepared.error.message}` };
+      }
+      const exportId = prepared.data.id;
+      const deadline = Date.now() + 240_000;
+      let record = prepared.data;
+      while (Date.now() < deadline && record.status === 'preparing') {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+        const polled = await window.roc.research.getExport({ projectId: id, exportId });
+        if (!polled.ok) {
+          return { error: `get: ${polled.error.message}` };
+        }
+        record = polled.data;
+      }
+      if (record.status !== 'ready') {
+        return { error: `export.status=${record.status} err=${record.error ?? 'none'}` };
+      }
+      const published = await window.roc.research.publishExport({ projectId: id, exportId, replacesExportId: null });
+      if (!published.ok) {
+        return { error: `publish: ${published.error.message}` };
+      }
+      // `export.write` 要求导出包**已批准**（`export-service.requireApproved`），所以交付前必须真的过
+      // 导出阶段的人工闸门：publish 只是 draft → start(ready→running) → complete(→waiting_approval)
+      // → approve(→approved)。
+      const gateStep = async (label, request) => {
+        const result = await window.roc.research.transitionWorkflow(request);
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: `${label}: ${result.error.message}` };
+      };
+      const startedExport = await gateStep('export.start', { projectId: id, action: 'start', expectedStage: 'export' });
+      if (!startedExport.ok) {
+        return { error: startedExport.error };
+      }
+      const submittedExport = await gateStep('export.complete', { projectId: id, action: 'complete', expectedStage: 'export' });
+      if (!submittedExport.ok) {
+        return { error: submittedExport.error };
+      }
+      const approvedExport = await gateStep('export.approve', { projectId: id, action: 'approve', expectedStage: 'export' });
+      if (!approvedExport.ok) {
+        return { error: approvedExport.error };
+      }
+      const firstFile = record.files[0];
+      const read =
+        firstFile === undefined
+          ? null
+          : await window.roc.research.readExportFile({ projectId: id, exportId, path: firstFile.path });
+      const delivered = await window.roc.research.writeExport({ projectId: id, exportId, destinationPath: destination });
+      const afterApproval = await window.roc.research.getExport({ projectId: id, exportId });
+      return {
+        files: record.files.map((file) => file.path),
+        archive: record.archive === null ? null : record.archive.path,
+        approval: afterApproval.ok ? afterApproval.data.approval : `error:${afterApproval.error.message}`,
+        artifactId: published.data.artifactId,
+        readOk: read === null ? null : read.ok,
+        deliveredPath: delivered.ok ? delivered.data.destinationPath : null,
+        deliveredSize: delivered.ok ? delivered.data.size : 0,
+        deliverError: delivered.ok ? null : delivered.error.message
+      };
+    },
+    { id: projectId, artifactId: evidenceRule.artifactId, destination: exportDestination }
+  );
+  if (delivery.error !== undefined) {
+    fail('7 导出包', 'prepare → publish → write', delivery.error);
+  }
+  assertCheck('7 导出包', '导出准备到达 ready 并列出了真实文件', delivery.files.length > 0, JSON.stringify(delivery.files));
+  assertCheck(
+    '7 导出包',
+    '发布 + 过导出阶段人工闸门 → 导出包 approved',
+    typeof delivery.artifactId === 'string' && delivery.approval === 'approved',
+    `artifact=${delivery.artifactId} approval=${delivery.approval}`
+  );
+  assertCheck('7 导出包', '导出包文件可读', delivery.readOk === true, String(delivery.readOk));
+  // macOS 上 `/var` 是 `/private/var` 的符号链接，后端交付时会做真实路径规范化 —— 比较 realpath，
+  // 而不是字面字符串（否则一条成功的交付会被报成失败）。
+  const deliveredReal = delivery.deliveredPath === null ? null : realpathSync(delivery.deliveredPath);
+  const expectedReal = join(realpathSync(dirname(exportDestination)), basename(exportDestination));
+  assertCheck(
+    '7 导出包',
+    '交付写入指定绝对路径且文件真的落盘',
+    deliveredReal === expectedReal && existsSync(delivery.deliveredPath),
+    `path=${delivery.deliveredPath} real=${String(deliveredReal)} size=${delivery.deliveredSize} err=${delivery.deliverError}`
   );
 
   // ---- 闸门 3/4/5：工具链相关的三条（两条路） -----------------------------------
@@ -933,6 +1230,10 @@ try {
   console.log(
     `\nP7 验收闸门：${results.length - failed.length}/${results.length} 记录通过 · 断言 ${results.length - infoCount - assertionFailures}/${results.length - infoCount} · 说明性记录 ${infoCount}。报告写入 ${artifactDir}/report.json`
   );
+  // 恢复 B17 绕行改名的构建产物，不给下一轮（或下一次构建）埋陷阱。
+  if (jobCliDisabledByRun && existsSync(jobCliDisabledPath) && !existsSync(jobCliPath)) {
+    renameSync(jobCliDisabledPath, jobCliPath);
+  }
   if (app !== undefined) {
     await Promise.race([app.close(), new Promise((resolveDone) => setTimeout(resolveDone, 20_000))]);
     setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();

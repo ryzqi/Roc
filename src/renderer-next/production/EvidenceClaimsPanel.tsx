@@ -55,8 +55,19 @@ type ClaimDraft = {
   expectedVersion: number;
 };
 
-export function EvidenceClaimsPanel(): React.JSX.Element {
+export function EvidenceClaimsPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const workflow = useWorkflow();
   const projectId = scope.projectId ?? '';
 
@@ -206,10 +217,17 @@ export function EvidenceClaimsPanel(): React.JSX.Element {
               evidenceIds: [],
               expectedVersion: 1
             }),
-          disabled: manuscriptArtifact === null,
+          // 「可以写」= 项目未归档 **且** 当前阶段组可写（`canWrite`）。原来只判断「有没有正文工件」，
+          // 于是归档项目的「新建主张」仍然可点（评审 P1）。
+          disabled: manuscriptArtifact === null || !canWrite,
           testId: 'production-claims-new'
         }}
       >
+        {canWrite ? null : (
+          <p className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="production-claims-readonly" role="note">
+            只读：项目已归档或当前阶段组不可写 —— 主张的新增与修改已停用。
+          </p>
+        )}
         {manuscriptArtifact === null ? (
           <InlineHint text="本项目还没有正文工件：主张必须挂在正文工件上，先让写作阶段产出正文。" testId="production-claims-no-artifact" />
         ) : (
@@ -350,7 +368,7 @@ export function EvidenceClaimsPanel(): React.JSX.Element {
             <button
               type="button"
               data-testid="production-claim-save"
-              disabled={saveClaim.pending || saveIssues.length > 0}
+              disabled={!canWrite || saveClaim.pending || saveIssues.length > 0}
               onClick={() => {
                 void saveClaim.run(draft).then((saved) => {
                   if (saved !== null) {

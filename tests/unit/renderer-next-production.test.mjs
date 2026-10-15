@@ -119,37 +119,34 @@ test('a start request is blocked until file, environment, runtime and label are 
   const blocked = rules.experimentStartBlockers({
     sourcePath: null,
     environment: null,
-    environmentHashMatches: false,
     engine: null,
     runtime: null,
     label: ''
   });
   assert.equal(blocked.length, 3, `file, environment and label are all missing: ${JSON.stringify(blocked)}`);
 
-  const staleEnvironment = rules.experimentStartBlockers({
-    sourcePath: 'scripts/run.py',
-    environment,
-    environmentHashMatches: false,
-    engine: 'python',
-    runtime: { kind: 'bundled-python' },
-    label: 'run 1'
-  });
-  assert.deepEqual(
-    staleEnvironment.map((issue) => issue.reference),
-    ['environmentHash'],
-    'a re-probed environment must force a fresh check before the run'
-  );
-
+  // 「环境自上次探测后变化」不在前端判断：前端把探测到的 hash 钉进 expectedEnvironmentHash，由后端
+  // 比对（`research_experiment_environment_changed`）。这条规则因此不再有这个入参（评审备注）。
   assert.deepEqual(
     rules.experimentStartBlockers({
       sourcePath: 'scripts/run.py',
       environment,
-      environmentHashMatches: true,
       engine: 'python',
       runtime: { kind: 'uv' },
       label: 'run 1'
     }),
     []
+  );
+  assert.deepEqual(
+    rules.experimentStartBlockers({
+      sourcePath: 'notes.md',
+      environment,
+      engine: null,
+      runtime: { kind: 'uv' },
+      label: 'run 1'
+    }).map((issue) => issue.reference),
+    ['notes.md'],
+    'a non-script extension is reported against the chosen file'
   );
 });
 
@@ -179,7 +176,7 @@ test('figure formats come from the path, and PDF has no renderable path in the r
   assert.equal(rules.figureFormatForPath('figure.pdf'), 'pdf');
   assert.equal(rules.figureFormatForPath('figure.eps'), null);
 
-  assert.equal(rules.figureRenderMode('svg', 'utf8'), 'inline-markup');
+  assert.equal(rules.figureRenderMode('svg', 'utf8'), 'data-url', 'SVG is never injected as markup');
   assert.equal(rules.figureRenderMode('png', 'base64'), 'data-url');
   assert.equal(
     rules.figureRenderMode('pdf', 'base64'),

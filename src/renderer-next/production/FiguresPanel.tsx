@@ -91,8 +91,19 @@ const PIXEL_LIMIT = 32_000_000;
 type PreviewImage = { dataUrl: string; mediaType: 'image/png' | 'image/svg+xml' };
 const FIGURE_FILES = ['figure.png', 'figure.svg', 'figure.pdf'] as const;
 
-export function FiguresPanel(): React.JSX.Element {
+export function FiguresPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const projectId = scope.projectId ?? '';
   const workspacePath = scope.workspacePath;
 
@@ -173,6 +184,20 @@ export function FiguresPanel(): React.JSX.Element {
 
   const pixelArea = draft.widthInches * draft.heightInches * draft.dpi ** 2;
   const blockers = [
+    // `researchFigureOptionsSchema` 的字段边界（宽高 1–24、dpi 72–1200 整数、seed 0..2^32-1）也要在
+    // 前端镜像：清空数字输入会让 `Number('') === 0`，那时后端只会回一个 zod 错误（评审 P2）。
+    ...(Number.isFinite(draft.widthInches) && draft.widthInches >= 1 && draft.widthInches <= 24
+      ? []
+      : [{ message: '宽度必须在 1–24 英寸之间', reference: 'width' }]),
+    ...(Number.isFinite(draft.heightInches) && draft.heightInches >= 1 && draft.heightInches <= 24
+      ? []
+      : [{ message: '高度必须在 1–24 英寸之间', reference: 'height' }]),
+    ...(Number.isInteger(draft.dpi) && draft.dpi >= 72 && draft.dpi <= 1200
+      ? []
+      : [{ message: 'DPI 必须是 72–1200 的整数', reference: 'dpi' }]),
+    ...(Number.isInteger(draft.seed) && draft.seed >= 0 && draft.seed <= 4294967295
+      ? []
+      : [{ message: '随机种子必须是 0–4294967295 的整数', reference: 'seed' }]),
     ...(draft.label.trim().length === 0 ? [{ message: '给这次运行一个标签', reference: 'label' }] : []),
     ...(draft.sourcePath.length === 0 ? [{ message: '选择工作区里的 .py 脚本', reference: 'sourcePath' }] : []),
     ...sourcePathIssues(draft.sourcePath),
@@ -363,7 +388,7 @@ export function FiguresPanel(): React.JSX.Element {
         <button
           type="button"
           data-testid="production-figure-run"
-          disabled={!scope.writable || run.pending || blockers.length > 0}
+          disabled={!canWrite || run.pending || blockers.length > 0}
           onClick={() => {
             void run
               .run({
@@ -424,7 +449,7 @@ export function FiguresPanel(): React.JSX.Element {
                     <button
                       type="button"
                       data-testid={`production-figure-publish-${entry.id}`}
-                      disabled={!scope.writable || publish.pending}
+                      disabled={!canWrite || publish.pending}
                       onClick={() => void publish.run({ runId: entry.id, replacesFigureId: null }).then(() => library.reload())}
                       className={secondaryButtonClass}
                     >

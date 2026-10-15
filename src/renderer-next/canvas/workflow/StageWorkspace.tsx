@@ -329,32 +329,32 @@ function MainPanel({
     return <ArtifactPanel groupId={groupId} />;
   }
   if (tab === 'claims') {
-    return <EvidenceClaimsPanel />;
+    return <EvidenceClaimsPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'ideas') {
-    return <IdeasPanel />;
+    return <IdeasPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'manuscript') {
-    return <ManuscriptPanel />;
+    return <ManuscriptPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'policies') {
-    return <PoliciesPanel />;
+    return <PoliciesPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'experiments') {
-    return <ExperimentsPanel />;
+    return <ExperimentsPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'figures') {
-    return <FiguresPanel />;
+    return <FiguresPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'production') {
-    return <ExportPanel />;
+    return <ExportPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'template') {
-    return <TemplatePanel />;
+    return <TemplatePanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'editor') {
     // 文稿：工作区里的 .tex/.bib 真文件编辑（编译在下面的模板面板里）。
-    return <LatexPanel />;
+    return <LatexPanel writeAllowed={writeAllowed} />;
   }
   if (tab === 'runs') {
     return (

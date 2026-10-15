@@ -35,8 +35,19 @@ import {
  *     effective config and links to the settings centre instead of growing a second writer.
  */
 
-export function PoliciesPanel(): React.JSX.Element {
+export function PoliciesPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const workflow = useWorkflow();
   const projectId = scope.projectId ?? '';
   const currentStage = workflow.workflow?.currentStage ?? null;
@@ -118,7 +129,7 @@ export function PoliciesPanel(): React.JSX.Element {
                 <select
                   data-testid="production-policy-tier"
                   value={draft.tier}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onChange={(event) => setDraft({ ...draft, tier: event.target.value as ResearchStagePolicy['tier'] })}
                   className={selectClass}
                 >
@@ -132,7 +143,7 @@ export function PoliciesPanel(): React.JSX.Element {
                 <select
                   data-testid="production-policy-model"
                   value={currentModelKey}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onChange={(event) => {
                     const value = event.target.value;
                     if (value === '') {
@@ -160,7 +171,7 @@ export function PoliciesPanel(): React.JSX.Element {
                   max={100}
                   data-testid="production-policy-steps"
                   value={draft.maxSteps}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onChange={(event) => setDraft({ ...draft, maxSteps: Number(event.target.value) })}
                   className={textInputClass}
                 />
@@ -174,7 +185,7 @@ export function PoliciesPanel(): React.JSX.Element {
                   step={1000}
                   data-testid="production-policy-timeout"
                   value={draft.timeoutMs}
-                  disabled={!scope.writable}
+                  disabled={!canWrite}
                   onChange={(event) => setDraft({ ...draft, timeoutMs: Number(event.target.value) })}
                   className={textInputClass}
                 />
@@ -184,7 +195,7 @@ export function PoliciesPanel(): React.JSX.Element {
               <button
                 type="button"
                 data-testid="production-policy-save"
-                disabled={!scope.writable || save.pending || policy === null || !policyChanged(draft, policy)}
+                disabled={!canWrite || save.pending || policy === null || !policyChanged(draft, policy)}
                 onClick={() => {
                   void save.run(draft).then((saved) => {
                     if (saved !== null) {

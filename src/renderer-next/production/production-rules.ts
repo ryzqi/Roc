@@ -197,7 +197,6 @@ export function runtimesForEngine(engine: ExperimentEngine): Array<{ kind: Resea
 export function experimentStartBlockers(input: {
   sourcePath: string | null;
   environment: ResearchExperimentEnvironment | null;
-  environmentHashMatches: boolean;
   engine: ExperimentEngine | null;
   runtime: ResearchExperimentRuntime | null;
   label: string;
@@ -214,12 +213,8 @@ export function experimentStartBlockers(input: {
   if (input.environment !== null && input.runtime === null) {
     issues.push({ message: '先选择运行时（与引擎匹配）', reference: 'runtime' });
   }
-  if (input.environment !== null && !input.environmentHashMatches) {
-    issues.push({
-      message: '运行环境自上次探测后已变化：重新检查环境后再启动',
-      reference: 'environmentHash'
-    });
-  }
+  // 「环境自上次探测后变化」不在前端判断：启动时把探测到的 `expectedEnvironmentHash` 钉进请求，
+  // 由后端比对并报 `research_experiment_environment_changed` —— 前端拿不到两次探测之间的变化。
   if (input.label.trim().length === 0) {
     issues.push({ message: '给这次运行一个标签', reference: 'label' });
   }
@@ -256,13 +251,13 @@ export function figureFormatForPath(path: string): FigureFormat | null {
  * (B21): SVG is text (inline), PNG arrives as base64 (a `data:` URL is the only option),
  * PDF cannot be previewed at all.
  */
-export function figureRenderMode(format: FigureFormat, encoding: 'utf8' | 'base64'): 'inline-markup' | 'data-url' | 'unsupported' {
+export function figureRenderMode(format: FigureFormat, encoding: 'utf8' | 'base64'): 'data-url' | 'unsupported' {
   if (format === 'pdf') {
     return 'unsupported';
   }
-  if (format === 'svg' && encoding === 'utf8') {
-    return 'inline-markup';
-  }
+  // SVG arrives as text, PNG as base64 — both end up in an `<img src="data:…">`. Inlining the SVG
+  // markup (`dangerouslySetInnerHTML`) would execute whatever the file carries, so the renderer
+  // deliberately has only this one mode and the rule says so (评审备注：词汇要与消费者一致).
   return 'data-url';
 }
 

@@ -56,8 +56,19 @@ type Loadable<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data: T | n
 
 const idle = <T,>(): Loadable<T> => ({ status: 'idle', data: null, error: null });
 
-export function TemplatePanel(): React.JSX.Element {
+export function TemplatePanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const projectId = scope.projectId ?? '';
 
   const toolchain = useAsyncResource<ResearchToolchainStatus>('template-toolchain', () => getToolchainStatus(scope.client), {
@@ -199,12 +210,14 @@ export function TemplatePanel(): React.JSX.Element {
           <button
             type="button"
             data-testid="production-template-import"
-            disabled={!scope.writable || importRun.pending}
+            disabled={!canWrite || importRun.pending}
             onClick={() => {
               void scope.client.api.files.selectFromDialog().then((selection) => {
-                // The picker answers with `{ filePaths: string[] }` (one entry in practice), and the
-                // smoke build returns a fixed file — so the harness drives import through IPC while
-                // the panel stays the real entry point.
+                // The picker answers with `{ filePaths: string[] }` and is implemented as
+                // `['openFile','multiSelections']` (files-ipc), so a **directory** cannot be chosen
+                // here even though `research.template.import` accepts one — the button says ZIP, and
+                // the first selected file is used (the contract's `sourcePath` is a single path).
+                // The smoke build returns a fixed file, so the harness drives import through IPC.
                 const sourcePath = selection.ok ? (selection.data?.filePaths[0] ?? null) : null;
                 if (sourcePath === null) {
                   return;
@@ -219,7 +232,7 @@ export function TemplatePanel(): React.JSX.Element {
             }}
             className={secondaryButtonClass}
           >
-            导入模板（目录或 ZIP）
+            导入模板 ZIP
           </button>
         </div>
         {importRun.error === null ? null : <InlineHint text={importRun.error} testId="production-template-import-error" />}
@@ -255,7 +268,7 @@ export function TemplatePanel(): React.JSX.Element {
             <button
               type="button"
               data-testid="production-template-compile"
-              disabled={!scope.writable || compile.pending || compiling === true || !tectonicReady}
+              disabled={!canWrite || compile.pending || compiling === true || !tectonicReady}
               onClick={() => void compile.run(template.id).then(() => templates.reload())}
               className={primaryButtonClass}
             >
@@ -325,7 +338,7 @@ export function TemplatePanel(): React.JSX.Element {
             <button
               type="button"
               data-testid="production-template-set-entry"
-              disabled={!scope.writable || setEntry.pending || entryPath.length === 0 || entryPath === template.entryPath}
+              disabled={!canWrite || setEntry.pending || entryPath.length === 0 || entryPath === template.entryPath}
               onClick={() => void setEntry.run(entryPath).then(() => templates.reload())}
               className={secondaryButtonClass}
             >
@@ -376,7 +389,7 @@ export function TemplatePanel(): React.JSX.Element {
                 data-testid="production-template-editor-content"
                 value={openFile.draft}
                 rows={12}
-                disabled={!scope.writable}
+                disabled={!canWrite}
                 onChange={(event) => setOpenFile({ ...openFile, draft: event.target.value })}
                 className={textAreaClass}
               />
@@ -385,7 +398,7 @@ export function TemplatePanel(): React.JSX.Element {
                   type="button"
                   data-testid="production-template-editor-save"
                   disabled={
-                    !scope.writable ||
+                    !canWrite ||
                     saveFile.pending ||
                     openFile.draft === openFile.original.content
                   }

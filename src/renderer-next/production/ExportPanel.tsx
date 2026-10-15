@@ -51,8 +51,19 @@ import {
  *      refuses a non-`.zip` destination before the IPC round trip.
  */
 
-export function ExportPanel(): React.JSX.Element {
+export function ExportPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const workflow = useWorkflow();
   const projectId = scope.projectId ?? '';
   const manuscriptArtifacts = useMemo(
@@ -130,6 +141,10 @@ export function ExportPanel(): React.JSX.Element {
   const blockers = [
     ...(title.trim().length === 0 ? [{ message: '导出包标题不能为空', reference: 'title' }] : []),
     ...(manuscriptArtifactId.length === 0 ? [{ message: '选择一个正文工件', reference: 'manuscriptArtifactId' }] : []),
+    // 表单与请求必须一致：选了一个还不能用的导入模板时**阻断**，而不是悄悄换成默认模板（评审 P2）。
+    ...(templateId.length > 0 && templateSelection === null
+      ? [{ message: `模板 ${templateId} 还不能用于导出（需先编译成功，携带 revision + sourceDigest）`, reference: 'template' }]
+      : []),
     ...bundleIssues
   ];
 
@@ -228,7 +243,7 @@ export function ExportPanel(): React.JSX.Element {
         <button
           type="button"
           data-testid="production-export-prepare-run"
-          disabled={!scope.writable || prepare.pending || blockers.length > 0}
+          disabled={!canWrite || prepare.pending || blockers.length > 0}
           onClick={() => {
             void prepare
               .run({
@@ -382,7 +397,7 @@ export function ExportPanel(): React.JSX.Element {
               <button
                 type="button"
                 data-testid="production-export-publish"
-                disabled={!scope.writable || publish.pending}
+                disabled={!canWrite || publish.pending}
                 onClick={() => void publish.run(selected.id).then(() => exports.reload())}
                 className={primaryButtonClass}
               >
@@ -415,7 +430,7 @@ export function ExportPanel(): React.JSX.Element {
             <button
               type="button"
               data-testid="production-export-write"
-              disabled={!scope.writable || deliver.pending || !deliveryAcknowledged || !destinationPath.trim().endsWith('.zip')}
+              disabled={!canWrite || deliver.pending || !deliveryAcknowledged || !destinationPath.trim().endsWith('.zip')}
               onClick={() => {
                 void deliver.run(selected.id).then((result) => {
                   if (result !== null) {

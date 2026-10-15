@@ -32,8 +32,19 @@ import { InlineHint, PanelSection, primaryButtonClass } from './panel-shell';
 
 const EDITABLE_EXTENSIONS = ['.tex', '.bib', '.cls', '.sty', '.bbl', '.txt', '.md', '.json', '.yaml', '.yml', '.csv'];
 
-export function LatexPanel(): React.JSX.Element {
+export function LatexPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -88,7 +99,7 @@ export function LatexPanel(): React.JSX.Element {
   const previewData = preview.data;
   const isText = previewData !== null && previewData.kind === 'text';
   const isTruncated = isText && previewData.truncated;
-  const canEdit = scope.writable && isText && !isTruncated;
+  const canEdit = canWrite && isText && !isTruncated;
 
   /** Latch the loaded text into `draft` once per path, so typing does not fight the reload. */
   const loadedPathRef = useRef<string | null>(null);
@@ -101,8 +112,8 @@ export function LatexPanel(): React.JSX.Element {
     }
     loadedPathRef.current = selectedPath;
     setDraft(previewData.content);
-    setNote(null);
-    setRecovery(null);
+    // 不清 note/recovery：保存后会立刻 `preview.reload()`，而重读会让本效应再跑一次 —— 那会把
+    // 「已保存 N 字节」与 recovery point 在不到一次 IPC 往返内抹掉（评审 P2）。清空只发生在换文件时。
   }, [isText, previewData, selectedPath]);
 
   const onSelect = useCallback((path: string) => {
@@ -259,7 +270,7 @@ export function LatexPanel(): React.JSX.Element {
                   <span className="text-subtle text-[var(--font-micro-size)]" data-testid="production-latex-state">
                     {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'} · {formatBytes(previewData.sizeBytes)}
                   </span>
-                  {scope.writable ? null : (
+                  {canWrite ? null : (
                     <span className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="production-latex-readonly">
                       项目已归档：文件只读。
                     </span>

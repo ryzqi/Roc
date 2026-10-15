@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState, type ComponentType } from 'react';
+import { createElement, lazy, useEffect, useState, type ComponentType } from 'react';
 import type { AppViewId } from './routes';
 import { placeholderView } from './placeholder-view';
 
@@ -47,7 +47,14 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
   changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
   literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
-  latex: async () => ({ default: (await import('../production/LatexPanel')).LatexPanel }),
+  // `LatexPanel` also renders inside the stage workspace's 文稿 tab, where the *stage-group* write
+  // rule applies; as a route view there is no group, so it is mounted without the prop and falls
+  // back to the project-level predicate. Binding through `createElement` keeps that explicit
+  // instead of relying on a weak optional-props type being assignable to `ViewProps`.
+  latex: async () => {
+    const { LatexPanel } = await import('../production/LatexPanel');
+    return { default: (_props: ViewProps) => createElement(LatexPanel, {}) };
+  },
   terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
   files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
   tasks: async () => ({ default: (await import('../tasks/TasksView')).TasksView }),

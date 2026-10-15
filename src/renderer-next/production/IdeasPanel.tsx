@@ -51,8 +51,19 @@ import {
  * panel, never from typing (R10/ADR-M06), and the panel explains why it must be a new directory.
  */
 
-export function IdeasPanel(): React.JSX.Element {
+export function IdeasPanel({ writeAllowed }: { writeAllowed?: boolean }): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * The stage workspace decides it (`scope.writable && stageGroupWriteAllowed(...)`) and passes it
+   * down, because the *stage-group* half of the rule exists only in the renderer: the backend
+   * refuses artifact writes for a non-current stage (`requireEditableStage`) but happily starts an
+   * experiment run or a template compile, so a panel that gated on the archived flag alone would
+   * offer live buttons behind a 「只读：非当前阶段组」 badge. `undefined` keeps the route-rendered
+   * case (the `latex` view) working with the project-level predicate.
+   */
   const scope = useWorkspaceScope();
+  const canWrite = writeAllowed ?? scope.writable;
   const workflow = useWorkflow();
   const artifact = useMemo(
     () => (workflow.artifacts ?? []).find((item) => item.kind === 'idea_canvas') ?? null,
@@ -109,7 +120,7 @@ export function IdeasPanel(): React.JSX.Element {
   );
   const [promoted, setPromoted] = useState<{ projectId: string; origin: string } | null>(null);
 
-  const writable = scope.writable;
+  const writable = canWrite;
 
   if (artifact === null) {
     return (
