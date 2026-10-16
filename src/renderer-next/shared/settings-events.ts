@@ -1,7 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * Settings change broadcast (P8/T8.4).
+ * Configuration change broadcast (P8/T8.4, shared in P9).
+ *
+ * P8 named it for the settings centre because that was the only writer; P9 added two more writers
+ * of the same *cached configuration* (`skills.setEnabled`/`import`/`delete` and the MCP server
+ * mutations change the `skills`/`mcpServers` arrays inside `settings.get`'s snapshot), so it lives
+ * in `shared/` and the name is about the fact rather than about one surface: **a consumer's cached
+ * configuration is stale now**.
  *
  * The settings centre is the single writer for model/index configuration, and the
  * consumers of that configuration are **already mounted** elsewhere in the shell

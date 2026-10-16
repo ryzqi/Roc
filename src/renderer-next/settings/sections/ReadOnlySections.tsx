@@ -3,7 +3,7 @@ import { Download } from 'lucide-react';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { SettingsStore } from '../settings-scope';
 import { downloadModels, getModelsStatus, getRtkStatus, getToolchainStatus } from '../settings-store';
-import { KeyValueRow, SettingsNote, SettingsSection, settingsSecondaryButtonClass } from '../settings-ui';
+import { KeyValueRow, FormNote, FormSection, formSecondaryButtonClass } from '../../shared/form-ui';
 
 /**
  * 文献与解析 · 编译与沙箱 — the two sections with **no writer** (T8.3).
@@ -42,16 +42,16 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
   const status = models.data;
 
   return (
-    <SettingsSection
+    <FormSection
       title="文献与解析"
       hint="research.models.status / download（本地解析模型）"
       readOnly
       testId="settings-section-literature-body"
     >
       {models.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-models-status-error">
+        <FormNote tone="warn" testId="settings-models-status-error">
           {models.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
       <dl className="flex flex-col gap-0.5">
@@ -69,7 +69,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
       </dl>
 
       {status === null ? null : status.models.length === 0 ? (
-        <SettingsNote testId="settings-models-empty">后端还没有登记解析模型。</SettingsNote>
+        <FormNote testId="settings-models-empty">后端还没有登记解析模型。</FormNote>
       ) : (
         <ul className="flex flex-col gap-0.5" data-testid="settings-models-list">
           {status.models.map((model) => (
@@ -94,7 +94,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
               }
             });
           }}
-          className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+          className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
         >
           <Download size={11} aria-hidden="true" />
           {downloading ? '下载中…' : '下载/校验解析模型'}
@@ -102,17 +102,17 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         <span className="text-subtle text-[var(--font-micro-size)]">下载由后端执行；界面只在下载期间轮询状态。</span>
       </div>
       {download.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-models-download-error">
+        <FormNote tone="warn" testId="settings-models-download-error">
           {download.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
-      <SettingsNote testId="settings-literature-removed">
+      <FormNote testId="settings-literature-removed">
         旧前端的 MinerU 模式 / 地址 / Token / 公式与表格开关 / 语言，以及学术源（arXiv 镜像、Semantic Scholar
         key、CrossRef 邮箱、代理、自动引用、BibTeX 风格）在后端契约里没有字段，已移除。解析参数由后端工具链固定，
         文献导入仍可用（P5 的导入与解析面板）。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }
 
@@ -126,16 +126,16 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
   const rtkStatus = rtk.data;
 
   return (
-    <SettingsSection
+    <FormSection
       title="编译与沙箱"
       hint="research.toolchain.status · rtk.status（只读）"
       readOnly
       testId="settings-section-sandbox-body"
     >
       {toolchain.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-toolchain-error">
+        <FormNote tone="warn" testId="settings-toolchain-error">
           {toolchain.error}
-        </SettingsNote>
+        </FormNote>
       )}
       <dl className="flex flex-col gap-0.5">
         <KeyValueRow
@@ -157,16 +157,16 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
         <KeyValueRow label="错误" value={toolchainStatus?.error ?? '无'} testId="settings-toolchain-detail-error" />
       </dl>
       {toolchainStatus !== null && !toolchainStatus.available && toolchainStatus.error !== null ? (
-        <SettingsNote tone="warn" testId="settings-toolchain-unavailable">
+        <FormNote tone="warn" testId="settings-toolchain-unavailable">
           编译与实验在工具链就绪前都会失败：{toolchainStatus.error}
-        </SettingsNote>
+        </FormNote>
       ) : null}
 
       <div className="border-t border-line pt-2">
         {rtk.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-rtk-error">
+          <FormNote tone="warn" testId="settings-rtk-error">
             {rtk.error}
-          </SettingsNote>
+          </FormNote>
         )}
         <dl className="flex flex-col gap-0.5">
           <KeyValueRow
@@ -185,10 +185,10 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
         </dl>
       </div>
 
-      <SettingsNote testId="settings-sandbox-removed">
+      <FormNote testId="settings-sandbox-removed">
         旧前端的 LaTeX 引擎选择 / 自动编译 / 防抖 / synctex / 沙箱运行时与端点 / 执行超时 / 绘图后端在后端契约里没有字段，已移除。
         编译实际由模板包的 `research.template.compile`（tectonic）与实验运行的沙箱决定，二者都读这里的工具链状态。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }

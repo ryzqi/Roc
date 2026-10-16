@@ -5,7 +5,7 @@ import type { AsyncResource } from '../app/use-async-resource';
 import { useAsyncResource } from '../app/use-async-resource';
 import type { RocClient } from '../shared/roc-client';
 import { getIndexStatus, getSettingsSnapshot, saveHookConfig, saveIndexSettings, saveSettings } from './settings-store';
-import { notifySettingsChanged } from './settings-events';
+import { notifySettingsChanged } from '../shared/settings-events';
 import {
   cloneDraft,
   diffDraft,

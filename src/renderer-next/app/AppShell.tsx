@@ -9,7 +9,8 @@ import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
 import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
-import type { ManagementTabId } from '../management/ManagementPanel';
+import type { ManagementTabId } from '../management/use-management-stores';
+import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
 import { ProjectPortalView } from '../project/ProjectPortalView';
 import { useCurrentProject } from '../project/use-projects';
 import { useProjectWorkspace } from '../project/use-project-workspace';
@@ -111,6 +112,15 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   }, []);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
+  /**
+   * A prompt handed to the assistant's composer by the management drawer (P9/T9.1).
+   *
+   * The drawer must not start a run itself: run state, the transcript and the HITL cards live in
+   * the assistant panel, so a run started from a drawer would be invisible. The nonce makes the
+   * hand-off idempotent per request (the same text twice still replaces the draft).
+   */
+  const [assistantSeed, setAssistantSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const assistantSeedNonceRef = useRef(0);
   // The selected conversation lives here because two surfaces need it: the sidebar lists
   // threads, the assistant panel renders one. Cleared when the project changes (gate 6).
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
@@ -212,7 +222,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       rebindWorkspace: boundWorkspace.rebind,
       openFile: route.openFile,
       openFileInCanvas,
-      openSettings: () => navigate({ ...routeRef.current, page: 'settings' }),
+      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
+      // drawer's width would cover the settings panel it just asked for.
+      openSettings: () => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, page: 'settings' });
+      },
       openView: (view) => navigate({ ...routeRef.current, view }),
       // The group and its default tab are written together: the URL carries one `stage`
       // value, and a group with a tab from another group would not round-trip (P1).
@@ -231,6 +246,44 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       boundWorkspace.error,
       boundWorkspace.rebind
     ]
+  );
+
+  /**
+   * The management scope (P9/T9.5).
+   *
+   * Built once for the same structural reason as the literature and workflow scopes: the drawer and
+   * the three canvas views are siblings in different subtrees, and both need the four datasets plus
+   * the two actions that leave the management surface. `routeRef` is read at call time so a
+   * hand-off merges into the *current* route rather than the one captured when this memo was built.
+   */
+  const managementScope = useMemo<ManagementScope>(
+    () => ({
+      client,
+      projectId: route.projectId,
+      workspacePath: boundWorkspace.path,
+      onOpenThread: (threadId) => {
+        setAssistantThreadId(threadId);
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, assistantOpen: true });
+      },
+      onAskAssistant: (prompt) => {
+        assistantSeedNonceRef.current += 1;
+        setAssistantSeed({ text: prompt, nonce: assistantSeedNonceRef.current });
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, assistantOpen: true });
+      },
+      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
+      // drawer's width would cover the settings panel it just asked for.
+      openSettings: () => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, page: 'settings' });
+      },
+      openManagementView: (tab) => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, view: tab });
+      }
+    }),
+    [client, route.projectId, boundWorkspace.path, navigate]
   );
 
   /**
@@ -272,6 +325,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     },
     onOpenProject: (projectId) => {
       navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' });
+    },
+    onOpenManagementView: (tab) => {
+      navigate({ ...route, view: tab });
     },
     onOpenSession: (threadId) => {
       setAssistantThreadId(threadId);
@@ -383,6 +439,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const gitDrawerOpen = route.tool === 'git' && route.view !== 'changes';
 
   return (
+    <ManagementScopeProvider value={managementScope}>
     <div
       className={boot.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke flex h-full w-full flex-col bg-bg text-ink' : 'app-shell flex h-full w-full flex-col bg-bg text-ink'}
       data-testid="roc-app"
@@ -529,6 +586,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   onThreadIdChange={setAssistantThreadId}
                   workspacePath={boundWorkspace.path}
                   projectName={projectName}
+                  composerSeed={assistantSeed}
+                  onComposerSeedConsumed={() => setAssistantSeed(null)}
                   onOpenSettings={() => navigate({ ...route, page: 'settings' })}
                 />
               </Suspense>
@@ -606,5 +665,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         </Suspense>
       </ModalShell>
     </div>
+    </ManagementScopeProvider>
   );
 }

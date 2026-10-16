@@ -6,11 +6,11 @@ import { writeTextFile } from '../../workspace/workspace-store';
 import { applyImport, parseSettingsImport, serializeSettingsExport } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
 import {
-  SettingsNote,
-  SettingsSection,
-  settingsSecondaryButtonClass,
-  settingsTextAreaClass
-} from '../settings-ui';
+  FormNote,
+  FormSection,
+  formSecondaryButtonClass,
+  formTextAreaClass
+} from '../../shared/form-ui';
 
 /**
  * 偏好与备份 (T8.3).
@@ -54,13 +54,13 @@ export function BackupSection({
 
   const draft = store.draft;
   if (draft === null) {
-    return <SettingsNote testId="settings-backup-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-backup-unavailable">设置尚未读取完成。</FormNote>;
   }
 
   const exportFileName = `roc-settings-export.json`;
 
   return (
-    <SettingsSection
+    <FormSection
       title="偏好与备份"
       hint="renderer 侧快照（无密钥）· 导入进草稿 · 本地界面偏好重置"
       testId="settings-section-backup-body"
@@ -73,7 +73,7 @@ export function BackupSection({
             onClick={() => {
               setExportText(serializeSettingsExport(draft, new Date().toISOString()));
             }}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Download size={11} aria-hidden="true" />
             生成快照
@@ -88,7 +88,7 @@ export function BackupSection({
               }
               void writeSnapshot.run({ relativePath: exportFileName, content: exportText, source: 'settings-export' });
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             写入工作目录（{exportFileName}）
           </button>
@@ -97,9 +97,9 @@ export function BackupSection({
           </span>
         </div>
         {writeSnapshot.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-export-write-error">
+          <FormNote tone="warn" testId="settings-export-write-error">
             {writeSnapshot.error}
-          </SettingsNote>
+          </FormNote>
         )}
         {/* Not hidden while writing: the sentence describes the snapshot's contents, and hiding it
             exactly when the write happens reads like a state change. */}
@@ -113,7 +113,7 @@ export function BackupSection({
           rows={8}
           spellCheck={false}
           data-testid="settings-export-text"
-          className={settingsTextAreaClass}
+          className={formTextAreaClass}
         />
       </div>
 
@@ -130,7 +130,7 @@ export function BackupSection({
             setImported(false);
           }}
           data-testid="settings-import-text"
-          className={settingsTextAreaClass}
+          className={formTextAreaClass}
         />
         <div className="flex items-center gap-2">
           <button
@@ -156,7 +156,7 @@ export function BackupSection({
               setImportError(null);
               setImported(true);
             }}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Upload size={11} aria-hidden="true" />
             导入到草稿
@@ -168,9 +168,9 @@ export function BackupSection({
           ) : null}
         </div>
         {importError === null ? null : (
-          <SettingsNote tone="warn" testId="settings-import-error">
+          <FormNote tone="warn" testId="settings-import-error">
             {importError}
-          </SettingsNote>
+          </FormNote>
         )}
       </div>
 
@@ -180,7 +180,7 @@ export function BackupSection({
             type="button"
             data-testid="settings-reset-ui"
             onClick={() => setResetOpen(true)}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             重置本地界面偏好
           </button>
@@ -188,10 +188,10 @@ export function BackupSection({
             清除 `roc.ui.*`（面板宽度、折叠、左栏 tab、星标、文件树展开、外观覆盖）。产品数据与后端设置不受影响。
           </span>
         </div>
-        <SettingsNote testId="settings-reset-note">
+        <FormNote testId="settings-reset-note">
           后端没有「清除缓存 / 恢复默认设置」的 IPC，所以这里不做假动作：要恢复后端设置默认值目前只能手工改字段。
           面板宽度这类实时布局值在下次启动时回到默认。
-        </SettingsNote>
+        </FormNote>
       </div>
 
       <ConfirmDialog
@@ -208,6 +208,6 @@ export function BackupSection({
           onResetUiPreferences();
         }}
       />
-    </SettingsSection>
+    </FormSection>
   );
 }

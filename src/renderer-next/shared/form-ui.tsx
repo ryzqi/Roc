@@ -2,13 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 
 /**
- * Form primitives for the settings centre (P8).
+ * Shared form primitives (extracted in P9 from P8's `settings/settings-ui.tsx`).
  *
- * Presentation only: no IPC, no rules, no draft access. The class strings are the
- * same vocabulary the P3–P7 panels use (`--control-height`, `--font-meta-size`,
- * `--overlay-hover`, `focus-visible:outline-accent`); they are repeated here rather
- * than imported from `production/panel-shell.tsx` so the settings chunk does not
- * depend on another feature's lazy chunk.
+ * Two features now build real forms — the settings centre's twelve sections and the
+ * management drawer's four — and a third copy of these controls would have drifted the same
+ * way the legacy renderer's did. The names are feature-neutral for the same reason: a
+ * management-only control must not be called `SettingsNote`.
+ *
+ * Presentation only: no IPC, no rules, no draft access. The class strings are the same
+ * vocabulary the P3–P8 panels use (`--control-height`, `--font-meta-size`, `--overlay-hover`,
+ * `focus-visible:outline-accent`).
  *
  * Three accessibility rules are structural, not conventional:
  *
@@ -20,15 +23,15 @@ import { AlertTriangle, Info } from 'lucide-react';
  *    sections report state the backend owns and must not look editable.
  */
 
-export const settingsInputClass =
+export const formInputClass =
   'h-[var(--control-height)] w-full rounded-control border border-line bg-bg px-2 text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
-export const settingsSelectClass = settingsInputClass;
-export const settingsTextAreaClass =
+export const formSelectClass = formInputClass;
+export const formTextAreaClass =
   'w-full min-h-[72px] resize-y rounded-control border border-line bg-bg px-2 py-1 font-mono text-[var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
-export const settingsSecondaryButtonClass =
+export const formSecondaryButtonClass =
   'h-[var(--control-height-compact)] rounded-control border border-line px-2 text-muted text-[var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 
-export function SettingsSection({
+export function FormSection({
   title,
   hint,
   readOnly = false,
@@ -120,7 +123,7 @@ export function TextField({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         data-testid={testId}
-        className={settingsInputClass}
+        className={formInputClass}
       />
       {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       {issue === undefined || issue === null ? null : (
@@ -210,7 +213,7 @@ export function NumberField({
           }
         }}
         data-testid={testId}
-        className={settingsInputClass}
+        className={formInputClass}
       />
       {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       {issue === undefined || issue === null ? null : (
@@ -283,7 +286,7 @@ export function SelectField<T extends string>({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value as T)}
         data-testid={testId}
-        className={settingsSelectClass}
+        className={formSelectClass}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -297,7 +300,7 @@ export function SelectField<T extends string>({
 }
 
 /** A statement of fact from the backend (or of a deliberate absence). Not editable. */
-export function SettingsNote({
+export function FormNote({
   children,
   tone = 'default',
   testId

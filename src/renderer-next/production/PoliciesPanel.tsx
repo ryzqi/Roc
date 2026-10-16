@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import type { ResearchStagePolicy } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
-import { useSettingsRevision } from '../settings/settings-events';
+import { useSettingsRevision } from '../shared/settings-events';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime } from '../shared/format';

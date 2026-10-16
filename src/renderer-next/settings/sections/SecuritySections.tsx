@@ -1,4 +1,4 @@
-import { NumberField, CheckboxField, SettingsNote, SettingsSection, settingsInputClass } from '../settings-ui';
+import { NumberField, CheckboxField, FormNote, FormSection, formInputClass } from '../../shared/form-ui';
 import type { SettingsStore } from '../settings-scope';
 
 /**
@@ -19,12 +19,12 @@ import type { SettingsStore } from '../settings-scope';
 export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX.Element {
   const draft = store.draft;
   if (draft === null) {
-    return <SettingsNote testId="settings-guardrail-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-guardrail-unavailable">设置尚未读取完成。</FormNote>;
   }
   const memory = draft.settings.memory;
 
   return (
-    <SettingsSection
+    <FormSection
       title="智能体安全"
       hint="settings.save 的 permissions.mode 与 memory.securityScan / charLimits"
       testId="settings-section-guardrail-body"
@@ -39,7 +39,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
             })
           }
           data-testid="settings-approval-mode"
-          className={settingsInputClass}
+          className={formInputClass}
         >
           <option value="default">默认：需要审批的工具会停下来等确认</option>
           <option value="fully_automatic">全自动：不拦截工具调用</option>
@@ -50,9 +50,9 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
       </label>
 
       {draft.permissions.mode === 'fully_automatic' ? (
-        <SettingsNote tone="warn" testId="settings-approval-mode-warning">
+        <FormNote tone="warn" testId="settings-approval-mode-warning">
           全自动模式下删除文件、执行命令等工具不会请求确认 —— 仅在明确知道风险时使用。
-        </SettingsNote>
+        </FormNote>
       ) : null}
 
       <h4 className="text-ink text-[var(--font-meta-size)]">记忆安全扫描</h4>
@@ -143,23 +143,23 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
         />
       </div>
 
-      <SettingsNote testId="settings-guardrail-removed">
+      <FormNote testId="settings-guardrail-removed">
         旧前端的 shell 安全等级 / 覆盖保护 / 会话 token 预算 / MCP 超时 / 外网开关在后端契约里没有字段，已移除。
         文件写入与命令执行的边界由工具自己的能力清单与审批模式决定，不是一组可调阈值。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }
 
 export function MemorySection({ store }: { store: SettingsStore }): React.JSX.Element {
   const draft = store.draft;
   if (draft === null) {
-    return <SettingsNote testId="settings-memory-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-memory-unavailable">设置尚未读取完成。</FormNote>;
   }
   const autoMemory = draft.settings.memory.autoMemory;
 
   return (
-    <SettingsSection
+    <FormSection
       title="记忆策略"
       hint="settings.save 的 memory.autoMemory（记忆文件本身在管理面板，P9）"
       testId="settings-section-memory-body"
@@ -216,10 +216,10 @@ export function MemorySection({ store }: { store: SettingsStore }): React.JSX.El
         />
       </div>
 
-      <SettingsNote testId="settings-memory-note">
+      <FormNote testId="settings-memory-note">
         记忆文件的读写与检索（USER.md / AGENTS.md / MEMORY.md、安全扫描结果、审计流水）在管理面板的「记忆」分区（P9）；
         这里只设置后端用来决定「要不要沉淀、沉淀多少、留多久」的策略值。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }

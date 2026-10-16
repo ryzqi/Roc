@@ -3,7 +3,7 @@ import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
 import type { ChatRunMode } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncResource } from '../app/use-async-resource';
-import { useSettingsRevision } from '../settings/settings-events';
+import { useSettingsRevision } from '../shared/settings-events';
 import type { RocClient } from '../shared/roc-client';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
@@ -49,6 +49,10 @@ export type AssistantPanelProps = {
   /** Current workflow stage label, when a project is open (P6 supplies it). */
   stageLabel?: string | null;
   onOpenSettings: () => void;
+  /** Prefilled composer text handed in by another surface (P9's memory tab). */
+  composerSeed?: { text: string; nonce: number } | null;
+  /** Tells the owner the seed has been applied, so it can be dropped (a remount must not replay it). */
+  onComposerSeedConsumed?: () => void;
 };
 
 export function AssistantPanel({
@@ -59,7 +63,9 @@ export function AssistantPanel({
   workspacePath,
   projectName,
   stageLabel = null,
-  onOpenSettings
+  onOpenSettings,
+  composerSeed = null,
+  onComposerSeedConsumed
 }: AssistantPanelProps): React.JSX.Element {
   /**
    * The settings revision is part of the key, not just a reload trigger: a save in the
@@ -291,6 +297,8 @@ export function AssistantPanel({
         running={activeRun}
         suspended={suspendedOnApproval}
         replyMode={replyMode}
+        seed={composerSeed}
+        onSeedConsumed={onComposerSeedConsumed}
         onSend={async (input) => {
           // A suspended question takes the text as its answer; everything else starts a new run.
           if (pendingQuestion !== null) {

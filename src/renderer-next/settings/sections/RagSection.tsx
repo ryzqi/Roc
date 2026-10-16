@@ -14,13 +14,13 @@ import {
   CheckboxField,
   Field,
   NumberField,
-  SettingsNote,
-  SettingsSection,
+  FormNote,
+  FormSection,
   TextField,
-  settingsInputClass,
-  settingsSecondaryButtonClass,
-  settingsTextAreaClass
-} from '../settings-ui';
+  formInputClass,
+  formSecondaryButtonClass,
+  formTextAreaClass
+} from '../../shared/form-ui';
 
 /**
  * 向量与 RAG (T8.3).
@@ -110,7 +110,7 @@ function PatternsArea({
         onChange={(event) => setText(event.target.value)}
         onBlur={() => onCommit(linesToPatterns(text))}
         data-testid={testId}
-        className={settingsTextAreaClass}
+        className={formTextAreaClass}
       />
     </label>
   );
@@ -146,7 +146,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
   );
 
   if (draft === null) {
-    return <SettingsNote testId="settings-rag-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-rag-unavailable">设置尚未读取完成。</FormNote>;
   }
 
   const index = draft.index;
@@ -160,7 +160,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
   };
 
   return (
-    <SettingsSection
+    <FormSection
       title="向量与 RAG"
       hint="research.index.configure（按项目）· research.embedding.list / save"
       testId="settings-section-rag-body"
@@ -177,15 +177,15 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         </header>
 
         {store.projectId === null ? (
-          <SettingsNote testId="settings-index-no-project">
+          <FormNote testId="settings-index-no-project">
             索引配置按项目存储（契约要求 projectId）。进入一个项目后再打开设置即可配置该项目的索引。
-          </SettingsNote>
+          </FormNote>
         ) : store.indexError !== null ? (
-          <SettingsNote tone="warn" testId="settings-index-error">
+          <FormNote tone="warn" testId="settings-index-error">
             {store.indexError}
-          </SettingsNote>
+          </FormNote>
         ) : index === null ? (
-          <SettingsNote testId="settings-index-loading">索引配置读取中…</SettingsNote>
+          <FormNote testId="settings-index-loading">索引配置读取中…</FormNote>
         ) : (
           <>
             <Field label="索引文件类型" testId="settings-index-kinds">
@@ -246,7 +246,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                     updateIndex((target) => void (target.embeddingConfigId = next.length === 0 ? null : next));
                   }}
                   data-testid="settings-index-embedding"
-                  className={settingsInputClass}
+                  className={formInputClass}
                 >
                   <option value="">（不指定）</option>
                   {configs.map((config) => (
@@ -258,10 +258,10 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 </select>
               </label>
             </div>
-            <SettingsNote testId="settings-index-note">
+            <FormNote testId="settings-index-note">
               索引的扫描/重建仍由 RAG Studio 触发（research.index.control）；这里只保存配置，保存后 RAG Studio
               会立即读到新值。
-            </SettingsNote>
+            </FormNote>
           </>
         )}
       </section>
@@ -277,7 +277,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               setForm(newEmbeddingForm(configs));
               setApiKey('');
             }}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
             新增嵌入配置
@@ -286,7 +286,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
             type="button"
             data-testid="settings-embedding-reload"
             onClick={() => embeddings.reload()}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <RefreshCw size={11} aria-hidden="true" />
             重新读取
@@ -294,13 +294,13 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         </header>
 
         {embeddings.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-embedding-error">
+          <FormNote tone="warn" testId="settings-embedding-error">
             {embeddings.error}
-          </SettingsNote>
+          </FormNote>
         )}
 
         {configs.length === 0 ? (
-          <SettingsNote testId="settings-embedding-empty">后端还没有嵌入配置。</SettingsNote>
+          <FormNote testId="settings-embedding-empty">后端还没有嵌入配置。</FormNote>
         ) : (
           <ul className="flex flex-col gap-1" data-testid="settings-embedding-list">
             {configs.map((config) => (
@@ -407,7 +407,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                       embeddings.reload();
                     });
                 }}
-                className={settingsSecondaryButtonClass}
+                className={formSecondaryButtonClass}
               >
                 保存嵌入配置
               </button>
@@ -416,23 +416,23 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               </span>
             </div>
             {apiKey.trim().length === 0 ? (
-              <SettingsNote testId="settings-embedding-key-required">
+              <FormNote testId="settings-embedding-key-required">
                 保存必须带 API Key（`research.embedding.save` 的契约如此）：即使只改维度也要重新输入一次，渲染层不保存明文。
-              </SettingsNote>
+              </FormNote>
             ) : null}
             {saveEmbedding.error === null ? null : (
-              <SettingsNote tone="warn" testId="settings-embedding-save-error">
+              <FormNote tone="warn" testId="settings-embedding-save-error">
                 {saveEmbedding.error}
-              </SettingsNote>
+              </FormNote>
             )}
           </div>
         )}
       </section>
 
-      <SettingsNote testId="settings-rag-removed">
+      <FormNote testId="settings-rag-removed">
         旧前端的 chunk 大小 / 重叠 / topK / RRF k / 向量与关键词权重 / reranker / 相似度阈值 / 父块扩展 /
         上下文前缀没有后端字段，已移除（不造字段）；知识检索的超参由后端索引服务固定。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }

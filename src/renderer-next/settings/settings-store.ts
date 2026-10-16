@@ -1,9 +1,5 @@
 import type {
   AppStatus,
-  McpServerConfig,
-  McpServerSnapshot,
-  McpServersConfig,
-  McpServerTestResult,
   ProviderSecretClearResult,
   ProviderSecretSetResult,
   ProviderTestResult,
@@ -183,37 +179,4 @@ export function pauseBackgroundExecution(client: RocClient): Promise<IpcLikeResu
 
 export function resumeBackgroundExecution(client: RocClient): Promise<IpcLikeResult<TraySummary>> {
   return client.api.lifecycle.resumeBackgroundExecution();
-}
-
-/* ------------------------------------------------------------------ */
-/* MCP authorization                                                   */
-/* ------------------------------------------------------------------ */
-
-export function listMcpServers(client: RocClient): Promise<IpcLikeResult<McpServerSnapshot[]>> {
-  return client.api.mcp.listServers();
-}
-
-export function getMcpConfig(client: RocClient): Promise<IpcLikeResult<McpServersConfig>> {
-  return client.api.mcp.getConfig();
-}
-
-export function setMcpApprovalMode(
-  client: RocClient,
-  approvalMode: McpServersConfig['approvalMode']
-): Promise<IpcLikeResult<McpServersConfig>> {
-  return client.api.mcp.setApprovalMode({ approvalMode });
-}
-
-export function setMcpServerEnabled(
-  client: RocClient,
-  input: { id: string; enabled: boolean }
-): Promise<IpcLikeResult<McpServerConfig>> {
-  return client.api.mcp.setServerEnabled(input);
-}
-
-export function testMcpServer(
-  client: RocClient,
-  id: string
-): Promise<IpcLikeResult<McpServerTestResult>> {
-  return client.api.mcp.testServer(id);
 }

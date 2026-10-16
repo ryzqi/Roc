@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileCode2, Play, RefreshCw, XCircle } from 'lucide-react';
 import type { ResearchTemplate, ResearchTemplateFile, ResearchTemplateFileContent, ResearchToolchainStatus } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
-import { useSettingsRevision } from '../settings/settings-events';
+import { useSettingsRevision } from '../shared/settings-events';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';

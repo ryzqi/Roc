@@ -49,6 +49,14 @@ export type SearchGroupSources = {
   /** Opens the assistant panel on this thread. */
   onOpenSession: (threadId: string) => void;
   /**
+   * Opens one management group as a canvas view (`?view=memory|skills|mcp|tasks`).
+   *
+   * The palette is where 「管理」 becomes reachable without the drawer: the three views exist in the
+   * frozen route contract, and the skills group below is a real `skills.list` query rather than the
+   * P1 placeholder that promised "P9 接入" (F24).
+   */
+  onOpenManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void;
+  /**
    * Bumped every time the palette opens.
    *
    * The project list has no server-side query to key on, so without this the
@@ -59,8 +67,15 @@ export type SearchGroupSources = {
 };
 
 const UNAVAILABLE_GROUPS: Array<{ id: string; label: string; reason: string }> = [
-  { id: 'skills', label: '技能', reason: 'P9 接入 skills.list' },
-  { id: 'artifacts', label: '产物', reason: 'P6 接入 research.artifacts.list' }
+  {
+    // P6 lists artifacts inside the stage workspace (they hang off a stage artifact), and
+    // `research.artifacts.list` needs a project + stage filter to be meaningful. A palette group
+    // that ignores the stage would present another project's artifacts as search results, so this
+    // one stays out on purpose instead of promising a phase.
+    id: 'artifacts',
+    label: '产物',
+    reason: '产物按阶段列在阶段工作区里（P6）；⌘K 不做全局产物检索'
+  }
 ];
 
 /**
@@ -74,6 +89,7 @@ const SESSION_SEARCH_DEBOUNCE_MS = 200;
 /** Projects are listed once — there is no server-side project query to debounce. */
 const PROJECT_GROUP_LIMIT = 8;
 const SESSION_GROUP_LIMIT = 8;
+const SKILL_GROUP_LIMIT = 8;
 
 function previewLine(preview: string): string {
   const trimmed = preview.trim();
@@ -93,6 +109,7 @@ export function useSearchGroups({
   onOpenConcept,
   onOpenProject,
   onOpenSession,
+  onOpenManagementView,
   searchToken
 }: SearchGroupSources): SearchGroup[] {
   const files = useFileSearchGroups(client, workspacePath, query);
@@ -116,6 +133,15 @@ export function useSearchGroups({
   /** Projects come from the portal's own capability; the list is small and unfiltered by the backend. */
   const projectList = useAsyncResource(`search-projects:${searchToken}`, () => client.api.research.listProjects(), {
     label: '读取项目'
+  });
+  /**
+   * Skills (`skills.list`, no arguments) — filtered here because the capability has no query.
+   *
+   * Keyed on `searchToken` so a skill imported while the palette was closed is findable on the next
+   * open: the same "read once and never again" trap P4's session list and P5's project group hit.
+   */
+  const skillList = useAsyncResource(`search-skills:${searchToken}`, () => client.api.skills.list(), {
+    label: '读取技能'
   });
 
   return useMemo(() => {
@@ -233,6 +259,22 @@ export function useSearchGroups({
     const projectsGroup = buildProjectGroup(projectList, trimmed, onOpenProject);
     const sessionGroup = buildSessionGroup(sessions, onOpenSession);
 
+    // 「管理」 is a command group: the same three canvas views the drawer can open, reachable from ⌘K.
+    const managementGroup: SearchGroup = {
+      id: 'management',
+      label: '管理',
+      status: 'ready',
+      emptyLabel: '没有匹配的管理入口',
+      items: [
+        { id: 'mgmt:memory', title: '记忆', subtitle: 'USER.md / AGENTS.md / MEMORY.md（markdown 内容）', onOpen: () => onOpenManagementView('memory') },
+        { id: 'mgmt:skills', title: '技能', subtitle: '安装、启停、浏览技能文件', onOpen: () => onOpenManagementView('skills') },
+        { id: 'mgmt:mcp', title: 'MCP', subtitle: '授权服务与工具装配预览', onOpen: () => onOpenManagementView('mcp') },
+        { id: 'mgmt:tasks', title: '后台任务', subtitle: '定时任务与调度记录（打开任务是 P6 的任务看板）', onOpen: () => onOpenManagementView('tasks') }
+      ].filter((item) => trimmed.length === 0 || item.title.toLowerCase().includes(trimmed) || (item.subtitle ?? '').toLowerCase().includes(trimmed))
+    };
+
+    const skillsGroup = buildSkillsGroup(skillList, trimmed, onOpenManagementView);
+
     const unavailable = UNAVAILABLE_GROUPS.map<SearchGroup>((group) => ({
       id: group.id,
       label: group.label,
@@ -244,11 +286,12 @@ export function useSearchGroups({
     // Order mirrors the P1 palette: project-ish first, then the domain groups,
     // then files, then the later phases. Inserting at fixed positions keeps the
     // order stable even when a group is unavailable.
-    return [projectsGroup, literatureGroup, conceptGroup, sessionGroup, ...fileGroups, ...unavailable];
+    return [projectsGroup, literatureGroup, conceptGroup, sessionGroup, skillsGroup, managementGroup, ...fileGroups, ...unavailable];
   }, [
     concepts,
     conceptsLoaded,
     files,
+    onOpenManagementView,
     libraryItems,
     onOpenConcept,
     onOpenLiterature,
@@ -259,6 +302,9 @@ export function useSearchGroups({
     projectList.data,
     projectList.error,
     projectList.status,
+    skillList.data,
+    skillList.error,
+    skillList.status,
     query,
     searchToken,
     sessions.data,
@@ -276,6 +322,46 @@ export function useSearchGroups({
  * has no project search to push it down to. The list is a handful of rows, so
  * filtering it locally cannot hide a match behind a limit.
  */
+/**
+ * The skills group.
+ *
+ * `skills.list` has no query parameter, so the filter runs here — over the same fields the panel
+ * shows (name and description). A hit opens the skills surface rather than deep-linking one skill:
+ * the frozen route contract has no per-skill parameter (ADR-M05), and the panel's own selection is
+ * what remembers which skill is on screen.
+ */
+function buildSkillsGroup(
+  list: {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    data: Array<{ id: string; name: string; description: string; enabled: boolean; status: string }> | null;
+    error: string | null;
+  },
+  trimmedQuery: string,
+  onOpenManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void
+): SearchGroup {
+  if (list.status === 'error') {
+    return { id: 'skills', label: '技能', status: 'unavailable', items: [], unavailableReason: list.error ?? '读取技能失败' };
+  }
+  if (list.status !== 'ready') {
+    return { id: 'skills', label: '技能', status: 'loading', items: [], unavailableReason: '正在读取技能' };
+  }
+  return {
+    id: 'skills',
+    label: '技能',
+    status: 'ready',
+    emptyLabel: '没有匹配的技能',
+    items: (list.data ?? [])
+      .filter((skill) => trimmedQuery.length > 0 && (skill.name.toLowerCase().includes(trimmedQuery) || skill.description.toLowerCase().includes(trimmedQuery)))
+      .slice(0, SKILL_GROUP_LIMIT)
+      .map((skill) => ({
+        id: `skill:${skill.id}`,
+        title: skill.name,
+        subtitle: `${skill.enabled ? '已启用' : '已停用'} · ${skill.description}`,
+        onOpen: () => onOpenManagementView('skills')
+      }))
+  };
+}
+
 function buildProjectGroup(
   list: {
     status: 'idle' | 'loading' | 'ready' | 'error';

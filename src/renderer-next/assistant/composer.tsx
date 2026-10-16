@@ -64,6 +64,21 @@ export type AssistantComposerProps = {
     explicitSkillIds: string[];
   }) => Promise<boolean>;
   onStop: () => void;
+  /**
+   * Text handed in from another surface (P9's 「用助手整理记忆」).
+   *
+   * Keyed by `nonce`, not by content: the same prompt twice must still replace whatever the user
+   * typed, and a re-render with the same nonce must not. The hand-off only fills the input — it
+   * never sends, because the user decides whether to ask.
+   */
+  seed?: { text: string; nonce: number } | null;
+  /**
+   * Called once the seed has been written into the input.
+   *
+   * The owner drops it, so closing and reopening the assistant (the shell remounts the composer
+   * when the panel becomes visible) cannot replay a prompt the user already sent.
+   */
+  onSeedConsumed?: (() => void) | undefined;
 };
 
 const MODES: Array<{ id: ChatRunMode; label: string }> = [
@@ -86,13 +101,16 @@ export function AssistantComposer({
   suspended = false,
   replyMode,
   onSend,
-  onStop
+  onStop,
+  seed = null,
+  onSeedConsumed
 }: AssistantComposerProps): React.JSX.Element {
   // A suspended question is answerable even though a run exists; a plain running run is not,
   // and an approval suspend is not answerable at all (the card owns that decision).
   const inputLocked = (running || suspended) && !replyMode;
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
+  const seedNonceRef = useRef<number | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const skillById = useMemo(() => new Map(skills.map((skill) => [skill.id, skill])), [skills]);
@@ -101,6 +119,21 @@ export function AssistantComposer({
     () => parseSlashSkillCommand(text, skills.map((skill) => skill.id)),
     [skills, text]
   );
+
+  // A hand-off from another surface replaces the draft once per nonce.
+  useEffect(() => {
+    if (seed === null || seedNonceRef.current === seed.nonce) {
+      return;
+    }
+    seedNonceRef.current = seed.nonce;
+    setText(seed.text);
+    const element = textareaRef.current;
+    if (element !== null) {
+      element.focus();
+      element.setSelectionRange(seed.text.length, seed.text.length);
+    }
+    onSeedConsumed?.();
+  }, [onSeedConsumed, seed]);
 
   useEffect(() => {
     const element = textareaRef.current;

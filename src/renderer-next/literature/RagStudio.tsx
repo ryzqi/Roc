@@ -3,7 +3,7 @@ import { AlertCircle, Bookmark, DatabaseZap, ExternalLink, FlaskConical, Loader2
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
-import { useSettingsRevision } from '../settings/settings-events';
+import { useSettingsRevision } from '../shared/settings-events';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';

@@ -1,6 +1,5 @@
 import { createElement, lazy, useEffect, useState, type ComponentType } from 'react';
 import type { AppViewId } from './routes';
-import { placeholderView } from './placeholder-view';
 
 /**
  * View module registry: lazy loading plus *resolution tracking*.
@@ -59,9 +58,12 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
   tasks: async () => ({ default: (await import('../tasks/TasksView')).TasksView }),
   diagnostics: async () => ({ default: (await import('../diagnostics/DiagnosticsView')).DiagnosticsView }),
-  mcp: async () => ({ default: placeholderView('MCP', 'P9 实现') }),
-  skills: async () => ({ default: placeholderView('技能', 'P9 实现') }),
-  memory: async () => ({ default: placeholderView('记忆', 'P9 实现') })
+  // P9 made these three real. One component serves all of them: it picks its initial tab from the
+  // view id, and `management-shell-parts` holds the tab strip and the bodies so the canvas and the
+  // drawer cannot drift apart.
+  mcp: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
+  skills: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
+  memory: async () => ({ default: (await import('../management/ManagementView')).ManagementView })
 };
 
 const resolvedViews = new Set<AppViewId>();

@@ -9,11 +9,11 @@ import { trustHook } from '../settings-store';
 import {
   CheckboxField,
   KeyValueRow,
-  SettingsNote,
-  SettingsSection,
-  settingsSecondaryButtonClass,
-  settingsTextAreaClass
-} from '../settings-ui';
+  FormNote,
+  FormSection,
+  formSecondaryButtonClass,
+  formTextAreaClass
+} from '../../shared/form-ui';
 
 /**
  * Hooks (T8.3).
@@ -88,7 +88,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
   }, [draftJson]);
 
   if (draft === null || snapshot === null) {
-    return <SettingsNote testId="settings-hooks-unavailable">Hooks 配置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-hooks-unavailable">Hooks 配置尚未读取完成。</FormNote>;
   }
 
   const handlers = snapshot.handlers;
@@ -109,7 +109,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
   };
 
   return (
-    <SettingsSection
+    <FormSection
       title="Hooks"
       hint="settings.get 的 hooks 快照 · settings.hooks.save / trust"
       testId="settings-section-hooks-body"
@@ -120,15 +120,15 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       </dl>
 
       {snapshot.validationErrors.length === 0 ? null : (
-        <SettingsNote tone="warn" testId="settings-hooks-validation-errors">
+        <FormNote tone="warn" testId="settings-hooks-validation-errors">
           配置校验错误：{snapshot.validationErrors.join('；')}
-        </SettingsNote>
+        </FormNote>
       )}
 
       {handlers.length === 0 ? (
-        <SettingsNote testId="settings-hooks-empty">
+        <FormNote testId="settings-hooks-empty">
           还没有配置任何 hook。可以在下面的 JSON 里添加事件 → matcher 组 → command handler；保存后这里会列出它们。
-        </SettingsNote>
+        </FormNote>
       ) : (
         <ul className="flex flex-col gap-2" data-testid="settings-hooks-list">
           {handlers.map((handler) => (
@@ -167,9 +167,9 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
               </div>
               <p className="break-all font-mono text-muted text-[var(--font-micro-size)]">{handler.command}</p>
               {handler.validationError === null ? null : (
-                <SettingsNote tone="warn" testId={`settings-hook-error-${handler.id}`}>
+                <FormNote tone="warn" testId={`settings-hook-error-${handler.id}`}>
                   {handler.validationError}
-                </SettingsNote>
+                </FormNote>
               )}
               <div className="flex flex-wrap items-center gap-3">
                 <CheckboxField
@@ -192,7 +192,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                         }
                       });
                     }}
-                    className={settingsSecondaryButtonClass}
+                    className={formSecondaryButtonClass}
                   >
                     信任这条 hook
                   </button>
@@ -211,9 +211,9 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       )}
 
       {trust.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-hooks-trust-error">
+        <FormNote tone="warn" testId="settings-hooks-trust-error">
           {trust.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
       <div className="flex flex-col gap-1 border-t border-line pt-2">
@@ -227,7 +227,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             setJsonError(null);
           }}
           data-testid="settings-hooks-json"
-          className={settingsTextAreaClass}
+          className={formTextAreaClass}
         />
         <div className="flex items-center gap-2">
           <button
@@ -249,7 +249,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
               store.update((next) => void (next.hooks = result.data));
               setJsonError(null);
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             应用到草稿
           </button>
@@ -260,18 +260,18 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
               setJsonText(draftJson);
               setJsonError(null);
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             还原为草稿值
           </button>
           <span className="text-subtle text-[var(--font-micro-size)]">改动由顶部「保存设置」写入（settings.hooks.save）。</span>
         </div>
         {jsonError === null ? null : (
-          <SettingsNote tone="warn" testId="settings-hooks-json-error">
+          <FormNote tone="warn" testId="settings-hooks-json-error">
             {jsonError}
-          </SettingsNote>
+          </FormNote>
         )}
       </div>
-    </SettingsSection>
+    </FormSection>
   );
 }

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { parseProviderModelKey } from '../../../shared/provider-model-key';
 import { modelOptions } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
-import { SettingsNote, SettingsSection, settingsInputClass } from '../settings-ui';
+import { FormNote, FormSection, formInputClass } from '../../shared/form-ui';
 
 /**
  * 默认模型 (T8.3).
@@ -26,11 +26,11 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
   );
 
   if (draft === null) {
-    return <SettingsNote testId="settings-default-model-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-default-model-unavailable">设置尚未读取完成。</FormNote>;
   }
 
   return (
-    <SettingsSection
+    <FormSection
       title="默认模型"
       hint="settings.save 的 defaultModelId；未配置时需要模型的入口会先要求配置"
       testId="settings-section-default-model-body"
@@ -46,7 +46,7 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
             });
           }}
           data-testid="settings-default-model-select"
-          className={settingsInputClass}
+          className={formInputClass}
         >
           <option value="">（未配置）</option>
           {enabledOptions.map((option) => (
@@ -62,21 +62,21 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
       </label>
 
       {resolvable ? null : (
-        <SettingsNote tone="warn" testId="settings-default-model-unresolvable">
+        <FormNote tone="warn" testId="settings-default-model-unresolvable">
           当前默认模型 {current} 不在已启用（且被启用）的模型里；后端保存时会把它清空为「未配置」。请改选一个，或到
           「模型与服务」启用它。
-        </SettingsNote>
+        </FormNote>
       )}
 
       {current === null ? (
-        <SettingsNote testId="settings-default-model-missing">
+        <FormNote testId="settings-default-model-missing">
           未配置默认模型：助手的新会话与阶段运行都会要求先在这里选一个。
-        </SettingsNote>
+        </FormNote>
       ) : null}
 
-      <SettingsNote testId="settings-default-model-impact">
+      <FormNote testId="settings-default-model-impact">
         改动默认模型只影响之后新建的会话与阶段运行；正在进行的运行继续用启动时的模型。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }

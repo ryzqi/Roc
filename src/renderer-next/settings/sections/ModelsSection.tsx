@@ -19,12 +19,12 @@ import {
   Field,
   NumberField,
   SelectField,
-  SettingsNote,
-  SettingsSection,
+  FormNote,
+  FormSection,
   TextField,
-  settingsInputClass,
-  settingsSecondaryButtonClass
-} from '../settings-ui';
+  formInputClass,
+  formSecondaryButtonClass
+} from '../../shared/form-ui';
 
 /**
  * 模型与服务 (T8.3).
@@ -110,7 +110,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   );
 
   if (draft === null || provider === null) {
-    return <SettingsNote testId="settings-models-unavailable">设置尚未读取完成，或后端没有返回任何供应商。</SettingsNote>;
+    return <FormNote testId="settings-models-unavailable">设置尚未读取完成，或后端没有返回任何供应商。</FormNote>;
   }
 
   const builtIn = isFixedProviderId(provider.id);
@@ -125,7 +125,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   };
 
   return (
-    <SettingsSection
+    <FormSection
       title="模型与服务"
       hint="settings.get / save · settings.testProvider · settings.setProviderSecret"
       testId="settings-section-models-body"
@@ -140,7 +140,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
               setTestResult(null);
             }}
             data-testid="settings-provider-select"
-            className={settingsInputClass}
+            className={formInputClass}
           >
             {providers.map((entry: ProviderConfig) => (
               <option key={entry.id} value={entry.id}>
@@ -163,7 +163,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             });
             setSelectedId(created.id);
           }}
-          className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+          className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
         >
           <Plus size={11} aria-hidden="true" />
           新增供应商
@@ -180,7 +180,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             type="button"
             data-testid="settings-provider-remove"
             onClick={() => setRemoveProviderOpen(true)}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Trash2 size={11} aria-hidden="true" />
             移除供应商
@@ -271,7 +271,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                 reload();
               });
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             保存密钥
           </button>
@@ -280,24 +280,24 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             data-testid="settings-provider-secret-clear"
             disabled={clearSecret.pending || !stored}
             onClick={() => setClearSecretOpen(true)}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             清除密钥
           </button>
         </div>
-        <SettingsNote testId="settings-provider-secret-note">
+        <FormNote testId="settings-provider-secret-note">
           密钥只写入系统钥匙串；这一步同时把凭据引用改成 <span className="font-mono">secret:{provider.id}</span>
           ，点顶部「保存设置」写入后才对该供应商生效（模型工厂只认凭据引用）。
-        </SettingsNote>
+        </FormNote>
         {setSecret.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-provider-secret-error">
+          <FormNote tone="warn" testId="settings-provider-secret-error">
             {setSecret.error}
-          </SettingsNote>
+          </FormNote>
         )}
         {clearSecret.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-provider-secret-clear-error">
+          <FormNote tone="warn" testId="settings-provider-secret-clear-error">
             {clearSecret.error}
-          </SettingsNote>
+          </FormNote>
         )}
       </section>
 
@@ -308,7 +308,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             type="button"
             data-testid="settings-model-add"
             onClick={() => patchProvider((entry) => void entry.models.push(createModelDraft()))}
-            className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
             添加模型
@@ -316,7 +316,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         </header>
 
         {provider.models.length === 0 ? (
-          <SettingsNote testId="settings-model-empty">该供应商还没有模型；至少需要一个才能用于助手。</SettingsNote>
+          <FormNote testId="settings-model-empty">该供应商还没有模型；至少需要一个才能用于助手。</FormNote>
         ) : null}
 
         <ul className="flex flex-col gap-2">
@@ -428,7 +428,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                       entry.models.splice(modelIndex, 1);
                     })
                   }
-                  className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+                  className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
                 >
                   <Trash2 size={11} aria-hidden="true" />
                   移除模型
@@ -451,7 +451,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                 setTestResult(null);
               }}
               data-testid="settings-test-model"
-              className={settingsInputClass}
+              className={formInputClass}
             >
               {testModelOptions.map((model) => (
                 <option key={model.key} value={model.key}>
@@ -475,25 +475,25 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                 }
               });
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             {test.pending ? '测试中…' : '测试连通'}
           </button>
         </div>
         {testModelId === null ? (
-          <SettingsNote testId="settings-test-hint">先启用一个模型；契约要求测试同时给出 provider 与 model。</SettingsNote>
+          <FormNote testId="settings-test-hint">先启用一个模型；契约要求测试同时给出 provider 与 model。</FormNote>
         ) : null}
         {test.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-test-error">
+          <FormNote tone="warn" testId="settings-test-error">
             {test.error}
-          </SettingsNote>
+          </FormNote>
         )}
         {testResult === null ? null : (
-          <SettingsNote testId="settings-test-result">
+          <FormNote testId="settings-test-result">
             {testResult.status === 'ready'
               ? `连通：${testResult.latencyMs === null ? '后端未返回延迟' : `${testResult.latencyMs} ms`}（检查项 ${testResult.checked.length}）`
               : `不连通：${testResult.error ?? '后端没有给出原因'}`}
-          </SettingsNote>
+          </FormNote>
         )}
       </section>
 
@@ -533,6 +533,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           setSelectedId(null);
         }}
       />
-    </SettingsSection>
+    </FormSection>
   );
 }

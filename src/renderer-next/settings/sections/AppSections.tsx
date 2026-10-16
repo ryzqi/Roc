@@ -13,11 +13,11 @@ import {
   CheckboxField,
   KeyValueRow,
   NumberField,
-  SettingsNote,
-  SettingsSection,
+  FormNote,
+  FormSection,
   TextField,
-  settingsSecondaryButtonClass
-} from '../settings-ui';
+  formSecondaryButtonClass
+} from '../../shared/form-ui';
 
 /**
  * 应用基础 · 任务与调度 (T8.3).
@@ -45,21 +45,21 @@ export function AppSection({
   const app = useAsyncResource('settings:app-status', () => getAppStatus(store.client), { label: '读取应用状态' });
 
   if (draft === null) {
-    return <SettingsNote testId="settings-app-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-app-unavailable">设置尚未读取完成。</FormNote>;
   }
   const host = store.snapshot?.hostIntegration ?? null;
   const status = app.data;
 
   return (
-    <SettingsSection
+    <FormSection
       title="应用基础"
       hint="settings.save 的 startup / globalHotkey · app.getStatus · hostIntegration"
       testId="settings-section-app-body"
     >
       {app.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-app-status-error">
+        <FormNote tone="warn" testId="settings-app-status-error">
           {app.error}
-        </SettingsNote>
+        </FormNote>
       )}
       <dl className="flex flex-col gap-0.5">
         <KeyValueRow
@@ -91,9 +91,9 @@ export function AppSection({
           testId="settings-open-at-login"
         />
         {host !== null && host.startup.syncError !== null ? (
-          <SettingsNote tone="warn" testId="settings-open-at-login-error">
+          <FormNote tone="warn" testId="settings-open-at-login-error">
             写入系统登录项失败：{host.startup.syncError}
-          </SettingsNote>
+          </FormNote>
         ) : null}
       </div>
 
@@ -124,9 +124,9 @@ export function AppSection({
           />
         </dl>
         {host !== null && host.globalHotkey.registrationError !== null ? (
-          <SettingsNote tone="warn" testId="settings-hotkey-error">
+          <FormNote tone="warn" testId="settings-hotkey-error">
             注册失败：{host.globalHotkey.registrationError}
-          </SettingsNote>
+          </FormNote>
         ) : null}
       </div>
 
@@ -142,18 +142,18 @@ export function AppSection({
               className={
                 themeOverride === option
                   ? 'h-[var(--control-height)] rounded-control bg-accent-soft px-3 text-ink'
-                  : `${settingsSecondaryButtonClass} h-[var(--control-height)] px-3`
+                  : `${formSecondaryButtonClass} h-[var(--control-height)] px-3`
               }
             >
               {themeOverrideLabel(option)}
             </button>
           ))}
         </div>
-        <SettingsNote testId="settings-theme-note">
+        <FormNote testId="settings-theme-note">
           外观覆盖是渲染层 UI 偏好（ui-state 的 `roc.ui.theme.override`），立即生效、不写后端，也不在设置草稿里。
-        </SettingsNote>
+        </FormNote>
       </div>
-    </SettingsSection>
+    </FormSection>
   );
 }
 
@@ -168,14 +168,14 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
   const resume = useAsyncAction(() => resumeBackgroundExecution(store.client), { label: '恢复后台执行' });
 
   if (draft === null) {
-    return <SettingsNote testId="settings-tasks-unavailable">设置尚未读取完成。</SettingsNote>;
+    return <FormNote testId="settings-tasks-unavailable">设置尚未读取完成。</FormNote>;
   }
   const tasks = draft.settings.tasks;
   const schedulerStatus = scheduler.data;
   const trayStatus = tray.data;
 
   return (
-    <SettingsSection
+    <FormSection
       title="任务与调度"
       hint="settings.save 的 tasks · tasks.getSchedulerStatus · lifecycle.*"
       testId="settings-section-tasks-body"
@@ -250,9 +250,9 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
 
       <div className="border-t border-line pt-2">
         {scheduler.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-scheduler-error">
+          <FormNote tone="warn" testId="settings-scheduler-error">
             {scheduler.error}
-          </SettingsNote>
+          </FormNote>
         )}
         <dl className="flex flex-col gap-0.5">
           <KeyValueRow
@@ -281,9 +281,9 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
 
       <div className="border-t border-line pt-2">
         {tray.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-tray-error">
+          <FormNote tone="warn" testId="settings-tray-error">
             {tray.error}
-          </SettingsNote>
+          </FormNote>
         )}
         <dl className="flex flex-col gap-0.5">
           <KeyValueRow
@@ -316,7 +316,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                 }
               });
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             暂停后台执行
           </button>
@@ -331,22 +331,22 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                 }
               });
             }}
-            className={settingsSecondaryButtonClass}
+            className={formSecondaryButtonClass}
           >
             恢复后台执行
           </button>
         </div>
         {pause.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-background-pause-error">
+          <FormNote tone="warn" testId="settings-background-pause-error">
             {pause.error}
-          </SettingsNote>
+          </FormNote>
         )}
         {resume.error === null ? null : (
-          <SettingsNote tone="warn" testId="settings-background-resume-error">
+          <FormNote tone="warn" testId="settings-background-resume-error">
             {resume.error}
-          </SettingsNote>
+          </FormNote>
         )}
       </div>
-    </SettingsSection>
+    </FormSection>
   );
 }

@@ -3,14 +3,20 @@ import { PlugZap } from 'lucide-react';
 import type { McpServerSnapshot, McpServerTestResult } from '../../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { SettingsStore } from '../settings-scope';
-import { getMcpConfig, listMcpServers, setMcpApprovalMode, setMcpServerEnabled, testMcpServer } from '../settings-store';
+import {
+  getMcpConfig,
+  listMcpServers,
+  setMcpApprovalMode,
+  setMcpServerEnabled,
+  testMcpServer
+} from '../../shared/mcp-store';
 import {
   CheckboxField,
-  SettingsNote,
-  SettingsSection,
-  settingsInputClass,
-  settingsSecondaryButtonClass
-} from '../settings-ui';
+  FormNote,
+  FormSection,
+  formInputClass,
+  formSecondaryButtonClass
+} from '../../shared/form-ui';
 
 /**
  * 授权与安全 (T8.3).
@@ -66,15 +72,15 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
   }, [servers.data]);
 
   return (
-    <SettingsSection
+    <FormSection
       title="授权与安全"
       hint="mcp.getConfig / setApprovalMode · mcp.listServers / setServerEnabled / testServer"
       testId="settings-section-authorization-body"
     >
       {config.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-mcp-config-error">
+        <FormNote tone="warn" testId="settings-mcp-config-error">
           {config.error}
-        </SettingsNote>
+        </FormNote>
       )}
       <label className="flex max-w-[420px] flex-col gap-0.5">
         <span className="text-subtle text-[var(--font-micro-size)]">MCP 审批模式（mcp.approvalMode）</span>
@@ -91,28 +97,28 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
             });
           }}
           data-testid="settings-mcp-approval-mode"
-          className={settingsInputClass}
+          className={formInputClass}
         >
           <option value="default">默认：MCP 工具调用需要审批</option>
           <option value="fully_automatic">全自动：MCP 工具调用不拦截</option>
         </select>
       </label>
       {approvalMode.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-mcp-approval-error">
+        <FormNote tone="warn" testId="settings-mcp-approval-error">
           {approvalMode.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
       {servers.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-mcp-servers-error">
+        <FormNote tone="warn" testId="settings-mcp-servers-error">
           {servers.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
       {merged.length === 0 ? (
-        <SettingsNote testId="settings-mcp-empty">
+        <FormNote testId="settings-mcp-empty">
           后端还没有已授权的 MCP 服务（P9 的管理面板负责新增与编辑；这里只列出并开关已有的）。
-        </SettingsNote>
+        </FormNote>
       ) : (
         <ul className="flex flex-col gap-2" data-testid="settings-mcp-list">
           {merged.map(({ snapshot, authored }) => (
@@ -138,9 +144,9 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
                 ) : null}
               </div>
               {snapshot.lastError === null || snapshot.lastError === undefined ? null : (
-                <SettingsNote tone="warn" testId={`settings-mcp-error-${snapshot.id}`}>
+                <FormNote tone="warn" testId={`settings-mcp-error-${snapshot.id}`}>
                   {snapshot.lastError}
-                </SettingsNote>
+                </FormNote>
               )}
               {authored === null || authored.allowedTools.length === 0 ? null : (
                 <p className="text-subtle text-[var(--font-micro-size)]">
@@ -173,16 +179,16 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
                       }
                     });
                   }}
-                  className={`${settingsSecondaryButtonClass} inline-flex items-center gap-1`}
+                  className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
                 >
                   <PlugZap size={11} aria-hidden="true" />
-                  测试连接
+                  校验配置
                 </button>
                 {testResults[snapshot.id] === undefined ? null : (
                   <span className="text-[var(--font-micro-size)] text-muted" data-testid={`settings-mcp-test-result-${snapshot.id}`}>
                     {testResults[snapshot.id]?.status === 'ready'
-                      ? '连接成功'
-                      : `连接失败：${testResults[snapshot.id]?.error ?? '后端没有给出原因'}`}
+                      ? '配置完整（后端只校验配置，不连接）'
+                      : `配置有问题：${testResults[snapshot.id]?.error ?? '后端没有给出原因'}`}
                   </span>
                 )}
               </div>
@@ -192,20 +198,20 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
       )}
 
       {setEnabled.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-mcp-enable-error">
+        <FormNote tone="warn" testId="settings-mcp-enable-error">
           {setEnabled.error}
-        </SettingsNote>
+        </FormNote>
       )}
       {test.error === null ? null : (
-        <SettingsNote tone="warn" testId="settings-mcp-test-error">
+        <FormNote tone="warn" testId="settings-mcp-test-error">
           {test.error}
-        </SettingsNote>
+        </FormNote>
       )}
 
-      <SettingsNote testId="settings-authorization-note">
+      <FormNote testId="settings-authorization-note">
         MCP 服务的增删改（`mcp.upsertServer` / `deleteServer` / `ensureExaPreset`）在管理面板的授权分区（P9）；
         这里管的是审批模式与已授权服务的开关。MCP 的审批模式与「智能体安全」里的工具审批模式是两套（后者管内置工具）。
-      </SettingsNote>
-    </SettingsSection>
+      </FormNote>
+    </FormSection>
   );
 }

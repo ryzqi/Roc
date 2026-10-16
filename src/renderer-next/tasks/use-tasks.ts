@@ -10,16 +10,13 @@ import { errorMessage } from '../app/loaded-state';
 import type { AsyncStatus } from '../app/use-async-resource';
 import type { RocClient } from '../shared/roc-client';
 import {
-  cancelBackgroundTask,
-  deleteBackgroundTask,
+  dispatchTaskAction,
   getActiveTasks,
   getSchedulerStatus,
   getSnapshot,
   getTaskDetail,
-  pauseBackgroundTask,
-  resumeBackgroundTask,
-  runBackgroundNow,
-  updateBackgroundTask
+  updateBackgroundTask,
+  type TaskListAction
 } from './task-store';
 
 /**
@@ -38,7 +35,7 @@ import {
  * an approval completed in another surface cannot leave a stale card here.
  */
 
-export type TaskListAction = 'pause' | 'resume' | 'cancel' | 'runNow' | 'delete';
+export type { TaskListAction };
 
 export type TasksStore = {
   status: AsyncStatus;
@@ -58,36 +55,6 @@ export type TasksStore = {
   runListAction: (action: TaskListAction, taskId: string) => Promise<boolean>;
   runUpdate: (input: { taskId: string; patch: Partial<BackgroundTaskPreviewRequest>; reason: string }) => Promise<boolean>;
 };
-
-/**
- * One board action → one capability.
- *
- * A `switch` rather than a chain of ternaries: the five capabilities take a **bare id string**
- * (F18) but return different payloads, so the branch is about which call to make, not about a
- * shared shape — and a table is what makes a sixth action a one-line addition.
- */
-async function dispatchTaskAction(
-  client: RocClient,
-  action: TaskListAction,
-  taskId: string
-): Promise<{ ok: true } | { ok: false; error: { message: string } }> {
-  switch (action) {
-    case 'pause':
-      return pauseBackgroundTask(client, taskId);
-    case 'resume':
-      return resumeBackgroundTask(client, taskId);
-    case 'cancel':
-      return cancelBackgroundTask(client, taskId);
-    case 'runNow':
-      return runBackgroundNow(client, taskId);
-    case 'delete':
-      return deleteBackgroundTask(client, taskId);
-    default:
-      // Exhaustive over `TaskListAction`; the default keeps a future sixth action from
-      // silently doing nothing.
-      throw new Error(`unknown_task_action:${String(action)}`);
-  }
-}
 
 export function useTasksStore(client: RocClient): TasksStore {
   const [snapshot, setSnapshot] = useState<TaskSnapshot | null>(null);
