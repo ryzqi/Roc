@@ -3,6 +3,7 @@ import { AlertCircle, Bookmark, DatabaseZap, ExternalLink, FlaskConical, Loader2
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
+import { useSettingsRevision } from '../settings/settings-events';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
@@ -87,8 +88,15 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const [note, setNote] = useState<string | null>(null);
   const scope = useWorkspaceScope();
 
+  /**
+   * The index configuration is written by the settings centre (ADR-M09), and `settings.*`
+   * has no push channel — so the effective-config block below re-reads when settings change
+   * (P8/T8.4). Without the revision the panel would keep showing the pre-save revision and
+   * a stale include/exclude list.
+   */
+  const settingsRevision = useSettingsRevision();
   const statusResource = useAsyncResource(
-    projectId === null ? null : `index-status:${projectId}`,
+    projectId === null ? null : `index-status:${projectId}:${settingsRevision}`,
     () => getIndexStatusSafely(client, projectId ?? ''),
     { label: '读取索引状态' }
   );

@@ -27,6 +27,14 @@ export type ModalShellProps = {
   widthClassName?: string;
   testId?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Where focus returns when the overlay closes, as a CSS selector.
+   *
+   * Defaults to the element that opened the overlay. The settings centre passes its gear
+   * button because ⌘, arrives from the native menu, where the opener is the document body
+   * and focus would otherwise be lost on close.
+   */
+  returnFocusSelector?: string;
   /** Return false to keep the overlay open (e.g. unsaved draft confirmation). */
   beforeClose?: () => boolean;
   /** Clicking the scrim closes. Set false for destructive flows. */
@@ -43,6 +51,7 @@ export function ModalShell({
   widthClassName,
   testId,
   initialFocusRef,
+  returnFocusSelector,
   beforeClose,
   closeOnBackdrop = true
 }: ModalShellProps): React.JSX.Element | null {
@@ -55,7 +64,7 @@ export function ModalShell({
 
   // Background inertness lives in the hook, which reference-counts the overlay
   // stack so layers closing out of order cannot leave `#root` hidden forever.
-  useOverlayBehavior({ open, panelRef, overlayId, onRequestClose: onClose, canClose, initialFocusRef });
+  useOverlayBehavior({ open, panelRef, overlayId, onRequestClose: onClose, canClose, initialFocusRef, returnFocusSelector });
 
   if (!open) {
     return null;

@@ -43,6 +43,14 @@ export type OverlayBehaviorOptions = {
   /** Consulted before every close path; returning false vetoes the close. */
   canClose: () => boolean;
   initialFocusRef?: RefObject<HTMLElement | null> | undefined;
+  /**
+   * Element that should receive focus when the overlay closes, as a CSS selector.
+   *
+   * Used when the opener is not the element the user last focused — the settings centre is
+   * opened by the native ⌘, menu accelerator, so `document.activeElement` is the body and
+   * focus would land nowhere. When the selector matches nothing the captured opener wins.
+   */
+  returnFocusSelector?: string | undefined;
   /** Stable id used for stack ordering. */
   overlayId: string;
   /** Set false to leave the app accessible behind this overlay (non-modal). */
@@ -55,6 +63,7 @@ export function useOverlayBehavior({
   onRequestClose,
   canClose,
   initialFocusRef,
+  returnFocusSelector,
   overlayId,
   inertBackground = true
 }: OverlayBehaviorOptions): void {
@@ -69,7 +78,10 @@ export function useOverlayBehavior({
       return;
     }
 
-    const opener = captureDialogOpener();
+    const opener =
+      returnFocusSelector === undefined
+        ? captureDialogOpener()
+        : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
     const wasEmpty = openOverlayStack.length === 0;
     openOverlayStack.push(overlayId);
 
@@ -122,5 +134,5 @@ export function useOverlayBehavior({
       // Returning focus to the trigger is what keeps keyboard flow continuous.
       restoreDialogFocus(opener);
     };
-  }, [open, overlayId, panelRef, initialFocusRef, inertBackground]);
+  }, [open, overlayId, panelRef, initialFocusRef, returnFocusSelector, inertBackground]);
 }

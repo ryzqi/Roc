@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileCode2, Play, RefreshCw, XCircle } from 'lucide-react';
 import type { ResearchTemplate, ResearchTemplateFile, ResearchTemplateFileContent, ResearchToolchainStatus } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
+import { useSettingsRevision } from '../settings/settings-events';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -71,7 +72,11 @@ export function TemplatePanel({ writeAllowed }: { writeAllowed?: boolean }): Rea
   const canWrite = writeAllowed ?? scope.writable;
   const projectId = scope.projectId ?? '';
 
-  const toolchain = useAsyncResource<ResearchToolchainStatus>('template-toolchain', () => getToolchainStatus(scope.client), {
+  // The toolchain is reported (not configured) here, but the settings centre can change it
+  // (a model download, a toolchain repair), so the status re-reads on a settings save
+  // (P8/T8.4) — otherwise the compile button keeps its pre-save disabled state.
+  const settingsRevision = useSettingsRevision();
+  const toolchain = useAsyncResource<ResearchToolchainStatus>(`template-toolchain:${settingsRevision}`, () => getToolchainStatus(scope.client), {
     label: '读取工具链状态'
   });
   const templates = useAsyncResource<ResearchTemplate[]>(

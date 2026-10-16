@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
 import type { ChatRunMode } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncResource } from '../app/use-async-resource';
+import { useSettingsRevision } from '../settings/settings-events';
 import type { RocClient } from '../shared/roc-client';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
@@ -60,7 +61,15 @@ export function AssistantPanel({
   stageLabel = null,
   onOpenSettings
 }: AssistantPanelProps): React.JSX.Element {
-  const settings = useAsyncResource('assistant:settings', () => client.api.settings.get(), {
+  /**
+   * The settings revision is part of the key, not just a reload trigger: a save in the
+   * settings centre changes the model label, the image support and the skill list, and the
+   * contract has no push channel for `settings.*` (P8/T8.4). Keying on the revision makes
+   * the resource drop the old snapshot and re-read, which is the same path a project switch
+   * takes.
+   */
+  const settingsRevision = useSettingsRevision();
+  const settings = useAsyncResource(`assistant:settings:${settingsRevision}`, () => client.api.settings.get(), {
     label: '读取模型设置'
   });
   const [mode, setMode] = useState<ChatRunMode>('chat');

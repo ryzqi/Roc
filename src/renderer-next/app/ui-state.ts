@@ -254,6 +254,40 @@ export function writeFileTreeExpanded(projectId: string, paths: readonly string[
   writeRaw(uiStateKeys.fileTreeExpanded, JSON.stringify(record));
 }
 
+/**
+ * Removes every `roc.ui.*` key, returning the ones that existed.
+ *
+ * Backs 「重置本地界面偏好」 in the settings centre (P8): the only thing this module owns is
+ * UI layout state, so it is the only thing the reset may touch. It deliberately does not
+ * delete anything else from `localStorage` — that would be the compatibility layer this
+ * migration forbids (ADR-M02).
+ */
+export function clearUiState(): string[] {
+  const store = storage();
+  if (store === null) {
+    return [];
+  }
+  const removed: string[] = [];
+  try {
+    // Collect first, then remove: deleting while iterating by index shifts the following
+    // entries, and collecting forward keeps the returned order the storage order.
+    const keys: string[] = [];
+    for (let index = 0; index < store.length; index += 1) {
+      const key = store.key(index);
+      if (key !== null && key.startsWith(UI_STATE_PREFIX)) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) {
+      store.removeItem(key);
+      removed.push(key);
+    }
+  } catch {
+    return removed;
+  }
+  return removed;
+}
+
 /* ------------------------------------------------------------------ */
 /* Legacy cleanup                                                      */
 /* ------------------------------------------------------------------ */

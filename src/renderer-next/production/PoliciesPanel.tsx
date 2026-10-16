@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import type { ResearchStagePolicy } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
+import { useSettingsRevision } from '../settings/settings-events';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime } from '../shared/format';
@@ -62,8 +63,11 @@ export function PoliciesPanel({ writeAllowed }: { writeAllowed?: boolean }): Rea
     [workflow.policies, selectedStage]
   );
 
+  // Re-read after a settings-centre save (P8/T8.4): the stage-policy model picker and the
+  // embedding summary both come from this snapshot, and `settings.*` has no push channel.
+  const settingsRevision = useSettingsRevision();
   const settings = useAsyncResource(
-    'production-settings',
+    `production-settings:${settingsRevision}`,
     () => getSettings(scope.client),
     { label: '读取模型设置' }
   );

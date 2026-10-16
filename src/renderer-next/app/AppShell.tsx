@@ -4,7 +4,7 @@ import type { AppViewId } from './routes';
 import { useAppNavigateBridge, useAppRoute } from './use-app-route';
 import { useLayoutState } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
-import { purgeLegacyStorage } from './ui-state';
+import { clearUiState, purgeLegacyStorage } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
@@ -119,7 +119,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [managementMounted, setManagementMounted] = useState(false);
   const [settingsMounted, setSettingsMounted] = useState(false);
 
-  const { override, cycle: cycleTheme } = useAppearanceOverride();
+  const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
   const layout = useLayoutState();
   const windowState = useWindowState(client);
@@ -552,8 +552,19 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         <Suspense fallback={<DelayedFallback label="正在加载设置…" />}>
           <SettingsModal
             open={settingsOpen}
+            client={client}
+            projectId={route.projectId}
+            workspacePath={boundWorkspace.path}
+            themeOverride={override}
+            onThemeOverrideChange={setOverride}
+            // 「重置本地界面偏好」 is the only writer of `roc.ui.*` outside ui-state.ts's
+            // own helpers, so the live appearance override has to be reset here too —
+            // otherwise the DOM keeps an override whose stored value was just deleted.
+            onResetUiPreferences={() => {
+              clearUiState();
+              setOverride('system');
+            }}
             onClose={() => navigate({ ...route, page: 'research' })}
-            dirtyCount={0}
           />
         </Suspense>
       ) : null}

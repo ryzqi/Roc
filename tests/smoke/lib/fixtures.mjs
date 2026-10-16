@@ -58,6 +58,15 @@ export function seedSmokeWorkspace(workspaceRoot, remoteRoot) {
     'docs/smoke-preview.pdf'
   ]);
   runWorkspaceGit(workspaceRoot, ['commit', '-m', 'initial smoke workspace']);
+  // Pin the initial branch to `master`.
+  //
+  // `git init` names the branch after `init.defaultBranch`, which is **ambient**: this machine's
+  // CommandLineTools git sets it to `main` in its system config, while Homebrew's git defaults to
+  // `master` — so the same suite passed or failed depending on which git the launching shell's
+  // PATH resolved (P8 hit exactly that: three harnesses in a row failed on
+  // `git push -u origin master` → `src refspec master does not match any`). Every assertion in
+  // P3–P7 expects `master`, so the fixture renames it instead of inheriting the environment.
+  runWorkspaceGit(workspaceRoot, ['branch', '-M', 'master']);
   writeFileSync(
     join(workspaceRoot, 'phase-three-notes.txt'),
     `phase three smoke workspace\n${buildSmokeContent('changed in git line', 80)}`,

@@ -31,6 +31,13 @@ export const REGION_PATTERN = /\/\/#region[ \t]+node_modules\/\.pnpm\/([^\n]+)/g
  * `react-markdown`, `streamdown`, `highlight.js`) and long transcript lists
  * (`react-virtuoso`). Adding a package here is the assertion that the lazy
  * boundary around it is intentional.
+ *
+ * `zod` (P8) is the same shape one level down: its only consumers are the
+ * `src/shared/schemas/**` modules, which are imported by lazily loaded surfaces (the settings
+ * centre's hooks editor and the assistant's persisted-thread history). It used to be guarded
+ * only by the byte budget, which cannot distinguish "zod grew the lazy chunk" from "zod leaked
+ * into every launch"; the P8 review asked for the assertion, and `report:renderer-eager` shows
+ * the entry's four files carry no zod region.
  */
 export const EAGER_FORBIDDEN_PACKAGES = [
   'react-diff-view',
@@ -40,7 +47,8 @@ export const EAGER_FORBIDDEN_PACKAGES = [
   'highlight.js',
   'react-markdown',
   'streamdown',
-  'react-virtuoso'
+  'react-virtuoso',
+  'zod'
 ];
 
 /**
