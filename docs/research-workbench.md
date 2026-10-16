@@ -6,17 +6,28 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 ## 入口
 
-- Renderer：`src/renderer/views/research/ResearchAppShell.tsx`
-- 路由：`research-route.ts`（`project` / `view` / `stage`）
-- 阶段组：`research-stage-groups.ts`
+- 壳：`src/renderer/app/AppShell.tsx`（顶栏 + 左栏 + 画布 + 助手；`WorkspaceLayout.tsx` 管三栏弹性与窄窗抽屉）
+- 窗口壳：`src/renderer/shell/WindowChrome.tsx`；左栏：`shell/LeftSidebar.tsx`；画布：`canvas/WorkspaceCanvas.tsx`
+- 路由：`src/renderer/app/routes.ts`（`page` / `project` / `view` / `stage` / `tool` / `assistant`，ADR-M05）
+- 视图注册：`src/renderer/app/view-registry.ts`（懒加载 + 解析跟踪；每个视图一个真实 `import()`）
+- 阶段组：`src/renderer/canvas/workflow/stage-groups.ts`
 - 主进程：`src/main/plugins/research/`，`loadPhase: critical`
 - 数据根：`~/.roc`；库、索引、实验、导出分别在 `research-library` / `research-index` / `research-experiments` / `research-exports`
 
-无项目 id 时停在项目列表，不自动进入上次或第一个项目。列表用卡片网格；空态只显示「新建研究项目」，点新建才出标题、研究目标、语言和工作目录。创建必须选择目录，一个目录同时只属于一个研究项目。创建后进入该项目科研工作台，默认总览。顶栏「所有项目」返回列表并卸掉当前项目。缺目录的旧项目可以进入总览，但打开文件与代码前必须先绑定工作目录。文件与代码打开的是该项目目录，不是全局计算目录。设置里不再保留默认工作区。
+无项目 id 时停在**项目门户**，不自动进入上次或第一个项目。门户用卡片网格；空态只显示「新建研究项目」，
+点新建才出标题、研究目标、语言和工作目录。创建必须选择目录，一个目录同时只属于一个研究项目。
+创建后进入该项目的工作台，默认落总览（`view=overview`）。顶栏「所有项目」返回门户并卸掉当前项目。
+缺目录的旧项目可以进入总览，但打开文件与代码前必须先绑定工作目录 —— 绑定入口在左栏（`sidebar-files-binding`），
+设置里不再保留默认工作区。
 
-当前下一步钉在科研工作台壳上，和阶段条同一层，总览和阶段工作区都能看见。细条在没有对象时只有主按钮；有工件时加一行标题；要重试时加一行原因的第一句。运行中是状态句加次级「取消运行」。待审核时主按钮是「确认通过」或「接受稿件」，退回修改和要求修订在同一条上但为次级。阶段工作区不再放流程按钮，只留编辑面板和可选的阶段指令；指令留空时用研究目标。解析模型不出现在总览，只在打开「发现与阅读」且模型未就绪时提供下载。
+当前下一步钉在总览与阶段工作区里（`workflow-next-strip`），和阶段条同一层。
+细条在没有对象时只有主按钮；有工件时加一行标题；要重试时加一行原因的第一句。
+运行中是状态句加次级「取消运行」。待审核时主按钮是「确认通过」或「接受稿件」，退回修改和要求修订在同一条上但为次级。
+阶段工作区不再放流程按钮，只留编辑面板和可选的阶段指令；指令留空时用研究目标。
+解析模型不出现在总览，只在打开「发现与阅读」且模型未就绪时提供下载。
 
-项目内快捷键：`1` 总览，`2` 活动，`3` 溯源。`Escape` 关闭抽屉、活动栏或错误条。
+快捷键：`⌘K` 搜索、`⌘,` 设置、`⌘J` 助手、`⌘B` 左栏；项目内 `1` 总览、`2` 活动、`3` 溯源。
+`Escape` 关闭抽屉、浮层或错误条。
 
 ## 对话驱动阶段
 
@@ -30,15 +41,25 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 ## 壳层视图
 
+画布一次只显示一个视图（`view` 参数，注册表在 `src/renderer/app/view-registry.ts`）：
+
 | `view` | 界面 | 内容 |
 | --- | --- | --- |
-| `changes` | `ResearchChangesView` | 本次对话产生的文件改动（工作目录 diff）、阶段产物和阶段运行。默认视图。 |
-| `overview` | `ResearchOverviewView` | 研究目标、当前阶段、闸门、索引、流水线、最近活动。只读。 |
-| `activity` | `ResearchActivityView` | 流程事件与阶段运行。 |
-| `provenance` | `ResearchProvenanceView` | 工件、证据、来源。 |
-| `stage` | `ResearchStageWorkspace` | 当前阶段组的可编辑面板。二级视图。 |
+| `overview` | `ProjectOverview` | 研究目标、当前阶段、闸门、索引、最近活动。默认视图。 |
+| `stage` | `StageWorkspace` | 当前阶段组的可编辑面板（非当前组只读）。 |
+| `activity` | `ActivityView` | 流程事件、阶段运行与任务。 |
+| `provenance` | `ProvenanceView` | 工件、证据、来源。 |
+| `changes` | `ChangesView` | 工作目录 diff、阶段产物与阶段运行。 |
+| `literature` | `LiteratureHubView` | 文献库 / 知识库 / Wiki / 图谱 / RAG Studio。 |
+| `latex` | `LatexPanel` | 文稿与模板编译。 |
+| `terminal` | `TerminalView` | 真实 pty 会话。 |
+| `files` | `FilesView` | 文件树 + 预览/编辑（PDF 走 `files.preview` 的协议 URL）。 |
+| `tasks` | `TasksView` | 任务看板、审批、后台任务。 |
+| `diagnostics` | `DiagnosticsView` | 失败运行、指标、打包诊断。 |
+| `mcp` / `skills` / `memory` | `ManagementView` | 管理面板的三个分区（与抽屉共用同一组组件）。 |
 
-非当前阶段组只读。设置组（嵌入配置、阶段模型）始终可写。
+抽屉（`ModalShell`）给 Git 与管理面板；浮层给 ⌘K 搜索与设置。两者都不卸载当前项目。
+窗口 ≤1099px 时左栏与助手改成抽屉（ADR-M12）。
 
 ## 阶段组
 
@@ -55,25 +76,29 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 ## 科研服务
 
-`research-services.ts` 把既有能力标成项目服务，不另起运行时：
+科研服务不再有独立的导轨或壳层：它们就是画布视图、抽屉和助手。
+对话绑定当前项目、驱动阶段（`research_*` 工具在运行快照里），其余服务按视图落位：
 
-| 服务 | 视图 | 说明 |
+| 服务 | 落点 | 说明 |
 | --- | --- | --- |
-| 研究助手 | `chat`（解析为 research + 助手叠层） | 绑定当前项目、驱动阶段的对话 |
-| 活动与运行 | `tasks-board` | 任务、审批、后台运行 |
-| 文件与代码 | `workspace` | 项目文件、Git、终端 |
-| 连接器 | `mcp` | MCP 授权 |
-| 技能 | `skills` | 按阶段可调用的 Skill |
-| 项目记忆 | `memory` | 会话与自动记忆 |
-| 运行诊断 | `diagnostics` | 失败运行与主机状态 |
+| 研究助手 | 助手列 / 窄窗抽屉（`⌘J`） | 绑定当前项目、驱动阶段的对话 |
+| 活动与运行 | `view=activity` + `view=tasks` | 流程事件、阶段运行、任务与审批 |
+| 文件与代码 | `view=files` / `view=changes` / `view=terminal` + Git 抽屉 | 项目文件、diff、真实 pty |
+| 连接器 | `view=mcp`（或管理抽屉） | MCP 授权；审批模式在设置中心 |
+| 技能 | `view=skills` | 导入 / 启停 / 文件预览 |
+| 项目记忆 | `view=memory` | 5 个槽位、容量、会话检索、注入预览 |
+| 运行诊断 | `view=diagnostics` | 失败运行与主机状态 |
 
-窄屏下服务进抽屉。研究助手是改论文和推进阶段的主入口，开在助手叠层里。
+研究助手是改论文和推进阶段的主入口，开在右侧助手列；`titlebar-toggle-assistant` 与 `⌘J` 都可开关。
 
-## 研究助手入口与叠层
+## 研究助手入口
 
-没有独立的「对话优先」主视图。`openMainPage('chat')` 不会切到独立对话页：AppShell 的导航处理把它解析成 `activeView = research` 加助手叠层（URL 写成 `?page=research&assistant=1`）。因此 `RailOverlay` 的导轨按钮（`.rail-button`）在当前产品里不渲染；打开右侧工作台走研究壳的画布工具（`research-shell-canvas-tools` 里的「文件 / Git / 终端」，对应 `research-shell-canvas-tool-<tool>`），它会设 `workbenchVisible` 而不改 `activeView`。
+没有独立的「对话优先」主视图。`page=chat` 会被路由规范化成 `page=research&assistant=1`
+（`src/renderer/app/routes.ts`），也就是「留在当前项目 + 打开助手」。
 
-叠层打开时对话归叠层：研究壳自己不再渲染对话列（`research-cockpit-chat`），也不会挂第二个 `Chat`，所以全局只有一个 `chat-view` 与一个 composer；壳网格同步收成两列（`.research-cockpit--no-chat`）。`research-shell-assistant` 这个入口同时承担「新建对话」（`onOpenResearchAssistant` 接的是 `startNewConversation`）。
+助手是布局的一部分而不是浮层：宽窗占右列（`assistant-panel`），≤1099px 变抽屉
+（`WorkspaceLayout`，`assistant-drawer`）。转录与输入区只有一个实例，切项目会清空当前 thread。
+会话历史在左栏的会话 tab（`sidebar-tab-sessions`），行是 `session-row-<threadId>`。
 
 ## 阶段角色
 

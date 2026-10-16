@@ -28,7 +28,7 @@ supersedes: 1.0.0
 
 | 层 | 入口 | 职责 | 不是什么 |
 |---|---|---|---|
-| 窗口壳 | `MacWindowChrome` | 窗口拖拽区、面包屑、搜索（⌘K）、助手/管理/Git/设置入口 | 一级导航、阶段条 |
+| 窗口壳 | `WindowChrome` | 窗口拖拽区、面包屑、搜索（⌘K）、助手/管理/Git/设置入口 | 一级导航、阶段条 |
 | 项目门户 | `ProjectPortalView` | 默认入口；卡片网格；搜索/状态筛选/新建 | 自动进入上次项目、空态直接摊开表单 |
 | 三栏工作台 | `AppShell` | 左栏 + 助手 + 画布；可拖拽、可折叠；断点收合 | 第二套导航层级 |
 | 左栏 | `LeftSidebar` | 文件 / 文献 / 会话三个 tab；主题与管理入口 | 科研服务全集、阶段导航 |
@@ -37,7 +37,7 @@ supersedes: 1.0.0
 | 项目内视图 | `ViewContent` | 总览 · 阶段工作区 · 活动 · 溯源 · 改动 · 文献 · 文稿 · 终端 · 文件 · 任务 · 诊断 · MCP · 技能 · 记忆 | 一级导航项的全集 |
 | 抽屉与浮层 | `ModalShell`（Git 抽屉 / 管理面板）/ `SearchPaletteModal` / `SettingsModal` | 临时工作面，不卸载当前项目 | 新窗口、路由页 |
 
-阶段组：发现与阅读、构思与计划、实验与检查、写作与审阅、发布与复现、项目设置。11 个流程阶段走人工闸门，不由模型自行跨过。分组定义的真身是 `src/renderer-next/canvas/workflow/stage-groups.ts`。
+阶段组：发现与阅读、构思与计划、实验与检查、写作与审阅、发布与复现、项目设置。11 个流程阶段走人工闸门，不由模型自行跨过。分组定义的真身是 `src/renderer/canvas/workflow/stage-groups.ts`。
 
 ### 页面结构
 
@@ -83,7 +83,7 @@ supersedes: 1.0.0
   -> 默认可进但只读；需先恢复才能改产物
 ```
 
-路由合同见 §6.5 与 `src/renderer-next/app/routes.ts`。
+路由合同见 §6.5 与 `src/renderer/app/routes.ts`。
 
 ### 1.4 相对 v1 的取代关系
 
@@ -141,12 +141,12 @@ v1 禁用左栏的理由是「避免做成 SaaS 仪表盘，避免 Chat/文件/�
 
 ## 2. 色彩变量
 
-真身是 `src/renderer-next/styles/tokens.css`，两层结构：
+真身是 `src/renderer/styles/tokens.css`，两层结构：
 
 1. **palette 层**：`--app-zinc-50..950` / `--app-slate-50..900`，浅深各一套。深色下 zinc 阶是**反相**的（`--app-zinc-900` 是深面，`--app-zinc-100` 是亮字），与 `research-studio` 一致，因此组件里 `bg-zinc-900 text-zinc-100` 在两套主题下语义相同。
 2. **semantics 层**：`--ink` / `--text` / `--muted` / `--bg` / `--surface` / `--line` / `--accent` / `--st-*` 等别名，由 palette 推导。**组件只用语义层或 Tailwind 语义类名，禁止写死 hex。**
 
-Tailwind 映射在 `src/renderer-next/styles/index.css` 的 `@theme`。调用链只有一条：`@theme` → CSS 变量 → 组件类名。禁止同时引入旧 `src/renderer/styles/*.css`（R5）。
+Tailwind 映射在 `src/renderer/styles/index.css` 的 `@theme`。调用链只有一条：`@theme` → CSS 变量 → 组件类名。禁止同时引入旧 `src/renderer/styles/*.css`（R5）。
 
 ### 关键语义 token
 
@@ -492,7 +492,7 @@ grid-template-rows: 44px 1fr
 | Cmd+, | 打开设置浮层 |
 | Cmd+N | 门户新建研究项目（项目内忽略） |
 
-渲染层绑定（`src/renderer-next/app/shortcuts.ts`）：
+渲染层绑定（`src/renderer/app/shortcuts.ts`）：
 
 | 快捷键 | 行为 | 条件 |
 |---|---|---|
@@ -626,44 +626,56 @@ grid-template-rows: 44px 1fr
 
 ## 12. `data-testid` 约定
 
-（P10 收敛后生效；P1–P9 新增元素按此命名，不做事后别名映射。）
+P10 按实现收敛（下表是从 `src/renderer/**` 的实际取值里对出来的，不是设想）。新增元素按此命名；
+**不做事后别名映射**，旧壳的 `research-*` / `chat-*` / `workbench-*` / `settings-view` 一律不再出现。
 
-| 前缀 | 归属 | 例 |
+| 前缀族 | 归属 | 例 |
 |---|---|---|
 | `roc-` | 应用根与启动门 | `roc-app`、`roc-app-startup`、`roc-app-startup-error` |
-| `shell-` | 顶栏、左栏、画布、助手容器 | `shell-titlebar`、`shell-sidebar`、`shell-canvas`、`shell-assistant` |
-| `portal-` | 项目门户与新建 | `portal-grid`、`portal-card`、`portal-create-form` |
-| `canvas-` | 画布一级 tab 与内容 | `canvas-tab-literature`、`canvas-view` |
-| `workflow-` | 阶段条、总览、闸门 | `workflow-stage-bar`、`workflow-next-action`、`workflow-gate` |
-| `assistant-` | 助手头部、转录、输入区、富块 | `assistant-composer`、`assistant-block-tool-call`、`assistant-interrupt` |
-| `files-` / `git-` / `terminal-` | 工作区服务 | `files-tree`、`git-status`、`terminal-session` |
-| `lit-` | 文献中心 | `lit-import`、`lit-reader`、`lit-index-status` |
-| `settings-` | 设置浮层 | `settings-modal`、`settings-section-rag`、`settings-dirty-bar` |
-| `mgmt-` | 管理面板 | `mgmt-memory`、`mgmt-mcp-servers` |
-| `view-` | 通用视图状态 | `view-loading`、`view-placeholder` |
+| `titlebar-` | 窗口顶栏 | `titlebar`、`titlebar-project-name`、`titlebar-settings` |
+| `sidebar-` | 左栏（文件 / 文献 / 会话） | `sidebar`、`sidebar-tab-sessions`、`sidebar-files-binding` |
+| `portal-` | 项目门户与卡片 | `portal`、`portal-grid`、`portal-card-<id>`、`portal-new-project` |
+| `project-` | 项目表单与项目级状态 | `project-form-title`、`project-load-error`、`project-readonly-banner` |
+| `canvas-` | 画布容器、列与一级 tab | `canvas`、`canvas-column`、`canvas-tab-<view>` |
+| `workflow-` | 阶段条、总览、人工闸门 | `workflow-stage-bar`、`workflow-next-strip`、`workflow-overview-gate`（对话里的闸门卡片是 `assistant-gate-*`） |
+| `assistant-` | 助手列、转录、输入区、富块、审批 | `assistant-panel`、`assistant-transcript`、`assistant-composer-input`、`assistant-approval-approve` |
+| `file-` / `files-` | 文件视图与预览 | `file-tree-row-<path>`、`file-preview-path`、`files-view` |
+| `git-` | Git 视图 | `git-panel`、`git-changes`、`git-diff` |
+| `terminal-` | 终端视图 | `terminal-xterm`、`terminal-status` |
+| `literature-` / `paper-` / `reader-` | 文献中心、阅读器 | `literature-list`、`paper-reader`、`reader-action-<id>` |
+| `rag-` | RAG Studio | `rag-studio`、`rag-search`、`rag-rebuild` |
+| `graph-` / `wiki-` / `knowledge-` | 派生视图（须标来源接口） | `graph-node-<id>`、`wiki-body`、`knowledge-graph` |
+| `production-` | 生产面板（构思/实验/图稿/正文/证据/主张/导出/模板） | `production-ideas`、`production-figure-<id>`、`production-latex` |
+| `task-` / `tasks-` | 任务详情与看板 | 任务详情用 `task-*`（`task-detail-*`），看板与列表用 `tasks-*`（`tasks-board-*`） |
+| `diagnostics-` | 诊断 | `diagnostics-view`、`diagnostics-health-status` |
+| `session-` | 会话列表（助手左栏 tab） | `session-row-<threadId>`、`session-new` |
+| `search-palette-` | ⌘K 搜索浮层 | `search-palette-input`、`search-palette-idle` |
+| `settings-` | 设置浮层（12 个分区） | `settings-modal`、`settings-section-rag-body`、`settings-dirty-bar` |
+| `mgmt-` | 管理分区（抽屉与画布视图共用） | `mgmt-memory`、`mgmt-mcp-rows`、`mgmt-tasks` |
+| `management-` | 管理容器 | `management-panel`、`management-view` |
 
-新增 testid 必须唯一且稳定；不要用索引或文案做后缀。
-
----
+后缀约定：`-<id>` 用稳定 id，`-error` / `-loading` / `-empty` 表示状态，`-view` / `-panel` 表示容器。
+新增 testid 必须唯一且稳定；**不要用索引、序号或文案做后缀**。抽屉与画布视图会同时挂载同一组管理分区，
+所以分区内部 id 由 `testIdPrefix` 区分（`mgmt-*` 与 `mgmt-view-*`），断言前先确认是哪一个入口。
 
 ## 实现对照
 
 | 规范 | 落点 |
 |---|---|
-| Token | `src/renderer-next/styles/tokens.css` |
-| Tailwind 映射与全局基础 | `src/renderer-next/styles/index.css` |
-| 壳层 | `src/renderer-next/app/AppShell.tsx`、`app/routes.ts`、`app/ui-state.ts` |
-| 外观桥 | `src/renderer-next/shell/appearance.ts` |
-| 视图懒加载 | `src/renderer-next/app/ViewContent.tsx` |
-| 阶段语义 | `src/renderer-next/canvas/workflow/stage-groups.ts` |
-| 错误分级 | `src/renderer-next/app/errors.ts` |
-| 异步结果与懒加载态 | `src/renderer-next/app/loaded-state.ts` |
+| Token | `src/renderer/styles/tokens.css` |
+| Tailwind 映射与全局基础 | `src/renderer/styles/index.css` |
+| 壳层 | `src/renderer/app/AppShell.tsx`、`app/routes.ts`、`app/ui-state.ts` |
+| 外观桥 | `src/renderer/shell/appearance.ts` |
+| 视图懒加载 | `src/renderer/app/ViewContent.tsx` |
+| 阶段语义 | `src/renderer/canvas/workflow/stage-groups.ts` |
+| 错误分级 | `src/renderer/app/errors.ts` |
+| 异步结果与懒加载态 | `src/renderer/app/loaded-state.ts` |
 | 菜单 | `src/main/application-menu.ts` |
 | 产品词 | `CONTEXT.md`、`docs/research-workbench.md` |
 
 后续改 UI：先改 token 和本文件，再改组件。页面特例按约定写到 `design-system/pages/<page>.md`（该目录当前不存在）。
 
-P10 完成后，本表的 `renderer-next` 路径收敛为 `renderer`。
+路径表在 P10 切换提交里已收敛：旧的 `src/renderer-next/` 改名为 `src/renderer/`，旧壳目录被删除，仓库里只有这一套前端。
 
 ---
 

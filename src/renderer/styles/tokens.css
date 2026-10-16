@@ -1,97 +1,173 @@
 /*
- * 旧壳 token（v1 规范）。
+ * Roc renderer token layer (ADR-M03).
  *
- * 迁移期：新壳的色彩真身是 `src/renderer-next/styles/tokens.css`（两层结构，
- * 见 design-system/MASTER.md v2 §2）。本文件只服务尚未迁走的旧 renderer，
- * P10 随旧壳一起删除，不做两边共享。新壳禁止 import 本文件。
+ * Two layers only:
+ *   1. palette   — `--app-zinc-*` / `--app-slate-*`, one set per theme.
+ *   2. semantics — `--ink` / `--surface` / `--line` / `--accent` / `--st-*` …
+ *
+ * Components must use either Tailwind semantic utilities (mapped from these
+ * variables in `index.css`) or the semantic aliases below. Never a raw hex.
+ *
+ * Theme selection is driven by `data-theme` on <html>, which is written from
+ * `app.getStatus` + `app.onAppearanceUpdated` (see `shell/appearance.ts`).
+ * The palette mirrors research-studio/src/index.css so the imported visual
+ * language stays faithful; only the darkest stop is lifted off near-black.
  */
+
+/* ------------------------------------------------------------------ */
+/* Layer 1 — palette: dark (default)                                   */
+/* ------------------------------------------------------------------ */
+
+:root,
+:root[data-theme='dark'] {
+  --app-zinc-50: #ffffff;
+  --app-zinc-100: #f4f4f5;
+  --app-zinc-200: #e4e4e7;
+  --app-zinc-300: #d4d4d8;
+  --app-zinc-400: #a1a1aa;
+  --app-zinc-500: #71717a;
+  --app-zinc-600: #52525b;
+  --app-zinc-700: #3f3f46;
+  --app-zinc-800: #27272a;
+  --app-zinc-850: #202024;
+  --app-zinc-900: #18181b;
+  /* Lifted off research-studio's #09090b: darker than #111827, still not black. */
+  --app-zinc-950: #0e0e11;
+
+  --app-slate-50: #18181b;
+  --app-slate-100: #202024;
+  --app-slate-200: #27272a;
+  --app-slate-300: #3f3f46;
+  --app-slate-400: #71717a;
+  --app-slate-500: #a1a1aa;
+  --app-slate-600: #d4d4d8;
+  --app-slate-700: #e4e4e7;
+  --app-slate-800: #f4f4f5;
+  --app-slate-900: #ffffff;
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
+  --glass-bg: rgba(18, 18, 21, 0.85);
+  --color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ */
+/* Layer 1 — palette: light                                            */
+/* ------------------------------------------------------------------ */
+
+:root[data-theme='light'] {
+  --app-zinc-50: #020617;
+  --app-zinc-100: #0f172a;
+  --app-zinc-200: #1e293b;
+  --app-zinc-300: #334155;
+  --app-zinc-400: #475569;
+  --app-zinc-500: #64748b;
+  --app-zinc-600: #94a3b8;
+  --app-zinc-700: #cbd5e1;
+  --app-zinc-800: #e2e8f0;
+  --app-zinc-850: #f1f5f9;
+  --app-zinc-900: #ffffff;
+  --app-zinc-950: #f8fafc;
+
+  --app-slate-50: #f8fafc;
+  --app-slate-100: #f1f5f9;
+  --app-slate-200: #e2e8f0;
+  --app-slate-300: #cbd5e1;
+  --app-slate-400: #94a3b8;
+  --app-slate-500: #64748b;
+  --app-slate-600: #475569;
+  --app-slate-700: #334155;
+  --app-slate-800: #1e293b;
+  --app-slate-900: #0f172a;
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ */
+/* Layer 2 — semantic aliases                                          */
+/* ------------------------------------------------------------------ */
+
 :root {
-  /* 文字阶 */
-  --ink: #1f2937;
-  --text: #2c3440;
-  --muted: #58606b;
-  --subtle: #6b7280;
+  /* Text ramp. Values are theme-relative: zinc-100 is the lightest stop in
+     dark and the darkest stop in light, thanks to the palette flip above.
 
-  /* 背景阶 */
-  --bg: #fcfcfd;
-  --bg-soft: #f6f7f9;
-  --surface: #ffffff;
-  --surface-strong: #ffffff;
-  --surface-card: #ffffff;
-  --surface-card-hover: #f8f9fb;
-  --surface-translucent: rgba(255, 255, 255, 0.92);
-  --material-window: rgba(245, 245, 247, 0.72);
-  --material-titlebar: rgba(250, 250, 252, 0.66);
-  --material-sidebar: rgba(246, 246, 248, 0.74);
-  --material-list: rgba(250, 250, 252, 0.78);
-  --material-detail: rgba(255, 255, 255, 0.9);
+     `--muted` and `--subtle` are both usable for body-position text, so both
+     clear 4.5:1 on `--bg`. Measured (WCAG 2.1 relative luminance):
+       dark  — muted #a1a1aa on #0e0e11 = 8.4:1, subtle #7c7c86 = 4.68:1
+       light — muted #64748b on #fcfcfd = 4.98:1, subtle #6b7280 = 5.06:1
+     `--subtle` is the weakest tier; do not use it below body size without a
+     second non-color signal. */
+  --ink: var(--app-zinc-100);
+  --text: var(--app-zinc-200);
+  --muted: var(--app-zinc-400);
+  --subtle: #7c7c86;
 
-  /* 描边阶 */
-  --line-soft: rgba(120, 144, 184, 0.14);
-  --line: rgba(120, 144, 184, 0.22);
-  --line-strong: rgba(120, 144, 184, 0.34);
-  --mac-hairline: rgba(0, 0, 0, 0.08);
+  /* Background ramp */
+  --bg: var(--app-zinc-950);
+  --bg-soft: var(--app-zinc-900);
+  --surface: var(--app-zinc-900);
+  --surface-strong: var(--app-zinc-850);
+  --surface-card: var(--app-zinc-900);
+  --surface-card-hover: var(--app-zinc-800);
+  --surface-translucent: color-mix(in srgb, var(--app-zinc-900) 88%, transparent);
+  --material-window: color-mix(in srgb, var(--app-zinc-950) 78%, transparent);
+  --material-titlebar: color-mix(in srgb, var(--app-zinc-900) 70%, transparent);
+  --material-sidebar: color-mix(in srgb, var(--app-zinc-900) 74%, transparent);
+  --material-list: color-mix(in srgb, var(--app-zinc-950) 80%, transparent);
+  --material-detail: color-mix(in srgb, var(--app-zinc-900) 90%, transparent);
 
-  /* 主调 */
-  --system-accent: #2d477a;
+  /* Hairlines */
+  --line-soft: color-mix(in srgb, var(--app-zinc-400) 14%, transparent);
+  --line: color-mix(in srgb, var(--app-zinc-400) 22%, transparent);
+  --line-strong: color-mix(in srgb, var(--app-zinc-400) 34%, transparent);
+  --mac-hairline: color-mix(in srgb, var(--app-zinc-100) 12%, transparent);
+
+  /* Accent. `--system-accent` is injected by the appearance bridge from the
+     macOS accent color; the fallback keeps the app usable before it arrives. */
+  --system-accent: #4f7cc4;
   --accent: var(--system-accent);
   --accent-deep: color-mix(in srgb, var(--accent) 78%, #000000);
   --accent-hover: var(--accent-deep);
-  /* 淡底用的主调：浅色下等于主调本身，深色下提亮，否则淡底叠深底不可见 */
   --accent-tint: var(--accent);
-  --accent-soft: color-mix(in srgb, var(--accent-tint) 10%, transparent);
-  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 18%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent-tint) 14%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 24%, transparent);
   --accent-stripe: var(--accent);
-
-  /* 实心主按钮填充：浅色深底白字，深色由 dark 块反转 */
-  --fill-strong: var(--ink);
-  --fill-strong-hover: var(--accent-deep);
-  --fill-strong-text: #ffffff;
-  --control-thumb: #ffffff;
-
-  /* 主色上的文字与加深态别名，页面不再各写 --accent-contrast / --accent-strong */
   --on-accent: #ffffff;
   --accent-contrast: var(--on-accent);
   --accent-strong: var(--accent-deep);
 
-  /* 成功态别名，科研页历史 --st-good 接到共享 --st-ok */
+  /* Solid primary fills */
+  --fill-strong: var(--app-zinc-100);
+  --fill-strong-hover: var(--accent-deep);
+  --fill-strong-text: var(--app-zinc-950);
+  --control-thumb: #ffffff;
+
+  /* Status. Never the only signal — pairs with an icon or label. */
+  --st-ok: #4bbd8a;
+  --st-info: var(--accent);
+  --st-warn: #d6a44f;
+  --st-bad: #e0716f;
+  --st-ok-line: color-mix(in srgb, var(--st-ok) 38%, transparent);
+  --st-info-line: color-mix(in srgb, var(--accent) 42%, transparent);
+  --st-warn-line: color-mix(in srgb, var(--st-warn) 38%, transparent);
+  --st-bad-line: color-mix(in srgb, var(--st-bad) 38%, transparent);
   --st-good: var(--st-ok);
   --st-good-line: var(--st-ok-line);
 
-  /* 控件：桌面密度，默认高 32，紧凑 28，输入 32。热区不小于 28，指针不是触摸目标。 */
-  --control-height: 32px;
-  --control-height-compact: 28px;
-  --control-height-input: 32px;
-  --control-height-textarea: 88px;
-  --control-pad-y: 4px;
-  --control-pad-x: 10px;
-  --control-gap: 8px;
-  --control-hit: 32px;
-  --control-hit-min: 28px;
+  /* Tool-call states */
+  --tool-st-start-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  --tool-st-start-text: color-mix(in srgb, var(--accent) 62%, #ffffff);
+  --tool-st-progress-bg: color-mix(in srgb, var(--st-warn) 16%, transparent);
+  --tool-st-progress-text: var(--st-warn);
+  --tool-st-end-bg: color-mix(in srgb, var(--st-ok) 16%, transparent);
+  --tool-st-end-text: var(--st-ok);
+  --tool-st-error-bg: color-mix(in srgb, var(--st-bad) 16%, transparent);
+  --tool-st-error-text: var(--st-bad);
 
-  /* 状态 */
-  --st-ok: #166c4a;
-  --st-info: var(--accent);
-  --st-warn: #8a5a17;
-  --st-bad: #9c3a3a;
-
-  /* 状态边线 */
-  --st-ok-line: #b9d8c6;
-  --st-info-line: #b8c5dc;
-  --st-warn-line: #d6c193;
-  --st-bad-line: #d4adad;
-
-  /* 工具调用状态 */
-  --tool-st-start-bg: #e3f2fd;
-  --tool-st-start-text: #2d477a;
-  --tool-st-progress-bg: #fff3e0;
-  --tool-st-progress-text: #8a5a17;
-  --tool-st-end-bg: #e8f5e9;
-  --tool-st-end-text: #166c4a;
-  --tool-st-error-bg: #ffebee;
-  --tool-st-error-text: #9c3a3a;
-
-  /* 圆角：控件 6 / 卡片 8 / 窗口与浮层 10。系统窗口圆角仍交给 Electron。 */
+  /* Radii: restrained. Control 6 / card 8 / overlay 10. */
   --r-control: 6px;
   --r-card: 8px;
   --r-window: 10px;
@@ -104,7 +180,7 @@
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
 
-  /* 间距：8px 网格。窗口 20，区块 24，卡片 16，紧间隙 8，卡片内可 12。 */
+  /* Spacing: 8px grid */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -120,42 +196,43 @@
   --gap-inline: var(--space-2);
   --pad-card: var(--space-4);
 
-  /* 阴影 */
-  --shadow-modal: 0 12px 32px rgba(20, 40, 80, 0.1);
-  --shadow-popover: 0 8px 20px rgba(20, 40, 80, 0.08);
-  --shadow-input: 0 1px 2px rgba(20, 40, 80, 0.04);
-  --shadow-card: 0 1px 2px rgba(20, 40, 80, 0.04);
-  --shadow-card-hover: 0 4px 14px rgba(20, 40, 80, 0.09);
+  /* Elevation */
+  --shadow-modal: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
+  --shadow-input: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.32);
 
-  /* 交互层（hover / press / 遮罩 / 强调条）。hover 要能看见，press 要比 hover 更深。 */
-  --overlay-hover: rgba(15, 23, 42, 0.08);
-  --overlay-active: rgba(15, 23, 42, 0.16);
-  --overlay-backdrop: rgba(15, 23, 42, 0.28);
-  --overlay-scrim: rgba(20, 40, 80, 0.32);
+  /* Interaction layers */
+  --overlay-hover: color-mix(in srgb, var(--app-zinc-100) 8%, transparent);
+  --overlay-active: color-mix(in srgb, var(--app-zinc-100) 16%, transparent);
+  --overlay-backdrop: rgba(6, 11, 20, 0.56);
+  --overlay-scrim: rgba(6, 11, 20, 0.62);
   --stripe-width: 3px;
   --lift-hover: none;
   --press-shift: translateY(1px);
 
-  /* Apple 系统色。控件着色仍用 --accent（跟随系统强调色），正文不用 systemGray，对比不够。 */
-  --system-blue: #007aff;
+  /* macOS system colors (informational; controls use --accent) */
+  --system-blue: #0a84ff;
   --system-gray: #8e8e93;
-  --system-gray-2: #aeaeb2;
-  --system-gray-3: #c7c7cc;
-  --system-gray-4: #d1d1d6;
-  --system-gray-5: #e5e5ea;
-  --system-gray-6: #f2f2f7;
   --label-primary: var(--ink);
   --label-secondary: var(--muted);
   --label-tertiary: var(--subtle);
   --separator: var(--line);
   --control-bg: var(--surface-strong);
 
-  /* 语义别名（不引入新色，仅命名） */
-  --composer-border: var(--line);
-  --composer-border-focus: color-mix(in srgb, var(--accent) 42%, transparent);
-  --workband-border: var(--mac-hairline);
+  /* Controls: desktop density */
+  --control-height: 32px;
+  --control-height-compact: 28px;
+  --control-height-input: 32px;
+  --control-height-textarea: 88px;
+  --control-pad-y: 4px;
+  --control-pad-x: 10px;
+  --control-gap: 8px;
+  --control-hit: 32px;
+  --control-hit-min: 28px;
 
-  /* 动效 */
+  /* Motion */
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 320ms;
@@ -164,7 +241,7 @@
   --transition-base: var(--duration-base) var(--easing-standard);
   --transition-fast: var(--duration-fast) var(--easing-standard);
 
-  /* 排版 */
+  /* Typography: system stacks only — no web fonts are ever loaded. */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
@@ -182,8 +259,7 @@
   --font-num-sm-size: 14px;
   --font-feature-mono: 'tnum' 1, 'cv11' 1;
 
-  /* 页面 / 气泡 */
-  --bg-gradient: var(--bg);
+  /* Chat surface */
   --chat-bubble-radius: var(--r-card);
   --chat-bubble-radius-tight: var(--r-card);
   --chat-gap: 24px;
@@ -194,103 +270,128 @@
   --chat-bubble-user-bg: var(--bg-soft);
   --chat-bubble-user-color: var(--text);
   --chat-bubble-user-shadow: none;
+  --composer-border: var(--line);
+  --composer-border-focus: color-mix(in srgb, var(--accent) 42%, transparent);
+  --workband-border: var(--mac-hairline);
 
-  /* 代码 */
+  /* Code */
+  --code-surface: var(--app-zinc-950);
+  --code-surface-soft: color-mix(in srgb, var(--app-zinc-100) 6%, transparent);
+  --code-text: var(--app-zinc-100);
+  --code-header-bg: var(--app-zinc-900);
+  --code-header-text: var(--app-zinc-400);
+
+  /* Syntax highlighting */
+  --syntax-keyword: #c4a2ff;
+  --syntax-string: #6bd6ae;
+  --syntax-comment: #8b9bb4;
+  --syntax-number: #e5bd6c;
+
+  /* Terminal stays dark in both themes (a light-theme terminal is unreadable as
+     a terminal). ANSI slots are tokens rather than component literals so the
+     palette can be retuned in one place. */
+  --terminal-bg: #0c121e;
+  --terminal-text: #dce4ef;
+  --terminal-cursor: #7aa7ff;
+  --terminal-selection: rgba(122, 167, 255, 0.28);
+  --terminal-line: rgba(122, 167, 255, 0.18);
+  --terminal-line-strong: rgba(122, 167, 255, 0.36);
+  --term-ansi-black: #1f2430;
+  --term-ansi-red: #e06c75;
+  --term-ansi-green: #98c379;
+  --term-ansi-yellow: #e5c07b;
+  --term-ansi-blue: #61afef;
+  --term-ansi-magenta: #c678dd;
+  --term-ansi-cyan: #56b6c2;
+  --term-ansi-white: #dce4ef;
+  --term-ansi-bright-black: #5c6773;
+  --term-ansi-bright-red: #ef8a96;
+  --term-ansi-bright-green: #b4d39a;
+  --term-ansi-bright-yellow: #f0d399;
+  --term-ansi-bright-blue: #82c0f5;
+  --term-ansi-bright-magenta: #d7a3e8;
+  --term-ansi-bright-cyan: #7fcdd5;
+  --term-ansi-bright-white: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Light-theme overrides on the semantic layer                         */
+/* ------------------------------------------------------------------ */
+
+:root[data-theme='light'] {
+  --ink: #0f172a;
+  --text: #1e293b;
+  --muted: #64748b;
+  --subtle: #6b7280;
+  --bg: #fcfcfd;
+  --bg-soft: #f1f5f9;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f8fafc;
+  --surface-translucent: rgba(255, 255, 255, 0.92);
+  --material-window: rgba(245, 245, 247, 0.72);
+  --material-titlebar: rgba(250, 250, 252, 0.66);
+  --material-sidebar: rgba(246, 246, 248, 0.74);
+  --material-list: rgba(250, 250, 252, 0.78);
+  --material-detail: rgba(255, 255, 255, 0.9);
+
+  --line-soft: rgba(120, 144, 184, 0.14);
+  --line: rgba(120, 144, 184, 0.22);
+  --line-strong: rgba(120, 144, 184, 0.34);
+  --mac-hairline: rgba(0, 0, 0, 0.08);
+
+  --system-accent: #2d477a;
+  --accent-tint: var(--accent);
+  --accent-soft: color-mix(in srgb, var(--accent-tint) 10%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 18%, transparent);
+  --on-accent: #ffffff;
+  --fill-strong: #0f172a;
+  --fill-strong-text: #ffffff;
+  --control-thumb: #ffffff;
+
+  --st-ok: #166c4a;
+  --st-info: var(--accent);
+  --st-warn: #8a5a17;
+  --st-bad: #9c3a3a;
+  --st-ok-line: #b9d8c6;
+  --st-info-line: #b8c5dc;
+  --st-warn-line: #d6c193;
+  --st-bad-line: #d4adad;
+
+  --tool-st-start-bg: #e3f2fd;
+  --tool-st-start-text: #2d477a;
+  --tool-st-progress-bg: #fff3e0;
+  --tool-st-progress-text: #8a5a17;
+  --tool-st-end-bg: #e8f5e9;
+  --tool-st-end-text: #166c4a;
+  --tool-st-error-bg: #ffebee;
+  --tool-st-error-text: #9c3a3a;
+
+  --shadow-modal: 0 12px 32px rgba(20, 40, 80, 0.1);
+  --shadow-popover: 0 8px 20px rgba(20, 40, 80, 0.08);
+  --shadow-input: 0 1px 2px rgba(20, 40, 80, 0.04);
+  --shadow-card: 0 1px 2px rgba(20, 40, 80, 0.04);
+  --shadow-card-hover: 0 4px 14px rgba(20, 40, 80, 0.09);
+  --overlay-hover: rgba(15, 23, 42, 0.06);
+  --overlay-active: rgba(15, 23, 42, 0.12);
+  --overlay-backdrop: rgba(15, 23, 42, 0.28);
+  --overlay-scrim: rgba(20, 40, 80, 0.32);
+
   --code-surface: #f7f8fa;
   --code-surface-soft: rgba(31, 41, 55, 0.04);
   --code-text: #1f2937;
   --code-header-bg: #fafbfc;
   --code-header-text: #6b7280;
-
-  /* 语法高亮 */
   --syntax-keyword: #8b3dff;
   --syntax-string: #087f5b;
   --syntax-comment: #6b7280;
   --syntax-number: #b45309;
-
-  /* 终端（两套主题下均为深色终端面板） */
-  --terminal-bg: #101726;
-  --terminal-text: #dce4ef;
-  --terminal-line: rgba(122, 167, 255, 0.18);
-  --terminal-line-strong: rgba(122, 167, 255, 0.36);
-
-  color: var(--text);
-  background: var(--bg);
-  font-family: var(--font-sans);
-  color-scheme: light;
 }
 
-:root[data-theme='dark'] {
-  --ink: #f4f7fb;
-  --text: #e7edf5;
-  --muted: #b5c0ce;
-  --subtle: #8f9bad;
-  --bg: #111827;
-  --bg-soft: #172033;
-  --surface: #151f30;
-  --surface-strong: #1a2638;
-  --surface-card: #172235;
-  --surface-card-hover: #1d2a3e;
-  --surface-translucent: rgba(21, 31, 48, 0.92);
-  --material-window: rgba(28, 28, 30, 0.72);
-  --material-titlebar: rgba(37, 37, 40, 0.66);
-  --material-sidebar: rgba(37, 37, 40, 0.74);
-  --material-list: rgba(28, 28, 30, 0.78);
-  --material-detail: rgba(28, 28, 30, 0.9);
-  --line-soft: rgba(190, 205, 228, 0.12);
-  --line: rgba(190, 205, 228, 0.2);
-  --line-strong: rgba(190, 205, 228, 0.32);
-  --mac-hairline: rgba(255, 255, 255, 0.1);
-  --system-blue: #0a84ff;
-  --system-gray: #8e8e93;
-  --system-gray-2: #636366;
-  --system-gray-3: #48484a;
-  --system-gray-4: #3a3a3c;
-  --system-gray-5: #2c2c2e;
-  --system-gray-6: #1c1c1e;
-  --accent-tint: color-mix(in srgb, var(--accent) 58%, #ffffff);
-  --accent-soft: color-mix(in srgb, var(--accent-tint) 18%, transparent);
-  --accent-soft-strong: color-mix(in srgb, var(--accent-tint) 30%, transparent);
-  --fill-strong-hover: #ffffff;
-  --fill-strong-text: var(--bg);
-  --st-ok: #79d2a6;
-  --st-warn: #e5bd6c;
-  --st-bad: #ee9292;
-  --st-ok-line: rgba(121, 210, 166, 0.38);
-  --st-info-line: color-mix(in srgb, var(--accent) 48%, transparent);
-  --st-warn-line: rgba(229, 189, 108, 0.36);
-  --st-bad-line: rgba(238, 146, 146, 0.36);
-
-  /* 工具调用状态 (深色) */
-  --tool-st-start-bg: rgba(45, 71, 122, 0.15);
-  --tool-st-start-text: #7a9bd8;
-  --tool-st-progress-bg: rgba(229, 189, 108, 0.15);
-  --tool-st-progress-text: #e5bd6c;
-  --tool-st-end-bg: rgba(121, 210, 166, 0.15);
-  --tool-st-end-text: #79d2a6;
-  --tool-st-error-bg: rgba(238, 146, 146, 0.15);
-  --tool-st-error-text: #ee9292;
-  --shadow-modal: 0 18px 42px rgba(0, 0, 0, 0.34);
-  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
-  --shadow-input: 0 1px 2px rgba(0, 0, 0, 0.22);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.32);
-  --overlay-hover: rgba(231, 237, 245, 0.08);
-  --overlay-active: rgba(231, 237, 245, 0.16);
-  --overlay-backdrop: rgba(6, 11, 20, 0.56);
-  --overlay-scrim: rgba(6, 11, 20, 0.62);
-  --code-surface: #111827;
-  --code-surface-soft: rgba(231, 237, 245, 0.06);
-  --code-text: #e7edf5;
-  --code-header-bg: #172033;
-  --code-header-text: #b5c0ce;
-  --syntax-keyword: #c4a2ff;
-  --syntax-string: #6bd6ae;
-  --syntax-comment: #8b9bb4;
-  --syntax-number: #e5bd6c;
-  --terminal-bg: #0c121e;
-  color-scheme: dark;
-}
+/* ------------------------------------------------------------------ */
+/* Accessibility overrides driven by the appearance snapshot           */
+/* ------------------------------------------------------------------ */
 
 :root[data-forced-colors='true'] {
   --accent: Highlight;

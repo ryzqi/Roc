@@ -13,12 +13,12 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 取消后是否回到可提交状态、关面板/切项目后是否恢复、500 条消息时虚拟化是否真的生效。
  * 静态阅读与单测都不覆盖这些（P3 的实测已经证明：类型正确、单测全绿、用户看到的是坏的）。
  *
- * 它**不**替代 P10 的 smoke：这里只覆盖 P4 的闸门，并显式以 `ROC_RENDERER=next` +
- * `ROC_SMOKE_TARGET=dist` 运行（后者很重要：`resolveSmokeTarget` 默认优先用
- * `release/mac-arm64/Roc.app`，那可能是过期的打包产物，P3 已经踩过两次）。
+ * 它**不**替代 P10 的 smoke：这里只覆盖 P4 的闸门，并显式以 `ROC_SMOKE_TARGET=dist` 运行
+ * （后者很重要：`resolveSmokeTarget` 默认优先用 `release/mac-arm64/Roc.app`，
+ * 那可能是过期的打包产物，P3 已经踩过两次）。
  *
  * 运行：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p4-assistant.mjs
  * 结果写入 `.artifacts/p4-gates/`（report.json + 截图）。
  */
@@ -233,7 +233,6 @@ try {
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
       ROC_SMOKE_API_KEY: 'smoke-test-key',
-      ROC_RENDERER: 'next'
     }
   });
   const page = await app.firstWindow();
@@ -643,7 +642,7 @@ try {
 
   // ---- 闸门 7：无假流式代码残留 ------------------------------------------------
   const assistantTimerHits = [];
-  for (const file of listSourceFiles('src/renderer-next/assistant')) {
+  for (const file of listSourceFiles('src/renderer/assistant')) {
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, index) => {
       if (/setInterval|setTimeout/u.test(line)) {
@@ -663,7 +662,7 @@ try {
   );
 
   const objectUrlHits = [];
-  for (const file of listSourceFiles('src/renderer-next')) {
+  for (const file of listSourceFiles('src/renderer')) {
     const code = stripComments(readFileSync(file, 'utf8'));
     if (/URL\.createObjectURL\s*\(/u.test(code)) {
       objectUrlHits.push(file);

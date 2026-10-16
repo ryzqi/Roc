@@ -57,10 +57,10 @@ const AUDIT_SCRIPT = `(() => {
     if (element.closest('[data-testid="terminal-xterm"]') !== null) {
       continue;
     }
-    if (element.closest('.workband-drag-region, .brand') !== null) {
+    if (element.closest('.drag-region') !== null) {
       continue;
     }
-    if (element.closest('.workband-drag-region, .brand') !== null) {
+    if (element.closest('.drag-region') !== null) {
       continue;
     }
     const style = getComputedStyle(element);
@@ -128,8 +128,8 @@ const AUDIT_SCRIPT = `(() => {
       if (left.element.contains(right.element) || right.element.contains(left.element)) {
         continue;
       }
-      const sharedModal = left.element.closest('[role="dialog"], .settings-modal, .ui-drawer');
-      if (sharedModal !== null && sharedModal === right.element.closest('[role="dialog"], .settings-modal, .ui-drawer')) {
+      const sharedModal = left.element.closest('[role="dialog"]');
+      if (sharedModal !== null && sharedModal === right.element.closest('[role="dialog"]')) {
         continue;
       }
       if (!intersects(left.rect, right.rect)) {
@@ -144,7 +144,7 @@ const AUDIT_SCRIPT = `(() => {
       if (overlapArea < SIGNIFICANT_AREA && ratio < SIGNIFICANT_RATIO) {
         continue;
       }
-      const layerSelector = '[role="dialog"], .settings-modal, .workbench, .ui-drawer';
+      const layerSelector = '[role="dialog"]';
       const leftLayer = left.element.closest(layerSelector);
       const rightLayer = right.element.closest(layerSelector);
       if (leftLayer !== rightLayer) {
@@ -173,12 +173,12 @@ const AUDIT_SCRIPT = `(() => {
   }
 
   const composerDebug = (() => {
-    const composer = document.querySelector('.composer--chat');
+    // The shell's composer test id (P10 rewrote this from the legacy composer class).
+    const composer = document.querySelector('[data-testid="assistant-composer"]');
     if (!(composer instanceof HTMLElement)) {
       return null;
     }
-    const bottom = composer.querySelector('.composer-bottom');
-    const tools = composer.querySelector('.composer-bottom');
+    const tools = composer.querySelector('[data-testid="assistant-composer-input"]')?.parentElement ?? null;
     const targets = Array.from(composer.querySelectorAll('*')).filter((child) => {
       const rect = child.getBoundingClientRect();
       const style = getComputedStyle(child);
@@ -204,7 +204,7 @@ const AUDIT_SCRIPT = `(() => {
   })();
 
   const panelOverflow = [];
-  for (const panel of document.querySelectorAll('.card, .research-shell-banner, .research-overview-block, .composer')) {
+  for (const panel of document.querySelectorAll('[data-testid="assistant-composer"], [role="dialog"], [data-testid="canvas"]')) {
     if (!isVisible(panel)) {
       continue;
     }

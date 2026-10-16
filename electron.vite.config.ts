@@ -76,16 +76,6 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
   }
 ];
 
-/**
- * Temporary entry switch for the parallel migration period (ADR-M01).
- *
- * The renderer keeps exactly one build entry - `index.html` - so
- * `check-renderer-chunks.mjs` stays deterministic (it locates "the" entry by
- * `isEntry === true`). With `ROC_RENDERER=next`, the module the entry imports is
- * aliased to the new shell. P10 deletes this together with the legacy shell.
- */
-const useNextRenderer = process.env.ROC_RENDERER === 'next';
-
 export function resolveRendererManualChunk(id: string): string | undefined {
   const normalizedId = id;
   const marker = '/node_modules/';
@@ -147,11 +137,6 @@ export default defineConfig({
   renderer: {
     root: '.',
     plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: useNextRenderer
-        ? [{ find: '/src/renderer/main.tsx', replacement: resolve(__dirname, 'src/renderer-next/main.tsx') }]
-        : []
-    },
     build: {
       outDir: 'dist/renderer',
       manifest: true,

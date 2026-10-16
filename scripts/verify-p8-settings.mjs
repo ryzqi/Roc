@@ -23,8 +23,8 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  *   3. **重启后保持**用真重启验证：`app.close()` 后用同一个 `ROC_DATA_ROOT` 再启动一次，再读后端与
  *      界面。只做 `page.reload()` 只能证明渲染层重读，证明不了落盘。
  *
- * 运行（必须 `ROC_SMOKE_TARGET=dist` + `ROC_RENDERER=next`，且先删产物再 build）：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p8-settings.mjs
  *
  * 必须 detach 跑；报告写 `.artifacts/p8-gates/`。
@@ -73,7 +73,6 @@ const launchEnv = {
   ROC_SMOKE: '1',
   ROC_DATA_ROOT: dataRoot,
   ROC_SMOKE_API_KEY: 'smoke-test-key',
-  ROC_RENDERER: 'next'
 };
 
 let app;
@@ -852,7 +851,7 @@ try {
   );
 
   // ---- 闸门 6：业务页无内联配置残留 ---------------------------------------------
-  const rendererRoot = resolve('src/renderer-next');
+  const rendererRoot = resolve('src/renderer');
   for (const [needle, label] of [
     ['isConfigOpen', '旧前端的配置抽屉开关 isConfigOpen'],
     ['ragChunkSize', '内联 RAG 分块配置 ragChunkSize'],
@@ -900,7 +899,7 @@ try {
     latexText.slice(0, 120)
   );
 
-  const randomHits = searchSourceTree(resolve('src/renderer-next/settings'), 'Math.random(');
+  const randomHits = searchSourceTree(resolve('src/renderer/settings'), 'Math.random(');
   assertCheck('6 无内联配置', '设置中心没有 Math.random() 假延迟', randomHits.length === 0, randomHits.slice(0, 3).join(', '));
 
   // ---- 闸门 1b：真重启后设置仍在（用同一个 ROC_DATA_ROOT 再启动一次） --------------

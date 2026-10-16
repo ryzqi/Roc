@@ -24,8 +24,8 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  *      预览只能断言「面板明确降级」；`export.write` 的落盘路径由 harness 提供（B22 在真实使用中
  *      需要用户手填）。
  *
- * 运行（必须 `ROC_SMOKE_TARGET=dist` + `ROC_RENDERER=next`，且先删产物再 build）：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p7-production.mjs
  *
  * 必须 detach 跑；报告写 `.artifacts/p7-gates/`。
@@ -176,7 +176,6 @@ try {
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
       ROC_SMOKE_API_KEY: 'smoke-test-key',
-      ROC_RENDERER: 'next'
     }
   });
   const page = await app.firstWindow();
@@ -626,7 +625,7 @@ try {
         window.roc.files.writeText({
           relativePath: 'p7-evidence.md',
           content: 'ROC-P7-EVIDENCE 这是一段用于证据捕获的正文。\n',
-          source: 'renderer-next/p7-harness'
+          source: 'renderer/p7-harness'
         })
       );
       if (!written.ok) {
@@ -926,7 +925,7 @@ try {
         const written = await window.roc.files.writeText({
           relativePath: 'p7-run.py',
           content: script,
-          source: 'renderer-next/p7-harness'
+          source: 'renderer/p7-harness'
         });
         if (!written.ok) {
           return { error: `writeText: ${written.error.message}` };
@@ -1031,7 +1030,7 @@ try {
         const written = await window.roc.files.writeText({
           relativePath: 'p7-figure.py',
           content: script,
-          source: 'renderer-next/p7-harness'
+          source: 'renderer/p7-harness'
         });
         if (!written.ok) {
           return { error: `writeText: ${written.error.message}` };
@@ -1177,8 +1176,8 @@ try {
   }
 
   // ---- 闸门 8：没有假随机（旧壳的 mock 痕迹） ----------------------------------
-  const randomHits = searchSourceTree(resolve('src/renderer-next'), 'Math.random(');
-  assertCheck('8 无假随机', 'src/renderer-next 里没有 Math.random()', randomHits.length === 0, randomHits.slice(0, 3).join(', '));
+  const randomHits = searchSourceTree(resolve('src/renderer'), 'Math.random(');
+  assertCheck('8 无假随机', 'src/renderer 里没有 Math.random()', randomHits.length === 0, randomHits.slice(0, 3).join(', '));
 
   // ---- 闸门 9：typecheck --------------------------------------------------------
   const typecheck = spawnSync('pnpm', ['typecheck'], { encoding: 'utf8', cwd: resolve('.') });

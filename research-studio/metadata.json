@@ -1,6 +1,0 @@
-{
-  "name": "Codex Research Studio",
-  "description": "macOS-native AI research workstation featuring agent tool orchestration, literature discovery, LaTeX studio, interactive knowledge graph, RAG wiki, Git, and terminal.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

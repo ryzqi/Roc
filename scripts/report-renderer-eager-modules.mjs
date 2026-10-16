@@ -13,7 +13,7 @@ import { scanPackageRegions } from './lib/renderer-chunk-attribution.mjs';
  * and `react` ended up sharing a chunk (`renderer-diff`, renamed by hand to
  * `renderer-react` once the cause was understood; see `electron.vite.config.ts`).
  *
- * Usage: `node scripts/report-renderer-eager-modules.mjs` after `ROC_RENDERER=next pnpm build`.
+ * Usage: `node scripts/report-renderer-eager-modules.mjs` after `pnpm build`.
  *
  * Attribution is textual: it reads the `//#region node_modules/.pnpm/<spec>/…`
  * comments rolldown emits. That is enough to answer "which package is in this

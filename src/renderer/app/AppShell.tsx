@@ -1,629 +1,670 @@
-import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  AppStatus,
-  ChatStartRunRequest,
-  TaskSnapshot
-} from '../../shared/types';
-import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
-import { useChatFeature } from '../features/chat/use-chat-feature';
-import { unwrap, type LoadedState } from '../loaded-state';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AppStatus } from '../../shared/types';import { errorMessage } from './loaded-state';
+import type { AppViewId } from './routes';
+import { useAppNavigateBridge, useAppRoute } from './use-app-route';
+import { useLayoutState } from './use-layout-state';
+import { useKeyboardShortcuts } from './shortcuts';
+import { clearUiState, purgeLegacyStorage } from './ui-state';
+import { ViewContent } from './ViewContent';
+import { WorkspaceLayout } from './WorkspaceLayout';
+import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
+import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
+import type { ManagementTabId } from '../management/use-management-stores';
+import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
+import { ProjectPortalView } from '../project/ProjectPortalView';
+import { useCurrentProject } from '../project/use-projects';
+import { useProjectWorkspace } from '../project/use-project-workspace';
+import { isProjectWritable } from '../project/project-store';
 import type { RocClient } from '../shared/roc-client';
-import { applySystemAppearance } from '../system-appearance';
-import { restoreDialogFocus } from '../dialog-focus';
-import type { ResearchServiceContext, ResearchServiceEntry } from '../views/research/research-services';
-import { AppSettingsLayer } from './AppSettingsLayer';
-import { AppWorkspaceShell } from './AppWorkspaceShell';
-import {
-  completeTaskRunEvent,
-  shouldApplyTaskRunEvent,
-  syncKnownTaskRunIds
-} from './task-run-event-filter';
-import {
-  loadTaskSurfaceData,
-  loadWorkspaceData
-} from './data-loading';
-import type {
-  MainViewId,
-  ViewId,
-  WorkbenchTool,
-  WorkspaceData
-} from './types';
-import { useAgentCapabilityPreview } from './use-agent-capability-preview';
-import type { AppBootstrap } from './use-app-bootstrap';
-import { useAppStartupResources } from './use-app-startup-resources';
-import { useAppTaskRuns } from './use-app-task-runs';
-import { useChatWorkspaceScale } from './use-chat-workspace-scale';
-import {
-  WORKBENCH_VIEWS,
-  buildTopMeta,
-  defaultWorkbenchTool,
-  isProjectServiceView,
-  parseViewId,
-  parseWorkbenchTool,
-  syncRendererUrl
-} from './view-routing';
-import { WindowWorkband } from './WindowWorkband';
+import { DelayedFallback } from '../shell/DelayedFallback';
+import { ErrorBar } from '../shell/ErrorBar';
+import { LeftSidebar } from '../shell/LeftSidebar';
+import { ModalShell } from '../shell/ModalShell';
+import { SearchPaletteModal } from '../shell/SearchPaletteModal';
+import { useSearchGroups } from '../shell/use-search-groups';
+import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
+import { WindowChrome } from '../shell/WindowChrome';
+import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
+import { useTraySummaryLabel } from '../shell/use-tray-summary';
+import { useWindowState } from '../shell/use-window-state';
+import { useBoundWorkspace } from '../workspace/use-bound-workspace';
+import { LiteratureScopeProvider } from '../literature/literature-scope';
+import { useLiteratureStore } from '../literature/use-literature-store';
+import { deriveWiki } from '../literature/derive-wiki';
+import { defaultTabForGroup } from '../canvas/workflow/stage-groups';
+import { WorkflowScopeProvider } from '../canvas/workflow/workflow-scope';
+import { useWorkflowStore } from '../canvas/workflow/use-workflow-store';
 
-const WorkbenchPanel = lazy(() =>
-  import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
-);
+/**
+ * The application shell (P1).
+ *
+ * Responsibilities, in order:
+ *   1. boot gate — `app.getStatus` decides loading / failed / ready
+ *   2. appearance — system snapshot + in-app override drive the token layer
+ *   3. navigation — the URL is the single source of truth (ADR-M05); the native
+ *      menu arrives through `app.onNavigate`
+ *   4. layout — three columns with persisted widths and ADR-M12 breakpoints
+ *   5. overlays — settings (URL-driven), search, management, Git
+ *
+ * Deliberately *not* here: any product data. Projects, literature, files and
+ * sessions arrive in P2–P9; this shell proves the frame, the routing contract,
+ * focus/Escape layering, and the shortcut split with the native menu.
+ *
+ * The window's own controls are system traffic lights
+ * (`titleBarStyle: 'hiddenInset'`), so nothing is drawn for them.
+ */
 
-function resetScrollPosition(element: HTMLElement): void {
-  element.scrollTop = 0;
-  element.scrollLeft = 0;
+type BootState =
+  | { status: 'loading' }
+  | { status: 'failed'; message: string }
+  | { status: 'ready'; appStatus: AppStatus };
+
+const PRIMARY_TABS: ReadonlySet<AppViewId> = new Set<AppViewId>(['literature', 'latex', 'terminal']);
+
+function canvasTabForView(view: AppViewId): CanvasTabId | null {
+  return PRIMARY_TABS.has(view) ? (view as CanvasTabId) : null;
 }
 
-export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
-  const { error, setError, setState, state, windowState } = bootstrap;
-  const initialParams = new URLSearchParams(window.location.search);
-  const initialView = parseViewId(initialParams.get('page'), initialParams.get('project'));
-  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' || initialView === 'chat' ? 'research' : initialView);
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
-  const settingsOpenerRef = useRef<HTMLElement | null>(null);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const selectedThreadIdRef = useRef<string | null>(selectedThreadId);
-  const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
-  const selectedTaskSurfaceTaskIdRef = useRef<string | null | undefined>(selectedTaskSurfaceTaskId);
-  const [activeTaskDetailId, setActiveTaskDetailId] = useState<string | null>(null);
-  const [taskBoardUiState, setTaskBoardUiState] = useState<{
-    railId: 'all' | 'todo' | 'running' | 'paused' | 'done';
-    scrollTop: number;
-  }>({
-    railId: 'all',
-    scrollTop: 0
-  });
-  const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
-  const taskRunIdsRef = useRef(new Set<string>());
-  const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
-  const [pendingWorkflowHint, setPendingWorkflowHint] = useState<ChatStartRunRequest['workflowHint']>(null);
-  const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
-  const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
-    parseWorkbenchTool(initialParams.get('tool'), initialView)
+/**
+ * Lazily loaded overlays and panels.
+ *
+ * Two things have to be true for these imports, and both are easy to get wrong:
+ *
+ *   1. **They must be `import()`**, because `check-renderer-chunks.mjs` forbids
+ *      `markdown|streamdown|highlight|settings` from the eager graph (R4 /
+ *      ADR-M11). The assistant pulls in the whole Markdown + KaTeX family in P4
+ *      and settings pulls in every section in P8, so the boundary has to exist
+ *      before those phases land.
+ *   2. **They must be mounted on demand.** `React.lazy` starts fetching on first
+ *      *render*, not first open, so a lazy element left in the tree with only a
+ *      falsy `open` prop still downloads at boot — which would fetch the
+ *      assistant's Markdown bundle at startup even though the assistant defaults
+ *      to closed. The `latch` below defers the first render until something
+ *      actually opens, then keeps the subtree mounted so state and scroll
+ *      position survive toggling.
+ *
+ * The manifest also only inspects *static* imports, so a stray eager import here
+ * would pass the check while defeating it. Keeping these lazy is a discipline.
+ */
+const AssistantPanel = lazy(async () => ({ default: (await import('../assistant/AssistantPanel')).AssistantPanel }));
+const SettingsModal = lazy(async () => ({ default: (await import('../settings/SettingsModal')).SettingsModal }));
+const ManagementPanel = lazy(async () => ({ default: (await import('../management/ManagementPanel')).ManagementPanel }));
+/**
+ * The Git drawer pulls in `react-diff-view` (a manual chunk, ~50 KB). It is lazy
+ * for the same reason as the panels above, and it needs no mount latch: the
+ * drawer's `ModalShell` renders `null` while closed, so the module is only
+ * fetched when the drawer actually opens.
+ */
+const GitPanel = lazy(async () => ({ default: (await import('../canvas/git/GitPanel')).GitPanel }));
+
+export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
+  const [boot, setBoot] = useState<BootState>({ status: 'loading' });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  /**
+   * Bumped on every palette open so the ⌘K groups re-read what can change while
+   * the palette is closed (the project list has no server-side query to key on).
+   */
+  const [searchToken, setSearchToken] = useState(0);
+  const openSearch = useCallback((): void => {
+    setSearchToken((current) => current + 1);
+    setSearchOpen(true);
+  }, []);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
+  /**
+   * A prompt handed to the assistant's composer by the management drawer (P9/T9.1).
+   *
+   * The drawer must not start a run itself: run state, the transcript and the HITL cards live in
+   * the assistant panel, so a run started from a drawer would be invisible. The nonce makes the
+   * hand-off idempotent per request (the same text twice still replaces the draft).
+   */
+  const [assistantSeed, setAssistantSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const assistantSeedNonceRef = useRef(0);
+  // The selected conversation lives here because two surfaces need it: the sidebar lists
+  // threads, the assistant panel renders one. Cleared when the project changes (gate 6).
+  const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
+  // Mount-on-demand latches; see the lazy block comment above.
+  const [assistantMounted, setAssistantMounted] = useState(false);
+  const [managementMounted, setManagementMounted] = useState(false);
+  const [settingsMounted, setSettingsMounted] = useState(false);
+
+  const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
+  const { route, navigate } = useAppRoute();
+  const layout = useLayoutState();
+  const windowState = useWindowState(client);
+  // The chrome and the read-only gate need the real project, not the raw id.
+  const currentProject = useCurrentProject(client, route.projectId);
+
+  useAppNavigateBridge(client, { route, navigate });
+  useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
+
+  const backgroundRunLabel = useTraySummaryLabel(client, windowState.hidden);
+
+  const inProject = route.projectId !== null;
+  const settingsOpen = route.page === 'settings';
+  const project = currentProject.data;
+  const projectName = project?.title ?? null;
+  const projectWritable = isProjectWritable(project);
+  /**
+   * A project that failed to load must not silently render an empty workspace.
+   * ADR-M07: surface the backend message with a retry instead of pretending the
+   * project exists (a stale deep link or a deleted project is the common case).
+   */
+  const projectLoadFailed = inProject && currentProject.status === 'error';
+
+  // A conversation belongs to one project, so a project switch drops the selection.
+  useEffect(() => {
+    setAssistantThreadId(null);
+  }, [route.projectId]);
+
+  const reloadCurrentProject = currentProject.reload;
+  const workspaceBinding = useProjectWorkspace(client, project, reloadCurrentProject);
+  // T3.1: the project's `workspacePath` is inert data until `workspace.select`
+  // scopes the backend to it. Every file/Git/terminal call is keyed on the
+  // **bound** path, so a project switch rebuilds all three (gate 6).
+  const boundWorkspace = useBoundWorkspace(client, project);
+
+  /**
+   * The literature store lives here, not in the literature view.
+   *
+   * The sidebar's 文献 tab and the canvas hub are siblings in different subtrees,
+   * and T5.1 requires them to share one state: importing from the canvas must show
+   * up in the sidebar, and selecting in one must select in the other. Creating the
+   * store once and providing it (like the workspace scope in P3) is what makes
+   * "shared" structural rather than a convention.
+   */
+  const literature = useLiteratureStore(client, route.projectId);
+
+  /**
+   * The research-workflow store (P6), created once for the same structural reason as
+   * the literature store: 总览 / 阶段工作区 / 活动流 are sibling canvas views that must
+   * agree on the stage, the in-flight run and the pending gate, and the contract has no
+   * push channel for stage runs (B11) — so exactly one poll must run.
+   */
+  const workflow = useWorkflowStore(client, route.projectId, project);
+
+  /**
+   * Latest route, readable from callbacks that live inside the memoised scope.
+   *
+   * `navigate` compares against its own ref and writes the URL, but merging a change
+   * into the *current* route needs that route at call time. Reading `route` from the
+   * closure would freeze whatever was current when the scope was built: switching the
+   * canvas view does not change `projectId`/`openFile`, so the memo would not
+   * recompute and 「打开设置中心」 would merge `page=settings` into the view the user
+   * had left. (Opening a file had the same shape but overwrites `view`, so it was
+   * invisible there.)
+   */
+  const routeRef = useRef(route);
+  routeRef.current = route;
+
+  const openFileInCanvas = (relativePath: string): void => {
+    // `tool: 'files'` explicitly rather than `route.tool ?? 'files'`: opening a file
+    // from the tree is the files workbench, so it must not inherit `git` (which would
+    // pop the Git drawer over the preview the user just asked for).
+    navigate({ ...routeRef.current, view: 'files', tool: 'files', openFile: relativePath });
+  };
+
+  /**
+   * The canvas data scope (P3). Memoised because every view reads it and a new
+   * identity on each render would re-render them all on unrelated shell state
+   * changes (the tray label updates on background task ticks).
+   */
+  const scope = useMemo<WorkspaceScope>(
+    () => ({
+      client,
+      projectId: route.projectId,
+      projectTitle: projectName,
+      writable: projectWritable,
+      workspacePath: boundWorkspace.path,
+      workspaceStatus: boundWorkspace.status,
+      workspaceError: boundWorkspace.error,
+      rebindWorkspace: boundWorkspace.rebind,
+      openFile: route.openFile,
+      openFileInCanvas,
+      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
+      // drawer's width would cover the settings panel it just asked for.
+      openSettings: () => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, page: 'settings' });
+      },
+      openView: (view) => navigate({ ...routeRef.current, view }),
+      // The group and its default tab are written together: the URL carries one `stage`
+      // value, and a group with a tab from another group would not round-trip (P1).
+      openStage: (group, tab) =>
+        navigate({ ...routeRef.current, view: 'stage', stageGroup: group, stageTab: tab ?? defaultTabForGroup(group) })
+    }),
+    [
+      client,
+      route.projectId,
+      route.openFile,
+      navigate,
+      projectName,
+      projectWritable,
+      boundWorkspace.path,
+      boundWorkspace.status,
+      boundWorkspace.error,
+      boundWorkspace.rebind
+    ]
   );
-  const [workbenchVisible, setWorkbenchVisible] = useState(
-    initialView === 'chat' ? initialParams.has('tool') : WORKBENCH_VIEWS.has(initialView)
+
+  /**
+   * The management scope (P9/T9.5).
+   *
+   * Built once for the same structural reason as the literature and workflow scopes: the drawer and
+   * the three canvas views are siblings in different subtrees, and both need the four datasets plus
+   * the two actions that leave the management surface. `routeRef` is read at call time so a
+   * hand-off merges into the *current* route rather than the one captured when this memo was built.
+   */
+  const managementScope = useMemo<ManagementScope>(
+    () => ({
+      client,
+      projectId: route.projectId,
+      workspacePath: boundWorkspace.path,
+      onOpenThread: (threadId) => {
+        setAssistantThreadId(threadId);
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, assistantOpen: true });
+      },
+      onAskAssistant: (prompt) => {
+        assistantSeedNonceRef.current += 1;
+        setAssistantSeed({ text: prompt, nonce: assistantSeedNonceRef.current });
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, assistantOpen: true });
+      },
+      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
+      // drawer's width would cover the settings panel it just asked for.
+      openSettings: () => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, page: 'settings' });
+      },
+      openManagementView: (tab) => {
+        setManagementOpen(false);
+        navigate({ ...routeRef.current, view: tab });
+      }
+    }),
+    [client, route.projectId, boundWorkspace.path, navigate]
   );
-  const [workbenchWidth, setWorkbenchWidth] = useState(560);
-  const [researchTopMeta, setResearchTopMeta] = useState<string | null>(null);
-  const [researchServiceContext, setResearchServiceContext] = useState<ResearchServiceContext | null>(null);
-  const previousResearchProjectIdRef = useRef<string | null>(null);
-  const [assistantOpen, setAssistantOpen] = useState(initialView === 'chat' && initialParams.get('project') !== null);
-  const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
 
-  const refreshTaskState = useCallback(async (): Promise<void> => {
-    const selectedTaskId = selectedTaskSurfaceTaskIdRef.current;
-    const [taskSnapshot, taskSurfaceData] = await Promise.all([
-      client.api.tasks.getSnapshot(),
-      loadTaskSurfaceData(selectedTaskId, client)
-    ]);
-    const selectedTaskWasRemoved =
-      typeof selectedTaskId === 'string' &&
-      taskSurfaceData.activeTasks.every((task) => task.taskId !== selectedTaskId);
-    if (selectedTaskWasRemoved && selectedTaskSurfaceTaskIdRef.current === selectedTaskId) {
-      selectedTaskSurfaceTaskIdRef.current = null;
-      setSelectedTaskSurfaceTaskId(null);
-      setActiveTaskDetailId(null);
-      setActiveView((current) => (current === 'task-detail' ? 'tasks-board' : current));
+  /**
+   * Concept rows for the ⌘K 概念 group.
+   *
+   * Derived with the same `deriveWiki` the 知识库 panel renders, from the same
+   * claims/evidence snapshot the store already holds — so the palette cannot claim
+   * a concept the panel would not show. Empty until the project's claims/evidence
+   * have loaded, which the group's own wording says.
+   */
+  const conceptRows = useMemo(() => {
+    const claims = literature.claims;
+    const evidence = literature.evidence;
+    if (claims === null || evidence === null) {
+      return [];
     }
-    setState((current) =>
-      current === null
-        ? current
-        : {
-            ...current,
-            taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
-            ...taskSurfaceData
-          }
-    );
-  }, [client, setState]);
+    return deriveWiki({ claims, evidence, libraryItems: literature.items }).pages.map((page) => ({
+      id: page.claimId,
+      label: page.title,
+      subtitle: page.evidence.length === 0 ? '尚无引用证据' : `引用 ${page.evidence.length} 条证据`
+    }));
+  }, [literature.claims, literature.evidence, literature.items]);
 
-  useEffect(() => {
-    return client.api.app.onAppearanceUpdated(applySystemAppearance);
-  }, []);
-
-  useEffect(() => {
-    return client.api.app.onNavigate((page) => {
-      if (page === 'research-new') {
-        const current = new URL(window.location.href);
-        if (current.searchParams.get('project') !== null) {
-          return;
-        }
-        const url = new URL(window.location.href);
-        url.searchParams.delete('project');
-        url.searchParams.delete('view');
-        url.searchParams.delete('stage');
-        url.searchParams.set('page', 'research');
-        window.history.pushState({}, '', url);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        setActiveView('research');
-        setAssistantOpen(false);
-        setSelectedThreadId(null);
-        setWorkbenchVisible(false);
-        window.dispatchEvent(new Event('research-new-project'));
-        return;
-      }
-      const view = parseViewId(page, new URLSearchParams(window.location.search).get('project'));
-      if (view === 'settings') {
-        settingsOpenerRef.current = null;
-        setSettingsOpen(true);
-        return;
-      }
-      if (view === 'chat') {
-        const projectId = new URLSearchParams(window.location.search).get('project');
-        if (projectId !== null && projectId.trim().length > 0) {
-          setActiveView('research');
-          setAssistantOpen(true);
-          return;
-        }
-        setActiveView('research');
-        setAssistantOpen(false);
-        return;
-      }
-      setActiveView(view);
-      setAssistantOpen(false);
-      setWorkbenchVisible(WORKBENCH_VIEWS.has(view));
-    });
-  }, []);
-
-  const openSettings = useCallback((opener: HTMLElement): void => {
-    settingsOpenerRef.current = opener;
-    setSettingsOpen(true);
-  }, []);
-
-  const closeSettings = useCallback((): void => {
-    setSettingsOpen(false);
-  }, []);
-
-  const completeSettingsExit = useCallback((): void => {
-    restoreDialogFocus(settingsOpenerRef.current);
-    settingsOpenerRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    return client.api.tasks.onUpdated(() => {
-      void refreshTaskState().catch((refreshError: unknown) => {
-        setError(refreshError instanceof Error ? refreshError.message : 'Roc 任务状态刷新失败。');
-      });
-    });
-  }, [refreshTaskState]);
-
-  useEffect(() => {
-    if (state === null) {
-      return;
-    }
-    syncKnownTaskRunIds({
-      target: taskRunIdsRef.current,
-      snapshot: state.taskSnapshot,
-      taskDetail: state.taskDetail
-    });
-  }, [state]);
-
-  useEffect(() => {
-    return client.api.chat.onRunEvent((event) => {
-      if (!shouldApplyTaskRunEvent(taskRunIdsRef.current, event)) {
-        return;
-      }
-      setTaskLiveRunState((current) => applyChatRunEvent(current, event));
-      completeTaskRunEvent(taskRunIdsRef.current, event);
-      if (
-        event.type === 'run_completed' ||
-        event.type === 'run_failed' ||
-        event.type === 'run_interrupted'
-      ) {
-        void refreshTaskState().catch((refreshError: unknown) => {
-          setError(refreshError instanceof Error ? refreshError.message : 'Roc 任务状态刷新失败。');
-        });
-      }
-    });
-  }, [refreshTaskState]);
-
-  useEffect(() => {
-    if (activeView === 'chat') {
-      return;
-    }
-    setActiveWorkbenchTool(defaultWorkbenchTool(activeView));
-  }, [activeView]);
-
-  const currentWorkspace = state?.workspace ?? null;
-  const currentAppMode = state?.appStatus.mode ?? null;
-  const currentAgentExecution = state?.agent.execution ?? null;
-  const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
-  const currentSelectedSkills = state?.selectedSkills ?? [];
-  const chatFeature = useChatFeature(client);
-  const {
-    memoryLoadState,
-    operationsLoadState,
-    setWorkspaceLoadState,
-    workspaceLoadState
-  } = useAppStartupResources({
-    activeView,
-    activeWorkbenchTool,
+  const searchGroups = useSearchGroups({
     client,
-    currentAppMode,
-    currentWorkspace,
-    selectedTaskSurfaceTaskId,
-    setError,
-    setState,
-    state,
-    workbenchVisible
-  });
-  const chatWorkspaceScale = useChatWorkspaceScale({
-    activeView,
-    hostRef: chatWorkspaceScaleHostRef
-  });
-
-  useEffect(() => {
-    selectedTaskSurfaceTaskIdRef.current = selectedTaskSurfaceTaskId;
-  }, [selectedTaskSurfaceTaskId]);
-
-  useEffect(() => {
-    selectedThreadIdRef.current = selectedThreadId;
-  }, [selectedThreadId]);
-
-  useEffect(() => {
-    const projectId = researchServiceContext?.projectId ?? null;
-    const previous = previousResearchProjectIdRef.current;
-    if (previous === projectId) {
-      return;
-    }
-    previousResearchProjectIdRef.current = projectId;
-    if (previous !== null) {
-      setSelectedThreadId(null);
-      setAssistantOpen(false);
-    }
-  }, [researchServiceContext?.projectId]);
-
-  const startNewConversation = useCallback((): void => {
-    const projectId = new URLSearchParams(window.location.search).get('project');
-    if (projectId === null || projectId.trim().length === 0) {
-      setActiveView('research');
-      setAssistantOpen(false);
-      return;
-    }
-    setAssistantOpen(true);
-    setSelectedThreadId(null);
-    setPendingWorkflowHint(null);
-    setPendingTaskSource(null);
-    setChatSelectionVersion((current) => current + 1);
-  }, []);
-
-  const applySelectedWorkspace = useCallback(async (workspace: NonNullable<LoadedState['workspace']>): Promise<void> => {
-    const [appStatus, workspaceData] = await Promise.all([
-      client.api.app.getStatus(),
-      loadWorkspaceData(workspace, {}, client)
-    ]);
-    const selectedAppStatus = unwrap<AppStatus>('app status', appStatus);
-    applySystemAppearance(selectedAppStatus.appearance);
-    setWorkspaceLoadState({
-      status: 'ready',
-      error: null,
-      key: workspace.path
-    });
-    setState((current) =>
-      current === null
-        ? current
-        : {
-            ...current,
-            appStatus: selectedAppStatus,
-            workspace,
-            ...workspaceData
-          }
-    );
-  }, [client, setState, setWorkspaceLoadState]);
-
-  const openResearchService = useCallback((service: ResearchServiceEntry): void => {
-    if (service.projectId === null) {
-      setActiveView('research');
-      return;
-    }
-    if (service.id === 'assistant') {
-      startNewConversation();
-      return;
-    }
-    if (service.id === 'files') {
-      if (service.workspacePath === null) {
-        setError('打开文件与代码前必须先绑定工作目录。');
-        return;
-      }
-      const workspacePath = service.workspacePath;
-      void (async () => {
-        const selected = await client.api.workspace.select({ path: workspacePath });
-        if (!selected.ok) {
-          setError(selected.error.message);
-          return;
-        }
-        await applySelectedWorkspace(selected.data);
-        setActiveWorkbenchTool('files');
-        setWorkbenchVisible(true);
-        setActiveView(service.view);
-      })();
-      return;
-    }
-    setActiveView(service.view);
-  }, [applySelectedWorkspace, client, setError, startNewConversation]);
-
-  const openCanvasTool = useCallback((tool: WorkbenchTool): void => {
-    const workspacePath = researchServiceContext?.workspacePath ?? null;
-    if (researchServiceContext?.projectId == null || workspacePath === null) {
-      setError('打开文件与代码前必须先绑定工作目录。');
-      return;
-    }
-    setActiveWorkbenchTool(tool);
-    setWorkbenchVisible(true);
-    if (state?.workspace?.path === workspacePath) {
-      return;
-    }
-    void (async () => {
-      const selected = await client.api.workspace.select({ path: workspacePath });
-      if (!selected.ok) {
-        setError(selected.error.message);
-        return;
-      }
-      await applySelectedWorkspace(selected.data);
-    })();
-  }, [applySelectedWorkspace, client, researchServiceContext?.projectId, researchServiceContext?.workspacePath, setError, state?.workspace?.path]);
-
-  const openTaskDetail = useCallback((taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }): void => {
-    if (boardUiState !== undefined) {
-      setTaskBoardUiState(boardUiState);
-    }
-    selectedTaskSurfaceTaskIdRef.current = taskId;
-    setSelectedTaskSurfaceTaskId(taskId);
-    setActiveTaskDetailId(taskId);
-    setActiveView('task-detail');
-  }, []);
-
-  const clearDeletingTaskSelection = useCallback((): void => {
-    selectedTaskSurfaceTaskIdRef.current = null;
-    setSelectedTaskSurfaceTaskId(null);
-  }, []);
-
-  const returnToTaskBoard = useCallback((): void => {
-    setActiveTaskDetailId(null);
-    setActiveView('tasks-board');
-  }, []);
-
-  const {
-    createTaskFromWorkbench,
-    resumeTaskApprovalFromDetail,
-    startChatRun,
-    submitTaskDetailInput
-  } = useAppTaskRuns({
-    chatFeature,
-    client,
-    currentSelectedMcpServers,
-    currentSelectedSkills,
-    openTaskDetail,
-    pendingTaskSource,
-    pendingWorkflowHint,
-    refreshTaskState,
-    selectedThreadId,
-    setPendingTaskSource,
-    setPendingWorkflowHint,
-    setSelectedTaskSurfaceTaskId,
-    setSelectedThreadId,
-    setState,
-    taskBoardUiState
+    query: searchQuery,
+    workspacePath: boundWorkspace.path,
+    openFile: openFileInCanvas,
+    projectId: route.projectId,
+    libraryItems: literature.items,
+    concepts: conceptRows,
+    conceptsLoaded: literature.claims !== null && literature.evidence !== null,
+    onOpenLiterature: (libraryItemId) => {
+      literature.select(libraryItemId);
+      navigate({ ...route, view: 'literature' });
+    },
+    onOpenConcept: () => {
+      navigate({ ...route, view: 'literature' });
+    },
+    onOpenProject: (projectId) => {
+      navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' });
+    },
+    onOpenManagementView: (tab) => {
+      navigate({ ...route, view: tab });
+    },
+    onOpenSession: (threadId) => {
+      setAssistantThreadId(threadId);
+      navigate({ ...route, assistantOpen: true });
+    },
+    searchToken
   });
 
-  useAgentCapabilityPreview({
-    client,
-    currentAgentExecution,
-    currentSelectedMcpServers,
-    currentSelectedSkills,
-    setState,
-    state
-  });
-
-  // 工作台工具切换只重置工作台内部滚动面。
+  /**
+   * Adopts the thread a literature-triggered run landed in.
+   *
+   * The reader's 「问助手」 button calls `chat.startRun` (from the shared store) and
+   * the run therefore exists **before** the panel is mounted; selecting the thread
+   * and opening the panel is what lets P4's `getActiveRun` + event replay pick the
+   * running run up. Navigation stays here because the URL has one writer
+   * (ADR-M05) — the store only reports which thread to show.
+   */
+  const literatureAssistantThreadId = literature.assistant.threadId;
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      document.querySelectorAll<HTMLElement>('.tool-stack, .workbench-tabs').forEach(resetScrollPosition);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [activeWorkbenchTool]);
-
-  useEffect(() => {
-    const projectId = new URLSearchParams(window.location.search).get('project');
-    if (isProjectServiceView(activeView) && (projectId === null || projectId.trim().length === 0)) {
-      setActiveView('research');
-      setAssistantOpen(false);
-      setWorkbenchVisible(false);
-    }
-  }, [activeView]);
-
-  useEffect(() => {
-    if (activeView !== 'workspace' && activeView !== 'git' && activeView !== 'terminal' && activeView !== 'preview') {
+    if (literatureAssistantThreadId === null) {
       return;
     }
-    const projectId = new URLSearchParams(window.location.search).get('project');
-    if (projectId === null || projectId.trim().length === 0) {
-      return;
+    setAssistantThreadId(literatureAssistantThreadId);
+    navigate({ ...route, assistantOpen: true });
+    literature.adoptAssistantThread();
+  }, [literature, literatureAssistantThreadId, navigate, route]);
+
+  // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
+  // nothing reads these values, we just stop them from accumulating.
+  useEffect(() => {
+    purgeLegacyStorage();
+  }, []);
+
+  useEffect(() => {
+    if (managementOpen) {
+      setManagementMounted(true);
     }
-    const currentPath = state?.workspace?.path ?? null;
+  }, [managementOpen]);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setSettingsMounted(true);
+    }
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (inProject && route.assistantOpen) {
+      setAssistantMounted(true);
+    }
+  }, [inProject, route.assistantOpen]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const listed = await client.api.research.listProjects();
-      if (cancelled || !listed.ok) {
-        if (!cancelled && !listed.ok) {
-          setError(listed.error.message);
+      try {
+        const result = await client.api.app.getStatus();
+        if (cancelled) {
+          return;
         }
-        return;
+        if (!result.ok) {
+          setBoot({ status: 'failed', message: result.error.message });
+          return;
+        }
+        setBoot({ status: 'ready', appStatus: result.data });
+      } catch (error) {
+        if (!cancelled) {
+          setBoot({ status: 'failed', message: errorMessage(error) });
+        }
       }
-      const project = listed.data.find((item) => item.id === projectId);
-      if (project === undefined) {
-        setActiveView('research');
-        setWorkbenchVisible(false);
-        return;
-      }
-      if (project.workspacePath === null) {
-        setError('打开文件与代码前必须先绑定工作目录。');
-        setActiveView('research');
-        setWorkbenchVisible(false);
-        return;
-      }
-      if (currentPath === project.workspacePath) {
-        return;
-      }
-      const selected = await client.api.workspace.select({ path: project.workspacePath });
-      if (cancelled) {
-        return;
-      }
-      if (!selected.ok) {
-        setError(selected.error.message);
-        return;
-      }
-      await applySelectedWorkspace(selected.data);
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeView, applySelectedWorkspace, client, setError, state?.workspace?.path]);
+  }, [client]);
 
-  useEffect(() => {
-    syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible, assistantOpen);
-  }, [activeView, activeWorkbenchTool, assistantOpen, workbenchVisible]);
+  const toggleAssistant = (): void => {
+    navigate({ ...route, assistantOpen: !route.assistantOpen });
+  };
 
-  const selectWorkspaceFromDialog = useCallback(async (): Promise<void> => {
-    const selected = await client.api.workspace.selectFromDialog();
-    if (!selected.ok) {
-      setError(selected.error.message);
-      return;
+  useKeyboardShortcuts({
+    onToggleSidebar: layout.toggleSidebar,
+    onToggleAssistant: toggleAssistant,
+    onOpenSearch: openSearch,
+    onCycleTheme: cycleTheme,
+    projectViewSlotsEnabled: inProject,
+    onProjectViewSlot: (slot) => {
+      const view: AppViewId = slot === 1 ? 'overview' : slot === 2 ? 'activity' : 'provenance';
+      navigate({ ...route, view });
     }
-    if (selected.data === null) {
-      return;
-    }
-    await applySelectedWorkspace(selected.data);
-  }, [applySelectedWorkspace, client, setError]);
+  });
 
-  const updateWorkspaceData = useCallback((partial: Partial<WorkspaceData>): void => {
-    setState((current) => (current === null ? current : { ...current, ...partial }));
-  }, []);
-
-  // 侧栏数据全部 memo 化：state 引用在 setTaskLiveRunState 这类高频 render 中不变，
-  // 因此任务流流式运行期间侧栏子树不会被重渲。
-  const topMeta = useMemo(
-    () => {
-      if (state === null) {
-        return '';
-      }
-      if (activeView === 'research' && researchTopMeta !== null) {
-        return researchTopMeta;
-      }
-      return buildTopMeta(activeView as MainViewId, state);
-    },
-    [activeView, researchTopMeta, state]
-  );
-
-  if (error !== null) {
-    return <div className="fatal">Roc 启动失败：{error}</div>;
+  if (boot.status === 'loading') {
+    return <StartupLoading />;
+  }
+  if (boot.status === 'failed') {
+    return <StartupFailure message={boot.message} />;
   }
 
-  if (state === null) {
-    return <div className="boot">Roc 正在加载本地工作台</div>;
-  }
-
-  const workspaceShellNode = (
-    <AppWorkspaceShell
-      activeTaskDetailId={activeTaskDetailId}
-      activeView={activeView}
-      activeWorkbenchTool={activeWorkbenchTool}
-      chatSelectionVersion={chatSelectionVersion}
-      client={client}
-      clearDeletingTaskSelection={clearDeletingTaskSelection}
-      createTaskFromWorkbench={createTaskFromWorkbench}
-      memoryLoadState={memoryLoadState}
-      openTaskDetail={openTaskDetail}
-      operationsLoadState={operationsLoadState}
-      resumeTaskApprovalFromDetail={resumeTaskApprovalFromDetail}
-      returnToTaskBoard={returnToTaskBoard}
-      selectWorkspaceFromDialog={selectWorkspaceFromDialog}
-      selectedThreadId={selectedThreadId}
-      setActiveView={setActiveView}
-      setActiveWorkbenchTool={setActiveWorkbenchTool}
-      setSelectedTaskSurfaceTaskId={setSelectedTaskSurfaceTaskId}
-      setState={setState}
-      setTaskBoardUiState={setTaskBoardUiState}
-      setWorkbenchVisible={setWorkbenchVisible}
-      setWorkbenchWidth={setWorkbenchWidth}
-      startChatRun={startChatRun}
-      state={state}
-      onResearchContextChange={setResearchTopMeta}
-      assistantOpen={assistantOpen}
-      onCloseResearchAssistant={() => setAssistantOpen(false)}
-      onOpenResearchAssistant={startNewConversation}
-      onOpenResearchService={openResearchService}
-      onOpenCanvasTool={openCanvasTool}
-      onResearchServiceContextChange={setResearchServiceContext}
-      researchServiceContext={researchServiceContext}
-      submitTaskDetailInput={submitTaskDetailInput}
-      taskBoardUiState={taskBoardUiState}
-      taskLiveRunState={taskLiveRunState}
-      updateWorkspaceData={updateWorkspaceData}
-      workbenchPanel={WorkbenchPanel}
-      workbenchVisible={workbenchVisible}
-      workbenchWidth={workbenchWidth}
-      windowState={windowState}
-      workspaceLoadState={workspaceLoadState}
-    />
-  );
+  /**
+   * The Git surface is rendered **once** (M-2).
+   *
+   * `?tool=git` drives the drawer, which is what P1 built and the capability
+   * matrix documents. The canvas `changes` view renders the same `GitPanel` in its
+   * wide layout, so when that view is already on screen the drawer stays closed —
+   * otherwise both would mount, each with its own `useGitWorkspace` (two sets of
+   * status/diffStat/listBranches calls and two states that disagree after an
+   * action).
+   */
+  const gitDrawerOpen = route.tool === 'git' && route.view !== 'changes';
 
   return (
-    <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
-      <a className="skip-to-canvas" href="#roc-main">跳到内容</a>
-      <WindowWorkband
-        activeView={activeView}
-        canGoBack={activeView === 'research' && researchServiceContext?.projectId !== undefined && researchServiceContext.projectId !== null}
-        onNewConversation={startNewConversation}
-        onNewProject={() => {
-          setActiveView('research');
-          window.dispatchEvent(new Event('research-new-project'));
+    <ManagementScopeProvider value={managementScope}>
+    <div
+      className={boot.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke flex h-full w-full flex-col bg-bg text-ink' : 'app-shell flex h-full w-full flex-col bg-bg text-ink'}
+      data-testid="roc-app"
+      data-mode={boot.appStatus.mode}
+    >
+      {/* Keyboard users can jump the chrome and the sidebar in one Tab
+          (MASTER v2 §9). Visible only while focused. */}
+      <a
+        href="#roc-main"
+        className="sr-only rounded-control border border-line bg-surface px-3 py-1 text-ink focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50"
+        data-testid="skip-to-canvas"
+      >
+        跳到内容
+      </a>
+
+      <WindowChrome
+        projectName={projectName}
+        onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
+        onOpenSearch={openSearch}
+        sidebarCollapsed={layout.sidebarCollapsed}
+        onToggleSidebar={layout.toggleSidebar}
+        assistantOpen={route.assistantOpen}
+        onToggleAssistant={toggleAssistant}
+        onOpenGit={() => navigate({ ...route, view: 'changes', tool: 'git' })}
+        onOpenManagement={() => {
+          setManagementTab('memory');
+          setManagementOpen(true);
         }}
-        onOpenSettings={openSettings}
-        onReturnToProjects={() => {
-          const url = new URL(window.location.href);
-          url.searchParams.delete('project');
-          url.searchParams.delete('view');
-          url.searchParams.delete('stage');
-          url.searchParams.set('page', 'research');
-          window.history.pushState({}, '', url);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-          setActiveView('research');
-          setAssistantOpen(false);
-          setSelectedThreadId(null);
-          setWorkbenchVisible(false);
-        }}
-        researchContext={researchServiceContext}
-        topMeta={topMeta}
+        onOpenSettings={() => navigate({ ...route, page: 'settings' })}
+        backgroundRunLabel={backgroundRunLabel}
       />
 
-      <div
-        className={
-          activeView === 'chat'
-            ? 'workspace workspace--chat workspace--no-sidebar'
-            : 'workspace workspace--no-sidebar'
-        }
-      >
-        <div
-          className="chat-workspace-scale-host"
-          data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
-          id="roc-main"
-          ref={chatWorkspaceScaleHostRef}
-          style={chatWorkspaceScale.style}
-        >
-          <div className="chat-workspace-scale-frame">{workspaceShellNode}</div>
-        </div>
-      </div>
-      <AppSettingsLayer
-        client={client}
-        onClose={closeSettings}
-        onExitComplete={completeSettingsExit}
-        open={settingsOpen}
-        setState={setState}
-        state={state}
+      {projectLoadFailed ? (
+        <main id="roc-main" className="flex min-h-0 flex-1 flex-col p-4" data-testid="project-load-error" tabIndex={-1}>
+          <ErrorBar
+            error={{
+              level: 'page',
+              message: currentProject.error ?? '读取当前科研项目失败',
+              retry: currentProject.reload,
+              actionLabel: '也可以返回项目列表'
+            }}
+          />
+          <div className="mt-2">
+            <button
+              type="button"
+              data-testid="project-load-error-back"
+              onClick={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              className="h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            >
+              返回项目列表
+            </button>
+          </div>
+        </main>
+      ) : inProject ? (
+        // One literature store for the sidebar's 文献 tab and the canvas hub (T5.1):
+        // the provider sits *above* the layout so both subtrees read the same state.
+        <LiteratureScopeProvider value={literature}>
+          <WorkflowScopeProvider value={workflow}>
+          <WorkspaceLayout
+          layout={layout}
+          assistantOpen={route.assistantOpen}
+          onToggleSidebar={layout.toggleSidebar}
+          onToggleAssistant={toggleAssistant}
+          assistantAvailable
+          sidebar={
+            <LeftSidebar
+              activeTab={layout.sidebarTab}
+              onTabChange={layout.setSidebarTab}
+              client={client}
+              projectId={route.projectId}
+              projectName={projectName ?? route.projectId ?? ''}
+              binding={boundWorkspace}
+              writable={projectWritable}
+              openFile={route.openFile}
+              onOpenFile={openFileInCanvas}
+              activeThreadId={assistantThreadId}
+              onSelectThread={setAssistantThreadId}
+              onStartNewThread={() => setAssistantThreadId(null)}
+              onThreadDeleted={(threadId) =>
+                setAssistantThreadId((current) => (current === threadId ? null : current))
+              }
+              onSelectWorkspace={workspaceBinding.bind}
+              workspacePending={workspaceBinding.pending}
+              workspaceError={workspaceBinding.error}
+              onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              onOpenLiterature={(libraryItemId) => {
+                // The sidebar tab has already selected the row in the shared store;
+                // re-selecting is a no-op (`setState` with the same value bails out)
+                // and keeps this callback correct if it is ever called without that
+                // first step.
+                if (libraryItemId !== null) {
+                  literature.select(libraryItemId);
+                }
+                navigate({ ...route, view: 'literature' });
+              }}
+              themeOverride={override}
+              onCycleTheme={cycleTheme}
+              onOpenManagement={() => {
+                setManagementTab('memory');
+                setManagementOpen(true);
+              }}
+            />
+          }
+          canvas={
+            <div className="flex h-full min-h-0 flex-col">
+              {project !== null && !projectWritable ? (
+                <p
+                  role="note"
+                  data-testid="project-readonly-banner"
+                  className="shrink-0 border-b border-line bg-bg-soft px-3 py-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]"
+                >
+                  项目已归档，仅可阅读：无法启动阶段运行、修改产物或写入文件。恢复项目后才能继续。
+                </p>
+              ) : null}
+              <WorkspaceCanvas
+                activeTab={canvasTabForView(route.view)}
+                onTabChange={(tab) =>
+                  // Switching tabs retargets the workbench tool instead of leaving
+                  // the previous one open behind an unrelated view (the terminal
+                  // tab carries its own tool; the other two carry none). No canvas
+                  // tab is the files view, so this cannot drop an open file.
+                  navigate({ ...route, view: tab, tool: tab === 'terminal' ? 'terminal' : null })
+                }
+              >
+                {/* The scope is what lazily loaded views read; the routing
+                    props stay on `ViewContent` (see workspace-scope.tsx). */}
+                <WorkspaceScopeProvider value={scope}>
+                  <ViewContent
+                    view={route.view}
+                    projectId={route.projectId}
+                    stageHint={route.view === 'stage' ? route.stageTab : null}
+                  />
+                </WorkspaceScopeProvider>
+              </WorkspaceCanvas>
+            </div>
+          }
+          assistant={
+            assistantMounted ? (
+              <Suspense fallback={<DelayedFallback label="正在加载助手…" />}>
+                <AssistantPanel
+                  client={client}
+                  projectId={route.projectId}
+                  threadId={assistantThreadId}
+                  onThreadIdChange={setAssistantThreadId}
+                  workspacePath={boundWorkspace.path}
+                  projectName={projectName}
+                  composerSeed={assistantSeed}
+                  onComposerSeedConsumed={() => setAssistantSeed(null)}
+                  onOpenSettings={() => navigate({ ...route, page: 'settings' })}
+                />
+              </Suspense>
+            ) : null
+          }
+          />
+          </WorkflowScopeProvider>
+        </LiteratureScopeProvider>
+      ) : (
+        <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
+          <ProjectPortalView
+            client={client}
+            createFormRequested={route.newProject}
+            onRequestConsumed={(requested) => navigate({ ...route, newProject: requested })}
+            onOpenProject={(projectId) => navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' })}
+          />
+        </main>
+      )}
+
+      {settingsMounted ? (
+        <Suspense fallback={<DelayedFallback label="正在加载设置…" />}>
+          <SettingsModal
+            open={settingsOpen}
+            client={client}
+            projectId={route.projectId}
+            workspacePath={boundWorkspace.path}
+            themeOverride={override}
+            onThemeOverrideChange={setOverride}
+            // 「重置本地界面偏好」 is the only writer of `roc.ui.*` outside ui-state.ts's
+            // own helpers, so the live appearance override has to be reset here too —
+            // otherwise the DOM keeps an override whose stored value was just deleted.
+            onResetUiPreferences={() => {
+              clearUiState();
+              setOverride('system');
+            }}
+            onClose={() => navigate({ ...route, page: 'research' })}
+          />
+        </Suspense>
+      ) : null}
+
+      <SearchPaletteModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        groups={searchGroups}
       />
+
+      {managementMounted ? (
+        <Suspense fallback={<DelayedFallback label="正在加载管理面板…" />}>
+          <ManagementPanel
+            open={managementOpen}
+            onClose={() => setManagementOpen(false)}
+            activeTab={managementTab}
+            onTabChange={setManagementTab}
+          />
+        </Suspense>
+      ) : null}
+
+      <ModalShell
+        open={gitDrawerOpen}
+        kind="drawer"
+        title="Git"
+        onClose={() => navigate({ ...route, tool: null })}
+        widthClassName="w-[520px]"
+        testId="git-drawer"
+      >
+        <Suspense fallback={<DelayedFallback label="正在加载 Git 面板…" />}>
+          <GitPanel
+            client={client}
+            workspacePath={boundWorkspace.path}
+            writable={projectWritable}
+            layout="drawer"
+          />
+        </Suspense>
+      </ModalShell>
     </div>
+    </ManagementScopeProvider>
   );
 }

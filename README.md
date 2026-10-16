@@ -5,7 +5,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 底层仍是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
 - 平台：仅 macOS，Apple Silicon 与 Intel（按架构打包 RTK 与科研工具链）
-- 默认界面：科研工作台（`page=research`）
+- 默认界面：项目门户（`page=research`，未选项目）→ 三栏工作台（选中项目后）
 - Agent：研究助手与阶段角色，不是产品主页
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
 - 包管理：`pnpm@12.5.1`
@@ -16,15 +16,19 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 
 ## 科研工作台
 
-打开应用后进入项目壳层。没有项目时是空态，创建后进入该项目的总览，而不是 Chat。
+打开应用先落**项目门户**：卡片网格列出研究项目，没有项目时是空态，点「新建研究项目」才出表单。
+进入某个项目后是**三栏工作台**：左栏（文件 / 文献 / 会话）、画布、助手列；窗口 ≤1099px 时左栏与助手变抽屉。
 
 | 区域 | 作用 |
 | --- | --- |
-| 项目总览 | 当前阶段、人工闸门、索引、运行与产物。只读。 |
-| 阶段工作区 | 按阶段组编辑文献、知识、构思、实验、图稿、正文、文稿与导出。 |
-| 活动与运行 | 阶段运行、任务审批、后台作业。 |
-| 溯源 | 工件、证据、实验/图稿/模型来源。 |
-| 科研服务 | 研究助手、文件与代码、连接器、技能、项目记忆、运行诊断。 |
+| 顶栏 | 所有项目 / 项目名 / 分支、⌘K 搜索、助手、管理、Git、设置 |
+| 左栏 | 文件树、文献、会话；主题与管理入口 |
+| 画布 | 一次一个视图：总览、阶段工作区、活动、溯源、改动、文献、文稿、终端、文件、任务、诊断、MCP、技能、记忆 |
+| 助手 | DeepAgent run 的执行面；富块渲染；⌘J 开关，窄窗为抽屉 |
+| 抽屉与浮层 | Git 抽屉、管理面板、⌘K 搜索、设置浮层 |
+
+科研服务不再有独立导轨：活动/文件/连接器/技能/记忆/诊断都是画布视图（或管理抽屉），
+研究助手是推进阶段的主入口。壳层与视图合同见 [docs/research-workbench.md](docs/research-workbench.md)。
 
 11 个研究阶段：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出。证据集、提纲、正文改写、图稿和最终导出走人工闸门。
 
@@ -35,6 +39,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 - Matplotlib 图稿渲染与发布
 - LaTeX 文稿、模板编译
 - 批准正文与图稿的最终 ZIP 导出
+- MCP 授权、技能、项目记忆、后台任务、运行诊断（管理面板与画布视图）
 
 合同细节：
 
@@ -51,7 +56,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 src/
   main/           # Kernel、插件、Agent、科研域、DB、IPC
   preload/        # 类型安全 bridge
-  renderer/       # React 19 UI；默认科研壳
+  renderer/       # React 19 UI：顶栏 + 左栏 + 画布 + 助手；门户与设置浮层
   shared/         # schema / types / IPC 合同
   rtk-integration/# shell 输出压缩
 tests/
@@ -108,7 +113,7 @@ Harness profile（`harness-profiles.ts`）：
 | 文件路由 | `src/main/services/deep-agent/filesystem-tool-contract.ts` |
 | 护栏 | `src/main/services/forge-guardrails/` |
 | 科研插件 | `src/main/plugins/research/` |
-| 科研壳 | `src/renderer/views/research/` |
+| 壳层 | `src/renderer/app/`、`src/renderer/shell/` |
 
 ---
 
@@ -177,25 +182,24 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 
 ## 测试
 
-端到端是唯一测试机制。不写单元测试。每次结束都留下可复核、可重复的工件。
+出厂前只有一条硬标准：**真应用 + 真 IPC + 真后端**。静态阅读与单测都不能替代它。
 
-- `pnpm test`：应用端到端，工件 `.artifacts/wave1/electron-smoke.json`
-- `pnpm smoke:performance`：长会话端到端，工件 `.artifacts/wave1/performance-smoke.json`（当前为已知红，见下）
-- `pnpm smoke:mac`：已打包应用端到端，工件 `.artifacts/mac-package/result.json` 与截图
-- 科研工具链：`node scripts/research/smoke.ts`，工件为输出目录中的 `result.json`
+| 命令 | 覆盖 | 工件 |
+| --- | --- | --- |
+| `pnpm test` | 新壳 smoke：启动、门户建项目并进入、一轮助手 run、设置保存、文件预览 / Git / 终端 | `.artifacts/smoke-electron/result.json` + 截图 |
+| `pnpm smoke:electron` | 上表 + 审批路径与人工闸门（P4 / P6 闸门作为子进程） | 同上 + `.artifacts/p4-gates/`、`.artifacts/p6-gates/` |
+| `pnpm verify:p3-workspace` … `verify:p9-management` | 七个阶段的验收闸门（真阶段运行 / 真 PDF 解析 / 真 provider 测速 / 真 MCP stdio 子进程 / 真重启等） | `.artifacts/pN-gates/report.json` |
+| `pnpm smoke:performance` | 冷启动与 1k / 10k 会话的交互、内存与预取预算 | `.artifacts/wave1/performance-smoke.json` |
+| `pnpm smoke:mac` | 已打包 `.app` 的原生行为（签名、托盘、pty、外观通知） | `.artifacts/mac-package/` |
+| `pnpm audit:layout` | 三个视口 × 门户/画布/助手/设置四态的布局审查 | `.artifacts/layout-audit/` |
+| `node --test tests/unit/` | 纯规则与投影的单元测试（无 DOM） | — |
 
-`pnpm test` 的工件里除了 `failedChecks` 还有 `retiredChecks`：这些检查描述的是已退役的「对话优先」独立视图（`.rail-button` 导轨、`workspace-shell--chat-collapsed`、旧 workband 的 chat-new-conversation 按钮），在当前产品里结构性不可达 —— 导航会把 `openMainPage('chat')` 解析成 `research` + 助手叠层。它们仍会被计算并写进 `rendererBoundary`，也带原因记入 `retiredChecks`，但不参与 `passed`。重新做布局前先读 [docs/research-workbench.md](docs/research-workbench.md) 的「研究助手入口与叠层」。
+**验收闸门必须串行跑**：Electron 的进程单例锁（`SingletonSocket`）让并行实例互相拒绝，
+表现为 `electron.launch: Process failed to launch`。
 
-### 已知红：`pnpm smoke:performance`
-
-这条命令现在能跑起来了，但还跑不完。两个剩余原因已定位：
-
-1. 交互测量用的 `history-thread-<id>` 选择器在 renderer 里已经不存在，线程历史搬到了项目记忆的会话面（`memory-tab-sessions`），`interactiveMs` 需要重新定义。
-2. 三个剖面串行启动 Electron，但 `ROC_DATA_ROOT` 不决定 Electron 的 `userData`，而 `initializeProcessIdentity()` 无条件申请单实例锁，所以后续剖面可能拿不到窗口，表现为 `Target page, context or browser has been closed`。修法是让 `userData` 跟随 data root，或在 smoke 下跳过单实例锁。
-
-已修好的部分：seed bundle 以前写到仓库外的 `../.runtime/`（`dirname` 在带尾斜杠的 URL 上多剥一层），那里解析不到 `better-sqlite3`，所以这条命令从未真正跑起来过；剖面现在也会种一个研究项目 —— 默认入口是项目列表，不自动进入项目就没有对话输入。
-
----
+P10 删掉了旧壳的 smoke 套件（`tests/smoke/electron-smoke*.mjs`）：那些断言绑在已删除的旧 DOM 上，
+没有可断言的对象，也不做事后别名映射。现在 `tests/smoke/lib/` 只留夹具与目标解析
+（`fixtures.mjs` / `smoke-target.mjs` / `assertions.mjs` / `artifacts.mjs` / `native-feel.mjs`）。
 
 ## 本机维护
 

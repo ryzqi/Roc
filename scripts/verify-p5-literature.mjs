@@ -30,8 +30,8 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  *      而没有新覆盖。索引闸门改用真实可索引的 markdown 文件（快、确定），并把它
  *      真实报告两个坏文件（种子里那对占位 PDF/PNG）当作失败可见性的证据。
  *
- * 运行（必须 `ROC_SMOKE_TARGET=dist` + `ROC_RENDERER=next`，且先删产物再 build）：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p5-literature.mjs
  *
  * 解析一轮在 CPU 上约 2 分钟，整轮约 5–10 分钟，**必须 detach 跑**（P4 的教训：
@@ -228,7 +228,6 @@ try {
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
       ROC_SMOKE_API_KEY: 'smoke-test-key',
-      ROC_RENDERER: 'next'
     }
   });
   const page = await app.firstWindow();
@@ -676,7 +675,7 @@ try {
   // ---- 闸门 3：静态断言（前端没有旧壳的假检索/假流水线） -----------------------
   const forbidden = ['executeTriPathRRFRetrieval', 'deduplicateAndMergePapers', 'executeMinerUPipeline', 'MINERU_PIPELINE_STAGES'];
   const forbiddenHits = [];
-  for (const file of listSourceFiles('src/renderer-next')) {
+  for (const file of listSourceFiles('src/renderer')) {
     // 先剔注释：这几个名字现在只出现在“已删除 / 契约里没有”的说明里，注释不可能
     // 实现假检索；不剔注释的话，解释“这些假实现已经没了”的注释反而会让闸门变红。
     const code = stripComments(readFileSync(file, 'utf8'));
@@ -688,14 +687,14 @@ try {
   }
   assertCheck(
     '3 无假实现',
-    `src/renderer-next 的**代码**里没有 ${forbidden.join(' / ')}（注释不算）`,
+    `src/renderer 的**代码**里没有 ${forbidden.join(' / ')}（注释不算）`,
     forbiddenHits.length === 0,
     forbiddenHits.join(', ')
   );
-  const legacyFiles = ['src/renderer-next/literature/ragEngine.ts', 'src/renderer-next/literature/mineruParser.ts']
+  const legacyFiles = ['src/renderer/literature/ragEngine.ts', 'src/renderer/literature/mineruParser.ts']
     .filter((path) => existsSync(path));
   assertCheck('3 无假实现', 'ragEngine.ts / mineruParser.ts 不存在', legacyFiles.length === 0, legacyFiles.join(', '));
-  const objectUrlHits = listSourceFiles('src/renderer-next').filter((file) => /URL\.createObjectURL\s*\(/u.test(stripComments(readFileSync(file, 'utf8'))));
+  const objectUrlHits = listSourceFiles('src/renderer').filter((file) => /URL\.createObjectURL\s*\(/u.test(stripComments(readFileSync(file, 'utf8'))));
   assertCheck('3 无假实现', 'renderer 里没有 Blob URL（PDF 走 files.preview* 协议）', objectUrlHits.length === 0, objectUrlHits.join(', '));
 
   // ---- 闸门 5：派生函数单测（纯函数 + 稳定输出） -------------------------------
@@ -705,7 +704,7 @@ try {
     pass: /\bpass (\d+)/u.exec(output)?.[1] ?? '?',
     fail: /\bfail (\d+)/u.exec(output)?.[1] ?? '?'
   });
-  const deriveTests = spawnSync('node', ['--test', 'tests/unit/renderer-next-derive.test.mjs'], {
+  const deriveTests = spawnSync('node', ['--test', 'tests/unit/renderer-derive.test.mjs'], {
     cwd: resolve('.'),
     encoding: 'utf8'
   });
@@ -717,7 +716,7 @@ try {
     deriveTests.status === 0 && deriveSummary.fail === '0' && deriveSummary.pass !== '0',
     `pass=${deriveSummary.pass} fail=${deriveSummary.fail}`
   );
-  const literatureTests = spawnSync('node', ['--test', 'tests/unit/renderer-next-literature.test.mjs', 'tests/unit/renderer-next-parse-blocks.test.mjs'], {
+  const literatureTests = spawnSync('node', ['--test', 'tests/unit/renderer-literature.test.mjs', 'tests/unit/renderer-parse-blocks.test.mjs'], {
     cwd: resolve('.'),
     encoding: 'utf8'
   });

@@ -115,7 +115,9 @@ try {
   assert.deepEqual(windowControls.tray, { empty: false, template: true, size: { width: 16, height: 16 } });
   assert.ok(windowControls.trayVisiblePixels > 0 && windowControls.trayVisiblePixels < 256);
   assert.deepEqual(windowControls.trayScales, [1, 2]);
-  await expect(page.locator('[data-testid="window-close"]')).toHaveCount(0);
+  // 渲染层不许自造窗口按钮：macOS 的交通灯由主进程的原生控件提供（P10 换掉旧壳的
+  // `window-close` 断言——那个 testid 在新壳里根本不存在，所以「count 0」是空断言）。
+  await expect(page.locator('[data-testid="window-close"], [data-testid="window-minimize"], [data-testid="window-zoom"]')).toHaveCount(0);
 
   const native = await application.evaluate(async ({ app }) => {
     const { createRequire } = process.getBuiltinModule('node:module');
@@ -252,18 +254,25 @@ try {
   const browserWindow = await application.browserWindow(page);
   await browserWindow.evaluate((window) => window.setBounds({ width: 1280, height: 720 }));
   const layout = await page.evaluate(() => {
-    const workband = document.querySelector('.window-workband');
-    const primary = document.querySelector('.workband-primary');
-    const meta = document.querySelector('.thread-meta');
-    if (!workband || !primary || !meta) throw new Error('Missing workband layout.');
+    const titlebar = document.querySelector('[data-testid="titlebar"]');
+    const leading = titlebar?.firstElementChild;
+    const primary = document.querySelector('[data-testid="titlebar-project-name"], [data-testid="titlebar-portal-title"]');
+    if (!(titlebar instanceof HTMLElement) || !(leading instanceof HTMLElement) || !(primary instanceof HTMLElement)) {
+      throw new Error('Missing titlebar layout.');
+    }
+    // 不要依赖「第一个子元素存在」：门户态里 `titlebar-toggle-sidebar` 不渲染，那个 div 可能只剩
+    // 标题。`pl-[74px]` 是给原生交通灯留的位置（WindowChrome），所以直接量内边距。
+    const paddingLeft = Number.parseFloat(getComputedStyle(leading).paddingLeft);
     return {
-      nativeControlsSpace: primary.getBoundingClientRect().left >= 80,
-      controlsDoNotOverlap: primary.getBoundingClientRect().right <= meta.getBoundingClientRect().left,
-      fontFamily: getComputedStyle(workband).fontFamily
+      nativeControlsSpace:
+        titlebar.classList.contains('drag-region') && leading.getBoundingClientRect().left + paddingLeft >= 74,
+      paddingLeft,
+      primaryVisible: primary.getBoundingClientRect().width > 0,
+      fontFamily: getComputedStyle(titlebar).fontFamily
     };
   });
   assert.equal(layout.nativeControlsSpace, true);
-  assert.equal(layout.controlsDoNotOverlap, true);
+  assert.equal(layout.primaryVisible, true);
   assert.match(layout.fontFamily, /-apple-system/);
   await page.screenshot({ path: join(artifactDir, 'main-1280.png') });
   await application.evaluate(({ Menu }) => {
@@ -271,7 +280,7 @@ try {
     if (settings === undefined) throw new Error('Settings menu is missing.');
     settings.click();
   });
-  await expect(page.locator('[data-testid="settings-view"]')).toBeVisible();
+  await expect(page.locator('[data-testid="settings-modal-panel"]')).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: join(artifactDir, 'settings.png') });
   const resources = await page.evaluate(() => ({

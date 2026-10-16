@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
+import { researchStageSchema } from '../../../src/shared/schemas/research';
+import { defaultResearchIndexOptions } from '../../../src/shared/schemas/research-index';
 import {
   applyAgentDatabaseSchema,
   applyCoreDatabaseSchema,
@@ -106,25 +108,75 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
   }
 }
 
+/**
+ * 建一个性能剖面项目。
+ *
+ * 这里手写 SQL 而不是 `new ResearchRepository(db).createProject(...)`：后者会把整棵研究插件图
+ * （含 `?raw` 资源与 `@napi-rs/canvas`）拉进夹具 bundle，esbuild 得为 `.md`/`.py`/`.node` 逐个配 loader。
+ * 所以下面**逐条对齐** `ResearchRepository.createProject` + `ResearchRunRepository.initializeProject`
+ * + `ResearchIndexRepository.initializeProject` 的写入。任何一处漏写都会让应用启动即失败
+ * （漏 `research_index_projects` → `required_plugin_failed`；漏 stage states →
+ * `research.workflow.get` 抛 `workflow_snapshot_stages_missing`，界面整屏空白）。
+ */
 function seedResearchProject(pool: DatabasePool, dataRoot: string, eventCount: number): void {
   const workspacePath = join(dataRoot, 'workspace');
   mkdirSync(workspacePath, { recursive: true });
+  const projectId = `project-performance-${eventCount}`;
   const timestamp = '2026-07-10T00:00:00.000Z';
-  pool
-    .getConnection('@roc/plugin-research')
-    .prepare(
-      `INSERT INTO research_projects
-       (id, title, description, workspace_path, status, current_stage, created_at, updated_at, language)
-       VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?, 'zh')`
-    )
-    .run(
-      `project-performance-${eventCount}`,
-      `Performance Profile ${eventCount}`,
-      'performance profile project',
-      workspacePath,
-      timestamp,
-      timestamp
+  const db = pool.getConnection('@roc/plugin-research');
+
+  db.prepare(
+    `INSERT INTO research_projects
+     (id, title, description, workspace_path, status, current_stage, created_at, updated_at, language)
+     VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?, 'zh')`
+  ).run(projectId, `Performance Profile ${eventCount}`, 'performance profile project', workspacePath, timestamp, timestamp);
+
+  // 与 `ResearchRepository.createProject` 的 stageGateRequired 一致（除 discovery 外全部需要人工闸门）。
+  const gateRequired = new Set<string>([
+    'retrieval',
+    'reading',
+    'ideation',
+    'planning',
+    'experiment',
+    'figure',
+    'writing',
+    'review',
+    'revision',
+    'export'
+  ]);
+  const insertStage = db.prepare(
+    `INSERT INTO research_stage_states
+     (project_id, stage, status, active_run_id, artifact_ids_json, entered_at, completed_at, gate_required, gate_approved, last_error)
+     VALUES (?, ?, ?, NULL, '[]', ?, NULL, ?, 0, NULL)`
+  );
+  researchStageSchema.options.forEach((stage, index) => {
+    insertStage.run(projectId, stage, index === 0 ? 'ready' : 'locked', index === 0 ? timestamp : null, gateRequired.has(stage) ? 1 : 0);
+  });
+
+  // 与 `ResearchRunRepository.initializeProject` 一致。
+  const insertPolicy = db.prepare('INSERT INTO research_stage_policies (project_id, stage, policy_json) VALUES (?, ?, ?)');
+  for (const stage of researchStageSchema.options) {
+    insertPolicy.run(
+      projectId,
+      stage,
+      JSON.stringify({
+        projectId,
+        stage,
+        tier: stage === 'retrieval' ? 'fast' : ['writing', 'review', 'revision'].includes(stage) ? 'deep' : 'balanced',
+        model: { kind: 'app_default' },
+        maxSteps: 30,
+        timeoutMs: 180000
+      })
     );
+  }
+
+  // 与 `ResearchIndexRepository.initializeProject` 一致。
+  db.prepare(
+    `INSERT INTO research_index_projects
+     (project_id, options_json, revision, generation, workspace_path, root_path, archived, phase, error, scan_id,
+      last_scan_at, embedding_key, scan_requested, scan_force, active_scan_force)
+     VALUES (?, ?, 1, 1, ?, NULL, 0, 'idle', NULL, NULL, NULL, 'none', 0, 0, 0)`
+  ).run(projectId, JSON.stringify(defaultResearchIndexOptions), workspacePath);
 }
 
 function countEvents(dataRoot: string): number {

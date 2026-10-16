@@ -27,8 +27,8 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  *      「暂停 → 启动」的合法组合（见 `use-workflow-store.ts` 的 `rerunStage`），若后端改了行为，
  *      这里会红。
  *
- * 运行（必须 `ROC_SMOKE_TARGET=dist` + `ROC_RENDERER=next`，且先删产物再 build）：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p6-workflow.mjs
  *
  * 必须 detach 跑（前台跑会被工具超时杀掉进程组），报告写 `.artifacts/p6-gates/`。
@@ -457,7 +457,6 @@ try {
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
       ROC_SMOKE_API_KEY: 'smoke-test-key',
-      ROC_RENDERER: 'next'
     }
   });
   const page = await app.firstWindow();
@@ -997,7 +996,7 @@ try {
   );
 
   // ---- 闸门 7：规则纯函数单测 ---------------------------------------------------
-  const unit = spawnSync('node', ['--test', 'tests/unit/renderer-next-workflow.test.mjs'], {
+  const unit = spawnSync('node', ['--test', 'tests/unit/renderer-workflow.test.mjs'], {
     encoding: 'utf8',
     cwd: resolve('.')
   });

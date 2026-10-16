@@ -4,6 +4,10 @@
  * 先用 `pnpm build` 产出 `dist/main/index.js`（或先 `package:mac` 用已打包的 .app），
  * 目标选择逻辑见 `tests/smoke/lib/smoke-target.mjs`：优先已打包应用，其次 dist。
  * 结果写入 `.artifacts/layout-audit/`（JSON + 各视口截图）。
+ *
+ * P10 重写：旧版驱动的是旧壳的 `research-app-shell` / `settings-gear` 等 testid，
+ * 旧壳已在切换提交里删除。这里改成新壳的三个真实状态（门户 / 项目画布 + 助手 / 设置），
+ * 覆盖视口宽度的三档（宽 / 标准 / 紧凑）。
  */
 import { _electron as electron } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -22,7 +26,9 @@ seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
 const { resolveSmokeTarget } = await import('../tests/smoke/lib/smoke-target.mjs');
-const smokeTarget = resolveSmokeTarget({});
+// 默认量 `dist`：布局审查是源码级检查，`release/` 里可能是**上一次**打包的产物（切壳前就是这种坑）。
+// 想看打包形态就显式 `ROC_SMOKE_TARGET=packaged pnpm audit:layout`。
+const smokeTarget = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
 
 let app;
 let smokeProvider;
@@ -38,6 +44,20 @@ async function capture(page, id) {
   const audit = await auditLayout(page, id);
   audits.push(audit);
   return audit;
+}
+
+async function navigate(page, search) {
+  await page.evaluate((next) => {
+    let url;
+    try {
+      url = new URL(window.location.href);
+    } catch {
+      return;
+    }
+    url.search = next;
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, search);
 }
 
 try {
@@ -61,46 +81,32 @@ try {
   });
   page.on('pageerror', (error) => console.error('[renderer:pageerror]', error.message));
   await waitForAppReady(page, 'layout-audit', artifactDir);
-  await page.waitForSelector('[data-testid="research-app-shell"]', { timeout: 10000 });
+  // 冷启动落门户（没有项目时不渲染左栏），所以先等门户容器。
+  await page.waitForSelector('[data-testid="portal"]', { timeout: 15_000 });
 
-  const seededProjects = [
-    {
-      title: '扩散模型采样加速：可复现基准与消融研究',
-      description: '比较 DDIM、DPM-Solver 与一致性蒸馏在相同算力预算下的采样质量、延迟与稳定性，产出一份可复现的基准与消融报告。'
-    },
-    {
-      title: '单细胞转录组的批次效应校正综述',
-      description: '系统梳理 Harmony、scVI 与 Seurat CCA 的适用边界，给出跨组织、跨平台的选型建议。'
-    },
-    {
-      title: '长文检索增强生成的长上下文评测',
-      description: '在 128k 上下文下评测检索增强与长上下文直接注入的差异，覆盖事实一致性、引用准确率与成本。'
-    }
-  ];
-  for (const [index, project] of seededProjects.entries()) {
-    const projectWorkspace = resolve(workspaceRoot, `project-${index + 1}`);
-    mkdirSync(projectWorkspace, { recursive: true });
-    const outcome = await page.evaluate(async ({ item, workspacePath }) => {
-    const result = await window.roc.research.createProject({
-      title: item.title,
-      description: item.description,
-      workspacePath,
-      language: 'zh'
-    });
-    return result.ok ? { ok: true } : { ok: false, error: result.error };
-    }, { item: project, workspacePath: projectWorkspace });
-    if (!outcome.ok) {
-      console.error('[seed] project failed', project.title, JSON.stringify(outcome.error));
-    } else {
-      console.error('[seed] project created', project.title);
-    }
-  }
+  // 种一个项目：门户卡网格要有卡才能审查「门户」这一态。
+  const project = await page.evaluate(async (workspacePath) => {
+    const unwrap = (result) => {
+      if (!result.ok) throw new Error(JSON.stringify(result.error));
+      return result.data;
+    };
+    unwrap(await window.roc.workspace.select({ path: workspacePath }));
+    // capability 是 `research.projects.create`，preload 方法名是 `research.createProject`。
+    return unwrap(
+      await window.roc.research.createProject({
+        title: '布局审查项目',
+        description: 'layout audit',
+        workspacePath
+      })
+    );
+  }, workspaceRoot);
+
+  // 门户列表在挂载时读一次，所以经 IPC 建完项目要重载页面才会出现新卡片。
   await page.reload();
   await waitForAppReady(page, 'layout-audit-after-seed', artifactDir);
-  await page.waitForSelector('[data-testid="research-app-shell"][data-shell-state="list"]', { timeout: 15000 });
-  await page.waitForSelector('.research-project-card', { timeout: 10000 });
-  const seededCardCount = await page.locator('.research-project-card').count();
-  console.error('[seed] project cards after reload', seededCardCount);
+  await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 20_000 });
+
+  const projectQuery = `page=research&project=${project.id}`;
 
   for (const viewport of VIEWPORTS) {
     await browserWindow.evaluate((window, size) => {
@@ -112,39 +118,25 @@ try {
     });
     await page.waitForTimeout(120);
 
-    await capture(page, `list-${viewport.id}`);
+    await navigate(page, 'page=research');
+    await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 15_000 });
+    await capture(page, `portal-${viewport.id}`);
 
-    const card = page.locator('.research-project-card').first();
-    if ((await card.count()) > 0) {
-      await card.evaluate((element) => element.click());
-      await page.waitForSelector('[data-testid="research-app-shell"][data-shell-state="project"]', { timeout: 10000 });
-      await capture(page, `project-${viewport.id}`);
-      const railBack = page.locator('[data-testid="research-shell-rail-all-projects"]');
-      if ((await railBack.count()) > 0) {
-        await railBack.evaluate((element) => element.click());
-      } else {
-        await page.locator('[data-testid="research-shell-all-projects"]').evaluate((element) => element.click());
-      }
-      await page.waitForSelector('[data-testid="research-app-shell"][data-shell-state="list"]', { timeout: 15000 });
+    await navigate(page, `${projectQuery}&view=overview`);
+    await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
+    await capture(page, `canvas-${viewport.id}`);
 
-      const assistantTrigger = page.locator('[data-testid="research-shell-assistant"]');
-      if ((await assistantTrigger.count()) > 0) {
-        await assistantTrigger.evaluate((element) => element.click());
-        await page.waitForSelector('[data-testid="research-assistant-overlay"]', { timeout: 10000 });
-        await capture(page, `assistant-${viewport.id}`);
-        const closeAssistant = page.locator('[data-testid="research-assistant-close"]');
-        if ((await closeAssistant.count()) > 0) {
-          await closeAssistant.evaluate((element) => element.click());
-          await page.waitForSelector('[data-testid="research-assistant-overlay"]', { state: 'detached', timeout: 10000 });
-        }
-      }
-    }
+    // 助手在宽窗是右列、在窄窗是抽屉；两种形态都要审。
+    await navigate(page, `${projectQuery}&view=overview&assistant=1`);
+    await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
+    await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });
+    await capture(page, `assistant-${viewport.id}`);
 
-    await page.locator('[data-testid="settings-gear"]').evaluate((element) => element.click());
-    await page.waitForSelector('[data-testid="settings-view"]', { timeout: 15000 });
+    await page.click('[data-testid="titlebar-settings"]');
+    await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 15_000 });
     await capture(page, `settings-${viewport.id}`);
     await page.keyboard.press('Escape');
-    await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 10000 });
+    await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
   }
 } catch (error) {
   writeLayoutAudit(artifactDir, {

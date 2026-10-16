@@ -15,11 +15,11 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 断言的是旧壳的 DOM，P10 才重写它，所以这里用与新壳一致的 `data-testid` 单独立一套。
  *
  * 它**不**替代 P10 的 smoke：这里只覆盖 P3 的四个闸门 + 只读闸门与 R10 的运行时表现，
- * 并且明确以 `ROC_RENDERER=next` + `ROC_SMOKE_TARGET=dist` 运行（后者很重要：
+ * 并且明确以 `ROC_SMOKE_TARGET=dist` 运行（后者很重要：
  * `resolveSmokeTarget` 默认会优先用 `release/mac-arm64/Roc.app`，那可能是旧的打包产物）。
  *
  * 运行：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p3-workspace.mjs
  * 结果写入 `.artifacts/p3-gates/`（report.json + 截图）。
  */
@@ -166,8 +166,7 @@ try {
       ...process.env,
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
-      ROC_SMOKE_API_KEY: 'smoke-test-key',
-      ROC_RENDERER: 'next'
+      ROC_SMOKE_API_KEY: 'smoke-test-key'
     }
   });
   const page = await app.firstWindow();

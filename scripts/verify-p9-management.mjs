@@ -24,8 +24,8 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  *      一条断言真实降级并记录原因（B18 的口径），不跳过。
  *   3. **顺序有意**：可检索会话在**重活之前**造（P5 的 B18 经验：解析/索引后的 chat run 会卡）。
  *
- * 运行（必须 `ROC_SMOKE_TARGET=dist` + `ROC_RENDERER=next`，且先删产物再 build）：
- *   rm -rf dist/renderer && ROC_RENDERER=next pnpm build
+ * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
+ *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p9-management.mjs
  *
  * 必须 detach 跑；报告写 `.artifacts/p9-gates/`。
@@ -118,7 +118,6 @@ const launchEnv = {
   ROC_SMOKE: '1',
   ROC_DATA_ROOT: dataRoot,
   ROC_SMOKE_API_KEY: 'smoke-test-key',
-  ROC_RENDERER: 'next'
 };
 
 let app;
@@ -975,11 +974,11 @@ try {
   await closeManagement();
 
   // ---- 闸门 5：无假数据 + typecheck ---------------------------------------------
-  const randomHits = searchSourceTree(resolve('src/renderer-next/management'), 'Math.random(');
+  const randomHits = searchSourceTree(resolve('src/renderer/management'), 'Math.random(');
   assertCheck('5 无假数据', '管理面板没有 Math.random()', randomHits.length === 0, randomHits.slice(0, 3).join(', '));
   const removedEntities = ['GuardrailRule', 'EvalBenchmarkResult', 'TelemetryMetric'];
   for (const entity of removedEntities) {
-    const hits = searchSourceTree(resolve('src/renderer-next'), entity);
+    const hits = searchSourceTree(resolve('src/renderer'), entity);
     assertCheck('5 无假数据', `没有 research-studio 的 ${entity} 假实体`, hits.length === 0, hits.slice(0, 3).join(', '));
   }
 

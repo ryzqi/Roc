@@ -9,7 +9,7 @@
 - **`design-system/MASTER.md` 升为 v2 并显式记录取代关系**（§1.4），旧条目逐条给出处置，避免实施期在两套规则间摇摆。
 - **保留 v1 与 `AGENTS.md` 一致的硬约束**：系统字体栈（不加载网页字体）、Lucide 描边图标、无 emoji 图标、`:focus-visible` 可见、`prefers-reduced-motion`、状态不只靠颜色、正文对比 ≥ 4.5:1、破坏操作确认、空态/错误五级形态、列表行不用 `cursor: pointer`。
 - **主题默认改为深色**（保留浅色与跟随系统）；圆角收敛为 6 / 8 / 10；界面正文统一 13px；顶栏 44px 并为系统红绿灯留 86px。
-- **Token 链只有一条**：Tailwind 4 `@theme` → CSS 变量（`src/renderer-next/styles/tokens.css` 两层结构）→ 组件类名。组件里禁止写死 hex，禁止并行引入旧 `src/renderer/styles/*.css`。
+- **Token 链只有一条**：Tailwind 4 `@theme` → CSS 变量（`src/renderer/styles/tokens.css` 两层结构）→ 组件类名。组件里禁止写死 hex，禁止并行引入旧 `src/renderer/styles/*.css`。
 - **把 AI Studio 方案的「单一真理源」结论转正为规范**（MASTER v2 §7）：模型/密钥、嵌入与索引参数、MinerU 解析开关、LaTeX 编译参数的唯一可写位置是设置中心；业务页只读显示 + 跳转。项目级配置（阶段模型、审稿循环）的唯一可写位置是项目设置阶段组。
 
 ## 理由
@@ -23,4 +23,4 @@ v1 禁用左栏的**动机**（避免做成 SaaS 仪表盘、避免 Chat/文件/
 - 实施期必须只认 v2。任何「v1 说没有左栏」的实现判断作废。
 - 断点策略需要重定：三栏在窄窗挤压，`≤ 799px` 时左栏与助手都改抽屉（ADR-M12）。
 - 顶部 44px 且左让 86px 会占用门户页横向空间，门户工具的按钮数量需要克制。
-- 旧 `src/renderer/styles/tokens.css` 与新 `src/renderer-next/styles/tokens.css` 并行存在到 P10；期间只允许新壳使用新文件，旧壳继续用旧文件，不交叉引用。
+- 并行期（P0–P9）两套 `tokens.css` 并存；P10 切换提交删除旧壳后只剩一套，`src/renderer/styles/` 就是新壳的文件。
