@@ -1,9 +1,10 @@
 import { _electron as electron } from '@playwright/test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
  * P8 验收闸门的自动化实测（真应用 / 真 IPC / 真设置读写 / 真密钥存储 / 真 provider 测速）。
@@ -30,25 +31,9 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 必须 detach 跑；报告写 `.artifacts/p8-gates/`。
  */
 
-const artifactDir = resolve('.artifacts/p8-gates');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir(resolve('.artifacts/p8-gates'));
 
-const results = [];
-function record(gate, name, ok, detail = '', kind = 'assert') {
-  const text = typeof detail === 'string' ? detail : JSON.stringify(detail ?? null);
-  results.push({ gate, name, ok, detail: text, kind });
-  console.log(`${ok ? '✔' : '✖'} [${gate}] ${name}${text.length === 0 ? '' : ` — ${text}`}`);
-}
-function fail(gate, name, detail) {
-  record(gate, name, false, detail);
-  throw new Error(`[${gate}] ${name}: ${detail}`);
-}
-function assertCheck(gate, name, condition, detail = '') {
-  if (!condition) {
-    fail(gate, name, detail === '' ? 'assertion failed' : detail);
-  }
-  record(gate, name, true, detail);
-}
+const { results, record, fail, assertCheck } = createGateRecorder();
 
 const smokeModelId = 'p8-smoke-model';
 const smokeProviderId = 'p8-smoke-provider';
@@ -81,20 +66,6 @@ const rendererErrors = [];
 
 async function sleep(ms) {
   await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
-}
-
-async function navigate(search) {
-  await page.evaluate((next) => {
-    let url;
-    try {
-      url = new URL(window.location.href);
-    } catch {
-      return;
-    }
-    url.search = next;
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, search);
 }
 
 /** Launches the app (also used for the restart half of gate 1). */
@@ -323,7 +294,7 @@ try {
   // ---- 闸门 1：每个分区读回保存值 ------------------------------------------------
   // 先进入项目：索引配置按项目读写（`research.index.configure` 要 projectId），导出快照的落盘
   // 也需要绑定的工作目录 —— 二者都来自当前路由里的项目。
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await waitForProjectRoute();
   await openSettingsViaShortcut();
   assertCheck(
@@ -685,7 +656,7 @@ try {
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await openSettingsViaShortcut();
   await openSection('models');
   await page.selectOption('[data-testid="settings-provider-select"]', 'p8-broken-provider');
@@ -712,7 +683,7 @@ try {
   // ---- 闸门 4：未保存关闭有确认 + 脏分区警告点 + 关闭后焦点回齿轮 ------------------
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await openSettingsViaShortcut();
   await openSection('guardrail');
   await page.fill('[data-testid="settings-char-limit-agents"]', '26000');
@@ -765,7 +736,7 @@ try {
   assertCheck('4 关闭确认', '放弃修改没有写入后端', roleAfter !== 27000, `agents=${String(roleAfter)}`);
 
   // ---- 闸门 5：设置改完助手 / RAG / 阶段策略立即生效（无需重启） -------------------
-  await navigate(`page=research&project=${projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="assistant-model-settings"]')?.textContent ?? '').includes('P8 Smoke Model TAG'),
@@ -792,7 +763,7 @@ try {
   // RAG Studio：索引配置改完 revision 与 include 立即变化
   // The literature sub-view is component state, not a URL parameter (P5 deviation), so the
   // gate drives it the way a user does: hub → RAG 子视图.
-  await navigate(`page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=literature`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 20_000 });
   await page.click('[data-testid="literature-subview-rag"]');
   await page.waitForSelector('[data-testid="rag-settings"]', { timeout: 20_000 });
@@ -823,7 +794,7 @@ try {
   // 阶段策略面板（△ 阶段面已随 research-studio 对齐整体删除）：该面板已不存在，所以「模型下拉跟随设置
   // 刷新」被另一块真的会刷新模型的界面接替——文稿视图的编译工具链状态读的是同一条 revision 机制，
   // 且它的可用性本来就来自后端（research.toolchain.status），不是内联配置。
-  await navigate(`page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   await page.waitForFunction(
     () => {
@@ -864,7 +835,7 @@ try {
     assertCheck('6 无内联配置', `业务页没有 ${label}`, hits.length === 0, hits.slice(0, 3).join(', '));
   }
   // 这一条要在 RAG Studio 真的挂载时读（上一条闸门把画布留在了文稿视图）。
-  await navigate(`page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=literature`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 20_000 });
   await page.click('[data-testid="literature-subview-rag"]');
   await page.waitForSelector('[data-testid="rag-open-settings"]', { timeout: 20_000 });
@@ -888,7 +859,7 @@ try {
 
   // 文稿（LaTeX）视图：没有引擎选择，也没有本地假编译
   // （它以前是阶段工作区的一个 tab；阶段面删除后它就是画布的一级 tab，同一份面板。）
-  await navigate(`page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   const latexText = ((await page.locator('[data-testid="production-latex"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   assertCheck(
@@ -927,7 +898,7 @@ try {
   );
   assertCheck('1b 重启保持', '重启后密钥仍然是「已配置」（safeStorage 持久）', afterRestart.secretStored === true, JSON.stringify(afterRestart));
 
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await ensureSettingsOpen();
   await openSection('app');
   assertCheck('1b 重启保持', '重启后界面仍读回保存的值', (await isChecked('settings-open-at-login')) === true && (await readInput('settings-global-hotkey')) === hotkeyTag);
@@ -943,46 +914,32 @@ try {
   );
 
   assertCheck('7 渲染层错误', '整轮没有 renderer error', rendererErrors.length === 0, rendererErrors.slice(0, 3).join(' | '));
+
+  finishGate({
+    label: 'P8',
+    artifactDir,
+    results,
+    rendererErrors,
+    extra: { providerRequests: smokeProvider.requests.length },
+    // 声明的闸门段落。跑到少一段就是失败：这个脚本曾经只跑到第 4 段（`3 测速`）
+    // 就结束了，仍然写 `passed: true`、报 40/40，而完整跑是 67/67。
+    expectedGates: [
+      '0 启动',
+      '0 准备',
+      '1 分区读回',
+      '1b 重启保持',
+      '2 密钥',
+      '3 测速',
+      '4 关闭确认',
+      '5 立即生效',
+      '6 无内联配置',
+      '7 typecheck',
+      '7 渲染层错误'
+    ]
+  });
 } catch (error) {
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.error(`\nP8 验收闸门失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+  finishGate({ label: 'P8', artifactDir, results, rendererErrors, error });
 } finally {
-  const failed = results.filter((entry) => entry.ok !== true);
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: failed.length === 0,
-        providerRequests: smokeProvider.requests.length,
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  const infoCount = results.filter((entry) => entry.kind === 'info').length;
-  const assertionFailures = failed.filter((entry) => entry.kind !== 'info').length;
-  console.log(
-    `\nP8 验收闸门：${results.length - failed.length}/${results.length} 记录通过 · 断言 ${results.length - infoCount - assertionFailures}/${results.length - infoCount} · 说明性记录 ${infoCount}。报告写入 ${artifactDir}/report.json`
-  );
   if (app !== undefined) {
     await Promise.race([app.close(), new Promise((resolveDone) => setTimeout(resolveDone, 20_000))]);
     setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();

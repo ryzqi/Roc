@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { DrawerSectionId } from '../../shared/surfaces';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
@@ -61,9 +62,15 @@ export type SearchGroupSources = {
    * `ManagementTabId`'s four values are the drawer's tabs, and only three of them are also canvas
    * views: 任务 is drawer-only in this shell (the reference has no task page, and the canvas view
    * that used to exist was a second surface over one dataset). The shell decides which of the two
-   * it opens — closing the drawer is part of that jump either way.
+   *   - `ManagementTabId`'s four values are the drawer's tabs, and only three of them are also canvas
+   *     views: 任务 is drawer-only in this shell (the reference has no task page, and the canvas view
+   *     that used to exist was a second surface over one dataset). The shell decides which of the two
+   *     it opens — closing the drawer is part of that jump either way.
+   *
+   * The parameter type is the table's `DrawerSectionId`, so this interface cannot disagree with the
+   * drawer's own tab list about how many sections there are.
    */
-  onOpenManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void;
+  onOpenManagementView: (section: DrawerSectionId) => void;
   /**
    * Bumped every time the palette opens.
    *
@@ -345,7 +352,7 @@ function buildSkillsGroup(
     error: string | null;
   },
   trimmedQuery: string,
-  onOpenManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void
+  onOpenManagementView: (section: DrawerSectionId) => void
 ): SearchGroup {
   if (list.status === 'error') {
     return { id: 'skills', label: '技能', status: 'unavailable', items: [], unavailableReason: list.error ?? '读取技能失败' };

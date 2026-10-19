@@ -1,19 +1,23 @@
 import { motion } from 'motion/react';
 import { BookOpen, FileText, Terminal } from 'lucide-react';
-import type { AppViewId } from '../app/routes';
+import { canvasTabIds, surfaceFor, type CanvasTabId } from '../../shared/surfaces';
 import { tabIndicatorTransition } from '../shared/motion';
 
 /**
  * Canvas: the primary tab strip plus the project views.
  *
- * The three top-level tabs are 文献 / LaTeX / 终端 — the new frontend's
- * information architecture, kept because they are the three surfaces a
- * researcher keeps open while working. Other views (总览 / 阶段 / 活动 / 溯源 /
- * 服务) are reached from the sidebar, the stage bar, or the chrome, so a tab is
- * only selected when the routed view is one of the three.
+ * The three top-level tabs are 文献 / LaTeX / 终端 — the three surfaces a researcher keeps open while
+ * working. Other views (记忆 / 技能 / MCP) are reached from the sidebar, the chrome or the grid, so a
+ * tab is only selected when the routed view is one of the three.
  *
- * Selection is therefore **derived from the URL**, not from component state: the
- * active tab is whichever of the three matches `?view=`.
+ * **The list, the order and the labels come from the surface table** (`src/shared/surfaces.ts`). All
+ * this module still owns is the *appearance* — which Lucide glyph and which icon hue each tab uses —
+ * because an icon is a renderer concern. That division is deliberate: the classification has one
+ * home, the rendering detail has another, and the `Record` below makes a tab added to the table
+ * without an icon a compile error rather than a blank slot.
+ *
+ * Selection is derived from the URL, not from component state: the active tab is whichever of the
+ * three matches `?view=`.
  *
  * ## The indicator travels between tabs
  *
@@ -40,7 +44,7 @@ import { tabIndicatorTransition } from '../shared/motion';
  * drop to the 600 stops for contrast.
  */
 
-export type CanvasTabId = Extract<AppViewId, 'literature' | 'latex' | 'terminal'>;
+export type { CanvasTabId };
 
 export type WorkspaceCanvasProps = {
   /** `null` when the routed view is not one of the three primary tabs. */
@@ -54,11 +58,15 @@ export type WorkspaceCanvasProps = {
   actions?: React.ReactNode;
 };
 
-const TABS: Array<{ id: CanvasTabId; label: string; icon: typeof BookOpen; iconClass: string }> = [
-  { id: 'literature', label: '文献', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
-  { id: 'latex', label: 'LaTeX', icon: FileText, iconClass: 'text-[var(--icon-latex)]' },
-  { id: 'terminal', label: '终端', icon: Terminal, iconClass: 'text-[var(--icon-terminal)]' }
-];
+/** 图标与色相属于渲染层，id / 顺序 / 标签属于面表。 */
+const TAB_APPEARANCE: Record<CanvasTabId, { icon: typeof BookOpen; iconClass: string }> = {
+  literature: { icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  latex: { icon: FileText, iconClass: 'text-[var(--icon-latex)]' },
+  terminal: { icon: Terminal, iconClass: 'text-[var(--icon-terminal)]' }
+};
+
+const TABS: ReadonlyArray<{ id: CanvasTabId; label: string; icon: typeof BookOpen; iconClass: string }> =
+  canvasTabIds.map((id) => ({ id, label: surfaceFor(id).label, ...TAB_APPEARANCE[id] }));
 
 const TAB_BASE =
   'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-card border px-3 whitespace-nowrap text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';

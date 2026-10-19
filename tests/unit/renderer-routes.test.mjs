@@ -1,47 +1,29 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as esbuild from 'esbuild';
+
+import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 /**
  * Round-trip guard for the renderer URL contract (ADR-M05).
  *
- * `routes.ts` is TypeScript with extension-less relative imports, so it is
- * bundled with esbuild (already a devDependency) before import. No new test
- * framework is introduced; `node --test` is enough.
+ * `routes.ts` is TypeScript with extension-less relative imports, so it is bundled before import —
+ * `scripts/lib/bundle-ts.mjs` is that helper, shared with the other unit tests instead of the
+ * `mkdtempSync` + `rmSync` copy each of them used to carry. No new test framework is introduced;
+ * `node --test` is enough.
  *
- * Why this exists: the legacy shell made `view=changes` implicit while its
- * parser defaulted to `changes`, and the new shell initially inherited the
- * implicit write while defaulting to `overview`. That pair silently rewrote
- * `changes -> overview` on every reload and orphaned `tool=git`. The invariant
- * enforced here is the one that failure violated.
+ * Why this exists: the legacy shell made `view=changes` implicit while its parser defaulted to
+ * `changes`, and the new shell initially inherited the implicit write while defaulting to
+ * `overview`. That pair silently rewrote `changes -> overview` on every reload and orphaned
+ * `tool=git`. The invariant enforced here is the one that failure violated.
+ *
+ * The native-menu mapping used to be tested here too. It moved: the page set and its meaning live in
+ * `src/shared/surfaces.ts` (asserted in `surfaces.test.mjs`), and the part a route can carry is
+ * `routeForMenuIntent` below. What remains here is the URL contract itself.
  */
 
-let routes;
-let tempDir;
-
-before(async () => {
-  tempDir = mkdtempSync(join(tmpdir(), 'roc-routes-'));
-  const outfile = join(tempDir, 'routes.mjs');
-  await esbuild.build({
-    entryPoints: ['src/renderer/app/routes.ts'],
-    outfile,
-    bundle: true,
-    format: 'esm',
-    platform: 'neutral',
-    target: 'node22',
-    logLevel: 'silent'
-  });
-  routes = await import(outfile);
-});
-
-after(() => {
-  if (tempDir !== undefined) {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
+const routes = await importTypeScriptModule('src/renderer/app/routes.ts');
+/** Loaded separately because the menu assertions read the table itself, not only what routes re-exports. */
+const surfaces = await importTypeScriptModule('src/shared/surfaces.ts');
 
 const ALL_VIEWS = [
   'literature',
@@ -116,43 +98,47 @@ test('normalizeAppRoute is idempotent', () => {
   }
 });
 
-test('the native menu\'s Git item selects the drawer, not a view', () => {
+test('a ?tool= survives next to any view — which is the route half of the Git and 文件 menu items', () => {
   // This guard started as “view=changes survives with its tool” after the legacy shell dropped the
-  // parameter. The wide change view is gone (the reference has one Git surface, a drawer), so what
-  // it protects now is that the menu item still reaches Git: `?tool=git` must survive the
-  // round-trip while the view stays untouched.
-  const gitIntent = routes.routeForNavigate('git', {
-    page: 'research',
-    projectId: 'p1',
-    view: 'literature',
-    tool: null,
-    openFile: null,
-    assistantOpen: false,
-    newProject: false
-  });
-  const reparsed = routes.parseAppRoute(toSearch(gitIntent));
-  assert.equal(reparsed.view, 'literature');
-  assert.equal(reparsed.tool, 'git');
-  assert.ok(routes.sameAppRoute(gitIntent, reparsed));
-});
-
-test('the files menu item also selects a drawer, and keeps the view', () => {
-  const base = routes.parseAppRoute(new URLSearchParams('page=research&project=p1'));
-  const next = routes.routeForNavigate('files', base);
-  assert.equal(next.tool, 'files');
-  // The view is whatever it already was — a drawer is not a page. This pin read `view === 'changes'`
-  // for Git before; now both entries must leave the canvas alone.
-  assert.equal(next.view, 'literature');
-  assert.ok(routes.sameAppRoute(next, routes.parseAppRoute(toSearch(next))));
-});
-
-test('menu navigate payloads from the native menu always land somewhere reachable', () => {
-  // src/main/application-menu.ts and macos-host-service.ts emit exactly these.
-  const base = routes.parseAppRoute(new URLSearchParams('page=research&project=p1'));
-  for (const payload of ['settings', 'research-new', 'chat', 'tasks', 'workspace', 'git', 'terminal']) {
-    const next = routes.routeForNavigate(payload, base);
-    assert.ok(routes.sameAppRoute(next, routes.parseAppRoute(toSearch(next))), payload);
+  // parameter. The wide change view is gone and so is `routeForNavigate`, but the route the Git and
+  // 文件 menu items mean is still this: a tool names a **drawer**, not a page, so it has to survive
+  // next to whatever canvas view is on screen.
+  for (const tool of ['git', 'files']) {
+    const route = routes.parseAppRoute(
+      new URLSearchParams(`page=research&project=p1&view=literature&tool=${tool}`)
+    );
+    assert.equal(route.view, 'literature', tool);
+    assert.equal(route.tool, tool);
+    assert.equal(toSearch(route).get('tool'), tool);
+    assert.ok(routes.sameAppRoute(route, routes.parseAppRoute(toSearch(route))));
   }
+});
+
+test('every menu intent either produces a round-tripping route or is the drawer one', () => {
+  // The producers are application-menu.ts, macos-host-service.ts and the open-settings handler;
+  // src/shared/surfaces.ts owns the closed list. Three of the four intents are route changes and
+  // must survive normalization from both a project route and the portal. 打开任务 is not routable at
+  // all, which `RoutableMenuIntent` enforces by excluding it — the old `routeForNavigate` expressed
+  // it as "return the current route", which `navigate` then dropped as a no-op.
+  const base = routes.parseAppRoute(new URLSearchParams('page=research&project=p1'));
+  const portal = routes.parseAppRoute(new URLSearchParams('page=research'));
+  let routable = 0;
+  for (const page of surfaces.menuPages) {
+    const intent = surfaces.menuIntentForPage(page);
+    assert.notEqual(intent, null, page);
+    if (intent.kind === 'management') {
+      continue;
+    }
+    routable += 1;
+    for (const from of [base, portal]) {
+      const next = routes.routeForMenuIntent(intent, from);
+      assert.ok(
+        routes.sameAppRoute(next, routes.parseAppRoute(toSearch(next))),
+        `${page} does not round-trip`
+      );
+    }
+  }
+  assert.equal(routable, 3, 'expected three routable menu intents');
 });
 
 test('no project means the portal: no view, tool, file or assistant leaks into the URL', () => {
@@ -198,24 +184,42 @@ test('an incoming ?stage= is ignored, never read and never re-written', () => {
   assert.equal(toSearch(withStage).get('stage'), null);
 });
 
-test('a retired view id falls back instead of leaking into the URL', () => {
+test('a retired or parked view id falls back instead of leaking into the URL', () => {
   // Everything except the reference's three canvas tabs and the three management views has been
   // retired (`overview`/`stage`/`activity`/`provenance`/`diagnostics` with the stage surface,
   // `tasks` with the task board, `files`/`changes` with the view-to-drawer move). A bookmark to any
   // of them must land somewhere real rather than render nothing.
-  const retired = ['overview', 'stage', 'activity', 'provenance', 'diagnostics', 'tasks', 'files', 'changes'];
+  //
+  // The parked domains (ADR 0024: 契约与数据库保留、界面删除) fall back **too**, and that is
+  // correct here: the parser has to answer deterministically for any input (ADR-M05). The place
+  // that refuses them is the gate guard, which is where a wrong page would otherwise pass an
+  // assertion — see `surfaces.test.mjs`.
+  const retired = [
+    'overview',
+    'stage',
+    'activity',
+    'provenance',
+    'diagnostics',
+    'tasks',
+    'files',
+    'changes',
+    ...surfaces.PARKED_CAPABILITIES.map((parked) => parked.id)
+  ];
   for (const id of retired) {
     const parsed = routes.parseAppRoute(new URLSearchParams(`page=research&project=p1&view=${id}`));
     assert.equal(parsed.view, routes.DEFAULT_VIEW, id);
   }
 });
 
-test('the native menu\'s task item stays reachable now that the board is gone', () => {
-  const base = routes.parseAppRoute(new URLSearchParams('page=research&project=p1'));
-  const next = routes.routeForNavigate('tasks', base);
-  // The drawer opens from the shell, not from the URL, so what the route has to prove is that the
-  // item does not send the user to a view that no longer exists.
-  assert.equal(next.view, routes.DEFAULT_VIEW);
+test('the tray\'s 打开任务 is a drawer intent, and 任务 is still not a canvas host', () => {
+  // Two facts replace the old "next.view === DEFAULT_VIEW" pin, which was true for the wrong reason:
+  // it held because the branch did nothing at all. The intent is now a management one (so the shell
+  // can open the drawer), and the table still records that 任务 must not gain a canvas view
+  // (ADR 0024: two interfaces over one dataset diverge).
+  assert.deepEqual(surfaces.menuIntentForPage('tasks'), { kind: 'management', section: 'tasks' });
+  const resolution = surfaces.resolveSurface('tasks');
+  assert.equal(resolution.kind, 'surface');
+  assert.equal(resolution.surface.canvas, 'none');
   assert.ok(!routes.APP_VIEW_IDS.has('tasks'));
 });
 

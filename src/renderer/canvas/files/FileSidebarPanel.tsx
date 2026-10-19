@@ -54,6 +54,8 @@ export type FileSidebarPanelProps = {
   onOpenFile: (relativePath: string) => void;
   /** A file another surface asked to preview; see `LeftSidebar`'s `SidebarFilesTab`. */
   previewRequest?: { relativePath: string; nonce: number } | null;
+  /** Called once the request has been adopted, so the shell can clear it. See the adopt effect. */
+  onPreviewRequestConsumed?: () => void;
 };
 
 export function FileSidebarPanel({
@@ -63,7 +65,8 @@ export function FileSidebarPanel({
   writable,
   openFile,
   onOpenFile,
-  previewRequest = null
+  previewRequest = null,
+  onPreviewRequestConsumed
 }: FileSidebarPanelProps): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
@@ -121,6 +124,21 @@ export function FileSidebarPanel({
    * opens it and a re-render never re-opens a preview the user just closed. The selection
    * travels with it, so the tree highlights the row and `?file=` stays the single source of
    * which file is current.
+   *
+   * ## Why the request must be *acknowledged*, not merely remembered
+   *
+   * "Which nonce did I last see" cannot live in this component alone, because this component is
+   * deliberately remounted when the bound workspace changes (`LeftSidebar` keys it on
+   * `binding.path`, which is what makes gate 6's project switch hand the tree fresh state). A ref
+   * dies with the instance, so after a switch it read `0` while the shell still held
+   * `{ nonce: 1 }` — and the request was **re-delivered**: it re-opened the previous project's
+   * file, whose read fails in the new workspace, leaving a full-screen "无法预览 PDF" overlay that
+   * covered the canvas and blocked every click (the P3 gate could not reach the terminal).
+   *
+   * The fix is the missing half of a convention this shell already uses: `assistantSeed` is paired
+   * with `onComposerSeedConsumed`, and the request stops existing as soon as it is adopted. A
+   * pending request therefore cannot outlive the workspace it was made in, which is also why the
+   * callback is not in the dependency list — `previewRequest` is the trigger, as before.
    */
   const lastPreviewRequestRef = useRef(0);
   useEffect(() => {
@@ -131,8 +149,7 @@ export function FileSidebarPanel({
     setQuery('');
     setRevealPath(previewRequest.relativePath);
     setPreviewPath(previewRequest.relativePath);
-    // `onOpenFile` is re-created by the shell each render, so it is deliberately not a
-    // dependency: the request identity is the trigger.
+    onPreviewRequestConsumed?.();
   }, [previewRequest]);
 
   const openFromSearch = (relativePath: string): void => {

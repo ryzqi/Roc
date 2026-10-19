@@ -1,9 +1,10 @@
 import { _electron as electron } from '@playwright/test';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
  * P4 验收闸门的自动化实测（真应用 / 真 IPC / 真 DeepAgent run / 真工具执行）。
@@ -23,25 +24,9 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 结果写入 `.artifacts/p4-gates/`（report.json + 截图）。
  */
 
-const artifactDir = resolve('.artifacts/p4-gates');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir(resolve('.artifacts/p4-gates'));
 
-const results = [];
-function record(gate, name, ok, detail = '') {
-  results.push({ gate, name, ok, detail });
-  const mark = ok ? '✔' : '✖';
-  console.log(`${mark} [${gate}] ${name}${detail.length === 0 ? '' : ` — ${detail}`}`);
-}
-function fail(gate, name, detail) {
-  record(gate, name, false, detail);
-  throw new Error(`[${gate}] ${name}: ${detail}`);
-}
-function assertCheck(gate, name, condition, detail = '') {
-  if (!condition) {
-    fail(gate, name, detail === '' ? 'assertion failed' : detail);
-  }
-  record(gate, name, true, detail);
-}
+const { results, record, fail, assertCheck } = createGateRecorder();
 
 const smokeModelId = 'p4-smoke-model';
 const smokeProviderId = 'p4-smoke-provider';
@@ -63,22 +48,11 @@ console.log(`P4 验收闸门实测 · target=${target.kind} · renderer=next · 
 let app;
 const rendererErrors = [];
 
-async function navigate(page, search) {
-  await page.evaluate((next) => {
-    let url;
-    try {
-      url = new URL(window.location.href);
-    } catch {
-      return;
-    }
-    url.search = next;
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, search);
-}
-
-async function openAssistant(page, projectId, view = 'overview') {
-  await navigate(page, `page=research&project=${projectId}&view=${view}&assistant=1`);
+async function openAssistant(page, projectId) {
+  // 视图写死为 `latex`：这里需要的只是「进入项目 + 助手打开」，而 `latex` 是 `?view=` 缺省时的
+  // 落点。之前是一个 `view = 'overview'` 的参数，而那个面在 P10 已删——导航被静默归一成 `latex`，
+  // 而调用方只传两个参数，所以那个参数从来没用过。删掉它，而不是把默认值换成另一个面。
+  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
 }
@@ -681,45 +655,30 @@ try {
 
   assertCheck('0 健康', '整轮流程没有 renderer 错误', rendererErrors.length === 0, rendererErrors.slice(0, 2).join(' | '));
 
-  const failed = results.filter((entry) => !entry.ok);
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: failed.length === 0,
-        results,
-        gate6: seeding,
-        providerRequests: smokeProvider.requests.length,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.log(`\nP4 验收闸门：${results.length - failed.length}/${results.length} 通过。报告写入 ${artifactDir}/report.json`);
-  if (failed.length > 0) {
-    process.exitCode = 1;
-  }
+  finishGate({
+    label: 'P4',
+    artifactDir,
+    results,
+    rendererErrors,
+    extra: { gate6: seeding, providerRequests: smokeProvider.requests.length },
+    // 声明的闸门段落。跑到少一段就是失败。
+    expectedGates: [
+      '0 启动',
+      '0 准备',
+      '0 健康',
+      '1 真跑一轮',
+      '2 审批',
+      '3 提问',
+      '4 取消',
+      '5 恢复',
+      '6 头部',
+      '6 虚拟化',
+      '7 无假流式',
+      '8 typecheck'
+    ]
+  });
 } catch (error) {
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.error(`\nP4 验收闸门失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+  finishGate({ label: 'P4', artifactDir, results, rendererErrors, error });
 } finally {
   if (app !== undefined) {
     await app.close();

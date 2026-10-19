@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
  * P9 验收闸门的自动化实测（真应用 / 真 IPC / 真 markdown 记忆 / 真技能目录 / 真 MCP stdio 子进程 /
@@ -31,25 +32,9 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 必须 detach 跑；报告写 `.artifacts/p9-gates/`。
  */
 
-const artifactDir = resolve('.artifacts/p9-gates');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir(resolve('.artifacts/p9-gates'));
 
-const results = [];
-function record(gate, name, ok, detail = '', kind = 'assert') {
-  const text = typeof detail === 'string' ? detail : JSON.stringify(detail ?? null);
-  results.push({ gate, name, ok, detail: text, kind });
-  console.log(`${ok ? '✔' : '✖'} [${gate}] ${name}${text.length === 0 ? '' : ` — ${text}`}`);
-}
-function fail(gate, name, detail) {
-  record(gate, name, false, detail);
-  throw new Error(`[${gate}] ${name}: ${detail}`);
-}
-function assertCheck(gate, name, condition, detail = '') {
-  if (!condition) {
-    fail(gate, name, detail === '' ? 'assertion failed' : detail);
-  }
-  record(gate, name, true, detail);
-}
+const { results, record, assertCheck } = createGateRecorder();
 
 const smokeModelId = 'p9-smoke-model';
 const smokeProviderId = 'p9-smoke-provider';
@@ -126,20 +111,6 @@ const rendererErrors = [];
 
 async function sleep(ms) {
   await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
-}
-
-async function navigate(search) {
-  await page.evaluate((next) => {
-    let url;
-    try {
-      url = new URL(window.location.href);
-    } catch {
-      return;
-    }
-    url.search = next;
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, search);
 }
 
 async function launchApp() {
@@ -367,7 +338,7 @@ try {
     );
   }
 
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await waitForProjectRoute();
 
   // ---- 闸门 1：记忆（五份 markdown 内容：读 / 改 / 存 / 快照 / 拒写） -------------
@@ -680,7 +651,7 @@ try {
   assertCheck('2 技能', '技能文件按 markdown 只读预览', previewBody.includes('Smoke Skill'), previewBody.slice(0, 80));
 
   // 启停 → 影响助手 composer 的候选
-  await navigate(`page=research&project=${projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   const composerProbe = async () => {
     await page.fill('[data-testid="assistant-composer-input"]', '/smoke');
@@ -1101,7 +1072,7 @@ try {
   assertCheck('6 重启保持', '重启后记忆文件内容逐字保持', afterRestart.file === memoryBody, JSON.stringify(afterRestart.file).slice(0, 80));
   assertCheck('6 重启保持', '重启后技能目录与 MCP 配置仍在', afterRestart.skills.some((skill) => skill.id === skillId) && afterRestart.mcpIds.includes('p9-stdio'), JSON.stringify(afterRestart.mcpIds));
 
-  await navigate(`page=research&project=${projectId}&view=overview`);
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
   await waitForProjectRoute();
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
@@ -1123,46 +1094,33 @@ try {
   );
 
   assertCheck('7 渲染层错误', '整轮没有 renderer error', rendererErrors.length === 0, rendererErrors.slice(0, 3).join(' | '));
+
+  finishGate({
+    label: 'P9',
+    artifactDir,
+    results,
+    rendererErrors,
+    extra: { providerRequests: smokeProvider.requests.length },
+    // 声明的闸门段落。跑到少一段就是失败：这个脚本曾经报过 29/29 成功，
+    // 而那次只跑到了第 4 个标签（`1 记忆`），完整跑是 88/88。
+    expectedGates: [
+      '0 启动',
+      '0 准备',
+      '0b 会话',
+      '1 记忆',
+      '2 技能',
+      '3 MCP',
+      '4 任务',
+      '5 无假数据',
+      '6 两入口',
+      '6 重启保持',
+      '7 typecheck',
+      '7 渲染层错误'
+    ]
+  });
 } catch (error) {
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.error(`\nP9 验收闸门失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+  finishGate({ label: 'P9', artifactDir, results, rendererErrors, error });
 } finally {
-  const failed = results.filter((entry) => entry.ok !== true);
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: failed.length === 0,
-        providerRequests: smokeProvider.requests.length,
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  const infoCount = results.filter((entry) => entry.kind === 'info').length;
-  const assertionFailures = failed.filter((entry) => entry.kind !== 'info').length;
-  console.log(
-    `\nP9 验收闸门：${results.length - failed.length}/${results.length} 记录通过 · 断言 ${results.length - infoCount - assertionFailures}/${results.length - infoCount} · 说明性记录 ${infoCount}。报告写入 ${artifactDir}/report.json`
-  );
   if (app !== undefined) {
     await Promise.race([app.close(), new Promise((resolveDone) => setTimeout(resolveDone, 20_000))]);
     setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();

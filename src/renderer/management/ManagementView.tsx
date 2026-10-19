@@ -1,8 +1,9 @@
+import { useState } from 'react';
+import { drawerSectionForCanvasView } from '../../shared/surfaces';
 import type { ViewProps } from '../app/view-registry';
 import { useManagement } from './management-scope';
 import { ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
 import { useManagementStores, type ManagementTabId } from './use-management-stores';
-import { useState } from 'react';
 
 /**
  * Management as a canvas view (P9/T9.5).
@@ -49,9 +50,15 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
   );
 }
 
+/**
+ * 深链落到哪个分区。
+ *
+ * 记忆 / 技能 / MCP 三个画布视图各自对应一个同名分区——`drawerSectionForCanvasView` 就是面表里那条
+ * 「这个视图也是抽屉分区」的反向查询，而不是第三份手写的对应表。
+ *
+ * 落在其它视图上时缺省到 记忆：这个函数取的是初始 tab，不是路由守卫，所以它不该抛错来接管一个
+ * 已经由路由决定的事。（文献 / LaTeX / 终端 走的是别的组件，不会到这里。）
+ */
 function viewForInitialTab(view: ViewProps['view']): ManagementTabId {
-  if (view === 'skills' || view === 'mcp') {
-    return view;
-  }
-  return 'memory';
+  return drawerSectionForCanvasView(view) ?? 'memory';
 }

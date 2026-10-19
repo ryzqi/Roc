@@ -15,6 +15,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
+import type { MenuPage } from '../shared/surfaces';
 import type { ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
 import { confirmShellRequestWithDialog } from './ipc/shell-ipc';
@@ -211,7 +212,7 @@ async function loadMainRenderer(window: BrowserWindow): Promise<void> {
   await window.loadFile(join(mainModuleDir, '../renderer/index.html'));
 }
 
-function showMainPage(page: string): void {
+function showMainPage(page: MenuPage): void {
   if (mainWindow === null || mainWindow.isDestroyed()) {
     return;
   }

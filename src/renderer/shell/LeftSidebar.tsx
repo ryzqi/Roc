@@ -61,6 +61,14 @@ export type LeftSidebarProps = {
   binding: BoundWorkspace;
   /** A file the shell asked the 文件 tab to reveal **and preview** (see `SidebarFilesTab`). */
   previewRequest?: { relativePath: string; nonce: number } | null;
+  /**
+   * Clears the request once the 文件 tab has adopted it.
+   *
+   * A request that is only *remembered* by its consumer is re-delivered when that consumer
+   * remounts — and this panel is deliberately remounted on a workspace change (see
+   * `FileSidebarPanel`'s adopt effect for the failure that caused).
+   */
+  onPreviewRequestConsumed?: () => void;
   /** Archived projects are read-only: no file creation, no writes. */
   writable: boolean;
   /** Workspace-relative path of the file open in the canvas, if any. */
@@ -186,7 +194,8 @@ function SidebarFilesTab({
   onSelectWorkspace,
   workspacePending,
   workspaceError,
-  previewRequest
+  previewRequest,
+  onPreviewRequestConsumed
 }: {
   client: RocClient;
   projectId: string | null;
@@ -204,8 +213,12 @@ function SidebarFilesTab({
    * the tree is — so a nonce is the only thing that has to travel. The nonce is compared
    * against the last one seen, so asking for the *same* file twice still opens it, and a
    * re-render never re-opens a preview the user just closed.
+   *
+   * `onPreviewRequestConsumed` is what makes the request one-shot: the panel is keyed on the bound
+   * path, so a project switch remounts it and a merely-remembered request would be re-delivered.
    */
   previewRequest: { relativePath: string; nonce: number } | null;
+  onPreviewRequestConsumed?: () => void;
 }): React.JSX.Element {
   if (binding.desiredPath === null) {
     return (
@@ -280,6 +293,7 @@ function SidebarFilesTab({
         openFile={openFile}
         onOpenFile={onOpenFile}
         previewRequest={previewRequest}
+        onPreviewRequestConsumed={onPreviewRequestConsumed}
       />
       {workspaceError === null ? null : (
         <p
@@ -302,6 +316,7 @@ export function LeftSidebar({
   projectName,
   binding,
   previewRequest = null,
+  onPreviewRequestConsumed,
   writable,
   openFile,
   onOpenFile,
@@ -431,6 +446,7 @@ export function LeftSidebar({
             workspacePending={workspacePending}
             workspaceError={workspaceError}
             previewRequest={previewRequest}
+            onPreviewRequestConsumed={onPreviewRequestConsumed}
           />
         ) : activeTab === 'sessions' ? (
           <SessionListView

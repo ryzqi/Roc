@@ -1,10 +1,11 @@
 import { _electron as electron } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
  * P3 验收闸门的自动化实测（真应用 / 真 IPC / 真 pty / 真 git）。
@@ -24,25 +25,9 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 结果写入 `.artifacts/p3-gates/`（report.json + 截图）。
  */
 
-const artifactDir = resolve('.artifacts/p3-gates');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir(resolve('.artifacts/p3-gates'));
 
-const results = [];
-function record(gate, name, ok, detail = '') {
-  results.push({ gate, name, ok, detail });
-  const mark = ok ? '✔' : '✖';
-  console.log(`${mark} [${gate}] ${name}${detail.length === 0 ? '' : ` — ${detail}`}`);
-}
-function fail(gate, name, detail) {
-  record(gate, name, false, detail);
-  throw new Error(`[${gate}] ${name}: ${detail}`);
-}
-function assertCheck(gate, name, condition, detail = '') {
-  if (!condition) {
-    fail(gate, name, detail === '' ? 'assertion failed' : detail);
-  }
-  record(gate, name, true, detail);
-}
+const { results, record, fail, assertCheck } = createGateRecorder();
 
 const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
@@ -72,20 +57,6 @@ console.log(`P3 验收闸门实测 · target=${target.kind} · renderer=next\n`)
 
 let app;
 const rendererErrors = [];
-
-async function navigate(page, search) {
-  await page.evaluate((next) => {
-    let url;
-    try {
-      url = new URL(window.location.href);
-    } catch {
-      return;
-    }
-    url.search = next;
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, search);
-}
 
 async function terminalText(page) {
   return await page.evaluate(() => document.querySelector('.xterm-rows')?.textContent ?? '');
@@ -521,34 +492,29 @@ try {
 
   assertCheck('0 健康', '整轮流程没有 renderer 错误', rendererErrors.length === 0, rendererErrors.slice(0, 2).join(' | '));
 
-  const failed = results.filter((entry) => !entry.ok);
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify({ checkedAt: new Date().toISOString(), passed: failed.length === 0, results, rendererErrors }, null, 2),
-    'utf8'
-  );
-  console.log(`\nP3 验收闸门：${results.length - failed.length}/${results.length} 通过。报告写入 ${artifactDir}/report.json`);
-  if (failed.length > 0) {
-    process.exitCode = 1;
-  }
+  finishGate({
+    label: 'P3',
+    artifactDir,
+    results,
+    rendererErrors,
+    // 声明的闸门段落。跑到少一段就是失败（历史上真的发生过：p8 只跑到第 4 段报 40/40 成功）。
+    expectedGates: [
+      '0 启动',
+      '0 准备',
+      '0 健康',
+      '1 外部编辑刷新',
+      '2 预览',
+      '3 路径越界（R10）',
+      '4 Git',
+      '5 终端',
+      '6 项目隔离',
+      '7 RTK',
+      '可访问性',
+      '只读闸门'
+    ]
+  });
 } catch (error) {
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.error(`\nP3 验收闸门失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+  finishGate({ label: 'P3', artifactDir, results, rendererErrors, error });
 } finally {
   if (app !== undefined) {
     await app.close();

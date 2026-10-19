@@ -1,7 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AppStatus } from '../../shared/types';import { errorMessage } from './loaded-state';
-import { DEFAULT_VIEW, type AppViewId } from './routes';
-import { useAppNavigateBridge, useAppRoute } from './use-app-route';
+import type { AppStatus } from '../../shared/types';
+import { canvasViewForDrawerSection, isCanvasTabId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
+import { errorMessage } from './loaded-state';
+import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
+import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useLayoutState } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
 import { clearUiState, purgeLegacyStorage } from './ui-state';
@@ -56,10 +58,16 @@ type BootState =
   | { status: 'failed'; message: string }
   | { status: 'ready'; appStatus: AppStatus };
 
-const PRIMARY_TABS: ReadonlySet<AppViewId> = new Set<AppViewId>(['literature', 'latex', 'terminal']);
-
+/**
+ * Whether the routed view is one of the three canvas tabs.
+ *
+ * The tab list lives in the surface table and it comes with a type guard, so this is a narrowing
+ * rather than a cast over a locally-kept copy of the list (which is what it used to be: a
+ * `PRIMARY_TABS` set here, an `APP_VIEW_IDS` set in `routes.ts`, a `TABS` array in
+ * `WorkspaceCanvas`, each covering a different part of the same fact).
+ */
 function canvasTabForView(view: AppViewId): CanvasTabId | null {
-  return PRIMARY_TABS.has(view) ? (view as CanvasTabId) : null;
+  return isCanvasTabId(view) ? view : null;
 }
 
 /**
@@ -167,7 +175,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   // The chrome and the read-only gate need the real project, not the raw id.
   const currentProject = useCurrentProject(client, route.projectId);
 
-  useAppNavigateBridge(client, { route, navigate });
   useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
 
   const backgroundRunLabel = useTraySummaryLabel(client, windowState.hidden);
@@ -245,6 +252,56 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   };
 
   /**
+   * Opens one management section, on the host it actually has.
+   *
+   * 记忆 / 技能 / MCP exist twice (canvas view and drawer section), so which one the user gets is a
+   * decision, and it used to be written out twice — once for the drawer's own entry and once for the
+   * ⌘K palette, with the two copies already drifting (one merged into `routeRef.current`, the other
+   * into a captured `route`). 任务 has **only** the drawer: ADR 0024 removed the task board because
+   * two surfaces over one dataset diverge, so there is no canvas view to fall back to.
+   */
+  const openManagementSection = useCallback(
+    (section: DrawerSectionId): void => {
+      const canvasView = canvasViewForDrawerSection(section);
+      if (canvasView === null) {
+        setManagementTab(section);
+        setManagementOpen(true);
+        return;
+      }
+      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
+      // drawer's width would cover the canvas view it just asked for.
+      setManagementOpen(false);
+      navigate({ ...routeRef.current, view: canvasView });
+    },
+    [navigate]
+  );
+
+  /**
+   * The shell's handling of the four things the native menu, the tray and the global hotkey can ask
+   * for (`src/shared/surfaces.ts` owns the list and the meaning of each).
+   *
+   * Three of them are pure route changes, so they live in `routes.routeForMenuIntent` where they can
+   * be asserted without a renderer. The fourth is 打开任务, and it is the reason this handler exists
+   * at all: a route cannot carry "open the management drawer on its 任务 section", and the old
+   * implementation expressed that by returning the *current* route — which `navigate`'s
+   * `sameAppRoute` early-return then dropped, so the tray item only raised the window while its own
+   * comment claimed the drawer was opened. `RoutableMenuIntent` excludes that case at the type
+   * level, so this branch cannot be forgotten again.
+   */
+  const handleMenuIntent = useCallback(
+    (intent: MenuIntent): void => {
+      if (intent.kind === 'management') {
+        openManagementSection(intent.section);
+        return;
+      }
+      navigate(routeForMenuIntent(intent, routeRef.current));
+    },
+    [navigate, openManagementSection]
+  );
+
+  useMenuIntentBridge(client, handleMenuIntent);
+
+  /**
    * The canvas data scope (P3). Memoised because every view reads it and a new
    * identity on each render would re-render them all on unrelated shell state
    * changes (the tray label updates on background task ticks).
@@ -313,20 +370,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         setManagementOpen(false);
         navigate({ ...routeRef.current, page: 'settings' });
       },
-      openManagementView: (tab) => {
-        if (tab === 'tasks') {
-          // 任务 is drawer-only (see `SearchGroupSources.onOpenManagementView`): open the
-          // management surface on its 任务 tab rather than navigating to a canvas view
-          // that no longer exists.
-          setManagementTab('tasks');
-          setManagementOpen(true);
-          return;
-        }
-        setManagementOpen(false);
-        navigate({ ...routeRef.current, view: tab });
-      }
+      openManagementView: openManagementSection
     }),
-    [client, route.projectId, boundWorkspace.path, navigate]
+    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection]
   );
 
   /**
@@ -369,16 +415,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     onOpenProject: (projectId) => {
       navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' });
     },
-    onOpenManagementView: (tab) => {
-      if (tab === 'tasks') {
-        // Same jump as the drawer's own entry: there is no `view=tasks` any more, so the
-        // palette opens the management surface instead of a canvas page.
-        setManagementTab('tasks');
-        setManagementOpen(true);
-        return;
-      }
-      navigate({ ...route, view: tab });
-    },
+    onOpenManagementView: openManagementSection,
     onOpenSession: (threadId) => {
       setAssistantThreadId(threadId);
       navigate({ ...route, assistantOpen: true });
@@ -558,6 +595,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               openFile={route.openFile}
               onOpenFile={openFileInCanvas}
               previewRequest={filePreview}
+              // The request is one-shot: once the 文件 tab has adopted it, it must stop existing, so a
+              // remount cannot re-deliver it into a workspace whose files are different. This panel is
+              // keyed on the bound path (`LeftSidebar`), so a project switch does remount it — see
+              // `FileSidebarPanel`'s adopt effect for the failure that produced.
+              onPreviewRequestConsumed={() => setFilePreview(null)}
               activeThreadId={assistantThreadId}
               onSelectThread={setAssistantThreadId}
               onStartNewThread={() => setAssistantThreadId(null)}

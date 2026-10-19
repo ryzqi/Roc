@@ -1,6 +1,7 @@
 import { type BrowserWindow, ipcMain } from 'electron';
 
 import { ipcChannels } from '../../shared/ipc';
+import type { MenuPage } from '../../shared/surfaces';
 import type {
   AppSettings,
   HostIntegrationStatus,
@@ -21,7 +22,7 @@ import { registerWindowIpc } from './window-ipc';
 import { registerWorkspaceDialogIpc } from './workspace-ipc';
 
 export type AppWindowControls = {
-  openMainPage: (page: string) => void;
+  openMainPage: (page: MenuPage) => void;
   closeMainWindow: () => void;
   syncHostSettings: (settings: AppSettings) => void;
   getHostIntegrationStatus: () => HostIntegrationStatus;
@@ -139,7 +140,7 @@ function registerLegacyAppSupplementIpc(timedHandle: (channel: string, handler: 
       return { opened: true as const };
     })
   );
-  timedHandle(ipcChannels.appOpenMainPage, (_event, page: string) =>
+  timedHandle(ipcChannels.appOpenMainPage, (_event, page: MenuPage) =>
     wrapIpc(() => {
       controls.openMainPage(page);
       return { opened: true as const, page };

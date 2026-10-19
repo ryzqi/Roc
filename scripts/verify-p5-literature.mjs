@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
  * P5 验收闸门的自动化实测（真应用 / 真 IPC / 真文档解析 / 真索引 / 真检索）。
@@ -38,31 +39,10 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
  * 前台跑会被工具超时杀掉进程组）。报告与截图写 `.artifacts/p5-gates/`。
  */
 
-const artifactDir = resolve('.artifacts/p5-gates');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir(resolve('.artifacts/p5-gates'));
 
-const results = [];
-/**
- * `kind: 'info'` marks a record that **reports an observation** rather than asserting
- * one (which route was taken, what the parse cost). They are printed and stored like
- * everything else, but the summary below counts them separately — a headline of
- * 「59/59 通过」 must not read as "59 things were asserted" when some of them were
- * merely narrated (评审 P2).
- */
-function record(gate, name, ok, detail = '', kind = 'assert') {
-  results.push({ gate, name, ok, detail, kind });
-  console.log(`${ok ? '✔' : '✖'} [${gate}] ${name}${detail.length === 0 ? '' : ` — ${detail}`}`);
-}
-function fail(gate, name, detail) {
-  record(gate, name, false, detail);
-  throw new Error(`[${gate}] ${name}: ${detail}`);
-}
-function assertCheck(gate, name, condition, detail = '') {
-  if (!condition) {
-    fail(gate, name, detail === '' ? 'assertion failed' : detail);
-  }
-  record(gate, name, true, detail);
-}
+// `kind: 'info'` 的语义与「为什么结论行必须分开计数」写在 `createGateRecorder` 的注释里。
+const { results, record, fail, assertCheck } = createGateRecorder();
 
 /** 闸门 1 的夹具：真 PDF，含一个章节标题、一个独立成行的公式、一个带边框的表格。 */
 const fixturePdf = resolve('tests/smoke/lib/assets/p5-paper.pdf');
@@ -72,7 +52,6 @@ const indexNoteMarker = 'ROC-P5-FILE-HIT';
 /** 文案标记：让检索/搜索断言只可能命中本项目自己造的数据。 */
 const paperTitleMarker = 'ROC-P5-GATE-PAPER';
 const paperCitationKey = 'rocP5GatePaper';
-const paperFormulaPhrase = 'Deep learning has transformed scientific discovery';
 /**
  * 会话检索的标记。
  *
@@ -115,20 +94,6 @@ if (!existsSync(jobCliPath) && existsSync(jobCliDisabledPath)) {
   console.log(`（自愈）上一轮 B17 绕行留下的 ${jobCliDisabledPath} 已恢复为 ${jobCliPath}`);
 }
 let jobCliDisabledByRun = false;
-
-async function navigate(page, search) {
-  await page.evaluate((next) => {
-    let url;
-    try {
-      url = new URL(window.location.href);
-    } catch {
-      return;
-    }
-    url.search = next;
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, search);
-}
 
 async function openLiteratureHub(page, projectId) {
   await navigate(page, `page=research&project=${projectId}&view=literature`);
@@ -1048,55 +1013,41 @@ try {
 
   assertCheck('0 健康', '整轮流程没有 renderer 错误', rendererErrors.length === 0, rendererErrors.slice(0, 2).join(' | '));
 
-  const failed = results.filter((entry) => !entry.ok);
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: failed.length === 0,
-        preflight: {
-          modelsReady,
-          modelsStatus,
-          toolchain: preflight.toolchain,
-          bibliographyImport,
-          bibliographyProbeError
-        },
-        results,
-        providerRequests: smokeProvider.requests.length,
-        rendererErrors
+  finishGate({
+    label: 'P5',
+    artifactDir,
+    results,
+    rendererErrors,
+    extra: {
+      preflight: {
+        modelsReady,
+        modelsStatus,
+        toolchain: preflight.toolchain,
+        bibliographyImport,
+        bibliographyProbeError
       },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  const infoCount = results.filter((entry) => entry.kind === 'info').length;
-  const assertionFailures = failed.filter((entry) => entry.kind !== 'info').length;
-  console.log(
-    `\nP5 验收闸门：${results.length - failed.length}/${results.length} 记录通过 · 断言 ${results.length - infoCount - assertionFailures}/${results.length - infoCount} · 说明性记录 ${infoCount} · modelsReady=${modelsReady}。报告写入 ${artifactDir}/report.json`
-  );
-  if (failed.length > 0) {
-    process.exitCode = 1;
-  }
+      providerRequests: smokeProvider.requests.length
+    },
+    extraNote: `modelsReady=${modelsReady}`,
+    // 声明的闸门段落。跑到少一段就是失败。
+    expectedGates: [
+      '0 启动',
+      '0 前置检查',
+      '0 准备',
+      '0 健康',
+      '1 导入 UI',
+      '1 真解析',
+      '2 真索引',
+      '3 无假实现',
+      '4 空数据',
+      '5 派生单测',
+      '6 ⌘K',
+      '7 typecheck',
+      'B18 探针'
+    ]
+  });
 } catch (error) {
-  writeFileSync(
-    join(artifactDir, 'report.json'),
-    JSON.stringify(
-      {
-        checkedAt: new Date().toISOString(),
-        passed: false,
-        error: error instanceof Error ? error.message : String(error),
-        results,
-        rendererErrors
-      },
-      null,
-      2
-    ),
-    'utf8'
-  );
-  console.error(`\nP5 验收闸门失败：${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+  finishGate({ label: 'P5', artifactDir, results, rendererErrors, error });
 } finally {
   // 恢复 B17 绕行改名的构建产物，让 harness 不给下一轮（或下一次构建）埋陷阱。
   if (jobCliDisabledByRun && existsSync(jobCliDisabledPath)) {

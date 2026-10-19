@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { DrawerSectionId } from '../../shared/surfaces';
 import { schedulerStatusWord } from './background-task-model';
 import { skillSummary } from './skill-model';
 import type { ManagementScope } from './management-scope';
@@ -21,7 +22,13 @@ import { useSkills, type SkillsStore } from './use-skills';
  * because it rendered the same section in two places.
  */
 
-export type ManagementTabId = 'memory' | 'skills' | 'mcp' | 'tasks';
+/**
+ * 管理抽屉的分区。
+ *
+ * 别名到面表（`src/shared/surfaces.ts`），不再是一份手抄的字面量联合。好处很具体：加一个分区时，
+ * `summaries` 的 `Record<ManagementTabId, string>` 会立刻报缺项，而不是静默渲染一个空摘要。
+ */
+export type ManagementTabId = DrawerSectionId;
 
 export type ManagementStores = {
   memory: MemoryFilesStore;

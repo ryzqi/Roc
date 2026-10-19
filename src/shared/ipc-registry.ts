@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { menuPages } from './surfaces';
+
 import {
   agentCapabilityPreviewRequestSchema,
   agentCapabilityPreviewSchema,
@@ -299,13 +301,21 @@ const noArgs = z.tuple([]);
 const oneArg = <TSchema extends z.ZodType>(schema: TSchema) => z.tuple([schema]);
 const optionalArg = <TSchema extends z.ZodType>(schema: TSchema) => z.tuple([schema.optional()]);
 const stringArg = oneArg(z.string());
+/**
+ * 一个原生菜单 / 托盘 / 全局热键能请壳打开的页面。
+ *
+ * 收窄成 `src/shared/surfaces.ts` 的 `menuPages` 而不是 `z.string()`：这个通道存在的目的是传给
+ * `app.onNavigate` 并由渲染层兑现，所以一个"发得出、认不出"的 page 应当在入口就被契约拒掉，
+ * 而不是变成一事件被渲染层默默丢弃。
+ */
+const menuPageArg = oneArg(z.enum(menuPages));
 
 export const ipcRegistry = {
   version: 2,
   requests: [
     request({ key: 'appGetStatus', channel: 'roc:app:get-status', domain: 'app', method: 'getStatus', kind: 'plugin', capabilityName: 'app.status.get', inputTransform: none, contract: methodContract(noArgs, appStatusSchema) }),
     request({ key: 'appOpenSettings', channel: 'roc:app:open-settings', domain: 'app', method: 'openSettings', kind: 'direct', contract: methodContract(noArgs, openedResultSchema) }),
-    request({ key: 'appOpenMainPage', channel: 'roc:app:open-main-page', domain: 'app', method: 'openMainPage', kind: 'direct', contract: methodContract(stringArg, openedPageResultSchema) }),
+    request({ key: 'appOpenMainPage', channel: 'roc:app:open-main-page', domain: 'app', method: 'openMainPage', kind: 'direct', contract: methodContract(menuPageArg, openedPageResultSchema) }),
     request({ key: 'windowGetState', channel: 'roc:window:get-state', domain: 'window', method: 'getState', kind: 'direct', contract: methodContract(noArgs, windowStateSnapshotSchema) }),
     request({ key: 'windowGetBounds', channel: 'roc:window:get-bounds', domain: 'window', method: 'getBounds', kind: 'direct', contract: methodContract(noArgs, windowBoundsSnapshotSchema) }),
     request({ key: 'windowMinimize', channel: 'roc:window:minimize', domain: 'window', method: 'minimize', kind: 'direct', contract: methodContract(noArgs, windowStateSnapshotSchema) }),

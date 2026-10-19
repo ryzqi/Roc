@@ -1,3 +1,4 @@
+import type { MenuPage } from '../shared/surfaces';
 import type { AppSettings, HostIntegrationStatus, TraySummary } from '../shared/types';
 import { toLogError } from './services/errors';
 import type { LogService } from './services/log-service';
@@ -85,7 +86,7 @@ export class MacOSHostService {
       menu: MenuLike;
       trayIconPath: string;
       createTray: (iconPath: string) => TrayLike;
-      openMainPage: (page: string) => void;
+      openMainPage: (page: MenuPage) => void;
       broadcastTaskUpdated: () => void;
     }
   ) {}

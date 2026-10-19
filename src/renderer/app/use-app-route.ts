@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RocClient } from '../shared/roc-client';
-import { appRouteToSearch, normalizeAppRoute, readAppRoute, routeForNavigate, sameAppRoute, writeAppRoute, type AppRoute } from './routes';
+import { menuIntentForPage, type MenuIntent } from '../../shared/surfaces';
+import { appRouteToSearch, normalizeAppRoute, readAppRoute, sameAppRoute, writeAppRoute, type AppRoute } from './routes';
 
 /**
  * URL-backed navigation state (ADR-M05).
@@ -61,22 +62,37 @@ export function useAppRoute(): AppRouteController {
 }
 
 /**
- * Routes native-menu payloads into the URL.
+ * Routes native-menu payloads to the shell as intents.
  *
- * `application-menu.ts` (⌘N, ⌘,) and `macos-host-service.ts` broadcast literal
- * page names — `settings`, `research-new`, `chat`, `tasks` — not view ids, so
- * the mapping lives in `routeForNavigate` rather than being guessed here.
+ * `application-menu.ts` (⌘N, ⌘,) and `macos-host-service.ts` (托盘、全局热键) broadcast page names,
+ * and `src/shared/surfaces.ts` owns the closed set of them plus what each one means.
+ *
+ * ## Why an intent and not a route
+ *
+ * The previous bridge built a whole `AppRoute` from the page. That works for three of the four
+ * pages and **cannot** work for the fourth: 托盘「打开任务」 means "开管理抽屉的任务分区", and the
+ * drawer's open section is not a route field. The old code silently gave up on it —
+ * `routeForNavigate('tasks')` returned the current route, the `sameAppRoute` early-return then
+ * dropped the navigation, and the menu item did nothing but raise the window while its own comment
+ * claimed the drawer was opened. A shell that receives the *intent* has somewhere to put it.
+ *
+ * An unregistered page is ignored. It should be unreachable: the preload method is typed over
+ * `MenuPage`, so the only way to get here with an unknown string is a payload built outside the
+ * contract, and inventing a navigation for it would be worse than doing nothing.
  */
-export function useAppNavigateBridge(client: RocClient, controller: AppRouteController): void {
-  const { navigate } = controller;
-  const routeRef = useRef(controller.route);
-  routeRef.current = controller.route;
+export function useMenuIntentBridge(client: RocClient, onIntent: (intent: MenuIntent) => void): void {
+  const handlerRef = useRef(onIntent);
+  handlerRef.current = onIntent;
 
   useEffect(
     () =>
       client.api.app.onNavigate((page) => {
-        navigate(routeForNavigate(page, routeRef.current));
+        const intent = menuIntentForPage(page);
+        if (intent === null) {
+          return;
+        }
+        handlerRef.current(intent);
       }),
-    [client, navigate]
+    [client]
   );
 }

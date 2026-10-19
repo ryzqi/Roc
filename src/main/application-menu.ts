@@ -1,7 +1,9 @@
 import type { MenuItemConstructorOptions } from 'electron';
 
+import type { MenuPage } from '../shared/surfaces';
+
 export function buildApplicationMenuTemplate(
-  openMainPage: (page: string) => void
+  openMainPage: (page: MenuPage) => void
 ): MenuItemConstructorOptions[] {
   return [
     {

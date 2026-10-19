@@ -4,12 +4,12 @@
  * `src/main/application-menu.ts` (⌘N, ⌘,) and `app.onNavigate` write these query
  * parameters, and so do deep links.
  *
- *   ?page=research|settings          outer surface
- *   ?project=<id>                    presence means "inside a project"
- *   ?view=<canvas view>              canvas view inside a project
- *   ?tool=files|git|terminal         workbench tool for files/changes/terminal views
- *   ?file=<workspace-relative path>  file open in the files view (P3)
- *   ?assistant=1                     assistant panel open
+ * `?page=research|settings`          outer surface
+ *   `?project=<id>`                    presence means "inside a project"
+ *   `?view=<canvas view>`              canvas view inside a project
+ *   `?tool=files|git`                  workbench tool for files/changes/terminal views
+ *   `?file=<workspace-relative path>`  file open in the files view (P3)
+ *   `?assistant=1`                     assistant panel open
  *
  * `page=research-new` (menu "新建研究项目") is normalised to `page=research`
  * plus `newProject=1`, which the portal uses to expand the create form.
@@ -29,21 +29,32 @@
  *
  * ## Default view
  *
- * A missing `view` becomes `latex`, which is what the reference defaults its canvas
- * tab to (`useState<WorkspaceTab>('latex')` in its `App`). Two earlier defaults are
- * gone: `changes` (the legacy shell) and `overview` (P2–P6, when the in-project
- * landing view was 总览).
+ * A missing `view` becomes the table's default (`latex`, which is what the reference defaults its
+ * canvas tab to — `useState<WorkspaceTab>('latex')` in its `App`). Two earlier defaults are gone:
+ * `changes` (the legacy shell) and `overview` (P2–P6, when the in-project landing view was 总览).
+ *
+ * ## Where the classification lives now
+ *
+ * `AppViewId` is not a union written here any more: it is derived from the surface table in
+ * `src/shared/surfaces.ts`, which also owns the default, the legal `?view=` set, the canvas tabs and
+ * the management drawer's sections. This file keeps the *URL contract* (how a route is written and
+ * parsed); the table keeps the *classification* (what exists and where it lands). Splitting them is
+ * what stops the copies this file used to hold from drifting apart.
+ *
+ * The native-menu mapping used to live here too (`routeForNavigate` — 13 branches for 4 real menu
+ * items, 9 of them with no producer). It is gone: `src/shared/surfaces.ts` declares the closed
+ * `MenuPage` union and its intent, and `use-app-route.ts` hands that intent to the shell — because
+ * one of the four intents (打开任务) is not expressible as a route field at all.
  */
+
+import { canvasViewIdSet, defaultViewId, isCanvasViewId, type CanvasViewId, type MenuIntent } from '../../shared/surfaces';
 
 export type AppPage = 'research' | 'settings';
 
-export type AppViewId =
-  | 'literature'
-  | 'latex'
-  | 'terminal'
-  | 'mcp'
-  | 'skills'
-  | 'memory';
+/**
+ * A `?view=` value. Derived from the surface table, so adding a canvas view is one edit.
+ */
+export type AppViewId = CanvasViewId;
 
 /**
  * Route-selected *auxiliary surface*.
@@ -86,21 +97,16 @@ export type AppRoute = {
   newProject: boolean;
 };
 
-export const DEFAULT_VIEW: AppViewId = 'latex';
+export const DEFAULT_VIEW: AppViewId = defaultViewId;
 
 /**
- * Every canvas view is project-scoped: with no project selected the shell shows
- * the portal, so the view parameter is normalised away. (There is deliberately
- * no global, project-less canvas view yet.)
+ * Every `?view=` value the parser accepts.
+ *
+ * Kept as a named export because it is the historical spelling, but it **is** the table's set —
+ * the same object, not a copy. (It used to be a hand-written `new Set([...])` next to a union that
+ * said the same thing.)
  */
-export const APP_VIEW_IDS: ReadonlySet<AppViewId> = new Set<AppViewId>([
-  'literature',
-  'latex',
-  'terminal',
-  'mcp',
-  'skills',
-  'memory'
-]);
+export const APP_VIEW_IDS: ReadonlySet<string> = canvasViewIdSet;
 
 export const WORKBENCH_TOOLS: ReadonlySet<WorkbenchTool> = new Set<WorkbenchTool>(['files', 'git']);
 
@@ -122,9 +128,17 @@ function parsePage(value: string | null): { page: AppPage; newProject: boolean }
   return { page: 'research', newProject: false };
 }
 
+/**
+ * A `?view=` value, or the default.
+ *
+ * `parked`（有契约、有数据库、没界面）与 `unknown`（从来不存在）在这里**没有**区别：两者都必须给出确定
+ * 答案，因为 `parseAppRoute(writeAppRoute(r))` 得成立（ADR-M05）。区分由 `surfaces.ts` 的
+ * `resolveSurface` 提供，读它的是闸门脚手架——在那一个不认识的面应当**抛错**，而不是像 P10 之后的
+ * `view=overview` 那样静默落到缺省视图上通过断言（八处，见 `surfaces.ts` 头部）。
+ */
 function parseView(value: string | null): AppViewId {
-  if (value !== null && APP_VIEW_IDS.has(value as AppViewId)) {
-    return value as AppViewId;
+  if (value !== null && isCanvasViewId(value)) {
+    return value;
   }
   return DEFAULT_VIEW;
 }
@@ -265,52 +279,39 @@ export function sameAppRoute(left: AppRoute, right: AppRoute): boolean {
   return true;
 }
 
-/** Entry-point mapping for `app.onNavigate` payloads from the native menu. */
-export function routeForNavigate(page: string, current: AppRoute): AppRoute {
+/**
+ * 能用路由表达的那几个菜单意图。
+ *
+ * `management` 被排除在外：抽屉的开合与当前分区**不是** URL 字段，所以它没有路由表示。
+ * 排成类型而不是让函数返回 null，是为了让这个事实变成编译期的——调用方必须先把那个分支拿走，
+ * 而拿不走的时候编译器会说话。
+ */
+export type RoutableMenuIntent = Exclude<MenuIntent, { kind: 'management' }>;
+
+/**
+ * 一个菜单意图落到路由上的结果。
+ *
+ * 这个函数换来了一件旧实现做不到的事：⌘N 在项目内被忽略、⌘, 打开设置、全局热键打开助手——
+ * 三条都能写成纯函数，于是在没有渲染器的情况下可以断言"每条都产出一个能往返的路由"。
+ * 旧的那个（`routeForNavigate`，十三个分支）把不可表达的那一条也宣成成功：托盘「打开任务」
+ * 返回当前路由，`sameAppRoute` 再把它当无变化丢掉，菜单项于是什么都不做。
+ */
+export function routeForMenuIntent(intent: RoutableMenuIntent, current: AppRoute): AppRoute {
   const base = normalizeAppRoute(current);
-  if (page === 'settings') {
+  if (intent.kind === 'settings') {
     return normalizeAppRoute({ ...base, page: 'settings' });
   }
-  if (page === 'research-new') {
-    // The legacy shell ignored ⌘N while already inside a project.
+  if (intent.kind === 'new-project') {
+    // ⌘N 在项目内被忽略，与旧壳一致。
     if (base.projectId !== null) {
       return base;
     }
     return normalizeAppRoute({ ...base, page: 'research', newProject: true, view: DEFAULT_VIEW });
   }
-  if (page === 'chat') {
-    return normalizeAppRoute({
-      ...base,
-      page: 'research',
-      view: 'literature',
-      assistantOpen: base.projectId !== null
-    });
-  }
-  if (page === 'tasks' || page === 'tasks-board') {
-    // 后台任务 has one home in this shell: the management drawer's 任务 tab. The native
-    // menu item is honoured by opening that rather than a second canvas surface, which
-    // would be a second writer over one dataset.
-    return normalizeAppRoute({ ...base, page: 'research' });
-  }
-  if (page === 'workspace' || page === 'files') {
-    // `?tool=files` now selects a **drawer** rather than a canvas view: the file tree lives
-    // in the sidebar and the preview opens in a modal, as in the reference.
-    return normalizeAppRoute({ ...base, page: 'research', view: 'literature', tool: 'files' });
-  }
-  if (page === 'git') {
-    // Likewise: `?tool=git` drives the drawer, and the wide change view is gone.
-    return normalizeAppRoute({ ...base, page: 'research', view: 'literature', tool: 'git' });
-  }
-  if (page === 'terminal') {
-    // No tool marker: the terminal is a canvas tab, and a sticky `tool` would keep whatever
-    // drawer was open on top of it.
-    return normalizeAppRoute({ ...base, page: 'research', view: 'terminal', tool: null });
-  }
-  if (page === 'memory' || page === 'mcp' || page === 'skills') {
-    return normalizeAppRoute({ ...base, page: 'research', view: page });
-  }
-  if (page === 'research') {
-    return normalizeAppRoute({ ...base, page: 'research' });
-  }
-  return base;
+  return normalizeAppRoute({
+    ...base,
+    page: 'research',
+    view: 'literature',
+    assistantOpen: base.projectId !== null
+  });
 }

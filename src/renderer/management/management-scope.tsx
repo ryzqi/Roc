@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import type { DrawerSectionId } from '../../shared/surfaces';
 import type { RocClient } from '../shared/roc-client';
 
 /**
@@ -36,13 +37,13 @@ export type ManagementScope = {
    */
   openSettings: () => void;
   /**
-   * Opens one group as a canvas view (`?view=memory|skills|mcp|tasks`).
+   * 打开一个管理分区，落在它真正拥有的宿主上。
    *
-   * The drawer documents the canvas as the other entry point for the same panels (T9.5), so the
-   * button that gets there must not be a second implementation — it navigates the one route the
-   * contract already has.
+   * 记忆 / 技能 / MCP 有两个落点（画布视图与抽屉分区），任务只有抽屉（ADR 0024：两个界面盯一个数据集
+   * 就是发散）。选哪一个由壳决定，所以这些分区永远不会长出第二条导航路径——而参数类型来自面表，
+   * 不是手写的字面量联合。
    */
-  openManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void;
+  openManagementView: (section: DrawerSectionId) => void;
 };
 
 const ManagementContext = createContext<ManagementScope | null>(null);
