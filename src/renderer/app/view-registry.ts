@@ -1,4 +1,4 @@
-import { createElement, lazy, useEffect, useState, type ComponentType } from 'react';
+import { lazy, useEffect, useState, type ComponentType } from 'react';
 import type { AppViewId } from './routes';
 
 /**
@@ -32,35 +32,27 @@ import type { AppViewId } from './routes';
 export type ViewProps = {
   view: AppViewId;
   projectId: string | null;
-  stageHint: string | null;
 };
 
 export type ViewModule = { default: ComponentType<ViewProps> };
 
 const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
-  overview: async () => ({ default: (await import('../canvas/workflow/ProjectOverview')).ProjectOverview }),
-  stage: async () => ({ default: (await import('../canvas/workflow/StageWorkspace')).StageWorkspace }),
-  activity: async () => ({ default: (await import('../canvas/workflow/ActivityView')).ActivityView }),
-  provenance: async () => ({ default: (await import('../production/ProvenanceView')).ProvenanceView }),
-  // P3 landed these three as real views. They are genuine `import()`s, not
-  // factories, so `react-diff-view` and `@xterm/*` stay out of the eager graph.
-  changes: async () => ({ default: (await import('../canvas/git/ChangesView')).ChangesView }),
+  // Every canvas view is a real `import()`, not a factory, so `react-diff-view` and `@xterm/*`
+  // stay out of the eager graph while the terminal and the Git drawer still get theirs.
+  //
+  // The reference's three (文献 / LaTeX / 终端) come first; the rest are the project views this
+  // build adds. `changes`, `files` and `tasks` used to be among them and are gone: the reference
+  // opens files from the sidebar tree and Git from a drawer, and there are no canvas pages for
+  // either remaining.
   literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
-  // `LatexPanel` also renders inside the stage workspace's 文稿 tab, where the *stage-group* write
-  // rule applies; as a route view there is no group, so it is mounted without the prop and falls
-  // back to the project-level predicate. Binding through `createElement` keeps that explicit
-  // instead of relying on a weak optional-props type being assignable to `ViewProps`.
-  latex: async () => {
-    const { LatexPanel } = await import('../production/LatexPanel');
-    return { default: (_props: ViewProps) => createElement(LatexPanel, {}) };
-  },
+  latex: async () => ({ default: (await import('../latex/LatexPanel')).LatexPanel }),
   terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
-  files: async () => ({ default: (await import('../canvas/files/FilesView')).FilesView }),
-  tasks: async () => ({ default: (await import('../tasks/TasksView')).TasksView }),
-  diagnostics: async () => ({ default: (await import('../diagnostics/DiagnosticsView')).DiagnosticsView }),
   // P9 made these three real. One component serves all of them: it picks its initial tab from the
   // view id, and `management-shell-parts` holds the tab strip and the bodies so the canvas and the
   // drawer cannot drift apart.
+  //
+  // 后台任务 has exactly one home in the reference — the management drawer's 任务 tab — and two
+  // surfaces over one dataset is the drift P9 built `management-shell-parts` to prevent.
   mcp: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
   skills: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
   memory: async () => ({ default: (await import('../management/ManagementView')).ManagementView })

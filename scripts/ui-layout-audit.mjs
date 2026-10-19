@@ -122,12 +122,12 @@ try {
     await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 15_000 });
     await capture(page, `portal-${viewport.id}`);
 
-    await navigate(page, `${projectQuery}&view=overview`);
+    await navigate(page, `${projectQuery}&view=latex`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
     await capture(page, `canvas-${viewport.id}`);
 
     // 助手在宽窗是右列、在窄窗是抽屉；两种形态都要审。
-    await navigate(page, `${projectQuery}&view=overview&assistant=1`);
+    await navigate(page, `${projectQuery}&view=latex&assistant=1`);
     await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
     await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });
     await capture(page, `assistant-${viewport.id}`);

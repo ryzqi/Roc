@@ -157,6 +157,39 @@
   --st-good: var(--st-ok);
   --st-good-line: var(--st-ok-line);
 
+  /* Category icon hues (research-studio parity).
+
+     The 400 stops are the exact values research-studio writes inline
+     (`text-sky-400` / `text-amber-400` / `text-emerald-400` / `text-purple-400`).
+     They are tokens rather than component literals for two reasons: no component
+     may hard-code a hex (MASTER v2 §2), and the light theme drops to the 600
+     stops so the same hue keeps >= 3:1 on white instead of the 1.9:1 the 400
+     stops give. Same hue identity, legible in both themes. */
+  --icon-file: #38bdf8;
+  --icon-literature: #38bdf8;
+  --icon-latex: #fbbf24;
+  --icon-terminal: #34d399;
+  --icon-git: #34d399;
+  --icon-agent: #c084fc;
+  --icon-manage: #c084fc;
+  /* The literature hub's four sub-views (reference: sky / emerald / amber / cyan). */
+  --icon-rag: #34d399;
+  --icon-wiki: #fbbf24;
+  --icon-graph: #22d3ee;
+  /* The management drawer's four tabs (reference: purple / purple / sky / amber). */
+  --icon-memory: #c084fc;
+  --icon-skill: #c084fc;
+  --icon-mcp: #38bdf8;
+  --icon-task: #fbbf24;
+  /* The theme control is labelled by its *action*, so it carries both hues: the
+     sun that means "switch to light" and the moon that means "switch to dark". */
+  --icon-theme-sun: #fbbf24;
+  --icon-theme-moon: #818cf8;
+
+  /* Selected-surface ring. research-studio writes `ring-1 ring-white/10`; an
+     alias keeps that hairline working in both themes through the palette flip. */
+  --ring-selected: color-mix(in srgb, var(--app-zinc-100) 10%, transparent);
+
   /* Tool-call states */
   --tool-st-start-bg: color-mix(in srgb, var(--accent) 16%, transparent);
   --tool-st-start-text: color-mix(in srgb, var(--accent) 62%, #ffffff);
@@ -211,6 +244,7 @@
   --stripe-width: 3px;
   --lift-hover: none;
   --press-shift: translateY(1px);
+  --divider-glow: 0 0 8px rgba(255, 255, 255, 0.25);
 
   /* macOS system colors (informational; controls use --accent) */
   --system-blue: #0a84ff;
@@ -250,6 +284,9 @@
   --font-meta-size: 12px;
   --font-micro-size: 11px;
   --font-read-size: 14px;
+  /* The reader's 「大号」 size (reference: `fontSize === 'large'`). A token rather
+     than a magic number at the call site, so the two sizes stay a scale. */
+  --font-read-large-size: 16px;
   --font-lead-size: 15px;
   --font-code-size: 12px;
   --font-h1-size: 24px;
@@ -359,6 +396,24 @@
   --st-warn-line: #d6c193;
   --st-bad-line: #d4adad;
 
+  --icon-file: #0284c7;
+  --icon-literature: #0284c7;
+  --icon-latex: #b45309;
+  --icon-terminal: #047857;
+  --icon-git: #047857;
+  --icon-agent: #7e22ce;
+  --icon-manage: #7e22ce;
+  --icon-rag: #047857;
+  --icon-wiki: #b45309;
+  --icon-graph: #0e7490;
+  --icon-memory: #7e22ce;
+  --icon-skill: #7e22ce;
+  --icon-mcp: #0284c7;
+  --icon-task: #b45309;
+  --icon-theme-sun: #b45309;
+  --icon-theme-moon: #4f46e5;
+  --ring-selected: color-mix(in srgb, var(--app-zinc-100) 10%, transparent);
+
   --tool-st-start-bg: #e3f2fd;
   --tool-st-start-text: #2d477a;
   --tool-st-progress-bg: #fff3e0;
@@ -377,6 +432,7 @@
   --overlay-active: rgba(15, 23, 42, 0.12);
   --overlay-backdrop: rgba(15, 23, 42, 0.28);
   --overlay-scrim: rgba(20, 40, 80, 0.32);
+  --divider-glow: 0 0 8px rgba(15, 23, 42, 0.2);
 
   --code-surface: #f7f8fa;
   --code-surface-soft: rgba(31, 41, 55, 0.04);
@@ -428,6 +484,26 @@
   --syntax-string: CanvasText;
   --syntax-comment: GrayText;
   --syntax-number: CanvasText;
+  /* Forced colours carry no decoration: hairlines and icon hues go flat so the
+     system palette is the only colour on screen. */
+  --ring-selected: Canvas;
+  --icon-file: CanvasText;
+  --icon-literature: CanvasText;
+  --icon-latex: CanvasText;
+  --icon-terminal: CanvasText;
+  --icon-git: CanvasText;
+  --icon-agent: CanvasText;
+  --icon-manage: CanvasText;
+  --icon-rag: CanvasText;
+  --icon-wiki: CanvasText;
+  --icon-graph: CanvasText;
+  --icon-memory: CanvasText;
+  --icon-skill: CanvasText;
+  --icon-mcp: CanvasText;
+  --icon-task: CanvasText;
+  --icon-theme-sun: CanvasText;
+  --icon-theme-moon: CanvasText;
+  --divider-glow: none;
 }
 
 :root[data-high-contrast='true'] {
@@ -436,6 +512,7 @@
   --shadow-modal: none;
   --shadow-popover: none;
   --shadow-input: none;
+  --divider-glow: none;
 }
 
 :root[data-reduced-transparency='true'] {

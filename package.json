@@ -26,8 +26,6 @@
     "verify:p3-workspace": "node scripts/verify-p3-workspace.mjs",
     "verify:p4-assistant": "node scripts/verify-p4-assistant.mjs",
     "verify:p5-literature": "node scripts/verify-p5-literature.mjs",
-    "verify:p6-workflow": "node scripts/verify-p6-workflow.mjs",
-    "verify:p7-production": "node scripts/verify-p7-production.mjs",
     "verify:p8-settings": "node scripts/verify-p8-settings.mjs",
     "verify:p9-management": "node scripts/verify-p9-management.mjs",
     "database:backup": "node dist/main/database-maintenance-cli.js backup",

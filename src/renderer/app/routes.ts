@@ -1,30 +1,24 @@
-import {
-  RESEARCH_STAGE_GROUPS,
-  STAGE_GROUP_IDS,
-  STAGE_TAB_IDS,
-  defaultTabForGroup,
-  stageGroupForStage,
-  type ResearchStageGroupId,
-  type ResearchStageTab
-} from '../canvas/workflow/stage-groups';
-
 /**
- * URL route contract, preserved from the legacy shell (ADR-M05).
+ * URL route contract (ADR-M05).
  *
  * `src/main/application-menu.ts` (⌘N, ⌘,) and `app.onNavigate` write these query
- * parameters, and so do deep links. Changing the shape would require touching
- * the backend, which the migration forbids.
+ * parameters, and so do deep links.
  *
  *   ?page=research|settings          outer surface
  *   ?project=<id>                    presence means "inside a project"
  *   ?view=<canvas view>              canvas view inside a project
- *   ?stage=<group|tab|workflow stage> only meaningful when view=stage
  *   ?tool=files|git|terminal         workbench tool for files/changes/terminal views
  *   ?file=<workspace-relative path>  file open in the files view (P3)
  *   ?assistant=1                     assistant panel open
  *
  * `page=research-new` (menu "新建研究项目") is normalised to `page=research`
  * plus `newProject=1`, which the portal uses to expand the create form.
+ *
+ * `?stage=<group|tab|workflow-stage>` used to be part of this contract. The stage
+ * surface was removed so the canvas matches the reference's information architecture
+ * (one strip: 文献 / LaTeX / 终端), so the parameter is **no longer read or written**.
+ * An incoming `?stage=` is simply ignored, which is why the native menu and any stale
+ * deep link keep working without a backend change.
  *
  * ## Round-trip guarantee
  *
@@ -33,49 +27,57 @@ import {
  * preserve every field of an already-normalized route. Both directions apply
  * the same normalizer, so the URL never encodes state the parser would drop.
  *
- * ## One deliberate divergence from the legacy shell
+ * ## Default view
  *
- * The legacy shell made `view=changes` implicit and defaulted a missing `view`
- * to `changes`. This module defaults to `overview` instead, because
- * design-system/MASTER.md v2 §0 and P2/P6 both fix the in-project landing view
- * as 总览 (falling back to 文献中心 until P6 lands the overview). The parameter
- * *meanings* are unchanged; only the default view differs, and it is written
- * explicitly rather than implied.
+ * A missing `view` becomes `latex`, which is what the reference defaults its canvas
+ * tab to (`useState<WorkspaceTab>('latex')` in its `App`). Two earlier defaults are
+ * gone: `changes` (the legacy shell) and `overview` (P2–P6, when the in-project
+ * landing view was 总览).
  */
 
 export type AppPage = 'research' | 'settings';
 
 export type AppViewId =
-  | 'overview'
-  | 'stage'
-  | 'activity'
-  | 'provenance'
-  | 'changes'
   | 'literature'
   | 'latex'
   | 'terminal'
-  | 'files'
-  | 'tasks'
-  | 'diagnostics'
   | 'mcp'
   | 'skills'
   | 'memory';
 
-export type WorkbenchTool = 'files' | 'git' | 'terminal';
+/**
+ * Route-selected *auxiliary surface*.
+ *
+ * `git` opens the top-bar Git drawer; `files` asks the sidebar to show its 文件 tab. Both sit
+ * beside the canvas rather than in it, which is why they are not view ids.
+ *
+ * `terminal` used to be here as well. The terminal is a canvas tab, so the marker was
+ * redundant — and worse, it was *sticky*: because a tool no longer belongs to a view, a route
+ * that carried `tool=terminal` could not express “close the Git drawer and show the terminal”
+ * at the same time as `tool=git`. Removing it makes `view=terminal` mean exactly that.
+ */
+export type WorkbenchTool = 'files' | 'git';
 
+/**
+ * Workspace-**relative** path revealed and selected in the sidebar's file tree, or null.
+ *
+ * Navigation state, not product data: it is what a "which file am I looking at" deep link
+ * means, so it lives in the URL. It used to name the canvas `files` view as its host; that
+ * view is gone and the sidebar tree reads the parameter instead, which is why
+ * `viewCarriesOpenFile` now answers `false` for every view and why this is the one route
+ * field the normaliser keeps regardless of `view`.
+ */
 export type AppRoute = {
   page: AppPage;
   projectId: string | null;
   view: AppViewId;
-  stageGroup: ResearchStageGroupId;
-  stageTab: ResearchStageTab;
   tool: WorkbenchTool | null;
   /**
    * Workspace-**relative** path open in the files view (P3), or null.
    *
    * This is navigation state, not product data: it is what a "which file am I
    * looking at" deep link means, and it lives in the URL for the same reason
-   * `stage` does — a reload must land on the same file, and the path is refused
+   * `stage` used to — a reload must land on the same file, and the path is refused
    * locally if it tries to escape the workspace (R10).
    */
   openFile: string | null;
@@ -84,7 +86,7 @@ export type AppRoute = {
   newProject: boolean;
 };
 
-export const DEFAULT_VIEW: AppViewId = 'overview';
+export const DEFAULT_VIEW: AppViewId = 'latex';
 
 /**
  * Every canvas view is project-scoped: with no project selected the shell shows
@@ -92,35 +94,15 @@ export const DEFAULT_VIEW: AppViewId = 'overview';
  * no global, project-less canvas view yet.)
  */
 export const APP_VIEW_IDS: ReadonlySet<AppViewId> = new Set<AppViewId>([
-  'overview',
-  'stage',
-  'activity',
-  'provenance',
-  'changes',
   'literature',
   'latex',
   'terminal',
-  'files',
-  'tasks',
-  'diagnostics',
   'mcp',
   'skills',
   'memory'
 ]);
 
-export const WORKBENCH_TOOLS: ReadonlySet<WorkbenchTool> = new Set<WorkbenchTool>(['files', 'git', 'terminal']);
-
-/** Views that carry a workbench tool selection. */
-const TOOL_BEARING_VIEWS: ReadonlySet<AppViewId> = new Set<AppViewId>(['files', 'changes', 'terminal']);
-
-export function viewCarriesTool(view: AppViewId): boolean {
-  return TOOL_BEARING_VIEWS.has(view);
-}
-
-/** Only the files view can have a file open in it. */
-export function viewCarriesOpenFile(view: AppViewId): boolean {
-  return view === 'files';
-}
+export const WORKBENCH_TOOLS: ReadonlySet<WorkbenchTool> = new Set<WorkbenchTool>(['files', 'git']);
 
 function emptyToNull(value: string | null): string | null {
   if (value === null) {
@@ -147,55 +129,11 @@ function parseView(value: string | null): AppViewId {
   return DEFAULT_VIEW;
 }
 
-function parseStage(value: string | null): { group: ResearchStageGroupId; tab: ResearchStageTab } {
-  if (value === null || value.trim().length === 0) {
-    return { group: 'discover', tab: defaultTabForGroup('discover') };
-  }
-  if (STAGE_GROUP_IDS.has(value as ResearchStageGroupId)) {
-    const group = value as ResearchStageGroupId;
-    return { group, tab: defaultTabForGroup(group) };
-  }
-  if (STAGE_TAB_IDS.has(value as ResearchStageTab)) {
-    const tab = value as ResearchStageTab;
-    const group = RESEARCH_STAGE_GROUPS.find((item) => item.tabs.some((entry) => entry.id === tab))?.id ?? 'discover';
-    return { group, tab };
-  }
-  const workflowStage = RESEARCH_STAGE_GROUPS.flatMap((item) => item.stages).find((stage) => stage === value);
-  if (workflowStage !== undefined) {
-    const group = stageGroupForStage(workflowStage);
-    return { group, tab: defaultTabForGroup(group) };
-  }
-  return { group: 'discover', tab: defaultTabForGroup('discover') };
-}
-
 function parseTool(value: string | null): WorkbenchTool | null {
   if (value !== null && WORKBENCH_TOOLS.has(value as WorkbenchTool)) {
     return value as WorkbenchTool;
   }
   return null;
-}
-
-/**
- * Makes a (group, tab) pair canonical.
- *
- * The URL can only carry one of the two, so a pair whose tab belongs to a
- * different group than the one given is ambiguous and would not survive a
- * round-trip. The tab is the finer-grained selector, so it wins.
- */
-function normalizeStagePair(
-  group: ResearchStageGroupId,
-  tab: ResearchStageTab
-): { group: ResearchStageGroupId; tab: ResearchStageTab } {
-  if (STAGE_TAB_IDS.has(tab)) {
-    const owner = RESEARCH_STAGE_GROUPS.find((item) => item.tabs.some((entry) => entry.id === tab));
-    if (owner !== undefined) {
-      return { group: owner.id, tab };
-    }
-  }
-  if (STAGE_GROUP_IDS.has(group)) {
-    return { group, tab: defaultTabForGroup(group) };
-  }
-  return { group: 'discover', tab: defaultTabForGroup('discover') };
 }
 
 /**
@@ -206,16 +144,19 @@ function normalizeStagePair(
  */
 export function normalizeAppRoute(route: AppRoute): AppRoute {
   const page: AppPage = route.page;
-  // The portal cannot show a canvas view, a tool, the assistant, or a stage.
+  // The portal cannot show a canvas view, a drawer tool or the assistant.
   const projectId = route.projectId;
   const portal = projectId === null;
 
   const view: AppViewId = portal ? DEFAULT_VIEW : route.view;
-  const parsedStage = view === 'stage' ? normalizeStagePair(route.stageGroup, route.stageTab) : parseStage(null);
-  const tool: WorkbenchTool | null = viewCarriesTool(view) ? route.tool : null;
-  // The open file belongs to the files view only; any other view drops it, which
-  // is what keeps `parse(write(r))` stable for the fields that remain.
-  const openFile = viewCarriesOpenFile(view) && !portal ? emptyToNull(route.openFile) : null;
+  // Tools are no longer view-scoped: `?tool=git` and `?tool=files` select a **drawer**, and the
+  // reference opens both from the top bar while any canvas view stays on screen. `terminal` is
+  // still a view and still carries its tool (the tab is the terminal's own). The portal is the one
+  // place with no chrome to open a drawer from, so it clears the tool the way it clears the view.
+  const tool: WorkbenchTool | null = portal ? null : route.tool;
+  // Kept regardless of `view`: it is the sidebar tree's selection, not a view parameter (ADR-M05
+  // note above). The `portal` half is the only thing that clears it.
+  const openFile = portal ? null : emptyToNull(route.openFile);
   // `newProject` is a one-shot *request* to open the portal's create form, so it
   // is only meaningful on a project-less portal. The form's open state and its
   // draft are component state in `ProjectPortalView`; that is what keeps an
@@ -228,8 +169,6 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
     page,
     projectId,
     view,
-    stageGroup: parsedStage.group,
-    stageTab: parsedStage.tab,
     tool,
     openFile,
     // The assistant lives in a project; with no project it cannot be open.
@@ -240,13 +179,10 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
 
 export function parseAppRoute(search: URLSearchParams): AppRoute {
   const parsedPage = parsePage(search.get('page'));
-  const parsedStage = parseStage(search.get('stage'));
   return normalizeAppRoute({
     page: parsedPage.page,
     projectId: emptyToNull(search.get('project')),
     view: parseView(search.get('view')),
-    stageGroup: parsedStage.group,
-    stageTab: parsedStage.tab,
     tool: parseTool(search.get('tool')),
     openFile: emptyToNull(search.get('file')),
     assistantOpen: search.get('assistant') === '1',
@@ -275,12 +211,6 @@ export function appRouteToSearch(route: AppRoute): string {
     // Written explicitly, never implied: the parser's default differs from the
     // legacy shell's (see the header comment).
     params.set('view', normalized.view);
-  }
-
-  if (normalized.view === 'stage') {
-    const stageValue =
-      normalized.stageTab === defaultTabForGroup(normalized.stageGroup) ? normalized.stageGroup : normalized.stageTab;
-    params.set('stage', stageValue);
   }
 
   if (normalized.tool !== null) {
@@ -332,10 +262,7 @@ export function sameAppRoute(left: AppRoute, right: AppRoute): boolean {
   ) {
     return false;
   }
-  if (left.view !== 'stage') {
-    return true;
-  }
-  return left.stageGroup === right.stageGroup && left.stageTab === right.stageTab;
+  return true;
 }
 
 /** Entry-point mapping for `app.onNavigate` payloads from the native menu. */
@@ -355,23 +282,31 @@ export function routeForNavigate(page: string, current: AppRoute): AppRoute {
     return normalizeAppRoute({
       ...base,
       page: 'research',
-      view: 'changes',
+      view: 'literature',
       assistantOpen: base.projectId !== null
     });
   }
   if (page === 'tasks' || page === 'tasks-board') {
-    return normalizeAppRoute({ ...base, page: 'research', view: 'tasks' });
+    // 后台任务 has one home in this shell: the management drawer's 任务 tab. The native
+    // menu item is honoured by opening that rather than a second canvas surface, which
+    // would be a second writer over one dataset.
+    return normalizeAppRoute({ ...base, page: 'research' });
   }
   if (page === 'workspace' || page === 'files') {
-    return normalizeAppRoute({ ...base, page: 'research', view: 'files', tool: 'files' });
+    // `?tool=files` now selects a **drawer** rather than a canvas view: the file tree lives
+    // in the sidebar and the preview opens in a modal, as in the reference.
+    return normalizeAppRoute({ ...base, page: 'research', view: 'literature', tool: 'files' });
   }
   if (page === 'git') {
-    return normalizeAppRoute({ ...base, page: 'research', view: 'changes', tool: 'git' });
+    // Likewise: `?tool=git` drives the drawer, and the wide change view is gone.
+    return normalizeAppRoute({ ...base, page: 'research', view: 'literature', tool: 'git' });
   }
   if (page === 'terminal') {
-    return normalizeAppRoute({ ...base, page: 'research', view: 'terminal', tool: 'terminal' });
+    // No tool marker: the terminal is a canvas tab, and a sticky `tool` would keep whatever
+    // drawer was open on top of it.
+    return normalizeAppRoute({ ...base, page: 'research', view: 'terminal', tool: null });
   }
-  if (page === 'memory' || page === 'mcp' || page === 'skills' || page === 'diagnostics') {
+  if (page === 'memory' || page === 'mcp' || page === 'skills') {
     return normalizeAppRoute({ ...base, page: 'research', view: page });
   }
   if (page === 'research') {

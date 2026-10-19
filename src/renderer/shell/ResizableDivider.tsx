@@ -12,6 +12,12 @@ import { GripVertical } from 'lucide-react';
  * The hairline is drawn at 1px inside an 8px hit area: the hit target is
  * comfortable without making the two panels look separated by a gutter.
  *
+ * The handle's feedback is the reference's three states, ported from
+ * `research-studio/src/components/ResizableDivider.tsx`: the hairline brightens
+ * under the pointer, the grab chip fades in on hover, and while dragging it goes
+ * solid, grows 5% and casts a soft glow (`--divider-glow`) so it is clear that
+ * the divider — not the window — is what the pointer is moving.
+ *
  * Colors come from the token layer through arbitrary Tailwind values so no
  * component hard-codes a hex (MASTER v2 §2).
  */
@@ -102,20 +108,20 @@ export function ResizableDivider({
         onReset?.();
       }}
       onKeyDown={onKeyDown}
-      className="relative z-30 -mx-1 flex w-2 shrink-0 cursor-col-resize touch-none items-center justify-center select-none"
+      className="group relative z-30 -mx-1 flex w-2 shrink-0 cursor-col-resize touch-none items-center justify-center select-none"
     >
       <div
         className={
           dragging
-            ? 'h-full w-px bg-line-strong transition-colors duration-[var(--duration-fast)]'
-            : 'h-full w-px bg-line transition-colors duration-[var(--duration-fast)]'
+            ? 'h-full w-px bg-line-strong shadow-[var(--divider-glow)] transition-colors duration-[var(--duration-fast)]'
+            : 'h-full w-px bg-line transition-colors duration-[var(--duration-fast)] group-hover:bg-line-strong'
         }
       />
       <div
         className={
           dragging
-            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 items-center justify-center rounded-control border border-line bg-[var(--surface-card-hover)] opacity-100 transition-opacity duration-[var(--duration-fast)]'
-            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 items-center justify-center rounded-control border border-line bg-surface opacity-0 transition-opacity duration-[var(--duration-fast)]'
+            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-105 items-center justify-center rounded-control border border-line bg-[var(--surface-card-hover)] opacity-100 shadow-[var(--shadow-card)] transition-all duration-[var(--duration-fast)]'
+            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-100 items-center justify-center rounded-control border border-line bg-surface opacity-0 shadow-[var(--shadow-card)] transition-all duration-[var(--duration-fast)] group-hover:opacity-100'
         }
       >
         <GripVertical size={10} aria-hidden="true" className="text-muted" />

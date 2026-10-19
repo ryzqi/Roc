@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import type { ChatResumeDecision } from '../../shared/types';
+import { popoverTransition, popoverVariants } from '../shared/motion';
 import type { ChatTranscriptMessage } from './transcript';
 import { ChatMessageRow } from './blocks/message-row';
 
@@ -18,10 +20,13 @@ import { ChatMessageRow } from './blocks/message-row';
  *   2. **Initial window** (`buildTranscriptVirtuosoWindow`): a reopened thread starts at
  *      the last item instead of animating from the top.
  *
- * Changed: `motion`'s `AnimatePresence` + variants for the "back to latest" button is now
- * a plain conditional element with a CSS transition. P1 measured motion's shared-layout
- * projection at ~385 KB of eager JS and ruled it out for incidental animation, and this
- * button needs nothing more than a fade.
+ * Changed back: the 「滚动到最新」 button is again `motion`'s `AnimatePresence` + a fade with a
+ * 4px rise. P1 replaced it with a conditional element plus a CSS transition because motion's
+ * layout projection cost ~385 KB of eager JS against a 900 KB self-imposed ceiling; the real
+ * budget in `check-renderer-chunks.mjs` is 1.7 MB and the app builds at 918 KB, so that trade
+ * was for a constraint that no longer binds. It was also a behavioural compromise: fading out
+ * with CSS means keeping the button mounted, which leaves an invisible 28px hit target over
+ * the transcript. `AnimatePresence` removes it from the DOM once the exit finishes.
  */
 
 export type ChatTranscriptPanelProps = {
@@ -139,17 +144,24 @@ export function ChatTranscriptPanel({
           }
         }}
       />
-      {isAtBottom ? null : (
-        <button
-          type="button"
-          aria-label="滚动到最新"
-          data-testid="assistant-scroll-bottom"
-          onClick={handleScrollBottomClick}
-          className="absolute bottom-2 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-surface text-muted shadow-[var(--shadow-popover)] transition-opacity duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)] motion-reduce:transition-none"
-        >
-          <ChevronDown size={14} aria-hidden="true" />
-        </button>
-      )}
+      <AnimatePresence>
+        {isAtBottom ? null : (
+          <motion.button
+            type="button"
+            aria-label="滚动到最新"
+            data-testid="assistant-scroll-bottom"
+            onClick={handleScrollBottomClick}
+            variants={popoverVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={popoverTransition}
+            className="absolute bottom-2 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-surface text-muted shadow-[var(--shadow-popover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          >
+            <ChevronDown size={14} aria-hidden="true" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

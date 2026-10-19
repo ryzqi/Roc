@@ -40,6 +40,28 @@ import { useRtkStatus } from '../../workspace/use-rtk-status';
  *   - **Copy and paste are left to the system.** xterm's own clipboard handling
  *     plus the native Edit-menu roles cover ⌘C/⌘V; intercepting keys here would
  *     break ⌘K-style passthrough and is exactly what the plan forbids.
+ *
+ * ## Not ported: 「在终端里运行这个脚本」
+ *
+ * The reference's canvas has one hand-off on this surface: a plot/script panel calls
+ * `onRunScriptInTerminal(code)`, which switches to the terminal tab with a command
+ * prefilled (`python src/plot_benchmarks.py`) and the terminal runs it on mount
+ * (`initialCommand`).
+ *
+ * That has no counterpart here, and the reason is structural rather than an omission:
+ * the command has to travel from the caller to this view, and every route for it is closed.
+ *
+ *   - **A route parameter** (`?view=terminal&run=…`) would extend the frozen route
+ *     contract and its round-trip tests (ADR-M05) for a once-per-run hand-off.
+ *   - **A new prefill entry in the workspace scope** means inventing the caller as well:
+ *     this build has no plot panel that owns a script path — experiments and figures are
+ *     records in the backend, and the script that produced them is not addressable from
+ *     the renderer (the same reason the reader cannot embed the source PDF, B16).
+ *
+ * The user path is not lost, it is just not automated: the workspace file tree opens the
+ * script and the terminal is right next to it, and the agent can run it through
+ * `run_shell_command` (each call visible, and subject to its own approval policy). Recorded
+ * so the next person does not read this file and conclude nobody noticed.
  */
 
 export type TerminalSessionViewProps = {

@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { AppViewId } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
+import { viewFadeTransition, viewFadeVariants } from '../shared/motion';
 import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProps } from './view-registry';
 
 /**
@@ -23,11 +25,40 @@ import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProp
  * The canvas is a single scroll surface (MASTER v2 §5), so its offset resets when
  * the *shown* view changes — not when the requested one does, so a slow load
  * cannot jump the view the user is still reading.
+ *
+ * ## The swap cross-fades
+ *
+ * `research-studio` wraps each canvas view in `<motion.div>` inside an
+ * `AnimatePresence mode="wait">`, giving a 120ms opacity fade between views. P1
+ * cut it directly, for two stated reasons: the design system said to, and the fade
+ * needed `motion` in the eager graph.
+ *
+ * Both are now spent (`docs/adr/0023-motion-parity-with-research-studio.md`), so the
+ * prototype's fade is restored — with one structural change, because the naive port
+ * silently broke an acceptance gate.
+ *
+ * **The routing attributes moved onto the animated element.**
+ *
+ * `data-view` / `data-shown-view` are the contract the acceptance gates poll to
+ * learn which view is on screen (`verify-p6-workflow.mjs`'s `openView` waits for
+ * `[data-view="x"][data-shown-view="x"]`). Keeping them on the outer container
+ * while the view renders inside an `AnimatePresence` child makes the attribute
+ * *lie*: the state flip that writes `data-shown-view="overview"` happens a frame
+ * before the overview is mounted — or, with `mode="wait"`, 120ms before. The gate
+ * then waits successfully and reads a panel that is not in the DOM, which is
+ * exactly what happened: 总览's instruction-source assertion read `null` and P6
+ * stopped at 42/69.
+ *
+ * Moving the attributes onto the mounted view element makes "shown" mean "this
+ * element is the shown view", which is what every reader already assumed. The
+ * scroll surface moves with them, so there is still exactly one scrollable element
+ * per rendered view and the reset below still targets it. `mode="wait"` is then
+ * the prototype's own sequencing (out, then in) with no lying attribute.
  */
 
 export type { ViewProps };
 
-export function ViewContent({ view, projectId, stageHint }: ViewProps): React.JSX.Element {
+export function ViewContent({ view, projectId }: ViewProps): React.JSX.Element {
   // Subscribing makes the resolution moment observable, which is what drives the
   // warm-up to completion.
   useViewResolution();
@@ -58,21 +89,29 @@ export function ViewContent({ view, projectId, stageHint }: ViewProps): React.JS
   const Shown = loadView(shownView);
 
   return (
-    <div
-      ref={scrollRef}
-      className="h-full w-full overflow-y-auto"
-      data-view={view}
-      data-shown-view={shownView}
-      data-project={projectId ?? ''}
-      data-stage={stageHint ?? ''}
-    >
-      <Suspense fallback={<DelayedFallback />}>
-        <Shown
-          view={shownView}
-          projectId={projectId}
-          stageHint={shownView === view ? stageHint : null}
-        />
-      </Suspense>
+    <div className="h-full w-full">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          // Keyed on the *shown* view, not the requested one: keying on `view`
+          // would fade out the view the user is still reading the moment a cold
+          // chunk starts downloading, which defeats the hysteresis above.
+          key={shownView}
+          ref={scrollRef}
+          variants={viewFadeVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={viewFadeTransition}
+          className="h-full w-full overflow-y-auto"
+          data-view={view}
+          data-shown-view={shownView}
+          data-project={projectId ?? ''}
+        >
+          <Suspense fallback={<DelayedFallback />}>
+            <Shown view={shownView} projectId={projectId} />
+          </Suspense>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

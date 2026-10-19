@@ -20,10 +20,7 @@ import { GitChangeLists } from './GitChangeLists';
 import { GitFileDiff } from './GitFileDiff';
 
 /**
- * Git panel (P3/T3.5) — the whole Git surface, in one component used twice:
- *
- *   - the top-bar drawer (`?tool=git`), stacked layout
- *   - the canvas `changes` view, wide two-pane layout
+ * Git panel (P3/T3.5) — the whole Git surface, in the top-bar drawer.
  *
  * Having one implementation is deliberate: the alternative was two panels that
  * drift, and the only real difference is how the change list and the diff are
@@ -50,7 +47,17 @@ export type GitPanelProps = {
   workspacePath: string | null;
   /** Archived projects are read-only. */
   writable: boolean;
-  layout: 'drawer' | 'canvas';
+  /**
+   * One layout: the stacked one the top-bar drawer uses.
+   *
+   * There used to be a `'canvas'` variant for the wide two-pane change view. That view
+   * is gone — the reference opens Git as a drawer and nothing else, and two surfaces
+   * over one repository meant two `useGitWorkspace` instances whose selections disagreed
+   * after an action (which is why the shell had to remember not to mount the drawer while
+   * the view was on screen). The list-then-diff order the stacked layout gives is the
+   * reference's own order, and the drawer is resizable by widening the window.
+   */
+  layout: 'drawer';
 };
 
 export function GitPanel({ client, workspacePath, writable, layout }: GitPanelProps): React.JSX.Element {
@@ -150,7 +157,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         disabled={busy || !writable}
         placeholder="提交信息（必填）"
         aria-label="提交信息"
-        rows={layout === 'drawer' ? 2 : 3}
+        rows={2}
         data-testid="git-commit-message"
         className="w-full resize-none rounded-control border border-line bg-surface px-2 py-1.5 text-ink placeholder:text-subtle disabled:opacity-60"
       />
@@ -374,17 +381,10 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         />
       ) : null}
 
-      {layout === 'canvas' ? (
-        <div className="flex min-h-0 flex-1 gap-2">
-          <div className="flex min-h-0 w-[360px] shrink-0 flex-col border-r border-line-soft pr-1">{listColumn}</div>
-          <div className="flex min-h-0 flex-1 flex-col">{diffColumn}</div>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-          {listColumn}
-          <div className="flex min-h-[40%] flex-col border-t border-line-soft pt-1">{diffColumn}</div>
-        </div>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {listColumn}
+        <div className="flex min-h-[40%] flex-col border-t border-line-soft pt-1">{diffColumn}</div>
+      </div>
 
       {footer}
 

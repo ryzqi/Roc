@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
 import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
 import { McpSection } from './sections/McpSection';
@@ -13,13 +14,25 @@ import type { ManagementStores, ManagementTabId } from './use-management-stores'
  * the body switch live here, and each shell only decides **how it is framed** (a 720px drawer vs a
  * full-width canvas view). That is the "两种入口共用同一组件" the phase asked for, without either
  * shell owning a second copy of the section wiring.
+ *
+ * The tab strip is the reference's: a recessed track (`bg-bg`, 1px border, 2px inner pad) holding
+ * four equal chips, the selected one raised against it, and a **hue per section** (参考里
+ * 记忆/技能 紫、MCP 天蓝、任务 匣黄) that is carried by the icon only while the tab is selected.
+ * The tab set itself already matched — `ManagementTab` in the reference is
+ * `'memory' | 'skills' | 'mcp' | 'tasks'`, the same four in the same order.
  */
 
-export const MANAGEMENT_TABS: ReadonlyArray<{ id: ManagementTabId; label: string }> = [
-  { id: 'memory', label: '记忆' },
-  { id: 'skills', label: '技能' },
-  { id: 'mcp', label: 'MCP' },
-  { id: 'tasks', label: '任务' }
+export const MANAGEMENT_TABS: ReadonlyArray<{
+  id: ManagementTabId;
+  label: string;
+  icon: LucideIcon;
+  /** Applied only to the selected chip, as in the reference. */
+  iconClass: string;
+}> = [
+  { id: 'memory', label: '记忆', icon: Brain, iconClass: 'text-[var(--icon-memory)]' },
+  { id: 'skills', label: '技能', icon: Sparkles, iconClass: 'text-[var(--icon-skill)]' },
+  { id: 'mcp', label: 'MCP', icon: Cpu, iconClass: 'text-[var(--icon-mcp)]' },
+  { id: 'tasks', label: '任务', icon: Clock, iconClass: 'text-[var(--icon-task)]' }
 ];
 
 export function ManagementTabStrip({
@@ -70,10 +83,11 @@ export function ManagementTabStrip({
       aria-label="管理分组"
       onKeyDown={onKeyDown}
       data-testid="mgmt-tabs"
-      className="flex shrink-0 items-center gap-0.5"
+      className="flex shrink-0 items-center gap-1 rounded-card border border-line bg-bg p-0.5"
     >
       {MANAGEMENT_TABS.map((tab) => {
         const selected = tab.id === activeTab;
+        const Icon = tab.icon;
         return (
           <button
             key={tab.id}
@@ -88,10 +102,11 @@ export function ManagementTabStrip({
             data-testid={`${testIdPrefix}-tab-${tab.id}`}
             className={
               selected
-                ? 'h-[var(--control-height-compact)] flex-1 rounded-control bg-accent-soft text-ink active:bg-[var(--accent-soft-strong)]'
-                : 'h-[var(--control-height-compact)] flex-1 rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control border border-line-strong bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)]'
+                : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control border border-transparent text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
             }
           >
+            <Icon size={12} aria-hidden="true" className={selected ? tab.iconClass : 'text-subtle'} />
             <span className="text-[var(--font-meta-size)]">{tab.label}</span>
           </button>
         );

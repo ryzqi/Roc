@@ -23,6 +23,25 @@ import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus, tra
  *     out of order: the first closer restores `null` while the second is still
  *     open, and the second then leaves `#root` permanently hidden from
  *     assistive technology.
+ *
+ * ## Focus *return* is deliberately not here
+ *
+ * All three rules above are keyed on `open`, because they must take effect the
+ * instant the overlay starts closing. Focus return must **not** be: it has to
+ * happen when the panel actually leaves the DOM.
+ *
+ * This used to be one effect and one lifetime — `ModalShell` rendered `null` when
+ * closed, so `open: false` *was* the unmount. Adding the exit animation separated
+ * the two, and the split has a visible failure: this effect's cleanup fired at
+ * `open: false`, then ~180ms later the panel unmounted and a *nested* overlay's
+ * cleanup (a stacked confirm panel, whose opener is a button inside the panel being
+ * removed) put focus back on an element that was about to disappear. Focus then
+ * fell to `<body>` — caught by `verify:p8-settings`, 关闭后焦点回到设置齿轮 got
+ * `null`.
+ *
+ * So focus return lives in `OverlayFocusRestore`, which is mounted *inside* the
+ * animated subtree. Its lifetime is the panel's lifetime, and nested overlays
+ * therefore resolve in the same order they did before the animation existed.
  */
 
 const openOverlayStack: string[] = [];
@@ -43,14 +62,6 @@ export type OverlayBehaviorOptions = {
   /** Consulted before every close path; returning false vetoes the close. */
   canClose: () => boolean;
   initialFocusRef?: RefObject<HTMLElement | null> | undefined;
-  /**
-   * Element that should receive focus when the overlay closes, as a CSS selector.
-   *
-   * Used when the opener is not the element the user last focused — the settings centre is
-   * opened by the native ⌘, menu accelerator, so `document.activeElement` is the body and
-   * focus would land nowhere. When the selector matches nothing the captured opener wins.
-   */
-  returnFocusSelector?: string | undefined;
   /** Stable id used for stack ordering. */
   overlayId: string;
   /** Set false to leave the app accessible behind this overlay (non-modal). */
@@ -63,7 +74,6 @@ export function useOverlayBehavior({
   onRequestClose,
   canClose,
   initialFocusRef,
-  returnFocusSelector,
   overlayId,
   inertBackground = true
 }: OverlayBehaviorOptions): void {
@@ -78,10 +88,6 @@ export function useOverlayBehavior({
       return;
     }
 
-    const opener =
-      returnFocusSelector === undefined
-        ? captureDialogOpener()
-        : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
     const wasEmpty = openOverlayStack.length === 0;
     openOverlayStack.push(overlayId);
 
@@ -131,8 +137,39 @@ export function useOverlayBehavior({
       if (inertBackground && openOverlayStack.length === 0 && root !== null) {
         root.removeAttribute('aria-hidden');
       }
-      // Returning focus to the trigger is what keeps keyboard flow continuous.
-      restoreDialogFocus(opener);
     };
-  }, [open, overlayId, panelRef, initialFocusRef, returnFocusSelector, inertBackground]);
+  }, [open, overlayId, panelRef, initialFocusRef, inertBackground]);
+}
+
+/**
+ * Returns focus to whatever opened the overlay, when the overlay is really gone.
+ *
+ * Rendered by `ModalShell` *inside* the animated subtree on purpose: the effect's
+ * cleanup is the unmount, which is the only moment that is both (a) after the panel
+ * has left the DOM and (b) in the same commit as every nested overlay's removal. See
+ * this module's header for the focus-loss bug that separating focus return from
+ * unmount caused.
+ *
+ * `returnFocusSelector` exists because the opener is not always what the user last
+ * focused: the settings centre also opens from the native `⌘,` menu accelerator, where
+ * `document.activeElement` is the body and focus would land nowhere. When the selector
+ * matches nothing the captured opener wins.
+ */
+export function OverlayFocusRestore({ returnFocusSelector }: { returnFocusSelector?: string | undefined }): null {
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Runs before `useOverlayBehavior`'s effect (child effects fire first), so the
+    // opener is still the focused element when it is captured.
+    openerRef.current =
+      returnFocusSelector === undefined
+        ? captureDialogOpener()
+        : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
+
+    return () => {
+      restoreDialogFocus(openerRef.current);
+    };
+  }, [returnFocusSelector]);
+
+  return null;
 }

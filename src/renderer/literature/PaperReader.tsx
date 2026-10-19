@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, RotateCcw, Save, Sparkles, Square, Timer, X } from 'lucide-react';
+import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, RotateCcw, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -38,6 +38,19 @@ import type { LiteratureStore } from './use-literature-store';
  * lands: `library.export` returns content (there is no save-as dialog — F16), so
  * copying goes to the clipboard and writing goes through `files.writeText` into the
  * bound workspace, and the message says which relative path was used.
+ *
+ * ## The one control that is not a backend call: the text size
+ *
+ * `research-studio`'s reading toolbar ends with a 字号 toggle (标准 / 大号) that swaps
+ * the article's own type size. It is ported because it is the reader's only
+ * *reading* control — every other button in that row is an IPC call — and because
+ * reading a parsed paper is the one thing a researcher does here for a long time.
+ *
+ * The button is labelled by the action (「大号」 while the text is standard) and the
+ * two sizes are tokens (`--font-read-size` / `--font-read-large-size`), so the
+ * scale stays in one place rather than becoming a magic number in this file. The
+ * choice is component state, exactly as in the reference: leaving the reader resets
+ * it, and nothing about a paper's text size belongs in the project record.
  */
 
 export type PaperReaderProps = {
@@ -86,6 +99,8 @@ export function PaperReader({
   const [keyDraft, setKeyDraft] = useState<string | null>(null);
   const [downloadPending, setDownloadPending] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  /** Reader text size (reference's 字号 toggle). State, not persisted: see the header. */
+  const [largeText, setLargeText] = useState(false);
   const jumpHandledFor = useRef<string | null>(null);
 
   /**
@@ -455,6 +470,17 @@ export function PaperReader({
             )}
             问助手
           </button>
+          <button
+            type="button"
+            onClick={() => setLargeText((current) => !current)}
+            aria-pressed={largeText}
+            title={largeText ? '切回标准字号' : '切换到大号字号'}
+            data-testid="reader-text-size"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+          >
+            <Type size={11} aria-hidden="true" />
+            {largeText ? '标准' : '大号'}
+          </button>
         </div>
         {keyDraft === null ? null : (
           <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-key-editor">
@@ -669,7 +695,15 @@ export function PaperReader({
             ) : blocks.length === 0 ? (
               <EmptyState icon={CircleAlert} title="解析结果里没有内容块" testId="reader-content-empty-blocks" />
             ) : (
-              <article className="flex flex-col gap-2" data-testid="reader-blocks">
+              <article
+                className={
+                  largeText
+                    ? 'flex flex-col gap-2 text-[var(--font-read-large-size)] leading-[1.7]'
+                    : 'flex flex-col gap-2 text-[var(--font-read-size)] leading-[1.65]'
+                }
+                data-testid="reader-blocks"
+                data-text-size={largeText ? 'large' : 'standard'}
+              >
                 {blocks.map((block) => (
                   <section
                     key={block.id}

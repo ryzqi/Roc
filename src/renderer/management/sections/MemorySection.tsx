@@ -75,7 +75,8 @@ export function MemorySection({
   const selectedRow = files.rows.find((row) => row.slot.scope === files.selected.scope && row.slot.kind === files.selected.kind) ?? null;
   const selectedMeta = selectedRow?.meta ?? null;
   // An ineffective slot cannot be written: the backend returns `workspace_required`, so the button
-  // would be a guaranteed failure (and the reason is a wiring gap, not a user mistake — B26).
+  // would be a guaranteed failure (and the reason is a missing working-directory binding, not a
+  // user mistake).
   const slotWritable = selectedMeta !== null && selectedMeta.effective;
 
   // Only "no status yet" is a loading state: a refresh keeps the files and the editor on screen.
@@ -141,7 +142,9 @@ export function MemorySection({
           />
         </dl>
 
-        <FormNote testId="mgmt-memory-workspace-note">{MEMORY_WORKSPACE_UNAVAILABLE_NOTE}</FormNote>
+        {memory.workspaceHash === null ? (
+          <FormNote testId="mgmt-memory-workspace-note">{MEMORY_WORKSPACE_UNAVAILABLE_NOTE}</FormNote>
+        ) : null}
 
         <div className="flex items-center gap-2">
           <button
@@ -387,7 +390,7 @@ export function MemorySection({
               className={formInputClass}
             >
               <option value="all">全部工作目录</option>
-              {/* No workspace hash exists (B26), so a "current workspace" scope could not be honoured. */}
+              {/* `workspaceScope: 'current'` needs the backend's own hash; there is nothing to scope to until a directory is bound. */}
               <option value="current" disabled={files.memory.workspaceHash === null}>
                 当前工作目录{files.memory.workspaceHash === null ? '（不可用）' : ''}
               </option>

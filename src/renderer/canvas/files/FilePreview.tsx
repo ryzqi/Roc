@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, FileWarning, Loader2, Save } from 'lucide-react';
+import { Copy, FileWarning, Loader2, Save, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
 import { useAsyncResource } from '../../app/use-async-resource';
 import { ErrorBar } from '../../shell/ErrorBar';
@@ -52,6 +52,15 @@ export type FilePreviewProps = {
   writable: boolean;
   /** Reports unsaved state so the shell can warn before closing. */
   onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * Renders a close control at the end of the header row.
+   *
+   * The preview opens as a modal (the reference's `FilePreviewModal`), and Escape is handled by
+   * a window listener there — but the PDF branch renders a `<iframe>`, and once the iframe has
+   * focus the key events never reach that listener. A visible close button is the affordance
+   * that does not depend on where focus happens to be, which is also why the reference has one.
+   */
+  onClose?: () => void;
 };
 
 const WRITE_SOURCE = 'renderer:file-preview';
@@ -61,7 +70,8 @@ export function FilePreview({
   relativePath,
   workspacePath,
   writable,
-  onDirtyChange
+  onDirtyChange,
+  onClose
 }: FilePreviewProps): React.JSX.Element {
   const kind = previewKindFor(relativePath);
   const isPdf = kind === 'pdf';
@@ -230,6 +240,17 @@ export function FilePreview({
           <span className="text-[var(--st-ok)] text-[var(--font-micro-size)]" data-testid="file-preview-saved">
             已保存
           </span>
+        )}
+        {onClose === undefined ? null : (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={`关闭 ${relativePath} 的预览`}
+            data-testid="file-preview-close"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
         )}
 
         <button

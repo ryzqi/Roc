@@ -1,7 +1,16 @@
 import { useCallback, useId, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
-import { useOverlayBehavior } from './use-overlay-behavior';
+import {
+  drawerTransition,
+  drawerVariants,
+  modalPopTransition,
+  modalPopVariants,
+  scrimTransition,
+  scrimVariants
+} from '../shared/motion';
+import { useOverlayBehavior, OverlayFocusRestore } from './use-overlay-behavior';
 
 /**
  * Shared overlay shell for drawers and modals (MASTER v2 §5 / §6.7).
@@ -12,6 +21,28 @@ import { useOverlayBehavior } from './use-overlay-behavior';
  *
  * Rendered through a portal so a drawer can stack above a modal without either
  * needing to know the other's DOM position.
+ *
+ * ## Entrance and exit
+ *
+ * `research-studio` gives every overlay an entrance and no exit: the Git drawer
+ * asks for `animate-in slide-in-from-right duration-200`, a `tailwindcss-animate`
+ * utility that package was never installed with, so the classes are inert; the
+ * hosted `AnimatePresence` panels elsewhere in that prototype do animate out.
+ * What is ported here is the *intended* vocabulary, taken from the two keyframes
+ * it did ship and never used — `.animate-scaleIn` (0.18) for modals and
+ * `.animate-slideInRight` (0.2) for drawers — now applied symmetrically.
+ *
+ * The early `return null` that used to guard the closed state is gone: it would
+ * unmount the panel before it could animate out, and `AnimatePresence` needs the
+ * subtree to survive one exit frame. Two consequences had to be handled:
+ *
+ *   1. **The lazy panel is still not fetched at boot.** `children` is only
+ *      rendered inside the `open` branch, so `GitPanel`'s module is still
+ *      requested on first open, not at startup (see `AppShell`'s latch comment).
+ *   2. **A click during the exit must not close twice.** The exiting subtree is a
+ *      snapshot from the frame where `open` was still true, so its `close`
+ *      closure would happily re-run `onClose`. `openRef` is read at call time,
+ *      which is the live value.
  */
 
 export type OverlayKind = 'modal' | 'drawer';
@@ -32,13 +63,27 @@ export type ModalShellProps = {
    *
    * Defaults to the element that opened the overlay. The settings centre passes its gear
    * button because ⌘, arrives from the native menu, where the opener is the document body
-   * and focus would otherwise be lost on close.
+   * and focus would otherwise be lost on close. Handled by `OverlayFocusRestore`, which
+   * lives inside the animated subtree so focus returns when the panel is actually gone —
+   * see that module's header.
    */
   returnFocusSelector?: string;
   /** Return false to keep the overlay open (e.g. unsaved draft confirmation). */
   beforeClose?: () => boolean;
   /** Clicking the scrim closes. Set false for destructive flows. */
   closeOnBackdrop?: boolean;
+  /**
+   * Body padding.
+   *
+   * `default` is the padded form body every overlay wants. `none` exists for a body
+   * that brings its own **columns**: the settings centre's left navigation is a
+   * coloured rail that has to reach the panel's edges, exactly as the reference's
+   * `w-44 bg-zinc-950` does — inner padding would trap it inside the panel and the
+   * rail would stop reading as a rail. A `p-0` override appended to the class list
+   * could not be trusted for this: both `p-0` and `px-4` are plain utilities, so order
+   * in the attribute decides nothing.
+   */
+  bodyPadding?: 'default' | 'none';
 };
 
 export function ModalShell({
@@ -53,7 +98,8 @@ export function ModalShell({
   initialFocusRef,
   returnFocusSelector,
   beforeClose,
-  closeOnBackdrop = true
+  closeOnBackdrop = true,
+  bodyPadding = 'default'
 }: ModalShellProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -61,74 +107,112 @@ export function ModalShell({
   const bodyId = useId();
 
   const canClose = useCallback(() => (beforeClose === undefined ? true : beforeClose()), [beforeClose]);
+  /**
+   * Live `open`, for handlers that outlive their own render.
+   *
+   * `AnimatePresence` keeps the exiting subtree mounted with the props it had
+   * while open, so `open` inside those closures is stale `true` for the length of
+   * the exit; reading the ref is what keeps a stray click from closing twice.
+   */
+  const openRef = useRef(open);
+  openRef.current = open;
 
   // Background inertness lives in the hook, which reference-counts the overlay
   // stack so layers closing out of order cannot leave `#root` hidden forever.
-  useOverlayBehavior({ open, panelRef, overlayId, onRequestClose: onClose, canClose, initialFocusRef, returnFocusSelector });
-
-  if (!open) {
-    return null;
-  }
+  useOverlayBehavior({ open, panelRef, overlayId, onRequestClose: onClose, canClose, initialFocusRef });
 
   const close = (): void => {
-    if (!canClose()) {
+    if (!openRef.current || !canClose()) {
       return;
     }
     onClose();
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex" data-testid={testId ?? 'overlay'} data-overlay-kind={kind}>
-      {/* The scrim is a child covering the container, so the click must be
-          handled *here*: on the container, `event.target` would always be the
-          scrim and the guard would never pass. */}
-      <div
-        aria-hidden="true"
-        data-testid={testId === undefined ? undefined : `${testId}-scrim`}
-        onClick={closeOnBackdrop ? close : undefined}
-        className={
-          kind === 'drawer'
-            ? 'absolute inset-0 bg-[var(--overlay-backdrop)]'
-            : 'absolute inset-0 bg-[var(--overlay-scrim)]'
-        }
-      />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        data-testid={testId === undefined ? undefined : `${testId}-panel`}
-        className={
-          kind === 'drawer'
-            ? `relative z-10 ml-auto flex h-full max-w-full flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-            : `relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
-        }
-      >
-        <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
-          <h2 id={titleId} className="min-w-0 flex-1 truncate text-ink text-[var(--font-h3-size)]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={close}
-            aria-label={`关闭${title}`}
-            data-testid={testId === undefined ? undefined : `${testId}-close`}
-            className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+    // The container is a `motion.div` so presence is propagated to the scrim and
+    // the panel unambiguously; it carries no animation of its own.
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          className="fixed inset-0 z-50 flex"
+          data-testid={testId ?? 'overlay'}
+          data-overlay-kind={kind}
+        >
+          {/* Mounted with the panel, not with `ModalShell`: its unmount is the panel's
+              removal, which is when focus may safely go back to the opener. */}
+          <OverlayFocusRestore returnFocusSelector={returnFocusSelector} />
+
+          {/* The scrim is a child covering the container, so the click must be
+              handled *here*: on the container, `event.target` would always be the
+              scrim and the guard would never pass. */}
+          <motion.div
+            aria-hidden="true"
+            data-testid={testId === undefined ? undefined : `${testId}-scrim`}
+            onClick={closeOnBackdrop ? close : undefined}
+            variants={scrimVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={scrimTransition}
+            className={
+              kind === 'drawer'
+                ? 'absolute inset-0 bg-[var(--overlay-backdrop)]'
+                : 'absolute inset-0 bg-[var(--overlay-scrim)]'
+            }
+          />
+          <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={bodyId}
+            data-testid={testId === undefined ? undefined : `${testId}-panel`}
+            variants={kind === 'drawer' ? drawerVariants : modalPopVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={kind === 'drawer' ? drawerTransition : modalPopTransition}
+            className={
+              kind === 'drawer'
+                ? `relative z-10 ml-auto flex h-full max-w-full flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
+                : `relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+            }
           >
-            <X size={14} aria-hidden="true" />
-          </button>
-        </div>
+            <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
+              <h2 id={titleId} className="min-w-0 flex-1 truncate text-ink text-[var(--font-h3-size)]">
+                {title}
+              </h2>
+              <button
+                type="button"
+                onClick={close}
+                aria-label={`关闭${title}`}
+                data-testid={testId === undefined ? undefined : `${testId}-close`}
+                className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
 
-        <div id={bodyId} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {children}
-        </div>
+            <div
+              id={bodyId}
+              className={
+                bodyPadding === 'none'
+                  ? 'min-h-0 flex-1 overflow-hidden'
+                  : 'min-h-0 flex-1 overflow-y-auto px-4 py-3'
+              }
+            >
+              {children}
+            </div>
 
-        {footer === undefined ? null : (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-2.5">{footer}</div>
-        )}
-      </div>
-    </div>,
+            {footer === undefined ? null : (
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-2.5">
+                {footer}
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
     document.body
   );
 }

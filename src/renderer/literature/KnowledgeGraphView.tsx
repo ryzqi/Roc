@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Compass, ExternalLink } from 'lucide-react';
+import { Bot, Compass, ExternalLink, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence } from '../../shared/types';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -23,6 +23,23 @@ import { deriveGraph, graphNeighbors, GRAPH_LAYOUT_NODE_LIMIT, type GraphNode, t
  * node, never a sample edge.
  *
  * Node kinds are text badges, not colours alone (AGENTS.md).
+ *
+ * ## Two interactions ported from the reference, one deliberately not
+ *
+ * The reference's graph has a text filter, a category filter, zoom controls, and
+ * 「让助手扩展这个节点」.
+ *
+ *   - **Text filter** — ported. It is the only way to find a node once the graph
+ *     is past a screenful, and it composes with the kind chips.
+ *   - **Ask the assistant about a node** — ported, and routed through the shared
+ *     literature store's `askAssistant` so the run lands in the same
+ *     thread-adoption path the reader's 「问助手」 uses (`AppShell` opens the panel
+ *     on the run's thread). The reference called this out of its always-visible
+ *     conversation column; here the panel opens as part of the hand-off.
+ *   - **Zoom in / out / reset** — **not** ported, because there is nothing to zoom:
+ *     this is a deterministic list, not a canvas with a viewport transform. Shipping
+ *     a zoom control that scales a list would be animation for its own sake and
+ *     would imply a layout the view deliberately does not have (ADR-M10).
  */
 
 export type KnowledgeGraphViewProps = {
@@ -31,6 +48,8 @@ export type KnowledgeGraphViewProps = {
   libraryItems: readonly ResearchLibraryItem[];
   /** Highlight this node's neighbourhood; set when arriving from the wiki. */
   focusClaimId?: string | null;
+  /** Hands the node to the research assistant (reference's `onExpandGraphWithNode`). */
+  onAskAssistantAboutNode?: (node: GraphNode) => void;
 };
 
 const KIND_LABELS: Readonly<Record<GraphNodeKind, string>> = {
@@ -44,7 +63,8 @@ export function KnowledgeGraphView({
   claims,
   evidence,
   libraryItems,
-  focusClaimId = null
+  focusClaimId = null,
+  onAskAssistantAboutNode
 }: KnowledgeGraphViewProps): React.JSX.Element {
   const scope = useWorkspaceScope();
   const graph = useMemo(
@@ -53,13 +73,23 @@ export function KnowledgeGraphView({
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<GraphNodeKind | 'all'>('all');
+  const [filterText, setFilterText] = useState('');
 
   const focusNodeId = focusClaimId === null ? null : `claim:${focusClaimId}`;
   const effectiveSelected = selectedNodeId ?? focusNodeId;
 
+  const query = filterText.trim().toLowerCase();
   const visibleNodes = useMemo(
-    () => (kindFilter === 'all' ? graph.nodes : graph.nodes.filter((node) => node.kind === kindFilter)),
-    [graph.nodes, kindFilter]
+    () =>
+      graph.nodes
+        .filter((node) => kindFilter === 'all' || node.kind === kindFilter)
+        .filter(
+          (node) =>
+            query.length === 0 ||
+            node.label.toLowerCase().includes(query) ||
+            node.detail.toLowerCase().includes(query)
+        ),
+    [graph.nodes, kindFilter, query]
   );
   const selectedNode: GraphNode | null = graph.nodes.find((node) => node.id === effectiveSelected) ?? null;
   const neighbours = selectedNode === null ? [] : graphNeighbors(graph, selectedNode.id);
@@ -81,6 +111,28 @@ export function KnowledgeGraphView({
         <span className="text-muted text-[var(--font-meta-size)]" data-testid="graph-counts">
           {graph.nodes.length} 节点 · {graph.links.length} 关系
         </span>
+        <div className="ml-1 flex h-[var(--control-height-compact)] min-w-[150px] flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2 sm:max-w-[220px]">
+          <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
+          <input
+            value={filterText}
+            onChange={(event) => setFilterText(event.target.value)}
+            placeholder="过滤节点…"
+            aria-label="过滤图谱节点"
+            data-testid="graph-filter-text"
+            className="min-w-0 flex-1 bg-transparent text-ink text-[var(--font-micro-size)] placeholder:text-subtle"
+          />
+          {filterText.length === 0 ? null : (
+            <button
+              type="button"
+              onClick={() => setFilterText('')}
+              aria-label="清除节点过滤"
+              data-testid="graph-filter-clear"
+              className="shrink-0 rounded-control text-subtle hover:text-ink"
+            >
+              <X size={11} aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <div className="ml-1 flex flex-wrap items-center gap-1">
           <button
             type="button"
@@ -121,6 +173,11 @@ export function KnowledgeGraphView({
 
       <div className="flex min-h-0 flex-1">
         <ul className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="图谱节点" data-testid="graph-node-list">
+          {visibleNodes.length === 0 ? (
+            <li className="px-2 py-4 text-muted text-[var(--font-meta-size)]" data-testid="graph-no-match">
+              没有匹配的节点。
+            </li>
+          ) : null}
           {visibleNodes.map((node) => {
             const active = node.id === effectiveSelected;
             return (
@@ -190,6 +247,17 @@ export function KnowledgeGraphView({
                 <ExternalLink size={11} aria-hidden="true" />
                 固定这个节点
               </button>
+              {onAskAssistantAboutNode === undefined ? null : (
+                <button
+                  type="button"
+                  onClick={() => onAskAssistantAboutNode(selectedNode)}
+                  data-testid="graph-ask-assistant"
+                  className="flex h-[var(--control-height-compact)] items-center gap-1 self-start rounded-control border border-line bg-surface px-2 font-medium text-ink text-[var(--font-meta-size)] hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
+                >
+                  <Bot size={11} aria-hidden="true" className="text-[var(--icon-agent)]" />
+                  让助手扩展这个节点
+                </button>
+              )}
               <p className="text-subtle text-[var(--font-micro-size)]">
                 关系只来自后端记录：主张→证据、证据→来源、共享证据的主张↔主张。不生成相似度边。
               </p>

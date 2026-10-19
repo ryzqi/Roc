@@ -166,7 +166,11 @@
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
-    *::after {
+    *::after,
+    /* `::details-content` animates the activity blocks below and is not a `*`
+       match; without it a reduced-motion user would still see the tallest
+       animation in the transcript. */
+    ::details-content {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -200,6 +204,111 @@
   .drag-region {
     -webkit-app-region: drag;
   }
+}
+
+/*
+ * Motion vocabulary, ported 1:1 from `research-studio/src/index.css`.
+ *
+ * Deliberately **unlayered**: research-studio declares these outside Tailwind's
+ * layers, so `.animate-scaleIn` outranks a utility on the same element. Keeping
+ * the same placement means the imported markup behaves the same way here.
+ *
+ * Durations and easing are the originals — 150/180/200ms on
+ * `cubic-bezier(0.16, 1, 0.3, 1)` — and are written as literals rather than the
+ * `--duration-*` tokens because those carry the shell's own 120/180/320 ramp for
+ * micro-interactions. Two different vocabularies; this file keeps them apart.
+ *
+ * `prefers-reduced-motion` is handled once, globally, in the base layer above;
+ * reduced-motion users get the end state with no travel. Components never check
+ * the media query themselves.
+ */
+@keyframes roc-fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes roc-scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes roc-slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: roc-fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scaleIn {
+  animation: roc-scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideInRight {
+  animation: roc-slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/*
+ * Disclosure animation for the activity blocks (T4.4).
+ *
+ * `research-studio` animates its thought and tool-call bodies with
+ * `AnimatePresence` + `{ opacity, height: 0 -> 'auto' }` over 160ms (thought) and
+ * 150ms (tool call) — and those are the two most frequently triggered animations
+ * in the product, because every tool call and every reasoning block is one.
+ *
+ * The port is CSS, not `motion`, and that is a deliberate upgrade rather than a
+ * substitution:
+ *
+ *   - the disclosure is a native `<details>`, which is what keeps it
+ *     keyboard-correct, screen-reader-correct and usable while a stream is still
+ *     arriving. `AnimatePresence` needs a mount/unmount boundary, so porting the
+ *     prototype literally would mean replacing `<details>` with a button plus a
+ *     region and losing those properties;
+ *   - `::details-content` (Chromium 131+) plus `interpolate-size: allow-keywords`
+ *     (Chromium 129+) animates the real disclosure box in **both** directions,
+ *     which is what the prototype achieves and what a `height: 0 -> auto`
+ *     transition on a wrapper could not do without unmounting.
+ *
+ * This app's Electron is Chromium 152, so both are available (verified via
+ * `process.versions.chrome`, not assumed). The failure mode if that ever stops
+ * being true is an instant open with no travel — the block still works.
+ *
+ * The 160ms/ease-out timing is the prototype's; the reduced-motion kill-switch is
+ * the global rule in the base layer above, which now also covers
+ * `::details-content` explicitly.
+ */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+details::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    block-size 0.16s ease-out,
+    opacity 0.16s ease-out,
+    content-visibility 0.16s allow-discrete;
+}
+
+details[open]::details-content {
+  block-size: auto;
+  opacity: 1;
 }
 
 /* KaTeX display math scrolls instead of overflowing the canvas. */

@@ -863,9 +863,19 @@ try {
   assertCheck('2 真索引', '命中列表非空', hitCount > 0, `hits=${hitCount}`);
   const firstHitText = (await hitRows.first().textContent()) ?? '';
   assertCheck('2 真索引', '命中内容包含夹具标记（说明命中的是真内容）', firstHitText.includes(indexNoteMarker), '');
-  const hitOpenId = await hitRows.first().locator('button').first().getAttribute('data-testid');
-  await hitRows.first().locator('button').first().click();
-  await page.waitForSelector('[data-testid="files-view"][data-state="preview"]', { timeout: 30_000 });
+  /**
+   * 按**testid** 定位打开按钮，不用 `button.first()`。
+   *
+   * `button.first()` 断言的是行的 DOM 顺序，不是行的行为：命中行增加一个次要动作（复制片段）
+   * 就会让闸门点到另一个按钮，失败信息还只说「没预览」。逐命中的 `rag-hit-open-<chunkId>`
+   * 是本文件下面（闸门 2）已经在用的写法，这里统一。
+   */
+  const hitOpenButton = hitRows.first().locator('[data-testid^="rag-hit-open-"]');
+  const hitOpenId = await hitOpenButton.getAttribute('data-testid');
+  await hitOpenButton.click();
+  // 工作区文件来源的命中不再跳到画布 `view=files`（那个视图已删）：它选中左栏树里的那一行，并弹出
+  // 预览模态（对齐 research-studio 的 FilePreviewModal）。所以断言的对象是模态里的路径。
+  await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { timeout: 30_000 });
   const previewPath = (await page.textContent('[data-testid="file-preview-path"]')) ?? '';
   assertCheck(
     '2 真索引',
@@ -874,6 +884,10 @@ try {
     `${hitOpenId} → ${previewPath.trim()}`
   );
   await page.screenshot({ path: join(artifactDir, '02-index-hit.png') });
+  // Escape 关掉预览（参考的 FilePreviewModal 就是 Escape/点遮罩关；画布中央的面板盖住了遮罩，
+  // Playwright 按坐标点会点到面板，所以用键盘路径）。后面的步骤要回到画布继续点。
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { state: 'detached', timeout: 15_000 });
 
   // ---- B18 探针（info）：重活之后的 run 还能不能起来 ---------------------------
   //

@@ -159,6 +159,15 @@ export type LiteratureStore = {
   writeToWorkspace: (input: { relativePath: string; content: string }) => Promise<string | null>;
   /** State of the reader's 「问助手」 run (see `LiteratureAssistantState`). */
   assistant: LiteratureAssistantState;
+  /**
+   * Hands an instruction to the research assistant, in the current project.
+   *
+   * One entry point, because three surfaces do it: the reader asks about the selected
+   * paper, the knowledge base asks about a concept, and the graph asks about a node.
+   * Each writing its own `chat.startRun` would be three places to keep `mode`, the
+   * capability list and the thread-adoption contract in agreement.
+   */
+  askAssistant: (prompt: string) => Promise<void>;
   /** Starts a real `chat.startRun` for the selected paper. */
   askAssistantAboutSelected: () => Promise<void>;
   /** Called by the shell once it has adopted `assistant.threadId`. */
@@ -576,46 +585,65 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
 
   /**
-   * Starts a real assistant run about the selected paper.
+   * Hands an instruction to the research assistant.
    *
    * The workspace is deliberately left to the backend: with `researchProjectId`
    * set, the agent resolves the project's own directory (and ignores a renderer
    * supplied path), so passing one from here could only ever disagree with the
    * project record.
    */
+  const askAssistant = useCallback(
+    async (prompt: string): Promise<void> => {
+      if (projectId === null) {
+        setAssistantError('先进入一个研究项目，助手才拿得到项目工具与工作目录。');
+        return;
+      }
+      setAssistantPending(true);
+      setAssistantError(null);
+      try {
+        const result = await client.api.chat.startRun({
+          input: prompt,
+          mode: 'chat',
+          enabledCapabilities: { mcpServers: [], skills: [] },
+          researchProjectId: projectId
+        });
+        if (!result.ok) {
+          setAssistantError(result.error.message);
+          return;
+        }
+        setAssistantThreadId(result.data.threadId);
+      } catch (error) {
+        setAssistantError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setAssistantPending(false);
+      }
+    },
+    [client, projectId]
+  );
+
+  /**
+   * Starts a real assistant run about the selected paper.
+   *
+   * The prompt names the item and, when one exists, the parsed document, so the agent
+   * reads the same paper the reader is showing instead of guessing from the title.
+   */
   const askAssistantAboutSelected = useCallback(async (): Promise<void> => {
-    if (projectId === null || selected === null) {
+    if (selected === null) {
       setAssistantError('先进入项目并选一条文献。');
       return;
     }
     const activeDocument = (documents.data ?? [])[0] ?? null;
-    setAssistantPending(true);
-    setAssistantError(null);
-    try {
-      const result = await client.api.chat.startRun({
-        input: buildLiteratureAssistantPrompt({
-          title: libraryItemTitle(selected),
-          authors: selected.metadata.authors,
-          year: selected.metadata.publishedYear,
-          citationKey: selected.bibliography.citationKey,
-          libraryItemId: selected.id,
-          documentId: activeDocument?.id ?? null
-        }),
-        mode: 'chat',
-        enabledCapabilities: { mcpServers: [], skills: [] },
-        researchProjectId: projectId
-      });
-      if (!result.ok) {
-        setAssistantError(result.error.message);
-        return;
-      }
-      setAssistantThreadId(result.data.threadId);
-    } catch (error) {
-      setAssistantError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setAssistantPending(false);
-    }
-  }, [client, documents.data, projectId, selected]);
+    await askAssistant(
+      buildLiteratureAssistantPrompt({
+        title: libraryItemTitle(selected),
+        authors: selected.metadata.authors,
+        year: selected.metadata.publishedYear,
+        citationKey: selected.bibliography.citationKey,
+        libraryItemId: selected.id,
+        documentId: activeDocument?.id ?? null
+      })
+    );
+  }, [askAssistant, documents.data, selected]);
 
   return {
     client,
@@ -661,6 +689,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     exportItem,
     writeToWorkspace,
     assistant: { pending: assistantPending, error: assistantError, threadId: assistantThreadId },
+    askAssistant,
     askAssistantAboutSelected,
     adoptAssistantThread: () => setAssistantThreadId(null)
   };

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Bookmark, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
+import { AlertCircle, Bookmark, Check, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
+import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { useSettingsRevision } from '../shared/settings-events';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -86,6 +87,16 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const [fileQuery, setFileQuery] = useState('');
   const [actionPending, setActionPending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  /**
+   * Per-hit copy feedback (the reference's `copiedChunkId`).
+   *
+   * A hit is the only place a *chunk* is visible — the contract exposes no chunk
+   * browser (B14) — so copying the retrieved text is how a researcher moves it into
+   * a note or a manuscript, and it needs to say which row was copied rather than
+   * flipping one shared flag on every row at once.
+   */
+  const [copiedChunkId, setCopiedChunkId] = useState<string | null>(null);
+  const hitCopy = useCopyFeedback();
   const scope = useWorkspaceScope();
 
   /**
@@ -422,6 +433,23 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                       <span className="min-w-0 flex-1 truncate font-mono text-subtle text-[var(--font-micro-size)]">
                         {hit.sourceType} · {hit.locator ?? '无 locator'}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          hitCopy.copy(hit.content);
+                          setCopiedChunkId(hit.chunkId);
+                        }}
+                        title="复制这条命中的正文"
+                        data-testid={`rag-hit-copy-${hit.chunkId}`}
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                      >
+                        {hitCopy.copied && copiedChunkId === hit.chunkId ? (
+                          <Check size={10} aria-hidden="true" className="text-[var(--st-ok)]" />
+                        ) : (
+                          <ClipboardCopy size={10} aria-hidden="true" />
+                        )}
+                        {hitCopy.copied && copiedChunkId === hit.chunkId ? '已复制' : '复制'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => openHit(hit)}

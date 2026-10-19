@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { ArrowLeft, BookOpen, FolderTree, Loader2, MessagesSquare, Moon, RotateCcw, Sliders, Sun, SunMoon } from 'lucide-react';
+import { BookOpen, FolderGit2, FolderTree, Loader2, MessagesSquare, Moon, RotateCcw, Sliders, Sun, SunMoon } from 'lucide-react';
 import type { SidebarTab } from '../app/ui-state';
 import { SessionListView } from '../assistant/SessionListView';
 import { FileSidebarPanel } from '../canvas/files/FileSidebarPanel';
@@ -17,8 +17,35 @@ import { EmptyState } from './EmptyState';
  * navigation (MASTER v2 §1.5). New tabs require a MASTER amendment.
  *
  * Interaction rules: rows are 36-40px with `--r-card` radius, hover uses a
- * subtle fill, the selected tab uses `--accent-soft`, and nothing gets
+ * subtle fill, the selected tab is a raised surface, and nothing gets
  * `cursor: pointer` (MASTER v2 §6.2).
+ *
+ * ## Visual port
+ *
+ * The four bands are the reference's four bands
+ * (`research-studio/src/components/LeftSidebar.tsx`), in the same order and with
+ * the same material logic:
+ *
+ *   1. **project banner** — folder glyph + slug + 「切换课题」, on `--surface/90`.
+ *      This replaces P1's plain title row and its lone back arrow: the prototype
+ *      answers "which project am I in" and "how do I leave" in one strip, which is
+ *      the question a three-column workbench has to answer above the fold.
+ *   2. **segmented tabs** — a recessed track (`bg-bg/90`, 1px border) holding
+ *      three equal buttons, the selected one raised (`--surface-card-hover` +
+ *      `--shadow-card`). The tab strip is a *control*, so its selected state is an
+ *      inset track and a raised chip rather than an accent wash the way a list
+ *      row would be.
+ *   3. **panel** — unchanged, each tab's own body.
+ *   4. **bottom bar** — the theme control as one full-width button, plus the
+ *      management entry the chrome also offers.
+ *
+ * Colours use the token layer only; the four icon hues come from `--icon-*`, which
+ * is what keeps the reference's category colours from becoming literal hexes.
+ *
+ * The theme control is labelled by its **action** (「深色」 while the app is
+ * light), matching both the reference and MASTER v2 §11's "name controls by user
+ * action". The current state lives in the `title`, so the label never has to be
+ * read as an ambiguous toggle.
  *
  * P1 rendered empty states only; P3 fills 文件 (real tree + name search + new
  * file), P5 fills 文献, P4 fills 会话.
@@ -32,6 +59,8 @@ export type LeftSidebarProps = {
   projectName: string;
   /** Backend binding state for the project's configured directory (T3.1). */
   binding: BoundWorkspace;
+  /** A file the shell asked the 文件 tab to reveal **and preview** (see `SidebarFilesTab`). */
+  previewRequest?: { relativePath: string; nonce: number } | null;
   /** Archived projects are read-only: no file creation, no writes. */
   writable: boolean;
   /** Workspace-relative path of the file open in the canvas, if any. */
@@ -58,10 +87,10 @@ export type LeftSidebarProps = {
   onOpenManagement: () => void;
 };
 
-const TABS: Array<{ id: SidebarTab; label: string; icon: typeof FolderTree }> = [
-  { id: 'files', label: '文件', icon: FolderTree },
-  { id: 'literature', label: '文献', icon: BookOpen },
-  { id: 'sessions', label: '会话', icon: MessagesSquare }
+const TABS: Array<{ id: SidebarTab; label: string; icon: typeof FolderTree; iconClass: string }> = [
+  { id: 'files', label: '文件', icon: FolderTree, iconClass: 'text-[var(--icon-file)]' },
+  { id: 'literature', label: '文献', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  { id: 'sessions', label: '会话', icon: MessagesSquare, iconClass: 'text-muted' }
 ];
 
 /**
@@ -91,17 +120,39 @@ function SidebarLiteratureTab({
   );
 }
 
-function themeIcon(override: 'system' | 'light' | 'dark'): React.JSX.Element {
+/**
+ * The theme control, labelled by what pressing it *does*.
+ *
+ * `system` is not "follow the system, and also the system is light" — it is its own
+ * state, so it keeps its own label and icon. The other two name their destination.
+ */
+function themeAction(override: 'system' | 'light' | 'dark'): {
+  icon: React.JSX.Element;
+  label: string;
+  iconClass: string;
+} {
   if (override === 'light') {
-    return <Sun size={13} aria-hidden="true" />;
+    return {
+      icon: <Moon size={12} aria-hidden="true" />,
+      label: '深色',
+      iconClass: 'text-[var(--icon-theme-moon)]'
+    };
   }
   if (override === 'dark') {
-    return <Moon size={13} aria-hidden="true" />;
+    return {
+      icon: <Sun size={12} aria-hidden="true" />,
+      label: '浅色',
+      iconClass: 'text-[var(--icon-theme-sun)]'
+    };
   }
-  return <SunMoon size={13} aria-hidden="true" />;
+  return {
+    icon: <SunMoon size={12} aria-hidden="true" />,
+    label: '跟随系统',
+    iconClass: 'text-muted'
+  };
 }
 
-function themeLabel(override: 'system' | 'light' | 'dark'): string {
+function themeState(override: 'system' | 'light' | 'dark'): string {
   if (override === 'light') {
     return '浅色';
   }
@@ -134,7 +185,8 @@ function SidebarFilesTab({
   onOpenFile,
   onSelectWorkspace,
   workspacePending,
-  workspaceError
+  workspaceError,
+  previewRequest
 }: {
   client: RocClient;
   projectId: string | null;
@@ -145,6 +197,15 @@ function SidebarFilesTab({
   onSelectWorkspace: () => void;
   workspacePending: boolean;
   workspaceError: string | null;
+  /**
+   * A file another surface asked to preview (the RAG hit's 「打开来源文件」).
+   *
+   * The preview overlay is view state and lives in `FileSidebarPanel`, which is also where
+   * the tree is — so a nonce is the only thing that has to travel. The nonce is compared
+   * against the last one seen, so asking for the *same* file twice still opens it, and a
+   * re-render never re-opens a preview the user just closed.
+   */
+  previewRequest: { relativePath: string; nonce: number } | null;
 }): React.JSX.Element {
   if (binding.desiredPath === null) {
     return (
@@ -218,6 +279,7 @@ function SidebarFilesTab({
         writable={writable}
         openFile={openFile}
         onOpenFile={onOpenFile}
+        previewRequest={previewRequest}
       />
       {workspaceError === null ? null : (
         <p
@@ -239,6 +301,7 @@ export function LeftSidebar({
   projectId,
   projectName,
   binding,
+  previewRequest = null,
   writable,
   openFile,
   onOpenFile,
@@ -276,65 +339,78 @@ export function LeftSidebar({
     tabRefs.current.get(nextTab)?.focus();
   };
 
+  const theme = themeAction(themeOverride);
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg-soft" data-testid="sidebar">
-      <div className="flex items-center gap-1 border-b border-line px-2 py-2">
+    <div className="flex h-full min-h-0 flex-col bg-bg text-text" data-testid="sidebar">
+      {/* Band 1 — current project, and the way out of it. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line bg-surface/90 px-2.5 py-1.5">
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-text">
+          <FolderGit2 size={12} aria-hidden="true" className="shrink-0 text-muted" />
+          <span
+            className="truncate font-medium text-[var(--font-micro-size)]"
+            title={projectName}
+            data-testid="sidebar-project-name"
+          >
+            {projectName}
+          </span>
+        </span>
         <button
           type="button"
           onClick={onBackToPortal}
-          aria-label="返回项目列表"
-          title="返回项目列表"
-          className="rounded-control p-1.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          title="返回研究项目门户"
+          className="shrink-0 rounded-control px-1 py-0.5 text-muted text-[var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink"
         >
-          <ArrowLeft size={14} aria-hidden="true" />
+          切换课题
         </button>
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-ink text-[var(--font-meta-size)]"
-          title={projectName}
-          data-testid="sidebar-project-name"
+      </div>
+
+      {/* Band 2 — the segmented tab track. */}
+      <div className="shrink-0 border-b border-line bg-surface/60 p-2">
+        <div
+          role="tablist"
+          aria-label="项目上下文"
+          className="flex items-center gap-1 rounded-card border border-line bg-bg/90 p-0.5"
         >
-          {projectName}
-        </span>
-      </div>
-
-      <div role="tablist" aria-label="项目上下文" className="flex shrink-0 items-center gap-0.5 px-2 py-1.5">
-        {TABS.map((tab, index) => {
-          const selected = tab.id === activeTab;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              ref={(element) => {
-                if (element === null) {
-                  tabRefs.current.delete(tab.id);
-                  return;
+          {TABS.map((tab, index) => {
+            const selected = tab.id === activeTab;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                ref={(element) => {
+                  if (element === null) {
+                    tabRefs.current.delete(tab.id);
+                    return;
+                  }
+                  tabRefs.current.set(tab.id, element);
+                }}
+                role="tab"
+                id={`sidebar-tab-${tab.id}`}
+                aria-selected={selected}
+                // Only the rendered panel can be pointed at; the inactive panels
+                // do not exist, so an unconditional `aria-controls` would be a
+                // dangling reference for two of the three tabs.
+                aria-controls={selected ? `sidebar-panel-${tab.id}` : undefined}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => onTabChange(tab.id)}
+                onKeyDown={(event) => onTabKeyDown(event, index)}
+                data-testid={`sidebar-tab-${tab.id}`}
+                className={
+                  selected
+                    ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)]'
+                    : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]'
                 }
-                tabRefs.current.set(tab.id, element);
-              }}
-              role="tab"
-              id={`sidebar-tab-${tab.id}`}
-              aria-selected={selected}
-              // Only the rendered panel can be pointed at; the inactive panels
-              // do not exist, so an unconditional `aria-controls` would be a
-              // dangling reference for two of the three tabs.
-              aria-controls={selected ? `sidebar-panel-${tab.id}` : undefined}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => onTabChange(tab.id)}
-              onKeyDown={(event) => onTabKeyDown(event, index)}
-              data-testid={`sidebar-tab-${tab.id}`}
-              className={
-                selected
-                  ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control bg-accent-soft text-ink active:bg-[var(--accent-soft-strong)]'
-                  : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
-              }
-            >
-              <Icon size={13} aria-hidden="true" />
-              <span className="text-[var(--font-meta-size)]">{tab.label}</span>
-            </button>
-          );
-        })}
+              >
+                <Icon size={12} aria-hidden="true" className={tab.iconClass} />
+                <span className="text-[var(--font-meta-size)]">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
+      {/* Band 3 — the selected tab's body. */}
       <div
         role="tabpanel"
         id={`sidebar-panel-${activeTab}`}
@@ -354,6 +430,7 @@ export function LeftSidebar({
             onSelectWorkspace={onSelectWorkspace}
             workspacePending={workspacePending}
             workspaceError={workspaceError}
+            previewRequest={previewRequest}
           />
         ) : activeTab === 'sessions' ? (
           <SessionListView
@@ -368,17 +445,18 @@ export function LeftSidebar({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 border-t border-line px-2 py-2">
+      {/* Band 4 — theme + management. */}
+      <div className="flex shrink-0 items-center gap-1.5 border-t border-line bg-surface/50 p-2">
         <button
           type="button"
           onClick={onCycleTheme}
-          title={`主题：${themeLabel(themeOverride)}（⌘D 切换）`}
-          aria-label={`主题：${themeLabel(themeOverride)}，点击切换`}
+          title={`切换为${theme.label}（⌘D）· 当前 ${themeState(themeOverride)}`}
+          aria-label={`切换为${theme.label}，当前 ${themeState(themeOverride)}`}
           data-testid="sidebar-theme-toggle"
-          className="flex h-[var(--control-height-compact)] flex-1 items-center gap-1.5 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-2 rounded-card border border-line bg-surface font-medium text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
-          {themeIcon(themeOverride)}
-          <span className="truncate text-[var(--font-meta-size)]">{themeLabel(themeOverride)}</span>
+          <span className={theme.iconClass}>{theme.icon}</span>
+          <span className="truncate">{theme.label}</span>
         </button>
         <button
           type="button"
@@ -386,9 +464,9 @@ export function LeftSidebar({
           title="管理（记忆 / 技能 / MCP / 任务）"
           aria-label="打开管理面板"
           data-testid="sidebar-management"
-          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-card border border-line bg-surface px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
-          <Sliders size={13} aria-hidden="true" />
+          <Sliders size={13} aria-hidden="true" className="text-[var(--icon-manage)]" />
         </button>
       </div>
     </div>

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FilePlus2, Loader2, Search, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
 import { joinRelative, parentRelative, checkRelativePath, pathRejectionMessage } from '../../workspace/paths';
 import { useFileNameSearch } from '../../workspace/use-file-search';
 import { writeTextFile } from '../../workspace/workspace-store';
+import { FilePreview } from './FilePreview';
 import { FileTreeView } from './FileTreeView';
 
 /**
@@ -24,6 +25,18 @@ import { FileTreeView } from './FileTreeView';
  * typed `../` is refused here with the same specific message the backend would
  * give — R10 wants the failure early, not different.
  *
+ * ## Clicking a row opens the preview modal, not a canvas page
+ *
+ * This is the reference's model (`FileTreeView` → `onPreviewFile` → `FilePreviewModal`):
+ * the tree is the file *list*, and the file itself is a modal over whatever canvas view is
+ * open. It replaced the canvas `files` view, which meant clicking a file navigated the
+ * whole canvas away — so a researcher reading a paper lost it by looking at a `notes.md`.
+ *
+ * Selection still travels through the URL (`onOpenFile` → `?file=`), because that is what
+ * the tree reads to reveal and highlight the row, and because a reload must land on the
+ * same file (ADR-M05). The modal is opened here, next to the click, instead of being
+ * derived from the route: which overlay is on screen is view state, not navigation.
+ *
  * A create form is hidden entirely for an archived project rather than disabled
  * after the fact: `files.writeText` must not be reachable when the project is
  * read-only.
@@ -39,6 +52,8 @@ export type FileSidebarPanelProps = {
   writable: boolean;
   openFile: string | null;
   onOpenFile: (relativePath: string) => void;
+  /** A file another surface asked to preview; see `LeftSidebar`'s `SidebarFilesTab`. */
+  previewRequest?: { relativePath: string; nonce: number } | null;
 };
 
 export function FileSidebarPanel({
@@ -47,7 +62,8 @@ export function FileSidebarPanel({
   projectId,
   writable,
   openFile,
-  onOpenFile
+  onOpenFile,
+  previewRequest = null
 }: FileSidebarPanelProps): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
@@ -56,16 +72,88 @@ export function FileSidebarPanel({
   const [creatingPending, setCreatingPending] = useState(false);
   /** Set when a search result is opened, so the tree can reveal it (T3.4). */
   const [revealPath, setRevealPath] = useState<string | null>(null);
+  /** The file whose preview modal is open (reference: `FilePreviewModal` over the canvas). */
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewDirty, setPreviewDirty] = useState(false);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Escape closes the preview, from anywhere.
+   *
+   * A keydown handler on the panel would only fire when focus is already inside it, and the
+   * click that opens a preview leaves focus on the tree row — so the listener has to be on the
+   * window. It is installed only while a preview is open, and it stops propagation so the
+   * shell's own Escape handling (which would close a drawer underneath) does not also run.
+   */
+  useEffect(() => {
+    if (previewPath === null) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!previewDirty || window.confirm('这个文件有未保存的修改。关闭会丢弃它们。')) {
+        setPreviewPath(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    // The dialog owns the keyboard while it is up: without this, the next Tab would walk the
+    // tree behind the scrim, which a modal preview must not allow.
+    previewPanelRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [previewPath, previewDirty]);
 
   const search = useFileNameSearch(client, workspacePathKey, query);
   const searching = query.trim().length > 0;
+
+  const openFileForPreview = (relativePath: string): void => {
+    setPreviewPath(relativePath);
+    onOpenFile(relativePath);
+  };
+
+  /**
+   * Adopt a preview request from another surface.
+   *
+   * The nonce is compared against the last one seen, so asking for the *same* file twice still
+   * opens it and a re-render never re-opens a preview the user just closed. The selection
+   * travels with it, so the tree highlights the row and `?file=` stays the single source of
+   * which file is current.
+   */
+  const lastPreviewRequestRef = useRef(0);
+  useEffect(() => {
+    if (previewRequest === null || previewRequest.nonce === lastPreviewRequestRef.current) {
+      return;
+    }
+    lastPreviewRequestRef.current = previewRequest.nonce;
+    setQuery('');
+    setRevealPath(previewRequest.relativePath);
+    setPreviewPath(previewRequest.relativePath);
+    // `onOpenFile` is re-created by the shell each render, so it is deliberately not a
+    // dependency: the request identity is the trigger.
+  }, [previewRequest]);
 
   const openFromSearch = (relativePath: string): void => {
     // Clear the query first so the tree is what the reveal lands in.
     setQuery('');
     setRevealPath(relativePath);
-    onOpenFile(relativePath);
+    openFileForPreview(relativePath);
   };
+
+  /**
+   * The open file, validated locally before anything is requested (R10).
+   *
+   * This check used to live in the canvas `files` view. That view is gone — the reference
+   * reveals files in this tree — so the tree/panel pair owns selection and the refusal that
+   * goes with it.
+   */
+  const openPathCheck = openFile === null ? null : checkRelativePath(openFile);
+  const rejectedPath =
+    openFile !== null && openPathCheck !== null && !openPathCheck.ok
+      ? { relativePath: openFile, reason: openPathCheck.reason }
+      : null;
 
   const targetDirectory = openFile === null ? '' : parentRelative(openFile);
 
@@ -98,7 +186,7 @@ export function FileSidebarPanel({
     }
     setCreating(false);
     setDraftName('');
-    onOpenFile(relativePath);
+    openFileForPreview(relativePath);
   };
 
   const createForm = writable && creating ? (
@@ -201,8 +289,9 @@ export function FileSidebarPanel({
             workspacePathKey={workspacePathKey}
             projectId={projectId}
             selectedPath={openFile}
-            onOpenFile={onOpenFile}
+            onOpenFile={openFileForPreview}
             revealPath={revealPath}
+            rejectedPath={rejectedPath}
           />
         ) : search.status === 'loading' ? (
           <p className="flex items-center gap-2 px-3 py-3 text-muted" role="status" data-testid="file-search-loading">
@@ -247,6 +336,59 @@ export function FileSidebarPanel({
           </ul>
         )}
       </div>
+
+      {/*
+        The preview overlay, which is the reference's model (`FilePreviewModal`). It lives
+        here — next to the tree, which is where a file is chosen — rather than in the canvas,
+        so the canvas keeps showing whatever view the user was reading.
+
+        ## Why this is not `ModalShell`
+
+        The shell's shared overlay adds things a *file* preview should not have: a header bar
+        with the path and a close button (the preview already shows the path and its own
+        actions), `aria-hidden` on `#root`, an overlay-stack entry that suppresses the global
+        shortcuts — and, for this surface, a focus-trap effect whose cleanup races the exit
+        animation and can put focus back on `<body>` (the defect `OverlayFocusRestore` records).
+        The reference's `FilePreviewModal` is the same shape: its own scrim and panel, no shared
+        shell. Escape and the scrim still close it, which is the whole interaction contract of a
+        preview.
+      */}
+      {previewPath === null ? null : (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          data-testid="file-preview-modal"
+          data-overlay-kind="modal"
+        >
+          <div
+            aria-hidden="true"
+            data-testid="file-preview-modal-scrim"
+            onClick={() => {
+              if (!previewDirty || window.confirm('这个文件有未保存的修改。关闭会丢弃它们。')) {
+                setPreviewPath(null);
+              }
+            }}
+            className="absolute inset-0 bg-[var(--overlay-scrim)]"
+          />
+          <div
+            ref={previewPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`预览 ${previewPath}`}
+            data-testid="file-preview-modal-panel"
+            tabIndex={-1}
+            className="relative z-10 flex h-[min(86vh,760px)] w-[min(1100px,92vw)] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] focus:outline-none"
+          >
+            <FilePreview
+              client={client}
+              relativePath={previewPath}
+              workspacePath={workspacePathKey}
+              writable={writable}
+              onDirtyChange={setPreviewDirty}
+              onClose={() => setPreviewPath(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

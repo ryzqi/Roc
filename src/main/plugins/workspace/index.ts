@@ -99,9 +99,18 @@ const workspaceCapabilityDescriptors = [
   descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
+/**
+ * `workspaceService` lets another plugin read the **same** binding this plugin owns.
+ *
+ * `workspace.select` is the only writer of `WorkspaceService.currentWorkspace`, so a second
+ * instance would be a second answer to "which directory is bound" — the memory plugin needs the
+ * one the shell actually selected for its two project memory slots (B26). When it is omitted the
+ * plugin keeps its own instance, which is what the standalone tests want.
+ */
 export type WorkspacePluginOptions = {
   rootDir?: string;
   workspaceConfigService?: WorkspaceConfigService;
+  workspaceService?: WorkspaceService;
 };
 
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
@@ -124,7 +133,9 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
     initialize: async (context) => {
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
-      const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
+      const workspaceService =
+        options.workspaceService ??
+        new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
       workspaceChangeWatcher = new WorkspaceChangeWatcherService({

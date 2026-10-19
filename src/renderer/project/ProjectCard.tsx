@@ -15,6 +15,13 @@ import { projectStageLabel, projectStatusLabel } from './project-store';
  * visual order by keyboard and each carries its own `aria-label`. Archive and
  * delete are destructive-adjacent and live away from the card's primary click
  * target — the card body opens the project, the footer acts on it.
+ *
+ * The hover lift (`-translate-y-0.5` + `--shadow-card-hover`) is the reference's
+ * (`hover:-translate-y-0.5 hover:shadow-lg`). It is a state signal, not decoration:
+ * the grid has no other cue that the whole card — not just its footer — is the
+ * click target. Under `prefers-reduced-motion` the translate is switched off
+ * rather than sped up, because the global rule in `styles/index.css` collapses
+ * transitions to 0.01ms, which would turn a smooth lift into a 2px jump.
  */
 
 export type ProjectCardProps = {
@@ -50,7 +57,7 @@ export function ProjectCard({
       className={
         archived
           ? 'group flex flex-col rounded-card border border-line-soft bg-surface opacity-80'
-          : 'group flex flex-col rounded-card border border-line bg-surface hover:border-accent'
+          : 'group flex flex-col rounded-card border border-line bg-surface transition-all duration-[var(--duration-fast)] hover:-translate-y-0.5 hover:border-accent hover:shadow-[var(--shadow-card-hover)] motion-reduce:hover:translate-y-0'
       }
     >
       <button

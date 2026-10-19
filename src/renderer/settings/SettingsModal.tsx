@@ -1,5 +1,20 @@
 import { useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArchiveRestore,
+  BookOpen,
+  Brain,
+  CalendarClock,
+  Cpu,
+  Database,
+  FileCode,
+  KeyRound,
+  Layers,
+  Shield,
+  Sliders,
+  Webhook,
+  type LucideIcon
+} from 'lucide-react';
 import { ModalShell } from '../shell/ModalShell';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { EmptyState } from '../shell/EmptyState';
@@ -18,13 +33,41 @@ import { LiteratureSection, SandboxSection } from './sections/ReadOnlySections';
 import { GuardrailSection, MemorySection } from './sections/SecuritySections';
 
 /**
+ * Section glyphs.
+ *
+ * The reference's settings rail carries an icon on every row (`Layers` / `Database` /
+ * `BookOpen` / `FileCode` / `Shield` / `Sliders`), and that is most of what makes the rail
+ * scannable at a glance. They live here rather than in `settings-rules.ts` on purpose: that
+ * module holds pure data and is imported by `tests/unit/renderer-settings.test.mjs`, so
+ * pulling a React component library into it would make the rules layer depend on the view
+ * layer. Five of these are the reference's own glyphs for the sections it had; the other
+ * seven extend the same vocabulary to the sections this build added.
+ *
+ * Monochrome by design — the reference tints its icons only by selected state, and the hue
+ * a selected row needs is already carried by the row's own surface.
+ */
+const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
+  models: Layers,
+  'default-model': Cpu,
+  rag: Database,
+  literature: BookOpen,
+  sandbox: FileCode,
+  guardrail: Shield,
+  app: Sliders,
+  tasks: CalendarClock,
+  authorization: KeyRound,
+  hooks: Webhook,
+  memory: Brain,
+  backup: ArchiveRestore
+};
+
+/**
  * Settings centre (P8/T8.2–T8.4).
  *
  * ## Fixed shape (MASTER v2 §6.7)
  *
  * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 220px section list with 40px rows, a dirty bar
- * pinned above the scrolling form, and the twelve sections in their normative order. The
- * height is passed through `widthClassName` because `ModalShell` only caps its panel; a
+ * pinned above the scrolling form, and the twelve sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
  * settings window that scrolls the whole modal (header and section list included) loses the
  * dirty bar exactly when it matters.
  *
@@ -238,20 +281,23 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         testId="settings-modal"
         initialFocusRef={activeTabRef}
         returnFocusSelector='[data-testid="titlebar-settings"]'
+        // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
+        bodyPadding="none"
       >
-        <div className="flex h-full gap-3">
+        <div className="flex h-full">
           <div
             ref={listRef}
             role="tablist"
             aria-orientation="vertical"
             aria-label="设置分区"
             onKeyDown={onListKeyDown}
-            className="flex w-[220px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line pr-2"
+            className="flex w-[190px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-bg p-2"
             data-testid="settings-sections"
           >
             {SETTINGS_SECTIONS.map((section) => {
               const selected = section.id === activeSection;
               const sectionDirty = store.dirtySections.has(section.id);
+              const Icon = SECTION_ICONS[section.id];
               return (
                 <button
                   key={section.id}
@@ -269,16 +315,21 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                   data-testid={`settings-section-${section.id}`}
                   className={
                     selected
-                      ? 'flex h-10 items-center gap-1.5 rounded-control bg-accent-soft px-2.5 text-left text-ink active:bg-[var(--accent-soft-strong)]'
-                      : 'flex h-10 items-center gap-1.5 rounded-control px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                      ? 'flex h-10 items-center gap-2 rounded-card border border-line-strong bg-[var(--surface-card-hover)] px-2.5 text-left font-semibold text-ink shadow-[var(--shadow-card)]'
+                      : 'flex h-10 items-center gap-2 rounded-card border border-transparent px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
                   }
                 >
+                  <Icon
+                    size={13}
+                    aria-hidden="true"
+                    className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
+                  />
                   <span className="text-[var(--font-meta-size)]">{section.label}</span>
                   {sectionDirty ? (
                     <>
                       <span
                         aria-hidden="true"
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
+                        className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
                         data-testid={`settings-dirty-dot-${section.id}`}
                       />
                       <span className="sr-only">（有未保存的修改）</span>
@@ -289,7 +340,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             })}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col p-3">
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-2">
               <span className="min-w-0 flex-1 text-muted text-[var(--font-meta-size)]" data-testid="settings-dirty-bar">
                 {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}

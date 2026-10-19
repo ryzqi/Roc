@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
+import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
 import type { ChatRunMode } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -30,6 +30,21 @@ import { useChatSession } from './use-chat-session';
  *     duplicating a half-write. Stage label arrives with P6; until then only the project name
  *     is shown rather than a guessed stage.
  *
+ * ## The model pill
+ *
+ * `research-studio`'s header opens a dropdown on that pill: the configured models, with
+ * 「设置模型与服务」 as its last row. The **pill** is ported (Bot glyph in `--icon-agent`,
+ * label, trailing affordance, raised surface) because it is the header's visual signature,
+ * but the dropdown is not — and that is a contract reason, not a scope one: `settings.save`
+ * is a **whole document**, not a patch (`SettingsSaveRequest`). The settings centre owns a
+ * dirty draft of that document and is the only surface that knows which fields the user has
+ * already changed; a switcher in the assistant would have to re-send every field it did not
+ * load, making it a second writer of a whole-document resource.
+ *
+ * So the trailing affordance is `Settings2`, not `ChevronDown`: the control really does open
+ * the settings centre, and a chevron would promise a menu that does not exist. Recorded here
+ * rather than left as a silent difference from the reference.
+ *
  * `threadId` is component state and is cleared when the project changes: a thread belongs to
  * one project's conversation, and carrying it across projects would be exactly the leak gate 6
  * is about.
@@ -53,6 +68,15 @@ export type AssistantPanelProps = {
   composerSeed?: { text: string; nonce: number } | null;
   /** Tells the owner the seed has been applied, so it can be dropped (a remount must not replay it). */
   onComposerSeedConsumed?: () => void;
+  /**
+   * Puts the assistant column back to its default width.
+   *
+   * The reference puts this in its conversation header. The shell already offers the
+   * same operation on the divider (double-click, and `Home` while it is focused), and
+   * this calls the same `resetAssistant` — it is duplicated here because a double-click
+   * on a 1px hairline is not discoverable while the header button is.
+   */
+  onResetWidth?: () => void;
 };
 
 export function AssistantPanel({
@@ -65,7 +89,8 @@ export function AssistantPanel({
   stageLabel = null,
   onOpenSettings,
   composerSeed = null,
-  onComposerSeedConsumed
+  onComposerSeedConsumed,
+  onResetWidth
 }: AssistantPanelProps): React.JSX.Element {
   /**
    * The settings revision is part of the key, not just a reload trigger: a save in the
@@ -197,6 +222,14 @@ export function AssistantPanel({
           {projectName === null ? '未进入项目' : projectName}
           {stageLabel === null ? '' : ` · ${stageLabel}`}
         </span>
+        {/* The reference's header counts the messages it is showing — the one number
+            that says a long run is still producing output. */}
+        <span
+          className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]"
+          data-testid="assistant-message-count"
+        >
+          {session.messages.length} 条消息
+        </span>
         {statusLabel === null ? null : (
           <span
             className={
@@ -218,10 +251,24 @@ export function AssistantPanel({
           onClick={onOpenSettings}
           title="模型与思考开关在设置中心（唯一可写位置）"
           data-testid="assistant-model-settings"
-          className="h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 truncate rounded-control border border-line px-2 font-mono text-muted text-[var(--font-micro-size)] hover:text-ink"
+          className="flex h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 items-center gap-1.5 rounded-card border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
         >
-          {modelLabel}
+          <Bot size={13} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
+          <span className="min-w-0 truncate font-medium tracking-tight">{modelLabel}</span>
+          <Settings2 size={11} aria-hidden="true" className="shrink-0 text-muted" />
         </button>
+        {onResetWidth === undefined ? null : (
+          <button
+            type="button"
+            onClick={onResetWidth}
+            title="重置助手宽度"
+            aria-label="重置助手宽度"
+            data-testid="assistant-reset-width"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-card text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          >
+            <Minimize2 size={13} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -13,8 +13,11 @@
  *   5. 设置打开（⌘,）→ 改一个真字段 → 保存 → 脏状态条清空、没有保存错误
  *   6. 文件预览 / Git 状态 / 终端会话（真 IPC + 真 pty 输出）
  *
- * 4（审批）与 7（人工闸门）由 P4 / P6 的验收闸门深度覆盖，`--full` 会把它们作为子进程跑一遍，
+ * 4（审批）由 P4 的验收闸门深度覆盖，`--full` 会把它作为子进程跑一遍，
  * 而不是在这里再抄一遍断言（重复的断言会分叉）。
+ *
+ * 「7 人工闸门」曾由 P6 的验收闸门覆盖；P6/P7 整面已随 research-studio 对齐删除
+ * （见 `docs/adr/0024-stage-surface-removed-for-parity.md`），所以这条路径不再有闸门。
  *
  * 运行：
  *   rm -rf dist/renderer && pnpm build
@@ -167,19 +170,22 @@ try {
   await page.screenshot({ path: join(artifactDir, 'canvas.png') });
 
   // ---- 6 文件预览 / Git / 终端 ---------------------------------------------------
-  await navigate(page, `page=research&project=${preflight.projectId}&view=files&tool=files`);
+  await navigate(page, `page=research&project=${preflight.projectId}&tool=files`);
   await page.waitForSelector('[data-testid="file-tree-row-00-overview.txt"]', { timeout: 20_000 });
   await page.click('[data-testid="file-tree-row-00-overview.txt"]');
   await page.waitForSelector('[data-testid="file-preview"]', { timeout: 20_000 });
   const previewText = (await page.locator('[data-testid="file-preview"]').textContent()) ?? '';
   assertCheck('6 工作区', '文件预览显示磁盘上的真实内容', previewText.includes('workspace overview smoke file'), previewText.slice(0, 60));
+  // Escape 关掉预览（参考的 FilePreviewModal 就是 Escape/点遮罩关），否则它会盖住后面的步骤。
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { state: 'detached', timeout: 15_000 });
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=changes&tool=git`);
+  await navigate(page, `page=research&project=${preflight.projectId}&tool=git`);
   await page.waitForSelector('[data-testid="git-panel"]', { timeout: 20_000 });
   const branch = (await page.locator('[data-testid="git-current-branch"]').textContent()) ?? '';
   assertCheck('6 工作区', 'Git 面板读到真实分支名', branch.trim().length > 0, branch.trim().slice(0, 40));
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=terminal&tool=terminal`);
+  await navigate(page, `page=research&project=${preflight.projectId}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-xterm"]', { timeout: 20_000 });
   await page.click('[data-testid="terminal-xterm"]');
   await page.keyboard.type("printf 'ROC_SMOKE_PTY_OK\\n'");
@@ -245,7 +251,7 @@ try {
   }
   assertCheck('3 助手', '默认模型指向 stub provider 且密钥进了 safeStorage', configured.defaultModelId === smokeModelKey && configured.secretStored, JSON.stringify(configured));
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${preflight.projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
   await page.fill('[data-testid="assistant-composer-input"]', '用一句话说明这次 smoke 在验证什么。');
   await page.focus('[data-testid="assistant-composer-input"]');
@@ -322,10 +328,10 @@ try {
   writeFileSync(join(artifactDir, 'result.json'), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   console.log(`\n新壳 smoke：${results.length - failed.length}/${results.length} 通过${failed.length === 0 ? '' : ` · 失败 ${failed.length}`}`);
 
-  // 4（审批）与 7（人工闸门）由对应阶段的验收闸门深度覆盖；`--full` 顺带跑一遍，
-  // 而不是在这里抄一份会分叉的断言。
+  // 4（审批）由对应的验收闸门深度覆盖；`--full` 顺带跑一遍，而不是在这里抄一份会分叉的断言。
+  // 人工闸门（原 P6）的闸门随阶段面一起删除：它的断言对象已经不存在。
   if (full && failed.length === 0) {
-    for (const script of ['scripts/verify-p4-assistant.mjs', 'scripts/verify-p6-workflow.mjs']) {
+    for (const script of ['scripts/verify-p4-assistant.mjs']) {
       console.log(`\n=== 深度路径：${script}`);
       const child = spawnSync('node', [script], { stdio: 'inherit', env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
       if (child.status !== 0) {
@@ -334,7 +340,7 @@ try {
       }
     }
   } else if (!full) {
-    console.log('（审批与人工闸门路径见 `pnpm verify:p4-assistant` / `pnpm verify:p6-workflow`；`--full` 会一并跑）');
+    console.log('（审批路径见 `pnpm verify:p4-assistant`；`--full` 会一并跑）');
   }
   if (failed.length > 0) {
     process.exitCode = 1;

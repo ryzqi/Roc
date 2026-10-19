@@ -85,13 +85,15 @@ test('capacity uses code points, not UTF-16 units', () => {
 test('a slot the backend did not report is distinguishable from an empty one', () => {
   const slot = memory.findSlot('workspace', 'agents');
   assert.equal(memory.slotUnavailableReason(null, slot), '后端没有返回这个槽位。');
-  // The reason is a wiring gap (the shell hands the memory plugin `getWorkspace: () => null`), so it
-  // must not tell the user to "bind a workspace first" — that cannot make the slot work (B26).
+  // An ineffective workspace slot now means "no working directory is bound", so the reason must be
+  // actionable (bind one) rather than describing a permanent wiring gap — B26 is fixed.
   const workspaceReason = memory.slotUnavailableReason(
     { scope: 'workspace', kind: 'agents', exists: false, charCount: 0, charLimit: 20000, absolutePath: '', effective: false, updatedAt: null },
     slot
   );
-  assert.match(workspaceReason, /B26/);
+  assert.match(workspaceReason, /绑定工作目录/u);
+  assert.doesNotMatch(workspaceReason, /B26/u);
+  assert.doesNotMatch(memory.MEMORY_WORKSPACE_UNAVAILABLE_NOTE, /永远不可用|B26/u);
   assert.match(memory.MEMORY_WORKSPACE_UNAVAILABLE_NOTE, /workspaceHash/u);
   assert.equal(
     memory.slotUnavailableReason(

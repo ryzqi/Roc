@@ -213,7 +213,7 @@ try {
   record('0 准备', '两个项目各自绑定一个真实工作目录', true, `${first.data.id} / ${second.data.id}`);
 
   // ---- 闸门 6（前半）：项目 1 的文件树 = 项目 1 的工作目录 ----------------------
-  await navigate(page, `page=research&project=${first.data.id}&view=files&tool=files`);
+  await navigate(page, `page=research&project=${first.data.id}&tool=files`);
   await page.waitForSelector('[data-testid="file-tree"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="file-tree-row-00-overview.txt"]', { timeout: 20_000 });
   assertCheck('6 项目隔离', '项目 1 的文件树来自它自己的工作目录', true, '00-overview.txt 可见');
@@ -271,38 +271,66 @@ try {
   await page.screenshot({ path: join(artifactDir, '01-files-tree.png') });
 
   // ---- 闸门 2：预览分发（文本 / 代码 / 图片 / PDF）+ R10 ------------------------
-  await page.click('[data-testid="file-tree-row-00-overview.txt"]');
+  //
+  // 点文件行会**弹出预览模态**（对齐 research-studio 的 `FilePreviewModal`），所以每个文件前要把上
+  // 一个关掉：模态没关就去点树里的下一行，指针会被遮罩拦住（Playwright 会直接报 intercepts pointer
+  // events）。`关闭文件预览` 是模态标题栏的关闭按钮。
+  const openPreview = async (rowTestId) => {
+    await page.click(rowTestId);
+  };
+  // 用预览自带的关闭按钮关（参考的 FilePreviewModal 也有一个）：PDF 分支是 `<iframe>`，一旦
+  // iframe 拿到焦点，Escape 就到不了我们的窗口监听器，所以关闭不能只依赖键盘。
+  const closePreview = async () => {
+    if ((await page.locator('[data-testid="file-preview-modal-panel"]').count()) > 0) {
+      await page.click('[data-testid="file-preview-close"]');
+      await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { state: 'detached', timeout: 10_000 });
+    }
+  };
+
+  await openPreview('[data-testid="file-tree-row-00-overview.txt"]');
   await page.waitForSelector('[data-testid="file-preview-text"]', { timeout: 15_000 });
   const textPreview = (await page.locator('[data-testid="file-preview-text"]').textContent()) ?? '';
   assertCheck('2 预览', '文本预览读取真实内容', textPreview.includes('workspace overview smoke file'), textPreview.trim().slice(0, 40));
+  await closePreview();
 
-  await page.click('[data-testid="file-tree-row-gate-sample.ts"]');
+  await openPreview('[data-testid="file-tree-row-gate-sample.ts"]');
   await page.waitForSelector('[data-testid="file-preview"][data-kind="code"]', { timeout: 15_000 });
   assertCheck('2 预览', '代码文件按 code 分支渲染', true, 'data-kind=code');
+  await closePreview();
+  // 预览必须关得掉（参考的 FilePreviewModal 用 Escape/遮罩关；面板本身没有共享 ModalShell 的
+  // 头部关闭按钮）。这一条是在文本/代码分支上断言的 —— PDF 分支是 `<iframe src=roc-preview://…>`，
+  // iframe 会吃按键，所以那一步的关闭交给下一次导航。
+  assertCheck('2 预览', '预览可以关掉（自带关闭按钮，不依赖焦点在哪）', (await page.locator('[data-testid="file-preview-modal-panel"]').count()) === 0, '');
 
   await ensureExpanded(page, 'assets', 'assets/smoke-image.png');
-  await page.click('[data-testid="file-tree-row-assets/smoke-image.png"]');
+  await openPreview('[data-testid="file-tree-row-assets/smoke-image.png"]');
   await page.waitForSelector('[data-testid="file-preview-image"]', { timeout: 15_000 });
   const imageSrc = await page.getAttribute('[data-testid="file-preview-image"]', 'src');
   assertCheck('2 预览', '图片按 data URL 渲染', imageSrc !== null && imageSrc.startsWith('data:image/'), (imageSrc ?? '').slice(0, 24));
+  await closePreview();
 
   await ensureExpanded(page, 'docs', 'docs/smoke-preview.pdf');
-  await page.click('[data-testid="file-tree-row-docs/smoke-preview.pdf"]');
+  await openPreview('[data-testid="file-tree-row-docs/smoke-preview.pdf"]');
   await page.waitForSelector('[data-testid="file-preview-pdf"]', { timeout: 15_000 });
   const pdfSrc = await page.getAttribute('[data-testid="file-preview-pdf"]', 'src');
   assertCheck('2 预览', 'PDF 走主进程自定义协议（roc-preview://）', (pdfSrc ?? '').startsWith('roc-preview://'), (pdfSrc ?? '').slice(0, 40));
   assertCheck('2 预览', 'PDF 不使用 Blob URL', !(pdfSrc ?? '').startsWith('blob:'), '');
+  await closePreview();
 
-  // R10：越界路径必须在渲染前被拒绝，并给出专属文案
-  await navigate(page, `page=research&project=${first.data.id}&view=files&tool=files&file=${encodeURIComponent('../../etc/passwd')}`);
-  await page.waitForSelector('[data-testid="files-view"][data-state="rejected"]', { timeout: 10_000 });
-  const rejectionText = (await page.locator('[data-testid="error-blocked"]').textContent()) ?? '';
-  assertCheck('3 路径越界（R10）', '深链越界路径被渲染前拒绝', rejectionText.includes('不能越出工作目录'), rejectionText.split('\n')[0]);
+  // R10：越界路径必须在渲染前被拒绝，并给出专属文案。
+  //
+  // 这一步以前走画布 `view=files`（它的 `data-state=rejected` 就是这条闸门的判据）。画布文件视图
+  // 已删（对齐 research-studio：文件在左栏树 + 预览浮层），越界拒绝的真身移到左栏树自己：
+  // 同一段 `checkRelativePath` + `pathRejectionMessage`，所以文案没变，只是显示在树里。
+  await navigate(page, `page=research&project=${first.data.id}&view=literature&file=${encodeURIComponent('../../etc/passwd')}`);
+  await page.waitForSelector('[data-testid="file-tree-rejected"]', { timeout: 10_000 });
+  const rejectionText = (await page.locator('[data-testid="file-tree-rejected"]').textContent()) ?? '';
+  assertCheck('3 路径越界（R10）', '深链越界路径在渲染前被拒绝', rejectionText.includes('不能越出工作目录'), rejectionText.trim().slice(0, 80));
   assertCheck('3 路径越界（R10）', '拒绝时不产生预览请求', (await page.locator('[data-testid="file-preview"]').count()) === 0);
 
   // ---- 闸门 4：Git 全流程（改动列表 → stage → commit + discard 二次确认） -------
-  await navigate(page, `page=research&project=${first.data.id}&view=changes&tool=git`);
-  await page.waitForSelector('[data-testid="git-panel"][data-state="ready"]', { timeout: 20_000 });
+  await navigate(page, `page=research&project=${first.data.id}&view=literature&tool=git`);
+  await page.waitForSelector('[data-testid="git-drawer-panel"] [data-testid="git-panel"][data-state="ready"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="git-change-phase-three-notes.txt"]', { timeout: 15_000 });
   assertCheck('4 Git', '改动列表显示真实未暂存改动', true, 'phase-three-notes.txt');
   const branchLabel = (await page.locator('[data-testid="git-current-branch"]').textContent()) ?? '';
@@ -358,8 +386,13 @@ try {
   assertCheck('4 Git', '确认后改动被丢弃', true, '');
   await page.screenshot({ path: join(artifactDir, '04-git-panel.png') });
 
+  // 关掉 Git 抽屉再走：它的遮罩盖着画布，后面点终端会被拦住（同样的事在 gate 6/只读闸门里靠
+  // 「换 view 自动收抽屉」解决，这里是同一个 view 内换步骤，所以要显式关）。
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="git-drawer"]', { state: 'detached', timeout: 15_000 });
+
   // ---- 闸门 5：终端能跑 ls / pwd / python --version，且 resize 同步给 PTY ------
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal&tool=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   assertCheck('5 终端', 'pty 会话进入 ready', true, '');
 
@@ -392,7 +425,7 @@ try {
   );
   // 可访问性（AGENTS.md「保留 focus-visible」）：`outline-none` 在 utilities 层会盖掉
   // base 层的焦点环，所以这里用 computed style 验证聚焦后真的有 2px 可见环。
-  await navigate(page, `page=research&project=${first.data.id}&view=changes&tool=git`);
+  await navigate(page, `page=research&project=${first.data.id}&tool=git`);
   await page.waitForSelector('[data-testid="git-commit-message"]', { timeout: 20_000 });
   const focusRing = await page.evaluate(() => {
     const element = document.querySelector('[data-testid="git-commit-message"]');
@@ -409,13 +442,16 @@ try {
     focusRing !== null && focusRing.outlineStyle !== 'none' && Number.parseFloat(focusRing.outlineWidth) >= 2,
     JSON.stringify(focusRing)
   );
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal&tool=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   assertCheck('7 RTK', '终端底部显示 rtk.status 一行', (await page.locator('[data-testid="terminal-rtk-status"]').count()) === 1, (await page.locator('[data-testid="terminal-rtk-status"]').textContent()) ?? '');
   await page.screenshot({ path: join(artifactDir, '05-terminal.png') });
 
+  // 终端现在是画布 tab（不再有 `tool=terminal` 这个粘性标记），离开它不会自动清掉别的工具；
+  // 这里没有别的工具开着，所以直接切项目。
+
   // ---- 闸门 6（后半）：切到项目 2 → 文件树/Git/终端全部按新工作目录重建 ---------
-  await navigate(page, `page=research&project=${second.data.id}&view=files&tool=files`);
+  await navigate(page, `page=research&project=${second.data.id}&tool=files`);
   await page.waitForSelector('[data-testid="file-tree-row-second-only.txt"]', { timeout: 20_000 });
   assertCheck('6 项目隔离', '切到项目 2 后文件树来自项目 2', true, 'second-only.txt 可见');
   assertCheck(
@@ -424,7 +460,7 @@ try {
     (await page.locator('[data-testid="file-tree-row-external-one.txt"]').count()) === 0
   );
 
-  await navigate(page, `page=research&project=${second.data.id}&view=changes&tool=git`);
+  await navigate(page, `page=research&project=${second.data.id}&tool=git`);
   await page.waitForSelector('[data-testid="git-panel"][data-state="ready"]', { timeout: 20_000 });
   assertCheck(
     '6 项目隔离',
@@ -432,7 +468,7 @@ try {
     (await page.locator('[data-testid="git-changes-clean"]').count()) === 1
   );
 
-  await navigate(page, `page=research&project=${second.data.id}&view=terminal&tool=terminal`);
+  await navigate(page, `page=research&project=${second.data.id}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   const secondCwd = (await page.locator('[data-testid="terminal-cwd"]').textContent()) ?? '';
   assertCheck('6 项目隔离', '切项目后终端在新工作目录重建', secondCwd.includes(secondWorkspace), secondCwd);
@@ -448,10 +484,10 @@ try {
   if (!archive.ok) {
     fail('只读闸门', '归档项目', archive.error.message);
   }
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal&tool=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-readonly"]', { timeout: 20_000 });
   assertCheck('只读闸门', '归档项目不提供交互式终端', true, 'terminal-readonly');
-  await navigate(page, `page=research&project=${first.data.id}&view=changes&tool=git`);
+  await navigate(page, `page=research&project=${first.data.id}&tool=git`);
   await page.waitForSelector('[data-testid="git-panel"][data-state="ready"]', { timeout: 20_000 });
   assertCheck(
     '只读闸门',
@@ -470,7 +506,7 @@ try {
   assertCheck('只读闸门', '归档项目的提交按钮被禁用', await page.locator('[data-testid="git-commit"]').isDisabled(), '');
   const readonlyNote = (await page.locator('[data-testid="git-readonly-note"]').textContent()) ?? '';
   assertCheck('只读闸门', '归档项目在面板内明示只读', readonlyNote.includes('已归档'), readonlyNote.trim());
-  await navigate(page, `page=research&project=${first.data.id}&view=files&tool=files`);
+  await navigate(page, `page=research&project=${first.data.id}&tool=files`);
   await page.waitForSelector('[data-testid="file-sidebar-panel"]', { timeout: 20_000 });
   assertCheck(
     '只读闸门',

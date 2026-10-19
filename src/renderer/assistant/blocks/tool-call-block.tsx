@@ -15,6 +15,24 @@ import { useActivityBlockState } from './use-activity-block-state';
  * `ToolDataSection` serialises non-strings with `JSON.stringify(…, null, 2)` because
  * tool payloads are arbitrary structured data; a raw `String(data)` would print
  * `[object Object]`, which is how these blocks used to lose information.
+ *
+ * ## Not ported: the reference's 「前往对应视窗」 button
+ *
+ * The reference's tool row can end with a jump to the canvas surface the result belongs
+ * to (`onOpenWorkspaceTab(tc.targetWorkspaceTab)`). Doing that here needs the tool's
+ * **scope**, and `run-capability-manifest.ts` is the only place that knows whether a tool
+ * is `workspace` / `memory` / `app` — the transcript does not carry it
+ * (`ChatTranscriptActivityBlock` hands this block a `name` and payloads, nothing more).
+ * The two ways to close the gap are both worse than recording it:
+ *
+ *   1. a name→view table in this file — a second copy of the manifest's tool list, which
+ *      drifts silently the first time a tool is renamed (the backend refuses to keep a
+ *      duplicate of the reserved-name guard for exactly this reason);
+ *   2. adding `scope` to the run/transcript contract — a backend change, so not a
+ *      frontend port at all.
+ *
+ * A button that guessed the destination from a tool's name would send the user to the
+ * wrong surface *and be believed*, which is worse than the missing button.
  */
 type ToolCallBlockModel = Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>;
 

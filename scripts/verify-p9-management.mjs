@@ -163,9 +163,9 @@ async function launchApp() {
   return { launched, window };
 }
 
-/** The shell adopts the project route only after the state update, so wait for the overview. */
+/** The shell adopts the project route only after the state update, so wait for the layout. */
 async function waitForProjectRoute() {
-  await page.waitForSelector('[data-testid="workflow-overview"]', { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="workspace-layout"]', { timeout: 20_000 });
 }
 
 async function openManagement(tab = 'memory') {
@@ -390,13 +390,18 @@ try {
   });
   assertCheck(
     '1 记忆',
-    '三份全局槽位 effective、两个项目槽位不可用（后端没把工作目录接给记忆插件）',
+    '五个槽位都 effective：工作目录已绑定，项目槽位真的接通了（B26 已修）',
     Array.isArray(slotShape.effective) &&
-      slotShape.effective.filter((row) => row.effective).length === 3 &&
-      slotShape.effective.filter((row) => !row.effective).every((row) => row.key.startsWith('workspace:')),
+      slotShape.effective.length === 5 &&
+      slotShape.effective.every((row) => row.effective),
     JSON.stringify(slotShape)
   );
-  assertCheck('1 记忆', 'memory.status.workspaceHash 是 null（B26 的根因，界面据此解释）', slotShape.workspaceHash === null, String(slotShape.workspaceHash));
+  assertCheck(
+    '1 记忆',
+    'memory.status.workspaceHash 与 workspace.select 绑定的目录一致（不再是 null）',
+    typeof slotShape.workspaceHash === 'string' && slotShape.workspaceHash.length > 0,
+    String(slotShape.workspaceHash)
+  );
 
   // 写 global/user
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
@@ -431,24 +436,47 @@ try {
     JSON.stringify(userRow)
   );
 
-  // 项目槽位：契约上必须是「拒写 + 说明原因」，而不是静默失败或假成功
-  const workspaceWrite = await page.evaluate(async () => {
-    const result = await window.roc.memory.writeFile({ scope: 'workspace', kind: 'memory', content: '# 项目记忆\n' });
-    return result.ok ? result.data : { ipcError: result.error.message };
-  });
+  // 项目槽位：绑定了工作目录就必须真的可写（B26 修复后不再返回 workspace_required）
+  const workspaceBody = '# 项目记忆\n\nROC-P9-WORKSPACE-MEMORY\n';
+  const workspaceWrite = await page.evaluate(async (content) => {
+    const result = await window.roc.memory.writeFile({ scope: 'workspace', kind: 'memory', content });
+    const readBack = await window.roc.memory.readFile({ scope: 'workspace', kind: 'memory' });
+    return result.ok
+      ? { meta: result.data.meta, readBack: readBack.ok ? readBack.data : null }
+      : { ipcError: result.error.message };
+  }, workspaceBody);
   assertCheck(
     '1 记忆',
-    '写项目槽位返回 workspace_required（domain outcome，不是 IPC 错误）',
-    workspaceWrite.ok === false && workspaceWrite.reason === 'workspace_required',
-    JSON.stringify(workspaceWrite).slice(0, 120)
+    '写项目槽位真的落进 workspaceHash 命名空间并逐字读回',
+    workspaceWrite.meta !== undefined && workspaceWrite.meta.effective === true && workspaceWrite.readBack === workspaceBody,
+    JSON.stringify(workspaceWrite).slice(0, 140)
   );
   await page.click('[data-testid="mgmt-memory-slot-workspace-memory"]');
-  await page.waitForSelector('[data-testid="mgmt-memory-slot-unavailable"]', { timeout: 20_000 });
-  const unavailableNote = await text('mgmt-memory-slot-unavailable');
-  assertCheck('1 记忆', '界面解释项目槽位为何不可写（指向 B26，而不是让用户去绑目录）', unavailableNote.includes('B26'), unavailableNote.slice(0, 90));
-  assertCheck('1 记忆', '不可写槽位的保存按钮是禁用的', await page.locator('[data-testid="mgmt-memory-save"]').isDisabled());
-  const workspaceNote = await text('mgmt-memory-workspace-note');
-  assertCheck('1 记忆', '槽位列表上方写明 workspaceHash 恒为 null 的原因', workspaceNote.includes('B26'), workspaceNote.slice(0, 90));
+  await page.waitForFunction(
+    () =>
+      (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes(
+        'ROC-P9-WORKSPACE-MEMORY'
+      ),
+    undefined,
+    { timeout: 20_000 }
+  );
+  assertCheck(
+    '1 记忆',
+    '项目槽位在界面里可编辑（没有「不可写」提示）',
+    (await page.locator('[data-testid="mgmt-memory-slot-unavailable"]').count()) === 0
+  );
+  assertCheck(
+    '1 记忆',
+    '绑定了工作目录后不再显示 workspaceHash 为 null 的说明',
+    (await page.locator('[data-testid="mgmt-memory-workspace-note"]').count()) === 0
+  );
+  await page.fill('[data-testid="mgmt-memory-textarea"]', '# 项目记忆（界面写入）\n');
+  assertCheck(
+    '1 记忆',
+    '可写项目槽位的保存按钮在草稿变脏后启用',
+    (await page.locator('[data-testid="mgmt-memory-save"]').isDisabled()) === false
+  );
+  await page.click('[data-testid="mgmt-memory-discard"]');
 
   // 快照预览与文件内容一致
   await page.click('[data-testid="mgmt-memory-preview-toggle"]');
@@ -465,9 +493,9 @@ try {
   );
   assertCheck(
     '1 记忆',
-    '快照预览不含项目槽位（它们不可用，预览只拼生效的槽位）',
-    previewText.includes('/memory/workspaces/current') === false,
-    previewText.slice(-60)
+    '快照预览也带上项目槽位（它生效了，预览只拼生效的槽位）',
+    previewText.includes('/memory/workspaces/current/MEMORY.md') && previewText.includes('ROC-P9-WORKSPACE-MEMORY'),
+    previewText.slice(-80)
   );
 
   // 安全扫描拒写（domain outcome，不是 IPC 错误）
@@ -539,7 +567,12 @@ try {
     const option = select === null ? null : [...select.options].find((entry) => entry.value === 'current');
     return option === undefined || option === null ? null : option.disabled;
   });
-  assertCheck('1 记忆', '没有 workspaceHash 时「当前工作目录」检索范围被禁用', currentScopeDisabled === true, String(currentScopeDisabled));
+  assertCheck(
+    '1 记忆',
+    '有 workspaceHash 时「当前工作目录」检索范围可选',
+    currentScopeDisabled === false,
+    String(currentScopeDisabled)
+  );
   await page.fill('[data-testid="mgmt-memory-search-input"]', sessionProbe);
   await page.click('[data-testid="mgmt-memory-search-run"]');
   await page.waitForFunction(

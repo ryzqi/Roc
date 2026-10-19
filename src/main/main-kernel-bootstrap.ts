@@ -38,6 +38,7 @@ import { RocPaths } from './services/paths';
 import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
 import { SelfConfigService } from './services/self-config';
+import { WorkspaceService } from './services/workspace-service';
 
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
@@ -187,6 +188,11 @@ function createDefaultMainKernelPlugins(input: {
 }): readonly RocPlugin[] {
   input.paths.ensureTree();
   const configService = input.configService;
+  // One binding, two readers. `workspace.select` writes this instance (the workspace plugin owns
+  // the capability) and the memory plugin reads it, so the two project memory slots
+  // (`/memory/workspaces/current/{AGENTS,MEMORY}.md`) resolve against the directory the shell
+  // actually bound instead of a permanent `null` (B26).
+  const workspaceService = new WorkspaceService(configService);
   const agentModelFactory = new LangChainAgentModelFactoryAdapter(input.modelFactory, {
     beforeCreate: () => configService.reloadSettingsDocument()
   });
@@ -233,7 +239,10 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createMemoryPlugin({
-      getWorkspace: () => null,
+      getWorkspace: () => {
+        const workspace = workspaceService.getCurrentWorkspace();
+        return workspace === null ? null : { path: workspace.path, label: workspace.displayName };
+      },
       getMemorySettings: () => {
         configService.reloadSettingsDocument();
         return configService.getSettings().memory;
@@ -242,7 +251,7 @@ function createDefaultMainKernelPlugins(input: {
     createTaskPlugin({
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
-    createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
+    createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService, workspaceService }),
     createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
       modelsRoot: input.researchModelsRoot,
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),

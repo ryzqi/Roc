@@ -1,6 +1,5 @@
 import { createContext, useContext } from 'react';
 import type { AppViewId } from './routes';
-import type { ResearchStageGroupId, ResearchStageTab } from '../canvas/workflow/stage-groups';
 import type { RocClient } from '../shared/roc-client';
 import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
 
@@ -8,7 +7,7 @@ import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
  * The project/workspace scope a canvas view renders inside (P3).
  *
  * Deliberately **not** part of `ViewProps`: those are route-derived (`view`,
- * `projectId`, `stageHint`), and a view must be able to stay mounted while the
+ * `projectId`), and a view must be able to stay mounted while the
  * route's query parameters change. Scope is different — it is the identity of the
  * thing being viewed, and every P3–P9 view needs the same four facts:
  *
@@ -50,16 +49,14 @@ export type WorkspaceScope = {
    */
   openSettings: () => void;
   /**
-   * Navigates the canvas to another view in the same project (P6).
+   * Navigates the canvas to another view in the same project.
    *
-   * 总览's 「打开活动」 and 阶段工作区's group switch are navigation, not state: the
-   * view and the stage group are URL fields (ADR-M05), and only the shell writes them.
-   * Without this a view would have to synthesise a URL — which is how a second writer
-   * of the route contract appears.
+   * Navigation, not state: the view is a URL field (ADR-M05) and only the shell
+   * writes the route. Without this a view would have to synthesise a URL — which is
+   * how a second writer of the route contract appears. The literature hub's jump to
+   * the files view is the remaining caller.
    */
   openView: (view: AppViewId) => void;
-  /** Navigates to the stage workspace with a specific group (and tab) selected. */
-  openStage: (group: ResearchStageGroupId, tab?: ResearchStageTab) => void;
 };
 
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);

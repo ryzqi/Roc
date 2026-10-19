@@ -33,22 +33,7 @@ export type ShortcutHandlers = {
   onToggleAssistant: () => void;
   onOpenSearch: () => void;
   onCycleTheme: () => void;
-  /** 1 / 2 / 3 → 总览 / 活动 / 溯源. Only meaningful inside a project. */
-  onProjectViewSlot: (slot: 1 | 2 | 3) => void;
-  /** Slot keys only apply inside a project. */
-  projectViewSlotsEnabled: boolean;
 };
-
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  if (target.isContentEditable) {
-    return true;
-  }
-  const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-}
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
   // Keep handlers reachable from a listener installed once, so shortcut
@@ -89,19 +74,6 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
         }
         return;
       }
-
-      // Unmodified slot keys. Never while typing, never behind an overlay.
-      if (meta || event.ctrlKey || withShiftOrAlt || overlayStackDepth() > 0) {
-        return;
-      }
-      if (event.key !== '1' && event.key !== '2' && event.key !== '3') {
-        return;
-      }
-      if (!ref.current.projectViewSlotsEnabled || isTextEntryTarget(event.target)) {
-        return;
-      }
-      event.preventDefault();
-      ref.current.onProjectViewSlot(event.key === '1' ? 1 : event.key === '2' ? 2 : 3);
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -121,6 +93,5 @@ export const SHORTCUT_REFERENCE: ReadonlyArray<{ keys: string; label: string; ow
   { keys: '⌘J', label: '折叠/展开助手', owner: 'renderer' },
   { keys: '⌘K', label: '搜索', owner: 'renderer' },
   { keys: '⌘D', label: '切换主题', owner: 'renderer' },
-  { keys: '1 / 2 / 3', label: '总览 / 活动 / 溯源', owner: 'renderer' },
   { keys: 'Esc', label: '关闭当前层', owner: 'renderer' }
 ];

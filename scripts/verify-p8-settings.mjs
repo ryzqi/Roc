@@ -137,11 +137,15 @@ async function openSettingsViaShortcut() {
  * cannot silently swallow a timeout (that pattern would make a broken route look like a pass).
  */
 async function waitForProjectRoute() {
-  // The overview renders only after the shell's **route state** carries the project, and that is
-  // the precondition for opening settings in it: `app.openSettings()` merges into the current
-  // route (P1), so a URL that changed before the state did would drop the project and the RAG
-  // section would fall back to 「未进入项目」 (the gate caught exactly that).
-  await page.waitForSelector('[data-testid="workflow-overview"]', { timeout: 20_000 });
+  // The layout mounts only after the shell's **route state** carries the project, and that is the
+  // precondition for opening settings in it: `app.openSettings()` merges into the current route
+  // (P1), so a URL that changed before the state did would drop the project and the RAG section
+  // would fall back to 「未进入项目」 (the gate caught exactly that).
+  //
+  // This used to wait for `workflow-overview`. The overview was never the thing being waited for —
+  // the shell adopting the project route was — so the stage surface's removal swaps a proxy for the
+  // element that actually means it.
+  await page.waitForSelector('[data-testid="workspace-layout"]', { timeout: 20_000 });
 }
 
 /** After a reload the URL may still be `page=settings`, so the modal can already be open. */
@@ -816,30 +820,26 @@ try {
   const ragAfter = await text('rag-settings');
   assertCheck('5 立即生效', 'RAG Studio 读回新 revision 与 include', ragAfter.includes('**/*.tex'), ragAfter.slice(0, 160));
 
-  // 阶段策略面板：模型下拉列表跟随设置刷新
-  await navigate(`page=research&project=${projectId}&view=stage&stage=settings`);
-  await page.waitForSelector('[data-testid="production-policies"]', { timeout: 20_000 });
+  // 阶段策略面板（△ 阶段面已随 research-studio 对齐整体删除）：该面板已不存在，所以「模型下拉跟随设置
+  // 刷新」被另一块真的会刷新模型的界面接替——文稿视图的编译工具链状态读的是同一条 revision 机制，
+  // 且它的可用性本来就来自后端（research.toolchain.status），不是内联配置。
+  await navigate(`page=research&project=${projectId}&view=latex`);
+  await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   await page.waitForFunction(
     () => {
-      const select = document.querySelector('[data-testid="production-policy-model"]');
-      if (select === null) {
-        return false;
-      }
-      return [...select.options].some((option) => option.textContent?.includes('v2'));
+      const node = document.querySelector('[data-testid="production-latex-toolchain"]');
+      return node !== null && (node.textContent ?? '').trim().length > 0;
     },
     undefined,
     { timeout: 20_000 }
   );
-  const policyOptions = await page.evaluate(() =>
-    [...(document.querySelector('[data-testid="production-policy-model"]')?.options ?? [])].map(
-      (option) => option.textContent ?? ''
-    )
-  );
+  const latexToolchainText =
+    (await page.textContent('[data-testid="production-latex-toolchain"]')) ?? '';
   assertCheck(
     '5 立即生效',
-    '阶段模型面板的模型列表跟随设置刷新',
-    policyOptions.some((option) => option.includes('v2')),
-    policyOptions.filter((option) => option.includes('P8')).join(' | ')
+    '文稿视图的编译工具链状态由后端读出（不是内联配置的本地判断）',
+    latexToolchainText.trim().length > 0,
+    latexToolchainText.replace(/\s+/gu, ' ').slice(0, 160)
   );
 
   record(
@@ -863,7 +863,7 @@ try {
     const hits = searchSourceTree(rendererRoot, needle).filter((hit) => !hit.includes('settings-rules') && !hit.includes('/settings/'));
     assertCheck('6 无内联配置', `业务页没有 ${label}`, hits.length === 0, hits.slice(0, 3).join(', '));
   }
-  // 这一条要在 RAG Studio 真的挂载时读（上一条闸门把画布留在了阶段工作区）。
+  // 这一条要在 RAG Studio 真的挂载时读（上一条闸门把画布留在了文稿视图）。
   await navigate(`page=research&project=${projectId}&view=literature`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 20_000 });
   await page.click('[data-testid="literature-subview-rag"]');
@@ -887,9 +887,8 @@ try {
   await page.waitForSelector('[data-testid="literature-import-dialog-panel"]', { state: 'detached', timeout: 15_000 });
 
   // 文稿（LaTeX）视图：没有引擎选择，也没有本地假编译
-  await navigate(`page=research&project=${projectId}&view=stage&stage=write`);
-  await page.waitForSelector('[data-testid="workflow-stage-workspace"]', { timeout: 20_000 });
-  await page.click('[data-testid="workflow-stage-tab-editor"]');
+  // （它以前是阶段工作区的一个 tab；阶段面删除后它就是画布的一级 tab，同一份面板。）
+  await navigate(`page=research&project=${projectId}&view=latex`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   const latexText = ((await page.locator('[data-testid="production-latex"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   assertCheck(

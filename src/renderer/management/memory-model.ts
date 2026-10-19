@@ -117,11 +117,10 @@ export function findSlot(scope: MemoryScope, kind: MemoryKind): MemorySlot | nul
 /**
  * Why a slot is not usable.
  *
- * The workspace slots report `workspace_required`, and the reason is **not** "bind a working
- * directory": the shell bootstraps the memory plugin with `getWorkspace: () => null`
- * (`main-kernel-bootstrap.ts`), so `memory.status.workspaceHash` is always null and the two
- * project slots can never resolve (backend task B26). Saying "bind a workspace first" would send
- * the user to do something that cannot work.
+ * The workspace slots report `workspace_required` only while no working directory is bound: the
+ * main process hands the memory plugin the same `WorkspaceService` the shell binds through
+ * `workspace.select` (`main-kernel-bootstrap.ts`), so `memory.status.workspaceHash` is null
+ * exactly when nothing is bound. That makes "bind a working directory" the actionable reason.
  */
 export function slotUnavailableReason(meta: MemoryFileMeta | null, slot: MemorySlot): string | null {
   if (meta === null) {
@@ -131,13 +130,17 @@ export function slotUnavailableReason(meta: MemoryFileMeta | null, slot: MemoryS
     return null;
   }
   return slot.requiresWorkspace
-    ? '项目槽位不可用：记忆插件当前没有接到工作目录（B26）'
+    ? '项目槽位不可用：还没有绑定工作目录（在左栏绑定后即可读写）。'
     : '当前不可用。';
 }
 
-/** The one-line explanation shown above the slot list when project slots exist but cannot resolve. */
+/**
+ * Shown above the slot list **only** while `memory.status.workspaceHash` is null, i.e. while the
+ * two project slots genuinely cannot resolve. It explains how to make them work instead of
+ * describing a gap in the build.
+ */
 export const MEMORY_WORKSPACE_UNAVAILABLE_NOTE =
-  '项目级槽位（/memory/workspaces/current/{AGENTS,MEMORY}.md）在当前构建里永远不可用：主进程给记忆插件传的 workspace provider 是 `() => null`，所以 memory.status.workspaceHash 始终为 null、读写作都返回 workspace_required（后端任务单 B26）。三份全局文件不受影响。';
+  '项目级槽位（/memory/workspaces/current/{AGENTS,MEMORY}.md）需要绑定工作目录：绑定后 memory.status.workspaceHash 不再为 null，这两份文件会出现在槽位列表里且可读可写。三份全局文件不受影响。';
 
 /* ------------------------------------------------------------------ */
 /* Capacity                                                            */

@@ -4,6 +4,7 @@ import type { FileEntry } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { ErrorBar } from '../../shell/ErrorBar';
 import { EmptyState } from '../../shell/EmptyState';
+import { pathRejectionMessage, type PathRejection } from '../../workspace/paths';
 import {
   ancestorDirectoriesOf,
   clampRowIndex,
@@ -57,6 +58,13 @@ export type FileTreeViewProps = {
    * search result, so the tree continues where the search left off.
    */
   revealPath?: string | null;
+  /**
+   * A path that is not inside the workspace, refused before any request is made (R10).
+   *
+   * The tree is where selection lives now, so it is also where an impossible selection is
+   * reported; the canvas `files` view used to own both.
+   */
+  rejectedPath?: { relativePath: string; reason: PathRejection } | null;
 };
 
 const KIND_ICON = { file: FileText, directory: Folder } as const;
@@ -82,7 +90,8 @@ export function FileTreeView({
   projectId,
   selectedPath,
   onOpenFile,
-  revealPath = null
+  revealPath = null,
+  rejectedPath = null
 }: FileTreeViewProps): React.JSX.Element {
   const tree = useFileTree(client, { workspacePathKey, projectId });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -268,6 +277,31 @@ export function FileTreeView({
 
   if (workspacePathKey === null) {
     return <EmptyState compact title="未选择工作区" description="绑定工作目录后才会显示文件树。" testId="file-tree-no-workspace" />;
+  }
+
+  /**
+   * A path that cannot be inside the workspace, refused before any request is made (R10).
+   *
+   * This used to be the canvas `files` view's job — it was the `?file=` host, and a rejected path
+   * rendered `data-state="rejected"` there. The view is gone (the reference reveals files in the
+   * tree), so the same `checkRelativePath` + `pathRejectionMessage` pair moved to the surface that
+   * now owns selection. The backend refuses it too; failing locally is about the message, not about
+   * being the only boundary.
+   */
+  if (rejectedPath !== null) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-2 p-3" data-testid="file-tree-rejected">
+        <ErrorBar
+          error={{
+            level: 'blocked',
+            message: pathRejectionMessage(rejectedPath.reason),
+            code: 'renderer_path_rejected',
+            actionLabel: `被拒绝的路径：${rejectedPath.relativePath}`
+          }}
+        />
+        <p className="text-muted text-[var(--font-meta-size)]">文件路径必须位于工作目录之内。</p>
+      </div>
+    );
   }
 
   if (tree.rootError !== null) {

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';import { errorMessage } from './loaded-state';
-import type { AppViewId } from './routes';
+import { DEFAULT_VIEW, type AppViewId } from './routes';
 import { useAppNavigateBridge, useAppRoute } from './use-app-route';
 import { useLayoutState } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
@@ -31,9 +31,6 @@ import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
 import { useLiteratureStore } from '../literature/use-literature-store';
 import { deriveWiki } from '../literature/derive-wiki';
-import { defaultTabForGroup } from '../canvas/workflow/stage-groups';
-import { WorkflowScopeProvider } from '../canvas/workflow/workflow-scope';
-import { useWorkflowStore } from '../canvas/workflow/use-workflow-store';
 
 /**
  * The application shell (P1).
@@ -126,12 +123,46 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
   // Mount-on-demand latches; see the lazy block comment above.
   const [assistantMounted, setAssistantMounted] = useState(false);
+  /** A file another surface asked the 文件 tab to preview (see `openFileInCanvas`). */
+  const [filePreview, setFilePreview] = useState<{ relativePath: string; nonce: number } | null>(null);
+  const previewNonceRef = useRef(0);
   const [managementMounted, setManagementMounted] = useState(false);
   const [settingsMounted, setSettingsMounted] = useState(false);
 
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
   const layout = useLayoutState();
+
+  /**
+   * `?tool=files` as a one-shot request to show the 文件 tab.
+   *
+   * The file tree lives in the sidebar now, so the native menu's "文件/工作区" item has nothing
+   * to open in the canvas — what it means is "put me in front of the tree". Handled on the
+   * *transition* into `files`, not on the value: forcing the tab while the parameter is present
+   * would make 会话 unreachable until the URL changed.
+   */
+  const previousToolRef = useRef(route.tool);
+  const previousViewRef = useRef(route.view);
+  useEffect(() => {
+    if (route.tool === 'files' && previousToolRef.current !== 'files') {
+      layout.setSidebarTab('files');
+    }
+    /**
+     * Changing the canvas view dismisses the drawer.
+     *
+     * The scrim covers the canvas, so a view change while it is up can only come from outside
+     * the drawer — a tab click, a deep link, another surface's navigation. Leaving the drawer
+     * open would put it on top of the view the user just asked for, with the canvas unreachable
+     * behind it and nothing on screen explaining why. Same reasoning as the canvas tab strip's
+     * own 「clear the tool on tab change」.
+     */
+    if (route.view !== previousViewRef.current && route.tool !== null) {
+      navigate({ ...route, tool: null });
+    }
+    previousToolRef.current = route.tool;
+    previousViewRef.current = route.view;
+  }, [route, layout, navigate]);
+
   const windowState = useWindowState(client);
   // The chrome and the read-only gate need the real project, not the raw id.
   const currentProject = useCurrentProject(client, route.projectId);
@@ -177,14 +208,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const literature = useLiteratureStore(client, route.projectId);
 
   /**
-   * The research-workflow store (P6), created once for the same structural reason as
-   * the literature store: 总览 / 阶段工作区 / 活动流 are sibling canvas views that must
-   * agree on the stage, the in-flight run and the pending gate, and the contract has no
-   * push channel for stage runs (B11) — so exactly one poll must run.
-   */
-  const workflow = useWorkflowStore(client, route.projectId, project);
-
-  /**
    * Latest route, readable from callbacks that live inside the memoised scope.
    *
    * `navigate` compares against its own ref and writes the URL, but merging a change
@@ -198,11 +221,27 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const routeRef = useRef(route);
   routeRef.current = route;
 
+  /**
+   * Asks the 文件 tab to reveal a file **and open its preview**.
+   *
+   * There is no canvas `files` view any more (the reference opens files from the sidebar tree
+   * and shows the preview in a modal), so "open a file" is two things now:
+   *
+   *   1. `?file=` — the URL field the tree reads to reveal and select the row (ADR-M05);
+   *   2. a nonce the 文件 tab compares against the last one it saw, because which overlay is on
+   *      screen is view state, not navigation, and the panel that owns the modal is mounted
+   *      inside the sidebar.
+   *
+   * Selection and reveal also have to make the 文件 tab *visible*: asking for a file from the
+   * literature hub while the 会话 tab is open would otherwise set a selection nobody can see.
+   * `view` and `tool` are deliberately left alone — touching `tool` would pop the Git drawer
+   * over the preview the user just asked for.
+   */
   const openFileInCanvas = (relativePath: string): void => {
-    // `tool: 'files'` explicitly rather than `route.tool ?? 'files'`: opening a file
-    // from the tree is the files workbench, so it must not inherit `git` (which would
-    // pop the Git drawer over the preview the user just asked for).
-    navigate({ ...routeRef.current, view: 'files', tool: 'files', openFile: relativePath });
+    layout.setSidebarTab('files');
+    previewNonceRef.current += 1;
+    setFilePreview({ relativePath, nonce: previewNonceRef.current });
+    navigate({ ...routeRef.current, openFile: relativePath });
   };
 
   /**
@@ -228,11 +267,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         setManagementOpen(false);
         navigate({ ...routeRef.current, page: 'settings' });
       },
-      openView: (view) => navigate({ ...routeRef.current, view }),
-      // The group and its default tab are written together: the URL carries one `stage`
-      // value, and a group with a tab from another group would not round-trip (P1).
-      openStage: (group, tab) =>
-        navigate({ ...routeRef.current, view: 'stage', stageGroup: group, stageTab: tab ?? defaultTabForGroup(group) })
+      openView: (view) => navigate({ ...routeRef.current, view })
     }),
     [
       client,
@@ -279,6 +314,14 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         navigate({ ...routeRef.current, page: 'settings' });
       },
       openManagementView: (tab) => {
+        if (tab === 'tasks') {
+          // 任务 is drawer-only (see `SearchGroupSources.onOpenManagementView`): open the
+          // management surface on its 任务 tab rather than navigating to a canvas view
+          // that no longer exists.
+          setManagementTab('tasks');
+          setManagementOpen(true);
+          return;
+        }
         setManagementOpen(false);
         navigate({ ...routeRef.current, view: tab });
       }
@@ -324,9 +367,16 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       navigate({ ...route, view: 'literature' });
     },
     onOpenProject: (projectId) => {
-      navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' });
+      navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' });
     },
     onOpenManagementView: (tab) => {
+      if (tab === 'tasks') {
+        // Same jump as the drawer's own entry: there is no `view=tasks` any more, so the
+        // palette opens the management surface instead of a canvas page.
+        setManagementTab('tasks');
+        setManagementOpen(true);
+        return;
+      }
       navigate({ ...route, view: tab });
     },
     onOpenSession: (threadId) => {
@@ -411,12 +461,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     onToggleSidebar: layout.toggleSidebar,
     onToggleAssistant: toggleAssistant,
     onOpenSearch: openSearch,
-    onCycleTheme: cycleTheme,
-    projectViewSlotsEnabled: inProject,
-    onProjectViewSlot: (slot) => {
-      const view: AppViewId = slot === 1 ? 'overview' : slot === 2 ? 'activity' : 'provenance';
-      navigate({ ...route, view });
-    }
+    onCycleTheme: cycleTheme
   });
 
   if (boot.status === 'loading') {
@@ -429,14 +474,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   /**
    * The Git surface is rendered **once** (M-2).
    *
-   * `?tool=git` drives the drawer, which is what P1 built and the capability
-   * matrix documents. The canvas `changes` view renders the same `GitPanel` in its
-   * wide layout, so when that view is already on screen the drawer stays closed —
-   * otherwise both would mount, each with its own `useGitWorkspace` (two sets of
-   * status/diffStat/listBranches calls and two states that disagree after an
-   * action).
+   * `?tool=git` drives the drawer, and now it is the **only** Git surface: the canvas
+   * `changes` view is gone, so there is no second `GitPanel` to keep from mounting at the
+   * same time (two instances meant two `useGitWorkspace` states that disagreed after an
+   * action). The reference opens Git as a drawer, and so does this shell.
    */
-  const gitDrawerOpen = route.tool === 'git' && route.view !== 'changes';
+  const gitDrawerOpen = route.tool === 'git';
 
   return (
     <ManagementScopeProvider value={managementScope}>
@@ -457,13 +500,13 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
       <WindowChrome
         projectName={projectName}
-        onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
+        onBackToPortal={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
         onOpenSearch={openSearch}
         sidebarCollapsed={layout.sidebarCollapsed}
         onToggleSidebar={layout.toggleSidebar}
         assistantOpen={route.assistantOpen}
         onToggleAssistant={toggleAssistant}
-        onOpenGit={() => navigate({ ...route, view: 'changes', tool: 'git' })}
+        onOpenGit={() => navigate({ ...route, tool: 'git' })}
         onOpenManagement={() => {
           setManagementTab('memory');
           setManagementOpen(true);
@@ -486,7 +529,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             <button
               type="button"
               data-testid="project-load-error-back"
-              onClick={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              onClick={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
               className="h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
             >
               返回项目列表
@@ -497,7 +540,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         // One literature store for the sidebar's 文献 tab and the canvas hub (T5.1):
         // the provider sits *above* the layout so both subtrees read the same state.
         <LiteratureScopeProvider value={literature}>
-          <WorkflowScopeProvider value={workflow}>
           <WorkspaceLayout
           layout={layout}
           assistantOpen={route.assistantOpen}
@@ -515,6 +557,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               writable={projectWritable}
               openFile={route.openFile}
               onOpenFile={openFileInCanvas}
+              previewRequest={filePreview}
               activeThreadId={assistantThreadId}
               onSelectThread={setAssistantThreadId}
               onStartNewThread={() => setAssistantThreadId(null)}
@@ -524,7 +567,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               onSelectWorkspace={workspaceBinding.bind}
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}
-              onBackToPortal={() => navigate({ ...route, projectId: null, view: 'overview' })}
+              onBackToPortal={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
               onOpenLiterature={(libraryItemId) => {
                 // The sidebar tab has already selected the row in the shared store;
                 // re-selecting is a no-op (`setState` with the same value bails out)
@@ -557,21 +600,17 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               <WorkspaceCanvas
                 activeTab={canvasTabForView(route.view)}
                 onTabChange={(tab) =>
-                  // Switching tabs retargets the workbench tool instead of leaving
-                  // the previous one open behind an unrelated view (the terminal
-                  // tab carries its own tool; the other two carry none). No canvas
-                  // tab is the files view, so this cannot drop an open file.
-                  navigate({ ...route, view: tab, tool: tab === 'terminal' ? 'terminal' : null })
+                  // Switching canvas tabs clears the drawer tool rather than leaving it open
+                  // behind an unrelated view — a `?tool=git` that survived a tab click would sit
+                  // over the terminal with no way to tell why. No canvas tab is the files view,
+                  // so this cannot drop an open file.
+                  navigate({ ...route, view: tab, tool: null })
                 }
               >
                 {/* The scope is what lazily loaded views read; the routing
                     props stay on `ViewContent` (see workspace-scope.tsx). */}
                 <WorkspaceScopeProvider value={scope}>
-                  <ViewContent
-                    view={route.view}
-                    projectId={route.projectId}
-                    stageHint={route.view === 'stage' ? route.stageTab : null}
-                  />
+                  <ViewContent view={route.view} projectId={route.projectId} />
                 </WorkspaceScopeProvider>
               </WorkspaceCanvas>
             </div>
@@ -589,12 +628,15 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   composerSeed={assistantSeed}
                   onComposerSeedConsumed={() => setAssistantSeed(null)}
                   onOpenSettings={() => navigate({ ...route, page: 'settings' })}
+                  // Same handler the divider's double-click and Home key use, so the
+                  // header button cannot drift from the drag handle (reference has it
+                  // in the header; the shell had it only on the divider).
+                  onResetWidth={layout.resetAssistant}
                 />
               </Suspense>
             ) : null
           }
           />
-          </WorkflowScopeProvider>
         </LiteratureScopeProvider>
       ) : (
         <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
@@ -602,7 +644,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             client={client}
             createFormRequested={route.newProject}
             onRequestConsumed={(requested) => navigate({ ...route, newProject: requested })}
-            onOpenProject={(projectId) => navigate({ ...route, projectId, view: 'overview' }, { mode: 'push' })}
+            onOpenProject={(projectId) => navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' })}
           />
         </main>
       )}

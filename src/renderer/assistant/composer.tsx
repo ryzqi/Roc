@@ -31,6 +31,20 @@ import { parseSlashSkillCommand } from './slash-skill-command';
  *
  * Keys follow the legacy shell exactly (Enter sends, Shift+Enter newlines, ⌘Enter sends)
  * because that habit is the one thing users bring with them.
+ *
+ * ## The two toggles the reference has in this footer are not here
+ *
+ * `research-studio`'s composer ends with 联网搜索 and 深度思考 switches. Neither is
+ * portable: `chatStartRunRequestSchema` has no thinking or web-search field — the run
+ * request carries `input` / `mode` / `threadId` / `workflowHint` / `taskSource` /
+ * `workspacePath` / `shellAllowedCommands` / `attachments` / `explicitSkillIds` and nothing
+ * else. A switch that never reaches the backend is a control that lies, so the row carries
+ * the one run-shape choice the contract does have (`mode`: 对话 / 任务 / 计划) instead, and
+ * capability stays where it is actually enforced — `enabledCapabilities` on the request and
+ * the run's own manifest (with the approval cards as the surface that shows it).
+ *
+ * 联网搜索 in particular is not a switch in this build at all: a run either has the web
+ * tools per its manifest or it does not.
  */
 
 export type ComposerSkill = { id: string; name: string };

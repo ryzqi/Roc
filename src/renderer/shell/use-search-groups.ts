@@ -55,6 +55,14 @@ export type SearchGroupSources = {
    * frozen route contract, and the skills group below is a real `skills.list` query rather than the
    * P1 placeholder that promised "P9 接入" (F24).
    */
+  /**
+   * Opens a tab of the management surface.
+   *
+   * `ManagementTabId`'s four values are the drawer's tabs, and only three of them are also canvas
+   * views: 任务 is drawer-only in this shell (the reference has no task page, and the canvas view
+   * that used to exist was a second surface over one dataset). The shell decides which of the two
+   * it opens — closing the drawer is part of that jump either way.
+   */
   onOpenManagementView: (tab: 'memory' | 'skills' | 'mcp' | 'tasks') => void;
   /**
    * Bumped every time the palette opens.
@@ -269,7 +277,7 @@ export function useSearchGroups({
         { id: 'mgmt:memory', title: '记忆', subtitle: 'USER.md / AGENTS.md / MEMORY.md（markdown 内容）', onOpen: () => onOpenManagementView('memory') },
         { id: 'mgmt:skills', title: '技能', subtitle: '安装、启停、浏览技能文件', onOpen: () => onOpenManagementView('skills') },
         { id: 'mgmt:mcp', title: 'MCP', subtitle: '授权服务与工具装配预览', onOpen: () => onOpenManagementView('mcp') },
-        { id: 'mgmt:tasks', title: '后台任务', subtitle: '定时任务与调度记录（打开任务是 P6 的任务看板）', onOpen: () => onOpenManagementView('tasks') }
+        { id: 'mgmt:tasks', title: '后台任务', subtitle: '定时任务与调度记录（打开管理面板的任务分区）', onOpen: () => onOpenManagementView('tasks') }
       ].filter((item) => trimmed.length === 0 || item.title.toLowerCase().includes(trimmed) || (item.subtitle ?? '').toLowerCase().includes(trimmed))
     };
 

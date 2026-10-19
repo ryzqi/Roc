@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Loader2, Plus } from 'lucide-react';
+import { AlertCircle, BookOpen, Database, Layers, Loader2, Plus, Share2, Zap } from 'lucide-react';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -36,16 +36,38 @@ import { useLiteratureImportActions } from './use-literature-import-actions';
  *
  * No mock path exists: when the backend has nothing, each sub-view shows its empty
  * state (gate 4).
+ *
+ * ## The header is the reference's header
+ *
+ * `research-studio`'s hub opens with one recessed tab track on the left (four equal
+ * chips, the active one raised) and the two global actions on the right — 「设置」
+ * with the amber bolt, and 「导入」 as the screen's single solid primary button.
+ * Both are ported. Two details differ on purpose:
+ *
+ *   - the labels are 阅读 / 检索 / 知识库 / 图谱 rather than the reference's
+ *     阅读 / 检索 / Wiki / 图谱: 知识库 is this product's established word for the
+ *     derived concept view (its testids and docs all say `wiki`/知识库), and the
+ *     reference's 「Wiki」 is the loanword the glossary avoids;
+ *   - 「设置」 opens the settings centre, but not at a named section. The reference
+ *     passes `'literature'`; this shell's route contract has one `page=settings`
+ *     value, so the panel opens at its own default (the phase's deviation table is
+ *     where a section param would be registered, and P8's gate drives sections
+ *     through the panel's own nav).
+ *
+ * The cross-view `FocusRequest` hand-off (检索 → 阅读, 知识库 → 图谱) is unchanged.
  */
 
 type SubViewId = LiteratureSubView;
 
-const SUB_VIEWS: Array<{ id: SubViewId; label: string }> = [
-  { id: 'reader', label: '阅读' },
-  { id: 'rag', label: 'RAG' },
-  { id: 'wiki', label: '知识库' },
-  { id: 'graph', label: '图谱' }
+const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
+  { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  { id: 'rag', label: '检索', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
+  { id: 'wiki', label: '知识库', icon: Layers, iconClass: 'text-[var(--icon-wiki)]' },
+  { id: 'graph', label: '图谱', icon: Share2, iconClass: 'text-[var(--icon-graph)]' }
 ];
+
+const SUB_TAB_BASE =
+  'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function LiteratureHubView(): React.JSX.Element {
   const store = useLiterature();
@@ -95,34 +117,58 @@ export function LiteratureHubView(): React.JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
-      <div role="tablist" aria-label="文献工作区" className="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
-        {SUB_VIEWS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={entry.id === subView}
-            tabIndex={entry.id === subView ? 0 : -1}
-            onClick={() => setSubView(entry.id)}
-            data-testid={`literature-subview-${entry.id}`}
-            className={
-              entry.id === subView
-                ? 'h-[var(--control-height-compact)] rounded-control bg-accent-soft px-2.5 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)]'
-                : 'h-[var(--control-height-compact)] rounded-control px-2.5 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
-            }
-          >
-            {entry.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => openImport('document')}
-          data-testid="literature-hub-import"
-          className="ml-auto flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+      <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-line px-3">
+        <div
+          role="tablist"
+          aria-label="文献工作区"
+          className="flex shrink-0 items-center gap-1 rounded-card border border-line bg-surface p-0.5"
         >
-          <Plus size={11} aria-hidden="true" />
-          导入
-        </button>
+          {SUB_VIEWS.map((entry) => {
+            const selected = entry.id === subView;
+            const Icon = entry.icon;
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setSubView(entry.id)}
+                data-testid={`literature-subview-${entry.id}`}
+                className={
+                  selected
+                    ? `${SUB_TAB_BASE} bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)]`
+                    : `${SUB_TAB_BASE} text-muted hover:text-ink active:bg-[var(--overlay-active)]`
+                }
+              >
+                <Icon size={13} aria-hidden="true" className={entry.iconClass} />
+                <span>{entry.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={scope.openSettings}
+            title="配置 MinerU 与学术源（⌘,）"
+            data-testid="literature-hub-settings"
+            className="flex h-7 items-center gap-1 rounded-card border border-line bg-surface px-2.5 text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
+          >
+            <Zap size={12} aria-hidden="true" className="text-[var(--icon-wiki)]" />
+            设置
+          </button>
+          <button
+            type="button"
+            onClick={() => openImport('document')}
+            data-testid="literature-hub-import"
+            className="flex h-7 items-center gap-1.5 rounded-card bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] active:opacity-90"
+          >
+            <Plus size={13} aria-hidden="true" />
+            导入
+          </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -168,6 +214,14 @@ export function LiteratureHubView(): React.JSX.Element {
                   setFocus({ parseId: null, locator: null });
                   setSubView('graph');
                 }}
+                onOpenPaper={(libraryItemId) => {
+                  // The reference's `onJumpToPaperReader`: select the item and land in the
+                  // reader. Selecting first is what makes the reader show *this* paper.
+                  store.select(libraryItemId);
+                  setFocus({ parseId: null, locator: null });
+                  setSubView('reader');
+                }}
+                onAskAssistant={(prompt) => void store.askAssistant(prompt)}
               />
             ) : (
               derivedPanel
@@ -181,6 +235,10 @@ export function LiteratureHubView(): React.JSX.Element {
                 evidence={evidence}
                 libraryItems={store.items}
                 focusClaimId={graphClaimFocusId}
+                onAskAssistantAboutNode={(node) =>
+                  // The reference's own wording for this hand-off.
+                  void store.askAssistant(`请围绕实体 “${node.label}” 扩展相关原理、算法演进与代表论文。`)
+                }
               />
             ) : (
               derivedPanel

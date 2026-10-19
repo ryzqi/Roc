@@ -523,7 +523,7 @@ try {
   if (!secondProject.ok) {
     fail('5 恢复', '创建项目 2', secondProject.error.message);
   }
-  await navigate(page, `page=research&project=${secondProject.data.id}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${secondProject.data.id}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForTimeout(500);
   // 切项目会清空 threadId，所以“看不到转录”必须是**主动**结果：助手还在、输入区可用、
@@ -540,7 +540,7 @@ try {
   );
   await page.click('[data-testid="sidebar-tab-sessions"]');
   const listedInSecondProject = await describeSessionList(page, threadId);
-  await navigate(page, `page=research&project=${projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.click('[data-testid="sidebar-tab-sessions"]');
   await waitForSessionRow(page, threadId, '5 恢复');
@@ -560,7 +560,7 @@ try {
   await page.screenshot({ path: join(artifactDir, '05-restored-run.png') });
 
   // ---- 闸门 6：500 条消息时虚拟化仍生效 ----------------------------------------
-  await navigate(page, `page=research&project=${projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   const seeding = await seedManyRuns(page, { threadId, projectId, workspacePath: workspaceRoot, runs: gate6Runs });
   assertCheck(
