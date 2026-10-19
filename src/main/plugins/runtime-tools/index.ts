@@ -13,7 +13,7 @@ import type {
 } from '../../../shared/types';
 import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
-import type { WorkspaceConfigService } from '../../services/workspace-service';
+import type { WorkspaceConfigService, WorkspaceService } from '../../services/workspace-service';
 import type { WebReadExecutionRequest, WebReadResult } from '../../services/web-read-service';
 import { webReadExecutionRequestSchema } from '../../services/web-read-request-schema';
 import { createRtkService } from './rtk-adapter';
@@ -56,6 +56,12 @@ export type RuntimeToolsPluginOptions = {
   rootDir?: string;
   workspacePath?: string;
   workspaceConfigService?: WorkspaceConfigService;
+  /**
+   * The shell's working-directory binding. When the shell hands over the instance it owns,
+   * `shell.execute` without an explicit `cwd` resolves the bound directory; a private instance
+   * would never see `workspace.select` and would always answer `workspace_not_selected`.
+   */
+  workspaceService?: WorkspaceService;
   binaryManager?: RTKBinaryManager;
   commandExecutor?: ShellCommandExecutor;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
@@ -84,6 +90,7 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
         rootDir: options.rootDir,
         workspacePath: options.workspacePath,
         workspaceConfigService: options.workspaceConfigService,
+        workspaceService: options.workspaceService,
         rtkService,
         commandExecutor: options.commandExecutor
       });

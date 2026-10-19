@@ -17,6 +17,7 @@ import { createAppPlugin } from './plugins/app';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
 import { createAgentPlugin } from './plugins/agent';
 import { AgentTaskHistoryContract } from './plugins/agent/agent-task-history-contract';
+import { AgentMemoryStatsContract } from './plugins/agent/agent-memory-stats-contract';
 import { createDiagnosticsPlugin } from './plugins/diagnostics';
 import type { RuntimeMetricsProvider } from './plugins/diagnostics/runtime-metrics';
 import { createMcpPlugin } from './plugins/mcp';
@@ -106,6 +107,14 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
   const runtime = new KernelRuntime({
     rootDir: pluginDataDir,
+    memoryRetentionPolicy: () => {
+      configService.reloadSettingsDocument();
+      const memory = configService.getSettings().memory;
+      return {
+        autoMemoryAuditRetentionDays: memory.autoMemory.auditRetentionDays,
+        sessionMessageRetentionDays: memory.sessionRetentionDays
+      };
+    },
     createPlugins: (databasePool) =>
       options.plugins ??
       createDefaultMainKernelPlugins({
@@ -239,6 +248,9 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createMemoryPlugin({
+      // `memory.status` reports session rows and full-text-index health, both of which live in the
+      // agent database — the memory plugin only owns the memory database.
+      agentFacts: new AgentMemoryStatsContract(input.databasePool.getConnection('@roc/plugin-agent')),
       getWorkspace: () => {
         const workspace = workspaceService.getCurrentWorkspace();
         return workspace === null ? null : { path: workspace.path, label: workspace.displayName };
@@ -262,7 +274,9 @@ function createDefaultMainKernelPlugins(input: {
       confirmShellRequest: input.confirmShellRequest,
       rootDir: input.paths.root,
       workspaceConfigService: configService,
-      workspacePath: undefined
+      // Same instance the shell binds: `shell.execute` without an explicit `cwd` must resolve the
+      // bound directory instead of throwing `workspace_not_selected`.
+      workspaceService
     }),
     createDiagnosticsPlugin({
       performanceObserverService: input.performanceObserverService,

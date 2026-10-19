@@ -8,6 +8,12 @@ export type RocDatabaseRetentionPolicy = {
   terminalRunRetentionDays: number;
   maxCheckpointsPerThread: number;
   autoMemoryAuditRetentionDays: number;
+  /**
+   * `settings.memory.sessionRetentionDays`. Backs the memory panel's "保留 N 天" line: the panel
+   * has always displayed this window, so it has to be the window the retention pass actually
+   * applies to `session_messages`.
+   */
+  sessionMessageRetentionDays: number;
 };
 
 export type RocDatabaseRetentionResult = {
@@ -20,6 +26,7 @@ export type RocDatabaseRetentionResult = {
     checkpointWrites: number;
     toolEffects: number;
     contextArtifacts: number;
+    sessionMessages: number;
     memoryAudit: number;
   };
 };
@@ -32,8 +39,9 @@ export function runDatabaseRetention(input: {
 }): RocDatabaseRetentionResult {
   validatePolicy(input.policy);
   const terminalCutoff = cutoffIso(input.now, input.policy.terminalRunRetentionDays);
+  const sessionCutoff = cutoffIso(input.now, input.policy.sessionMessageRetentionDays);
   const memoryAuditCutoff = cutoffIso(input.now, input.policy.autoMemoryAuditRetentionDays);
-  const agentDeleted = runAgentRetention(input.agentDb, input.policy, terminalCutoff);
+  const agentDeleted = runAgentRetention(input.agentDb, input.policy, terminalCutoff, sessionCutoff);
   const memoryAudit = runMemoryRetention(input.memoryDb, memoryAuditCutoff);
   return {
     deleted: {
@@ -46,7 +54,8 @@ export function runDatabaseRetention(input: {
 function runAgentRetention(
   agentDb: DatabaseConnection,
   policy: RocDatabaseRetentionPolicy,
-  terminalCutoff: string
+  terminalCutoff: string,
+  sessionCutoff: string
 ): Omit<RocDatabaseRetentionResult['deleted'], 'memoryAudit'> {
   return agentDb.transaction(() => {
     try {
@@ -65,6 +74,16 @@ function runAgentRetention(
       const contextArtifacts = agentDb
         .prepare('DELETE FROM context_artifacts WHERE run_id IN (SELECT run_id FROM retention_old_runs)')
         .run().changes;
+      // Session messages age out by their own window, not the run window: a thread can be long
+      // finished while its transcript is still recent. The protected-thread list keeps the
+      // transcripts of runs that are still live (or awaiting an interrupt) intact.
+      const sessionMessages = agentDb
+        .prepare(
+          `DELETE FROM session_messages
+           WHERE created_at < ?
+             AND thread_id NOT IN (SELECT thread_id FROM retention_protected_threads)`
+        )
+        .run(sessionCutoff).changes;
       const { checkpointWrites, checkpoints } = new RocSqliteCheckpointer(agentDb).deleteExcessCheckpoints({
         protectedThreadIds,
         maxCheckpointsPerThread: policy.maxCheckpointsPerThread
@@ -77,7 +96,8 @@ function runAgentRetention(
         checkpoints,
         checkpointWrites,
         toolEffects,
-        contextArtifacts
+        contextArtifacts,
+        sessionMessages
       };
     } finally {
       dropTempTables(agentDb);
@@ -147,6 +167,9 @@ function validatePolicy(policy: RocDatabaseRetentionPolicy): void {
   }
   if (policy.autoMemoryAuditRetentionDays < 0) {
     throw new Error('database_retention_memory_days_invalid');
+  }
+  if (policy.sessionMessageRetentionDays < 0) {
+    throw new Error('database_retention_session_days_invalid');
   }
 }
 

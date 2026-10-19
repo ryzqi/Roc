@@ -36,8 +36,25 @@ export type MemoryWorkspaceContext = {
   label: string;
 };
 
+/**
+ * The agent-database facts `memory.status` reports.
+ *
+ * `session_messages` and its full-text index live in the agent database, so the memory plugin
+ * cannot read them from its own connection. Structural (not nominal) so
+ * `AgentMemoryStatsContract` satisfies it without the memory plugin importing the agent plugin.
+ */
+export type MemoryAgentFactsProvider = {
+  readSessionStats(): { totalRows: number; oldestAt: string | null };
+  readFullTextIndexHealth(): { healthy: boolean; status: 'ready' | 'unavailable' };
+};
+
 type MemoryStoreRepositoryOptions = {
   store: RocSqliteStore;
+  /**
+   * Required, not optional: a status with no agent facts would have to invent them, which is
+   * exactly the hardcoded `0 / null / healthy` this contract replaced.
+   */
+  agentFacts: MemoryAgentFactsProvider;
   getWorkspace: () => MemoryWorkspaceContext | null;
   getMemorySettings?: () => MemoryStoreRepositorySettings;
   auditRepository?: AutoMemoryAuditRepository;
@@ -271,6 +288,8 @@ export class MemoryStoreRepository {
 
   async status(): Promise<MemoryStatus> {
     const context = this.resolveContext();
+    const sessionStats = this.options.agentFacts.readSessionStats();
+    const fullTextIndex = this.options.agentFacts.readFullTextIndexHealth();
     const files: MemoryFileMeta[] = [];
     for (const request of slotRequests) {
       const resolved = resolveMemorySlotByScopeKind(request, context.workspaceHash);
@@ -300,11 +319,11 @@ export class MemoryStoreRepository {
         totalLimit
       },
       sessionMessages: {
-        totalRows: 0,
+        totalRows: sessionStats.totalRows,
         retentionDays: this.getMemorySettings().sessionRetentionDays,
-        oldestAt: null
+        oldestAt: sessionStats.oldestAt
       },
-      fullTextIndex: { healthy: true, status: 'ready' },
+      fullTextIndex,
       autoMemory: {
         enabled: this.getMemorySettings().autoMemory.enabled,
         auditRetentionDays: this.getMemorySettings().autoMemory.auditRetentionDays,

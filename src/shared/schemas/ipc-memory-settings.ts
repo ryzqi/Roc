@@ -175,7 +175,7 @@ export const memoryStatusSchema = z
         oldestAt: z.string().nullable()
       })
       .strict(),
-    fullTextIndex: z.object({ healthy: z.boolean(), status: z.literal('ready') }).strict(),
+    fullTextIndex: z.object({ healthy: z.boolean(), status: z.enum(['ready', 'unavailable']) }).strict(),
     autoMemory: z
       .object({
         enabled: z.boolean(),

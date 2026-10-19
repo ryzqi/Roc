@@ -403,6 +403,47 @@ try {
     String(slotShape.workspaceHash)
   );
 
+  // 会话消息与全文索引是 agent 库的事实：此前是写死的 0 / null / healthy:true。
+  const sessionFacts = await page.evaluate(async () => {
+    const status = await window.roc.memory.status();
+    const settings = await window.roc.settings.get();
+    return {
+      memory: status.ok
+        ? { sessionMessages: status.data.sessionMessages, fullTextIndex: status.data.fullTextIndex }
+        : { error: status.error.message },
+      retentionDays: settings.ok ? settings.data.settings.memory.sessionRetentionDays : null
+    };
+  });
+  const sessionStats = sessionFacts.memory.sessionMessages;
+  assertCheck(
+    '1 记忆',
+    '会话消息行数与最早时间来自 agent 库（探针会话已持久化，不再恒为 0 / null）',
+    typeof sessionStats?.totalRows === 'number' &&
+      sessionStats.totalRows > 0 &&
+      typeof sessionStats.oldestAt === 'string' &&
+      Number.isFinite(Date.parse(sessionStats.oldestAt)),
+    JSON.stringify(sessionStats).slice(0, 120)
+  );
+  assertCheck(
+    '1 记忆',
+    '保留天数与 settings.memory.sessionRetentionDays 是同一个值',
+    sessionStats?.retentionDays === sessionFacts.retentionDays,
+    `${String(sessionStats?.retentionDays)} vs ${String(sessionFacts.retentionDays)}`
+  );
+  assertCheck(
+    '1 记忆',
+    '全文索引状态来自真实探测（ready，不再是常量 true）',
+    sessionFacts.memory.fullTextIndex?.healthy === true && sessionFacts.memory.fullTextIndex?.status === 'ready',
+    JSON.stringify(sessionFacts.memory.fullTextIndex)
+  );
+  const sessionRowText = await text('mgmt-memory-sessions');
+  assertCheck(
+    '1 记忆',
+    '面板把最早时间格式化成日期，而不是原样打印 ISO',
+    sessionRowText.includes('行') && /\dT\d/u.test(sessionRowText) === false,
+    sessionRowText.slice(0, 80)
+  );
+
   // 写 global/user
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
   await page.waitForFunction(

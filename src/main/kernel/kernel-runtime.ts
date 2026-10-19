@@ -21,6 +21,15 @@ export type KernelRuntimeOptions = {
   rootDir: string;
   createPlugins(databasePool: DatabasePool): readonly RocPlugin[];
   safeStorage: SafeStorageBackend;
+  /**
+   * The two retention windows that are user settings (`settings.memory`). They override the fixed
+   * defaults at run time instead of replacing the policy wholesale, so the run/checkpoint limits
+   * keep living in one place.
+   */
+  memoryRetentionPolicy?: () => Pick<
+    RocDatabaseRetentionPolicy,
+    'autoMemoryAuditRetentionDays' | 'sessionMessageRetentionDays'
+  >;
 };
 
 export type KernelRuntimeStatus = {
@@ -41,7 +50,8 @@ type KernelInfrastructure = {
 const productionRetentionPolicy: RocDatabaseRetentionPolicy = {
   terminalRunRetentionDays: 90,
   maxCheckpointsPerThread: 100,
-  autoMemoryAuditRetentionDays: 180
+  autoMemoryAuditRetentionDays: 180,
+  sessionMessageRetentionDays: 90
 };
 
 export class KernelRuntime {
@@ -88,7 +98,7 @@ export class KernelRuntime {
             runDatabaseRetention({
               agentDb: databasePool.getConnection('@roc/plugin-agent'),
               memoryDb: databasePool.getConnection('@roc/plugin-memory'),
-              policy: productionRetentionPolicy,
+              policy: this.resolveRetentionPolicy(),
               now: new Date()
             })
         },
@@ -163,6 +173,12 @@ export class KernelRuntime {
         }
       }
     }
+  }
+
+  /** Settings-backed overrides for the fixed retention defaults (see `productionRetentionPolicy`). */
+  private resolveRetentionPolicy(): RocDatabaseRetentionPolicy {
+    const overrides = this.options.memoryRetentionPolicy?.();
+    return overrides === undefined ? productionRetentionPolicy : { ...productionRetentionPolicy, ...overrides };
   }
 
   startDatabaseMaintenance(): void {

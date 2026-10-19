@@ -92,6 +92,10 @@ export function MemorySection({
 
   const memory: MemoryStatus = files.memory;
   const saveOutcome = files.save.outcome;
+  const oldestSessionAt = memory.sessionMessages.oldestAt;
+  const fullTextIndexState = memory.fullTextIndex.healthy
+    ? '健康'
+    : '异常（全文索引不可用，会话检索会退化为无结果）';
 
   const requestSave = (): void => {
     void files.save.run().then((saved) => {
@@ -132,12 +136,12 @@ export function MemorySection({
           />
           <KeyValueRow
             label="会话消息"
-            value={`${memory.sessionMessages.totalRows} 行 · 保留 ${memory.sessionMessages.retentionDays} 天 · 最早 ${memory.sessionMessages.oldestAt ?? '—'}`}
+            value={`${memory.sessionMessages.totalRows} 行 · 保留 ${memory.sessionMessages.retentionDays} 天 · 最早 ${oldestSessionAt === null ? '—' : formatBeijingDateTime(oldestSessionAt)}`}
             testId="mgmt-memory-sessions"
           />
           <KeyValueRow
             label="全文索引"
-            value={memory.fullTextIndex.healthy ? '健康' : `异常（${memory.fullTextIndex.status}）`}
+            value={fullTextIndexState}
             testId="mgmt-memory-index"
           />
         </dl>

@@ -21,6 +21,8 @@ export type ShellAdapterOptions = {
   rootDir?: string;
   workspacePath?: string;
   workspaceConfigService?: WorkspaceConfigService;
+  /** A shared binding: when present this adapter reads it instead of creating its own. */
+  workspaceService?: WorkspaceService;
   rtkService: RtkService;
   commandExecutor?: ShellCommandExecutor;
   taskRecorder?: ShellTaskEventRecorder;
@@ -29,7 +31,8 @@ export type ShellAdapterOptions = {
 export function createShellExecutionService(options: ShellAdapterOptions): ShellExecutionService {
   const paths = new RocPaths(options.rootDir);
   paths.ensureTree();
-  const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig());
+  const workspaceService =
+    options.workspaceService ?? new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig());
   if (options.workspacePath !== undefined) {
     workspaceService.selectWorkspace(options.workspacePath);
   }

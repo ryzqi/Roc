@@ -18,6 +18,7 @@ import { AutoMemoryAuditRepository } from '../../services/memory/auto-memory-aud
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import {
   MemoryStoreRepository,
+  type MemoryAgentFactsProvider,
   type MemoryStoreRepositorySettings,
   type MemoryWorkspaceContext
 } from './memory-store-repository';
@@ -118,7 +119,9 @@ const memoryStatusSchema = z.object({
   }),
   fullTextIndex: z.object({
     healthy: z.boolean(),
-    status: z.literal('ready')
+    // `ready` / `unavailable` rather than a `ready` literal: an unhealthy index previously had to
+    // describe itself as ready, which made the pair `healthy: false, status: 'ready'` unavoidable.
+    status: z.enum(['ready', 'unavailable'])
   }),
   autoMemory: z.object({
     enabled: z.boolean(),
@@ -199,6 +202,8 @@ const memoryCapabilityDescriptors = [
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type MemoryPluginOptions = {
+  /** Agent-database facts for `memory.status` (`session_messages` + its full-text index). */
+  agentFacts: MemoryAgentFactsProvider;
   workspace?: {
     path: string;
     label: string;
@@ -207,7 +212,7 @@ export type MemoryPluginOptions = {
   getMemorySettings?: () => MemoryStoreRepositorySettings;
 };
 
-export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin {
+export function createMemoryPlugin(options: MemoryPluginOptions): RocPlugin {
   let subscriptions: EventSubscription[] = [];
   return {
     manifest: {
@@ -229,6 +234,7 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
         options.getMemorySettings === undefined ? () => defaultSettings.memory : options.getMemorySettings;
       const repository = new MemoryStoreRepository({
         store: new RocSqliteStore(db),
+        agentFacts: options.agentFacts,
         getWorkspace,
         getMemorySettings,
         auditRepository
