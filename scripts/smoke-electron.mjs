@@ -16,8 +16,8 @@
  * 4（审批）由 P4 的验收闸门深度覆盖，`--full` 会把它作为子进程跑一遍，
  * 而不是在这里再抄一遍断言（重复的断言会分叉）。
  *
- * 「7 人工闸门」曾由 P6 的验收闸门覆盖；P6/P7 整面已随 research-studio 对齐删除
- * （见 `docs/adr/0024-stage-surface-removed-for-parity.md`），所以这条路径不再有闸门。
+ * 「7 人工闸门」曾由 P6 的验收闸门覆盖；P6/P7 整面已删除
+ * （见 `docs/adr/0024-stage-surface-removed.md`），所以这条路径不再有闸门。
  *
  * 运行：
  *   rm -rf dist/renderer && pnpm build
@@ -176,7 +176,7 @@ try {
   await page.waitForSelector('[data-testid="file-preview"]', { timeout: 20_000 });
   const previewText = (await page.locator('[data-testid="file-preview"]').textContent()) ?? '';
   assertCheck('6 工作区', '文件预览显示磁盘上的真实内容', previewText.includes('workspace overview smoke file'), previewText.slice(0, 60));
-  // Escape 关掉预览（参考的 FilePreviewModal 就是 Escape/点遮罩关），否则它会盖住后面的步骤。
+  // Escape 关掉预览（FilePreviewModal 就是 Escape/点遮罩关），否则它会盖住后面的步骤。
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { state: 'detached', timeout: 15_000 });
 

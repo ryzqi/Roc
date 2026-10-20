@@ -10,7 +10,7 @@ import { ToolCallBlock } from './tool-call-block';
  * Subagent card (T4.4), ported from `chat/subagent/SubagentActivityCard.tsx`.
  *
  * This is the block that proves the "reuse the reducer, don't rewrite the renderer"
- * decision (ADR-M04) was right: a subagent run nests text, reasoning, tool calls and
+ * decision was right: a subagent run nests text, reasoning, tool calls and
  * **other subagents** inside one card, and the tree shape comes from
  * `assistant/subagent-tree.ts` plus this recursion.
  *

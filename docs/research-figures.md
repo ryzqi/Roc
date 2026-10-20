@@ -48,7 +48,7 @@ await research.publishFigure({ projectId, runId, replacesFigureId: null });
 roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf}/{sha256}
 ```
 
-图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。科研页图稿面板选择 Python 源与数据后渲染、读日志并发布；审核与替换仍走阶段闸门。
+图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。图稿域**今天没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：渲染、读日志与发布走 `research.figure.startOwned` / `publishOwned`，由对话代理调用；深链到 `?view=figures` 会明确失败。审核与替换仍走人工闸门（对话里的 `research_approve_gate`）。
 
 ## 验证
 

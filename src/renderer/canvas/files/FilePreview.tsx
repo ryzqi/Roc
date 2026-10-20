@@ -55,10 +55,10 @@ export type FilePreviewProps = {
   /**
    * Renders a close control at the end of the header row.
    *
-   * The preview opens as a modal (the reference's `FilePreviewModal`), and Escape is handled by
+   * The preview opens as a modal (`FilePreviewModal`), and Escape is handled by
    * a window listener there — but the PDF branch renders a `<iframe>`, and once the iframe has
    * focus the key events never reach that listener. A visible close button is the affordance
-   * that does not depend on where focus happens to be, which is also why the reference has one.
+   * that does not depend on where focus happens to be.
    */
   onClose?: () => void;
 };

@@ -2,7 +2,7 @@ import { AlertTriangle, CircleSlash, RotateCcw, X } from 'lucide-react';
 import type { AppError } from '../app/errors';
 
 /**
- * Page-level and blocked-level error surfaces (MASTER v2 §10).
+ * Page-level and blocked-level error surfaces.
  *
  * `page` renders a dismissible `role="alert"` bar; `blocked` renders an in-canvas
  * explanation with a recovery affordance, because a refusal is an expected

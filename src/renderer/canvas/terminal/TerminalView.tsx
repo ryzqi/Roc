@@ -43,7 +43,7 @@ import { useRtkStatus } from '../../workspace/use-rtk-status';
  *
  * ## Not ported: 「在终端里运行这个脚本」
  *
- * The reference's canvas has one hand-off on this surface: a plot/script panel calls
+ * The canvas has one hand-off on this surface: a plot/script panel calls
  * `onRunScriptInTerminal(code)`, which switches to the terminal tab with a command
  * prefilled (`python src/plot_benchmarks.py`) and the terminal runs it on mount
  * (`initialCommand`).
@@ -52,7 +52,7 @@ import { useRtkStatus } from '../../workspace/use-rtk-status';
  * the command has to travel from the caller to this view, and every route for it is closed.
  *
  *   - **A route parameter** (`?view=terminal&run=…`) would extend the frozen route
- *     contract and its round-trip tests (ADR-M05) for a once-per-run hand-off.
+ *     contract and its round-trip tests for a once-per-run hand-off.
  *   - **A new prefill entry in the workspace scope** means inventing the caller as well:
  *     this build has no plot panel that owns a script path — experiments and figures are
  *     records in the backend, and the script that produced them is not addressable from

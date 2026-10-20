@@ -45,7 +45,7 @@ rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/r
 
 运行完整验证：
 
-`pnpm test` 写 `.artifacts/wave1/electron-smoke.json`。`smoke:mac` 写 `.artifacts/mac-package/result.json`。
+`pnpm test` 写 `.artifacts/smoke-electron/result.json`。`smoke:mac` 写 `.artifacts/mac-package/result.json`。
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck

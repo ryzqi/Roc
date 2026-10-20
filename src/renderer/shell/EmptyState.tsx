@@ -1,7 +1,7 @@
 import { AlertTriangle, Loader2, type LucideIcon } from 'lucide-react';
 
 /**
- * The one empty/loading/error surface (MASTER v2 §10).
+ * The one empty/loading/error surface.
  *
  * Shape is fixed: icon + one-line title + optional one sentence + at most one
  * action. No illustrations, no multi-paragraph explanations, and **no

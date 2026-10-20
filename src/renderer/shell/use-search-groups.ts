@@ -50,22 +50,13 @@ export type SearchGroupSources = {
   /** Opens the assistant panel on this thread. */
   onOpenSession: (threadId: string) => void;
   /**
-   * Opens one management group as a canvas view (`?view=memory|skills|mcp|tasks`).
+   * Opens one group of the management surface: as a canvas view when it has one, otherwise as a
+   * drawer section.
    *
-   * The palette is where 「管理」 becomes reachable without the drawer: the three views exist in the
-   * frozen route contract, and the skills group below is a real `skills.list` query rather than the
-   * P1 placeholder that promised "P9 接入" (F24).
-   */
-  /**
-   * Opens a tab of the management surface.
-   *
-   * `ManagementTabId`'s four values are the drawer's tabs, and only three of them are also canvas
-   * views: 任务 is drawer-only in this shell (the reference has no task page, and the canvas view
-   * that used to exist was a second surface over one dataset). The shell decides which of the two
-   *   - `ManagementTabId`'s four values are the drawer's tabs, and only three of them are also canvas
-   *     views: 任务 is drawer-only in this shell (the reference has no task page, and the canvas view
-   *     that used to exist was a second surface over one dataset). The shell decides which of the two
-   *     it opens — closing the drawer is part of that jump either way.
+   * `DrawerSectionId`'s four values are the drawer's tabs, and only three of them are also canvas
+   * views: 任务 is drawer-only (the canvas view that used to exist was a second surface over one
+   * dataset). The shell decides which of the two it opens — closing the drawer is part of that jump
+   * either way.
    *
    * The parameter type is the table's `DrawerSectionId`, so this interface cannot disagree with the
    * drawer's own tab list about how many sections there are.
@@ -342,7 +333,7 @@ export function useSearchGroups({
  *
  * `skills.list` has no query parameter, so the filter runs here — over the same fields the panel
  * shows (name and description). A hit opens the skills surface rather than deep-linking one skill:
- * the frozen route contract has no per-skill parameter (ADR-M05), and the panel's own selection is
+ * the route contract has no per-skill parameter, and the panel's own selection is
  * what remembers which skill is on screen.
  */
 function buildSkillsGroup(

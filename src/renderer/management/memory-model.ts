@@ -13,7 +13,7 @@ import type {
 /**
  * Memory projections (P9/T9.1).
  *
- * Type-only imports (esbuild-bundleable for the unit test, ADR-M08 discipline).
+ * Type-only imports (esbuild-bundleable for the unit test).
  *
  * ## What the backend actually has
  *

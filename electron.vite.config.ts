@@ -42,7 +42,7 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
     packages: ['react', 'react-dom', 'scheduler']
   },
   /*
-   * `react-diff-view` deliberately has **no** rule (P3 amendment to ADR-M11).
+   * `react-diff-view` deliberately has **no** rule.
    *
    * P0 gave it a `renderer-diff` chunk for a predictable name. That produced a
    * silent eager-graph leak instead: react-diff-view is a CJS package, so the
@@ -58,7 +58,7 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
    * deliberately not repeated here — they change with every phase, and a stale
    * number in a comment reads like a measurement. Run `pnpm check:renderer-chunks`
    * (which now fails on this class of leak) or `pnpm report:renderer-eager` for the
-   * current numbers; the P3 baseline is recorded in `ADR-M11 修订`.
+   * current numbers.
    *
    * The byte budget and the forbidden-name list both passed the leak, so
    * `scripts/check-renderer-chunks.mjs` now also asserts that no lazily loaded

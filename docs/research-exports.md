@@ -115,4 +115,4 @@ await research.writeExport({ projectId, exportId, destinationPath: '/absolute/de
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```
 
-成功后读取该输出目录的 `result.json`，其中保留 PDF、页面图和解析结果。应用端到端另见 `pnpm test` 的 `.artifacts/wave1/electron-smoke.json`。
+成功后读取该输出目录的 `result.json`，其中保留 PDF、页面图和解析结果。应用端到端另见 `pnpm test` 的 `.artifacts/smoke-electron/result.json`。

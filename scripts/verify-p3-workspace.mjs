@@ -243,13 +243,13 @@ try {
 
   // ---- 闸门 2：预览分发（文本 / 代码 / 图片 / PDF）+ R10 ------------------------
   //
-  // 点文件行会**弹出预览模态**（对齐 research-studio 的 `FilePreviewModal`），所以每个文件前要把上
+  // 点文件行会**弹出预览模态**（`FilePreviewModal`），所以每个文件前要把上
   // 一个关掉：模态没关就去点树里的下一行，指针会被遮罩拦住（Playwright 会直接报 intercepts pointer
   // events）。`关闭文件预览` 是模态标题栏的关闭按钮。
   const openPreview = async (rowTestId) => {
     await page.click(rowTestId);
   };
-  // 用预览自带的关闭按钮关（参考的 FilePreviewModal 也有一个）：PDF 分支是 `<iframe>`，一旦
+  // 用预览自带的关闭按钮关（FilePreviewModal 也有一个）：PDF 分支是 `<iframe>`，一旦
   // iframe 拿到焦点，Escape 就到不了我们的窗口监听器，所以关闭不能只依赖键盘。
   const closePreview = async () => {
     if ((await page.locator('[data-testid="file-preview-modal-panel"]').count()) > 0) {
@@ -268,7 +268,7 @@ try {
   await page.waitForSelector('[data-testid="file-preview"][data-kind="code"]', { timeout: 15_000 });
   assertCheck('2 预览', '代码文件按 code 分支渲染', true, 'data-kind=code');
   await closePreview();
-  // 预览必须关得掉（参考的 FilePreviewModal 用 Escape/遮罩关；面板本身没有共享 ModalShell 的
+  // 预览必须关得掉（FilePreviewModal 用 Escape/遮罩关；面板本身没有共享 ModalShell 的
   // 头部关闭按钮）。这一条是在文本/代码分支上断言的 —— PDF 分支是 `<iframe src=roc-preview://…>`，
   // iframe 会吃按键，所以那一步的关闭交给下一次导航。
   assertCheck('2 预览', '预览可以关掉（自带关闭按钮，不依赖焦点在哪）', (await page.locator('[data-testid="file-preview-modal-panel"]').count()) === 0, '');
@@ -291,7 +291,7 @@ try {
   // R10：越界路径必须在渲染前被拒绝，并给出专属文案。
   //
   // 这一步以前走画布 `view=files`（它的 `data-state=rejected` 就是这条闸门的判据）。画布文件视图
-  // 已删（对齐 research-studio：文件在左栏树 + 预览浮层），越界拒绝的真身移到左栏树自己：
+  // 已删（文件在左栏树 + 预览浮层），越界拒绝的真身移到左栏树自己：
   // 同一段 `checkRelativePath` + `pathRejectionMessage`，所以文案没变，只是显示在树里。
   await navigate(page, `page=research&project=${first.data.id}&view=literature&file=${encodeURIComponent('../../etc/passwd')}`);
   await page.waitForSelector('[data-testid="file-tree-rejected"]', { timeout: 10_000 });

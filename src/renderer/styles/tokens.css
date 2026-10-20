@@ -1,5 +1,5 @@
 /*
- * Roc renderer token layer (ADR-M03).
+ * Roc renderer token layer.
  *
  * Two layers only:
  *   1. palette   — `--app-zinc-*` / `--app-slate-*`, one set per theme.
@@ -10,8 +10,8 @@
  *
  * Theme selection is driven by `data-theme` on <html>, which is written from
  * `app.getStatus` + `app.onAppearanceUpdated` (see `shell/appearance.ts`).
- * The palette mirrors research-studio/src/index.css so the imported visual
- * language stays faithful; only the darkest stop is lifted off near-black.
+ * The darkest stop is lifted off near-black so the shell reads as a window
+ * rather than a hole.
  */
 
 /* ------------------------------------------------------------------ */
@@ -31,7 +31,7 @@
   --app-zinc-800: #27272a;
   --app-zinc-850: #202024;
   --app-zinc-900: #18181b;
-  /* Lifted off research-studio's #09090b: darker than #111827, still not black. */
+  /* Darker than #111827, still not black. */
   --app-zinc-950: #0e0e11;
 
   --app-slate-50: #18181b;
@@ -157,17 +157,15 @@
   --st-good: var(--st-ok);
   --st-good-line: var(--st-ok-line);
 
-  /* Category icon hues (research-studio parity).
+  /* Category icon hues.
 
-     The 400 stops are the exact values research-studio writes inline
-     (`text-sky-400` / `text-amber-400` / `text-emerald-400` / `text-purple-400` /
-     `text-blue-400`). They are tokens rather than component literals for two reasons:
-     no component may hard-code a hex (MASTER v2 §2), and the light theme drops to the
-     600 stops so the same hue keeps >= 3:1 on white instead of the 1.9:1 the 400 stops
-     give. Same hue identity, legible in both themes.
+     One token per category so no component hard-codes a hex. The dark theme uses
+     the 400 stops; the light theme drops to the 600 stops so the same hue keeps
+     >= 3:1 on white instead of the 1.9:1 the 400 stops give. Same hue identity,
+     legible in both themes.
 
-     `--icon-file` is **amber**, not sky: the reference's file-tree tab is a `FolderTree`
-     glyph in `text-amber-400` and its folders and `.tex` rows share that hue. */
+     `--icon-file` is **amber**, not sky: the file tree's folder glyph and its `.tex`
+     rows share that hue. */
   --icon-file: #fbbf24;
   --icon-literature: #38bdf8;
   --icon-latex: #fbbf24;
@@ -175,13 +173,13 @@
   --icon-git: #34d399;
   --icon-agent: #c084fc;
   --icon-manage: #c084fc;
-  /* Source-code rows in the file tree (reference: `text-blue-400`). */
+  /* Source-code rows in the file tree. */
   --icon-code: #60a5fa;
-  /* The literature hub's four sub-views (reference: sky / emerald / amber / cyan). */
+  /* The literature hub's four sub-views: 检索 emerald, 知识库 amber, 图谱 cyan, 阅读 sky. */
   --icon-rag: #34d399;
   --icon-wiki: #fbbf24;
   --icon-graph: #22d3ee;
-  /* The management drawer's four tabs (reference: purple / purple / sky / amber). */
+  /* The management drawer's four tabs: 记忆/技能 purple, MCP sky, 任务 amber. */
   --icon-memory: #c084fc;
   --icon-skill: #c084fc;
   --icon-mcp: #38bdf8;
@@ -191,8 +189,8 @@
   --icon-theme-sun: #fbbf24;
   --icon-theme-moon: #818cf8;
 
-  /* Selected-surface ring. research-studio writes `ring-1 ring-white/10`; an
-     alias keeps that hairline working in both themes through the palette flip. */
+  /* Selected-surface ring: a 10% highlight hairline that survives the palette
+     flip, so call sites do not need a theme-specific colour. */
   --ring-selected: color-mix(in srgb, var(--app-zinc-100) 10%, transparent);
 
   /* Tool-call states */
@@ -205,19 +203,15 @@
   --tool-st-error-bg: color-mix(in srgb, var(--st-bad) 16%, transparent);
   --tool-st-error-text: var(--st-bad);
 
-  /* Radii: three tiers, transcribed from research-studio's own scale.
+  /* Radii: four tiers, 6 / 8 / 12 / 16.
 
-     The reference does not invent a scale, it uses Tailwind's: `rounded-lg` (8px) on
-     controls, inputs and list rows, `rounded-xl` (12px) on cards, popovers and
-     drawers, `rounded-2xl` (16px) on modal panels — 222 / 63 / 13 call sites.
-     `rounded-md` (6px) survives only on chips and badges.
+     `--r-chip` 6 (chips, badges, the inner buttons of a segmented track) /
+     `--r-control` 8 (controls, inputs, list rows) / `--r-card` 12 (cards,
+     popovers, drawers) / `--r-window` 16 (modal panels).
 
-     MASTER v2 §1.4 had tightened these to 6 / 8 / 10 as a v1→v2 correction. ADR 0025
-     retires that clause: the reference is the visual standard, so the tiers come back to
-     6 / 8 / 12 / 16 — `rounded-md` keeps its own token (`--r-chip`) because the reference
-     has 40 call sites for it and it is what makes a segmented track's inner buttons sit
-     inside its outer radius. `--r-xs`/`--r-sm`/`--r-md`/`--r-lg` keep their old aliases —
-     they are the pre-rename spelling still used by a handful of components. */
+     `--r-chip` is its own tier because a track's inner button has to sit inside
+     its outer radius. `--r-xs`/`--r-sm`/`--r-md`/`--r-lg` are the pre-rename
+     spelling still used by a handful of components — do not use them in new code. */
   --r-chip: 6px;
   --r-control: 8px;
   --r-card: 12px;
@@ -302,8 +296,8 @@
   --font-meta-size: 12px;
   --font-micro-size: 11px;
   --font-read-size: 14px;
-  /* The reader's 「大号」 size (reference: `fontSize === 'large'`). A token rather
-     than a magic number at the call site, so the two sizes stay a scale. */
+  /* The reader's 「大号」 size. A token rather than a magic number at the call
+     site, so the two sizes stay a scale. */
   --font-read-large-size: 16px;
   --font-lead-size: 15px;
   --font-code-size: 12px;

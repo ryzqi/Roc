@@ -6,7 +6,7 @@
  * that renders them (and would be a genuine cycle: the hub imports the dialog).
  *
  * The sub-view is **component state**, not a URL parameter: adding `?literature=`
- * would have meant extending the frozen route contract (ADR-M05) and its round-trip
+ * would have meant extending the route contract and its round-trip
  * tests for a selector the legacy shell also kept in component state, and no P5 gate
  * needs a deep link into a sub-view. Registered in the phase's deviation table.
  */

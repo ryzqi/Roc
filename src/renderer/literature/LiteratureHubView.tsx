@@ -22,7 +22,7 @@ import { useLiteratureImportActions } from './use-literature-import-actions';
  * land on 图谱 with no selected paper and no way back.
  *
  * The sub-view itself is **component state**, not a URL parameter. That is a
- * deliberate divergence from ADR-M05's "navigation state lives in the URL": adding
+ * deliberate exception to "navigation state lives in the URL": adding
  * `?literature=` would have meant extending the frozen route contract (and its
  * round-trip tests) for a selector the legacy shell also kept in component state,
  * and none of P5's gates require a deep link into a sub-view. Registered in the
@@ -37,22 +37,16 @@ import { useLiteratureImportActions } from './use-literature-import-actions';
  * No mock path exists: when the backend has nothing, each sub-view shows its empty
  * state (gate 4).
  *
- * ## The header is the reference's header
+ * ## The header
  *
- * `research-studio`'s hub opens with one recessed tab track on the left (four equal
- * chips, the active one raised) and the two global actions on the right — 「设置」
- * with the amber bolt, and 「导入」 as the screen's single solid primary button.
- * Both are ported. Two details differ on purpose:
+ * One recessed tab track on the left (four equal chips, the active one raised) and the two
+ * global actions on the right — 「设置」 with the amber bolt, and 「导入」 as the screen's
+ * single solid primary button. Two details are deliberate:
  *
- *   - the labels are 阅读 / 检索 / 知识库 / 图谱 rather than the reference's
- *     阅读 / 检索 / Wiki / 图谱: 知识库 is this product's established word for the
- *     derived concept view (its testids and docs all say `wiki`/知识库), and the
- *     reference's 「Wiki」 is the loanword the glossary avoids;
- *   - 「设置」 opens the settings centre, but not at a named section. The reference
- *     passes `'literature'`; this shell's route contract has one `page=settings`
- *     value, so the panel opens at its own default (the phase's deviation table is
- *     where a section param would be registered, and P8's gate drives sections
- *     through the panel's own nav).
+ *   - the labels are 阅读 / 检索 / 知识库 / 图谱: 知识库 is this product's established word
+ *     for the derived concept view (its testids and docs all say `wiki`/知识库);
+ *   - 「设置」 opens the settings centre at its own default, not at a named section: the
+ *     route contract has one `page=settings` value.
  *
  * The cross-view `FocusRequest` hand-off (检索 → 阅读, 知识库 → 图谱) is unchanged.
  */
@@ -215,8 +209,8 @@ export function LiteratureHubView(): React.JSX.Element {
                   setSubView('graph');
                 }}
                 onOpenPaper={(libraryItemId) => {
-                  // The reference's `onJumpToPaperReader`: select the item and land in the
-                  // reader. Selecting first is what makes the reader show *this* paper.
+                  // Select the item, then land in the reader: selecting first is what makes the
+                  // reader show *this* paper.
                   store.select(libraryItemId);
                   setFocus({ parseId: null, locator: null });
                   setSubView('reader');
@@ -236,7 +230,6 @@ export function LiteratureHubView(): React.JSX.Element {
                 libraryItems={store.items}
                 focusClaimId={graphClaimFocusId}
                 onAskAssistantAboutNode={(node) =>
-                  // The reference's own wording for this hand-off.
                   void store.askAssistant(`请围绕实体 “${node.label}” 扩展相关原理、算法演进与代表论文。`)
                 }
               />

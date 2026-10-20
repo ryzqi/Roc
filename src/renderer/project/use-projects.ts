@@ -16,12 +16,12 @@ import {
 /**
  * Project portal data hooks (P2/T2.1).
  *
- * Wraps `research.projects.*` in the shared async primitives (ADR-M07): reads use
+ * Wraps `research.projects.*` in the shared async primitives: reads use
  * `useAsyncResource` (keyed, with a reload used by the error bar's retry), writes
  * use `useAsyncAction` (with the backend message passed straight through).
  *
  * Pinning is a local preference and lives in `ui-state.ts`; it is kept here so
- * components never touch `localStorage` directly (ADR-M06).
+ * components never touch `localStorage` directly.
  */
 
 /**
@@ -29,7 +29,7 @@ import {
  *
  * `cancelled` and `failed` are deliberately distinct: collapsing both into
  * `null` made a backend failure look like the user closing the panel, so clicking
- * 「选择目录」 did nothing visible and said nothing (ADR-M07 forbids that).
+ * 「选择目录」 did nothing visible and said nothing.
  */
 export type WorkspacePickResult =
   | { status: 'picked'; path: string }

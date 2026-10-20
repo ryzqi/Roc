@@ -35,15 +35,14 @@ import { GuardrailSection, MemorySection } from './sections/SecuritySections';
 /**
  * Section glyphs.
  *
- * The reference's settings rail carries an icon on every row (`Layers` / `Database` /
+ * The settings rail carries an icon on every row (`Layers` / `Database` /
  * `BookOpen` / `FileCode` / `Shield` / `Sliders`), and that is most of what makes the rail
  * scannable at a glance. They live here rather than in `settings-rules.ts` on purpose: that
  * module holds pure data and is imported by `tests/unit/renderer-settings.test.mjs`, so
  * pulling a React component library into it would make the rules layer depend on the view
- * layer. Five of these are the reference's own glyphs for the sections it had; the other
- * seven extend the same vocabulary to the sections this build added.
+ * layer. The glyphs come from one vocabulary and cover every section.
  *
- * Monochrome by design — the reference tints its icons only by selected state, and the hue
+ * Monochrome by design — only the selected state tints its icon, and the hue
  * a selected row needs is already carried by the row's own surface.
  */
 const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
@@ -64,7 +63,7 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
 /**
  * Settings centre (P8/T8.2–T8.4).
  *
- * ## Fixed shape (MASTER v2 §6.7)
+ * ## Fixed shape
  *
  * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 220px section list with 40px rows, a dirty bar
  * pinned above the scrolling form, and the twelve sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
@@ -202,7 +201,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const impacts = highImpactChanges(store.base, store.draft);
 
   // Unsaved drafts are never discarded silently: the veto opens a confirmation instead of
-  // closing, and Escape cancels it (MASTER v2 §6.7 / §11).
+  // closing, and Escape cancels it.
   const requestClose = (): boolean => {
     if (!dirty) {
       return true;

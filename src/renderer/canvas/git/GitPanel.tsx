@@ -50,12 +50,12 @@ export type GitPanelProps = {
   /**
    * One layout: the stacked one the top-bar drawer uses.
    *
-   * There used to be a `'canvas'` variant for the wide two-pane change view. That view
-   * is gone — the reference opens Git as a drawer and nothing else, and two surfaces
-   * over one repository meant two `useGitWorkspace` instances whose selections disagreed
-   * after an action (which is why the shell had to remember not to mount the drawer while
-   * the view was on screen). The list-then-diff order the stacked layout gives is the
-   * reference's own order, and the drawer is resizable by widening the window.
+   * There used to be a `'canvas'` variant for the wide two-pane change view. That view is
+   * gone — Git opens as a drawer and nothing else — and two surfaces over one repository
+   * meant two `useGitWorkspace` instances whose selections disagreed after an action
+   * (which is why the shell had to remember not to mount the drawer while the view was on
+   * screen). The stacked layout lists first and diffs below, and the drawer is resizable
+   * by widening the window.
    */
   layout: 'drawer';
 };

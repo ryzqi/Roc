@@ -7,7 +7,7 @@ import type { RocClient } from '../shared/roc-client';
  *
  * Thin wrappers over `research.projects.*` plus the pure derivations the portal
  * needs. Nothing here touches `localStorage`: projects live in SQLite, and the
- * only local project state is the pin list in `ui-state.ts` (ADR-M06).
+ * only local project state is the pin list in `ui-state.ts`.
  *
  * The entity is exactly `researchProjectSchema`
  * (`id/title/description/workspacePath/status/language/origin/currentStage/

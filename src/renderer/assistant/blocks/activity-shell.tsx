@@ -16,11 +16,10 @@ import { ChevronDown, type LucideIcon } from 'lucide-react';
  *   - the state is **never signalled by colour alone**: the pill always carries a
  *     label ("执行中" / "成功" / "错误"…) and the icon differs per state (AGENTS.md).
  *
- * Geometry comes from the reference's two block types (thought bar `px-3 py-2`,
+ * Geometry comes from the two block types (thought bar `px-3 py-2`,
  * tool row `px-3 py-2`, body `px-3 py-2.5`, 13px icon, 13px chevron,
  * `rounded-xl` frame). The block has **no vertical margin of its own**: the
- * transcript's `gap-3` owns the spacing between blocks, exactly as the
- * reference's `space-y-3` does — carrying both would double it.
+ * transcript's `gap-3` owns the spacing between blocks — carrying both would double it.
  *
  * A native `<details>` keeps the disclosure keyboard- and screen-reader-correct; the
  * rotation is driven by the controlled `open` prop (the blocks already own that

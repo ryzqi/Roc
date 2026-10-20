@@ -839,7 +839,7 @@ try {
   const hitOpenId = await hitOpenButton.getAttribute('data-testid');
   await hitOpenButton.click();
   // 工作区文件来源的命中不再跳到画布 `view=files`（那个视图已删）：它选中左栏树里的那一行，并弹出
-  // 预览模态（对齐 research-studio 的 FilePreviewModal）。所以断言的对象是模态里的路径。
+  // 预览模态（FilePreviewModal）。所以断言的对象是模态里的路径。
   await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { timeout: 30_000 });
   const previewPath = (await page.textContent('[data-testid="file-preview-path"]')) ?? '';
   assertCheck(
@@ -849,7 +849,7 @@ try {
     `${hitOpenId} → ${previewPath.trim()}`
   );
   await page.screenshot({ path: join(artifactDir, '02-index-hit.png') });
-  // Escape 关掉预览（参考的 FilePreviewModal 就是 Escape/点遮罩关；画布中央的面板盖住了遮罩，
+  // Escape 关掉预览（FilePreviewModal 就是 Escape/点遮罩关；画布中央的面板盖住了遮罩，
   // Playwright 按坐标点会点到面板，所以用键盘路径）。后面的步骤要回到画布继续点。
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-testid="file-preview-modal-panel"]', { state: 'detached', timeout: 15_000 });

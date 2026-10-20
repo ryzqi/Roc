@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Deferred loading indicator (MASTER v2 §10).
+ * Deferred loading indicator.
  *
  * Shows nothing for the first 200ms so a fast chunk load does not flash a
  * placeholder, then renders a one-line status. Used by both the canvas view

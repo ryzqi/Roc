@@ -11,16 +11,13 @@ import type { LayoutState } from './use-layout-state';
  * variables on the container (`--sidebar-w`, `--assistant-w`) because they are
  * dynamic; colors still come only from the token layer.
  *
- * **Column order is the reference's** (ADR 0025): `research-studio`'s `App` renders
- * `LeftSidebar` → `ResizableDivider` → agent column → `ResizableDivider` →
- * `WorkspaceCanvas`, so the assistant sits *between* the rail and the canvas and the
- * canvas owns the right edge. MASTER v2 §5 drew it as 左栏 | 画布 | 助手; that clause is
- * retired because the reference is the visual standard and this is the arrangement a
- * researcher resizes while writing (the canvas keeps `flex-1`, so it is still the
- * widest surface, and the divider now grows the assistant when dragged right, exactly
- * as the reference's `handleAgentResize` does).
+ * **Column order is 左栏 | 助手 | 画布** (ADR 0023): sidebar, divider, assistant column,
+ * divider, canvas — so the assistant sits *between* the rail and the canvas and the
+ * canvas owns the right edge. This is the arrangement a researcher resizes while
+ * writing: the canvas keeps `flex-1` and stays the widest surface, and dragging the
+ * assistant's divider right grows the assistant.
  *
- * At `<= 1099px` (ADR-M12) the sidebar and assistant become drawers instead of
+ * At `<= 1099px` the sidebar and assistant become drawers instead of
  * columns. The window's own minimum is 1184px, so that mode mainly exists for
  * the layout audit and for a future lower minimum — it is implemented rather
  * than left as a TODO so the canvas never collapses if it is reached.
@@ -28,7 +25,7 @@ import type { LayoutState } from './use-layout-state';
 
 export type WorkspaceLayoutProps = {
   layout: LayoutState;
-  /** From the URL (`?assistant=1`), not from layout state — see ADR-M05. */
+  /** From the URL (`?assistant=1`), not from layout state. */
   assistantOpen: boolean;
   onToggleSidebar: () => void;
   onToggleAssistant: () => void;
@@ -53,7 +50,7 @@ export function WorkspaceLayout({
   const assistantVisible = assistantAvailable && assistantOpen && !layout.assistantAsDrawer;
 
   // Report the clamp state so the divider can announce why dragging stopped,
-  // instead of the handle silently refusing to move (MASTER v2 §9).
+  // instead of the handle silently refusing to move.
   const sidebarAtLimit =
     layout.sidebarWidth <= SIDEBAR_WIDTH.min ? 'min' : layout.sidebarWidth >= SIDEBAR_WIDTH.max ? 'max' : null;
   const assistantAtLimit = layout.assistantWidth <= ASSISTANT_WIDTH.min ? 'min' : null;
@@ -91,7 +88,7 @@ export function WorkspaceLayout({
             {assistant}
           </div>
           {/* The divider is *after* the assistant, which is what makes dragging it right
-              widen the panel (see `growAssistant`), as in the reference. */}
+              widen the panel (see `growAssistant`). */}
           <ResizableDivider
             ariaLabel="调整助手宽度"
             onDelta={layout.growAssistant}

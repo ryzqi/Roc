@@ -15,18 +15,17 @@ import type { ManagementStores, ManagementTabId } from './use-management-stores'
  * full-width canvas view). That is the "两种入口共用同一组件" the phase asked for, without either
  * shell owning a second copy of the section wiring.
  *
- * The tab strip is the reference's: a recessed track (`bg-bg`, 1px border, 2px inner pad) holding
- * four equal chips, the selected one raised against it, and a **hue per section** (参考里
- * 记忆/技能 紫、MCP 天蓝、任务 匣黄) that is carried by the icon only while the tab is selected.
- * The tab set itself already matched — `ManagementTab` in the reference is
- * `'memory' | 'skills' | 'mcp' | 'tasks'`, the same four in the same order.
+ * The tab strip is a recessed track (`bg-bg`, 1px border, 2px inner pad) holding four equal chips,
+ * the selected one raised against it, and a **hue per section** (记忆/技能 紫、MCP 天蓝、任务 匣黄)
+ * carried by the icon only while the tab is selected. The tab set is
+ * `'memory' | 'skills' | 'mcp' | 'tasks'`, in that order.
  */
 
 export const MANAGEMENT_TABS: ReadonlyArray<{
   id: ManagementTabId;
   label: string;
   icon: LucideIcon;
-  /** Applied only to the selected chip, as in the reference. */
+  /** Applied only to the selected chip. */
   iconClass: string;
 }> = [
   { id: 'memory', label: '记忆', icon: Brain, iconClass: 'text-[var(--icon-memory)]' },

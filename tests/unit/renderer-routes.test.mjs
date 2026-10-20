@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 /**
- * Round-trip guard for the renderer URL contract (ADR-M05).
+ * Round-trip guard for the renderer URL contract.
  *
  * `routes.ts` is TypeScript with extension-less relative imports, so it is bundled before import —
  * `scripts/lib/bundle-ts.mjs` is that helper, shared with the other unit tests instead of the
@@ -164,7 +164,7 @@ test('no project means the portal: no view, tool, file or assistant leaks into t
 test('a tool survives on any view, because it selects a drawer', () => {
   // This is the opposite of the old rule (“tools belong to files/changes/terminal”). Git and files
   // are drawers now, so `?tool=git` has to survive next to whatever canvas view is on screen — that
-  // is exactly how the reference behaves (顶栏 Git 抽屉盖在画布上).
+  // is how a drawer behaves (顶栏 Git 抽屉盖在画布上).
   const withGit = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&view=latex&tool=git'));
   assert.equal(withGit.view, 'latex');
   assert.equal(withGit.tool, 'git');
@@ -172,7 +172,7 @@ test('a tool survives on any view, because it selects a drawer', () => {
   assert.ok(routes.sameAppRoute(withGit, routes.parseAppRoute(toSearch(withGit))));
 });
 
-test('a missing view defaults to latex, which is the reference canvas default', () => {
+test('a missing view defaults to latex, the canvas default', () => {
   assert.equal(routes.parseAppRoute(new URLSearchParams('page=research&project=p1')).view, 'latex');
 });
 
@@ -185,13 +185,13 @@ test('an incoming ?stage= is ignored, never read and never re-written', () => {
 });
 
 test('a retired or parked view id falls back instead of leaking into the URL', () => {
-  // Everything except the reference's three canvas tabs and the three management views has been
+  // Everything except the three canvas tabs and the three management views has been
   // retired (`overview`/`stage`/`activity`/`provenance`/`diagnostics` with the stage surface,
   // `tasks` with the task board, `files`/`changes` with the view-to-drawer move). A bookmark to any
   // of them must land somewhere real rather than render nothing.
   //
   // The parked domains (ADR 0024: 契约与数据库保留、界面删除) fall back **too**, and that is
-  // correct here: the parser has to answer deterministically for any input (ADR-M05). The place
+  // correct here: the parser has to answer deterministically for any input. The place
   // that refuses them is the gate guard, which is where a wrong page would otherwise pass an
   // assertion — see `surfaces.test.mjs`.
   const retired = [

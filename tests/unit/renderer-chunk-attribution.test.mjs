@@ -15,7 +15,7 @@ import {
  *
  * That is not hypothetical. The first version of this parser split a pnpm
  * directory like `@xterm+xterm@6.0.0` into `@xterm+xterm`, so the two scoped
- * entries on the deny-list could never fire while ADR-M11, findings F14 and the
+ * entries on the deny-list could never fire while the findings and the
  * config comment all said `@xterm/*` was enforced. The generative test at the
  * bottom is the one that would have caught it.
  */

@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
  * Salvaged from the deleted production shell (`production/panel-shell.tsx`) with the parts that
  * outlived it: the stage-artifact scaffolding (`IssueList` + the `ProductionIssue` type), the
  * key/value row and the form field classes went with the panels that used them, because the stage
- * surface and its artifact panels were removed to match the reference's IA.
+ * surface and its artifact panels were removed when the canvas collapsed to one tab strip.
  *
  * Presentation only: no data, no rules, no IPC.
  */

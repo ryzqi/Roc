@@ -1,5 +1,5 @@
 /**
- * URL route contract (ADR-M05).
+ * URL route contract.
  *
  * `src/main/application-menu.ts` (⌘N, ⌘,) and `app.onNavigate` write these query
  * parameters, and so do deep links.
@@ -15,7 +15,7 @@
  * plus `newProject=1`, which the portal uses to expand the create form.
  *
  * `?stage=<group|tab|workflow-stage>` used to be part of this contract. The stage
- * surface was removed so the canvas matches the reference's information architecture
+ * surface was removed so the canvas has one information architecture
  * (one strip: 文献 / LaTeX / 终端), so the parameter is **no longer read or written**.
  * An incoming `?stage=` is simply ignored, which is why the native menu and any stale
  * deep link keep working without a backend change.
@@ -29,8 +29,7 @@
  *
  * ## Default view
  *
- * A missing `view` becomes the table's default (`latex`, which is what the reference defaults its
- * canvas tab to — `useState<WorkspaceTab>('latex')` in its `App`). Two earlier defaults are gone:
+ * A missing `view` becomes the table's default (`latex`). Two earlier defaults are gone:
  * `changes` (the legacy shell) and `overview` (P2–P6, when the in-project landing view was 总览).
  *
  * ## Where the classification lives now
@@ -132,7 +131,7 @@ function parsePage(value: string | null): { page: AppPage; newProject: boolean }
  * A `?view=` value, or the default.
  *
  * `parked`（有契约、有数据库、没界面）与 `unknown`（从来不存在）在这里**没有**区别：两者都必须给出确定
- * 答案，因为 `parseAppRoute(writeAppRoute(r))` 得成立（ADR-M05）。区分由 `surfaces.ts` 的
+ * 答案，因为 `parseAppRoute(writeAppRoute(r))` 得成立。区分由 `surfaces.ts` 的
  * `resolveSurface` 提供，读它的是闸门脚手架——在那一个不认识的面应当**抛错**，而不是像 P10 之后的
  * `view=overview` 那样静默落到缺省视图上通过断言（八处，见 `surfaces.ts` 头部）。
  */
@@ -164,12 +163,12 @@ export function normalizeAppRoute(route: AppRoute): AppRoute {
 
   const view: AppViewId = portal ? DEFAULT_VIEW : route.view;
   // Tools are no longer view-scoped: `?tool=git` and `?tool=files` select a **drawer**, and the
-  // reference opens both from the top bar while any canvas view stays on screen. `terminal` is
+  // top bar opens both while any canvas view stays on screen. `terminal` is
   // still a view and still carries its tool (the tab is the terminal's own). The portal is the one
   // place with no chrome to open a drawer from, so it clears the tool the way it clears the view.
   const tool: WorkbenchTool | null = portal ? null : route.tool;
-  // Kept regardless of `view`: it is the sidebar tree's selection, not a view parameter (ADR-M05
-  // note above). The `portal` half is the only thing that clears it.
+  // Kept regardless of `view`: it is the sidebar tree's selection, not a view parameter
+  // (see the note above). The `portal` half is the only thing that clears it.
   const openFile = portal ? null : emptyToNull(route.openFile);
   // `newProject` is a one-shot *request* to open the portal's create form, so it
   // is only meaningful on a project-less portal. The form's open state and its

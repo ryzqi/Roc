@@ -13,7 +13,7 @@ import {
 import { useOverlayBehavior, OverlayFocusRestore } from './use-overlay-behavior';
 
 /**
- * Shared overlay shell for drawers and modals (MASTER v2 §5 / §6.7).
+ * Shared overlay shell for drawers and modals.
  *
  * One implementation so the four requirements cannot drift between overlays:
  * focus trap, Escape closing one layer at a time, `aria-modal` semantics, and a
@@ -24,13 +24,9 @@ import { useOverlayBehavior, OverlayFocusRestore } from './use-overlay-behavior'
  *
  * ## Entrance and exit
  *
- * `research-studio` gives every overlay an entrance and no exit: the Git drawer
- * asks for `animate-in slide-in-from-right duration-200`, a `tailwindcss-animate`
- * utility that package was never installed with, so the classes are inert; the
- * hosted `AnimatePresence` panels elsewhere in that prototype do animate out.
- * What is ported here is the *intended* vocabulary, taken from the two keyframes
- * it did ship and never used — `.animate-scaleIn` (0.18) for modals and
- * `.animate-slideInRight` (0.2) for drawers — now applied symmetrically.
+ * Every overlay animates **both** ways: modals scale in and out over 0.18s
+ * (`modalPopVariants`), drawers slide in and out over 0.2s (`drawerVariants`), and
+ * the scrim fades with either. The vocabulary lives in `shared/motion.ts`.
  *
  * The early `return null` that used to guard the closed state is gone: it would
  * unmount the panel before it could animate out, and `AnimatePresence` needs the
@@ -77,8 +73,8 @@ export type ModalShellProps = {
    *
    * `default` is the padded form body every overlay wants. `none` exists for a body
    * that brings its own **columns**: the settings centre's left navigation is a
-   * coloured rail that has to reach the panel's edges, exactly as the reference's
-   * `w-44 bg-zinc-950` does — inner padding would trap it inside the panel and the
+   * coloured rail that has to reach the panel's edges — inner padding would trap it inside the
+   * panel and the
    * rail would stop reading as a rail. A `p-0` override appended to the class list
    * could not be trusted for this: both `p-0` and `px-4` are plain utilities, so order
    * in the attribute decides nothing.

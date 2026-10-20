@@ -22,20 +22,17 @@ import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProp
  * boundary: React would unmount and remount it on the swap, running its effects
  * twice — two IPC round-trips per first visit once P3+ lands real views.
  *
- * The canvas is a single scroll surface (MASTER v2 §5), so its offset resets when
+ * The canvas is a single scroll surface, so its offset resets when
  * the *shown* view changes — not when the requested one does, so a slow load
  * cannot jump the view the user is still reading.
  *
  * ## The swap cross-fades
  *
- * `research-studio` wraps each canvas view in `<motion.div>` inside an
- * `AnimatePresence mode="wait">`, giving a 120ms opacity fade between views. P1
- * cut it directly, for two stated reasons: the design system said to, and the fade
- * needed `motion` in the eager graph.
+ * Each canvas view is wrapped in `<motion.div>` inside an
+ * `AnimatePresence mode="wait">`, giving a 120ms opacity fade between views
+ * (`viewFadeVariants`).
  *
- * Both are now spent (`docs/adr/0023-motion-parity-with-research-studio.md`), so the
- * prototype's fade is restored — with one structural change, because the naive port
- * silently broke an acceptance gate.
+ * One structural change matters: a bare fade silently broke an acceptance gate.
  *
  * **The routing attributes moved onto the animated element.**
  *
@@ -53,7 +50,7 @@ import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProp
  * element is the shown view", which is what every reader already assumed. The
  * scroll surface moves with them, so there is still exactly one scrollable element
  * per rendered view and the reset below still targets it. `mode="wait"` is then
- * the prototype's own sequencing (out, then in) with no lying attribute.
+ * the sequencing (out, then in) with no lying attribute.
  */
 
 export type { ViewProps };

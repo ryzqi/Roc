@@ -12,14 +12,13 @@ import { GripVertical } from 'lucide-react';
  * The hairline is drawn at 1px inside an 8px hit area: the hit target is
  * comfortable without making the two panels look separated by a gutter.
  *
- * The handle's feedback is the reference's three states, ported from
- * `research-studio/src/components/ResizableDivider.tsx`: the hairline brightens
+ * The handle's feedback has three states: the hairline brightens
  * under the pointer, the grab chip fades in on hover, and while dragging it goes
  * solid, grows 5% and casts a soft glow (`--divider-glow`) so it is clear that
  * the divider — not the window — is what the pointer is moving.
  *
  * Colors come from the token layer through arbitrary Tailwind values so no
- * component hard-codes a hex (MASTER v2 §2).
+ * component hard-codes a hex.
  */
 
 export type ResizableDividerProps = {

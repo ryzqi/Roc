@@ -56,7 +56,9 @@ await research.promoteIdeaCanvas({
 
 构思角色输出必须包含 `ideaCanvas`。系统把它写入本次运行创建的 `idea_canvas` 工件；缺少结构、证据或字段一致性时运行失败，不打开审核闸门。
 
-科研页构思面板保存 Canvas、查看历史，并在已批准版本上晋升为新项目。
+构思域**今天没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md) 有意保留，登记在 `src/shared/surfaces.ts`
+的 `PARKED_CAPABILITIES`）：保存 Canvas、查看历史与在已批准版本上晋升，都由对话代理调用上面这些
+capability。深链到 `?view=ideas` 会明确失败。
 
 ## 验证
 
@@ -64,4 +66,4 @@ await research.promoteIdeaCanvas({
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
 ```
 
-成功后读取 `.artifacts/wave1/electron-smoke.json`。
+成功后读取 `.artifacts/smoke-electron/result.json`。

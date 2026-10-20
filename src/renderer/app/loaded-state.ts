@@ -1,5 +1,5 @@
 /**
- * Uniform async-result handling (ADR-M07).
+ * Uniform async-result handling.
  *
  * Every IPC call is either `{ ok: true, data }` or `{ ok: false, error }`.
  * Components never `try/catch` around IPC calls; they unwrap and let the shell

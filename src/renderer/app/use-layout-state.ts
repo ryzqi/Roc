@@ -14,17 +14,16 @@ import {
 } from './ui-state';
 
 /**
- * Layout state for the three-column workspace, persisted as UI preferences
- * (ADR-M06).
+ * Layout state for the three-column workspace, persisted as UI preferences.
  *
  * Scope is deliberately narrow: panel geometry and which sidebar tab is
  * showing. Two things that look like layout state are **not** here, because the
- * URL already owns them (ADR-M05) and a second copy would drift after reload:
+ * URL already owns them and a second copy would drift after reload:
  *
  *   - which canvas view is active   → `?view=`
  *   - whether the assistant is open → `?assistant=1`
  *
- * Width rules (MASTER v2 §5):
+ * Width rules:
  *   sidebar   180–400, default 256
  *   assistant 280–(window − sidebar − 360), default 440
  * The canvas retains at least 360px, so the assistant cannot squeeze it away.
@@ -34,7 +33,7 @@ import {
 const CANVAS_MIN_WIDTH = 360;
 
 /**
- * Breakpoint policy (ADR-M12).
+ * Breakpoint policy.
  *
  * The window's own minimum is 1184px (`src/main/window-shell.ts`), so `drawers`
  * is not reachable by user resizing today — it appears only if that minimum is
@@ -158,7 +157,7 @@ export function useLayoutState(): LayoutState {
     (deltaPx: number) => {
       setAssistantWidth((current) => {
         // The divider sits on the assistant's *right* edge, so dragging it right
-        // widens the panel — the reference's own `handleAgentResize` sign.
+        // widens the panel.
         const next = clamp(current + deltaPx, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
         if (next !== current) {
           schedulePersistWidths();

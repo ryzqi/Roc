@@ -4,7 +4,7 @@ import { menuIntentForPage, type MenuIntent } from '../../shared/surfaces';
 import { appRouteToSearch, normalizeAppRoute, readAppRoute, sameAppRoute, writeAppRoute, type AppRoute } from './routes';
 
 /**
- * URL-backed navigation state (ADR-M05).
+ * URL-backed navigation state.
  *
  * The URL is the single source of truth: this hook mirrors it into React state,
  * mirrors user actions back into it, and follows the native menu through

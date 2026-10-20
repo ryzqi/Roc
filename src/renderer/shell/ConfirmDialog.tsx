@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ModalShell } from './ModalShell';
 
 /**
- * Destructive-action confirmation (MASTER v2 §11).
+ * Destructive-action confirmation.
  *
  * Used by settings-close-with-drafts, git discard, skill/MCP/task deletion, and
  * project delete. Replaces `window.confirm`, which cannot be styled, cannot be

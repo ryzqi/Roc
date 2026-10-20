@@ -1,5 +1,5 @@
 /**
- * The only module in the renderer allowed to touch `localStorage` (ADR-M06).
+ * The only module in the renderer allowed to touch `localStorage`.
  *
  * Allowed keys are UI layout preferences and nothing else. Product data —
  * projects, literature, sessions, settings, secrets, indexes, tasks — must come
@@ -32,18 +32,17 @@ export type SidebarTab = 'files' | 'literature' | 'sessions';
 /*
  * Deliberately NOT stored here:
  *
- *   canvas tab  — the current view is `?view=` in the URL (ADR-M05)
- *   assistant   — open/closed is `?assistant=1` in the URL (ADR-M05)
+ *   canvas tab  — the current view is `?view=` in the URL
+ *   assistant   — open/closed is `?assistant=1` in the URL
  *
  * A second copy would let the two disagree after a reload, so the URL wins and
  * neither key exists under `roc.ui.*`.
  */
 
 /**
- * Legacy keys written by the pre-migration shell and by research-studio's
- * `mockProjects.ts`. They are garbage after this migration — we delete them
- * once at startup. This is cleanup, not a compatibility layer: nothing reads
- * them (ADR-M02, P2/T2.6).
+ * Legacy keys written by the pre-migration shell. They are garbage — we delete
+ * them once at startup. This is cleanup, not a compatibility layer: nothing
+ * reads them.
  */
 export const LEGACY_STORAGE_KEYS = ['codex_projects_list', 'codex_model_settings'] as const;
 export const LEGACY_STORAGE_PREFIXES = ['codex_project_data_'] as const;
@@ -260,7 +259,7 @@ export function writeFileTreeExpanded(projectId: string, paths: readonly string[
  * Backs 「重置本地界面偏好」 in the settings centre (P8): the only thing this module owns is
  * UI layout state, so it is the only thing the reset may touch. It deliberately does not
  * delete anything else from `localStorage` — that would be the compatibility layer this
- * migration forbids (ADR-M02).
+ * migration forbids.
  */
 export function clearUiState(): string[] {
   const store = storage();

@@ -1,7 +1,7 @@
 import { ArrowLeft, Bot, GitBranch, PanelLeft, PanelLeftClose, Search, Settings, Sliders } from 'lucide-react';
 
 /**
- * The one global toolbar (MASTER v2 §6.1).
+ * The one global toolbar.
  *
  * The window uses `titleBarStyle: 'hiddenInset'` with
  * `trafficLightPosition: { x: 16, y: 19 }` (src/main/window-shell.ts), so the
@@ -12,25 +12,19 @@ import { ArrowLeft, Bot, GitBranch, PanelLeft, PanelLeftClose, Search, Settings,
  * The whole bar is a drag region, and every interactive child opts out with
  * `no-drag` — otherwise buttons become unclickable on macOS.
  *
- * ## Deliberate departures from the reference
+ * ## Two things this toolbar does not do
  *
- * Two things `research-studio/src/components/MacWindowChrome.tsx` draws are
- * **not** ported, because they are prototype artefacts rather than design:
+ *   1. **Draw its own traffic lights.** The window has the real system controls at
+ *      `trafficLightPosition`; painted round buttons would show six lights and put a
+ *      fake close control on a real window.
+ *   2. **Hide labels behind macOS-only `sm:` / `md:` breakpoints.** 管理 / Git follow
+ *      the shell's own 1100px breakpoint, not an arbitrary viewport width, so a label
+ *      never disappears just because the window is narrow.
  *
- *   1. **The hand-drawn traffic lights.** The prototype paints three round
- *      buttons in `#FF5F56` / `#FFBD2E` / `#27C93F` because it runs in a browser
- *      tab. This window has the real thing at `trafficLightPosition`, so copying
- *      them would show six lights and put a fake close button on a real window.
- *      MASTER v2 §11 already forbids redrawing them.
- *   2. **The macOS-only `sm:` / `md:` breakpoints on the labels.** The prototype
- *      hides 管理 / Git behind the viewport width; the shell's own breakpoint
- *      contract is 1100px (ADR-M12), so the label visibility follows that, not
- *      the prototype's arbitrary 640/768px.
- *
- * Everything else is a faithful port: the layered material bar, the boxed
- * 项目列表 button next to the breadcrumb, `~/<project>` in medium weight, the
- * branch as bare mono text, the centered 搜索… field, and the category icon hues
- * (`--icon-*`) that identify 管理 / Git at a glance.
+ * The rest of the bar: the layered material bar, the boxed 项目列表 button next to the
+ * breadcrumb, `~/<project>` in medium weight, the branch as bare mono text, the
+ * centered 搜索… field, and the category icon hues (`--icon-*`) that identify
+ * 管理 / Git at a glance.
  */
 
 export type WindowChromeProps = {
@@ -51,7 +45,7 @@ export type WindowChromeProps = {
   backgroundRunLabel?: string | null;
 };
 
-/** `rounded-control` is the reference's `rounded-lg` (8px), used on every chrome button. */
+/** Every chrome button uses the 8px control radius. */
 const ICON_BUTTON =
   'no-drag flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
 
@@ -137,7 +131,7 @@ export function WindowChrome({
                   <span aria-hidden="true" className="text-subtle">
                     /
                   </span>
-                  {/* Bare mono text, as in the reference: the branch is context, not a
+                  {/* Bare mono text: the branch is context, not a
                       control. `--icon-git` keeps the hue and flips with the theme. */}
                   <span
                     className="shrink-0 font-mono text-[var(--font-micro-size)]"
@@ -184,8 +178,7 @@ export function WindowChrome({
           </span>
         )}
 
-        {/* Active state inverts to a solid fill, exactly as the reference does
-            (`bg-zinc-100 text-zinc-900` in dark) — and through the palette flip it
+        {/* Active state inverts to a solid fill — and through the palette flip it
             stays legible in light theme, where `--fill-strong` is the dark stop. */}
         <button
           type="button"

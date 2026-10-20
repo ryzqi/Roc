@@ -27,14 +27,14 @@ import { FileTreeView } from './FileTreeView';
  *
  * ## Clicking a row opens the preview modal, not a canvas page
  *
- * This is the reference's model (`FileTreeView` → `onPreviewFile` → `FilePreviewModal`):
- * the tree is the file *list*, and the file itself is a modal over whatever canvas view is
- * open. It replaced the canvas `files` view, which meant clicking a file navigated the
+ * The model (`FileTreeView` → `onPreviewFile` → `FilePreviewModal`): the tree is the file
+ * *list*, and the file itself is a modal over whatever canvas view is open. It replaced the
+ * canvas `files` view, which meant clicking a file navigated the
  * whole canvas away — so a researcher reading a paper lost it by looking at a `notes.md`.
  *
  * Selection still travels through the URL (`onOpenFile` → `?file=`), because that is what
  * the tree reads to reveal and highlight the row, and because a reload must land on the
- * same file (ADR-M05). The modal is opened here, next to the click, instead of being
+ * same file. The modal is opened here, next to the click, instead of being
  * derived from the route: which overlay is on screen is view state, not navigation.
  *
  * A create form is hidden entirely for an archived project rather than disabled
@@ -75,7 +75,7 @@ export function FileSidebarPanel({
   const [creatingPending, setCreatingPending] = useState(false);
   /** Set when a search result is opened, so the tree can reveal it (T3.4). */
   const [revealPath, setRevealPath] = useState<string | null>(null);
-  /** The file whose preview modal is open (reference: `FilePreviewModal` over the canvas). */
+  /** The file whose preview modal is open, over whatever canvas view is on screen. */
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewDirty, setPreviewDirty] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
@@ -162,8 +162,8 @@ export function FileSidebarPanel({
   /**
    * The open file, validated locally before anything is requested (R10).
    *
-   * This check used to live in the canvas `files` view. That view is gone — the reference
-   * reveals files in this tree — so the tree/panel pair owns selection and the refusal that
+   * This check used to live in the canvas `files` view. That view is gone — files are revealed
+   * in this tree — so the tree/panel pair owns selection and the refusal that
    * goes with it.
    */
   const openPathCheck = openFile === null ? null : checkRelativePath(openFile);
@@ -355,7 +355,7 @@ export function FileSidebarPanel({
       </div>
 
       {/*
-        The preview overlay, which is the reference's model (`FilePreviewModal`). It lives
+        The preview overlay (`FilePreviewModal`). It lives
         here — next to the tree, which is where a file is chosen — rather than in the canvas,
         so the canvas keeps showing whatever view the user was reading.
 
@@ -366,7 +366,7 @@ export function FileSidebarPanel({
         actions), `aria-hidden` on `#root`, an overlay-stack entry that suppresses the global
         shortcuts — and, for this surface, a focus-trap effect whose cleanup races the exit
         animation and can put focus back on `<body>` (the defect `OverlayFocusRestore` records).
-        The reference's `FilePreviewModal` is the same shape: its own scrim and panel, no shared
+        The shape is deliberate: its own scrim and panel, no shared
         shell. Escape and the scrim still close it, which is the whole interaction contract of a
         preview.
       */}

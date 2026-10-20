@@ -6,7 +6,7 @@ import { EmptyState } from '../shell/EmptyState';
 import { deriveWiki } from './derive-wiki';
 
 /**
- * LLM Wiki projection view (P5/T5.6, ADR-M10).
+ * LLM Wiki projection view.
  *
  * The legacy view rendered `mockWikiEntries` when the store was empty. That is the
  * exact failure R12 names, so here the empty case is an empty state and nothing
@@ -23,23 +23,22 @@ import { deriveWiki } from './derive-wiki';
  *
  * ## Navigable, because a wall of cards is not a wiki
  *
- * `research-studio`'s wiki is a *reading surface*: a concept list, a selected
- * concept with links out to other concepts and to the papers behind it, and a copy
- * button. The first port of this view lost all of that — it stacked every page into
- * one scroll column, so a concept could not be chosen, searched for, or followed.
- * What is restored here:
+ * A wiki is a *reading surface*: a concept list, a selected concept with links out to
+ * other concepts and to the papers behind it, and a copy button. Stacking every page
+ * into one scroll column would lose all of that — a concept could not be chosen,
+ * searched for, or followed. What is here:
  *
  *   - **selection** — the list on the left drives the detail on the right, with the
- *     selected row raised the same way the reference raises it;
+ *     selected row is raised;
  *   - **filter** — title, statement, evidence text and paper titles, because the
  *     only way to find a concept is to search what is actually in it;
  *   - **navigation** — the 共现 list is not decoration: clicking either side selects
- *     that concept, which is this projection's equivalent of the reference's
- *     `[[wiki link]]`. (There is no `[[…]]` syntax to parse: a derived concept's
+ *     that concept, which is this projection's equivalent of a `[[wiki link]]`. (There is no
+ *     `[[…]]` syntax to parse: a derived concept's
  *     body is the claim's own statement, not authored wiki text.)
  *   - **the papers behind a concept are buttons** — they jump to that item in the
- *     reader, which is the reference's `onJumpToPaperReader`;
- *   - **copy as Markdown** — the reference's 「复制」, with the same 已复制 feedback,
+ *     reader;
+ *   - **copy as Markdown** — a 「复制」 action with 已复制 feedback,
  *     assembled from the derived page.
  *
  * The 演进时间线 / 共现 / 未归类证据 panels stay, because the design requires every

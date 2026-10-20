@@ -34,7 +34,7 @@ import {
  *   | 检索      | `research.literature.search` → `importRecord` | arXiv ids go through the same search path |
  *
  * Deliberately absent: the legacy form's MinerU mode and formula/table switches.
- * Those are settings (ADR-M09), and the parse step reads them from the settings
+ * Those are settings, and the parse step reads them from the settings
  * centre; a dialog-local copy would be a second source of truth.
  */
 
@@ -217,7 +217,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
       widthClassName="max-w-2xl"
       footer={
         <span className={labelClass} data-testid="literature-import-hint">
-          解析（MinerU）模式与公式/表格开关在设置中心，不在这里（ADR-M09）。
+          解析（MinerU）模式与公式/表格开关在设置中心，不在这里。
         </span>
       }
     >

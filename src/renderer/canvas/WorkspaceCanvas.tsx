@@ -21,27 +21,17 @@ import { tabIndicatorTransition } from '../shared/motion';
  *
  * ## The indicator travels between tabs
  *
- * `research-studio` marks the active tab with `<motion.div layoutId
- * ="activeTabIndicator">` inside the button, so the underline *slides* when the
- * tab changes instead of blinking. P1 replaced that with a per-tab opacity
- * transition because the layout-projection engine cost ~385 KB in the eager
- * graph (1,075,296 B vs 690,349 B, everything else identical) against a 900 KB
- * self-imposed ceiling.
+ * The active tab carries a shared `layoutId` indicator, so the underline *slides*
+ * when the tab changes instead of blinking. It used to be a per-tab opacity
+ * transition, kept out by a self-imposed eager-byte ceiling that no longer
+ * exists; the real budget lives in `check-renderer-chunks.mjs` (1,700,000 B) and
+ * the layout-projection engine fits inside it. `MotionConfig
+ * reducedMotion="user"` still governs the travel: for reduced-motion users the
+ * indicator appears where it belongs without sliding.
  *
- * That reasoning is now spent: P4–P9 finished at 917,865 B against the real
- * budget in `check-renderer-chunks.mjs` (1,700,000 B), so the projection engine
- * fits with room to spare, and `motion` is not on that script's deny-list. The
- * prototype's animation is restored, and the pinning is left in the gate rather
- * than in a comment. `MotionConfig reducedMotion="user"` still governs the
- * travel for reduced-motion users — the indicator then appears where it belongs
- * without sliding. The budget argument this comment used to make, and the
- * measurements that retired it, are recorded in
- * `docs/adr/0023-motion-parity-with-research-studio.md`.
- *
- * Icon hues are category identity, not decoration: they are the same four hues
- * `research-studio` writes inline (`text-sky-400` / `-amber-400` / `-emerald-400`),
- * exposed as `--icon-*` so no component carries a hex and the light theme can
- * drop to the 600 stops for contrast.
+ * Icon hues are category identity, not decoration: they are exposed as
+ * `--icon-*` so no component carries a hex and the light theme can drop to the
+ * 600 stops for contrast.
  */
 
 export type { CanvasTabId };
@@ -52,8 +42,6 @@ export type WorkspaceCanvasProps = {
   onTabChange: (tab: CanvasTabId) => void;
   /** Project views (`ViewContent`), or the portal placeholder. */
   children: React.ReactNode;
-  /** Stage bar slot; P6 fills this. */
-  stageBar?: React.ReactNode;
   /** Rendered at the right of the tab strip (project-scoped actions). */
   actions?: React.ReactNode;
 };
@@ -75,7 +63,6 @@ export function WorkspaceCanvas({
   activeTab,
   onTabChange,
   children,
-  stageBar,
   actions
 }: WorkspaceCanvasProps): React.JSX.Element {
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -100,7 +87,7 @@ export function WorkspaceCanvas({
         {TABS.map((tab, index) => {
           const selected = tab.id === activeTab;
           const Icon = tab.icon;
-          // With no primary tab selected (the default `overview` view), the
+          // When no primary tab is selected (a parked or unknown `?view=`), the
           // whole strip would otherwise be `tabIndex={-1}` and therefore
           // unreachable by keyboard. The first tab stays tabbable as the entry
           // point; roving focus takes over once a tab is selected.
@@ -126,11 +113,10 @@ export function WorkspaceCanvas({
                 // `layoutId` is shared across the three tabs, so React mounts one
                 // indicator at a time and motion interpolates its box — the slide.
                 //
-                // The bar is mono, not `--accent`: the reference's is `bg-zinc-200`
-                // (a near-white ink line in dark), and every other selection in the
-                // reference — this strip's own active tab, the sidebar's segmented
-                // control, the literature hub's track — is a raised monochrome chip.
-                // `--accent` on chrome would be a fifth colour in a monochrome shell.
+                // The bar is mono, not `--accent`: chrome selection is always a
+                // raised monochrome mark, and `--accent` is reserved for the
+                // primary action and focus. A coloured bar here would be the
+                // only colour in an otherwise mono shell.
                 <motion.div
                   aria-hidden="true"
                   data-testid="canvas-tab-indicator"
@@ -145,9 +131,7 @@ export function WorkspaceCanvas({
         {actions === undefined ? null : <div className="ml-auto flex shrink-0 items-center gap-1 py-1">{actions}</div>}
       </div>
 
-      {stageBar === undefined ? null : <div className="shrink-0">{stageBar}</div>}
-
-      {/* Single scroll surface for the canvas (MASTER v2 §5). */}
+      {/* Single scroll surface for the canvas. */}
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );

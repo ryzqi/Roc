@@ -9,7 +9,7 @@ import type { AppViewId } from './routes';
  *   1. **Hysteresis** — when switching to a view whose chunk is not resident,
  *      the canvas must keep showing the previous view instead of blanking, then
  *      swap when the new one is ready (the legacy shell's `useShownView`).
- *   2. **Scroll reset** — the canvas is a single scroll surface (MASTER v2 §5),
+ *   2. **Scroll reset** — the canvas is a single scroll surface,
  *      so its offset is reset when the *shown* view changes, not when the
  *      requested one does.
  *
@@ -22,7 +22,7 @@ import type { AppViewId } from './routes';
  * eager entry, which is fine for placeholders but **the assistant, settings, the
  * terminal, the diff view and the Markdown/KaTeX families must stay real dynamic
  * imports**, or `check-renderer-chunks.mjs`'s `forbidden` guard (or the eager
- * budget) fails (R4 / ADR-M11).
+ * budget) fails.
  *
  * P3 turned `files` / `terminal` / `changes` into real imports. They no longer
  * have a same-name placeholder factory in this file, so nothing keeps
@@ -40,9 +40,9 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   // Every canvas view is a real `import()`, not a factory, so `react-diff-view` and `@xterm/*`
   // stay out of the eager graph while the terminal and the Git drawer still get theirs.
   //
-  // The reference's three (文献 / LaTeX / 终端) come first; the rest are the project views this
-  // build adds. `changes`, `files` and `tasks` used to be among them and are gone: the reference
-  // opens files from the sidebar tree and Git from a drawer, and there are no canvas pages for
+  // The three primary tabs (文献 / LaTeX / 终端) come first; the rest are the project views this
+  // build adds. `changes`, `files` and `tasks` used to be among them and are gone: files open from
+  // the sidebar tree and Git from a drawer, and there are no canvas pages for
   // either remaining.
   literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
   latex: async () => ({ default: (await import('../latex/LatexPanel')).LatexPanel }),
@@ -51,7 +51,7 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   // view id, and `management-shell-parts` holds the tab strip and the bodies so the canvas and the
   // drawer cannot drift apart.
   //
-  // 后台任务 has exactly one home in the reference — the management drawer's 任务 tab — and two
+  // 后台任务 has exactly one home — the management drawer's 任务 tab — and two
   // surfaces over one dataset is the drift P9 built `management-shell-parts` to prevent.
   mcp: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
   skills: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),

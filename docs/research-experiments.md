@@ -1,7 +1,6 @@
 # 科研实验运行
 
-实验从项目内的 Python、R、Julia 脚本启动。UI 选择引擎与源后直接 `startExperiment`；主进程缺 `expectedEnvironmentHash` 时内部 inspect。Agent 可传入 hash 以钉死重放。`inspectExperimentEnvironment` 仍作诊断接口。每次新运行使用新的 `requestId`，相同请求重发返回已有运行。`engine` 必须与所选运行时及源文件类型一致。
-
+实验从项目内的 Python、R、Julia 脚本启动。调用 `startExperiment` 时选择引擎与源；主进程缺 `expectedEnvironmentHash` 时内部 inspect。Agent 可传入 hash 以钉死重放。`inspectExperimentEnvironment` 仍作诊断接口。每次新运行使用新的 `requestId`，相同请求重发返回已有运行。`engine` 必须与所选运行时及源文件类型一致。
 Python 可以选择随应用提供的运行时，或者使用同一内置解释器创建的项目 `.venv`（不继承系统 site-packages）。uv 模式要求 `uv.lock` 和 `pyproject.toml`：先在受限项目 Python 中收集实际包信息，再将安装元数据复制到没有启动钩子的临时环境，执行 `uv sync --locked --check --offline --no-python-downloads --no-build`。该检查不自动安装、升级或改写锁文件。环境摘要记录解释器、Python 版本、平台、包版本、安装元数据摘要、锁文件摘要和固定工具链身份。
 
 R 使用 `{kind:"renv", rootPath, libraryPath}`：`rootPath` 是所选 R 的 `R.home()` 绝对目录，`libraryPath` 是项目内的相对库目录。项目须有 `renv.lock`，库中须有 `renv`；支持 renv 创建的包缓存链接。运行前检查 R 版本、`renv::status()` 与实际包描述，锁文件中的 R/包版本不符会失败。R 以 `--vanilla` 启动，不加载项目或用户启动配置；使用指定库和该 R 自带的库，不恢复额外的 site-library。
@@ -40,8 +39,7 @@ R 的标准库会执行系统命令。应用附带带源码和哈希的 arm64/x6
 
 实验、绘图和导出阶段的模型输出必须绑定本次运行链已发布的真实工件。系统不会另造 `path=null` 的空产物；未发布时阶段失败并保留模型版本。失败或重试会留下已发布记录，重试成功后把模型 provenance 接到这些工件。手工创建的元数据工件不能代替实际发布。
 
-实验运行只接受 `python` / `r` / `julia`。图稿走独立 `startFigure`，见[图稿执行与审核](research-figures.md)。科研页实验面板选择引擎与源后启动脚本实验、读取日志并发布实验。`inspectExperimentEnvironment` 供 Agent 与诊断，不是 UI 前置。任意本机环境包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
-
+实验运行只接受 `python` / `r` / `julia`。图稿走独立 `startFigure`，见[图稿执行与审核](research-figures.md)。实验域**今天没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：启动脚本实验、读取日志与发布走上面的 capability（`research.experiment.startOwned` / `publishOwned`），由对话代理调用；深链到 `?view=experiments` 会明确失败。`inspectExperimentEnvironment` 供 Agent 与诊断，不是 UI 前置。任意本机环境包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
 修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令重建两个架构、合并为通用库并更新源码/二进制哈希。应用运行时直接使用已构建资源。
 
 ```bash

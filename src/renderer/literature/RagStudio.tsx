@@ -30,8 +30,8 @@ import type { LiteratureStore } from './use-literature-store';
  * asked `index.evidenceSource` with a **chunkId** — a method whose argument is an
  * evidence id, so it could only ever throw `research_evidence_not_found` (F16).
  *
- * Index configuration is **read-only** with a jump to the settings centre
- * (ADR-M09): the effective values are shown from `status.settings`, never edited.
+ * Index configuration is **read-only** with a jump to the settings centre: the
+ * effective values are shown from `status.settings`, never edited.
  *
  * Every write passes back the revision it read (`expectedRevision`), because
  * `index.control` is an optimistic-concurrency call.
@@ -88,7 +88,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const [actionPending, setActionPending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   /**
-   * Per-hit copy feedback (the reference's `copiedChunkId`).
+   * Per-hit copy feedback.
    *
    * A hit is the only place a *chunk* is visible — the contract exposes no chunk
    * browser (B14) — so copying the retrieved text is how a researcher moves it into
@@ -100,7 +100,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const scope = useWorkspaceScope();
 
   /**
-   * The index configuration is written by the settings centre (ADR-M09), and `settings.*`
+   * The index configuration is written by the settings centre, and `settings.*`
    * has no push channel — so the effective-config block below re-reads when settings change
    * (P8/T8.4). Without the revision the panel would keep showing the pre-save revision and
    * a stale include/exclude list.
@@ -589,7 +589,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
         <section>
           <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[var(--font-meta-size)]">
-            生效配置（只读，写入口在设置中心 — ADR-M09）
+            生效配置（只读，写入口在设置中心）
             <button
               type="button"
               onClick={() => scope.openSettings()}

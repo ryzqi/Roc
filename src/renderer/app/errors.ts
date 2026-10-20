@@ -1,10 +1,10 @@
 import { errorMessage } from './loaded-state';
 
 /**
- * Error taxonomy from design-system/MASTER.md §10, carried into the new shell.
+ * Error taxonomy carried into the shell.
  *
  * Five levels, each with a distinct surface. Naming them in one module is what
- * stops every view from inventing its own error chrome (ADR-M07):
+ * stops every view from inventing its own error chrome:
  *
  *   startup — the app could not boot; takes over the whole window
  *   page    — a whole view failed to load; error bar above an empty body

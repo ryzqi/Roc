@@ -1,5 +1,5 @@
 /**
- * Startup surfaces (MASTER v2 §10).
+ * Startup surfaces.
  *
  * The window shows exactly one of these until the shell can mount, and the same
  * component renders the "preload bridge missing" case from `App.tsx` and the

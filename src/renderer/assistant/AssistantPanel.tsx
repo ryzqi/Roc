@@ -32,18 +32,16 @@ import { useChatSession } from './use-chat-session';
  *
  * ## The model pill
  *
- * `research-studio`'s header opens a dropdown on that pill: the configured models, with
- * 「设置模型与服务」 as its last row. The **pill** is ported (Bot glyph in `--icon-agent`,
- * label, trailing affordance, raised surface) because it is the header's visual signature,
- * but the dropdown is not — and that is a contract reason, not a scope one: `settings.save`
- * is a **whole document**, not a patch (`SettingsSaveRequest`). The settings centre owns a
- * dirty draft of that document and is the only surface that knows which fields the user has
- * already changed; a switcher in the assistant would have to re-send every field it did not
- * load, making it a second writer of a whole-document resource.
+ * The pill (Bot glyph in `--icon-agent`, label, trailing affordance, raised surface) is the
+ * header's visual signature, but it is a read-only display rather than a model switcher: the
+ * only control it opens is the settings centre. That is a contract reason, not a scope one —
+ * `settings.save` is a **whole document**, not a patch (`SettingsSaveRequest`). The settings
+ * centre owns a dirty draft of that document and is the only surface that knows which fields
+ * the user has already changed; a switcher in the assistant would have to re-send every field
+ * it did not load, making it a second writer of a whole-document resource.
  *
  * So the trailing affordance is `Settings2`, not `ChevronDown`: the control really does open
- * the settings centre, and a chevron would promise a menu that does not exist. Recorded here
- * rather than left as a silent difference from the reference.
+ * the settings centre, and a chevron would promise a menu that does not exist.
  *
  * `threadId` is component state and is cleared when the project changes: a thread belongs to
  * one project's conversation, and carrying it across projects would be exactly the leak gate 6
@@ -71,7 +69,7 @@ export type AssistantPanelProps = {
   /**
    * Puts the assistant column back to its default width.
    *
-   * The reference puts this in its conversation header. The shell already offers the
+   * The shell already offers the
    * same operation on the divider (double-click, and `Home` while it is focused), and
    * this calls the same `resetAssistant` — it is duplicated here because a double-click
    * on a 1px hairline is not discoverable while the header button is.
@@ -222,8 +220,8 @@ export function AssistantPanel({
           {projectName === null ? '未进入项目' : projectName}
           {stageLabel === null ? '' : ` · ${stageLabel}`}
         </span>
-        {/* The reference's header counts the messages it is showing — the one number
-            that says a long run is still producing output. */}
+        {/* The message count is the one number that says a long run is still producing
+            output. */}
         <span
           className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]"
           data-testid="assistant-message-count"
@@ -280,9 +278,9 @@ export function AssistantPanel({
   ].filter((message): message is string => message !== null && message.length > 0);
 
   return (
-    // `bg-bg`, not `--bg-soft`: the reference paints all three columns the same
-    // (`bg-zinc-950`) and separates them with hairlines only. Its transcript wrapper is
-    // `bg-zinc-950/40` over that same colour, i.e. deliberately invisible.
+    // `bg-bg`, not `--bg-soft`: all three columns share one colour and are separated by
+    // hairlines only. Tinting the transcript wrapper the same colour keeps it deliberately
+    // invisible.
     <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="assistant-panel">
       {header}
 

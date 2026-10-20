@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { errorMessage, type IpcLikeResult } from './loaded-state';
 
 /**
- * Uniform IPC resource loading (ADR-M07).
+ * Uniform IPC resource loading.
  *
  * Every view in P2–P9 loads backend data the same way, so this is the single
  * place that decides what "loading", "ready" and "error" mean:
@@ -11,7 +11,7 @@ import { errorMessage, type IpcLikeResult } from './loaded-state';
  *     new filter) the resource **drops the previous scope's data immediately**
  *     rather than showing it until the new call resolves
  *   - `{ ok: false }` becomes `status: 'error'` carrying the backend's own
- *     message — no component invents its own error text (MASTER v2 §10)
+ *     message — no component invents its own error text
  *   - a stale response never wins: results are dropped if the key changed or the
  *     component unmounted while the call was in flight
  *   - `reload()` re-runs the same call, which is what the error bar's retry does

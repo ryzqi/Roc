@@ -7,7 +7,7 @@ import { EmptyState } from '../shell/EmptyState';
 import { deriveGraph, graphNeighbors, GRAPH_LAYOUT_NODE_LIMIT, type GraphNode, type GraphNodeKind } from './derive-graph';
 
 /**
- * Knowledge graph (P5/T5.7, ADR-M10).
+ * Knowledge graph.
  *
  * Deliberately **not** a force layout. Two reasons, both measured rather than
  * aesthetic:
@@ -24,9 +24,9 @@ import { deriveGraph, graphNeighbors, GRAPH_LAYOUT_NODE_LIMIT, type GraphNode, t
  *
  * Node kinds are text badges, not colours alone (AGENTS.md).
  *
- * ## Two interactions ported from the reference, one deliberately not
+ * ## Two interactions kept, one deliberately not
  *
- * The reference's graph has a text filter, a category filter, zoom controls, and
+ * The graph can have a text filter, a category filter, zoom controls, and
  * 「让助手扩展这个节点」.
  *
  *   - **Text filter** — ported. It is the only way to find a node once the graph
@@ -34,12 +34,11 @@ import { deriveGraph, graphNeighbors, GRAPH_LAYOUT_NODE_LIMIT, type GraphNode, t
  *   - **Ask the assistant about a node** — ported, and routed through the shared
  *     literature store's `askAssistant` so the run lands in the same
  *     thread-adoption path the reader's 「问助手」 uses (`AppShell` opens the panel
- *     on the run's thread). The reference called this out of its always-visible
- *     conversation column; here the panel opens as part of the hand-off.
+ *     on the run's thread). Here the panel opens as part of the hand-off.
  *   - **Zoom in / out / reset** — **not** ported, because there is nothing to zoom:
  *     this is a deterministic list, not a canvas with a viewport transform. Shipping
  *     a zoom control that scales a list would be animation for its own sake and
- *     would imply a layout the view deliberately does not have (ADR-M10).
+ *     would imply a layout the view deliberately does not have.
  */
 
 export type KnowledgeGraphViewProps = {
@@ -48,7 +47,7 @@ export type KnowledgeGraphViewProps = {
   libraryItems: readonly ResearchLibraryItem[];
   /** Highlight this node's neighbourhood; set when arriving from the wiki. */
   focusClaimId?: string | null;
-  /** Hands the node to the research assistant (reference's `onExpandGraphWithNode`). */
+  /** Hands the node to the research assistant. */
   onAskAssistantAboutNode?: (node: GraphNode) => void;
 };
 

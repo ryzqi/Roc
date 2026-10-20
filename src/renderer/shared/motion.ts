@@ -1,23 +1,21 @@
 import type { Transition, Variants } from 'motion/react';
 
 /**
- * The renderer's motion vocabulary, transcribed from the prototype.
+ * The renderer's motion vocabulary. One module, so every duration and easing has
+ * a single home instead of being a literal at the call site:
  *
- * These are the animations `research-studio/src/**` actually ships, not a
- * restatement of a design intent:
- *
- * | surface                | source                                              |
- * |------------------------|-----------------------------------------------------|
- * | canvas tab indicator   | `WorkspaceCanvas` — `layoutId` + spring 0.18        |
- * | canvas view swap       | `WorkspaceCanvas` — `AnimatePresence mode="wait"` 0.12 opacity |
- * | popover / dropdown     | `AgentChat` — opacity + y:4 + scale:0.98, 0.12      |
- * | collapsible section    | `AgentChat` — opacity + height:auto, 0.16 / 0.15    |
- * | modal                  | `index.css` `.animate-scaleIn`, 0.18                |
- * | drawer                 | `index.css` `.animate-slideInRight`, 0.2            |
+ * | surface                | preset                            |
+ * |------------------------|-----------------------------------|
+ * | canvas tab indicator   | `tabIndicatorTransition` 0.18     |
+ * | canvas view swap       | `viewFadeVariants` 0.12           |
+ * | popover / dropdown     | `popoverVariants` 0.12            |
+ * | collapsible section    | `collapseVariants` 0.16 / 0.15    |
+ * | modal                  | `modalPopVariants` 0.18           |
+ * | drawer                 | `drawerVariants` 0.2              |
  *
  * Durations are literals on purpose. `--duration-fast/base/slow` (120/180/320ms)
  * is the shell's own micro-interaction ramp for CSS transitions; folding both
- * vocabularies into one scale would silently retime the prototype's animations.
+ * vocabularies into one scale would silently retime these.
  *
  * `prefers-reduced-motion` is *not* handled here. The root `MotionConfig
  * reducedMotion="user"` (main.tsx) covers every consumer — a component that checks
@@ -25,7 +23,7 @@ import type { Transition, Variants } from 'motion/react';
  * vocabulary does check it, once, in `styles/index.css`.
  */
 
-/** research-studio's shared easing. */
+/** Shared easing: a fast start with a long settle. */
 const SOFT = [0.16, 1, 0.3, 1] as const;
 
 /** Canvas view cross-fade (`AnimatePresence mode="wait"`, 120ms). */
@@ -40,7 +38,7 @@ export const viewFadeVariants: Variants = {
 /**
  * The sliding underline shared by the canvas tab strip and the sidebar's own
  * tab strip. `layoutId` is what makes it travel between tabs rather than
- * blink; the spring is the prototype's `bounce: 0.15, duration: 0.18`.
+ * blink; the spring is `bounce: 0.15, duration: 0.18`.
  */
 export const tabIndicatorTransition: Transition = { type: 'spring', bounce: 0.15, duration: 0.18 };
 
@@ -56,11 +54,11 @@ export const popoverVariants: Variants = {
 /**
  * Collapsible detail sections (tool-call bodies, reasoning blocks).
  *
- * `height: 'auto'` in a variant is a layout read per frame; it is the prototype's
- * own choice and the reason it needs `overflow-hidden` on the same element.
- * Two durations exist upstream (0.16 and 0.15) — both are exported rather than
- * averaged, because collapsing a tool result is the one transition the user
- * triggers dozens of times per session and the difference is visible in a trace.
+ * `height: 'auto'` in a variant is a layout read per frame; it needs
+ * `overflow-hidden` on the same element. Two durations exist (0.16 and 0.15) —
+ * both are exported rather than averaged, because collapsing a tool result is
+ * the one transition the user triggers dozens of times per session and the
+ * difference is visible in a trace.
  */
 export const collapseTransition: Transition = { duration: 0.16, ease: 'easeOut' };
 export const collapseTransitionShort: Transition = { duration: 0.15, ease: 'easeOut' };
@@ -73,7 +71,7 @@ export function collapseVariants(): Variants {
   };
 }
 
-/** Modal entrance: `.animate-scaleIn` as a motion preset, for portal-hosted panels. */
+/** Modal entrance (opacity + 0.98 scale), for portal-hosted panels. */
 export const modalPopTransition: Transition = { duration: 0.18, ease: SOFT };
 
 export const modalPopVariants: Variants = {
@@ -82,7 +80,7 @@ export const modalPopVariants: Variants = {
   exit: { opacity: 0, scale: 0.98 }
 };
 
-/** Drawer entrance: `.animate-slideInRight` as a motion preset. */
+/** Drawer entrance: slide in from the right. */
 export const drawerTransition: Transition = { duration: 0.2, ease: SOFT };
 
 export const drawerVariants: Variants = {

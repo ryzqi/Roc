@@ -11,7 +11,7 @@
 
 @theme {
   /* The palette is theme-flipped (see tokens.css), so `bg-zinc-900` means
-     "surface" in both themes, exactly as in research-studio. */
+     "surface" in both themes. */
   --color-zinc-50: var(--app-zinc-50);
   --color-zinc-100: var(--app-zinc-100);
   --color-zinc-200: var(--app-zinc-200);
@@ -210,19 +210,14 @@
 /*
  * Motion vocabulary.
  *
- * `research-studio/src/index.css` shipped three keyframe utilities — `fadeIn`
- * (0.15), `scaleIn` (0.18), `slideInRight` (0.2), all on
- * `cubic-bezier(0.16, 1, 0.3, 1)`. ADR 0023 ported them verbatim. Audit finding
- * (ADR 0025): **nothing ever used them.** The reference itself only had one live
- * call site (`animate-fadeIn` on the portal's three form modals — its `animate-in
- * …` classes are inert, `tailwindcss-animate` was never installed), and every
- * overlay here is a `ModalShell`, which implements the same two entrances as
- * `motion` variants (`shared/motion.ts`: `modalPopVariants` 0.18,
- * `drawerVariants` 0.2) so it gets both directions instead of entrance only.
+ * The motion standard is `shared/motion.ts` (JS) plus the one CSS transition that
+ * has to exist (`::details-content`, below) — one consumer each, no second copy.
+ * Overlays go through `ModalShell`, which uses the `motion` variants so they get
+ * both an entrance and an exit.
  *
- * Dead CSS is a second vocabulary that never runs; it is deleted. The motion
- * standard is `shared/motion.ts` (JS) plus the one CSS transition that has to
- * exist (`::details-content`, below) — one consumer each, no third copy.
+ * Three keyframe utilities once lived here (`animate-fadeIn` / `animate-scaleIn` /
+ * `animate-slideInRight`); nothing ever called them, so they were deleted. Dead
+ * CSS is a second vocabulary that never runs.
  *
  * `prefers-reduced-motion` is handled once, globally, in the base layer above;
  * reduced-motion users get the end state with no travel. Components never check
@@ -232,31 +227,29 @@
 /*
  * Disclosure animation for the activity blocks (T4.4).
  *
- * `research-studio` animates its thought and tool-call bodies with
- * `AnimatePresence` + `{ opacity, height: 0 -> 'auto' }` over 160ms (thought) and
- * 150ms (tool call) — and those are the two most frequently triggered animations
- * in the product, because every tool call and every reasoning block is one.
+ * Thought and tool-call bodies animate over 160ms (thought) and 150ms (tool
+ * call) — the two most frequently triggered animations in the product, because
+ * every tool call and every reasoning block is one.
  *
- * The port is CSS, not `motion`, and that is a deliberate upgrade rather than a
+ * This is CSS, not `motion`, and that is a deliberate upgrade rather than a
  * substitution:
  *
  *   - the disclosure is a native `<details>`, which is what keeps it
  *     keyboard-correct, screen-reader-correct and usable while a stream is still
- *     arriving. `AnimatePresence` needs a mount/unmount boundary, so porting the
- *     prototype literally would mean replacing `<details>` with a button plus a
- *     region and losing those properties;
+ *     arriving. `AnimatePresence` needs a mount/unmount boundary, so a `motion`
+ *     port would mean replacing `<details>` with a button plus a region and
+ *     losing those properties;
  *   - `::details-content` (Chromium 131+) plus `interpolate-size: allow-keywords`
  *     (Chromium 129+) animates the real disclosure box in **both** directions,
- *     which is what the prototype achieves and what a `height: 0 -> auto`
- *     transition on a wrapper could not do without unmounting.
+ *     which a `height: 0 -> auto` transition on a wrapper could not do without
+ *     unmounting.
  *
  * This app's Electron is Chromium 152, so both are available (verified via
  * `process.versions.chrome`, not assumed). The failure mode if that ever stops
  * being true is an instant open with no travel — the block still works.
  *
- * The 160ms/ease-out timing is the prototype's; the reduced-motion kill-switch is
- * the global rule in the base layer above, which now also covers
- * `::details-content` explicitly.
+ * The reduced-motion kill-switch is the global rule in the base layer above,
+ * which also covers `::details-content` explicitly.
  */
 :root {
   interpolate-size: allow-keywords;

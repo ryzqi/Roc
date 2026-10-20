@@ -90,11 +90,9 @@ export function ProjectPortalView({
   };
 
   /**
-   * The grid's column count is read from the layout, not assumed: the reference's
-   * `md:grid-cols-2 lg:grid-cols-3` means the count changes at 768px and 1024px, and a
-   * hard-coded 3 made every vertical arrow move land one column off when the window was
-   * narrower. (This used to be an `auto-fill, minmax(240px, 1fr)` count, which is why the
-   * comment survived the switch to the reference's fixed columns at all.)
+   * The grid's column count is read from the layout, not assumed: `md:grid-cols-2
+   * lg:grid-cols-3` means the count changes at 768px and 1024px, and a hard-coded 3 made
+   * every vertical arrow move land one column off when the window was narrower.
    */
   const columnCount = (): number => {
     const grid = gridRef.current;
@@ -179,8 +177,8 @@ export function ProjectPortalView({
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3 border-b border-line-soft pb-4">
           <h1 className="min-w-0 text-ink text-xl font-semibold tracking-tight sm:text-2xl">研究项目</h1>
-          {/* The reference's count badge: the one number that says how much work the
-              portal is holding, in tabular mono so it does not jump as projects land. */}
+          {/* The count badge: the one number that says how much work the portal is
+              holding, in tabular mono so it does not jump as projects land. */}
           <span
             className="shrink-0 rounded-control border border-line bg-surface px-2 py-0.5 font-mono text-muted text-[var(--font-meta-size)]"
             data-testid="portal-count"

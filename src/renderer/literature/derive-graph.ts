@@ -1,7 +1,7 @@
 import type { ResearchClaim, ResearchEvidence, ResearchIndexedFile, ResearchLibraryItem } from '../../shared/types';
 
 /**
- * Derived knowledge-graph projection (T5.7, ADR-M10).
+ * Derived knowledge-graph projection.
  *
  * Same discipline as `derive-wiki.ts`: pure, real data only, and **no graph when
  * there is no data** (R12 / gate 4). The legacy view seeded a layout with mock

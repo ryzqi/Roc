@@ -27,14 +27,14 @@ import {
  * focused row is always inside the slice, otherwise roving focus would point at
  * an element that is not rendered.
  *
- * **Keyboard model** (MASTER v2 §9, AGENTS.md "every important action must be
- * keyboard accessible"). This is the ARIA tree pattern with a roving `tabIndex`:
+ * **Keyboard model** (AGENTS.md "every important action must be keyboard
+ * accessible"). This is the ARIA tree pattern with a roving `tabIndex`:
  * exactly one row is tabbable, ↑/↓ move, → expands or steps into a directory, ←
  * collapses or steps out to the parent, Home/End jump, and typing jumps to the
  * next row whose name starts with the typed prefix. Enter/Space are left to the
  * row button's native activation, so a keystroke cannot fire the action twice.
  *
- * Interaction rules from MASTER v2 §6.4: rows are 24px inside a 36-40px target
+ * Interaction rules: rows are 24px inside a 36-40px target
  * band, selection uses `--accent-soft`, hover uses `--overlay-hover`, there is no
  * `cursor: pointer`, and a directory row's disclosure is a real button.
  */
@@ -98,10 +98,10 @@ const CODE_EXTENSIONS = [
 ] as const;
 
 /**
- * Per-row icon hue, taken from the reference's `FileTreeView` (`getFileIcon`):
+ * Per-row icon hue (`getFileIcon`):
  * folders and LaTeX sources share amber, source code is blue, the `.bib` family is
  * the literature hue, and everything else stays grey. The hues are tokens, so the
- * light theme drops to a legible stop instead of the reference's hard-coded 400s.
+ * light theme drops to a legible stop instead of the dark theme's 400s.
  *
  * Directory rows use the same amber in both disclosure states; the glyph is what
  * carries "open" (see `RowIcon`).
@@ -337,8 +337,8 @@ export function FileTreeView({
    * A path that cannot be inside the workspace, refused before any request is made (R10).
    *
    * This used to be the canvas `files` view's job — it was the `?file=` host, and a rejected path
-   * rendered `data-state="rejected"` there. The view is gone (the reference reveals files in the
-   * tree), so the same `checkRelativePath` + `pathRejectionMessage` pair moved to the surface that
+   * rendered `data-state="rejected"` there. The view is gone — files are revealed in the tree —
+   * so the same `checkRelativePath` + `pathRejectionMessage` pair moved to the surface that
    * now owns selection. The backend refuses it too; failing locally is about the message, not about
    * being the only boundary.
    */

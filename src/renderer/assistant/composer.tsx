@@ -31,10 +31,10 @@ import { parseSlashSkillCommand } from './slash-skill-command';
  * Keys follow the legacy shell exactly (Enter sends, Shift+Enter newlines, ⌘Enter sends)
  * because that habit is the one thing users bring with them.
  *
- * ## The two toggles the reference has in this footer are not here
+ * ## The two toggles that would fit here are not here
  *
- * `research-studio`'s composer ends with 联网搜索 and 深度思考 switches. Neither is
- * portable: `chatStartRunRequestSchema` has no thinking or web-search field — the run
+ * 联网搜索 and 深度思考 switches are not portable: `chatStartRunRequestSchema` has no
+ * thinking or web-search field — the run
  * request carries `input` / `mode` / `threadId` / `workflowHint` / `taskSource` /
  * `workspacePath` / `shellAllowedCommands` / `attachments` / `explicitSkillIds` and nothing
  * else. A switch that never reaches the backend is a control that lies, so the row carries
@@ -293,8 +293,8 @@ export function AssistantComposer({
         </ul>
       )}
 
-      {/* One card holds the field and its own bottom bar, exactly as the reference's
-          composer does (`rounded-2xl p-3 shadow-md` + a bordered control row inside). */}
+      {/* One card holds the field and its own bottom bar (`rounded-2xl p-3 shadow-md`
+          plus a bordered control row inside). */}
       <div className="flex flex-col gap-2.5 rounded-window border border-line bg-surface p-3 shadow-[var(--shadow-card)]">
         <div className="flex items-end gap-2">
           <textarea

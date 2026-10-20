@@ -16,10 +16,9 @@ import { projectStageLabel, projectStatusLabel } from './project-store';
  * delete are destructive-adjacent and live away from the card's primary click
  * target — the card body opens the project, the footer acts on it.
  *
- * The hover lift (`-translate-y-0.5` + `--shadow-card-hover`) is the reference's
- * (`hover:-translate-y-0.5 hover:shadow-lg`). It is a state signal, not decoration:
- * the grid has no other cue that the whole card — not just its footer — is the
- * click target. Under `prefers-reduced-motion` the translate is switched off
+ * The hover lift (`-translate-y-0.5` + `--shadow-card-hover`) is a state signal, not
+ * decoration: the grid has no other cue that the whole card — not just its footer — is
+ * the click target. Under `prefers-reduced-motion` the translate is switched off
  * rather than sped up, because the global rule in `styles/index.css` collapses
  * transitions to 0.01ms, which would turn a smooth lift into a 2px jump.
  */

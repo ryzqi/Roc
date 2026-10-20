@@ -1,6 +1,6 @@
 # Roc
 
-Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研究项目，而不是通用对话页。项目下组织文献、证据、想法、实验、图稿和论文；研究助手、文件、任务、连接器、技能和诊断作为科研服务挂在当前项目上。
+Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研究项目，而不是通用对话页。项目下组织文献、证据、想法、实验、图稿和论文；研究助手、文件、后台任务、MCP 连接器、技能和记忆挂在当前项目上。
 
 底层仍是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
@@ -10,38 +10,30 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
 - 包管理：`pnpm@12.5.1`
 
-术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。视觉、版式与动效的对齐标准见 [docs/adr/0025-alignment-audit-and-cleanup.md](docs/adr/0025-alignment-audit-and-cleanup.md)；设计参照目录是 [research-studio/](research-studio/README.md)（只读，不是第二套前端）。
+术语见 [CONTEXT.md](CONTEXT.md)。壳层与科研服务见 [docs/research-workbench.md](docs/research-workbench.md)。视觉、版式与动效的口径在 [`src/renderer/styles/tokens.css`](src/renderer/styles/tokens.css) 与 [`src/renderer/shared/motion.ts`](src/renderer/shared/motion.ts)，取舍理由见 [ADR 0023](docs/adr/0023-visual-and-motion-spec.md)。
 
 ---
 
 ## 科研工作台
 
 打开应用先落**项目门户**：卡片网格列出研究项目，没有项目时是空态，点「新建研究项目」才出表单。
-进入某个项目后是**三栏工作台**：左栏（文件 / 文献 / 会话）、助手列、画布（栏序与设计参照一致）；窗口 ≤1099px 时左栏与助手变抽屉。
+进入某个项目后是**三栏工作台**：左栏（文件 / 文献 / 会话）、助手列、画布；窗口 ≤1099px 时左栏与助手变抽屉。
 
 | 区域 | 作用 |
 | --- | --- |
 | 顶栏 | 所有项目 / 项目名 / 分支、⌘K 搜索、助手、管理、Git、设置 |
 | 左栏 | 文件树、文献、会话；主题与管理入口 |
-| 画布 | 一次一个视图：总览、阶段工作区、活动、溯源、改动、文献、文稿、终端、文件、任务、诊断、MCP、技能、记忆 |
+| 画布 | 一次一个视图（`?view=`）。一级 tab 只有三个：文献、LaTeX、终端；管理三节（记忆 / 技能 / MCP）也走画布视图 |
 | 助手 | DeepAgent run 的执行面；富块渲染；⌘J 开关，窄窗为抽屉 |
-| 抽屉与浮层 | Git 抽屉、管理面板、⌘K 搜索、设置浮层 |
+| 抽屉与浮层 | Git 抽屉、管理抽屉（记忆 / 技能 / MCP / 任务）、⌘K 搜索、设置浮层 |
 
-科研服务不再有独立导轨：活动/文件/连接器/技能/记忆/诊断都是画布视图（或管理抽屉），
-研究助手是推进阶段的主入口。壳层与视图合同见 [docs/research-workbench.md](docs/research-workbench.md)。
+「有哪些面、每个面落在哪里」由 [`src/shared/surfaces.ts`](src/shared/surfaces.ts) 一张表声明，是唯一真理源；逐面清单与落点见 [docs/research-workbench.md](docs/research-workbench.md)。缺省画布视图是 `latex`：文件由左栏文件树 + 预览浮层承载，Git 改动由顶栏抽屉承载——两者都没有画布落点。
 
-11 个研究阶段：发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出。证据集、提纲、正文改写、图稿和最终导出走人工闸门。
+**研究助手是唯一执行入口**（ADR 0020）：推进阶段、检索取证、过人工闸门、改论文都在对话里做。11 个研究阶段（发现、检索、阅读、构思、方案、实验/数据、绘图、写作、审稿、修订、导出）由阶段角色 Agent 执行，一次运行绑定当前项目与阶段，由对话代理的科研工具（`research_run_stage` / `research_approve_gate` / `research_lint_manuscript` 等）启动。
 
-阶段工作区已接入：
+下列七个域**今天有契约、有数据库、没有界面**（[ADR 0024](docs/adr/0024-stage-surface-removed.md) 有意保留，登记在 `PARKED_CAPABILITIES` 里，深链会明确失败）：构思、实验、图稿、正文、导出、模板包、阶段策略。
 
-- 文献库 / 知识库 / Idea Canvas
-- Python、R、Julia 实验运行
-- Matplotlib 图稿渲染与发布
-- LaTeX 文稿、模板编译
-- 批准正文与图稿的最终 ZIP 导出
-- MCP 授权、技能、项目记忆、后台任务、运行诊断（管理面板与画布视图）
-
-合同细节：
+合同细节（记的是契约，不是当前界面）：
 
 - [Idea Canvas](docs/research-ideas.md)
 - [实验运行](docs/research-experiments.md)
@@ -52,18 +44,19 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 
 ## 架构分层
 
-```
+```text
 src/
   main/           # Kernel、插件、Agent、科研域、DB、IPC
   preload/        # 类型安全 bridge
-  renderer/       # React 19 UI：顶栏 + 左栏 + 画布 + 助手；门户与设置浮层
+  renderer/       # React 19 UI：顶栏 + 左栏 + 助手 + 画布；门户与设置浮层
   shared/         # schema / types / IPC 合同
   rtk-integration/# shell 输出压缩
 tests/
 scripts/
 resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill
-design-system/    # 全局视觉与交互规范
 ```
+
+设计口径没有单独的文档目录：真身是 `src/renderer/styles/tokens.css`（颜色与刻度）与 `src/renderer/shared/motion.ts`（动效），组件不得写死颜色。
 
 进程边界：renderer 只做 UI；preload 白名单 IPC；main 负责文件系统、网络、密钥、Agent 与科研生产。
 
@@ -71,9 +64,9 @@ design-system/    # 全局视觉与交互规范
 
 ## 研究助手运行时
 
-对话页是科研服务，不是默认首页。阶段角色走各自 Skill 白名单；通用研究助手走 DeepAgents harness。
+研究助手是当前项目上的执行面，不是默认首页。阶段角色走各自 Skill 白名单；通用研究助手走 DeepAgents harness。
 
-```
+```text
 科研工作台 / 阶段角色 / 研究助手
         │ IPC (Zod schema)
         ▼
@@ -154,7 +147,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc install
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc dev
 ```
 
-`dev` 先验证原生模块，再启动 Electron + Vite。默认打开科研工作台。
+`dev` 先验证原生模块，再启动 Electron + Vite。默认打开项目门户。
 
 ```bash
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
@@ -187,8 +180,8 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 | 命令 | 覆盖 | 工件 |
 | --- | --- | --- |
 | `pnpm test` | 新壳 smoke：启动、门户建项目并进入、一轮助手 run、设置保存、文件预览 / Git / 终端 | `.artifacts/smoke-electron/result.json` + 截图 |
-| `pnpm smoke:electron` | 上表 + 审批路径与人工闸门（P4 / P6 闸门作为子进程） | 同上 + `.artifacts/p4-gates/`、`.artifacts/p6-gates/` |
-| `pnpm verify:p3-workspace` … `verify:p9-management` | 七个阶段的验收闸门（真阶段运行 / 真 PDF 解析 / 真 provider 测速 / 真 MCP stdio 子进程 / 真重启等） | `.artifacts/pN-gates/report.json` |
+| `pnpm smoke:electron` | 上表 + 审批路径（P4 闸门作为子进程） | 同上 + `.artifacts/p4-gates/` |
+| `pnpm verify:p3-workspace` / `verify:p4-assistant` / `verify:p5-literature` / `verify:p8-settings` / `verify:p9-management` | 五个阶段的验收闸门（真阶段运行 / 真 PDF 解析 / 真 provider 测速 / 真 MCP stdio 子进程 / 真重启等） | `.artifacts/pN-gates/report.json` |
 | `pnpm smoke:performance` | 冷启动与 1k / 10k 会话的交互、内存与预取预算 | `.artifacts/wave1/performance-smoke.json` |
 | `pnpm smoke:mac` | 已打包 `.app` 的原生行为（签名、托盘、pty、外观通知） | `.artifacts/mac-package/` |
 | `pnpm audit:layout` | 三个视口 × 门户/画布/助手/设置四态的布局审查 | `.artifacts/layout-audit/` |
@@ -198,8 +191,9 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 表现为 `electron.launch: Process failed to launch`。
 
 P10 删掉了旧壳的 smoke 套件（`tests/smoke/electron-smoke*.mjs`）：那些断言绑在已删除的旧 DOM 上，
-没有可断言的对象，也不做事后别名映射。现在 `tests/smoke/lib/` 只留夹具与目标解析
-（`fixtures.mjs` / `smoke-target.mjs` / `assertions.mjs` / `artifacts.mjs` / `native-feel.mjs`）。
+没有可断言的对象，也不做事后别名映射。现在 `tests/smoke/` 只留一份性能 smoke 与夹具/目标解析
+（`performance-smoke.mjs`，`lib/` 下的 `fixtures.mjs` / `smoke-target.mjs` / `assertions.mjs` / `artifacts.mjs` /
+`native-feel.mjs` / `electron-smoke-layout-audit.mjs` / `performance-profile-seed.ts` 与 `lib/assets/`）。
 
 ## 本机维护
 
@@ -399,13 +393,12 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | CSL 样式（GB/T 7714-2015） | 随库更新 | `https://github.com/citation-style-language/styles` ✓ | **CC-BY-SA-3.0** | 必须保留样式内作者与贡献者署名，并注明 CSL 项目与 `https://citationstyles.org/` |
 | CSL 语言文件 | 随库更新 | `https://github.com/citation-style-language/locales` ✓ | CC-BY-SA-3.0 | 同上 |
 
-落地时以上三条必须同时进 `docs/integrations` 的运行时清单与随包 `licenses/`。
+落地时以上三条必须同时进 §五 的 npm 运行时清单与随包 `resources/research-runtime/licenses/`。
 
 ### 九、只作参照、不引入代码
 
 | 项目 | 网址 | 借鉴的是什么 |
 | --- | --- | --- |
-| research-studio | 本仓库 `research-studio/README.md`（只读设计参照） | 视觉、版式、动效与栏序（ADR 0025） |
 | MyST | `https://mystmd.org` ✓ | 交叉引用语义（`{numref}`）与「标签解析 = 纯函数 + 可预检」 |
 | Vale 上游规则 | `https://github.com/errata-ai/vale` ✓ | 规则格式与 `existence/substitution` 的写法；**规则内容为本仓库自研** |
 | Prose 写作风格规则 | `https://github.com/jdkato/prose` | `write-good` 系规则的思路来源；只借思路，不复制文本 |

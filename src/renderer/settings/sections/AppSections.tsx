@@ -25,7 +25,7 @@ import {
  * 应用基础 writes two `appSettingsSchema` fields the main process actually applies —
  * `startup.openAtLogin` (through `macos-host-service`) and `globalHotkey` (`globalShortcut`) —
  * and reports `hostIntegration`, which is the only honest source for "did the registration
- * succeed". 外观 is a renderer UI preference and stays in `ui-state.ts` (ADR-M06): it is
+ * succeed". 外观 is a renderer UI preference and stays in `ui-state.ts`: it is
  * applied immediately, not drafted, because it has no backend field to save.
  *
  * The legacy `fontSize` / `editorFontSize` / `autoSwitchWorkspace` have no backend field and

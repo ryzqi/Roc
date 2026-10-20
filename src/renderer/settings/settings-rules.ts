@@ -7,7 +7,7 @@ import { buildProviderModelKey } from '../../shared/provider-model-key';
  * Pure rules for the settings centre (P8/T8.1–T8.3).
  *
  * Type-only imports on purpose: the unit test bundles this file with esbuild
- * (ADR-M08 discipline, same as P6/P7), so nothing here may pull zod or React into
+ * so nothing here may pull zod or React into
  * the module graph. Everything that talks to the backend lives in
  * `settings-store.ts`; everything that renders lives in `sections/**`.
  *

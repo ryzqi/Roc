@@ -791,7 +791,7 @@ try {
   const ragAfter = await text('rag-settings');
   assertCheck('5 立即生效', 'RAG Studio 读回新 revision 与 include', ragAfter.includes('**/*.tex'), ragAfter.slice(0, 160));
 
-  // 阶段策略面板（△ 阶段面已随 research-studio 对齐整体删除）：该面板已不存在，所以「模型下拉跟随设置
+  // 阶段策略面板（△ 阶段面已整体删除）：该面板已不存在，所以「模型下拉跟随设置
   // 刷新」被另一块真的会刷新模型的界面接替——文稿视图的编译工具链状态读的是同一条 revision 机制，
   // 且它的可用性本来就来自后端（research.toolchain.status），不是内联配置。
   await navigate(page, `page=research&project=${projectId}&view=latex`);

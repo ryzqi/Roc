@@ -87,7 +87,7 @@ export function ProjectFormDialog({
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   // Failure of the native panel is its own error line: collapsing it into
-  // "nothing happened" was the silent-failure bug ADR-M07 forbids.
+  // "nothing happened" would be a silent failure.
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);

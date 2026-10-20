@@ -40,9 +40,9 @@ import { deriveWiki } from '../literature/derive-wiki';
  * Responsibilities, in order:
  *   1. boot gate — `app.getStatus` decides loading / failed / ready
  *   2. appearance — system snapshot + in-app override drive the token layer
- *   3. navigation — the URL is the single source of truth (ADR-M05); the native
+ *   3. navigation — the URL is the single source of truth; the native
  *      menu arrives through `app.onNavigate`
- *   4. layout — three columns with persisted widths and ADR-M12 breakpoints
+ *   4. layout — three columns with persisted widths and a drawer breakpoint
  *   5. overlays — settings (URL-driven), search, management, Git
  *
  * Deliberately *not* here: any product data. Projects, literature, files and
@@ -76,8 +76,8 @@ function canvasTabForView(view: AppViewId): CanvasTabId | null {
  * Two things have to be true for these imports, and both are easy to get wrong:
  *
  *   1. **They must be `import()`**, because `check-renderer-chunks.mjs` forbids
- *      `markdown|streamdown|highlight|settings` from the eager graph (R4 /
- *      ADR-M11). The assistant pulls in the whole Markdown + KaTeX family in P4
+ *      `markdown|streamdown|highlight|settings` from the eager graph. The assistant
+ *      pulls in the whole Markdown + KaTeX family in P4
  *      and settings pulls in every section in P8, so the boundary has to exist
  *      before those phases land.
  *   2. **They must be mounted on demand.** `React.lazy` starts fetching on first
@@ -186,7 +186,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const projectWritable = isProjectWritable(project);
   /**
    * A project that failed to load must not silently render an empty workspace.
-   * ADR-M07: surface the backend message with a retry instead of pretending the
+   * Surface the backend message with a retry instead of pretending the
    * project exists (a stale deep link or a deleted project is the common case).
    */
   const projectLoadFailed = inProject && currentProject.status === 'error';
@@ -231,10 +231,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   /**
    * Asks the 文件 tab to reveal a file **and open its preview**.
    *
-   * There is no canvas `files` view any more (the reference opens files from the sidebar tree
-   * and shows the preview in a modal), so "open a file" is two things now:
+   * There is no canvas `files` view any more (files open from the sidebar tree and the preview
+   * is a modal), so "open a file" is two things now:
    *
-   *   1. `?file=` — the URL field the tree reads to reveal and select the row (ADR-M05);
+   *   1. `?file=` — the URL field the tree reads to reveal and select the row;
    *   2. a nonce the 文件 tab compares against the last one it saw, because which overlay is on
    *      screen is view state, not navigation, and the panel that owns the modal is mounted
    *      inside the sidebar.
@@ -430,7 +430,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
    * the run therefore exists **before** the panel is mounted; selecting the thread
    * and opening the panel is what lets P4's `getActiveRun` + event replay pick the
    * running run up. Navigation stays here because the URL has one writer
-   * (ADR-M05) — the store only reports which thread to show.
+   * — the store only reports which thread to show.
    */
   const literatureAssistantThreadId = literature.assistant.threadId;
   useEffect(() => {
@@ -514,7 +514,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
    * `?tool=git` drives the drawer, and now it is the **only** Git surface: the canvas
    * `changes` view is gone, so there is no second `GitPanel` to keep from mounting at the
    * same time (two instances meant two `useGitWorkspace` states that disagreed after an
-   * action). The reference opens Git as a drawer, and so does this shell.
+   * action). Git opens as a drawer.
    */
   const gitDrawerOpen = route.tool === 'git';
 
@@ -525,8 +525,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       data-testid="roc-app"
       data-mode={boot.appStatus.mode}
     >
-      {/* Keyboard users can jump the chrome and the sidebar in one Tab
-          (MASTER v2 §9). Visible only while focused. */}
+      {/* Keyboard users can jump the chrome and the sidebar in one Tab.
+          Visible only while focused. */}
       <a
         href="#roc-main"
         className="sr-only rounded-control border border-line bg-surface px-3 py-1 text-ink focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50"
@@ -671,8 +671,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   onComposerSeedConsumed={() => setAssistantSeed(null)}
                   onOpenSettings={() => navigate({ ...route, page: 'settings' })}
                   // Same handler the divider's double-click and Home key use, so the
-                  // header button cannot drift from the drag handle (reference has it
-                  // in the header; the shell had it only on the divider).
+                  // header button cannot drift from the drag handle (the shell previously had it
+                  // only on the divider).
                   onResetWidth={layout.resetAssistant}
                 />
               </Suspense>

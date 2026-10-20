@@ -1,18 +1,17 @@
 # Roc 科研助手
 
-> **口径版本：P10 单前端切换之后（v3 术语）。**
+> **口径版本：v3 术语。**
 >
-> 这份文档在 `1da2e0e9`（清理文件）里被连同 `design-system/MASTER.md` 一起删除，是失误：`docs/README.md`
-> 与 `docs/research-workbench.md` 都声明「产品口径以 CONTEXT.md 为准」，删掉之后仓库里读不到领域边界。
-> 本次按 [ADR 0022](docs/adr/0022-single-frontend-after-cutover.md) 与 [ADR 0024](docs/adr/0024-stage-surface-removed-for-parity.md)
-> 的口径重写，范围限定为**今天界面上真实存在的概念**。被删掉的那些面（总览投影、阶段条、阶段工作区、
-> 当前下一步、下一步细条、运行状态、阶段产物、闸门决定、退回说明、重试原因）**不再收录**——它们的术语
-> 没有消费者了，留着只会让后来者以为界面里还有这些东西。
+> 本文只收**今天界面上真实存在的概念**。已经不存在的面（总览投影、阶段条、阶段工作区、当前下一步、
+> 下一步细条、运行状态、阶段产物、闸门决定、退回说明、重试原因）的术语不再收录——它们的消费者已经
+> 消失，留着只会让后来者以为界面里还有这些东西。阶段面被删除的理由见
+> [ADR 0024](docs/adr/0024-stage-surface-removed.md)。
 >
-> **视觉、版式与动效的对齐标准是 `research-studio/`**（只读设计参照），逐条的对照与有意不照抄的地方见
-> [ADR 0025](docs/adr/0025-alignment-audit-and-cleanup.md)。
+> **视觉、版式与动效的真身是 [`src/renderer/styles/tokens.css`](src/renderer/styles/tokens.css) 与
+> [`src/renderer/shared/motion.ts`](src/renderer/shared/motion.ts)**，取舍理由见
+> [ADR 0023](docs/adr/0023-visual-and-motion-spec.md)。
 >
-> v2 的 `_Avoid_` 条目按「今天违反它就会写出错误代码」保留；已经随面一起消失的条目按上面的理由删除。
+> `_Avoid_` 条目按「今天违反它就会写出错误代码」保留。
 
 Roc 面向个人研究者，围绕研究项目组织文献、证据、想法、实验、图稿和论文。默认入口是项目门户；进入某一个
 研究项目后才打开该项目的三栏工作台。**研究助手是唯一执行入口**（[ADR 0020](docs/adr/0020-conversation-drives-stages.md)）：
@@ -22,7 +21,7 @@ Roc 面向个人研究者，围绕研究项目组织文献、证据、想法、�
 ## 壳层
 
 **三栏工作台**：进入某一个研究项目后的产品壳（文档里也简称「工作台」）。结构是顶栏 + 左栏（文件 / 文献 /
-会话）+ 助手列 + 画布（与设计参照同序：助手夹在左栏与画布之间）；≤1099px 时左栏与助手变抽屉。当前研究项目、画布视图、抽屉（Git / 管理）与浮层
+会话）+ 助手列 + 画布（助手夹在左栏与画布之间）；≤1099px 时左栏与助手变抽屉。当前研究项目、画布视图、抽屉（Git / 管理）与浮层
 （⌘K 搜索 / 设置）都在这个壳里。进入后离开门户；顶栏用「所有项目」返回。不在项目门户上显示。
 _Avoid_：通用工作台、项目内第二套导航层级、门户页里的工作台
 
@@ -135,11 +134,10 @@ _Avoid_：绕开闸门直接推进阶段
 ## 有能力但今天没有界面
 
 这七个域在契约（`src/shared/ipc-registry.ts`）与数据库里仍然完整，`pnpm check:ipc` 仍然是 current，
-但 [ADR 0024](docs/adr/0024-stage-surface-removed-for-parity.md) 删掉了它们的界面：**构思、实验、图稿、正文、
-导出、模板包、阶段策略**。这是有意保留的能力，不是回归；重新接界面时它们是现成的。
-
-它们登记在 `src/shared/surfaces.ts` 里，标记为**没有落点**，因此任何导航到它们的深链都会明确失败，而不是
-静默落回默认视图。
+但 [ADR 0024](docs/adr/0024-stage-surface-removed.md) 删掉了它们的界面：**构思、实验、图稿、正文、
+导出、模板包、阶段策略**。它们登记在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES` 里，标记为
+**没有落点**，所以导航到它们的深链会明确失败，而不是静默落回默认视图。逐面清单见
+[科研工作台](docs/research-workbench.md)。
 
 ## 许可
 

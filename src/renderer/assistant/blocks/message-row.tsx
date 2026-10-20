@@ -41,9 +41,9 @@ import { ToolCallBlock } from './tool-call-block';
  * replays), far less machinery, and the bounded key set — which existed so a long
  * session could not grow the renderer's memory without limit — is kept.
  *
- * Geometry is the reference's: the transcript is a `px-4` gutter with 24px between
- * rows, an assistant turn stacks its blocks 12px apart (`space-y-3` there, `gap-3`
- * here), and a user turn is the one filled bubble in the surface — 85% max width,
+ * Geometry: the transcript is a `px-4` gutter with 24px between rows, an assistant turn
+ * stacks its blocks 12px apart (`gap-3`), and a user turn is the one filled bubble in the
+ * surface — 85% max width,
  * 16px radius with the bottom-right corner at the control radius,
  * `--surface-card-hover` fill, 13px text at `leading-relaxed`.
  */

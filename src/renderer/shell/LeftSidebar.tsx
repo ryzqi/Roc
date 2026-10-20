@@ -14,22 +14,17 @@ import { EmptyState } from './EmptyState';
  *
  * The tab set is fixed at three (files / literature / sessions) and every tab is
  * a subordinate view of the *current project* — this is not global app
- * navigation (MASTER v2 §1.5). New tabs require a MASTER amendment.
+ * navigation. The tab set is a product decision, not a local one.
  *
  * Interaction rules: rows are 36-40px with `--r-card` radius, hover uses a
  * subtle fill, the selected tab is a raised surface, and nothing gets
- * `cursor: pointer` (MASTER v2 §6.2).
+ * `cursor: pointer`.
  *
- * ## Visual port
- *
- * The four bands are the reference's four bands
- * (`research-studio/src/components/LeftSidebar.tsx`), in the same order and with
- * the same material logic:
+ * ## Four bands
  *
  *   1. **project banner** — folder glyph + slug + 「切换课题」, on `--surface/90`.
- *      This replaces P1's plain title row and its lone back arrow: the prototype
- *      answers "which project am I in" and "how do I leave" in one strip, which is
- *      the question a three-column workbench has to answer above the fold.
+ *      It answers "which project am I in" and "how do I leave" in one strip, which
+ *      is the question a three-column workbench has to answer above the fold.
  *   2. **segmented tabs** — a recessed track (`bg-bg/90`, 1px border) holding
  *      three equal buttons, the selected one raised (`--surface-card-hover` +
  *      `--shadow-card`). The tab strip is a *control*, so its selected state is an
@@ -39,12 +34,11 @@ import { EmptyState } from './EmptyState';
  *   4. **bottom bar** — the theme control as one full-width button, plus the
  *      management entry the chrome also offers.
  *
- * Colours use the token layer only; the four icon hues come from `--icon-*`, which
- * is what keeps the reference's category colours from becoming literal hexes.
+ * Colours use the token layer only; the four icon hues come from `--icon-*`, so
+ * category colour never becomes a literal hex.
  *
  * The theme control is labelled by its **action** (「深色」 while the app is
- * light), matching both the reference and MASTER v2 §11's "name controls by user
- * action". The current state lives in the `title`, so the label never has to be
+ * light), matching the "name controls by user action" rule. The current state lives in the `title`, so the label never has to be
  * read as an ambiguous toggle.
  *
  * P1 rendered empty states only; P3 fills 文件 (real tree + name search + new

@@ -1024,7 +1024,7 @@ try {
   const removedEntities = ['GuardrailRule', 'EvalBenchmarkResult', 'TelemetryMetric'];
   for (const entity of removedEntities) {
     const hits = searchSourceTree(resolve('src/renderer'), entity);
-    assertCheck('5 无假数据', `没有 research-studio 的 ${entity} 假实体`, hits.length === 0, hits.slice(0, 3).join(', '));
+    assertCheck('5 无假数据', `没有硬编码的 ${entity} 假实体`, hits.length === 0, hits.slice(0, 3).join(', '));
   }
 
   // ---- 闸门 6：两个入口 + 重启保持 ----------------------------------------------

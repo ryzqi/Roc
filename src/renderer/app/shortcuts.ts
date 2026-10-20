@@ -21,8 +21,8 @@ import { overlayStackDepth } from '../shell/use-overlay-behavior';
  *
  * Panel and navigation keys are suppressed so a shortcut cannot silently mutate
  * the view *behind* a modal (collapsing the sidebar, or switching the canvas
- * view, while the user is looking at a dialog). ⌘K stays live, matching
- * MASTER v2 §9 ("⌘K 始终") and letting the palette stay reachable.
+ * view, while the user is looking at a dialog). ⌘K stays live whatever is open,
+ * so the palette stays reachable.
  *
  * Unmodified digits are also ignored while focus is in a text field, so typing
  * "1" into the assistant composer never navigates.

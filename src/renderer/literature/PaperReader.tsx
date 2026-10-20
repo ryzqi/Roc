@@ -41,16 +41,16 @@ import type { LiteratureStore } from './use-literature-store';
  *
  * ## The one control that is not a backend call: the text size
  *
- * `research-studio`'s reading toolbar ends with a 字号 toggle (标准 / 大号) that swaps
- * the article's own type size. It is ported because it is the reader's only
- * *reading* control — every other button in that row is an IPC call — and because
- * reading a parsed paper is the one thing a researcher does here for a long time.
+ * The toolbar ends with a 字号 toggle (标准 / 大号) that swaps the article's own type
+ * size. It is the reader's only *reading* control — every other button in that row is
+ * an IPC call — and reading a parsed paper is the one thing a researcher does here for
+ * a long time.
  *
  * The button is labelled by the action (「大号」 while the text is standard) and the
  * two sizes are tokens (`--font-read-size` / `--font-read-large-size`), so the
  * scale stays in one place rather than becoming a magic number in this file. The
- * choice is component state, exactly as in the reference: leaving the reader resets
- * it, and nothing about a paper's text size belongs in the project record.
+ * choice is component state: leaving the reader resets it, and nothing about a paper's
+ * text size belongs in the project record.
  */
 
 export type PaperReaderProps = {
@@ -99,7 +99,7 @@ export function PaperReader({
   const [keyDraft, setKeyDraft] = useState<string | null>(null);
   const [downloadPending, setDownloadPending] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  /** Reader text size (reference's 字号 toggle). State, not persisted: see the header. */
+  /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
   const jumpHandledFor = useRef<string | null>(null);
 

@@ -1,7 +1,7 @@
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem, ResearchKnowledgeSearchResult } from '../../shared/types';
 
 /**
- * Derived LLM-Wiki projection (T5.6, ADR-M10).
+ * Derived LLM-Wiki projection.
  *
  * **Pure functions over real data only.** The legacy `LlmWikiView` shipped a
  * `mockWikiEntries` array and rendered it when the store was empty, which is

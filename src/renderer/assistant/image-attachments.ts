@@ -4,7 +4,7 @@ import { parseProviderModelKey } from '../../shared/provider-model-key';
 /**
  * Image attachments (T4.5).
  *
- * Ported from the legacy shell's `chat/image-attachments.ts` (ADR-M04), with two
+ * Ported from the legacy shell's `chat/image-attachments.ts`, with two
  * changes:
  *
  *   1. **No Blob URL.** The legacy version built the preview with
@@ -14,7 +14,7 @@ import { parseProviderModelKey } from '../../shared/provider-model-key';
  *      absolute and greppable instead of "only for project files".
  *   2. **No `LoadedState`.** That type belongs to the legacy shell. This module only
  *      needs the model list, so it takes a narrow structural snapshot that the P4
- *      header can build from `settings.get` (ADR-M02: the renderer derives).
+ *      header can build from `settings.get`.
  *
  * The wire contract is `chatImageAttachmentSchema`, which requires **exactly one** of
  * `data` (bytes the renderer read from a paste/drop) or `path` (a file the main

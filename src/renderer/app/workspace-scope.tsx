@@ -42,7 +42,7 @@ export type WorkspaceScope = {
   /**
    * Opens the settings centre.
    *
-   * Needed by panels that must *not* own a configuration (ADR-M09): RAG's index
+   * Needed by panels that must *not* own a configuration: RAG's index
    * and embedding settings only show their effective values and send the user
    * here. Navigation itself stays in the shell, so the route contract has one
    * writer.
@@ -51,7 +51,7 @@ export type WorkspaceScope = {
   /**
    * Navigates the canvas to another view in the same project.
    *
-   * Navigation, not state: the view is a URL field (ADR-M05) and only the shell
+   * Navigation, not state: the view is a URL field and only the shell
    * writes the route. Without this a view would have to synthesise a URL — which is
    * how a second writer of the route contract appears. The literature hub's jump to
    * the files view is the remaining caller.
