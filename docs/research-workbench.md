@@ -31,7 +31,9 @@ Roc 默认打开项目列表。未知 `page` 或从设置页返回时落到 `res
 
 ## 对话驱动阶段
 
-研究助手是主入口，拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`）：`research_overview`、`research_list_artifacts`、`research_read_artifact`、`research_list_evidence`、`research_search_knowledge`、`research_search_literature`、`research_capture_evidence`、`research_stage_runs`、`research_run_stage`、`research_cancel_stage_run`、`research_approve_gate`。
+研究助手是主入口，拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`）：`research_overview`、`research_list_artifacts`、`research_read_artifact`、`research_lint_manuscript`、`research_list_evidence`、`research_search_knowledge`、`research_search_literature`、`research_capture_evidence`、`research_stage_runs`、`research_run_stage`、`research_cancel_stage_run`、`research_approve_gate`。
+
+`research_lint_manuscript` 是唯一的确定性检查入口（Vale，见 [research-prose.md](research-prose.md)）：它只读，不改正文，草稿也可以检查。
 
 工具名与权限进入本轮能力清单（`researchProjectId` 写进运行快照），所以运行时的工具集和冻结的清单一致。阶段推进仍然是服务端的阶段角色运行（`research_run_stage` 启动，后台继续，不阻塞对话）；阶段角色运行降级为对话代理调用的内部工具。
 

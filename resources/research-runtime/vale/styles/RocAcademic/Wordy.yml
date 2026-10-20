@@ -1,0 +1,19 @@
+# 冗长表达。只给 suggestion：它不影响正确性，只是让段落更难读。
+extends: substitution
+message: "用 “%s” 代替 “%s”。"
+level: suggestion
+ignorecase: true
+swap:
+  in order to: to
+  due to the fact that: because
+  in spite of the fact that: although
+  a large number of: many
+  a small number of: few
+  at this point in time: now
+  in the event that: if
+  for the purpose of: to
+  with regard to: about
+  in terms of: for
+  it is important to note that: note that
+  as a matter of fact: in fact
+  based on the fact that: because

@@ -178,6 +178,7 @@ export const rocApi: RocPreloadApi = {
     importTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateImport, ...args),
     compileTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCompile, ...args),
     getToolchainStatus: (...args) => ipcRenderer.invoke(ipcChannels.researchToolchainStatus, ...args),
+    lintManuscript: (...args) => ipcRenderer.invoke(ipcChannels.researchProseLint, ...args),
     getModelsStatus: (...args) => ipcRenderer.invoke(ipcChannels.researchModelsStatus, ...args),
     downloadModels: (...args) => ipcRenderer.invoke(ipcChannels.researchModelsDownload, ...args),
     getTemplate: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateGet, ...args),

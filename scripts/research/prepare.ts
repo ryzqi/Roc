@@ -37,6 +37,10 @@ type ToolsLock = {
   pythonVersion: string;
   uvVersion: string;
   tectonicVersion: string;
+  /**
+   * Vale（prose linter）的版本。它不在归档里跑，而是作为 `bin/vale` 被 `lintProse()` 直接调。
+   */
+  valeVersion: string;
   texBundle: { url: string; sha256: string; size: number; zipSha256: string };
   architectures: Record<string, Record<string, { url: string; sha256: string }>>;
 };
@@ -215,6 +219,16 @@ export async function computeLockHashes(): Promise<Record<string, string>> {
       lockHashes[relative(SOURCES, file).split(sep).join('/')] = await fileSha256(file);
     }
   }
+  // Vale 的规则集是**配置**而不是二进制：它决定了检查结论，所以必须进 lockHashes，
+  // 否则改一条规则既不会要求重建工具链，也不会被 `research_toolchain_source_mismatch` 抓到。
+  const valeRoot = join(SOURCES, 'vale');
+  if (await pathInfo(valeRoot) !== null) {
+    for (const file of (await walkFiles(valeRoot)).sort()) {
+      const info = await lstat(file);
+      if (!info.isFile() || info.isSymbolicLink()) continue;
+      lockHashes[relative(SOURCES, file).split(sep).join('/')] = await fileSha256(file);
+    }
+  }
   for (const name of SCRIPT_FILES) lockHashes[`scripts/${name}`] = await fileSha256(join(SCRIPTS, name));
   return lockHashes;
 }
@@ -301,10 +315,11 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       await mkdir(join(root, 'locks'));
       for (const name of LOCK_FILES) await copyPreservingMode(join(SOURCES, name), join(root, 'locks', name));
       await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
+      await cp(join(SOURCES, 'vale'), join(root, 'vale'), { recursive: true, preserveTimestamps: true });
       const collected = await collectPythonLicenses(root);
       await writeFile(join(root, 'licenses/python-packages.json'), `${JSON.stringify(collected, null, 2)}\n`, 'utf8');
       await portablePython(join(root, 'python'));
-      const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion };
+      const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion, vale: tools.valeVersion };
       const manifest = await writeManifest(root, { architecture, versions, lockHashes });
       await rename(root, output);
       console.log(`科研工具链已准备：${output}（${manifest.entries.length} 个文件或链接）`);

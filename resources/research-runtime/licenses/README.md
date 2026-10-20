@@ -7,6 +7,7 @@
 | CPython 及 standalone 依赖 | `locks/tools.lock.json`；解释器中的 `python/lib/python3.12/LICENSE.txt` 及随包 notices |
 | uv | 0.12.10；`uv-MIT.txt`、`uv-APACHE.txt` |
 | Tectonic | 0.17.0；`tectonic-MIT.txt` |
+| Vale | 3.24.0；`vale-MIT.txt`。二进制与规则集分开登记：规则集是 Roc 自己写的（`vale/styles/`），随工具链打包并进 lockHashes |
 | Python 科研依赖 | `locks/uv.lock`；构建时生成的 `python-packages.json` 记录实际版本、元数据与随包许可证文件路径，原文保留在各包中 |
 | Docling 布局模型 | `locks/models.lock.json`；Apache-2.0，版权及模型说明保留在对应模型 README 中 |
 | Docling 表格与公式模型 | `locks/models.lock.json`；`CDLA-Permissive-2.0.txt` 与对应模型 README |

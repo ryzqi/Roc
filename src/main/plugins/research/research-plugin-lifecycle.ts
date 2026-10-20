@@ -32,6 +32,7 @@ export async function shutdownResearchPlugin(services: {
   templates: ShutdownService;
   documents: ShutdownService;
   library: ShutdownService;
+  prose: ShutdownService;
 }): Promise<void> {
   const ordered = [
     services.productionInputs,
@@ -43,7 +44,8 @@ export async function shutdownResearchPlugin(services: {
     services.stageRuntime,
     services.templates,
     services.documents,
-    services.library
+    services.library,
+    services.prose
   ];
   const results = await Promise.allSettled(ordered.map((service) => service?.shutdown()));
   const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);

@@ -1,0 +1,26 @@
+# 没有出处的「有研究表明」。
+#
+# Roc 的主张必须绑定 evidenceId；`many studies` / `research shows` 这类写法在正文里读起来
+# 像有证据，实际上没有指向任何一条。真正的引用由 \cite{} 表达（见 latex-source.ts）。
+#
+# `accepted` / `believed` 不在这一档：它们声称的是**领域共识**（有时确实存在），而不是
+# 「有人研究过」。那种写法在 Consensus.yml 里按 warning 提示核对检索。
+#
+# 长 token 用 `>-` 折行：YAML 折叠会把换行变成单个空格，所以只在原文本来就有空格的位置断开。
+extends: existence
+message: "“%s” 读起来像有证据但没有出处：改成具体引用，或删掉。"
+level: error
+ignorecase: true
+nonword: true
+tokens:
+  - >-
+    (?:many|several|numerous|various|some)
+    (?:studies|researchers|papers|works|authors) (?:have )?
+    (?:shown|showed|found|reported|suggested|demonstrated)
+  - >-
+    (?:research|evidence|literature)
+    (?:shows|showed|suggests|indicates|has shown)
+  - >-
+    it (?:is|has been)
+    (?:widely |well )?(?:known|reported|shown|established|noted) that
+  - a growing body of (?:literature|research|evidence)

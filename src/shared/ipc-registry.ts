@@ -132,6 +132,7 @@ import {
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
   researchToolchainStatusSchema, researchModelsStatusSchema
 } from './schemas/research-production';
+import { researchProseLintReportSchema, researchProseLintRequestSchema } from './schemas/research-prose';
 import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
@@ -444,6 +445,7 @@ export const ipcRegistry = {
     request({ key: 'researchTemplateImport', channel: 'roc:research:template-import', domain: 'research', method: 'importTemplate', kind: 'plugin', capabilityName: 'research.template.import', inputTransform: first, contract: methodContract(oneArg(researchTemplateImportRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchTemplateCompile', channel: 'roc:research:template-compile', domain: 'research', method: 'compileTemplate', kind: 'plugin', capabilityName: 'research.template.compile', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchToolchainStatus', channel: 'roc:research:toolchain-status', domain: 'research', method: 'getToolchainStatus', kind: 'plugin', capabilityName: 'research.toolchain.status', inputTransform: none, contract: methodContract(noArgs, researchToolchainStatusSchema) }),
+    request({ key: 'researchProseLint', channel: 'roc:research:prose-lint', domain: 'research', method: 'lintManuscript', kind: 'plugin', capabilityName: 'research.prose.lint', inputTransform: first, contract: methodContract(oneArg(researchProseLintRequestSchema), researchProseLintReportSchema) }),
     request({ key: 'researchModelsStatus', channel: 'roc:research:models-status', domain: 'research', method: 'getModelsStatus', kind: 'plugin', capabilityName: 'research.models.status', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
     request({ key: 'researchModelsDownload', channel: 'roc:research:models-download', domain: 'research', method: 'downloadModels', kind: 'plugin', capabilityName: 'research.models.download', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
     request({ key: 'researchTemplateGet', channel: 'roc:research:template-get', domain: 'research', method: 'getTemplate', kind: 'plugin', capabilityName: 'research.template.get', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),

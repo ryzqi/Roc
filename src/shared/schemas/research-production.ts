@@ -3,7 +3,8 @@ import { researchTemplateCompileRequestSchema } from './research';
 
 export const researchToolchainStatusSchema = z.object({
   available: z.boolean(),
-  versions: z.object({ python: z.string(), uv: z.string(), tectonic: z.string() }).strict().nullable(),
+  // 开放记录：工具集增加时（例如 vale）无需再动这张 schema，键集由 lock 的 architectures 决定。
+  versions: z.record(z.string(), z.string()).nullable(),
   error: z.string().nullable()
 }).strict();
 

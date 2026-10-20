@@ -17,6 +17,7 @@ docs/*
 !docs/research-figures.md
 !docs/research-exports.md
 !docs/research-ideas.md
+!docs/research-prose.md
 !docs/rtk-integration.md
 !docs/adr/
 !docs/adr/0001-research-workbench-architecture.md

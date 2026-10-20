@@ -15,6 +15,11 @@
     "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c"
   },
   {
+    "file": "vale-MIT.txt",
+    "source": "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_macOS_arm64.tar.gz#LICENSE",
+    "sha256": "29a16197c8d01cafcacbd9c1774b66b28d7c0f15a6aceed88e4e8068ea398470"
+  },
+  {
     "file": "CDLA-Permissive-2.0.txt",
     "source": "https://raw.githubusercontent.com/spdx/license-list-data/v3.25.0/text/CDLA-Permissive-2.0.txt",
     "sha256": "4531a67d443284d93ffed0803df5b10634aff21c3d77e381f2d48af01d875868"

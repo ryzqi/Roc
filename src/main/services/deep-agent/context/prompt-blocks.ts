@@ -227,6 +227,7 @@ function buildResearchPrompt(): string {
     '',
     '论文正文的真身是项目工作目录里的 LaTeX 文件（.tex / .bib / .sty）：用 read_file / write_file / edit_file 改，用 run_shell_command 编译，改完先读回确认。',
     '阶段产物的结构化内容用 research_read_artifact 按 artifactId 读，不要猜文件名。',
+    '写审稿意见或修订正文前先用 research_lint_manuscript 跑一次确定性检查：它返回每条命中的 claimId 与行号，不要凭印象断言文稿没有问题。',
     '',
     '文献检索用 research_search_literature，项目材料检索用 research_search_knowledge。',
     '主张只能引用 research_list_evidence 或 research_capture_evidence 返回的真实 evidenceId；不要编造来源、页码、运行或验证结果。',

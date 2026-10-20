@@ -8,6 +8,7 @@
 | [research-ideas.md](research-ideas.md) | Idea Canvas 与项目语言 |
 | [research-experiments.md](research-experiments.md) | Python / R / Julia 实验运行 |
 | [research-figures.md](research-figures.md) | 可复现图稿渲染与审核 |
+| [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [release/release-candidate-checklist.md](release/release-candidate-checklist.md) | 发布前命令 |

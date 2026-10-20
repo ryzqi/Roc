@@ -1,0 +1,9 @@
+# 被动语态。方法小节里被动是惯例，所以只到 suggestion，而且只匹配「be + 常见过去分词」，
+# 不猜 -ed（-ed 里混着 interested / limited 这类形容词，误报会淹没真问题）。
+extends: existence
+message: "被动语态 “%s”：方法句里主动语态更清楚谁做了什么。"
+level: suggestion
+ignorecase: true
+nonword: true
+tokens:
+  - \b(?:is|are|was|were|be|been|being)\s+(?:built|made|found|shown|given|taken|used|done|seen|known|set|held|left|put|carried\s+out|performed|measured|collected|analyzed|analysed|examined|reported|proposed|observed)

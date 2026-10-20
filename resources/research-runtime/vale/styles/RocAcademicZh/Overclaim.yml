@@ -1,0 +1,11 @@
+# 声称「已证明」。error 级：这是证据口径被破坏。
+extends: existence
+message: "“%s” 声称已经证实：改成「支持」「与……一致」，并写出限制。"
+level: error
+nonword: true
+tokens:
+  - 完全证明
+  - 充分证明
+  - 毫无疑问
+  - 毋庸置疑
+  - 彻底解决

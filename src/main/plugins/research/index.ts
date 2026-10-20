@@ -51,6 +51,8 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
 import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
+import { ResearchProseLintService } from './prose-lint-service';
+import { registerResearchProseCapabilities, researchProseCapabilities } from './prose-lint-capabilities';
 import { ResearchLibraryService } from './library-service';
 import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from './library-capabilities';
 import { ResearchDocumentService } from './document-service';
@@ -127,6 +129,8 @@ export type ResearchPluginOptions = {
   indexRoot?: string;
   indexWatch?: ResearchIndexWatch;
   libraryRoot?: string;
+  /** 文稿检查的私有 job 根目录：投影文件与 Vale 的 HOME/缓存都写在里面，跑完即删。 */
+  proseRoot?: string;
   libraryFetch?: ConstructorParameters<typeof ResearchLibraryService>[3];
   toolchainRoot?: string;
   modelsRoot?: string;
@@ -147,6 +151,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let figures: ResearchFigureService | null = null;
   let exports: ResearchExportService | null = null;
   let productionInputs: ResearchProductionInputService | null = null;
+  let prose: ResearchProseLintService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -160,7 +165,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities]
+      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       const db = context.database.getConnection();
@@ -197,6 +202,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       productionJob.recover();
       productionInputs = new ResearchProductionInputService(researchRepository, researchExperiments, researchFigures, researchExports);
       registerResearchProductionInputCapabilities(context, productionInputs);
+      const researchProse = new ResearchProseLintService(researchRepository, toolchain, options.proseRoot ?? null);
+      prose = researchProse;
+      registerResearchProseCapabilities(context, researchProse);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
       researchRepository.documents.recover();
@@ -275,7 +283,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library });
+        await shutdownResearchPlugin({ productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
       } finally {
         productionInputs = null;
         exports = null;
@@ -285,6 +293,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         embeddings = null;
         documents = null;
         library = null;
+        prose = null;
         templates = null;
         stageRuntime = null;
         repository = null;

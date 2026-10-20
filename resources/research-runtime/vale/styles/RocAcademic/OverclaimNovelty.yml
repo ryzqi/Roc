@@ -1,0 +1,13 @@
+# 声称新颖性。warning 级，不是 error：它的问题通常是检索不足，而不是否定证据。
+#
+# 「首次」在论文里是**关于文献的断言**，需要一次查全的检索来支撑，而 Roc 的检索阶段恰好
+# 产出了可追溯的文献集。所以提示是「核对检索」而不是「删掉这句话」。
+extends: existence
+message: "“%s” 是关于文献的新颖性声称：核对检索是否覆盖，或把它写成有出处的表述。"
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - for the first time
+  - the first (?:study|work|paper|report) to
+  - fills? (?:a|the) (?:gap|void) in the literature

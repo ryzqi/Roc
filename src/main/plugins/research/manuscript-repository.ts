@@ -82,6 +82,26 @@ export class ResearchManuscriptRepository {
     };
   }
 
+  /**
+   * 与 `exportBundle` 同构，**只少一条批准要求**。
+   *
+   * 文稿检查的用处恰恰在批之前：写作/修订刚产出草稿时发现问题，比等到审稿间门才发现便宜得多。
+   * 而导出必须只认已批准正文，所以两者不能共用同一个入口——把钢丝放在同一条路径上，
+   * 要么让导出接受草稿，要么让检查永远看不到草稿。
+   *
+   * 其余不变量完全一致：仍需已保存的正文（`research_manuscript_required`）且未过期
+   * （`research_manuscript_stale`）。检查一份过期正文与检查一份错位的小节一样没有意义。
+   */
+  inspectBundle(request: ResearchExportBundleRequest): ResearchExportBundle {
+    const artifact = this.artifacts.get(request.artifactId);
+    if (artifact.projectId !== request.projectId) throw new Error('research_manuscript_project_mismatch');
+    const { manuscript, claims } = this.requireCurrentManuscript(artifact);
+    return {
+      ...request, manuscript, claims,
+      evidence: this.evidence.evidenceForClaims(claims, request.projectId), generatedAt: this.now()
+    };
+  }
+
   private requireCurrentManuscript(artifact: ResearchArtifact): { manuscript: ResearchManuscript; claims: ResearchClaim[] } {
     if (artifact.kind !== 'manuscript') throw new Error('research_manuscript_artifact_required');
     const manuscript = this.getManuscript(artifact.id);

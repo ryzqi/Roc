@@ -1,0 +1,31 @@
+# Roc 与科研工作流自有的术语。Vale 的 Vale.Spelling 目前未启用，这份词表的意义是：
+# 一旦启用拼写检查，这些词不应被报成拼错。
+Roc
+Vega-Lite
+Mermaid
+citeproc
+Tectonic
+LaTeX
+BibTeX
+BibLaTeX
+XeTeX
+Fandol
+CTeX
+Docling
+OpenAlex
+Crossref
+Semantic
+Scholar
+arXiv
+DOI
+ORCID
+PMID
+PMCID
+RRID
+PRISMA
+FAIR
+reproducibility
+provenance
+manuscript
+preprint
+dataset

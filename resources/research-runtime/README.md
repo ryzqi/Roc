@@ -4,6 +4,8 @@ Python 3.12.14 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel M
 
 Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。解析模型不随安装包分发：开发机使用 `.runtime/research-models`，打包后下载到 `~/.roc/research-models`。打包 extraResources 排除 models、旧 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件以及 Python include；afterPack 用当前 `worker.py` / `figure.py` 覆盖 live 副本并改写 manifest。文献交换在主进程 `bibliography.ts`，不随工具链分发 Python 入口。运行时禁止自动联网拉取。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
 
+Vale 3.24.0 作为第 4 个归档工具装到 `bin/vale`，供文稿检查（合同见仓库根的 `docs/research-prose.md`）。它的**规则集是 Roc 自己写的**，放在本目录 `vale/` 并原样复制进工具链：规则参与 `lockHashes`，所以改规则会要求重建，也会被运行时的 `research_toolchain_source_mismatch` 抓到。
+
 本目录保存源文件和依赖声明。构建得到的解释器、环境与模型位于项目 `.runtime/`，不提交生成的第三方二进制。此目录提供可供应用打包的完整工具链；主进程接线与 Electron 打包校验已接入 `package:mac`。
 
 ## 准备和校验
@@ -17,7 +19,7 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/fetch-models.ts
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
 ```
 
-`prepare.ts` 按工具归档 SHA-256 与 `uv.lock` 组装 Python / Tectonic / TeX 环境，生成逐文件完整性清单及实际 Python 包许可证索引。模型只写入 `--models` 缓存（默认 `.runtime/research-models`），不复制进 toolchain 输出。解释器和 console script 不依赖开发机 venv。下载缓存位于 `.runtime/research-downloads`；中断后重复命令会使用已完成分块及部分字节。相同输出已存在时执行完整校验；源文件或锁文件变化后需选择新输出目录，避免覆盖已有工具链。
+`prepare.ts` 按工具归档 SHA-256 与 `uv.lock` 组装 Python / Tectonic / Vale / TeX 环境，生成逐文件完整性清单及实际 Python 包许可证索引。模型只写入 `--models` 缓存（默认 `.runtime/research-models`），不复制进 toolchain 输出。解释器和 console script 不依赖开发机 venv。下载缓存位于 `.runtime/research-downloads`；中断后重复命令会使用已完成分块及部分字节。相同输出已存在时执行完整校验；源文件或锁文件变化后需选择新输出目录，避免覆盖已有工具链。
 
 TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离线编译子集 ZIP。保留原始文件字节，并重写 `SHA256SUM`。源 TAR 哈希、子集 ZIP 哈希均在 `tools.lock.json`。运行时 `tectonic --only-cached`，不下载其余 TeX Live 包。缺包即编译失败。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
 

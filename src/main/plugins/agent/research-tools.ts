@@ -5,6 +5,7 @@ import { tool } from 'langchain';
 import { z } from 'zod';
 
 import { researchLiteratureSourceSchema, researchStageSchema } from '../../../shared/schemas/research';
+import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
 import type {
   ResearchArtifact,
   ResearchArtifactContent,
@@ -36,6 +37,7 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   { name: 'research_overview', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_list_artifacts', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_read_artifact', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
+  { name: 'research_lint_manuscript', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_list_evidence', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_stage_runs', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_knowledge', scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
@@ -108,6 +110,29 @@ export function createResearchTools(input: {
       name: 'research_read_artifact',
       description: '按 artifactId 读取阶段产物的结构化内容（正文 markdown、主张、章节）。读正文优先用这个，不要猜文件名。',
       schema: z.object({ artifactId: z.string().trim().min(1) }).strict()
+    }),
+    tool(async ({ artifactId, offset, limit }) => {
+      const artifact = await invoke<ResearchArtifact>('research.artifacts.get', { id: artifactId });
+      if (artifact.projectId !== projectId) throw new Error('research_artifact_project_mismatch');
+      const report = await invoke<ResearchProseLintReport>('research.prose.lint', { projectId, artifactId });
+      // 报告可能很长（上限 2000 条），按 severity 先给汇总再分页给明细，
+      // 既不丢信息也不把整份报告塞进上下文。
+      return { artifactId, artifactTitle: report.artifactTitle, language: report.language,
+        valeVersion: report.valeVersion, counts: report.counts, truncated: report.truncated,
+        droppedUnits: report.droppedUnits,
+        findings: report.findings.slice(offset, offset + limit).map((finding) => ({
+          claimId: finding.claimId, sectionIndex: finding.sectionIndex, sectionTitle: finding.sectionTitle,
+          line: finding.line, severity: finding.severity, check: finding.check,
+          message: finding.message, match: finding.match
+        })),
+        totalFindings: report.findings.length,
+        nextOffset: offset + limit < report.findings.length ? offset + limit : null };
+    }, {
+      name: 'research_lint_manuscript',
+      description: '用随包的确定性检查器检查正文的措辞与证据口径（模糊限定词、无出处的「有研究表明」、超出证据的论断、冗余表达）。'
+        + '每条命中有 claimId 与行号。写审稿意见或修订前先跑一次，不要凭印象断言文稿没问题。',
+      schema: z.object({ artifactId: z.string().trim().min(1), offset: z.number().int().nonnegative(),
+        limit: z.number().int().min(1).max(200) }).strict()
     }),
     tool(async () => {
       const evidence = await invoke<ResearchEvidence[]>('research.evidence.list', { projectId });

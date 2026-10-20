@@ -1,0 +1,8 @@
+# 声称新颖性。warning 级，不是 error：它的问题通常是检索不足。
+extends: existence
+message: "“%s” 是关于文献的新颖性声称：核对检索是否覆盖，或把它写成有出处的表述。"
+level: warning
+nonword: true
+tokens:
+  - 首次(?:证明|发现|提出|实现)
+  - 填补了.{0,6}空白

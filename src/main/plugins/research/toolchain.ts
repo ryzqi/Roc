@@ -9,14 +9,18 @@ import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
 import workerSource from '../../../../resources/research-runtime/worker.py?raw';
 import { researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
+import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
 import { ResearchModelStore, type ResearchModelsStatus } from './model-store';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const manifestSchema = z.object({
   schemaVersion: z.literal(1), platform: z.literal('darwin'), architecture: z.enum(['arm64', 'x64']),
-  versions: z.object({ python: z.string(), uv: z.string(), tectonic: z.string() }).strict(),
+  // 版本键是开放的：`checkToolVersions` 按 `architectures[arch]` 实际有哪些工具逐键比对，
+  // 所以加一个工具（例如 vale）只需要改 lock 与 prepare，不用再动这张 schema。
+  versions: z.record(z.string(), z.string()),
   lockHashes: z.record(z.string(), digestSchema),
   entries: z.array(z.discriminatedUnion('type', [
     z.object({ path: z.string(), type: z.literal('file'), size: z.number().int().nonnegative(), sha256: digestSchema, executable: z.boolean() }).strict(),
@@ -84,6 +88,63 @@ export class ResearchToolchain {
     const result = await this.job(input, { operation: 'write_bibliography', format: input.format },
       z.object({ sourceHash: z.string(), filename: z.string(), content: z.string() }).strict());
     return { filename: result.filename, content: result.content };
+  }
+
+  /**
+   * 用随包的 Vale 检查一段文稿投影，返回**未经信任**的 JSON 报告。
+   *
+   * 两个不变量比功能本身重要：
+   *
+   * 1. **离线且无全局配置**。`--no-global` 是必需的：没有它 Vale 会读 `$HOME/.vale.ini` 与
+   *    `$XDG_CONFIG_HOME` 下用户装的 style 包，同一段文稿在不同机器上就会给出不同结论，
+   *    而这些结论要进导出溯源。`networkAccess: 'none'` 保证 `vale sync` 类行为直接失败。
+   * 2. **只写 jobDir**。投影文件是我们自己写进 `jobDir/prose/` 的，Vale 的 `HOME`/`TMPDIR`/
+   *    缓存全部指向 jobDir 内的目录，工具链根目录仅只读挂载。
+   *
+   * 参数顺序与开关是实测得来的，不是照文档抄的：`--sort` 与 `--glob` 在 Vale 3.24.0 会报
+   * `argument 'file' does not exist`，`--no-exit` 必须给（有 error 级告警时 Vale 退出码非零，
+   * 那不是失败）。另外 Vale 对读不到的文件**静默返回空对象**，所以文件由本方法写入并核对。
+   */
+  async lintProse(input: { jobDir: string; units: readonly { path: string; content: string }[]; signal?: AbortSignal }): Promise<unknown> {
+    const { root } = await this.resolve();
+    if (input.units.length === 0) throw new ResearchProcessError('research_prose_no_units');
+    const proseDir = await createResearchDirectory(input.jobDir, 'prose');
+    const targets: string[] = [];
+    for (const unit of input.units) {
+      const relative = researchRelativePath(unit.path);
+      const target = join(proseDir, relative);
+      assertResearchDescendant(proseDir, target);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, unit.content, 'utf8');
+      targets.push(target);
+    }
+    const result = await runResearchProcess({
+      command: join(root, 'bin/vale'),
+      args: ['--config', join(root, 'vale/.vale.ini'), '--no-global', '--no-color', '--no-exit', '--output=JSON',
+        '--minAlertLevel=suggestion', ...targets],
+      cwd: proseDir,
+      readablePaths: [root, proseDir],
+      writablePaths: [input.jobDir],
+      environment: await this.proseEnvironment(root, input.jobDir),
+      timeoutMs: 120_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false
+    });
+    if (result.exitCode !== 0) throw new ResearchProcessError('research_prose_lint_failed', result.stdout, result.stderr);
+    const parsed = parseJson(result.stdout);
+    // 配置或用法错误时 Vale 不回报告，而是一个 `{Code: 'E100', Text: …}` 对象且退出码非零。
+    // 走到这里说明退出码是 0，但两端都判一次：静默把 E100 当「没有命中」是这套检查最坏的失败模式。
+    if (isProseErrorEnvelope(parsed)) throw new ResearchProcessError('research_prose_lint_failed', result.stdout, result.stderr);
+    return parsed;
+  }
+
+  private async proseEnvironment(root: string, jobDir: string): Promise<NodeJS.ProcessEnv> {
+    const temporary = await createResearchDirectory(jobDir, 'tmp');
+    const cache = await createResearchDirectory(jobDir, 'cache');
+    const home = await createResearchDirectory(jobDir, 'home');
+    // `HOME` 不给系统用户目录：Vale 会去 `$HOME/.config/vale` 与 `$XDG_DATA_HOME` 找配置和
+    // 缓存，而那些路径既不在可读名单里，也不应该被读。给一个空目录 + `--no-global` 把
+    // 「这台机器上装过什么」从检查结果里剔除。
+    return { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, LANG: 'en_US.UTF-8',
+      TMPDIR: temporary, XDG_CACHE_HOME: cache, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, '.local/share') };
   }
 
   async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
@@ -213,8 +274,8 @@ export class ResearchToolchain {
       throw error;
     }
     const manifest = manifestSchema.parse(parseJson((await readResearchFile(root, 'manifest.json', 32 * 1024 * 1024)).toString('utf8')));
-    if (manifest.architecture !== process.arch || manifest.versions.python !== toolsLock.pythonVersion
-        || manifest.versions.uv !== toolsLock.uvVersion || manifest.versions.tectonic !== toolsLock.tectonicVersion) {
+    const expected = lockedToolVersions(toolsLock, process.arch);
+    if (manifest.architecture !== process.arch || expected === null || !toolVersionsMatch(manifest.versions, expected)) {
       throw new ResearchProcessError('research_toolchain_version_mismatch');
     }
     const entries = new Map(manifest.entries.map((entry) => [researchRelativePath(entry.path), entry]));
@@ -270,6 +331,15 @@ export class ResearchToolchain {
 function parseJson(value: string): unknown {
   try { return JSON.parse(value) as unknown; }
   catch { throw new ResearchProcessError('research_json_invalid'); }
+}
+
+/**
+ * Vale 的配置/用法错误信封：一个 `{Line, Path, Text, Code, Span}` 对象，而不是
+ * `{ "<file>": [alert, …] }`。区分它和「一个字都没报」是必要的——两者都是合法的 JSON。
+ */
+function isProseErrorEnvelope(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && typeof (value as Record<string, unknown>).Code === 'string';
 }
 
 function isPackagedModelPath(path: string): boolean {

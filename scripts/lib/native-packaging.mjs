@@ -296,6 +296,7 @@ export function assertLiveResearchToolchainForPackaging({
     'manifest.json',
     'bin/tectonic',
     'bin/uv',
+    'bin/vale',
     'python/bin/python3',
     'tex/bundle.zip',
     'licenses/python-packages.json'
@@ -436,14 +437,22 @@ export function verifyPackagedResearchToolchain({
     'figure.py',
     'bin/tectonic',
     'bin/uv',
+    'bin/vale',
     'python/bin/python3',
     'tex/bundle.zip',
+    // Vale 的配置与规则集与二进制同等重要：少了它们 `lintProse()` 会在运行时报错，
+    // 而只有这条打包断言能在 `afterPack` 阶段把它拦住。
+    'vale/.vale.ini',
+    'vale/styles/RocAcademic/Hedging.yml',
+    'vale/styles/RocAcademicZh/Hedging.yml',
+    'vale/styles/config/vocabularies/Roc/accept.txt',
     'licenses/README.md',
     'licenses/sources.json',
     'licenses/python-packages.json',
     'licenses/tectonic-MIT.txt',
     'licenses/uv-MIT.txt',
     'licenses/uv-APACHE.txt',
+    'licenses/vale-MIT.txt',
     'licenses/CDLA-Permissive-2.0.txt'
   ];
   for (const relativePath of required) {

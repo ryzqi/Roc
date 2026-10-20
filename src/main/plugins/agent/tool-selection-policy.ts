@@ -205,6 +205,7 @@ export class DefaultToolSelectionPolicy implements ToolSelectionPolicy {
       'research_approve_gate',
       'research_cancel_stage_run',
       'research_capture_evidence',
+      'research_lint_manuscript',
       'research_list_artifacts',
       'research_list_evidence',
       'research_overview',
