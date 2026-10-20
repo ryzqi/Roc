@@ -126,7 +126,8 @@ try {
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
     await capture(page, `canvas-${viewport.id}`);
 
-    // 助手在宽窗是右列、在窄窗是抽屉；两种形态都要审。
+    // 助手在宽窗是**中列**（参考的栏序：左栏 | 助手 | 画布，见 ADR 0025），在窄窗是抽屉；
+    // 两种形态都要审。
     await navigate(page, `${projectQuery}&view=latex&assistant=1`);
     await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
     await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });

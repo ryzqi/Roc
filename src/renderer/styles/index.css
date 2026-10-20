@@ -58,6 +58,7 @@
   --color-st-bad: var(--st-bad);
   --color-st-info: var(--st-info);
 
+  --radius-chip: var(--r-chip);
   --radius-control: var(--r-control);
   --radius-card: var(--r-card);
   --radius-window: var(--r-window);
@@ -207,61 +208,26 @@
 }
 
 /*
- * Motion vocabulary, ported 1:1 from `research-studio/src/index.css`.
+ * Motion vocabulary.
  *
- * Deliberately **unlayered**: research-studio declares these outside Tailwind's
- * layers, so `.animate-scaleIn` outranks a utility on the same element. Keeping
- * the same placement means the imported markup behaves the same way here.
+ * `research-studio/src/index.css` shipped three keyframe utilities — `fadeIn`
+ * (0.15), `scaleIn` (0.18), `slideInRight` (0.2), all on
+ * `cubic-bezier(0.16, 1, 0.3, 1)`. ADR 0023 ported them verbatim. Audit finding
+ * (ADR 0025): **nothing ever used them.** The reference itself only had one live
+ * call site (`animate-fadeIn` on the portal's three form modals — its `animate-in
+ * …` classes are inert, `tailwindcss-animate` was never installed), and every
+ * overlay here is a `ModalShell`, which implements the same two entrances as
+ * `motion` variants (`shared/motion.ts`: `modalPopVariants` 0.18,
+ * `drawerVariants` 0.2) so it gets both directions instead of entrance only.
  *
- * Durations and easing are the originals — 150/180/200ms on
- * `cubic-bezier(0.16, 1, 0.3, 1)` — and are written as literals rather than the
- * `--duration-*` tokens because those carry the shell's own 120/180/320 ramp for
- * micro-interactions. Two different vocabularies; this file keeps them apart.
+ * Dead CSS is a second vocabulary that never runs; it is deleted. The motion
+ * standard is `shared/motion.ts` (JS) plus the one CSS transition that has to
+ * exist (`::details-content`, below) — one consumer each, no third copy.
  *
  * `prefers-reduced-motion` is handled once, globally, in the base layer above;
  * reduced-motion users get the end state with no travel. Components never check
  * the media query themselves.
  */
-@keyframes roc-fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes roc-scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes roc-slideInRight {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-.animate-fadeIn {
-  animation: roc-fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-scaleIn {
-  animation: roc-scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-slideInRight {
-  animation: roc-slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 
 /*
  * Disclosure animation for the activity blocks (T4.4).

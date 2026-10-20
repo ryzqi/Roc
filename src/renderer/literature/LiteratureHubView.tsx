@@ -67,7 +67,7 @@ const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; ic
 ];
 
 const SUB_TAB_BASE =
-  'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function LiteratureHubView(): React.JSX.Element {
   const store = useLiterature();
@@ -121,7 +121,7 @@ export function LiteratureHubView(): React.JSX.Element {
         <div
           role="tablist"
           aria-label="文献工作区"
-          className="flex shrink-0 items-center gap-1 rounded-card border border-line bg-surface p-0.5"
+          className="flex shrink-0 items-center gap-1 rounded-control border border-line bg-surface p-0.5"
         >
           {SUB_VIEWS.map((entry) => {
             const selected = entry.id === subView;
@@ -154,7 +154,7 @@ export function LiteratureHubView(): React.JSX.Element {
             onClick={scope.openSettings}
             title="配置 MinerU 与学术源（⌘,）"
             data-testid="literature-hub-settings"
-            className="flex h-7 items-center gap-1 rounded-card border border-line bg-surface px-2.5 text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
+            className="flex h-7 items-center gap-1 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
           >
             <Zap size={12} aria-hidden="true" className="text-[var(--icon-wiki)]" />
             设置
@@ -163,7 +163,7 @@ export function LiteratureHubView(): React.JSX.Element {
             type="button"
             onClick={() => openImport('document')}
             data-testid="literature-hub-import"
-            className="flex h-7 items-center gap-1.5 rounded-card bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] active:opacity-90"
+            className="flex h-7 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] active:opacity-90"
           >
             <Plus size={13} aria-hidden="true" />
             导入

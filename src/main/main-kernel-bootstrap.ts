@@ -344,6 +344,11 @@ function createAppStatus(input: {
   };
 }
 
+/**
+ * `mode` is the only public signal that a run is automated (`AppStatus.mode`). The smoke
+ * harness and the eight gates assert it, so it must stay in the contract; the values are the
+ * registered test seams' vocabulary, not a product setting (`docs/README.md` § 测试 seam).
+ */
 function detectMode(isPackaged: boolean): AppStatus['mode'] {
   if (process.env.VITEST === 'true') {
     return 'test';

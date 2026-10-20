@@ -157,8 +157,9 @@ export function useLayoutState(): LayoutState {
   const growAssistant = useCallback(
     (deltaPx: number) => {
       setAssistantWidth((current) => {
-        // Dragging the assistant's left edge leftwards makes it wider.
-        const next = clamp(current - deltaPx, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
+        // The divider sits on the assistant's *right* edge, so dragging it right
+        // widens the panel — the reference's own `handleAgentResize` sign.
+        const next = clamp(current + deltaPx, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
         if (next !== current) {
           schedulePersistWidths();
         }

@@ -251,7 +251,7 @@ export function AssistantPanel({
           onClick={onOpenSettings}
           title="模型与思考开关在设置中心（唯一可写位置）"
           data-testid="assistant-model-settings"
-          className="flex h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 items-center gap-1.5 rounded-card border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <Bot size={13} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
           <span className="min-w-0 truncate font-medium tracking-tight">{modelLabel}</span>
@@ -264,7 +264,7 @@ export function AssistantPanel({
             title="重置助手宽度"
             aria-label="重置助手宽度"
             data-testid="assistant-reset-width"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-card text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           >
             <Minimize2 size={13} aria-hidden="true" />
           </button>
@@ -280,7 +280,10 @@ export function AssistantPanel({
   ].filter((message): message is string => message !== null && message.length > 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg-soft" data-testid="assistant-panel">
+    // `bg-bg`, not `--bg-soft`: the reference paints all three columns the same
+    // (`bg-zinc-950`) and separates them with hairlines only. Its transcript wrapper is
+    // `bg-zinc-950/40` over that same colour, i.e. deliberately invisible.
+    <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="assistant-panel">
       {header}
 
       {errorMessages.length === 0 ? null : (

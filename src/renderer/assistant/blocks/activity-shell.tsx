@@ -16,6 +16,12 @@ import { ChevronDown, type LucideIcon } from 'lucide-react';
  *   - the state is **never signalled by colour alone**: the pill always carries a
  *     label ("执行中" / "成功" / "错误"…) and the icon differs per state (AGENTS.md).
  *
+ * Geometry comes from the reference's two block types (thought bar `px-3 py-2`,
+ * tool row `px-3 py-2`, body `px-3 py-2.5`, 13px icon, 13px chevron,
+ * `rounded-xl` frame). The block has **no vertical margin of its own**: the
+ * transcript's `gap-3` owns the spacing between blocks, exactly as the
+ * reference's `space-y-3` does — carrying both would double it.
+ *
  * A native `<details>` keeps the disclosure keyboard- and screen-reader-correct; the
  * rotation is driven by the controlled `open` prop (the blocks already own that
  * state through `useActivityBlockState`) rather than by a CSS `[open]` selector, so
@@ -70,17 +76,17 @@ export function ActivityBlockShell({
 }: ActivityBlockShellProps): React.JSX.Element {
   return (
     <details
-      className="my-1 rounded-card border border-line bg-surface"
+      className="rounded-card border border-line bg-surface"
       data-testid={testId}
       data-tone={tone}
       open={open}
       onToggle={(event) => onToggle(event.currentTarget.open)}
     >
       <summary
-        className="flex cursor-default list-none items-center gap-2 px-2 py-1.5 [&::-webkit-details-marker]:hidden"
+        className="flex cursor-default list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden"
         data-testid={`${testId}-summary`}
       >
-        <Icon size={12} aria-hidden="true" strokeWidth={2.5} className={`shrink-0 ${TONE_ICON[tone]}`} />
+        <Icon size={13} aria-hidden="true" strokeWidth={2.5} className={`shrink-0 ${TONE_ICON[tone]}`} />
         <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]" title={title}>
           {title}
         </span>
@@ -88,13 +94,13 @@ export function ActivityBlockShell({
           <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">{meta}</span>
         )}
         {statusLabel === undefined ? null : (
-          <span className={`shrink-0 rounded-control px-1.5 py-0.5 text-[var(--font-micro-size)] ${TONE_PILL[tone]}`}>
+          <span className={`shrink-0 rounded-chip px-1.5 py-0.5 text-[var(--font-micro-size)] ${TONE_PILL[tone]}`}>
             {statusLabel}
           </span>
         )}
         {expandable ? (
           <ChevronDown
-            size={12}
+            size={13}
             aria-hidden="true"
             className={
               open
@@ -119,7 +125,7 @@ export function ActivityBlockBody({
 }): React.JSX.Element {
   return (
     <div
-      className="min-w-0 border-t border-line-soft px-2 py-1.5 text-[var(--font-meta-size)]"
+      className="min-w-0 border-t border-line-soft px-3 py-2.5 text-[var(--font-meta-size)]"
       data-testid={testId}
     >
       {children}

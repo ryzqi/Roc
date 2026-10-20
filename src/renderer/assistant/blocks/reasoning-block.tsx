@@ -1,5 +1,5 @@
 import { Brain } from 'lucide-react';
-import { ActivityBlockShell } from './activity-shell';
+import { ActivityBlockBody, ActivityBlockShell } from './activity-shell';
 import { useActivityBlockState } from './use-activity-block-state';
 
 /**
@@ -38,9 +38,9 @@ export function ReasoningBlock({ id, content, isStreaming }: ReasoningBlockProps
       open={open}
       onToggle={setOpen}
     >
-      <div className="border-t border-line-soft px-2 py-1.5" data-testid="assistant-reasoning-body">
+      <ActivityBlockBody testId="assistant-reasoning-body">
         <ReasoningTimeline content={content} />
-      </div>
+      </ActivityBlockBody>
     </ActivityBlockShell>
   );
 }

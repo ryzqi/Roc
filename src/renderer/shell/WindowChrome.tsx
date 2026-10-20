@@ -51,12 +51,12 @@ export type WindowChromeProps = {
   backgroundRunLabel?: string | null;
 };
 
-/** `rounded-card` is the reference's `rounded-lg` (8px), used on every chrome button. */
+/** `rounded-control` is the reference's `rounded-lg` (8px), used on every chrome button. */
 const ICON_BUTTON =
-  'no-drag flex h-7 w-7 items-center justify-center rounded-card text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
+  'no-drag flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
 
 const LABELED_BUTTON =
-  'no-drag flex h-7 items-center gap-1.5 rounded-card border border-line px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
+  'no-drag flex h-7 items-center gap-1.5 rounded-control border border-line px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
 
 export function WindowChrome({
   projectName,
@@ -103,7 +103,7 @@ export function WindowChrome({
             onClick={onBackToPortal}
             title="返回项目列表"
             data-testid="titlebar-projects"
-            className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-card border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
+            className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
           >
             <ArrowLeft size={13} aria-hidden="true" className="text-muted" />
             <span>项目列表</span>
@@ -116,7 +116,7 @@ export function WindowChrome({
               <button
                 type="button"
                 onClick={onBackToPortal}
-                className="no-drag truncate rounded-card px-1 transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]"
+                className="no-drag truncate rounded-control px-1 transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]"
                 title="点击返回课题门户"
                 data-testid="titlebar-back-to-portal"
               >
@@ -162,7 +162,7 @@ export function WindowChrome({
           type="button"
           onClick={onOpenSearch}
           data-testid="titlebar-search"
-          className="no-drag flex h-7 w-32 min-w-0 items-center justify-between gap-2 truncate rounded-card border border-line bg-surface px-3 text-muted transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)] sm:w-48 md:w-56"
+          className="no-drag flex h-7 w-32 min-w-0 items-center justify-between gap-2 truncate rounded-control border border-line bg-surface px-3 text-muted transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)] sm:w-48 md:w-56"
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             <Search size={12} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -196,7 +196,7 @@ export function WindowChrome({
           data-testid="titlebar-toggle-assistant"
           className={
             assistantOpen
-              ? 'no-drag flex h-7 items-center gap-1.5 rounded-card border border-line-strong bg-[var(--fill-strong)] px-2.5 font-medium text-[var(--fill-strong-text)] transition-colors duration-[var(--duration-fast)] active:opacity-90'
+              ? 'no-drag flex h-7 items-center gap-1.5 rounded-control border border-line-strong bg-[var(--fill-strong)] px-2.5 font-medium text-[var(--fill-strong-text)] transition-colors duration-[var(--duration-fast)] active:opacity-90'
               : `${LABELED_BUTTON} px-2.5`
           }
         >

@@ -26,3 +26,12 @@ P0–P9 期间新旧两套前端并行存在：旧壳在 `src/renderer/`，新�
 - 旧壳的 smoke 断言（约 200KB）不能复用：新壳的验收改由七个阶段闸门（`pnpm verify:p3…p9`）与
   重写的 `pnpm test` / `pnpm smoke:electron` 承担。
 - `git revert` 能回退这次切换，但回退后 `research-studio/` 也一并回来，设计参考目录的清理需要重新做。
+
+## 后记（ADR 0025，本轮审查）
+
+「`research-studio/` 整体删除」这条**没有维持**：`b0c01e7a`（修复记忆）把它整目录恢复了，而 ADR 0023/0024
+的逐面对齐一直需要直接读参考实现。现状以**事实**为准，由 [ADR 0025](0025-alignment-audit-and-cleanup.md) §8
+重写：目录保留为**只读设计参照**，但删掉了 AI Studio 导出脚手架与演示/模拟层，因此**不再可构建**。
+
+「仓库里只有一套前端」这一条仍然成立：`research-studio/**` 不参与构建、不进 `tsconfig`、不被任何脚本引用，
+唯一的渲染层是 `src/renderer/**`。

@@ -3,8 +3,7 @@ import { ArrowUp, Image as ImageIcon, Loader2, Paperclip, Square, X } from 'luci
 import type { ChatImageAttachment, ChatRunMode } from '../../shared/types';
 import {
   applyComposerCompletion,
-  detectComposerTrigger,
-  type ComposerTrigger
+  detectComposerTrigger
 } from './composer-trigger';
 import {
   createFileImageAttachment,
@@ -231,7 +230,7 @@ export function AssistantComposer({
 
   return (
     <div
-      className="shrink-0 border-t border-line p-2.5"
+      className="shrink-0 border-t border-line p-3"
       data-testid="assistant-composer"
       onDragOver={(event) => {
         event.preventDefault();
@@ -294,106 +293,109 @@ export function AssistantComposer({
         </ul>
       )}
 
-      <div className="flex items-end gap-2 rounded-card border border-line bg-surface px-2.5 py-2">
-        <textarea
-          ref={textareaRef}
-          rows={3}
-          value={text}
-          disabled={inputLocked}
-          aria-label="给助手的指令"
-          placeholder={
-            replyMode
-              ? '输入回答后发送，运行会继续'
-              : suspended
-                ? '运行已挂起，请先在上方卡片里决定'
-                : inputLocked
-                  ? '运行中…可先停止再修改'
-                  : '输入指令。Enter 发送 · Shift+Enter 换行 · / 选择技能'
-          }
-          data-testid="assistant-composer-input"
-          onChange={(event) => {
-            setText(event.target.value);
-            setCaret(event.target.selectionStart);
-          }}
-          onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
+      {/* One card holds the field and its own bottom bar, exactly as the reference's
+          composer does (`rounded-2xl p-3 shadow-md` + a bordered control row inside). */}
+      <div className="flex flex-col gap-2.5 rounded-window border border-line bg-surface p-3 shadow-[var(--shadow-card)]">
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            rows={2}
+            value={text}
+            disabled={inputLocked}
+            aria-label="给助手的指令"
+            placeholder={
+              replyMode
+                ? '输入回答后发送，运行会继续'
+                : suspended
+                  ? '运行已挂起，请先在上方卡片里决定'
+                  : inputLocked
+                    ? '运行中…可先停止再修改'
+                    : '输入指令。Enter 发送 · Shift+Enter 换行 · / 选择技能'
+            }
+            data-testid="assistant-composer-input"
+            onChange={(event) => {
+              setText(event.target.value);
+              setCaret(event.target.selectionStart);
+            }}
+            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            onPaste={(event) => {
+              const files = [...event.clipboardData.files];
+              if (files.length === 0) {
+                return;
+              }
               event.preventDefault();
-              void submit();
-            }
-          }}
-          onPaste={(event) => {
-            const files = [...event.clipboardData.files];
-            if (files.length === 0) {
-              return;
-            }
-            event.preventDefault();
-            void addFiles(files, 'clipboard');
-          }}
-          className="min-h-[3rem] min-w-0 flex-1 resize-none bg-transparent text-ink placeholder:text-subtle disabled:opacity-60"
-        />
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="添加图片"
-              title={imageInputSupported ? '添加图片（也可直接粘贴）' : '当前模型不支持图片输入'}
-              data-testid="assistant-composer-attach"
-              disabled={running || !imageInputSupported}
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/png,image/jpeg,image/webp';
-                input.multiple = true;
-                input.onchange = () => {
-                  void addFiles([...(input.files ?? [])], 'drop');
-                };
-                input.click();
-              }}
-              className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
-            >
-              <Paperclip size={13} aria-hidden="true" />
-            </button>
-          </div>
-          {inputLocked ? (
-            suspended ? (
-              <span
-                className="flex h-[var(--control-height)] items-center rounded-control border border-line px-3 text-muted text-[var(--font-meta-size)]"
-                data-testid="assistant-composer-suspended"
+              void addFiles(files, 'clipboard');
+            }}
+            className="min-h-[2.5rem] min-w-0 flex-1 resize-none bg-transparent text-ink text-[var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60"
+          />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="添加图片"
+                title={imageInputSupported ? '添加图片（也可直接粘贴）' : '当前模型不支持图片输入'}
+                data-testid="assistant-composer-attach"
+                disabled={running || !imageInputSupported}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/png,image/jpeg,image/webp';
+                  input.multiple = true;
+                  input.onchange = () => {
+                    void addFiles([...(input.files ?? [])], 'drop');
+                  };
+                  input.click();
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
               >
-                等待审批决定
-              </span>
+                <Paperclip size={13} aria-hidden="true" />
+              </button>
+            </div>
+            {inputLocked ? (
+              suspended ? (
+                <span
+                  className="flex h-[var(--control-height)] items-center rounded-control border border-line px-3 text-muted text-[var(--font-meta-size)]"
+                  data-testid="assistant-composer-suspended"
+                >
+                  等待审批决定
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  data-testid="assistant-composer-stop"
+                  className="flex h-[var(--control-height)] items-center gap-1 rounded-control border border-line px-3 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                >
+                  <Square size={11} aria-hidden="true" />
+                  停止
+                </button>
+              )
             ) : (
               <button
                 type="button"
-                onClick={onStop}
-                data-testid="assistant-composer-stop"
-                className="flex h-[var(--control-height)] items-center gap-1 rounded-control border border-line px-3 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                onClick={() => void submit()}
+                disabled={sending || (text.trim().length === 0 && attachments.length === 0)}
+                data-testid="assistant-composer-send"
+                className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:opacity-40"
               >
-                <Square size={11} aria-hidden="true" />
-                停止
+                {sending ? (
+                  <Loader2 size={11} aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <ArrowUp size={11} aria-hidden="true" />
+                )}
+                {replyMode ? '回复' : '发送'}
               </button>
-            )
-          ) : (
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={sending || (text.trim().length === 0 && attachments.length === 0)}
-              data-testid="assistant-composer-send"
-              className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:opacity-40"
-            >
-              {sending ? (
-                <Loader2 size={11} aria-hidden="true" className="animate-spin" />
-              ) : (
-                <ArrowUp size={11} aria-hidden="true" />
-              )}
-              {replyMode ? '回复' : '发送'}
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="mt-1 flex items-center gap-2">
+      <div className="flex items-center gap-2 border-t border-line-soft pt-2">
         <div
           role="radiogroup"
           aria-label="运行模式"
@@ -430,6 +432,7 @@ export function AssistantComposer({
         <span className="ml-auto text-subtle text-[var(--font-micro-size)]">
           {skills.length === 0 ? '' : `${skills.length} 个技能可用`}
         </span>
+      </div>
       </div>
     </div>
   );

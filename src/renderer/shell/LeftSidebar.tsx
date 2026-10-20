@@ -385,7 +385,7 @@ export function LeftSidebar({
         <div
           role="tablist"
           aria-label="项目上下文"
-          className="flex items-center gap-1 rounded-card border border-line bg-bg/90 p-0.5"
+          className="flex items-center gap-1 rounded-control border border-line bg-bg/90 p-0.5"
         >
           {TABS.map((tab, index) => {
             const selected = tab.id === activeTab;
@@ -413,8 +413,8 @@ export function LeftSidebar({
                 data-testid={`sidebar-tab-${tab.id}`}
                 className={
                   selected
-                    ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)]'
-                    : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]'
+                    ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)]'
+                    : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip text-muted transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]'
                 }
               >
                 <Icon size={12} aria-hidden="true" className={tab.iconClass} />
@@ -469,7 +469,7 @@ export function LeftSidebar({
           title={`切换为${theme.label}（⌘D）· 当前 ${themeState(themeOverride)}`}
           aria-label={`切换为${theme.label}，当前 ${themeState(themeOverride)}`}
           data-testid="sidebar-theme-toggle"
-          className="flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-2 rounded-card border border-line bg-surface font-medium text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-2 rounded-control border border-line bg-surface font-medium text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <span className={theme.iconClass}>{theme.icon}</span>
           <span className="truncate">{theme.label}</span>
@@ -480,7 +480,7 @@ export function LeftSidebar({
           title="管理（记忆 / 技能 / MCP / 任务）"
           aria-label="打开管理面板"
           data-testid="sidebar-management"
-          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-card border border-line bg-surface px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <Sliders size={13} aria-hidden="true" className="text-[var(--icon-manage)]" />
         </button>

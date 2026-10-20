@@ -160,18 +160,23 @@
   /* Category icon hues (research-studio parity).
 
      The 400 stops are the exact values research-studio writes inline
-     (`text-sky-400` / `text-amber-400` / `text-emerald-400` / `text-purple-400`).
-     They are tokens rather than component literals for two reasons: no component
-     may hard-code a hex (MASTER v2 §2), and the light theme drops to the 600
-     stops so the same hue keeps >= 3:1 on white instead of the 1.9:1 the 400
-     stops give. Same hue identity, legible in both themes. */
-  --icon-file: #38bdf8;
+     (`text-sky-400` / `text-amber-400` / `text-emerald-400` / `text-purple-400` /
+     `text-blue-400`). They are tokens rather than component literals for two reasons:
+     no component may hard-code a hex (MASTER v2 §2), and the light theme drops to the
+     600 stops so the same hue keeps >= 3:1 on white instead of the 1.9:1 the 400 stops
+     give. Same hue identity, legible in both themes.
+
+     `--icon-file` is **amber**, not sky: the reference's file-tree tab is a `FolderTree`
+     glyph in `text-amber-400` and its folders and `.tex` rows share that hue. */
+  --icon-file: #fbbf24;
   --icon-literature: #38bdf8;
   --icon-latex: #fbbf24;
   --icon-terminal: #34d399;
   --icon-git: #34d399;
   --icon-agent: #c084fc;
   --icon-manage: #c084fc;
+  /* Source-code rows in the file tree (reference: `text-blue-400`). */
+  --icon-code: #60a5fa;
   /* The literature hub's four sub-views (reference: sky / emerald / amber / cyan). */
   --icon-rag: #34d399;
   --icon-wiki: #fbbf24;
@@ -200,11 +205,24 @@
   --tool-st-error-bg: color-mix(in srgb, var(--st-bad) 16%, transparent);
   --tool-st-error-text: var(--st-bad);
 
-  /* Radii: restrained. Control 6 / card 8 / overlay 10. */
-  --r-control: 6px;
-  --r-card: 8px;
-  --r-window: 10px;
-  --r-xs: var(--r-control);
+  /* Radii: three tiers, transcribed from research-studio's own scale.
+
+     The reference does not invent a scale, it uses Tailwind's: `rounded-lg` (8px) on
+     controls, inputs and list rows, `rounded-xl` (12px) on cards, popovers and
+     drawers, `rounded-2xl` (16px) on modal panels — 222 / 63 / 13 call sites.
+     `rounded-md` (6px) survives only on chips and badges.
+
+     MASTER v2 §1.4 had tightened these to 6 / 8 / 10 as a v1→v2 correction. ADR 0025
+     retires that clause: the reference is the visual standard, so the tiers come back to
+     6 / 8 / 12 / 16 — `rounded-md` keeps its own token (`--r-chip`) because the reference
+     has 40 call sites for it and it is what makes a segmented track's inner buttons sit
+     inside its outer radius. `--r-xs`/`--r-sm`/`--r-md`/`--r-lg` keep their old aliases —
+     they are the pre-rename spelling still used by a handful of components. */
+  --r-chip: 6px;
+  --r-control: 8px;
+  --r-card: 12px;
+  --r-window: 16px;
+  --r-xs: var(--r-chip);
   --r-sm: var(--r-card);
   --r-md: var(--r-card);
   --r-lg: var(--r-window);
@@ -396,9 +414,10 @@
   --st-warn-line: #d6c193;
   --st-bad-line: #d4adad;
 
-  --icon-file: #0284c7;
+  --icon-file: #b45309;
   --icon-literature: #0284c7;
   --icon-latex: #b45309;
+  --icon-code: #2563eb;
   --icon-terminal: #047857;
   --icon-git: #047857;
   --icon-agent: #7e22ce;
@@ -488,6 +507,7 @@
      system palette is the only colour on screen. */
   --ring-selected: Canvas;
   --icon-file: CanvasText;
+  --icon-code: CanvasText;
   --icon-literature: CanvasText;
   --icon-latex: CanvasText;
   --icon-terminal: CanvasText;

@@ -4,12 +4,21 @@ import { ASSISTANT_WIDTH, SIDEBAR_WIDTH } from './ui-state';
 import type { LayoutState } from './use-layout-state';
 
 /**
- * Three-column workspace layout: sidebar | canvas | assistant.
+ * Three-column workspace layout: sidebar | assistant | canvas.
  *
  * Extracted from `AppShell` so the geometry rules live in one place and can be
  * reasoned about without the boot/routing/overlay concerns. Widths arrive as CSS
  * variables on the container (`--sidebar-w`, `--assistant-w`) because they are
  * dynamic; colors still come only from the token layer.
+ *
+ * **Column order is the reference's** (ADR 0025): `research-studio`'s `App` renders
+ * `LeftSidebar` → `ResizableDivider` → agent column → `ResizableDivider` →
+ * `WorkspaceCanvas`, so the assistant sits *between* the rail and the canvas and the
+ * canvas owns the right edge. MASTER v2 §5 drew it as 左栏 | 画布 | 助手; that clause is
+ * retired because the reference is the visual standard and this is the arrangement a
+ * researcher resizes while writing (the canvas keeps `flex-1`, so it is still the
+ * widest surface, and the divider now grows the assistant when dragged right, exactly
+ * as the reference's `handleAgentResize` does).
  *
  * At `<= 1099px` (ADR-M12) the sidebar and assistant become drawers instead of
  * columns. The window's own minimum is 1184px, so that mode mainly exists for
@@ -76,12 +85,13 @@ export function WorkspaceLayout({
         </>
       ) : null}
 
-      <main className="flex min-w-0 flex-1 flex-col" data-testid="canvas-column">
-        {canvas}
-      </main>
-
       {assistantVisible ? (
         <>
+          <div className="flex w-[var(--assistant-w)] shrink-0 flex-col" data-testid="assistant-column">
+            {assistant}
+          </div>
+          {/* The divider is *after* the assistant, which is what makes dragging it right
+              widen the panel (see `growAssistant`), as in the reference. */}
           <ResizableDivider
             ariaLabel="调整助手宽度"
             onDelta={layout.growAssistant}
@@ -89,11 +99,12 @@ export function WorkspaceLayout({
             atLimit={assistantAtLimit}
             testId="divider-assistant"
           />
-          <div className="flex w-[var(--assistant-w)] shrink-0 flex-col" data-testid="assistant-column">
-            {assistant}
-          </div>
         </>
       ) : null}
+
+      <main className="flex min-w-0 flex-1 flex-col" data-testid="canvas-column">
+        {canvas}
+      </main>
 
       {layout.sidebarAsDrawer && !layout.sidebarCollapsed && assistantAvailable ? (
         <ModalShell

@@ -11,7 +11,28 @@
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [release/release-candidate-checklist.md](release/release-candidate-checklist.md) | 发布前命令 |
-| [../design-system/MASTER.md](../design-system/MASTER.md) | 全局视觉与交互规范（token、壳层、状态） |
+| [adr/0025-alignment-audit-and-cleanup.md](adr/0025-alignment-audit-and-cleanup.md) | **视觉与版式的对齐标准**（token、半径、字号、间距、栏序）与测试数据清理 |
+
+> 全局视觉与交互规范曾在 `design-system/MASTER.md`，该文件已在 `1da2e0e9` 删除；它的 §1.4（圆角 6/8/10）、
+> §5（栏序「左栏 / 画布 / 助手」）由 ADR 0025 作废，§11（不做路由 fade）由 ADR 0023 作废。
+> **今天的设计真身是**：`src/renderer/styles/tokens.css`（颜色与刻度）、`src/renderer/shared/motion.ts`（动效）、
+> `research-studio/`（只读逐面参照，自述见它的 [README](../research-studio/README.md)）与 ADR 0025（哪些地方有意不照抄）。
+
+## 测试 seam
+
+产品代码里的 `ROC_SMOKE` 分支是**原生对话框的替身**：闸门与 smoke 用 Playwright 驱动打包应用，
+点不到系统面板，也不该被系统面板拦住。它们保留是有意的（ADR 0025 §9），逐处列在这里以便审计：
+
+| 位置 | 行为 | 谁在用 |
+| --- | --- | --- |
+| `src/main/ipc/files-ipc.ts` | `files.selectFromDialog` 返回工作区里 seed 出来的 `assets/smoke-image.png` | `verify-p4-assistant`（图片附件）、`smoke-electron` |
+| `src/main/ipc/shell-ipc.ts` | 原生确认框自动同意，并把请求先写进日志 | `verify-p3-workspace`（丢弃改动）、`verify-p9-management` |
+| `src/main/chromium-runtime-flags.ts` | 打开远程调试端口（`0` = 让 Chromium 选） | 全部闸门与 smoke |
+| `src/main/macos-environment.ts` | 跳过登录 shell 的 PATH 采集 | 全部闸门与 smoke |
+| `src/main/main-kernel-bootstrap.ts` | `AppStatus.mode = 'smoke'` | 闸门断言启动态 |
+
+数据根不在用户目录：闸门以 `ROC_DATA_ROOT=<临时目录>` 启动，所以 smoke 不会污染真实项目数据
+（`tests/smoke/lib/fixtures.mjs`）。
 
 ## ADR
 
@@ -39,5 +60,13 @@
 | [0018](adr/0018-next-action-stays-in-shell.md) | 当前下一步钉在科研工作台的壳上 |
 | [0019](adr/0019-shell-strip-is-only-the-next-action.md) | 壳上只钉下一步细条 |
 | [0020](adr/0020-conversation-drives-stages.md) | 对话驱动阶段 |
+| [0021](adr/0021-new-frontend-ia-supersedes-no-sidebar-rule.md) | 新前端 IA 取代「无全局左栏」 |
+| [0022](adr/0022-single-frontend-after-cutover.md) | 切换后仓库里只有一套前端 |
+| [0023](adr/0023-motion-parity-with-research-studio.md) | 动效回到 `research-studio` 口径 |
+| [0024](adr/0024-stage-surface-removed-for-parity.md) | 阶段面已删除 |
+| [0025](adr/0025-alignment-audit-and-cleanup.md) | 对齐审查：视觉以参考为准 + 死类与脚手架清理 |
+
+> ADR 0003–0020 描述的是**已被 ADR 0024 删除**的界面（总览、阶段条、阶段工作区、人工闸门、下一步细条）。
+> 保留为历史记录，不代表当前产品。
 
 工具链源与许可证：[resources/research-runtime/README.md](../resources/research-runtime/README.md)。阶段 Skill：[resources/research-skills](../resources/research-skills)。`archive/` 是历史快照（仅本地保留，未纳入 Git），不代表当前产品。

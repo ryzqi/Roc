@@ -16,6 +16,10 @@ export function applyChromiumRuntimeFlags(commandLine: {
   commandLine.appendSwitch('disable-background-networking');
   commandLine.appendSwitch('disable-component-update');
   commandLine.appendSwitch('disable-domain-reliability');
+  // Test seam (`ROC_SMOKE=1`), registered in `docs/README.md` § 测试 seam: the harness
+  // attaches over the DevTools protocol, which needs a debugging port. `'0'` lets Chromium
+  // pick a free one so two runs cannot collide. An explicit `--remote-debugging-port` on the
+  // command line still wins, so a developer keeps their own port under smoke.
   const remoteDebuggingPort = resolveRemoteDebuggingPort(argv) ?? (env.ROC_SMOKE === '1' ? '0' : null);
   if (remoteDebuggingPort !== null) {
     commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort);

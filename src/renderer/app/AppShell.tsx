@@ -521,7 +521,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   return (
     <ManagementScopeProvider value={managementScope}>
     <div
-      className={boot.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke flex h-full w-full flex-col bg-bg text-ink' : 'app-shell flex h-full w-full flex-col bg-bg text-ink'}
+      className="app-shell flex h-full w-full flex-col bg-bg text-ink"
       data-testid="roc-app"
       data-mode={boot.appStatus.mode}
     >

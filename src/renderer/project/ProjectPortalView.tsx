@@ -90,10 +90,11 @@ export function ProjectPortalView({
   };
 
   /**
-   * The grid is `auto-fill, minmax(240px, 1fr)`, so the column count depends on
-   * width (4 at the 1100px cap, fewer when narrower). Read it from the layout
-   * instead of assuming: a hard-coded 3 made every vertical move land one column
-   * off.
+   * The grid's column count is read from the layout, not assumed: the reference's
+   * `md:grid-cols-2 lg:grid-cols-3` means the count changes at 768px and 1024px, and a
+   * hard-coded 3 made every vertical arrow move land one column off when the window was
+   * narrower. (This used to be an `auto-fill, minmax(240px, 1fr)` count, which is why the
+   * comment survived the switch to the reference's fixed columns at all.)
    */
   const columnCount = (): number => {
     const grid = gridRef.current;
@@ -175,14 +176,22 @@ export function ProjectPortalView({
 
   return (
     <div className="h-full overflow-y-auto" data-testid="portal">
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-3 px-7 pb-10 pt-5">
-        <div className="flex items-center gap-2">
-          <h1 className="min-w-0 flex-1 text-ink text-[var(--font-h1-size)]">研究项目</h1>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 border-b border-line-soft pb-4">
+          <h1 className="min-w-0 text-ink text-xl font-semibold tracking-tight sm:text-2xl">研究项目</h1>
+          {/* The reference's count badge: the one number that says how much work the
+              portal is holding, in tabular mono so it does not jump as projects land. */}
+          <span
+            className="shrink-0 rounded-control border border-line bg-surface px-2 py-0.5 font-mono text-muted text-[var(--font-meta-size)]"
+            data-testid="portal-count"
+          >
+            {all.length}
+          </span>
           <button
             type="button"
             data-testid="portal-new-project"
             onClick={() => setCreateOpen(true)}
-            className="flex h-[var(--control-height)] items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)]"
+            className="ml-auto flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)]"
           >
             <Plus size={14} aria-hidden="true" />
             新建研究项目
@@ -287,7 +296,7 @@ export function ProjectPortalView({
             aria-label="研究项目"
             onKeyDown={onGridKeyDown}
             data-testid="portal-grid"
-            className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2.5"
+            className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3"
           >
             {shown.map((project, index) => (
               <div role="listitem" key={project.id} data-card-index={index}>

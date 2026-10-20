@@ -69,7 +69,7 @@ const TABS: ReadonlyArray<{ id: CanvasTabId; label: string; icon: typeof BookOpe
   canvasTabIds.map((id) => ({ id, label: surfaceFor(id).label, ...TAB_APPEARANCE[id] }));
 
 const TAB_BASE =
-  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-card border px-3 whitespace-nowrap text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border px-3 whitespace-nowrap text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function WorkspaceCanvas({
   activeTab,
@@ -125,12 +125,18 @@ export function WorkspaceCanvas({
               {selected ? (
                 // `layoutId` is shared across the three tabs, so React mounts one
                 // indicator at a time and motion interpolates its box — the slide.
+                //
+                // The bar is mono, not `--accent`: the reference's is `bg-zinc-200`
+                // (a near-white ink line in dark), and every other selection in the
+                // reference — this strip's own active tab, the sidebar's segmented
+                // control, the literature hub's track — is a raised monochrome chip.
+                // `--accent` on chrome would be a fifth colour in a monochrome shell.
                 <motion.div
                   aria-hidden="true"
                   data-testid="canvas-tab-indicator"
                   layoutId="canvas-active-tab-indicator"
                   transition={tabIndicatorTransition}
-                  className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-accent"
+                  className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-ink"
                 />
               ) : null}
             </button>

@@ -68,13 +68,13 @@ export function ProjectCard({
         onClick={onOpen}
         aria-label={`打开项目 ${project.title}`}
         data-testid={`portal-card-open-${project.id}`}
-        className="flex flex-col gap-1.5 rounded-t-card px-3.5 pb-2 pt-3.5 text-left hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
+        className="flex flex-col gap-1.5 rounded-t-card px-4 pb-2.5 pt-4 text-left hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
       >
         <span className="flex items-center gap-1.5">
           {pinned ? (
             <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-accent" data-testid="portal-card-pinned" />
           ) : null}
-          <span className="min-w-0 flex-1 truncate text-ink" title={project.title}>
+          <span className="line-clamp-2 min-w-0 flex-1 text-[var(--font-read-size)] font-medium leading-snug text-ink" title={project.title}>
             {project.title}
           </span>
         </span>
@@ -111,7 +111,7 @@ export function ProjectCard({
         )}
       </button>
 
-      <div className="flex items-center gap-0.5 border-t border-line-soft px-2 py-1.5">
+      <div className="flex items-center gap-0.5 border-t border-line-soft px-3 py-2">
         <button
           type="button"
           onClick={onTogglePin}

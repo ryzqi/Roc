@@ -66,3 +66,19 @@ P10 的切换提交（ADR 0022）删掉了旧前端，但**保留**了它的设�
   `interpolate-size: allow-keywords`，两个方向都是真动画，语义不动。本机 Electron 44 的 Chromium 是
   **152**（实测 `process.versions.chrome`，不是假设），两个特性都在；万一将来不在，退化表现是「没有位移
   的瞬时展开」，块仍然可用。
+
+## 后记（ADR 0025，本轮审查）
+
+两条现状修正：
+
+1. **「三个关键帧与工具类原样搬回」这一条作废。** 本轮全仓搜索发现它们**从未被使用**：参考里唯一活着的
+   调用点是项目门户的三个表单模态，而这里的每个浮层都是 `ModalShell`，用 `shared/motion.ts` 的变体实现了
+   同样的两个入场并补上了出场。保留一份永不运行的 CSS 词汇表等于第二套规范，已删除，理由写在
+   `styles/index.css` 的注释里。动效真身只剩 `shared/motion.ts` + `::details-content`。
+2. **同一轮还改了版式与栏序**（圆角四档 6/8/12/16、画布 tab 指示条改为单色、助手列移到左栏与画布之间），
+   见 [ADR 0025](0025-alignment-audit-and-cleanup.md)。ADR 0023 只负责动效那部分。
+
+本 ADR 仍然成立的部分：视图切换 120ms 淡入淡出、画布 tab 指示器共享 `layoutId` 弹簧、浮层进场与出场、
+折叠块用 `::details-content`，以及五处**有意不照抄**（假红绿灯、模型下拉、折叠块实现、`<details>` 换法、
+助手头部 pill 指向设置）。eager 额度仍由 `pnpm check:renderer-chunks`（`1,700,000 B`）守，本轮实测
+`1,320,950 B`。

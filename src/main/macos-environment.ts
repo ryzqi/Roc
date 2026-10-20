@@ -17,6 +17,9 @@ const LOGIN_SHELL_PROXY_KEYS = [
 const LOOPBACK_NO_PROXY = '127.0.0.1,localhost,::1';
 
 export async function initializeMacOSPath(): Promise<void> {
+  // Test seam (`ROC_SMOKE=1`), registered in `docs/README.md` § 测试 seam: spawning the login
+  // shell takes seconds and would make every gate's startup budget flaky, and the harness
+  // already passes the PATH it needs to the child process.
   if (process.env.ROC_SMOKE === '1') {
     return;
   }

@@ -40,6 +40,12 @@ import { ToolCallBlock } from './tool-call-block';
  * soon as it mounts. Same visible behaviour (a new message fades in once, history never
  * replays), far less machinery, and the bounded key set — which existed so a long
  * session could not grow the renderer's memory without limit — is kept.
+ *
+ * Geometry is the reference's: the transcript is a `px-4` gutter with 24px between
+ * rows, an assistant turn stacks its blocks 12px apart (`space-y-3` there, `gap-3`
+ * here), and a user turn is the one filled bubble in the surface — 85% max width,
+ * 16px radius with the bottom-right corner at the control radius,
+ * `--surface-card-hover` fill, 13px text at `leading-relaxed`.
  */
 
 export type ChatMessageRowProps = {
@@ -123,12 +129,12 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
 
   return (
     <div
-      className={`flex ${isAssistant ? 'justify-start' : 'justify-end'} px-3 py-1.5 ${motionClass}`}
+      className={`flex ${isAssistant ? 'justify-start' : 'justify-end'} px-4 py-3 ${motionClass}`}
       data-role={message.role}
       data-testid={isAssistant ? 'assistant-message-assistant' : 'assistant-message-user'}
     >
       {isAssistant ? (
-        <article className="flex min-w-0 max-w-full flex-1 flex-col gap-1" data-testid="assistant-message-content">
+        <article className="flex min-w-0 max-w-full flex-1 flex-col gap-3" data-testid="assistant-message-content">
           {activityBlocks.map((block) => (
             <ChatActivityBlockView key={block.id} block={block} />
           ))}
@@ -155,8 +161,10 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
           ) : null}
         </article>
       ) : (
-        <article className="flex max-w-[92%] flex-col gap-1 rounded-card border border-line bg-bg-soft px-2.5 py-1.5">
-          <p className="whitespace-pre-wrap text-ink text-[var(--font-read-size)]">{message.content}</p>
+        <article className="flex max-w-[85%] flex-col gap-1.5 rounded-window rounded-br-control border border-line-strong bg-[var(--surface-card-hover)] px-4 py-3 shadow-[var(--shadow-card)]">
+          <p className="whitespace-pre-wrap text-ink text-[var(--font-body-size)] leading-relaxed">
+            {message.content}
+          </p>
           {attachments.length === 0 ? null : (
             <div className="flex flex-wrap gap-1" data-testid="assistant-message-attachments">
               {attachments.map((attachment) => (

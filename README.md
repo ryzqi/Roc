@@ -10,14 +10,14 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
 - 包管理：`pnpm@12.5.1`
 
-术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。视觉与交互规范见 [design-system/MASTER.md](design-system/MASTER.md)。
+术语见 [CONTEXT.md](CONTEXT.md)。壳层与阶段界面见 [docs/research-workbench.md](docs/research-workbench.md)。视觉、版式与动效的对齐标准见 [docs/adr/0025-alignment-audit-and-cleanup.md](docs/adr/0025-alignment-audit-and-cleanup.md)；设计参照目录是 [research-studio/](research-studio/README.md)（只读，不是第二套前端）。
 
 ---
 
 ## 科研工作台
 
 打开应用先落**项目门户**：卡片网格列出研究项目，没有项目时是空态，点「新建研究项目」才出表单。
-进入某个项目后是**三栏工作台**：左栏（文件 / 文献 / 会话）、画布、助手列；窗口 ≤1099px 时左栏与助手变抽屉。
+进入某个项目后是**三栏工作台**：左栏（文件 / 文献 / 会话）、助手列、画布（栏序与设计参照一致）；窗口 ≤1099px 时左栏与助手变抽屉。
 
 | 区域 | 作用 |
 | --- | --- |

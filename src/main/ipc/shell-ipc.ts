@@ -11,6 +11,14 @@ export async function confirmShellRequestWithDialog(
   mainWindow: BrowserWindow,
   logService: Pick<LogService, 'info'>
 ): Promise<ShellConfirmationResult> {
+  /**
+   * Test seam (`ROC_SMOKE=1`), registered in `docs/README.md` § 测试 seam.
+   *
+   * The gates confirm destructive actions through a native message box, which no automation
+   * can click. Under smoke the answer is always "confirmed" — and the request is logged
+   * *before* answering, so a gate that confirms something still leaves the title and message
+   * in the run's logs to audit.
+   */
   if (process.env.ROC_SMOKE === '1') {
     logService.info('Native confirmation auto-accepted for smoke.', {
       service: 'shell-ipc',

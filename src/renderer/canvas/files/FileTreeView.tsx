@@ -69,19 +69,73 @@ export type FileTreeViewProps = {
 
 const KIND_ICON = { file: FileText, directory: Folder } as const;
 
+const CODE_EXTENSIONS = [
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.py',
+  '.r',
+  '.jl',
+  '.ipynb',
+  '.json',
+  '.toml',
+  '.yaml',
+  '.yml',
+  '.sh',
+  '.css',
+  '.html',
+  '.sql',
+  '.c',
+  '.h',
+  '.cpp',
+  '.rs',
+  '.go'
+] as const;
+
+/**
+ * Per-row icon hue, taken from the reference's `FileTreeView` (`getFileIcon`):
+ * folders and LaTeX sources share amber, source code is blue, the `.bib` family is
+ * the literature hue, and everything else stays grey. The hues are tokens, so the
+ * light theme drops to a legible stop instead of the reference's hard-coded 400s.
+ *
+ * Directory rows use the same amber in both disclosure states; the glyph is what
+ * carries "open" (see `RowIcon`).
+ */
+function iconClassFor(row: FileTreeRow): string {
+  if (row.entry.type === 'directory') {
+    return 'text-[var(--icon-file)]';
+  }
+  const name = row.entry.name.toLowerCase();
+  if (name.endsWith('.tex') || name.endsWith('.cls') || name.endsWith('.sty') || name.endsWith('.ltx')) {
+    return 'text-[var(--icon-latex)]';
+  }
+  if (name.endsWith('.bib')) {
+    return 'text-[var(--icon-literature)]';
+  }
+  if (CODE_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+    return 'text-[var(--icon-code)]';
+  }
+  return 'text-subtle';
+}
+
 function RowIcon({ row, busy }: { row: FileTreeRow; busy: boolean }): React.JSX.Element {
   if (busy) {
     return <Loader2 size={12} aria-hidden="true" className="shrink-0 animate-spin text-muted" />;
   }
   if (row.entry.type === 'directory') {
     return row.expanded ? (
-      <FolderOpen size={12} aria-hidden="true" className="shrink-0 text-accent" />
+      <FolderOpen size={12} aria-hidden="true" className={`shrink-0 ${iconClassFor(row)}`} />
     ) : (
-      <Folder size={12} aria-hidden="true" className="shrink-0 text-subtle" />
+      <Folder size={12} aria-hidden="true" className={`shrink-0 ${iconClassFor(row)}`} />
     );
   }
   const Icon = KIND_ICON.file;
-  return <Icon size={12} aria-hidden="true" className="shrink-0 text-subtle" />;
+  return <Icon size={12} aria-hidden="true" className={`shrink-0 ${iconClassFor(row)}`} />;
 }
 
 export function FileTreeView({
