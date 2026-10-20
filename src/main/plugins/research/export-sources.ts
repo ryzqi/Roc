@@ -5,6 +5,7 @@ import type { ResearchExperimentService } from './experiment-service';
 import type { ResearchFigureService } from './figure-service';
 import type { LibraryItem } from './library-repository';
 import { escapeLatex, renderCitations, renderSections } from './latex-source';
+import { checkManuscriptBody, firstBlockingViolation } from './manuscript-integrity';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 import type { ResearchTemplateService } from './template-service';
@@ -56,6 +57,16 @@ export class ResearchExportSourceService {
     }
     const evidenceIds = [...new Set(claims.flatMap((claim) => claim.evidenceIds))];
     const evidence = evidenceIds.map((id) => this.repository.evidence.getEvidence(id, project.id));
+    // 正文的结构性检查放在所有副作用之前：闸门必须在准备开始前就挡住，
+    // 而不是等图稿校验、实验快照都跑完再失败。
+    // 注意这里只可能报出一类问题（图稿主张进了正文）：主张受支持与证据可解析由
+    // `requireForStage() -> exportBundle() -> requireCurrentManuscript()` 保证，见
+    // `manuscript-integrity.ts` 开头的说明。
+    const blocking = firstBlockingViolation(checkManuscriptBody({
+      sections: bundle.manuscript.sections,
+      claims: bundle.claims
+    }));
+    if (blocking !== null) throw new Error(`${blocking.code}:${blocking.subject}`);
     const citationKeys: Record<string, string> = {};
     const bibliography = new Map<string, z.infer<typeof researchBibliographyEntrySchema>>();
     const libraryRevisions = new Map<string, number>();
