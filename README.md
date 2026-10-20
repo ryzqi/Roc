@@ -2,7 +2,7 @@
 
 Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研究项目，而不是通用对话页。项目下组织文献、证据、想法、实验、图稿和论文；研究助手、文件、后台任务、MCP 连接器、技能和记忆挂在当前项目上。
 
-底层仍是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
+底层是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
 - 平台：仅 macOS，Apple Silicon 与 Intel（按架构打包 RTK 与科研工具链）
 - 默认界面：项目门户（`page=research`，未选项目）→ 三栏工作台（选中项目后）
@@ -179,21 +179,16 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 
 | 命令 | 覆盖 | 工件 |
 | --- | --- | --- |
-| `pnpm test` | 新壳 smoke：启动、门户建项目并进入、一轮助手 run、设置保存、文件预览 / Git / 终端 | `.artifacts/smoke-electron/result.json` + 截图 |
-| `pnpm smoke:electron` | 上表 + 审批路径（P4 闸门作为子进程） | 同上 + `.artifacts/p4-gates/` |
-| `pnpm verify:p3-workspace` / `verify:p4-assistant` / `verify:p5-literature` / `verify:p8-settings` / `verify:p9-management` | 五个阶段的验收闸门（真阶段运行 / 真 PDF 解析 / 真 provider 测速 / 真 MCP stdio 子进程 / 真重启等） | `.artifacts/pN-gates/report.json` |
+| `pnpm test` | `test:unit` + smoke：启动、门户建项目并进入、一轮助手 run、设置保存、文件预览 / Git / 终端 | `.artifacts/smoke-electron/result.json` + 截图 |
+| `pnpm smoke:electron` | `pnpm test` 的全部用例，外加审批路径（`verify-p4-assistant` 作为子进程） | 同上 + `.artifacts/p4-gates/` |
+| `pnpm verify:p3-workspace` / `verify:p4-assistant` / `verify:p5-literature` / `verify:p8-settings` / `verify:p9-management` | 验收闸门：真阶段运行 / 真 PDF 解析 / 真 provider 测速 / 真 MCP stdio 子进程 / 真重启 | `.artifacts/pN-gates/report.json` |
 | `pnpm smoke:performance` | 冷启动与 1k / 10k 会话的交互、内存与预取预算 | `.artifacts/wave1/performance-smoke.json` |
 | `pnpm smoke:mac` | 已打包 `.app` 的原生行为（签名、托盘、pty、外观通知） | `.artifacts/mac-package/` |
-| `pnpm audit:layout` | 三个视口 × 门户/画布/助手/设置四态的布局审查 | `.artifacts/layout-audit/` |
-| `node --test tests/unit/` | 纯规则与投影的单元测试（无 DOM） | — |
+| `pnpm test:unit` | 纯规则与投影的单元测试（无 DOM；等价于 `node --test tests/unit/`） | — |
 
-**验收闸门必须串行跑**：Electron 的进程单例锁（`SingletonSocket`）让并行实例互相拒绝，
-表现为 `electron.launch: Process failed to launch`。
+**验收闸门必须串行跑**：Electron 的进程单例锁（`SingletonSocket`）让并行实例互相拒绝，表现为 `electron.launch: Process failed to launch`。
 
-P10 删掉了旧壳的 smoke 套件（`tests/smoke/electron-smoke*.mjs`）：那些断言绑在已删除的旧 DOM 上，
-没有可断言的对象，也不做事后别名映射。现在 `tests/smoke/` 只留一份性能 smoke 与夹具/目标解析
-（`performance-smoke.mjs`，`lib/` 下的 `fixtures.mjs` / `smoke-target.mjs` / `assertions.mjs` / `artifacts.mjs` /
-`native-feel.mjs` / `electron-smoke-layout-audit.mjs` / `performance-profile-seed.ts` 与 `lib/assets/`）。
+`tests/smoke/` 除 `performance-smoke.mjs` 外只有 `lib/` 下的夹具与解析（`fixtures.mjs`、`smoke-target.mjs`、`assertions.mjs`、`artifacts.mjs`、`native-feel.mjs`、`electron-smoke-layout-audit.mjs`、`performance-profile-seed.ts` 与 `lib/assets/`）。
 
 ## 本机维护
 
@@ -205,7 +200,7 @@ P10 删掉了旧壳的 smoke 套件（`tests/smoke/electron-smoke*.mjs`）：那
 | `pnpm database:migrate` | 把 `~/.roc` 各插件库迁到代码里的最新 schema 版本 | 就地升级 schema |
 | `pnpm database:clear-agent-history` | 清空 agent / task 历史表，保留 schema 与配置 | 破坏性：删除前自动备份到 `~/.roc/plugin-data/backups/manual-clear-history-<时间戳>/` |
 | `pnpm logs:query --level error --grep <关键字>` | 查询 `~/.roc/logs/app.jsonl` | 只读；过滤器另有 `--service`、`--traceId`、`--runId`、`--since` |
-| `pnpm audit:layout` | 多视口 UI 布局审查，产出 `.artifacts/layout-audit/` | 需先 `pnpm build`；`release/` 里已有打包应用时优先用它 |
+| `pnpm audit:layout` | 三个视口 × 门户/画布/助手/设置四态的布局审查 | 需先 `pnpm build`；产出 `.artifacts/layout-audit/`；`release/` 里已有打包应用时优先用它 |
 
 `database:clear-agent-history` 在直接 `node` 调用时另需显式传 `--all-thread-kinds`，作为二次确认。
 
@@ -221,7 +216,7 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --ar
 rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 ```
 
-`package:mac`：校验 live 科研工具链 → `pnpm build`（含 typecheck）→ 首屏体积检查 → `electron-builder --mac --dir` → `smoke-mac`。输出当前架构的 `.app`。不会再打 zip/dmg。构建缓存在 `.runtime/`，验证截图在 `.artifacts/mac-package/`。
+`package:mac`：校验 live 科研工具链 → `pnpm build`（含 typecheck）→ 首屏体积检查 → `electron-builder --mac --dir` → `smoke-mac`。输出当前架构的 `.app`（不打 zip/dmg）。构建缓存在 `.runtime/`，验证截图在 `.artifacts/mac-package/`。
 
 - Apple Silicon：`release/mac-arm64/Roc.app`
 - Intel：在 x64 Mac 上安装匹配依赖，输出 `release/mac/Roc.app`
@@ -379,42 +374,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | Nature Skills（23 个技能） | 快照 `2a163b95` | `https://github.com/Yuan1z0825/nature-skills` ✓ | Apache-2.0 | `pnpm sync:builtin-skills` → 提交 `resources/builtin-skills/nature-skills.tar.gz` 与 `catalog.json`；运行时自动同步 |
 | Academic Research Skills（5 个技能） | 快照 `cfd081d8` | `https://github.com/Imbad0202/academic-research-skills` ✓ | **CC BY-NC 4.0** | 同上；许可证不允许默认分发，所以内置但不自动安装（管理 → 技能里显式接受后安装） |
 
-### 八、已评估但未集成
-
-记录在这里是为了避免重复讨论；判据是 `AGENTS.md` 的**离线分发**与 `CONTEXT.md` 的**许可**两条约束。
-
-| 项目 | 网址 | 不集成的原因 |
-| --- | --- | --- |
-| pandoc | `https://github.com/jgm/pandoc` ✓ | GPL-2.0 传染 + 体积大；现有导出只需 PDF/LaTeX |
-| Quarto | `https://github.com/quarto-dev/quarto-cli` ✓ | 需要 Deno 运行时，与随包离线工具链冲突 |
-| Typst | `https://github.com/typst/typst` ✓ | 许可证没问题（Apache-2.0），但换掉 Tectonic 等于重写导出域；等「编译太慢」成为真实投诉再评估 |
-| Manubot | `https://github.com/manubot/manubot` ✓ | 面向 CI/网络的写作流水线，与本地桌面口径不符 |
-| Zotero / Better BibTeX | `https://retorque.re/zotero-better-bibtex/` ✓ | Zotero 本体 AGPL；插件用它的**交换格式与引用键约定**即可，不引依赖 |
-| citecheck | `https://github.com/tobiasosDev/citecheck` ✓ | 项目过小（个位数 star），逻辑自研更可控 |
-| latex2arxiv | `https://github.com/YuZh98/latex2arxiv` ✓ | 面向 arXiv 投稿的预处理；等真要做投稿打包时再评估 |
-| citeproc-rs | `https://github.com/zotero/citeproc-rs` ✓ | MPL-2.0 可用，但不发布 macOS 预编译二进制，需要给 `prepare.ts` 加 Rust 构建 |
-| vega-lite / mermaid | `https://github.com/vega/vega-lite` ✓ / `https://github.com/mermaid-js/mermaid` ✓ | 计划内的图稿扩展（见下） |
-| graphviz | `https://github.com/graphviz/graphviz` ✓ | 许可证是 EPL-1.0（非宽松）；同类需求优先 Mermaid |
-
-### 九、计划中的集成（尚未落地）
-
-| 组件 | 版本 | 网址 | 许可证 | 义务 |
-| --- | --- | --- | --- | --- |
-| citeproc-js | 2.4.63 | `https://github.com/Juris-M/citeproc-js` ✓ | **CPAL-1.0** | 这是本仓库第一个非 MIT/Apache/BSD 的运行时依赖。文件级 copyleft：不修改它时只需随包保留许可证与版权声明；若修改其源码文件，被改文件需按同许可回馈 |
-| CSL 样式（GB/T 7714-2015） | 随库更新 | `https://github.com/citation-style-language/styles` ✓ | **CC-BY-SA-3.0** | 必须保留样式内作者与贡献者署名，并注明 CSL 项目与 `https://citationstyles.org/` |
-| CSL 语言文件 | 随库更新 | `https://github.com/citation-style-language/locales` ✓ | CC-BY-SA-3.0 | 同上 |
-
-落地时以上三条必须同时进 §五 的 npm 运行时清单与随包 `resources/research-runtime/licenses/`。
-
-### 十、只作参照、不引入代码
-
-| 项目 | 网址 | 借鉴的是什么 |
-| --- | --- | --- |
-| MyST | `https://mystmd.org` ✓ | 交叉引用语义（`{numref}`）与「标签解析 = 纯函数 + 可预检」 |
-| Vale 上游规则 | `https://github.com/errata-ai/vale` ✓ | 规则格式与 `existence/substitution` 的写法；**规则内容为本仓库自研** |
-| Prose 写作风格规则 | `https://github.com/jdkato/prose` | `write-good` 系规则的思路来源；只借思路，不复制文本 |
-
-### 十一、维护动作
+### 八、维护动作
 
 | 场景 | 动作 |
 | --- | --- |
@@ -429,11 +389,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 ## 状态
 
-当前版本：`0.1.0`（积极开发中）
-
-- 产品口径：科研工作台
-- 仓库目标：对齐项目/阶段/闸门/产物合同，而不是只改提示词
-- 密钥与本机运行态默认不进 Git
+当前版本：`0.1.0`（积极开发中）。产品口径是科研工作台；密钥与本机运行态默认不进 Git。
 
 ## License
 
