@@ -1,5 +1,7 @@
 import type {
   AgentCapabilityPreview,
+  BuiltinSkillsCheckResult,
+  BuiltinSkillsStatus,
   MemoryFileWriteOutcome,
   MemoryKind,
   MemoryScope,
@@ -123,6 +125,39 @@ export function readSkillFile(
   input: SkillFilePreviewRequest
 ): Promise<IpcLikeResult<SkillFilePreviewResult>> {
   return client.api.skills.readFile(input);
+}
+
+/**
+ * The built-in sources are a separate read from `skills.list`: the list says which skills exist,
+ * this says which upstream commit put them there and when the next check runs.
+ */
+export function getBuiltinSkillsStatus(client: RocClient): Promise<IpcLikeResult<BuiltinSkillsStatus>> {
+  return client.api.skills.builtinStatus();
+}
+
+export function checkBuiltinSkills(
+  client: RocClient,
+  input: { force?: boolean }
+): Promise<IpcLikeResult<BuiltinSkillsCheckResult>> {
+  return client.api.skills.builtinCheck(input);
+}
+
+export function setBuiltinSkillsAutoUpdate(
+  client: RocClient,
+  input: { autoUpdate: boolean }
+): Promise<IpcLikeResult<BuiltinSkillsStatus>> {
+  return client.api.skills.builtinAutoUpdate(input);
+}
+
+/**
+ * Installs one bundled source. This is also the consent action for non-commercial licenses: the
+ * backend records acceptance when this is called, so the button text must state that.
+ */
+export function restoreBuiltinSkillSource(
+  client: RocClient,
+  input: { sourceId: string }
+): Promise<IpcLikeResult<BuiltinSkillsStatus>> {
+  return client.api.skills.builtinRestore(input);
 }
 
 /* ------------------------------------------------------------------ */

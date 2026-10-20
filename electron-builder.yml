@@ -36,6 +36,10 @@ extraResources:
     filter:
       - trayTemplate*.png
       - trayTemplate@2x.png
+  - from: resources/builtin-skills
+    to: builtin-skills
+    filter:
+      - "**/*"
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
@@ -74,6 +78,10 @@ mac:
     - "!node_modules/pdfjs-dist/legacy/web/**"
     - "!node_modules/pdfjs-dist/legacy/image_decoders/**"
   extraResources:
+    - from: resources/builtin-skills
+      to: builtin-skills
+      filter:
+        - "**/*"
     - from: resources/rtk-binaries
       to: rtk-binaries
       filter:

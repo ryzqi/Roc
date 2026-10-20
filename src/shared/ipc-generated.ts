@@ -63,6 +63,10 @@ export const ipcChannels = {
   skillsDelete: 'roc:skills:delete',
   skillsListFiles: 'roc:skills:list-files',
   skillsReadFile: 'roc:skills:read-file',
+  skillsBuiltinStatus: 'roc:skills:builtin-status',
+  skillsBuiltinCheck: 'roc:skills:builtin-check',
+  skillsBuiltinAutoUpdate: 'roc:skills:builtin-auto-update',
+  skillsBuiltinRestore: 'roc:skills:builtin-restore',
   researchProjectsList: 'roc:research:projects-list',
   researchProjectsGet: 'roc:research:projects-get',
   researchProjectsCreate: 'roc:research:projects-create',
@@ -210,7 +214,8 @@ export const ipcChannels = {
   workspaceChanged: 'roc:workspace:changed',
   terminalOutput: 'roc:terminal:output',
   terminalExit: 'roc:terminal:exit',
-  chatRunEvent: 'roc:chat:run-event'
+  chatRunEvent: 'roc:chat:run-event',
+  skillsUpdated: 'roc:skills:updated'
 } as const;
 
 export const ipcRequestChannelKeys = [
@@ -274,6 +279,10 @@ export const ipcRequestChannelKeys = [
   'skillsDelete',
   'skillsListFiles',
   'skillsReadFile',
+  'skillsBuiltinStatus',
+  'skillsBuiltinCheck',
+  'skillsBuiltinAutoUpdate',
+  'skillsBuiltinRestore',
   'researchProjectsList',
   'researchProjectsGet',
   'researchProjectsCreate',
@@ -424,7 +433,8 @@ export const ipcEventChannelKeys = [
   'workspaceChanged',
   'terminalOutput',
   'terminalExit',
-  'chatRunEvent'
+  'chatRunEvent',
+  'skillsUpdated'
 ] as const;
 
 export const ipcRequestDefinitions = [
@@ -488,6 +498,10 @@ export const ipcRequestDefinitions = [
   { key: 'skillsDelete', channel: ipcChannels.skillsDelete, domain: 'skills', method: 'deleteSkill', kind: 'plugin' },
   { key: 'skillsListFiles', channel: ipcChannels.skillsListFiles, domain: 'skills', method: 'listFiles', kind: 'plugin' },
   { key: 'skillsReadFile', channel: ipcChannels.skillsReadFile, domain: 'skills', method: 'readFile', kind: 'plugin' },
+  { key: 'skillsBuiltinStatus', channel: ipcChannels.skillsBuiltinStatus, domain: 'skills', method: 'builtinStatus', kind: 'plugin' },
+  { key: 'skillsBuiltinCheck', channel: ipcChannels.skillsBuiltinCheck, domain: 'skills', method: 'builtinCheck', kind: 'plugin' },
+  { key: 'skillsBuiltinAutoUpdate', channel: ipcChannels.skillsBuiltinAutoUpdate, domain: 'skills', method: 'builtinAutoUpdate', kind: 'plugin' },
+  { key: 'skillsBuiltinRestore', channel: ipcChannels.skillsBuiltinRestore, domain: 'skills', method: 'builtinRestore', kind: 'plugin' },
   { key: 'researchProjectsList', channel: ipcChannels.researchProjectsList, domain: 'research', method: 'listProjects', kind: 'plugin' },
   { key: 'researchProjectsGet', channel: ipcChannels.researchProjectsGet, domain: 'research', method: 'getProject', kind: 'plugin' },
   { key: 'researchProjectsCreate', channel: ipcChannels.researchProjectsCreate, domain: 'research', method: 'createProject', kind: 'plugin' },
@@ -638,7 +652,8 @@ export const ipcEventDefinitions = [
   { key: 'workspaceChanged', channel: ipcChannels.workspaceChanged, domain: 'workspace', method: 'onChanged' },
   { key: 'terminalOutput', channel: ipcChannels.terminalOutput, domain: 'terminal', method: 'onOutput' },
   { key: 'terminalExit', channel: ipcChannels.terminalExit, domain: 'terminal', method: 'onExit' },
-  { key: 'chatRunEvent', channel: ipcChannels.chatRunEvent, domain: 'chat', method: 'onRunEvent' }
+  { key: 'chatRunEvent', channel: ipcChannels.chatRunEvent, domain: 'chat', method: 'onRunEvent' },
+  { key: 'skillsUpdated', channel: ipcChannels.skillsUpdated, domain: 'skills', method: 'onUpdated' }
 ] as const;
 
 export const pluginCapabilityMappings = [
@@ -687,6 +702,10 @@ export const pluginCapabilityMappings = [
   { domain: 'skills', preloadMethod: 'skills.deleteSkill', channel: ipcChannels.skillsDelete, capabilityName: 'skills.delete', inputTransform: { kind: 'id', key: 'id' } },
   { domain: 'skills', preloadMethod: 'skills.listFiles', channel: ipcChannels.skillsListFiles, capabilityName: 'skills.files.list', inputTransform: { kind: 'first' } },
   { domain: 'skills', preloadMethod: 'skills.readFile', channel: ipcChannels.skillsReadFile, capabilityName: 'skills.file.read', inputTransform: { kind: 'first' } },
+  { domain: 'skills', preloadMethod: 'skills.builtinStatus', channel: ipcChannels.skillsBuiltinStatus, capabilityName: 'skills.builtin.status', inputTransform: { kind: 'none' } },
+  { domain: 'skills', preloadMethod: 'skills.builtinCheck', channel: ipcChannels.skillsBuiltinCheck, capabilityName: 'skills.builtin.check', inputTransform: { kind: 'first' } },
+  { domain: 'skills', preloadMethod: 'skills.builtinAutoUpdate', channel: ipcChannels.skillsBuiltinAutoUpdate, capabilityName: 'skills.builtin.autoUpdate', inputTransform: { kind: 'first' } },
+  { domain: 'skills', preloadMethod: 'skills.builtinRestore', channel: ipcChannels.skillsBuiltinRestore, capabilityName: 'skills.builtin.restore', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.listProjects', channel: ipcChannels.researchProjectsList, capabilityName: 'research.projects.list', inputTransform: { kind: 'none' } },
   { domain: 'research', preloadMethod: 'research.getProject', channel: ipcChannels.researchProjectsGet, capabilityName: 'research.projects.get', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.createProject', channel: ipcChannels.researchProjectsCreate, capabilityName: 'research.projects.create', inputTransform: { kind: 'first' } },

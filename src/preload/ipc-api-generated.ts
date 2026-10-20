@@ -104,7 +104,16 @@ export const rocApi: RocPreloadApi = {
     setEnabled: (...args) => ipcRenderer.invoke(ipcChannels.skillsSetEnabled, ...args),
     deleteSkill: (...args) => ipcRenderer.invoke(ipcChannels.skillsDelete, ...args),
     listFiles: (...args) => ipcRenderer.invoke(ipcChannels.skillsListFiles, ...args),
-    readFile: (...args) => ipcRenderer.invoke(ipcChannels.skillsReadFile, ...args)
+    readFile: (...args) => ipcRenderer.invoke(ipcChannels.skillsReadFile, ...args),
+    builtinStatus: (...args) => ipcRenderer.invoke(ipcChannels.skillsBuiltinStatus, ...args),
+    builtinCheck: (...args) => ipcRenderer.invoke(ipcChannels.skillsBuiltinCheck, ...args),
+    builtinAutoUpdate: (...args) => ipcRenderer.invoke(ipcChannels.skillsBuiltinAutoUpdate, ...args),
+    builtinRestore: (...args) => ipcRenderer.invoke(ipcChannels.skillsBuiltinRestore, ...args),
+    onUpdated: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.skillsUpdated, listener);
+      return () => ipcRenderer.off(ipcChannels.skillsUpdated, listener);
+    }
   },
   research: {
     listProjects: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectsList, ...args),

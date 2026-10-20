@@ -16,13 +16,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
 import type { MenuPage } from '../shared/surfaces';
-import type { ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
+import type { BuiltinSkillsStatus, ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
 import { confirmShellRequestWithDialog } from './ipc/shell-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
 import { RocPaths } from './services/paths';
 import { agentChatRunEventType } from './plugins/agent/runtime';
 import { workspaceChangedEventType } from './plugins/workspace';
+import { builtinSkillsUpdatedEventType } from './plugins/skills';
 import {
   terminalSessionExitEventType,
   terminalSessionOutputEventType
@@ -254,6 +255,9 @@ async function createWindow(): Promise<void> {
     researchModelsRoot: app.isPackaged
       ? join(new RocPaths(process.env.ROC_DATA_ROOT).root, 'research-models')
       : join(mainModuleDir, '../../.runtime/research-models'),
+    builtinSkillsRoot: app.isPackaged
+      ? join(process.resourcesPath, 'builtin-skills')
+      : join(mainModuleDir, '../../resources/builtin-skills'),
     performanceObserverService,
     safeStorage: safeStorageBackend,
     runtimeMetricsProvider,
@@ -375,6 +379,11 @@ async function createWindow(): Promise<void> {
   kernel.subscribeEvent<TerminalSessionExitEvent>(terminalSessionExitEventType, (event) => {
     terminalOutputBatcher.flush();
     broadcastToWindows([mainWindow], ipcChannels.terminalExit, event.payload, {
+      include: (_window, index) => index === 0
+    });
+  });
+  kernel.subscribeEvent<BuiltinSkillsStatus>(builtinSkillsUpdatedEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.skillsUpdated, event.payload, {
       include: (_window, index) => index === 0
     });
   });

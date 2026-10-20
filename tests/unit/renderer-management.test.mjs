@@ -245,7 +245,7 @@ test('image previews arrive as data URLs and markdown is recognised by extension
   assert.match(skill.previewSizeLabel({ ...base, kind: 'text', relativePath: 'a.md', truncated: true }), /已截断/);
   assert.match(skill.previewTruncatedNote({ ...base, kind: 'text', relativePath: 'a.md', truncated: true }), /截断/);
   assert.equal(skill.previewTruncatedNote({ ...base, kind: 'text', relativePath: 'a.md' }), null);
-  assert.match(skill.SKILL_FIELD_NOTE, /没有分类、版本、来源与许可证/);
+  assert.match(skill.SKILL_FIELD_NOTE, /没有分类与版本字段/);
   assert.match(skill.LICENSE_BOUNDARY_NOTE, /CC BY-NC 4\.0/);
 });
 

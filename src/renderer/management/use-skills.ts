@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SkillFileEntry, SkillFilePreviewResult, SkillSnapshot } from '../../shared/types';
+import type {
+  BuiltinSkillsStatus,
+  SkillFileEntry,
+  SkillFilePreviewResult,
+  SkillSnapshot
+} from '../../shared/types';
 import type { AsyncStatus } from '../app/use-async-resource';
 import { errorMessage } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -7,11 +12,15 @@ import { notifySettingsChanged } from '../shared/settings-events';
 import { sortEntries } from './skill-model';
 import { useOptimisticFlags } from './use-optimistic-flags';
 import {
+  checkBuiltinSkills,
   deleteSkill,
+  getBuiltinSkillsStatus,
   importSkill,
   listSkillFiles,
   listSkills,
   readSkillFile,
+  restoreBuiltinSkillSource,
+  setBuiltinSkillsAutoUpdate,
   setSkillEnabled
 } from './management-store';
 
@@ -31,6 +40,37 @@ import {
  * reads the same snapshot from `settings.get`) and this panel cannot disagree about which skills
  * exist: the drawer shows the backend's list, never an optimistically patched copy.
  */
+
+/**
+ * Built-in source state.
+ *
+ * Kept next to the list rather than inside `SkillSnapshot` because it is source-scoped: two
+ * sources can be at different commits, one of them can be licensed for non-commercial use only,
+ * and a check can fail for one while the other updates successfully.
+ */
+type BuiltinSkillsStore = {
+  status: AsyncStatus;
+  error: string | null;
+  snapshot: BuiltinSkillsStatus | null;
+  reload: () => void;
+  check: {
+    pending: boolean;
+    error: string | null;
+    lastChanged: boolean | null;
+    run: (force?: boolean) => Promise<boolean>;
+  };
+  autoUpdate: {
+    pending: boolean;
+    error: string | null;
+    run: (autoUpdate: boolean) => Promise<boolean>;
+  };
+  restore: {
+    pending: boolean;
+    error: string | null;
+    sourceId: string | null;
+    run: (sourceId: string) => Promise<boolean>;
+  };
+};
 
 export type SkillsStore = {
   status: AsyncStatus;
@@ -59,6 +99,7 @@ export type SkillsStore = {
   toggleEnabled: { pending: boolean; error: string | null; run: (skill: SkillSnapshot, enabled: boolean) => Promise<boolean> };
   importFrom: { pending: boolean; error: string | null; lastImported: SkillSnapshot | null; run: (sourcePath: string) => Promise<boolean> };
   remove: { pending: boolean; error: string | null; run: (skillId: string) => Promise<boolean> };
+  builtin: BuiltinSkillsStore;
 };
 
 export function useSkills(client: RocClient): SkillsStore {
@@ -88,6 +129,17 @@ export function useSkills(client: RocClient): SkillsStore {
   const [removePending, setRemovePending] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [lastImported, setLastImported] = useState<SkillSnapshot | null>(null);
+
+  const [builtinSnapshot, setBuiltinSnapshot] = useState<BuiltinSkillsStatus | null>(null);
+  const [builtinStatus, setBuiltinStatus] = useState<AsyncStatus>('loading');
+  const [builtinError, setBuiltinError] = useState<string | null>(null);
+  const [builtinNonce, setBuiltinNonce] = useState(0);
+  const [builtinCheckPending, setBuiltinCheckPending] = useState(false);
+  const [builtinAutoUpdatePending, setBuiltinAutoUpdatePending] = useState(false);
+  const [builtinRestorePending, setBuiltinRestorePending] = useState(false);
+  const [builtinActionError, setBuiltinActionError] = useState<string | null>(null);
+  const [builtinLastChanged, setBuiltinLastChanged] = useState<boolean | null>(null);
+  const [builtinRestoreSourceId, setBuiltinRestoreSourceId] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     setNonce((current) => current + 1);
@@ -228,6 +280,164 @@ export function useSkills(client: RocClient): SkillsStore {
     return ids;
   }, [skills]);
 
+  const reloadBuiltin = useCallback(() => {
+    setBuiltinNonce((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBuiltinStatus('loading');
+    void (async () => {
+      try {
+        const result = await getBuiltinSkillsStatus(client);
+        if (cancelled) {
+          return;
+        }
+        if (!result.ok) {
+          setBuiltinStatus('error');
+          setBuiltinError(result.error.message);
+          return;
+        }
+        setBuiltinSnapshot(result.data);
+        setBuiltinStatus('ready');
+        setBuiltinError(null);
+      } catch (caught) {
+        if (!cancelled) {
+          setBuiltinStatus('error');
+          setBuiltinError(errorMessage(caught));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, builtinNonce]);
+
+  /**
+   * Push channel for the daily sync and the manual check. The list read is repeated because a new
+   * upstream commit can add or remove skills, and the composer reads the same `settings.get`
+   * snapshot — both consumers are stale after this event.
+   */
+  useEffect(() => {
+    const unsubscribe = client.api.skills.onUpdated((status) => {
+      setBuiltinSnapshot(status);
+      setBuiltinStatus('ready');
+      setBuiltinError(null);
+      reload();
+      notifySettingsChanged();
+    });
+    return unsubscribe;
+  }, [client, reload]);
+
+  const checkBuiltin = useCallback(
+    async (force = false): Promise<boolean> => {
+      setBuiltinCheckPending(true);
+      setBuiltinActionError(null);
+      setBuiltinLastChanged(null);
+      try {
+        const result = await checkBuiltinSkills(client, { force });
+        if (!result.ok) {
+          setBuiltinActionError(result.error.message);
+          return false;
+        }
+        setBuiltinSnapshot({
+          schemaVersion: result.data.schemaVersion,
+          autoUpdate: result.data.autoUpdate,
+          updating: result.data.updating,
+          lastCheckedAt: result.data.lastCheckedAt,
+          sources: result.data.sources
+        });
+        setBuiltinLastChanged(result.data.changed);
+        if (result.data.errors.length > 0) {
+          setBuiltinActionError(result.data.errors.join('；'));
+        }
+        reload();
+        notifySettingsChanged();
+        return result.data.errors.length === 0;
+      } catch (caught) {
+        setBuiltinActionError(errorMessage(caught));
+        return false;
+      } finally {
+        setBuiltinCheckPending(false);
+      }
+    },
+    [client, reload]
+  );
+
+  const setBuiltinAutoUpdate = useCallback(
+    async (autoUpdate: boolean): Promise<boolean> => {
+      setBuiltinAutoUpdatePending(true);
+      setBuiltinActionError(null);
+      try {
+        const result = await setBuiltinSkillsAutoUpdate(client, { autoUpdate });
+        if (!result.ok) {
+          setBuiltinActionError(result.error.message);
+          return false;
+        }
+        setBuiltinSnapshot(result.data);
+        return true;
+      } catch (caught) {
+        setBuiltinActionError(errorMessage(caught));
+        return false;
+      } finally {
+        setBuiltinAutoUpdatePending(false);
+      }
+    },
+    [client]
+  );
+
+  const restoreBuiltin = useCallback(
+    async (sourceId: string): Promise<boolean> => {
+      setBuiltinRestorePending(true);
+      setBuiltinRestoreSourceId(sourceId);
+      setBuiltinActionError(null);
+      try {
+        const result = await restoreBuiltinSkillSource(client, { sourceId });
+        if (!result.ok) {
+          setBuiltinActionError(result.error.message);
+          return false;
+        }
+        setBuiltinSnapshot(result.data);
+        reload();
+        notifySettingsChanged();
+        return true;
+      } catch (caught) {
+        setBuiltinActionError(errorMessage(caught));
+        return false;
+      } finally {
+        setBuiltinRestorePending(false);
+        setBuiltinRestoreSourceId(null);
+      }
+    },
+    [client, reload]
+  );
+
+  const builtin = useMemo<BuiltinSkillsStore>(
+    () => ({
+      status: builtinStatus,
+      error: builtinError,
+      snapshot: builtinSnapshot,
+      reload: reloadBuiltin,
+      check: { pending: builtinCheckPending, error: builtinActionError, lastChanged: builtinLastChanged, run: checkBuiltin },
+      autoUpdate: { pending: builtinAutoUpdatePending, error: builtinActionError, run: setBuiltinAutoUpdate },
+      restore: { pending: builtinRestorePending, error: builtinActionError, sourceId: builtinRestoreSourceId, run: restoreBuiltin }
+    }),
+    [
+      builtinStatus,
+      builtinError,
+      builtinSnapshot,
+      reloadBuiltin,
+      builtinCheckPending,
+      builtinLastChanged,
+      checkBuiltin,
+      builtinAutoUpdatePending,
+      setBuiltinAutoUpdate,
+      builtinRestorePending,
+      builtinRestoreSourceId,
+      restoreBuiltin
+    ]
+  );
+
   const toggleEnabled = useCallback(
     async (skill: SkillSnapshot, enabled: boolean): Promise<boolean> => {
       setTogglePending(true);
@@ -334,7 +544,8 @@ export function useSkills(client: RocClient): SkillsStore {
       closePreview: () => setPreviewPath(null),
       toggleEnabled: { pending: togglePending, error: mutationError, run: toggleEnabled },
       importFrom: { pending: importPending, error: mutationError, lastImported, run: importFrom },
-      remove: { pending: removePending, error: mutationError, run: remove }
+      remove: { pending: removePending, error: mutationError, run: remove },
+      builtin
     }),
     [
       status,
@@ -362,7 +573,8 @@ export function useSkills(client: RocClient): SkillsStore {
       lastImported,
       toggleEnabled,
       importFrom,
-      remove
+      remove,
+      builtin
     ]
   );
 }

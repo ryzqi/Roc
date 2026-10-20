@@ -53,7 +53,7 @@ src/
   rtk-integration/# shell 输出压缩
 tests/
 scripts/
-resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill
+resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill、内置技能快照与 catalog
 ```
 
 设计口径没有单独的文档目录：真身是 `src/renderer/styles/tokens.css`（颜色与刻度）与 `src/renderer/shared/motion.ts`（动效），组件不得写死颜色。
@@ -368,7 +368,18 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | arXiv | `https://export.arxiv.org/api/query` | 预印本（Atom，用 `fast-xml-parser` 解析） |
 | Hugging Face | `https://huggingface.co/<repoId>/resolve/<revision>/<path>` | 解析模型下载（唯一会下大文件的联网点） |
 
-### 七、已评估但未集成
+### 七、内置技能源
+
+两个上游 Skill 仓库随安装包内置（离线可用），运行时每 24 小时比对提交并同步；细节见
+[docs/builtin-skills.md](docs/builtin-skills.md)。快照与提交号的单一真理源是
+[`resources/builtin-skills/catalog.json`](resources/builtin-skills/catalog.json)。
+
+| 组件 | 版本 | 来源 | 许可证 | 更新方式 |
+| --- | --- | --- | --- | --- |
+| Nature Skills（23 个技能） | 快照 `2a163b95` | `https://github.com/Yuan1z0825/nature-skills` ✓ | Apache-2.0 | `pnpm sync:builtin-skills` → 提交 `resources/builtin-skills/nature-skills.tar.gz` 与 `catalog.json`；运行时自动同步 |
+| Academic Research Skills（5 个技能） | 快照 `cfd081d8` | `https://github.com/Imbad0202/academic-research-skills` ✓ | **CC BY-NC 4.0** | 同上；许可证不允许默认分发，所以内置但不自动安装（管理 → 技能里显式接受后安装） |
+
+### 八、已评估但未集成
 
 记录在这里是为了避免重复讨论；判据是 `AGENTS.md` 的**离线分发**与 `CONTEXT.md` 的**许可**两条约束。
 
@@ -385,7 +396,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | vega-lite / mermaid | `https://github.com/vega/vega-lite` ✓ / `https://github.com/mermaid-js/mermaid` ✓ | 计划内的图稿扩展（见下） |
 | graphviz | `https://github.com/graphviz/graphviz` ✓ | 许可证是 EPL-1.0（非宽松）；同类需求优先 Mermaid |
 
-### 八、计划中的集成（尚未落地）
+### 九、计划中的集成（尚未落地）
 
 | 组件 | 版本 | 网址 | 许可证 | 义务 |
 | --- | --- | --- | --- | --- |
@@ -395,7 +406,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 落地时以上三条必须同时进 §五 的 npm 运行时清单与随包 `resources/research-runtime/licenses/`。
 
-### 九、只作参照、不引入代码
+### 十、只作参照、不引入代码
 
 | 项目 | 网址 | 借鉴的是什么 |
 | --- | --- | --- |
@@ -403,7 +414,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | Vale 上游规则 | `https://github.com/errata-ai/vale` ✓ | 规则格式与 `existence/substitution` 的写法；**规则内容为本仓库自研** |
 | Prose 写作风格规则 | `https://github.com/jdkato/prose` | `write-good` 系规则的思路来源；只借思路，不复制文本 |
 
-### 十、维护动作
+### 十一、维护动作
 
 | 场景 | 动作 |
 | --- | --- |

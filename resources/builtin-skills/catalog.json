@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-20T14:17:47.043Z",
+  "sources": [
+    {
+      "id": "nature-skills",
+      "displayName": "Nature Skills",
+      "repo": "Yuan1z0825/nature-skills",
+      "ref": "main",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/Yuan1z0825/nature-skills",
+      "skillRoot": "skills",
+      "supportDirs": [],
+      "autoInstall": true,
+      "excludedDirectoryNames": [
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "tests",
+        "evals"
+      ],
+      "commit": "2a163b95255c608609ff815f3bbc6266591598e2",
+      "snapshot": {
+        "fileName": "nature-skills.tar.gz",
+        "sha256": "018bcca9d8aa2ce2c89c32212665246915de24c3b753cde41e67968f762fc833",
+        "sizeBytes": 31516111
+      }
+    },
+    {
+      "id": "academic-research-skills",
+      "displayName": "Academic Research Skills",
+      "repo": "Imbad0202/academic-research-skills",
+      "ref": "main",
+      "license": "CC-BY-NC-4.0",
+      "homepage": "https://github.com/Imbad0202/academic-research-skills",
+      "skillRoot": "",
+      "supportDirs": [
+        "shared",
+        "tools",
+        "commands",
+        "agents",
+        "scripts",
+        "docs"
+      ],
+      "autoInstall": false,
+      "excludedDirectoryNames": [
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "tests",
+        "evals",
+        "audits",
+        "examples"
+      ],
+      "commit": "cfd081d8f309ec65254d9f9f04c845ee78b1ec1d",
+      "snapshot": {
+        "fileName": "academic-research-skills.tar.gz",
+        "sha256": "b4537506c308cbe9310a067c4cd6370d23a803f95c81dfc42b1482531d6297d1",
+        "sizeBytes": 5595975
+      }
+    }
+  ]
+}

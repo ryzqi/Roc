@@ -66,7 +66,12 @@ export const skillSnapshotSchema = z
     path: z.string(),
     description: z.string(),
     status: z.enum(['ready', 'invalid']),
-    lastError: z.string().nullable().optional()
+    lastError: z.string().nullable().optional(),
+    /** `builtin` rows come from a vendored upstream repository and are refreshed by its sync. */
+    origin: z.enum(['builtin', 'user']),
+    sourceId: z.string().nullable(),
+    upstreamRepo: z.string().nullable(),
+    upstreamCommit: z.string().nullable()
   })
   .strict();
 

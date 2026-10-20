@@ -6,8 +6,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
-  statSync,
-  writeFileSync
+  statSync
 } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 import { listSkills, parseSkillMetadata, type LoaderSkillMetadata } from 'deepagents';
@@ -22,17 +21,8 @@ import type {
 } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
+import { readSkillState, writeSkillState } from './skill-state';
 import { requireText } from './validation';
-
-type SkillState = {
-  schemaVersion: 1;
-  enabled: boolean;
-};
-
-const defaultSkillState: SkillState = {
-  schemaVersion: 1,
-  enabled: true
-};
 
 const skillListLimit = 200;
 const skillIgnoredDirectories = new Set(['.git']);
@@ -88,7 +78,7 @@ export class SkillService {
     }
     const id = this.normalizeSkillId(metadata.name);
     const targetRoot = join(this.paths.skillsDir, id);
-    const priorState = this.readState(id);
+    const priorState = readSkillState(targetRoot);
     if (resolve(targetRoot) !== sourceRoot) {
       rmSync(targetRoot, { recursive: true, force: true });
       mkdirSync(targetRoot, { recursive: true });
@@ -96,7 +86,7 @@ export class SkillService {
         cpSync(join(sourceRoot, entry), join(targetRoot, entry), { recursive: true });
       }
     }
-    this.writeState(id, priorState);
+    writeSkillState(targetRoot, { ...priorState, origin: 'user', sourceId: null, upstreamRepo: null, upstreamCommit: null });
     const imported = this.readSkill(id, this.buildOfficialSkillIndex());
     if (imported === null) {
       throw new RocDomainError({
@@ -117,10 +107,8 @@ export class SkillService {
     if (skill === null) {
       throw this.notFound(skillId);
     }
-    this.writeState(skillId, {
-      schemaVersion: 1,
-      enabled
-    });
+    const skillDir = join(this.paths.skillsDir, skillId);
+    writeSkillState(skillDir, { ...readSkillState(skillDir), enabled });
     const updated = this.readSkill(skillId, officialSkillIndex);
     if (updated === null) {
       throw this.notFound(skillId);
@@ -277,7 +265,7 @@ export class SkillService {
       );
     }
 
-    const state = this.readState(id);
+    const state = readSkillState(skillPath);
     return {
       id: metadata.name,
       name: metadata.name,
@@ -285,27 +273,12 @@ export class SkillService {
       path: skillPath,
       description: metadata.description,
       status: 'ready',
-      lastError: null
+      lastError: null,
+      origin: state.origin,
+      sourceId: state.sourceId,
+      upstreamRepo: state.upstreamRepo,
+      upstreamCommit: state.upstreamCommit
     };
-  }
-
-  private readState(id: string): SkillState {
-    const statePath = join(this.paths.skillsDir, id, 'roc.skill.json');
-    if (!existsSync(statePath)) {
-      return defaultSkillState;
-    }
-    const parsed = JSON.parse(readFileSync(statePath, 'utf8')) as Partial<SkillState>;
-    if (parsed.schemaVersion !== 1 || typeof parsed.enabled !== 'boolean') {
-      return defaultSkillState;
-    }
-    return {
-      schemaVersion: 1,
-      enabled: parsed.enabled
-    };
-  }
-
-  private writeState(id: string, state: SkillState): void {
-    writeFileSync(join(this.paths.skillsDir, id, 'roc.skill.json'), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
   }
 
   private buildOfficialSkillIndex(): Map<string, LoaderSkillMetadata> {
@@ -320,6 +293,7 @@ export class SkillService {
     lastError: string,
     description = lastError
   ): SkillSnapshot {
+    const state = readSkillState(skillPath);
     return {
       id,
       name: id,
@@ -327,7 +301,11 @@ export class SkillService {
       path: skillPath,
       description,
       status: 'invalid',
-      lastError
+      lastError,
+      origin: state.origin,
+      sourceId: state.sourceId,
+      upstreamRepo: state.upstreamRepo,
+      upstreamCommit: state.upstreamCommit
     };
   }
 

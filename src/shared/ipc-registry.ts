@@ -82,6 +82,12 @@ import {
   settingsTrustHookRequestSchema
 } from './schemas/ipc-memory-settings';
 import {
+  builtinSkillsAutoUpdateRequestSchema,
+  builtinSkillsCheckRequestSchema,
+  builtinSkillsCheckResultSchema,
+  builtinSkillsStatusSchema
+} from './schemas/builtin-skills';
+import {
   mcpApprovalModeRequestSchema,
   mcpServerConfigSchema,
   mcpServerEnabledRequestSchema,
@@ -374,6 +380,10 @@ export const ipcRegistry = {
     request({ key: 'skillsDelete', channel: 'roc:skills:delete', domain: 'skills', method: 'deleteSkill', kind: 'plugin', capabilityName: 'skills.delete', inputTransform: id('id'), contract: methodContract(stringArg, deletedResultSchema) }),
     request({ key: 'skillsListFiles', channel: 'roc:skills:list-files', domain: 'skills', method: 'listFiles', kind: 'plugin', capabilityName: 'skills.files.list', inputTransform: first, contract: methodContract(oneArg(skillFileTreeRequestSchema), skillFileTreeResultSchema) }),
     request({ key: 'skillsReadFile', channel: 'roc:skills:read-file', domain: 'skills', method: 'readFile', kind: 'plugin', capabilityName: 'skills.file.read', inputTransform: first, contract: methodContract(oneArg(skillFilePreviewRequestSchema), skillFilePreviewResultSchema) }),
+    request({ key: 'skillsBuiltinStatus', channel: 'roc:skills:builtin-status', domain: 'skills', method: 'builtinStatus', kind: 'plugin', capabilityName: 'skills.builtin.status', inputTransform: none, contract: methodContract(noArgs, builtinSkillsStatusSchema) }),
+    request({ key: 'skillsBuiltinCheck', channel: 'roc:skills:builtin-check', domain: 'skills', method: 'builtinCheck', kind: 'plugin', capabilityName: 'skills.builtin.check', inputTransform: first, contract: methodContract(oneArg(builtinSkillsCheckRequestSchema), builtinSkillsCheckResultSchema) }),
+    request({ key: 'skillsBuiltinAutoUpdate', channel: 'roc:skills:builtin-auto-update', domain: 'skills', method: 'builtinAutoUpdate', kind: 'plugin', capabilityName: 'skills.builtin.autoUpdate', inputTransform: first, contract: methodContract(oneArg(builtinSkillsAutoUpdateRequestSchema), builtinSkillsStatusSchema) }),
+    request({ key: 'skillsBuiltinRestore', channel: 'roc:skills:builtin-restore', domain: 'skills', method: 'builtinRestore', kind: 'plugin', capabilityName: 'skills.builtin.restore', inputTransform: first, contract: methodContract(oneArg(z.object({ sourceId: z.string().min(1) }).strict()), builtinSkillsStatusSchema) }),
     request({ key: 'researchProjectsList', channel: 'roc:research:projects-list', domain: 'research', method: 'listProjects', kind: 'plugin', capabilityName: 'research.projects.list', inputTransform: none, contract: methodContract(noArgs, researchProjectSchema.array()) }),
     request({ key: 'researchProjectsGet', channel: 'roc:research:projects-get', domain: 'research', method: 'getProject', kind: 'plugin', capabilityName: 'research.projects.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchProjectSchema) }),
     request({ key: 'researchProjectsCreate', channel: 'roc:research:projects-create', domain: 'research', method: 'createProject', kind: 'plugin', capabilityName: 'research.projects.create', inputTransform: first, contract: methodContract(oneArg(researchProjectCreateRequestSchema), researchProjectSchema) }),
@@ -523,7 +533,8 @@ export const ipcRegistry = {
     event({ key: 'workspaceChanged', channel: 'roc:workspace:changed', domain: 'workspace', method: 'onChanged', contract: eventContract(workspaceChangedEventSchema) }),
     event({ key: 'terminalOutput', channel: 'roc:terminal:output', domain: 'terminal', method: 'onOutput', contract: eventContract(terminalSessionOutputEventSchema) }),
     event({ key: 'terminalExit', channel: 'roc:terminal:exit', domain: 'terminal', method: 'onExit', contract: eventContract(terminalSessionExitEventSchema) }),
-    event({ key: 'chatRunEvent', channel: 'roc:chat:run-event', domain: 'chat', method: 'onRunEvent', contract: eventContract(chatRunEventSchema) })
+    event({ key: 'chatRunEvent', channel: 'roc:chat:run-event', domain: 'chat', method: 'onRunEvent', contract: eventContract(chatRunEventSchema) }),
+    event({ key: 'skillsUpdated', channel: 'roc:skills:updated', domain: 'skills', method: 'onUpdated', contract: eventContract(builtinSkillsStatusSchema) })
   ]
 } as const;
 

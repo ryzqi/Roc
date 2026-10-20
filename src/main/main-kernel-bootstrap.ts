@@ -45,6 +45,7 @@ export type MainKernelBootstrapOptions = {
   dataRoot?: string;
   researchToolchainRoot?: string;
   researchModelsRoot?: string;
+  builtinSkillsRoot?: string;
   safeStorage: SafeStorageBackend;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
   plugins?: readonly RocPlugin[];
@@ -132,7 +133,8 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
         isPackaged: options.isPackaged,
         getAppearance: options.getAppearance,
         researchToolchainRoot: options.researchToolchainRoot,
-        researchModelsRoot: options.researchModelsRoot
+        researchModelsRoot: options.researchModelsRoot,
+        builtinSkillsRoot: options.builtinSkillsRoot
       }),
     safeStorage: options.safeStorage
   });
@@ -181,6 +183,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 function createDefaultMainKernelPlugins(input: {
   researchToolchainRoot?: string;
   researchModelsRoot?: string;
+  builtinSkillsRoot?: string;
   databasePool: DatabasePool;
   paths: RocPaths;
   configService: ConfigService;
@@ -269,7 +272,7 @@ function createDefaultMainKernelPlugins(input: {
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
       exportRoot: join(input.paths.root, 'research-exports'), proseRoot: join(input.paths.root, 'research-prose') }),
     createMcpPlugin({ configService }),
-    createSkillsPlugin({ rootDir: input.paths.root }),
+    createSkillsPlugin({ rootDir: input.paths.root, bundledRoot: input.builtinSkillsRoot }),
     createRuntimeToolsPlugin({
       confirmShellRequest: input.confirmShellRequest,
       rootDir: input.paths.root,

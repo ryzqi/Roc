@@ -1,12 +1,17 @@
 import { Suspense, lazy, useState } from 'react';
-import { ChevronRight, File as FileIcon, Folder, Package, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronRight, DownloadCloud, File as FileIcon, Folder, Package, RefreshCw, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import { formatBytes } from '../../shared/format';
 import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
 import { DelayedFallback } from '../../shell/DelayedFallback';
 import {
+  BUILTIN_SKILLS_NOTE,
   LICENSE_BOUNDARY_NOTE,
   SKILL_FIELD_NOTE,
+  builtinSourceActionLabel,
+  builtinSourceSummary,
+  formatBuiltinTimestamp,
+  shortCommit,
   filePreviewKind,
   joinRelativePath,
   parentRelativePath,
@@ -53,8 +58,118 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
   const segments = pathSegments(skills.dirPath);
   const deleteSkillRecord = skills.skills.find((skill) => skill.id === deleteTarget) ?? null;
 
+  const builtin = skills.builtin;
+  const builtinSnapshot = builtin.snapshot;
+
   return (
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-skills">
+      <FormSection
+        title="内置技能源"
+        hint="skills.builtin.status / check / autoUpdate / restore"
+        testId="mgmt-skills-builtin"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted text-[var(--font-meta-size)]" data-testid="mgmt-skills-builtin-summary">
+            {builtinSnapshot === null
+              ? builtin.status === 'loading'
+                ? '读取内置技能源…'
+                : '没有可用的内置技能源'
+              : `${builtinSnapshot.sources.length} 个来源 · 上次检查 ${formatBuiltinTimestamp(builtinSnapshot.lastCheckedAt)}${builtinSnapshot.updating ? ' · 正在同步' : ''}`}
+          </span>
+          <button
+            type="button"
+            data-testid="mgmt-skills-builtin-check"
+            disabled={builtin.check.pending || builtinSnapshot?.updating === true}
+            onClick={() => {
+              void builtin.check.run(true);
+            }}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+          >
+            <RefreshCw size={11} aria-hidden="true" />
+            {builtin.check.pending || builtinSnapshot?.updating === true ? '检查中…' : '立即检查更新'}
+          </button>
+          <label className="flex items-center gap-1 text-[var(--font-micro-size)] text-muted">
+            <input
+              type="checkbox"
+              checked={builtinSnapshot?.autoUpdate ?? true}
+              disabled={builtinSnapshot === null || builtin.autoUpdate.pending}
+              onChange={(event) => {
+                void builtin.autoUpdate.run(event.target.checked);
+              }}
+              data-testid="mgmt-skills-builtin-auto-update"
+              className="h-3.5 w-3.5 rounded-[3px] border border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            />
+            每天自动检查
+          </label>
+        </div>
+
+        {builtin.status === 'error' ? (
+          <FormNote tone="warn" testId="mgmt-skills-builtin-error">
+            {builtin.error}
+          </FormNote>
+        ) : null}
+        {builtin.check.error === null ? null : (
+          <FormNote tone="warn" testId="mgmt-skills-builtin-action-error">
+            {builtin.check.error}
+          </FormNote>
+        )}
+        {builtin.check.lastChanged === true ? (
+          <FormNote testId="mgmt-skills-builtin-changed">已从上游同步到新版本。</FormNote>
+        ) : null}
+
+        {builtinSnapshot === null ? null : (
+          <ul className="flex flex-col gap-1" data-testid="mgmt-skills-builtin-rows">
+            {builtinSnapshot.sources.map((source) => (
+              <li
+                key={source.id}
+                className="flex flex-col gap-1 rounded-card px-2 py-1.5 hover:bg-[var(--overlay-hover)]"
+                data-testid={`mgmt-skills-builtin-${source.id}`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <DownloadCloud size={12} aria-hidden="true" className="text-muted" />
+                    <span className="text-ink text-[var(--font-meta-size)]">{source.displayName}</span>
+                    <span className="font-mono text-subtle text-[var(--font-micro-size)]">{source.repo}</span>
+                    <span className="text-muted text-[var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-license-${source.id}`}>
+                      {source.license ?? '许可证未知'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    data-testid={`mgmt-skills-builtin-restore-${source.id}`}
+                    disabled={builtin.restore.pending}
+                    onClick={() => {
+                      void builtin.restore.run(source.id);
+                    }}
+                    className={formSecondaryButtonClass}
+                  >
+                    {builtin.restore.pending && builtin.restore.sourceId === source.id
+                      ? '安装中…'
+                      : builtinSourceActionLabel(source)}
+                  </button>
+                </div>
+                <span className="text-muted text-[var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-state-${source.id}`}>
+                  {builtinSourceSummary(source)} · 上游 {shortCommit(source.installedCommit)} · 检查于{' '}
+                  {formatBuiltinTimestamp(source.lastCheckedAt)}
+                </span>
+                {source.lastError === null ? null : (
+                  <FormNote tone="warn" testId={`mgmt-skills-builtin-last-error-${source.id}`}>
+                    {source.lastError}
+                  </FormNote>
+                )}
+                {source.installedCommit === null && source.license !== null && source.license !== 'Apache-2.0' ? (
+                  <FormNote testId={`mgmt-skills-builtin-license-note-${source.id}`}>
+                    该来源使用 {source.license}，不能作为 Roc 核心开源内容默认启用；点上面的按钮即表示你接受该许可并安装。
+                  </FormNote>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <FormNote testId="mgmt-skills-builtin-note">{BUILTIN_SKILLS_NOTE}</FormNote>
+      </FormSection>
+
       <FormSection
         title="已安装技能"
         hint="skills.list / setEnabled / import / delete"
@@ -127,6 +242,14 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                           data-testid={`mgmt-skill-status-${skill.id}`}
                         >
                           {skillStatusLabels[skill.status]}
+                        </span>
+                        <span
+                          className="text-subtle text-[var(--font-micro-size)]"
+                          data-testid={`mgmt-skill-origin-${skill.id}`}
+                        >
+                          {skill.origin === 'builtin'
+                            ? `内置 · ${skill.sourceId ?? ''} · ${shortCommit(skill.upstreamCommit ?? null)}`
+                            : '用户导入'}
                         </span>
                       </span>
                       <span className="block text-muted text-[var(--font-micro-size)]">{skill.description}</span>

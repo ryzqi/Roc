@@ -1,4 +1,9 @@
-import type { SkillFileEntry, SkillFilePreviewResult, SkillSnapshot } from '../../shared/types';
+import type {
+  BuiltinSkillSourceStatus,
+  SkillFileEntry,
+  SkillFilePreviewResult,
+  SkillSnapshot
+} from '../../shared/types';
 
 /**
  * Skill projections (P9/T9.2).
@@ -23,8 +28,11 @@ import type { SkillFileEntry, SkillFilePreviewResult, SkillSnapshot } from '../.
 export const LICENSE_BOUNDARY_NOTE =
   '许可边界：内置开源技能（Apache-2.0 / MIT 等）可随 Roc 分发；受 CC BY-NC 4.0 等限制的非商业技能插件只能在许可允许的边界内作为独立插件分发，不能伪装成 Roc 核心的标准开源内容。';
 
+export const BUILTIN_SKILLS_NOTE =
+  '两个上游仓库的技能快照随 Roc 分发出厂，离线可用；之后每天比对一次上游提交，有变化就同步到本机。Nature Skills 是 Apache-2.0；Academic Research Skills 是 CC BY-NC 4.0（非商业），只在你明确安装后才会启用和自动更新。';
+
 export const SKILL_FIELD_NOTE =
-  '技能快照只有 id / 名称 / 描述 / 路径 / 启停 / 状态（ready·invalid）：没有分类、版本、来源与许可证字段，所以这里不显示也不筛选这些维度。';
+  '技能快照是 id / 名称 / 描述 / 路径 / 启停 / 状态（ready·invalid）/ 来源（内置·用户）/ 上游仓库与提交：仍然没有分类与版本字段，所以这里不按分类或版本筛选。';
 
 export const skillStatusLabels: Readonly<Record<SkillSnapshot['status'], string>> = {
   ready: '可用',
@@ -134,4 +142,41 @@ export function previewSizeLabel(preview: SkillFilePreviewResult): string {
 /** `truncated` means the panel must not offer an edit affordance (it never does) nor compare sizes. */
 export function previewTruncatedNote(preview: SkillFilePreviewResult): string | null {
   return preview.truncated ? '预览被截断：文件比预览上限大，这里只显示开头部分。' : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Built-in sources                                                    */
+/* ------------------------------------------------------------------ */
+
+/** `null`/empty renders as `—` so a source that never checked is visibly different from one at 0. */
+export function formatBuiltinTimestamp(value: string | null): string {
+  if (value === null || value.length === 0) {
+    return '—';
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  const pad = (input: number): string => String(input).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+export function shortCommit(commit: string | null): string {
+  if (commit === null || commit.length === 0) {
+    return '—';
+  }
+  return commit.slice(0, 8);
+}
+
+/** Non-commercial sources need an explicit install; the label says what the click means. */
+export function builtinSourceActionLabel(source: BuiltinSkillSourceStatus): string {
+  if (source.installedCommit === null) {
+    return source.license === null ? '安装内置技能' : `接受 ${source.license} 并安装`;
+  }
+  return '重新安装内置版本';
+}
+
+export function builtinSourceSummary(source: BuiltinSkillSourceStatus): string {
+  const installed = source.installedCommit === null ? '未安装' : `已安装 ${source.skillIds.length} 个技能`;
+  return `${installed} · 内置 ${shortCommit(source.bundledCommit)} · 上游 ${shortCommit(source.installedCommit)}`;
 }
