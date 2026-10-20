@@ -223,6 +223,9 @@ export class ResearchExportService {
 
 function exportError(error: unknown): string {
   if (error instanceof ResearchProcessError) return error.code;
-  if (error instanceof Error && /^research_[a-z0-9_]+$/u.test(error.message)) return error.message;
+  // 与 `stage-runtime.ts` 的 `executionErrorCode()` 同一形状：本域的错误信息带 `<码>:<定位>`
+  // （例如 `research_export_figure_claim_in_body:claim_…`），用只接受裸码的正则会把定位丢掉，
+  // 用户就只剩下一句「导出失败」。
+  if (error instanceof Error && /^research_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message;
   return 'research_export_failed';
 }

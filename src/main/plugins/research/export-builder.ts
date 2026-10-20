@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import type { ResearchExportExecution, ResearchExportSources } from '../../../shared/schemas/research-exports';
 import { archiveSource, exportFileLimit, ResearchExportFiles, type ExportToolchain } from './export-files';
+import { unknownCitationKeysIn } from './citation-integrity';
 import { defaultExportEntry, renderExportBody } from './export-sources';
 import { compileLatex } from './latex-service';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
@@ -12,6 +13,10 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   repository: ResearchRepository; tools: ExportToolchain; scratch: string; signal: AbortSignal }): Promise<void> {
   const { record, sources, writer, repository, tools, scratch, signal } = input;
   let entryPath = 'main.tex';
+  // 模板里所有会参与编译的 .tex 文本。缺失的 `\cite` 键**不会**让编译失败（Tectonic 退出码 0，
+  // 现有 BibTeX 闸门只管「.bib 文件缺失」），只会在 PDF 里渲染成未定义引用；
+  // 所以必须在编译前对真实字节做一次键的存在性检查。理由与实测见 `citation-integrity.ts`。
+  const citationSources: string[] = [];
   if (record.request.template.kind === 'imported') {
     if (sources.template === null) throw new Error('research_export_template_required');
     const template = repository.getTemplate({ projectId: record.projectId, templateId: sources.template.id });
@@ -21,15 +26,28 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     if (reservedPaths.includes(entryPath)) throw new Error('research_export_template_entry_invalid');
     const entry = (await readResearchFile(root, entryPath, 1024 * 1024)).toString('utf8').replace(/(?<!\\)%[^\n]*/gu, '');
     if (!/\\input\s*\{roc-manuscript\.tex\}/u.test(entry) || !/\\bibliography\s*\{roc-references\}/u.test(entry)) throw new Error('research_export_template_slots_required');
+    citationSources.push(entry);
     for (const file of sources.template.files) {
       signal.throwIfAborted();
       const reserved = reservedPaths.includes(file.path);
       await writer.copy(root, file, `${reserved ? 'provenance/template' : 'source'}/${file.path}`);
+      if (file.path === entryPath || !file.path.endsWith('.tex') || file.size > 1024 * 1024) continue;
+      citationSources.push((await readResearchFile(root, file.path, 1024 * 1024)).toString('utf8'));
     }
   } else await writer.write('source/main.tex', defaultExportEntry(record.request.title, record.request.template.language));
 
   const entryDirectory = dirname(entryPath);
-  await writer.write(join('source', entryDirectory, 'roc-manuscript.tex'), renderExportBody(sources));
+  const body = renderExportBody(sources);
+  const unknownCitations = unknownCitationKeysIn([...citationSources, body], sources.bibliography.map((entry) => entry.citationKey));
+  if (unknownCitations.length > 0) {
+    // 报告先写盘再抛：失败作业会保留 `writer.list()` 里的文件（`export-service.ts` 的 catch 分支），
+    // 所以读 `logs/citation-report.json` 能拿到全部缺失键，而错误码里只放第一个（见下）。
+    await writer.write('logs/citation-report.json', `${JSON.stringify({ unknownCitationKeys: unknownCitations }, null, 2)}\n`);
+    // 只把第一个键放进错误码：本域的错误码就是用户看到的信号，但它要能通过
+    // `exportError()` 的形状校验（与 `stage-runtime.ts` 同一形态），多键拼接会整条丢掉。
+    throw new Error(`research_export_citation_unknown:${unknownCitations[0]}`);
+  }
+  await writer.write(join('source', entryDirectory, 'roc-manuscript.tex'), body);
   await writer.write('provenance/approved-manuscript.tex', sources.manuscript.latex);
   await writer.write('provenance/sources.json', JSON.stringify(sources, null, 2));
   await writer.write('provenance/export-archive.ts', archiveSource);

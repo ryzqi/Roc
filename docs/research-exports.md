@@ -33,26 +33,46 @@ await research.prepareExport({
 
 ## 来源和输出
 
-准备开始前先过一道**正文结构闸门**（`manuscript-integrity.ts`，在 `collect()` 的副作用之前调用）：
+导出前有两道完整性检查，分居两个层，因为它们的输入不同：
+
+**一、正文结构闸门**（`manuscript-integrity.ts`，在 `collect()` 的副作用之前，准备的第一步）：
 
 | 码 | 含义 |
 | --- | --- |
-| `research_export_figure_claim_in_body` | 图稿主张被放进了正文小节（它只能作图注） |
+| `research_export_figure_claim_in_body` | 正文小节里的主张被标成 `figure`：它的溯源会被记成图稿主张 |
 
 为什么只有一条、以及其他几条不变量住在哪里，写在 `manuscript-integrity.ts` 开头。摘要：
 主张必须 `supported` 且证据可解析，由 `resolveManuscriptClaims()` 在**写正文时**
 （`saveManuscript`）与**读正文时**（`requireCurrentManuscript`，导出走的正是这条）各验一次；
 `supported` 但无证据的主张在 `createClaim` 就被拒了。上述三道都比导出的闸门早，再查一遍不会多
 拦住任何东西。真正没被管的是 `subjectType`：那一层只看状态与证据，所以一条 `figure` 主张能被写进
-正文小节，然后同时被渲染成正文（下面没有图）与图注。
+正文小节，并被当作普通正文渲染。
 
-错误信息带定位（`<码>:<claimId>`），因为科研域的错误码直接就是用户看到的信号。
-闸门在准备开始前就挡住，不会等图稿校验、实验快照跑完再失败；发布与交付时会重新跑一遍。
+**二、引用键闸门**（`citation-integrity.ts`，在 `export-builder.ts` 里、编译之前）：
 
-> `\cite` / `\ref` / `\label` 一致性**不在这里查**：正文的 `\cite` 键由构造保证来自快照，
-> 而模板里的缺失键由更强的闸门兜住——`export-builder.ts` 拒绝「BibTeX 报错被忽略」的编译结果。
-> `\ref` / `\label` 今天没有可失败的情形（Roc 只给图稿生成 `\label`，正文不生成 `\ref`）；
-> 等同跟交叉引用落到渲染器里时再把它加到这里。
+| 码 | 含义 |
+| --- | --- |
+| `research_export_citation_unknown` | 模板里引用了快照参考文献里没有的键；全部缺失键写在 `logs/citation-report.json` |
+
+这一条的必要性是**实测**出来的，不是推的：用随包 Tectonic 编译一份带 `\cite{does-not-exist}` 的文稿，
+
+- `.bib` 文件**不存在**时才出现 `errors were issued by BibTeX, but were ignored`（退出码仍是 0）——
+  `export-builder.ts` 只管这一种；
+- `.bib` 存在但**缺这个键**时，BibTeX 只在 `.blg` 里写
+  `Warning--I didn't find a database entry for "does-not-exist"`，Tectonic 退出码 0，
+  `.log` 里是 `LaTeX Warning: Citation 'does-not-exist' on page 1 undefined`。
+
+结果是：**一份引用键对不上的模板会编译成功并交付出去**，错误只在 PDF 里以一个未定义引用出现。
+正文自己的 `\cite` 键由构造保证来自快照（`renderCitations()` 缺键就抛 `research_citation_key_required`），
+所以这条规则真正的目标是**模板自己的 `.tex`**。它扫描本次会参与编译的 `.tex`（入口 + 模板文件 + 生成的正交），
+跳过注释、`verbatim` / `lstlisting` / `minted` 与 `\nocite{*}`。
+
+错误信息带定位（`<码>:<claimId>`）：科研域的错误码直接就是用户看到的信号，
+但**位置**只在同步路径（publish / write / 每个 verifyStage）上完整——它们在 `collect()` 的调用栈里；
+`prepare` 走后台作业，错误码要过 `exportError()` 的形状校验才能落进记录。
+
+> `\ref` / `\label` 一致性**不在这里查**：Roc 只给图稿生成 `\label`，正文不生成 `\ref`，
+> 今天没有可失败的情形。等同跟交叉引用落到渲染器里时再把它加到这里。
 
 准备过程冻结批准正文及其主张/证据、批准图稿、引用的文献元数据、模型与实验运行、原始代码/数据和来源定位。文献引用键取自文献库；BibTeX crossref 父条目递归纳入快照及版本检查，并排在引用它的条目之后。父键优先匹配当前项目，未匹配时只接受全局唯一的有效条目。缺失、歧义、循环、版本变化或引用键冲突都会失败；文件与实验来源生成保留实际标题和定位的 misc 条目。正文和图稿的证据 ID 与 BibTeX 引用键之间的映射保存在追溯数据中。
 

@@ -26,8 +26,12 @@ import Database from 'better-sqlite3';
  *
  * `better-sqlite3` is native and cannot be bundled into a `data:` module, hence the temp directory
  * with a `node_modules` symlink. The `?raw` loaders are needed because `repository.ts` reaches
- * `figure-runner.ts` and `research-skills.ts`, which inline `figure.py` and the stage Skills —
- * the same two loaders `electron.vite.config.ts` sets for the main bundle.
+ * `figure-runner.ts` and `research-skills.ts`, which inline `figure.py` and the stage Skills.
+ *
+ * On the loaders: esbuild resolves a `?raw` specifier as a path whose extension is still `.py` /
+ * `.md`, so a `loader` map is enough — no `onResolve` plugin to strip the suffix. The product build
+ * needs none of this because Vite/rolldown handles `?raw` natively; `electron.vite.config.ts` has no
+ * loader configuration to copy from.
  */
 
 let tempDir;
