@@ -59,19 +59,24 @@ export class HookCommandRunner {
       let stdout = '';
       let stderr = '';
       let settled = false;
+      // A cleanup failure must be reported, not thrown from a timer callback.
+      const terminate = (): string | null => {
+        try { terminateProcessTree(child); return null; }
+        catch { return 'hook_command_cleanup_failed'; }
+      };
       const timeout = setTimeout(() => {
         if (settled) {
           return;
         }
         settled = true;
         request.signal?.removeEventListener('abort', abort);
-        terminateProcessTree(child);
+        const failure = terminate();
         resolve({
           status: 'failed',
           durationMs: Date.now() - startedAt,
           stdout: truncateOutput(stdout),
           stderr: truncateOutput(stderr),
-          error: 'hook_command_timeout'
+          error: failure ?? 'hook_command_timeout'
         });
       }, request.timeoutSeconds * 1000);
       const abort = () => {
@@ -80,13 +85,13 @@ export class HookCommandRunner {
         }
         settled = true;
         clearTimeout(timeout);
-        terminateProcessTree(child);
+        const failure = terminate();
         resolve({
           status: 'failed',
           durationMs: Date.now() - startedAt,
           stdout: truncateOutput(stdout),
           stderr: truncateOutput(stderr),
-          error: 'hook_command_aborted'
+          error: failure ?? 'hook_command_aborted'
         });
       };
       if (request.signal?.aborted === true) {

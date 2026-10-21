@@ -1,4 +1,5 @@
 export { verifyExtensions } from './extensions';
+export { verifyOptimizer } from './optimizer/optimizer';
 export { verifyTaskContracts } from './task-contract';
 export { runExecutionScenario, runIsolationScenario } from './execution';
 import assert from 'node:assert/strict';
@@ -239,7 +240,11 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
     case 'experiment': {
       const values = [[1, 2, 3], [2, 4], [1, null, 3], [-2, 1], [0, 0], [0.5, 1.25]][s.index];
       writeFileSync(join(dir, 'data.json'), JSON.stringify(values));
-      const numbers = JSON.parse(readFileSync(join(dir, 'data.json'), 'utf8')).filter((x: unknown) => x !== null) as number[];
+      let parsed: unknown;
+      try { parsed = JSON.parse(readFileSync(join(dir, 'data.json'), 'utf8')); }
+      catch (error) { throw new Error(`fixture_experiment_data_invalid:${String(error)}`); }
+      if (!Array.isArray(parsed)) throw new Error('fixture_experiment_data_invalid');
+      const numbers = parsed.filter((x: unknown) => x !== null) as number[];
       const sum = numbers.reduce((a, b) => a + b, 0);
       const result = s.variant === 'mean' ? sum / numbers.length : sum;
       assert.equal(result, [6, 3, 4, -1, 0, 1.75][s.index]);
@@ -356,7 +361,7 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
         throw new Error('unexpected_dispatch');
       });
       assert.equal(dispatched, false);
-      assert.equal(Reflect.get(result, 'status'), 'error');
+      assert.equal((result as { status?: unknown }).status, 'error');
       return { rejected: true, boundary: 'tool-protocol', malformedUnboundCall: s.variant === 'malformed-unbound-call' };
     }
     default: throw new Error(`unsupported_pilot_family:${s.family}`);

@@ -384,25 +384,33 @@ export class ShellExecutionService {
           }
         });
       };
+      const terminate = (message: string): Error => {
+        try {
+          terminateProcessTree(child);
+          return new Error(message);
+        } catch (error) {
+          return new Error(message, { cause: error });
+        }
+      };
       const abort = () => {
         if (settled) {
           return;
         }
         settled = true;
-        terminateProcessTree(child);
+        const failure = terminate('shell_execution_aborted');
         cleanup();
         finishArtifact(false);
-        reject(new Error('shell_execution_aborted'));
+        reject(failure);
       };
       const deadline = setTimeout(() => {
         if (settled) {
           return;
         }
         settled = true;
-        terminateProcessTree(child);
+        const failure = terminate('shell_execution_deadline_exceeded');
         cleanup();
         finishArtifact(false);
-        reject(new Error('shell_execution_deadline_exceeded'));
+        reject(failure);
       }, shellDeadlineMs);
       child.stdout.on('data', (chunk: Buffer | string) => {
         if (settled) {

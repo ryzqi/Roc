@@ -51,8 +51,15 @@ export class MacOsIsolatedEnvironment implements ExecutionEnvironment {
       let cleanupError: Error | undefined;
       const stop = () => {
         if (stopped) return cleanupError;
-        stopped = true;
-        try { terminateProcessTree(child); } catch (error) { cleanupError = new Error('isolated_environment_cleanup_failed', { cause: error }); }
+        // A group can be caught mid-dissolution at `exit` (macOS reports EPERM while it empties).
+        // Keep the failure and retry once at `close`; only a still-unsignalable group is reported.
+        try {
+          terminateProcessTree(child);
+          stopped = true;
+          cleanupError = undefined;
+        } catch (error) {
+          cleanupError = new Error('isolated_environment_cleanup_failed', { cause: error });
+        }
         return cleanupError;
       };
       const finish = (error?: Error, exitCode = 1) => {

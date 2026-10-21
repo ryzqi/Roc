@@ -51,3 +51,29 @@ isolated-provider cleanup and missing-MCP-tool diagnostics (source cases/review 
 Evidence: `.artifacts/harness-eval/2026-10-21T11-40-56.970Z-36602/report.json`,
 `.artifacts/harness-eval/ui-p3.log`. Resource scheduling deliberately serializes all mutations
 across runs to protect shared memory and overlapping workspace roots.
+
+P5 offline optimizer: 86/86 cases. `optimizer-surface` rejects all 12 out-of-surface
+proposals (permissions, budget, scorer, verifier, absolute/traversal paths, holdout
+identifiers, unknown or duplicate components) and shows stable materialise/trajectory
+serialisation. `optimizer-isolation` gives each candidate its own directory, SQLite
+ledger, workspace and credential scope; it measures the write scope (every created file
+stays under the case root and an outside sentinel is byte-identical) and falls back to
+the base surface after one budgeted retry of an invalid proposal. `optimizer-adopt`
+keeps the base for verifier failure, missing artifacts, cost overruns and an
+inconclusive selector, and records an anonymous A/B comparison whose scores come from
+artifact bytes (artifact present, existing citation verifier, user heading kept, numeric
+result restated as an appended `% roc-checked` line absent from the input draft) rather
+than from the candidate's own prompt strings; the comparison uses the full dev split
+(45 scenarios / 9 clusters) and no finals-only delivery. `optimizer-dataset` freezes 240 scenarios in 48 clusters (train 120 / dev 45 /
+holdout 75); the holdout key is a private secret, so a key forged from the public hash is
+rejected, as is access after mutation or by rewriters/selectors. It reports paired
+cluster-bootstrap quality intervals with failures in the denominator, real per-scenario
+timing, and four real ablations (full candidate vs constraint-only, numbers-only and a
+citation-check removal). `optimizer-cost-manifest` accounts retries, summaries, children,
+selection, reflection and judge calls, keeps a budget stop in the ledger, and resumes
+without repeated charges, repeated stage side effects or a changed call-table digest.
+Scores use a deterministic fixture rubric with a single repetition per scenario (k=1, per
+P5-02) and the fixture price is not a provider price, so none of this is real-model
+quality or cost evidence. The anonymous selector hides base/candidate labels from its own
+input, but remains in-process; it is not a security boundary. Evidence:
+`.artifacts/harness-eval/2026-10-21T15-45-54.415Z-23660/report.json`.
