@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { AIMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { TiktokenModel } from 'js-tiktoken';
+import type { ProviderType } from '../../../../shared/types';
 
 export type ContextBudgetProfile = {
   contextWindowTokens: number;
@@ -34,27 +36,43 @@ const MIN_SAFETY_MARGIN_TOKENS = 128;
 const BASE_SYSTEM_TOOL_OVERHEAD_TOKENS = 128;
 const MAX_SUMMARY_INPUT_TOKENS = 16_384;
 
-export function createContextTokenCounter(
-  model: Pick<BaseChatModel, 'getNumTokens'>
-): ContextTokenCounter {
+const profileCache = new WeakMap<ContextTokenCounter, Map<string, ContextBudgetProfile>>();
+const tokenizers = new Map<string, ReturnType<typeof import('js-tiktoken')['getEncoding']>>();
+
+async function loadTokenizer(modelId: string): Promise<ReturnType<typeof import('js-tiktoken')['getEncoding']> | null> {
+  const module = await import('js-tiktoken');
+  let name: ReturnType<typeof module.getEncodingNameForModel>;
+  try { name = module.getEncodingNameForModel(modelId as TiktokenModel); } catch { return null; }
+  let tokenizer = tokenizers.get(name);
+  if (tokenizer === undefined) { tokenizer = module.getEncoding(name); tokenizers.set(name, tokenizer); }
+  return tokenizer;
+}
+
+export function createContextTokenCounter(input: { modelId: string; providerType: ProviderType; baseUrl: string | null }): ContextTokenCounter {
+  const officialOpenAI = input.providerType === 'openai_compatible' &&
+    (input.baseUrl === null || new URL(input.baseUrl).origin === 'https://api.openai.com');
   let estimated = false;
+  const cache = new Map<string, ContextTokenCount>();
+  let encoding: Promise<ReturnType<typeof import('js-tiktoken')['encodingForModel']> | null> | null = null;
   const countText = async (text: string): Promise<ContextTokenCount> => {
-    const getNumTokens = model.getNumTokens;
-    if (typeof getNumTokens === 'function') {
-      try {
-        const tokens = await getNumTokens.call(model, text);
-        if (Number.isInteger(tokens) && tokens >= 0 && (text.length === 0 || tokens > 0)) {
-          return { estimated: false, tokens };
-        }
-      } catch {
-        estimated = true;
-      }
+    const cached = cache.get(text);
+    if (cached !== undefined) return cached;
+    let count: ContextTokenCount;
+    if (officialOpenAI) {
+      encoding ??= loadTokenizer(input.modelId);
+      const tokenizer = await encoding;
+      count = tokenizer === null ? { estimated: true, tokens: conservativeTextEstimate(text) }
+        : { estimated: false, tokens: tokenizer.encode(text, [], []).length };
+    } else {
+      count = { estimated: true, tokens: conservativeTextEstimate(text) };
     }
-    estimated = true;
-    return {
-      estimated: true,
-      tokens: conservativeTextEstimate(text)
-    };
+    estimated ||= count.estimated;
+    // Bound cached text independently of conversation length. Exact bytes invalidate changed schemas.
+    if (Buffer.byteLength(text, 'utf8') <= 131072) {
+      if (cache.size >= 64) cache.delete(cache.keys().next().value!);
+      cache.set(text, count);
+    }
+    return count;
   };
 
   return {
@@ -75,9 +93,10 @@ export function createContextTokenCounter(
           return await countText(content);
         })
       );
+      estimated = true;
       const messageFramingTokens = messages.length * 8;
       return {
-        estimated: counts.some((count) => count.estimated),
+        estimated: true, // Message framing and JSON projection remain estimates even with an exact text tokenizer.
         tokens: counts.reduce((total, count) => total + count.tokens, messageFramingTokens)
       };
     },
@@ -111,6 +130,10 @@ export async function deriveContextBudgetProfile(input: {
       return serialized;
     })
   ].join('\n');
+  const key = createHash('sha256').update(`${input.contextWindowTokens}:${overheadText}`).digest('hex');
+  let cachedProfiles = profileCache.get(input.counter);
+  const cached = cachedProfiles?.get(key);
+  if (cached !== undefined) return cached;
   const overheadCount = await input.counter.countText(overheadText);
   const systemToolOverheadTokens = Math.max(
     BASE_SYSTEM_TOOL_OVERHEAD_TOKENS,
@@ -129,7 +152,7 @@ export async function deriveContextBudgetProfile(input: {
   if (modelInputTokens <= 0) {
     throw new Error('context_budget_profile_invalid');
   }
-  return {
+  const profile = {
     contextWindowTokens: input.contextWindowTokens,
     modelInputTokens,
     reservedOutputTokens,
@@ -137,6 +160,10 @@ export async function deriveContextBudgetProfile(input: {
     summaryInputTokens: Math.max(1, Math.min(MAX_SUMMARY_INPUT_TOKENS, Math.floor(modelInputTokens / 2))),
     safetyMarginTokens
   };
+  if (cachedProfiles === undefined) { cachedProfiles = new Map(); profileCache.set(input.counter, cachedProfiles); }
+  if (cachedProfiles.size >= 8) cachedProfiles.delete(cachedProfiles.keys().next().value!);
+  cachedProfiles.set(key, profile);
+  return profile;
 }
 
 function conservativeTextEstimate(text: string): number {

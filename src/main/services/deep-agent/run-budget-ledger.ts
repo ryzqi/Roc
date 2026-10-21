@@ -51,6 +51,15 @@ export class RunBudgetLedger {
     if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
   }
 
+  readContextControlState(runId: string): { acceptanceIds: string[]; pendingEffects: string[]; pendingApprovals: string[] } {
+    const effects = this.db.prepare(`SELECT tool_call_id FROM agent_tool_effects
+      WHERE run_id = ? AND status IN ('in_progress','unknown') ORDER BY tool_call_id`).all(runId) as { tool_call_id: string }[];
+    const approvals = this.db.prepare(`SELECT interrupt_id FROM agent_pending_interrupts
+      WHERE run_id = ? ORDER BY position`).all(runId) as { interrupt_id: string }[];
+    return { acceptanceIds: [], pendingEffects: effects.map(row => row.tool_call_id),
+      pendingApprovals: approvals.map(row => row.interrupt_id) };
+  }
+
   enqueueCorrection(runId: string, submissionId: string, content: string): number {
     return this.db.transaction(() => {
       const row = this.db.prepare('SELECT status FROM agent_runs WHERE id = ?').get(runId) as { status: string } | undefined;

@@ -215,6 +215,7 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       ? null
       : createRocContextCompactionMiddleware({
           artifactStore: context.contextCompaction.artifactStore,
+          readControlState: () => context.budgetLedger.readContextControlState(context.policy.runId),
           artifactRecoveryEnabled: context.contextCompaction.artifactRecoveryEnabled,
           budgetProfile: context.contextCompaction.budgetProfile,
           emitEvent: context.contextCompaction.emitEvent,

@@ -164,7 +164,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<
   const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
   const revision = input.budgetLedger.freezeRevision(input.snapshot.runId, {
     schemaVersion: 1, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
-    manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 1,
+    manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 2,
     promptHash: hashToolInput(input.systemPrompt),
     tools: tools.map(tool => ({ name: tool.name, description: tool.description,
       schema: 'schema' in tool ? (tool.schema instanceof z.ZodType ? z.toJSONSchema(tool.schema) : tool.schema) : null })),

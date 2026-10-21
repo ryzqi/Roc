@@ -25,3 +25,11 @@ renderer chunk check and full Electron 52-assertion flow passed. Final child-acc
 covered by the source graph fixture; Electron evidence uses the preceding build.
 Evidence: `.artifacts/harness-eval/2026-10-21T08-45-01.589Z-16438/report.json`,
 `.artifacts/harness-eval/ui-p1.log`. Independent review findings fixed.
+
+P2 context: 68/68 deterministic cases; two summary boundaries plus checkpoint restore retain
+13 complete user messages and existing acceptance IDs. Artifact pagination, corruption, expiration
+and wrong-scope reads checked. Text token measurements use local OpenAI encoding; message framing
+and other providers remain estimates. Build, chunk check and Electron startup/model run smoke
+passed (12/12). No real-model quality or cost improvement claim.
+Evidence: `.artifacts/harness-eval/2026-10-21T09-12-07.732Z-21066/report.json`,
+`.artifacts/harness-eval/smoke-p2-context.log`. Context review passed; P2 memory/skills remain pending.

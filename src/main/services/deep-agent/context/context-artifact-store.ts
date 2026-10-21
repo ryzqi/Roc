@@ -26,6 +26,7 @@ export type PersistedContextArtifact = {
   toolCallId: string | null;
   toolName: string | null;
   workspaceHash: string | null;
+  expiresAt: string;
 };
 
 export type ReadContextArtifactInput = {
@@ -47,14 +48,17 @@ type ContextArtifactRow = {
   preview: string;
   content: string;
   workspace_hash: string | null;
+  created_at: string;
 };
 
 export class ContextArtifactStore {
-  constructor(private readonly db: DatabaseConnection) {}
+  constructor(private readonly db: DatabaseConnection, private readonly retentionDays = 90) {}
 
   persistArtifact(input: PersistContextArtifactInput): PersistedContextArtifact {
     const content = requireNonEmpty(input.content, 'context_artifact_content_empty');
     const artifactId = `ctx_artifact_${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const expiresAt = this.expiry(createdAt);
     const sha256 = hashContent(content);
     const preview = content.slice(0, 2000);
     const toolCallId = normalizeOptional(input.toolCallId);
@@ -77,10 +81,11 @@ export class ContextArtifactStore {
         preview,
         content,
         input.workspaceHash,
-        new Date().toISOString()
+        createdAt
       );
     return {
       artifactId,
+      expiresAt,
       content,
       kind: input.kind,
       originalChars: content.length,
@@ -100,7 +105,7 @@ export class ContextArtifactStore {
     const expectedSha256 = requireNonEmpty(input.expectedSha256, 'context_artifact_hash_empty');
     const row = this.db
       .prepare(
-        `SELECT id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash
+        `SELECT id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash, created_at
          FROM context_artifacts
          WHERE id = ? AND thread_id = ? AND workspace_hash IS ?`
       )
@@ -108,11 +113,17 @@ export class ContextArtifactStore {
     if (row === undefined) {
       return null;
     }
+    const expiresAt = this.expiry(row.created_at);
+    if (Date.now() >= Date.parse(expiresAt)) throw new Error('context_artifact_expired');
+    if (hashContent(row.content) !== row.sha256 || row.content.length !== row.original_chars) {
+      throw new Error('context_artifact_content_corrupt');
+    }
     if (expectedSha256 !== row.sha256) {
       throw new Error('context_artifact_hash_mismatch');
     }
     return {
       artifactId: row.id,
+      expiresAt,
       content: row.content,
       kind: row.kind,
       originalChars: row.original_chars,
@@ -126,6 +137,10 @@ export class ContextArtifactStore {
     };
   }
 
+  private expiry(createdAt: string): string {
+    if (!Number.isFinite(this.retentionDays) || this.retentionDays <= 0) throw new Error('context_artifact_retention_invalid');
+    return new Date(Date.parse(createdAt) + this.retentionDays * 86400000).toISOString();
+  }
 }
 
 export function formatContextArtifactReference(artifact: PersistedContextArtifact): string {
@@ -150,6 +165,10 @@ function createContextArtifactLocatorLines(artifact: PersistedContextArtifact): 
     `artifactId: ${artifact.artifactId}`,
     `sha256: ${artifact.sha256}`,
     `originalChars: ${artifact.originalChars}`,
+    `threadId: ${artifact.threadId}`,
+    `workspaceHash: ${artifact.workspaceHash ?? "none"}`,
+    `expiresAt: ${artifact.expiresAt}`,
+    `source: ${artifact.toolName ?? artifact.kind}:${artifact.toolCallId ?? artifact.runId}`,
     'retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit'
   ];
 }

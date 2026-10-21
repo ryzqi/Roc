@@ -197,6 +197,9 @@ importers:
       fast-xml-parser:
         specifier: 5.11.2
         version: 5.11.2
+      js-tiktoken:
+        specifier: 1.0.21
+        version: 1.0.21
       langchain:
         specifier: 1.5.16
         version: 1.5.16(@langchain/core@1.2.17(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(openai@7.8.0(undici@8.10.0)(zod@4.6.7))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

@@ -57,6 +57,7 @@ export function createContextArtifactReadTool(input: {
         artifactId: artifact.artifactId,
         sha256: artifact.sha256,
         kind: artifact.kind,
+        expiresAt: artifact.expiresAt,
         originalChars: artifact.originalChars,
         offset,
         content: artifact.content.slice(offset, end),

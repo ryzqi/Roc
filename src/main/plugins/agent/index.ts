@@ -229,7 +229,7 @@ function resolveDeepAgentExecutor(
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
     checkpointer: new RocSqliteCheckpointer(agentDb),
-    contextArtifactStore: new ContextArtifactStore(agentDb),
+    contextArtifactStore: new ContextArtifactStore(agentDb, option.getMemorySettings?.().sessionRetentionDays ?? 90),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
     metricsService: option.metricsService,

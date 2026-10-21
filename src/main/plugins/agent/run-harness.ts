@@ -188,7 +188,7 @@ export async function buildRunHarness(
   if (contextWindowTokens === null) {
     throw new Error('agent_context_budget_missing');
   }
-  const contextTokenCounter = createContextTokenCounter(handle.model);
+  const contextTokenCounter = createContextTokenCounter({ modelId: handle.modelId, providerType: handle.runtime.providerType, baseUrl: handle.runtime.baseUrl });
   const runSubagents = createRunSubagents({ webReadTool: tools.webReadTool });
   const contextBudgetProfile = await deriveConservativeContextBudgetProfile({
     contextWindowTokens,

@@ -108,8 +108,14 @@ try {
       report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) });
     }
   }
+  for (const name of ['context-artifacts', 'context-prefix', 'context-tokens', 'context-compaction', 'context-summary-failure']) {
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: await runtime.runContextScenario(name, dir) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
   for (const observation of Object.values(report.knownDefects)) assert.equal(observation.observed, observation.expected);
-  report.passed = report.results.length === 63 && report.results.every(r => r.passed);
+  report.passed = report.results.length === 68 && report.results.every(r => r.passed);
 } catch (error) {
   report.error = String(error);
   report.failureClass = error.failureClass ?? 'infra';

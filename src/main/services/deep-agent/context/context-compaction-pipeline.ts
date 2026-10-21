@@ -3,6 +3,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 
+import { collectUserConstraints, isContextContract, pinContextContract, type ContextControlState } from './context-contract';
 import type { RunExecutionSnapshot } from '../../../../shared/types';
 
 import { classifyProviderRequestFailure, isRetryableProviderHttpStatus } from '../../provider-request-retry';
@@ -27,7 +28,6 @@ import {
   type ContextSummaryInput
 } from './context-summary';
 import {
-  createContextTokenCounter,
   deriveContextBudgetProfile,
   type ContextBudgetProfile,
   type ContextTokenCounter
@@ -77,6 +77,7 @@ export type PreCompactionFlushRecorder = {
 
 export type RocContextCompactionOptions = {
   artifactStore: ContextArtifactStore;
+  readControlState: () => ContextControlState;
   artifactRecoveryEnabled?: boolean;
   budgetProfile: ContextBudgetProfile;
   emitEvent: (event: ContextMaintenanceEvent) => void;
@@ -85,7 +86,7 @@ export type RocContextCompactionOptions = {
   runId: string;
   sessionHistory: PreCompactionFlushRecorder;
   threadId: string;
-  tokenCounter?: ContextTokenCounter;
+  tokenCounter: ContextTokenCounter;
   toolResultPersistChars?: number;
   workspaceHash: string | null;
   workspacePath: string | null;
@@ -108,9 +109,7 @@ type ToolPairSnapshot = {
 };
 
 export function createRocContextCompactionMiddleware(options: RocContextCompactionOptions) {
-  const tokenCounter = options.tokenCounter === undefined
-    ? createContextTokenCounter(options.model as Pick<BaseChatModel, 'getNumTokens'>)
-    : options.tokenCounter;
+  const tokenCounter = options.tokenCounter;
   return createMiddleware({
     name: 'RocContextCompactionPipeline',
     beforeModel: async (state) => {
@@ -181,6 +180,7 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       await runDeterministicCompaction(input, beforeDeterministicMessages),
       toolPairs
     );
+    messages = pinContextContract(messages, input.messages, input.readControlState(), artifacts.map(formatContextArtifactLocator));
     const afterDeterministicChars = measureMessages(messages);
     const deterministicTokens = await input.countTokens(messages);
     input.emitEvent({
@@ -207,6 +207,7 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
     );
     if (preparedSummary.summaryInput === null) {
       messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
+      messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
       messages = await enforceHardContextLimit(input, messages);
       input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
       return messages;
@@ -214,6 +215,7 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
     const summary = await summarizeContextOrSkip(input, preparedSummary.summaryInput);
     if (summary === null) {
       messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
+      messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
       messages = await enforceHardContextLimit(input, messages);
       input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
       return messages;
@@ -223,6 +225,7 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       toolEvidence: [...new Set([...summary.toolEvidence, ...preparedSummary.artifactLocators])]
     });
     messages = compactToSummaryTail(messages, digestMessage);
+    messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
     input.sessionHistory.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
       threadId: input.threadId,
@@ -403,7 +406,7 @@ async function prepareSummaryInput(
   allMessages: readonly BaseMessage[]
 ): Promise<{ artifactLocators: string[]; summaryInput: ContextSummaryInput | null }> {
   const workingMessages = [...messagesToSummarize];
-  const references = artifacts.map(formatContextArtifactReference);
+  const references = artifacts.map(formatContextArtifactLocator);
   const artifactLocators = artifacts.map(formatContextArtifactLocator);
   let summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
   if (await countSummaryInput(input, summaryInput) <= input.budgetProfile.summaryInputTokens) {
@@ -418,7 +421,7 @@ async function prepareSummaryInput(
       threadId: input.threadId,
       workspaceHash: input.workspaceHash
     });
-    references.push(formatContextArtifactReference(artifact));
+    references.push(formatContextArtifactLocator(artifact));
     artifactLocators.push(formatContextArtifactLocator(artifact));
   }
 
@@ -443,16 +446,13 @@ function createSummaryInput(
     goal: inferGoal(allMessages),
     messages,
     recentMessages: [],
-    userConstraints: inferUserConstraints(messages),
+    userConstraints: collectUserConstraints(allMessages),
     workspacePath: input.workspacePath
   };
 }
 
 async function countSummaryInput(input: RunCompactionInput, summaryInput: ContextSummaryInput): Promise<number> {
   const messageTokens = await input.countTokens(buildContextSummaryModelMessages(summaryInput));
-  if (input.tokenCounter === undefined) {
-    return messageTokens;
-  }
   const schema = Reflect.get(contextSummarySchema, 'toJSONSchema');
   if (typeof schema !== 'function') {
     throw new Error('context_summary_schema_serializer_missing');
@@ -587,9 +587,8 @@ function compactToArtifactReferenceTail(
 
 function selectProtectedHead(messages: readonly BaseMessage[]): BaseMessage[] {
   const protectedMessages = selectProtectedPrefix(messages);
-  const latestHuman = [...messages].reverse().find((message) => message.getType() === 'human');
-  if (latestHuman !== undefined && !protectedMessages.includes(latestHuman)) {
-    protectedMessages.push(latestHuman);
+  for (const human of messages.filter(message => message.getType() === 'human')) {
+    if (!protectedMessages.includes(human)) protectedMessages.push(human);
   }
   return protectedMessages;
 }
@@ -603,6 +602,9 @@ function selectProtectedPrefix(messages: readonly BaseMessage[]): BaseMessage[] 
   const firstHuman = messages.find((message) => message.getType() === 'human');
   if (firstHuman !== undefined && !protectedMessages.includes(firstHuman)) {
     protectedMessages.push(firstHuman);
+  }
+  for (const contract of messages.filter(isContextContract)) {
+    if (!protectedMessages.includes(contract)) protectedMessages.push(contract);
   }
   return protectedMessages;
 }
@@ -657,20 +659,6 @@ function inferGoal(messages: readonly BaseMessage[]): string {
     return 'Maintain Roc DeepAgents runtime context.';
   }
   return contentToString(firstHuman.content).slice(0, 500);
-}
-
-function inferUserConstraints(messages: readonly BaseMessage[]): string[] {
-  const constraints: string[] = [];
-  for (const message of messages) {
-    if (message.getType() !== 'human') {
-      continue;
-    }
-    const content = contentToString(message.content);
-    if (/must|必须|不要|不能|优先|only|never/u.test(content)) {
-      constraints.push(content.slice(0, 500));
-    }
-  }
-  return constraints.slice(0, 8);
 }
 
 function measureMessages(messages: readonly BaseMessage[]): number {
