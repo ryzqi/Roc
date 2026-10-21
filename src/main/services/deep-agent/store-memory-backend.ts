@@ -13,6 +13,8 @@ import type {
 } from 'deepagents';
 
 import type { MemoryKind } from '../../../shared/types';
+import { readBackendSlice } from './backend-file-read';
+import { projectAutoMemoryScope } from '../memory/auto-memory-candidates';
 import { CapacityService } from '../memory/capacity';
 import { SecurityScanService } from '../memory/security-scan';
 import {
@@ -35,7 +37,8 @@ export class RocStoreMemoryBackend {
     private readonly allowedKeys: ReadonlySet<string>,
     private readonly securityScan: SecurityScanService,
     private readonly capacity: CapacityService,
-    private readonly kindByKey: ReadonlyMap<string, MemoryKind>
+    private readonly kindByKey: ReadonlyMap<string, MemoryKind>,
+    private readonly applicability: string
   ) {}
 
   async ls(path: string): Promise<LsResult> {
@@ -48,20 +51,19 @@ export class RocStoreMemoryBackend {
     };
   }
 
-  read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
-    const validation = this.validateKey(filePath);
-    if (!validation.ok) {
-      return Promise.resolve({ error: validation.detail });
-    }
-    return this.delegate.read(filePath, offset, limit);
+  async read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
+    return readBackendSlice(await this.readRaw(filePath), offset, limit);
   }
 
-  readRaw(filePath: string): Promise<ReadRawResult> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const validation = this.validateKey(filePath);
-    if (!validation.ok) {
-      return Promise.resolve({ error: validation.detail });
-    }
-    return this.delegate.readRaw(filePath);
+    if (!validation.ok) return { error: validation.detail };
+    const raw = await this.delegate.readRaw(filePath);
+    if (raw.error !== undefined || raw.data === undefined) return raw;
+    if (typeof raw.data.content !== 'string') return { error: 'memory_text_format_required' };
+    const content = (await this.projectScope()).get(filePath);
+    if (content === undefined) return { error: 'memory_scope_file_missing' };
+    return { data: { ...raw.data, content, mimeType: 'text/markdown' } };
   }
 
   async grep(
@@ -74,11 +76,16 @@ export class RocStoreMemoryBackend {
     if (result.error !== undefined || result.matches === undefined) {
       return result;
     }
+    const projected = new Map<string, string[]>();
+    for (const path of new Set(result.matches.filter(match => this.isAllowedKey(match.path)).map(match => match.path))) {
+      const raw = await this.readRaw(path);
+      if (raw.error !== undefined || raw.data === undefined || typeof raw.data.content !== 'string') {
+        return { error: raw.error ?? 'memory_projection_read_failed' };
+      }
+      projected.set(path, raw.data.content.split('\n'));
+    }
     return applyGrepMaxCount({
-      result: {
-        ...result,
-        matches: result.matches.filter((match) => this.isAllowedKey(match.path))
-      },
+      result: { ...result, matches: result.matches.filter(match => projected.get(match.path)?.[match.line - 1] === match.text) },
       maxCount
     });
   }
@@ -142,17 +149,26 @@ export class RocStoreMemoryBackend {
    * file_not_found 当作“没有这个文件”，其它错误会抛异常并让整批记忆加载失败。
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const allowedPaths = paths.filter((path) => this.isAllowedKey(path));
-    const downloaded =
-      allowedPaths.length === 0 ? [] : await this.delegate.downloadFiles(allowedPaths);
-    const byPath = new Map(downloaded.map((response) => [response.path, response]));
-    return paths.map((path) => {
-      const response = byPath.get(path);
-      if (response !== undefined) {
-        return response;
-      }
-      return { path, content: null, error: 'file_not_found' };
+    const projected = await this.projectScope();
+    return paths.map(path => {
+      const content = projected.get(path);
+      return content === undefined ? { path, content: null, error: 'file_not_found' as const } :
+        { path, content: new TextEncoder().encode(content), error: null };
     });
+  }
+
+  private async projectScope(): Promise<Map<string, string>> {
+    const listing = await this.delegate.glob('**/*', '/');
+    if (listing.error !== undefined || listing.files === undefined) throw new Error(listing.error ?? 'memory_scope_listing_failed');
+    const paths = listing.files.filter(file => !file.is_dir && this.isAllowedKey(file.path)).map(file => file.path);
+    const contents: string[] = [];
+    for (const path of paths) {
+      const raw = await this.delegate.readRaw(path);
+      if (raw.error !== undefined || raw.data === undefined || typeof raw.data.content !== 'string') throw new Error(raw.error ?? 'memory_scope_read_failed');
+      contents.push(raw.data.content);
+    }
+    const projected = projectAutoMemoryScope(contents, this.applicability);
+    return new Map(paths.map((path, index) => [path, projected[index]]));
   }
 
   private isAllowedKey(filePath: string): boolean {

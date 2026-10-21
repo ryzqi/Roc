@@ -283,7 +283,7 @@ export class MemoryStoreRepository {
     workspaceOverride?: MemoryWorkspaceContext | null
   ): Promise<MemorySearchResult> {
     const documents = await this.collectSearchDocuments(workspaceOverride);
-    return searchMemoryDocuments(documents, request.query, request.limit === undefined ? 5 : request.limit);
+    return searchMemoryDocuments(documents, request.query, request.limit === undefined ? 5 : request.limit, request.applicability);
   }
 
   async status(): Promise<MemoryStatus> {

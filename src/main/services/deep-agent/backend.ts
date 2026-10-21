@@ -13,6 +13,8 @@ import {
   type ReadRawResult,
   type ReadResult
 } from 'deepagents';
+import type { RunCapabilityManifestSkillV1 } from '../../../shared/types';
+import { SelectedSkillsFilesystemBackend } from './skill-backend';
 import type { BaseStore } from '@langchain/langgraph';
 import { CapacityService } from '../memory/capacity';
 import { SecurityScanService } from '../memory/security-scan';
@@ -31,8 +33,6 @@ const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
 const MEMORY_GLOBAL_ROUTE = '/memory/global/';
 const MEMORY_WORKSPACE_ROUTE = '/memory/workspaces/current/';
-const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
-const SKILL_ACCESS_DENIED_ERROR = 'Roc 当前回合未启用这个 skill。';
 const WORKSPACE_MEMORY_REQUIRED_ERROR = 'No workspace selected; select a workspace before writing workspace-scoped memory.';
 
 export type RocCompositeBackend = {
@@ -95,60 +95,6 @@ class RocRouteRejectingFilesystemBackend {
   }
 }
 
-class ReadOnlyFilesystemBackend {
-  constructor(
-    private readonly delegate: FilesystemBackend,
-    private readonly writeError: string
-  ) {
-  }
-
-  ls(path: string): Promise<LsResult> {
-    return this.delegate.ls(path);
-  }
-
-  read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
-    return this.delegate.read(filePath, offset, limit);
-  }
-
-  readRaw(filePath: string): Promise<ReadRawResult> {
-    return this.delegate.readRaw(filePath);
-  }
-
-  grep(
-    pattern: string,
-    path?: string | null,
-    glob?: string | null,
-    maxCount?: number | null
-  ): Promise<GrepResult> {
-    return this.delegate.grep(pattern, path ?? undefined, glob, maxCount);
-  }
-
-  glob(pattern: string, path?: string): Promise<GlobResult> {
-    return this.delegate.glob(pattern, path);
-  }
-
-  write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
-    return Promise.resolve({ error: this.writeError });
-  }
-
-  edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
-    return Promise.resolve({ error: this.writeError });
-  }
-
-  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
-    return Promise.resolve(
-      files.map(([path]) => ({
-        path,
-        error: 'permission_denied'
-      }))
-    );
-  }
-
-  downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    return this.delegate.downloadFiles(paths);
-  }
-}
-
 class WorkspaceMemoryRequiredBackend {
   readonly id = 'roc-workspace-memory-required';
 
@@ -191,150 +137,6 @@ class WorkspaceMemoryRequiredBackend {
 
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
     return Promise.resolve(paths.map((path) => ({ path, content: null, error: 'permission_denied' })));
-  }
-}
-
-class SelectedSkillsFilesystemBackend {
-  private readonly selectedSkillIds: ReadonlySet<string>;
-
-  constructor(
-    private readonly delegate: FilesystemBackend,
-    selectedSkillIds: readonly string[],
-    private readonly writeError: string
-  ) {
-    this.selectedSkillIds = new Set(selectedSkillIds);
-  }
-
-  async ls(path: string): Promise<LsResult> {
-    if (path === '/') {
-      const result = await this.delegate.ls(path);
-      if (result.error || result.files === undefined) {
-        return result;
-      }
-      return {
-        files: result.files.filter((entry) => {
-          const skillId = this.extractSkillId(entry.path);
-          return skillId !== null && this.selectedSkillIds.has(skillId);
-        })
-      };
-    }
-    if (!this.isAllowedSkillPath(path)) {
-      return { error: SKILL_ACCESS_DENIED_ERROR };
-    }
-    return this.delegate.ls(path);
-  }
-
-  async read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
-    if (!this.isAllowedSkillPath(filePath)) {
-      return { error: SKILL_ACCESS_DENIED_ERROR };
-    }
-    return this.delegate.read(filePath, offset, limit);
-  }
-
-  async readRaw(filePath: string): Promise<ReadRawResult> {
-    if (!this.isAllowedSkillPath(filePath)) {
-      return { error: SKILL_ACCESS_DENIED_ERROR };
-    }
-    return this.delegate.readRaw(filePath);
-  }
-
-  async grep(
-    pattern: string,
-    path?: string | null,
-    glob?: string | null,
-    maxCount?: number | null
-  ): Promise<GrepResult> {
-    const targetPath = path ?? '/';
-    if (targetPath === '/') {
-      const result = await this.delegate.grep(pattern, targetPath, glob);
-      if (result.error || result.matches === undefined) {
-        return result;
-      }
-      return applyGrepMaxCount({
-        result: {
-          ...result,
-          matches: result.matches.filter((entry) => {
-            const skillId = this.extractSkillId(entry.path);
-            return skillId !== null && this.selectedSkillIds.has(skillId);
-          })
-        },
-        maxCount
-      });
-    }
-    if (!this.isAllowedSkillPath(targetPath)) {
-      return { error: SKILL_ACCESS_DENIED_ERROR };
-    }
-    return this.delegate.grep(pattern, targetPath, glob, maxCount);
-  }
-
-  async glob(pattern: string, path?: string): Promise<GlobResult> {
-    const targetPath = path ?? '/';
-    if (targetPath === '/') {
-      const result = await this.delegate.glob(pattern, targetPath);
-      if (result.error || result.files === undefined) {
-        return result;
-      }
-      return {
-        ...result,
-        files: result.files.filter((entry) => {
-          const skillId = this.extractSkillId(entry.path);
-          return skillId !== null && this.selectedSkillIds.has(skillId);
-        })
-      };
-    }
-    if (!this.isAllowedSkillPath(targetPath)) {
-      return { error: SKILL_ACCESS_DENIED_ERROR };
-    }
-    return this.delegate.glob(pattern, targetPath);
-  }
-
-  write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
-    return Promise.resolve({ error: this.writeError });
-  }
-
-  edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
-    return Promise.resolve({ error: this.writeError });
-  }
-
-  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
-    return Promise.resolve(
-      files.map(([path]) => ({
-        path,
-        error: this.isAllowedSkillPath(path) ? 'permission_denied' : 'permission_denied'
-      }))
-    );
-  }
-
-  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const allowedPaths: string[] = [];
-    const deniedResults: FileDownloadResponse[] = [];
-    for (const path of paths) {
-      if (!this.isAllowedSkillPath(path)) {
-        deniedResults.push({
-          path,
-          content: null,
-          error: 'permission_denied'
-        });
-        continue;
-      }
-      allowedPaths.push(path);
-    }
-    const allowedResults = allowedPaths.length === 0 ? [] : await this.delegate.downloadFiles(allowedPaths);
-    return [...allowedResults, ...deniedResults];
-  }
-
-  private extractSkillId(path: string): string | null {
-    if (!path.startsWith('/')) {
-      return null;
-    }
-    const remainder = path.slice(1);
-    const [skillId] = remainder.split('/');
-    return skillId === undefined || skillId.length === 0 ? null : skillId;
-  }
-
-  private isAllowedSkillPath(path: string): boolean {
-    const skillId = this.extractSkillId(path);
-    return skillId !== null && this.selectedSkillIds.has(skillId);
   }
 }
 
@@ -436,12 +238,13 @@ class RocNonExecutingCompositeBackend {
  * 不会有编译错误，只会让注入被静默忽略。现在包装函数合并回实现本身，这个类型是唯一入口。
  */
 export type RocBackendInput = {
+  memoryApplicability: string;
   workspaceService: WorkspaceService;
   paths: RocPaths;
   store: BaseStore;
   securityScan: SecurityScanService;
   capacity: CapacityService;
-  selectedSkillIds?: readonly string[];
+  selectedSkills: readonly RunCapabilityManifestSkillV1[];
   /** 可注入的 ripgrep 服务；缺省按随包二进制解析。 */
   ripgrep?: RipgrepService;
 };
@@ -457,10 +260,7 @@ export function createBackend(input: RocBackendInput): {
     rootDir: input.paths.skillsDir,
     virtualMode: true
   });
-  const skillsBackend =
-    input.selectedSkillIds === undefined
-      ? new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR)
-      : new SelectedSkillsFilesystemBackend(skillsBackendBase, input.selectedSkillIds, READ_ONLY_SKILLS_ERROR);
+  const skillsBackend = new SelectedSkillsFilesystemBackend(skillsBackendBase, input.paths.skillsDir, input.selectedSkills);
   const slots = listMemorySlots(workspaceHash);
   const globalSlots = slots.filter((slot) => slot.scope === 'global');
   const workspaceSlots = slots.filter((slot) => slot.scope === 'workspace');
@@ -473,7 +273,8 @@ export function createBackend(input: RocBackendInput): {
       new Set(globalSlots.map((slot) => slot.storeKey)),
       input.securityScan,
       input.capacity,
-      globalKindByKey
+      globalKindByKey,
+      input.memoryApplicability
     )
   };
 
@@ -485,7 +286,8 @@ export function createBackend(input: RocBackendInput): {
           new Set(workspaceSlots.map((slot) => slot.storeKey)),
           input.securityScan,
           input.capacity,
-          workspaceKindByKey
+          workspaceKindByKey,
+          input.memoryApplicability
         );
 
   if (workspace !== null) {

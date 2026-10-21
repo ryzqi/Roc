@@ -4,7 +4,7 @@ import type {
   MemorySearchHit,
   MemorySearchResult
 } from '../../../shared/types';
-import { parseAutoMemoryEntries, parseUserPreferenceEntries } from './auto-memory-candidates';
+import { parseAutoMemoryEntries, parseUserPreferenceEntries, projectAutoMemoryScope } from './auto-memory-candidates';
 
 export type MemorySearchDocument = {
   path: string;
@@ -38,10 +38,17 @@ const MAX_SNIPPET_CHARS = 320;
 export function searchMemoryDocuments(
   documents: readonly MemorySearchDocument[],
   query: string,
-  limit: number
+  limit: number,
+  applicability: string
 ): MemorySearchResult {
   const terms = tokenizeQuery(query);
-  const units = documents.flatMap((document) => parseDocumentEntries(document));
+  const projected = new Map<MemorySearchDocument, string>();
+  for (const scope of ['global', 'workspace'] as const) {
+    const scoped = documents.filter(document => document.scope === scope);
+    const contents = projectAutoMemoryScope(scoped.map(document => document.content), applicability);
+    scoped.forEach((document, index) => projected.set(document, contents[index]));
+  }
+  const units = documents.flatMap(document => parseDocumentEntries({ ...document, content: projected.get(document)! }));
   if (terms.length === 0) {
     return { query, hits: [], scannedDocuments: documents.length, scannedEntries: units.length };
   }
@@ -169,7 +176,7 @@ function parseDocumentEntries(document: MemorySearchDocument): MemoryEntryUnit[]
     kind: document.kind,
     entryType: entry.type,
     key: entry.key,
-    text: entry.summary,
+    text: [entry.counterexamples.length > 0 ? `Counterexamples: ${entry.counterexamples.join('; ')}` : '', entry.summary].filter(Boolean).join('\n'),
     keyText: normalize(entry.key),
     summaryText: normalize(entry.summary),
     bodyText: normalize(entry.evidence.join(' '))

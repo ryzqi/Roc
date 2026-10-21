@@ -114,8 +114,14 @@ try {
     try { report.results.push({ id: name, passed: true, evidence: await runtime.runContextScenario(name, dir) }); }
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
+  for (const name of ['memory-versions', 'skills-pinning']) {
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: await runtime.runMemorySkillScenario(name, dir) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
   for (const observation of Object.values(report.knownDefects)) assert.equal(observation.observed, observation.expected);
-  report.passed = report.results.length === 68 && report.results.every(r => r.passed);
+  report.passed = report.results.length === 70 && report.results.every(r => r.passed);
 } catch (error) {
   report.error = String(error);
   report.failureClass = error.failureClass ?? 'infra';

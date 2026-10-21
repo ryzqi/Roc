@@ -135,6 +135,7 @@ const snapshotPreviewSchema = z.object({
 });
 
 const memorySearchRequestSchema = z.object({
+  applicability: z.string().regex(/^[a-f0-9]{64}$/),
   query: z.string(),
   limit: z.number().int().positive().max(20).optional()
 }) satisfies z.ZodType<MemorySearchRequest>;
@@ -157,6 +158,10 @@ const memorySearchResultSchema = z.object({
 }) satisfies z.ZodType<MemorySearchResult>;
 
 const memoryRememberRequestSchema = z.object({
+  applicability: z.string().regex(/^[a-f0-9]{64}$/),
+  status: z.enum(['active', 'revoked', 'needs_revalidation']),
+  counterexamples: z.array(z.string()),
+  executionKind: z.enum(['production', 'probe']),
   type: z.enum([
     'user_preference',
     'workspace_fact',

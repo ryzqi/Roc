@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { verifyMemorySkills } from './memory-skills';
 import { verifyContext } from './context';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -455,4 +456,9 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
 export async function runContextScenario(name: string, directory: string): Promise<unknown> {
   const db = openDatabase(join(directory, 'agent.sqlite'));
   try { return await verifyContext(name, directory, db); } finally { db.close(); }
+}
+
+export async function runMemorySkillScenario(name: string, directory: string): Promise<unknown> {
+  const db = openDatabase(join(directory, 'agent.sqlite'));
+  try { return await verifyMemorySkills(name, directory, db); } finally { db.close(); }
 }

@@ -74,6 +74,7 @@ const autoMemoryAuditRecordSchema = z
 
 export const memorySearchRequestSchema = z
   .object({
+    applicability: z.string().regex(/^[a-f0-9]{64}$/),
     query: z.string().trim().min(1),
     limit: z.number().int().positive().max(20).optional()
   })
@@ -102,6 +103,10 @@ export const memorySearchResultSchema = z
 
 export const memoryRememberRequestSchema = z
   .object({
+    applicability: z.string().regex(/^[a-f0-9]{64}$/),
+    status: z.enum(['active', 'revoked', 'needs_revalidation']),
+    counterexamples: z.array(z.string()),
+    executionKind: z.enum(['production', 'probe']),
     type: autoMemoryCandidateTypeSchema,
     confidence: autoMemoryConfidenceSchema,
     key: z.string(),

@@ -33,3 +33,10 @@ and other providers remain estimates. Build, chunk check and Electron startup/mo
 passed (12/12). No real-model quality or cost improvement claim.
 Evidence: `.artifacts/harness-eval/2026-10-21T09-12-07.732Z-21066/report.json`,
 `.artifacts/harness-eval/smoke-p2-context.log`. Context review passed; P2 memory/skills remain pending.
+
+P2 memory/skills: 70/70 cases, including version mismatch, archived revocation after TTL
+maintenance, probe writes, skill byte/license drift and symlinks. Independent review findings
+fixed. Build, existing 264 tests, IPC/chunks and Electron12/12 passed. Evidence:
+`.artifacts/harness-eval/2026-10-21T09-43-26.930Z-27961/report.json`,
+`.artifacts/harness-eval/smoke-p2-memory.log`. Expired latest states remain as invalidation markers;
+archive capacity can explicitly reject further writes rather than revive old experience.

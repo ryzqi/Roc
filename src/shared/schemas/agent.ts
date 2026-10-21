@@ -104,7 +104,11 @@ export const runCapabilityManifestSkillSchema = z
     canonicalIdentity: z.string(),
     name: z.string(),
     sourcePath: z.string(),
-    description: z.string()
+    description: z.string(),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+    license: z.string().nullable(),
+    licenseHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+    sourceRevision: z.string().nullable()
   })
   .strict();
 
@@ -198,7 +202,7 @@ const runExecutionSnapshotShape = {
 
 export const runExecutionSnapshotSchema = z
   .object({
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     ...runExecutionSnapshotShape,
     budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()

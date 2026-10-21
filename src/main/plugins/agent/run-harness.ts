@@ -48,6 +48,7 @@ import {
 import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
+import { memoryApplicability } from '../../services/deep-agent/harness-revision';
 import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
@@ -151,15 +152,14 @@ export async function buildRunHarness(
     userInput: request.run.userInput,
     workspacePath: runtimeWorkspace?.path ?? null
   });
+  const memoryRevision = memoryApplicability({ model: request.snapshot.model, toolContracts: request.snapshot.capabilityManifest.tools }, tools.runTools);
   const runtimeBackend = createRuntimeBackend({
+    memoryApplicability: memoryRevision,
     capabilities: services.capabilities,
     getMemorySettings: services.getMemorySettings,
     handle,
     paths: services.paths,
-    selectedSkillIds: [
-      ...request.snapshot.capabilityManifest.resolvedCapabilities.skills,
-      ...explicitSkillContexts.map((skill) => skill.id)
-    ],
+    selectedSkills: request.snapshot.capabilityManifest.skills,
     store: services.store,
     workspace: runtimeWorkspace
   });
@@ -167,6 +167,7 @@ export async function buildRunHarness(
     .filter((tool) => tool.executionScopes.includes('main'))
     .map((tool) => tool.modelVisibleName);
   const contextHarness = assembleContextHarness({
+    memoryApplicability: memoryRevision,
     artifactStore: services.contextArtifactStore,
     mode,
     enabledCapabilities: request.snapshot.capabilityManifest.resolvedCapabilities,
@@ -703,11 +704,12 @@ function createDeleteFileTool(capabilities: RocCapabilityRegistry): StringDynami
 }
 
 function createRuntimeBackend(input: {
+  memoryApplicability: string;
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
   handle: LangChainChatModelHandle;
   paths: RocPaths;
-  selectedSkillIds: readonly string[];
+  selectedSkills: RunExecutionSnapshot['capabilityManifest']['skills'];
   store: BaseStore;
   workspace: Workspace | null;
 }): ReturnType<typeof createBackend> {
@@ -727,7 +729,8 @@ function createRuntimeBackend(input: {
     store: input.store,
     securityScan: new SecurityScanService(memorySettings.securityScan),
     capacity: new CapacityService(memorySettings.charLimits),
-    selectedSkillIds: input.selectedSkillIds
+    selectedSkills: input.selectedSkills,
+    memoryApplicability: input.memoryApplicability
   });
 }
 

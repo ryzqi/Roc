@@ -23,6 +23,7 @@ export type ContextHarness = {
 };
 
 export function assembleContextHarness(input: {
+  memoryApplicability: string;
   artifactStore: ContextArtifactStore;
   mode: RunExecutionSnapshot['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
@@ -45,9 +46,10 @@ export function assembleContextHarness(input: {
     runtimeWorkspacePath: input.workspacePath,
     search: input.searchSessions
   });
-  const memorySearchTool = createMemorySearchTool({ search: input.searchMemory });
+  const memorySearchTool = createMemorySearchTool({ search: input.searchMemory, applicability: input.memoryApplicability });
   const rememberTool = createRememberTool({
     remember: input.remember,
+    applicability: input.memoryApplicability,
     runId: input.runId,
     threadId: input.threadId,
     workspacePath: input.workspacePath

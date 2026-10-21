@@ -18,6 +18,7 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
+import { describeHarnessTools, harnessImplementationHash } from './harness-revision';
 import { dependencies } from '../../../../package.json';
 import { hashToolInput } from './tool-effect-store';
 import type { InterruptDecisionType, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
@@ -163,11 +164,10 @@ export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<
 
   const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
   const revision = input.budgetLedger.freezeRevision(input.snapshot.runId, {
-    schemaVersion: 1, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
+    schemaVersion: 1, implementation: harnessImplementationHash, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
     manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 2,
     promptHash: hashToolInput(input.systemPrompt),
-    tools: tools.map(tool => ({ name: tool.name, description: tool.description,
-      schema: 'schema' in tool ? (tool.schema instanceof z.ZodType ? z.toJSONSchema(tool.schema) : tool.schema) : null })),
+    tools: describeHarnessTools(tools),
     middleware: middleware.map(readMiddlewareName),
     permissions: policy.filesystemPermissions,
     subagents: requireDeclarativeSubagents([GENERAL_PURPOSE_SUBAGENT, ...input.subagents]).map(spec => ({

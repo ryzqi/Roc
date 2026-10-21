@@ -11,6 +11,9 @@ const MAX_SUMMARY_CHARS = 400;
 const MAX_EVIDENCE_CHARS = 400;
 
 export type AutoMemoryCandidate = {
+  applicability: string;
+  status: 'active' | 'revoked' | 'needs_revalidation';
+  counterexamples: string[];
   type: AutoMemoryCandidateType;
   scope: MemoryScope;
   confidence: AutoMemoryConfidence;
@@ -26,6 +29,9 @@ export type AutoMemoryCandidate = {
 };
 
 export type AutoMemoryCandidateInput = {
+  applicability: string;
+  status: AutoMemoryCandidate['status'];
+  counterexamples: readonly string[];
   type: AutoMemoryCandidateType;
   confidence: AutoMemoryConfidence;
   key: string;
@@ -40,6 +46,10 @@ export type AutoMemoryCandidateInput = {
 
 /** 已经落盘的结构化条目，用于 TTL 清理、归档搬迁和 memory_search。 */
 export type ParsedAutoMemoryEntry = {
+  createdAt: string;
+  applicability: string;
+  status: string;
+  counterexamples: string[];
   type: string;
   key: string;
   confidence: string;
@@ -60,6 +70,9 @@ export function buildAutoMemoryCandidate(
 ): AutoMemoryCandidate {
   const metadata = normalizeCandidateMetadata(input, settings);
   return {
+    applicability: input.applicability,
+    status: input.status,
+    counterexamples: input.counterexamples.map(collapseWhitespace),
     type: input.type,
     scope: resolveCandidateScope(input.type, input.workspacePath),
     confidence: input.confidence,
@@ -76,6 +89,11 @@ export function buildAutoMemoryCandidate(
 }
 
 export function shouldRejectCandidate(candidate: AutoMemoryCandidate): string | null {
+  if (!/^[a-f0-9]{64}$/.test(candidate.applicability)) return 'memory_applicability_missing';
+  if (candidate.counterexamples.join('').length > MAX_EVIDENCE_CHARS) return 'counterexamples_too_long';
+  if (candidate.status === 'active' && candidate.revalidate !== null) return 'revalidation_requires_pending_status';
+  if (candidate.status === 'revoked' && candidate.counterexamples.length === 0) return 'revocation_requires_counterexample';
+  if (candidate.type === 'user_preference' && candidate.status !== 'active') return 'preference_status_requires_manual_edit';
   if (candidate.summary.length === 0) {
     return 'summary_empty';
   }
@@ -125,23 +143,11 @@ export function shouldRejectCandidate(candidate: AutoMemoryCandidate): string | 
 }
 
 export function autoMemoryEntryExists(existing: string, candidate: AutoMemoryCandidate): boolean {
-  const normalizedSummary = normalizeMemoryText(candidate.summary);
-  const lines = existing.split('\n');
-  let sawKey = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === `key: ${candidate.key}`) {
-      sawKey = true;
-      continue;
-    }
-    if (sawKey && trimmed.startsWith('summary: ')) {
-      return normalizeMemoryText(trimmed.slice('summary: '.length)) === normalizedSummary;
-    }
-    if (trimmed.startsWith('- type: ')) {
-      sawKey = false;
-    }
-  }
-  return false;
+  const entries = parseAutoMemoryEntries(existing).filter(entry => entry.key === candidate.key && entry.type === candidate.type);
+  const last = entries.at(-1);
+  return last !== undefined && last.applicability === candidate.applicability && last.status === candidate.status &&
+    normalizeMemoryText(last.summary) === normalizeMemoryText(candidate.summary) &&
+    JSON.stringify(last.counterexamples) === JSON.stringify(candidate.counterexamples) && last.revalidate === candidate.revalidate;
 }
 
 export function formatUserPreferenceEntry(candidate: AutoMemoryCandidate): string {
@@ -191,6 +197,10 @@ export function formatAutoMemoryEntry(candidate: AutoMemoryCandidate): string {
   const lines = [
     `- type: ${candidate.type}`,
     `  key: ${candidate.key}`,
+    `  applicability: ${candidate.applicability}`,
+    `  createdAt: ${candidate.createdAt}`,
+    `  status: ${candidate.status}`,
+    `  counterexamples: ${JSON.stringify(candidate.counterexamples)}`,
     `  confidence: ${candidate.confidence}`,
     `  source: ${candidate.sourceRunId}`,
     `  evidence: ${candidate.evidence.join(', ')}`,
@@ -298,6 +308,10 @@ export function parseAutoMemoryEntries(content: string): ParsedAutoMemoryEntry[]
     const parsedTtl = ttlRaw === undefined ? Number.NaN : Number.parseInt(ttlRaw, 10);
     const evidenceRaw = fields.get('evidence') ?? '';
     entries.push({
+      createdAt: fields.get('createdAt') ?? '',
+      applicability: fields.get('applicability') ?? '',
+      status: fields.get('status') ?? '',
+      counterexamples: fields.has('counterexamples') ? parseCounterexamples(fields.get('counterexamples')!) : [],
       type: typeMatch[1],
       key: fields.get('key') ?? '',
       confidence: fields.get('confidence') ?? '',
@@ -322,7 +336,10 @@ export function pruneExpiredAutoMemoryEntries(
   content: string,
   today: string
 ): { content: string; removed: ParsedAutoMemoryEntry[] } {
-  const expired = parseAutoMemoryEntries(content).filter((entry) => isEntryExpired(entry, today));
+  const entries = parseAutoMemoryEntries(content);
+  // Keep the latest state, even after expiry: deleting it could revive an archived predecessor.
+  const expired = entries.filter((entry, index) => isEntryExpired(entry, today) &&
+    entries.slice(index + 1).some(later => later.type === entry.type && later.key === entry.key && later.createdAt >= entry.createdAt));
   if (expired.length === 0) {
     return { content, removed: [] };
   }
@@ -525,4 +542,31 @@ function findNextSecondLevelHeading(lines: string[], start: number): number {
     }
   }
   return -1;
+}
+
+function parseCounterexamples(text: string): string[] {
+  const value: unknown = JSON.parse(text);
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error('memory_counterexamples_invalid');
+  return value;
+}
+
+/** Resolve status across every document in one scope. Blank hidden lines to retain grep locators. */
+export function projectAutoMemoryScope(contents: readonly string[], applicability: string, today = new Date().toISOString().slice(0, 10)): string[] {
+  const parsed = contents.map(parseAutoMemoryEntries);
+  const latest = new Map<string, ParsedAutoMemoryEntry>();
+  for (const entries of parsed) for (const entry of entries) {
+    const key = `${entry.type}:${entry.key}`;
+    const previous = latest.get(key);
+    if (previous === undefined || entry.createdAt > previous.createdAt ||
+      (entry.createdAt === previous.createdAt && (entries.includes(previous) || entry.status !== 'active'))) latest.set(key, entry);
+  }
+  return contents.map((content, document) => {
+    const lines = content.split('\n');
+    for (const entry of parsed[document]) {
+      if (latest.get(`${entry.type}:${entry.key}`) === entry && entry.createdAt.length > 0 &&
+        entry.status === 'active' && entry.applicability === applicability && !isEntryExpired(entry, today)) continue;
+      for (let line = entry.startLine; line < entry.endLine; line++) lines[line] = '';
+    }
+    return lines.join('\n');
+  });
 }

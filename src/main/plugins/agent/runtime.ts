@@ -1200,7 +1200,7 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     submissionHash: hashToolInput(input.request),
     runOrigin: resolveRunOrigin(input.request),
     model: {

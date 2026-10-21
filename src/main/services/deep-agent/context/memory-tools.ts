@@ -24,6 +24,8 @@ const memorySearchSchema = z.object({
 type MemorySearchToolInput = z.infer<typeof memorySearchSchema>;
 
 const rememberSchema = z.object({
+  status: z.enum(['active', 'revoked', 'needs_revalidation']),
+  counterexamples: z.array(z.string()),
   type: z.enum(['user_preference', 'workspace_fact', 'decision', 'pitfall', 'verification']),
   confidence: z.enum(['high', 'medium', 'low']),
   key: z.string(),
@@ -37,6 +39,7 @@ type RememberToolInput = z.infer<typeof rememberSchema>;
 
 export function createMemorySearchTool(input: {
   search: MemorySearchAdapter;
+  applicability: string;
 }): DynamicStructuredTool<typeof memorySearchSchema, MemorySearchToolInput, MemorySearchToolInput, string> {
   return new DynamicStructuredTool<typeof memorySearchSchema, MemorySearchToolInput, MemorySearchToolInput, string>({
     name: 'memory_search',
@@ -48,7 +51,7 @@ export function createMemorySearchTool(input: {
       if (normalizedQuery.length === 0) {
         return JSON.stringify({ query: '', hits: [] });
       }
-      const request: MemorySearchRequest = { query: normalizedQuery };
+      const request: MemorySearchRequest = { query: normalizedQuery, applicability: input.applicability };
       if (args.limit !== undefined) {
         request.limit = args.limit;
       }
@@ -69,6 +72,7 @@ export function createMemorySearchTool(input: {
 
 export function createRememberTool(input: {
   remember: MemoryRememberAdapter;
+  applicability: string;
   runId: string;
   threadId: string;
   workspacePath: string | null;
@@ -79,11 +83,16 @@ export function createRememberTool(input: {
       'Store one durable fact. Roc validates, deduplicates, supersedes by key, and reports the target file.',
       'user_preference requires confidence=high plus quoted user evidence; it goes to /memory/global/USER.md.',
       'Other types go to scoped MEMORY.md. Do not store transient results.',
+      'Use revoked plus counterexamples to retract a key; needs_revalidation keeps it out of automatic context.',
       'key is a stable lowercase slug using letters, digits, dots, colons, or hyphens.'
     ].join('\n'),
     schema: rememberSchema,
     func: async (args) => {
       const request: MemoryRememberRequest = {
+        applicability: input.applicability,
+        executionKind: 'production',
+        status: args.status,
+        counterexamples: args.counterexamples,
         type: args.type,
         confidence: args.confidence,
         key: args.key.trim(),

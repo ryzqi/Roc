@@ -55,6 +55,10 @@ export type AgentRunCompletedPayload = {
 };
 
 export type AutoMemoryRecordRequest = {
+  applicability: string;
+  status: 'active' | 'revoked' | 'needs_revalidation';
+  counterexamples: readonly string[];
+  executionKind: 'production' | 'probe';
   type: AutoMemoryCandidateType;
   confidence: AutoMemoryConfidence;
   key: string;
@@ -100,11 +104,18 @@ export class AutoMemoryWriter {
    * remember 工具的唯一入口：校验候选、去重、合并冲突，并把接受或拒绝的原因回给模型。
    */
   async recordCandidate(request: AutoMemoryRecordRequest, createdAt?: string): Promise<AutoMemoryRecordOutcome> {
+    if (request.executionKind === 'probe') return {
+      status: 'rejected', reason: 'probe_memory_write_forbidden',
+      scope: request.workspacePath ? 'workspace' : 'global', targetPath: null, archivedTo: []
+    };
     const memorySettings = this.resolveMemorySettings();
     const settings = memorySettings.autoMemory;
     const eventCreatedAt = createdAt === undefined ? new Date().toISOString() : createdAt;
     const candidate = buildAutoMemoryCandidate(
       {
+        applicability: request.applicability,
+        status: request.status,
+        counterexamples: request.counterexamples,
         type: request.type,
         confidence: request.confidence,
         key: request.key,

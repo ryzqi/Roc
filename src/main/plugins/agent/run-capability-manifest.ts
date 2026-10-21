@@ -1,3 +1,4 @@
+import { readSkillRevision } from '../../services/skill-revision';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -377,12 +378,12 @@ function resolveReconcileStrategy(
 }
 
 function compileManifestSkills(skills: SkillSnapshot[]): RunCapabilityManifestSkillV1[] {
-  return skills.map((skill) => ({
-    canonicalIdentity: `skill:${skill.id}`,
-    name: skill.name,
-    sourcePath: skill.path,
-    description: skill.description
-  }));
+  return skills.map(skill => {
+    const revision = readSkillRevision(skill.path);
+    return { canonicalIdentity: `skill:${skill.id}`, name: skill.name, sourcePath: skill.path,
+      description: skill.description, contentHash: revision.contentHash, license: revision.license,
+      licenseHash: revision.licenseHash, sourceRevision: skill.upstreamCommit };
+  });
 }
 
 function resolveProvenance(card: AgentCapabilityCard): RunCapabilityManifestToolV1['provenance'] {
