@@ -1,3 +1,4 @@
+import { mcpServerConfigSchema } from '../../../shared/schemas/ipc-mcp-skills';
 import { readSkillRevision } from '../../services/skill-revision';
 import { createHash } from 'node:crypto';
 
@@ -152,6 +153,9 @@ export function buildManifestFromPolicy(input: {
       })
     ],
     skills: compileManifestSkills(manifestSkills),
+    mcpServers: input.mcpServers.filter(server => resolvedMcpServers.includes(server.id)).map(server =>
+      mcpServerConfigSchema.parse({ id: server.id, name: server.name, enabled: server.enabled, transport: server.transport,
+        preset: server.preset, riskLevel: server.riskLevel, url: server.url, command: server.command, allowedTools: server.allowedTools })),
     untrustedContextPolicy: 'external_content_reference_only' as const
   };
 

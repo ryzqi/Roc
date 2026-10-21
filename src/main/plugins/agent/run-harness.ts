@@ -134,6 +134,7 @@ export async function buildRunHarness(
   });
   const tools = await createExecutorTools({
     capabilities: services.capabilities,
+    runId: request.run.id,
     capabilityManifest: request.snapshot.capabilityManifest,
     enabledCapabilities: request.snapshot.capabilityManifest.resolvedCapabilities,
     runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
@@ -387,6 +388,7 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshot): Workspace 
 async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
+  runId: string;
   enabledCapabilities: TaskRun['enabledCapabilities'];
   runtimeWorkspacePath: string | null;
   selfConfigService?: SelfConfigService;
@@ -398,7 +400,7 @@ async function createExecutorTools(input: {
 }): Promise<{ runTools: ClientTool[]; webReadTool: StringDynamicStructuredTool }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
-  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.capabilityManifest);
+  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.capabilityManifest, input.runId, input.abortSignal);
   if (input.mode === 'plan') {
     return { runTools: [webReadTool, askUserTool, ...mcpTools], webReadTool };
   }
@@ -460,6 +462,7 @@ function requireSelfConfigService(selfConfigService: SelfConfigService | undefin
 function createManifestAuthorizedBackgroundTaskTools(input: {
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
+  runId: string;
   enabledCapabilities: TaskRun['enabledCapabilities'];
   runtimeWorkspacePath: string | null;
 }): ClientTool[] {
@@ -509,24 +512,27 @@ function createManifestAuthorizedBackgroundTaskTools(input: {
 
 async function loadSelectedMcpTools(
   capabilities: RocCapabilityRegistry,
-  capabilityManifest: RunCapabilityManifestV1
+  capabilityManifest: RunCapabilityManifestV1,
+  runId: string,
+  signal: AbortSignal
 ): Promise<ClientTool[]> {
   const selectedTools = capabilityManifest.tools.filter((tool) => tool.provenance.kind === 'mcp');
   if (selectedTools.length === 0) {
     return [];
   }
-  const tools = await capabilities.invoke<{}, unknown[]>('mcp.tools.get', {});
-  return tools.flatMap((tool): ClientTool[] => {
-    if (!isClientTool(tool)) {
-      return [];
-    }
-    const modelVisibleName = resolveManifestMcpToolName(tool.name, selectedTools);
-    if (modelVisibleName === null) {
-      return [];
-    }
-    tool.name = modelVisibleName;
-    return [tool];
-  });
+  const tools = await capabilities.invoke<{ runId: string; servers: RunCapabilityManifestV1['mcpServers']; signal: AbortSignal }, unknown[]>('mcp.tools.get', { runId, servers: capabilityManifest.mcpServers, signal });
+  const selected = new Map<string, ClientTool>();
+  for (const tool of tools) {
+    if (!isClientTool(tool)) throw new Error('mcp_runtime_tool_contract_invalid');
+    const name = resolveManifestMcpToolName(tool.name, selectedTools);
+    if (name === null || selected.has(name)) continue;
+    tool.name = name;
+    selected.set(name, tool);
+  }
+  for (const expected of selectedTools) {
+    if (!selected.has(expected.modelVisibleName)) throw new Error(`mcp_manifest_tool_unavailable:${expected.modelVisibleName}`);
+  }
+  return [...selected.values()];
 }
 
 function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshot): boolean {
@@ -564,23 +570,15 @@ function resolveManifestMcpToolName(
   return null;
 }
 
-/**
- * mcp-adapters 2.0.1 起用单个下划线连接服务器名与工具名（`server_tool`），
- * 1.x 为双下划线（`server__tool`）。两种都接受，避免升级后 MCP 工具被静默丢弃。
- */
+/** Installed mcp-adapters 2.x prefixes tool names with server_tool. */
 function isMcpRuntimeToolName(runtimeName: string, serverId: string, modelVisibleName: string): boolean {
-  return runtimeName === `${serverId}_${modelVisibleName}` || runtimeName === `${serverId}__${modelVisibleName}`;
+  return runtimeName === `${serverId}_${modelVisibleName}`;
 }
 
 function isExaHostedWebSearchName(name: string): boolean {
   return (
-    name === 'web_search' ||
-    name === 'web_search_exa' ||
-    name === 'web_search_advanced_exa' ||
     name === 'exa-hosted_web_search_exa' ||
-    name === 'exa-hosted_web_search_advanced_exa' ||
-    name === 'exa-hosted__web_search_exa' ||
-    name === 'exa-hosted__web_search_advanced_exa'
+    name === 'exa-hosted_web_search_advanced_exa'
   );
 }
 

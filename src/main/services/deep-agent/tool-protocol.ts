@@ -75,7 +75,7 @@ function detectUnboundToolCall(
   });
 }
 
-function assertCapabilityManifestToolContract(
+export function assertCapabilityManifestToolContract(
   options: ToolProtocolOptions,
   request: { tool?: unknown; toolCall: { name: string } }
 ): void {

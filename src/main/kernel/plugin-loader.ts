@@ -28,6 +28,7 @@ export class PluginLoader {
   private readonly status: PluginLoaderStatus = { plugins: {} };
   private readonly initializedPlugins: RocPlugin[] = [];
   private readonly initializedPluginIds = new Set<string>();
+  private readonly cleanups = new Map<string, () => void>();
   private readonly capabilityOwners = new Map<string, string>();
 
   constructor(private readonly options: PluginLoaderOptions) {
@@ -51,22 +52,50 @@ export class PluginLoader {
           capabilityOwners: this.capabilityOwners,
           initializedPluginIds: this.initializedPluginIds
         });
-        await plugin.initialize(this.options.createContext(plugin, capabilities));
+        const baseContext = this.options.createContext(plugin, capabilities);
+        const subscriptions = new Set<() => void>();
+        this.cleanups.set(plugin.manifest.id, () => { for (const unsubscribe of subscriptions) unsubscribe(); subscriptions.clear(); });
+        const eventBus: RocEventBus = {
+          publish: event => baseContext.eventBus.publish(event),
+          subscribe: (type, handler) => {
+            const unsubscribe = baseContext.eventBus.subscribe(type, handler);
+            const release = () => { unsubscribe(); subscriptions.delete(release); };
+            subscriptions.add(release);
+            return release;
+          }
+        };
+        await plugin.initialize({ ...baseContext, eventBus });
         this.initializedPlugins.push(plugin);
         this.initializedPluginIds.add(plugin.manifest.id);
         this.status.plugins[plugin.manifest.id] = await plugin.healthCheck();
       } catch (error) {
-        await this.recordFailure(plugin, error);
+        this.initializedPluginIds.delete(plugin.manifest.id);
+        const index = this.initializedPlugins.indexOf(plugin);
+        if (index !== -1) this.initializedPlugins.splice(index, 1);
+        let failure: unknown = error;
+        try { await plugin.shutdown(); } catch (cleanupError) { failure = new AggregateError([error, cleanupError], 'plugin_initialization_cleanup_failed'); }
+        this.dispose(plugin);
+        await this.recordFailure(plugin, failure);
       }
     }
   }
 
   async shutdown(): Promise<void> {
+    const failures: unknown[] = [];
     for (const plugin of [...this.initializedPlugins].reverse()) {
-      await plugin.shutdown();
+      try { await plugin.shutdown(); } catch (error) { failures.push(error); }
+      finally { this.dispose(plugin); }
     }
     this.initializedPlugins.length = 0;
     this.initializedPluginIds.clear();
+    if (failures.length > 0) throw new AggregateError(failures, 'plugin_shutdown_failed');
+  }
+
+  private dispose(plugin: RocPlugin): void {
+    this.cleanups.get(plugin.manifest.id)?.();
+    this.cleanups.delete(plugin.manifest.id);
+    this.options.capabilities.unregister(plugin.manifest.id);
+    this.initializedPluginIds.delete(plugin.manifest.id);
   }
 
   getStatus(): PluginLoaderStatus {
@@ -112,6 +141,8 @@ class ScopedCapabilityRegistry implements RocCapabilityRegistry {
     if (pluginId !== this.options.plugin.manifest.id) {
       throw new Error('capability_plugin_mismatch');
     }
+    const declared = this.options.plugin.manifest.capabilities.find(item => item.name === descriptor.name);
+    if (declared === undefined || declared.version !== descriptor.version || declared.inputSchema !== descriptor.inputSchema || declared.outputSchema !== descriptor.outputSchema) throw new Error('capability_not_in_manifest');
     this.options.root.declare(pluginId, descriptor);
   }
 
@@ -120,6 +151,11 @@ class ScopedCapabilityRegistry implements RocCapabilityRegistry {
       throw new Error('capability_plugin_mismatch');
     }
     this.options.root.register(pluginId, descriptor, handler);
+  }
+
+  unregister(pluginId: string): void {
+    if (pluginId !== this.options.plugin.manifest.id) throw new Error('capability_plugin_mismatch');
+    this.options.root.unregister(pluginId);
   }
 
   async invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {

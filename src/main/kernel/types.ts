@@ -48,6 +48,7 @@ export type RocEventBus = {
 export type RocCapabilityRegistry = {
   declare(pluginId: string, descriptor: CapabilityDescriptor): void;
   register(pluginId: string, descriptor: CapabilityDescriptor, handler: (input: unknown) => Promise<unknown>): void;
+  unregister(pluginId: string): void;
   invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
   list(): readonly CapabilityDescriptor[];
 };

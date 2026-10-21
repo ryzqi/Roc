@@ -1,3 +1,4 @@
+import { tool, type StructuredToolInterface } from '@langchain/core/tools';
 import { MCPAdapter } from '@langchain/mcp-adapters';
 
 import type { McpServerConfig } from '../../../shared/types';
@@ -22,16 +23,9 @@ type McpServerConnectionConfig =
       url: string;
     };
 
-type McpAdapterConfig = {
-  throwOnLoadError: boolean;
-  onConnectionError: 'ignore';
-  // mcp-adapters 2.x 用 servers（1.x 的 mcpServers 已弃用，两者同时传会直接报错）。
-  // 2.x 移除了 useStandardContentBlocks：多模态内容默认就是标准 content block。
-  servers: Record<string, McpServerConnectionConfig>;
-};
-
 export type McpClientAdapter = {
-  loadTools(servers: readonly McpServerConfig[]): Promise<unknown[]>;
+  loadTools(runId: string, servers: readonly McpServerConfig[], signal: AbortSignal): Promise<unknown[]>;
+  release(runId: string): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -40,29 +34,56 @@ export function createMcpClientAdapter(): McpClientAdapter {
 }
 
 class LangChainMcpClientAdapter implements McpClientAdapter {
-  private client: LangChainMcpClient | null = null;
+  private readonly clients = new Map<string, LangChainMcpClient>();
 
-  async loadTools(servers: readonly McpServerConfig[]): Promise<unknown[]> {
-    await this.close();
-    const enabledServers = servers.filter((server) => server.enabled);
-    if (enabledServers.length === 0) {
-      return [];
-    }
-    const config: McpAdapterConfig = {
-      throwOnLoadError: false,
+  async loadTools(runId: string, servers: readonly McpServerConfig[], signal: AbortSignal): Promise<unknown[]> {
+    signal.throwIfAborted();
+    if (this.clients.has(runId)) throw new Error('mcp_run_already_loaded');
+    const enabledServers = servers.filter(server => server.enabled);
+    if (enabledServers.length === 0) return [];
+    const client = new MCPAdapter({
+      throwOnLoadError: true,
       onConnectionError: 'ignore',
-      servers: Object.fromEntries(enabledServers.map((server) => [server.id, toConnectionConfig(server)]))
-    };
-    this.client = new MCPAdapter(config);
-    return await this.client.listTools();
+      servers: Object.fromEntries(enabledServers.map(server => [server.id, { ...toConnectionConfig(server), defaultToolTimeout: 30000, ...(server.transport === 'stdio' ? { restart: { enabled: false } } : {}) }]))
+    });
+    this.clients.set(runId, client);
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(15000)]);
+    let abort: () => void = () => {};
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(new Error(signal.aborted ? 'mcp_initialization_aborted' : 'mcp_initialization_timeout'));
+      deadline.addEventListener('abort', abort, { once: true });
+      if (deadline.aborted) abort();
+    });
+    try {
+      const discovered = await Promise.race([client.listTools(), cancelled]);
+      if (this.clients.get(runId) !== client) throw new Error('mcp_run_released_during_load');
+      return discovered.map(value => {
+        if (typeof value !== 'object' || value === null || typeof Reflect.get(value, 'invoke') !== 'function' || typeof Reflect.get(value, 'name') !== 'string' || Reflect.get(value, 'schema') === undefined) throw new Error('mcp_tool_contract_invalid');
+        const source = value as StructuredToolInterface;
+        return tool(async (args, config) => {
+          const result: unknown = await source.invoke(args, { ...config, signal: config.signal === undefined ? AbortSignal.timeout(30000) : AbortSignal.any([config.signal, AbortSignal.timeout(30000)]) });
+          if (Buffer.byteLength(typeof result === 'string' ? result : JSON.stringify(result)) > 128 * 1024) throw new Error('mcp_tool_output_limit');
+          return result;
+        }, { name: source.name, description: source.description, schema: source.schema });
+      });
+    }
+    catch (error) {
+      try { await this.release(runId); } catch (cleanupError) { throw new AggregateError([error, cleanupError], 'mcp_load_cleanup_failed'); }
+      throw error;
+    } finally { deadline.removeEventListener('abort', abort); }
+  }
+
+  async release(runId: string): Promise<void> {
+    const client = this.clients.get(runId);
+    if (client === undefined) return;
+    this.clients.delete(runId);
+    await client.close();
   }
 
   async close(): Promise<void> {
-    if (this.client === null) {
-      return;
-    }
-    await this.client.close();
-    this.client = null;
+    const results = await Promise.allSettled([...this.clients.keys()].map(runId => this.release(runId)));
+    const failures = results.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length > 0) throw new AggregateError(failures, 'mcp_shutdown_failed');
   }
 }
 

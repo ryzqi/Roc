@@ -41,6 +41,8 @@ import type { RunBudgetLedger, RunLimits } from './run-budget-ledger';
 import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-budget-middleware';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
+import { createPreparedToolEffectMiddleware, createFinalToolGuardMiddleware, createToolAdmissionMiddleware } from './prepared-tool-effect';
+
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
 
 export type DeepAgentMiddleware = NonNullable<NonNullable<Parameters<typeof createDeepAgent>[0]>['middleware']>[number];
@@ -107,6 +109,7 @@ const ALL_MODES: readonly RunExecutionMode[] = ['plan', 'run', 'task'];
  * 那个相对位置由 createDeepAgent 拥有，不在这里表达。
  */
 const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
+  { name: 'RocPreparedToolEffectMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES, create: () => createPreparedToolEffectMiddleware() },
   {
     name: 'RocRunCorrectionMiddleware',
     scopes: ['main'],
@@ -257,6 +260,10 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     })
   },
   {
+    name: 'RocToolAdmissionMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
+    create: context => createToolAdmissionMiddleware(context.policy.runId, context.budgetLimits.maxConcurrentToolCalls, context.policy.capabilityManifest)
+  },
+  {
     name: 'RocRunBudgetMiddleware',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
@@ -287,6 +294,10 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
           store: context.toolEffectStore,
           capabilityManifest: context.policy.capabilityManifest
         })
+  },
+  {
+    name: 'RocFinalToolGuardMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
+    create: context => createFinalToolGuardMiddleware({ manifest: context.policy.capabilityManifest, scope: context.executionScope, boundToolNames: context.policy.boundToolNames })
   },
   {
     name: 'ForgeCleanupMiddleware',

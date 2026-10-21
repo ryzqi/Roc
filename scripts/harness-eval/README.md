@@ -40,3 +40,14 @@ fixed. Build, existing 264 tests, IPC/chunks and Electron12/12 passed. Evidence:
 `.artifacts/harness-eval/2026-10-21T09-43-26.930Z-27961/report.json`,
 `.artifacts/harness-eval/smoke-p2-memory.log`. Expired latest states remain as invalidation markers;
 archive capacity can explicitly reject further writes rather than revive old experience.
+
+P3: 80/80 deterministic cases, including cross-run exclusive writes, main/child shared
+admission, final guard mutations, crash reservations/explicit receipts, atomic writes, real
+MCP subprocess leases, failed-plugin cleanup and macOS sandbox filesystem/network/process
+checks. Review fixed setsid escape and cleanup errors. The probe provider permits OS runtime
+reads and denies external user files/network; production shell remains an explicit host path.
+Build,264 existing tests,IPC/chunks and Electron52/52 passed. UI evidence precedes only final
+isolated-provider cleanup and missing-MCP-tool diagnostics (source cases/review cover these).
+Evidence: `.artifacts/harness-eval/2026-10-21T11-40-56.970Z-36602/report.json`,
+`.artifacts/harness-eval/ui-p3.log`. Resource scheduling deliberately serializes all mutations
+across runs to protect shared memory and overlapping workspace roots.

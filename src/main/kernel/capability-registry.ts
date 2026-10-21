@@ -36,6 +36,10 @@ export class CapabilityRegistry implements RocCapabilityRegistry {
     record.handler = handler;
   }
 
+  unregister(pluginId: string): void {
+    for (const record of this.capabilities.values()) if (record.pluginId === pluginId) record.handler = null;
+  }
+
   async invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
     const record = this.capabilities.get(name);
     if (record === undefined) {

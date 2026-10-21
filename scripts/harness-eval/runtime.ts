@@ -1,3 +1,5 @@
+export { verifyExtensions } from './extensions';
+export { runExecutionScenario, runIsolationScenario } from './execution';
 import assert from 'node:assert/strict';
 import { verifyMemorySkills } from './memory-skills';
 import { verifyContext } from './context';
@@ -49,8 +51,9 @@ const effect = {
 export function crashWorker(directory: string, point: string): never {
   const db = openDatabase(join(directory, 'agent.sqlite'));
   const store = new AgentToolEffectStore(db);
+  store.reserve(effect);
   if (point === 'before-dispatch') process.exit(73);
-  store.start(effect);
+  store.markStarted(effect);
   appendFileSync(join(directory, 'remote-receipt.txt'), 'effect\n');
   if (point === 'remote-success') process.exit(73);
   store.finishSuccess({ ...effect, result: { receipt: 'effect' } });
@@ -65,13 +68,18 @@ export function recoverCrash(directory: string, point: string): Record<string, u
     const receipts = existsSync(join(directory, 'remote-receipt.txt'))
       ? readFileSync(join(directory, 'remote-receipt.txt'), 'utf8').trim().split('\n').length : 0;
     if (point === 'before-dispatch') {
-      assert.equal(store.readState(effect).status, 'not_started');
+      assert.equal(store.readState(effect).status, 'failed_retryable');
+      store.reserve(effect);
+      store.markStarted(effect);
       assert.equal(receipts, 0);
     } else if (point === 'remote-success') {
       assert.equal(receipts, 1);
       assert.equal(store.readState(effect).status, 'unknown');
       assert.throws(() => store.readReusable(effect), /unknown_manual_confirmation/);
-      assert.throws(() => store.start(effect), /unknown_manual_confirmation/);
+      assert.throws(() => store.reserve(effect), /unknown_manual_confirmation/);
+      store.reconcile({ ...effect, outcome: 'applied', evidence: 'remote-receipt.txt contains one durable synthetic receipt', result: { receipt: 'effect' } });
+      assert.deepEqual(store.readReusable(effect)?.result, { receipt: 'effect' });
+      assert.equal(receipts, 1);
     } else {
       assert.equal(receipts, 1);
       assert.deepEqual(store.readReusable(effect)?.result, { receipt: 'effect' });

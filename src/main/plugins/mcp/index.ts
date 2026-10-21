@@ -36,7 +36,8 @@ const mcpCapabilityDescriptors = [
   descriptor('mcp.testServer', idInputSchema, mcpServerTestResultSchema),
   descriptor('mcp.getConfig', emptyInputSchema, mcpServersConfigSchema),
   descriptor('mcp.setApprovalMode', mcpApprovalModeRequestSchema, mcpServersConfigSchema),
-  descriptor('mcp.tools.get', emptyInputSchema, z.array(z.unknown()))
+  descriptor('mcp.tools.get', z.object({ runId: z.string().min(1), servers: z.array(mcpServerConfigSchema), signal: z.instanceof(AbortSignal) }).strict(), z.array(z.unknown())),
+  descriptor('mcp.tools.release', z.object({ runId: z.string().min(1) }).strict(), z.object({ released: z.literal(true) }).strict())
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type McpPluginOptions = {
@@ -83,9 +84,14 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
         const request = input as { approvalMode: ApprovalMode };
         return service.setApprovalMode(request.approvalMode);
       });
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[8], async () =>
-        clientAdapter.loadTools(configAdapter.getMcpConfig().servers.filter((server) => server.enabled))
-      );
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[8], async input => {
+        const request = input as { runId: string; servers: McpServerConfig[]; signal: AbortSignal };
+        return clientAdapter.loadTools(request.runId, request.servers, request.signal);
+      });
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[9], async input => {
+        await clientAdapter.release((input as { runId: string }).runId);
+        return { released: true as const };
+      });
     },
     shutdown: async () => {
       await clientAdapter.close();

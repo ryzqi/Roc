@@ -270,6 +270,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         } catch (error) {
           rejectOutcome(error);
           throw error;
+        } finally {
+          if (input.snapshot.capabilityManifest.resolvedCapabilities.mcpServers.length > 0) {
+            await options.capabilities.invoke('mcp.tools.release', { runId: input.run.id });
+          }
         }
       })();
       return createAgentDeepAgentExecution({ events, outcome });

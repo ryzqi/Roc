@@ -40,7 +40,7 @@ export function createRocFilesystemPathPolicyMiddleware() {
   });
 }
 
-function normalizeFilesystemToolCall<TRequest extends ToolCallRequest>(
+export function normalizeFilesystemToolCall<TRequest extends ToolCallRequest>(
   request: TRequest
 ): ToolCallNormalizationResult<TRequest> {
   const pathField = getRocFileToolPathField(request.toolCall.name);

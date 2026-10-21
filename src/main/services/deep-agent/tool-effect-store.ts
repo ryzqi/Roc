@@ -3,6 +3,7 @@ import type { Database as DatabaseConnection, RunResult } from 'better-sqlite3';
 import type { RunCapabilityEffectClassV1, RunCapabilityReconcileStrategyV1 } from '../../../shared/types';
 
 export type ToolEffectStatus =
+  | 'reserved'
   | 'not_started'
   | 'in_progress'
   | 'succeeded'
@@ -47,7 +48,7 @@ export type ReusableToolEffect = { status: 'succeeded'; result: unknown };
 export class AgentToolEffectStore {
   constructor(private readonly db: DatabaseConnection) {}
 
-  start(input: ToolEffectKey & {
+  reserve(input: ToolEffectKey & {
     threadId: string;
     toolName: string;
     inputHash: string;
@@ -61,7 +62,7 @@ export class AgentToolEffectStore {
         `INSERT OR IGNORE INTO agent_tool_effects
          (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
           effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', NULL, NULL, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', NULL, NULL, ?, ?)`
       )
       .run(
         input.runId,
@@ -86,7 +87,7 @@ export class AgentToolEffectStore {
       const retry = this.db
         .prepare(
           `UPDATE agent_tool_effects
-           SET status = 'in_progress', result_json = NULL, error_json = NULL, updated_at = ?
+           SET status = 'reserved', result_json = NULL, error_json = NULL, updated_at = ?
            WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
              AND status = 'failed_retryable'`
         )
@@ -99,6 +100,32 @@ export class AgentToolEffectStore {
       throw new Error('agent_tool_effect_already_completed');
     }
     throwEffectUnavailable(state);
+  }
+
+  markStarted(input: ToolEffectKey): void {
+    validateKey(input);
+    const result = this.db.prepare(`UPDATE agent_tool_effects SET status = 'in_progress', updated_at = ?
+      WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ? AND status = 'reserved'`)
+      .run(new Date().toISOString(), input.runId, input.executionPath, input.checkpointId, input.toolCallId);
+    if (result.changes !== 1) throw new Error('agent_tool_effect_dispatch_not_reserved');
+  }
+
+  /** Main-process reconciliation requires an explicit receipt; never inferred from a model's claim. */
+  reconcile(input: ToolEffectKey & { inputHash: string; evidence: string; outcome: 'applied' | 'not_applied'; result?: unknown }): void {
+    if (input.evidence.trim().length === 0 || input.evidence.length > 4000) throw new Error('agent_tool_effect_receipt_required');
+    if (input.outcome === 'applied' && input.result === undefined) throw new Error('agent_tool_effect_receipt_result_required');
+    this.db.transaction(() => {
+      const row = this.readRow(input);
+      assertInputHash(row, input.inputHash);
+      if (row.status !== 'unknown') throw new Error('agent_tool_effect_reconcile_not_unknown');
+      this.db.prepare(`UPDATE agent_tool_effects SET status = ?, result_json = ?, updated_at = ?
+        WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?`)
+        .run(input.outcome === 'applied' ? 'succeeded' : 'failed_retryable', input.outcome === 'applied' ? JSON.stringify(input.result) : null,
+          new Date().toISOString(), input.runId, input.executionPath, input.checkpointId, input.toolCallId);
+      this.db.prepare(`INSERT INTO agent_tool_effect_reconciliations
+        (run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(input.runId, input.executionPath, input.checkpointId, input.toolCallId, input.inputHash, input.evidence, input.outcome, new Date().toISOString());
+    }).immediate();
   }
 
   readReusable(input: ToolEffectKey & { inputHash: string }): ReusableToolEffect | null {
@@ -132,6 +159,7 @@ export class AgentToolEffectStore {
 
   markRestartedUnknown(runId: string): void {
     const now = new Date().toISOString();
+    this.db.prepare("UPDATE agent_tool_effects SET status = 'failed_retryable', updated_at = ? WHERE run_id = ? AND status = 'reserved'").run(now, runId);
     this.db
       .prepare(
         `UPDATE agent_tool_effects
@@ -195,9 +223,11 @@ export class AgentToolEffectStore {
 
   deleteForRunIds(runIds: readonly string[]): number {
     const statement = this.db.prepare('DELETE FROM agent_tool_effects WHERE run_id = ?');
+    const receipts = this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id = ?');
     return this.db.transaction(() => {
       let deleted = 0;
       for (const runId of runIds) {
+        receipts.run(runId);
         deleted += statement.run(runId).changes;
       }
       return deleted;
@@ -206,7 +236,10 @@ export class AgentToolEffectStore {
 
   deleteForThread(threadId: string): number {
     requireToolEffectKey(threadId, 'agent_tool_effect_thread_id_missing');
-    return this.db.prepare('DELETE FROM agent_tool_effects WHERE thread_id = ?').run(threadId).changes;
+    return this.db.transaction(() => {
+      this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id IN (SELECT run_id FROM agent_tool_effects WHERE thread_id = ?)').run(threadId);
+      return this.db.prepare('DELETE FROM agent_tool_effects WHERE thread_id = ?').run(threadId).changes;
+    })();
   }
 
   finishSuccess(input: ToolEffectKey & { result: unknown }): void {
@@ -287,7 +320,7 @@ export function hashToolInput(input: unknown): string {
   return createHash('sha256').update(stableStringify(input)).digest('hex');
 }
 
-function validateEffectInput(input: Parameters<AgentToolEffectStore['start']>[0]): void {
+function validateEffectInput(input: Parameters<AgentToolEffectStore['reserve']>[0]): void {
   validateKey(input);
   requireToolEffectKey(input.threadId, 'agent_tool_effect_thread_id_missing');
   requireToolEffectKey(input.toolName, 'agent_tool_effect_tool_name_missing');

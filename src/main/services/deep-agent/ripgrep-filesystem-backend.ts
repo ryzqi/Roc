@@ -1,4 +1,5 @@
-import { FilesystemBackend, type GrepResult } from 'deepagents';
+import { type GrepResult } from 'deepagents';
+import { AtomicFilesystemBackend } from './atomic-filesystem-backend';
 import type { RipgrepService } from '../ripgrep-service';
 
 /**
@@ -9,8 +10,7 @@ import type { RipgrepService } from '../ripgrep-service';
  * 于是实际跑的是 `fg` 全仓枚举 + 逐文件 `includes`——大工作区里一次 grep 就是数秒的同步 IO。
  * 这里的子类把同一次调用交给 `RipgrepService`（显式二进制路径），PATH 不再参与决策。
  *
- * 刻意**不**改写读/写/编辑：那几条路径的语义（行号、`virtualMode` 的越界校验、符号链接
- * 的真实路径检查）都由上游负责，重写一遍只会制造第二个真相源。
+ * 读取保留上游语义；写入/编辑由 AtomicFilesystemBackend 原子发布，grep 在此替换。
  *
  * 降级：二进制缺失、spawn 失败或 rg 报错时退回 `super.grep`。**注意那条路径不完全等价**：
  * 上游会再试一次 PATH 上的 `rg`，自己没有才落到 `fg` 枚举。也就是说“不看 PATH”只在随包
@@ -30,7 +30,7 @@ export type RipgrepFilesystemBackendOptions = {
   maxFileSizeMb?: number;
 };
 
-export class RipgrepFilesystemBackend extends FilesystemBackend {
+export class RipgrepFilesystemBackend extends AtomicFilesystemBackend {
   // 名字不能跟上游的私有 `maxFileSizeBytes` 撞：TS 会判定基类被错误继承。
   private readonly grepMaxFileSizeBytes: number | null;
 

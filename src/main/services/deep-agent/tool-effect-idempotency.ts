@@ -79,7 +79,7 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
         return deserializeToolResult(reusable.result);
       }
 
-      options.store.start({
+      options.store.reserve({
         ...key,
         threadId: options.threadId,
         toolName: typedRequest.toolCall.name,
@@ -88,6 +88,7 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
         reconcileStrategy: effectPolicy.reconcileStrategy
       });
       try {
+        options.store.markStarted(key);
         const result = await handler(request);
         if (!ToolMessage.isInstance(result)) {
           throw new Error('agent_tool_effect_result_not_tool_message');

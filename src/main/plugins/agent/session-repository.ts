@@ -418,7 +418,7 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_version !== 4) {
+    if (row.snapshot_version !== 5) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
       throw new Error('run_execution_snapshot_unsupported_version');
     }

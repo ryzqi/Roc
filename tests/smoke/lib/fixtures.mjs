@@ -567,13 +567,16 @@ function writeStreamingToolCallOnlyResponse(response, toolCall, usage) {
  * assertion that a workspace filename shows up in the tool body is what proves the tool actually
  * executed rather than being echoed by the renderer.
  */
-function writeP4ToolModeResponse(response, parsedBody, turn) {
+async function writeP4ToolModeResponse(response, parsedBody, turn) {
+  // Keep the scripted running/streaming states observable on fast local providers.
+  await new Promise(resolve => setTimeout(resolve, 250));
   const callId = smokeP4CallId('ls', turn.nonce);
   if (readToolResultText(parsedBody?.messages, callId) !== null) {
     // Reasoning and text in the *closing* turn keep this turn free of tool calls, so the
     // reasoning block and the streamed text are exercised without the shape issue documented
     // on `writeStreamingToolCallOnlyResponse`.
     writeSseDelta(response, { role: 'assistant', reasoning_content: smokeP4ReasoningText });
+    await new Promise(resolve => setTimeout(resolve, 100));
     writeSseDelta(response, { content: '工具已返回，先记录看到的内容。' });
     writeSseDelta(response, { content: `\n\n结论完成。${smokeP4ToolDoneMarker}` });
     writeSseFinish(response, 'stop', { prompt_tokens: 42, completion_tokens: 24, total_tokens: 66 });
@@ -812,7 +815,7 @@ export async function startSmokeProvider(input = {}) {
         const p4Turn = readSmokeP4Turn(parsedBody?.messages);
         if (p4Turn !== null) {
           if (p4Turn.mode === 'tool') {
-            writeP4ToolModeResponse(response, parsedBody, p4Turn);
+            await writeP4ToolModeResponse(response, parsedBody, p4Turn);
             return;
           }
           if (p4Turn.mode === 'approval') {

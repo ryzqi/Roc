@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { mcpServerConfigSchema } from './ipc-mcp-skills';
 import { hitlDecisionTypeSchema } from './hitl';
 
 const identifierSchema = z.string().trim().min(1);
@@ -121,6 +122,7 @@ export const runCapabilityManifestSchema = z
     skippedCapabilities: z.array(skippedCapabilitySchema),
     tools: z.array(runCapabilityManifestToolSchema),
     skills: z.array(runCapabilityManifestSkillSchema),
+    mcpServers: z.array(mcpServerConfigSchema),
     untrustedContextPolicy: z.literal('external_content_reference_only')
   })
   .strict();
@@ -202,7 +204,7 @@ const runExecutionSnapshotShape = {
 
 export const runExecutionSnapshotSchema = z
   .object({
-    schemaVersion: z.literal(4),
+    schemaVersion: z.literal(5),
     ...runExecutionSnapshotShape,
     budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()

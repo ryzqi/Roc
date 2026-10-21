@@ -65,7 +65,7 @@ try {
       response.end(JSON.stringify({ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, object: 'chat.completion', created: 0, model: 'roc-pilot',
         choices: [{ index: 0, finish_reason: done ? 'stop' : 'tool_calls', message: done
           ? { role: 'assistant', content: 'pilot-complete' }
-          : { role: 'assistant', content: null, tool_calls: [{ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, type: 'function',
+          : { role: 'assistant', content: null, tool_calls: user === 'execution-child' ? [{id:'child-task',type:'function',function:{name:'task',arguments:JSON.stringify({description:'execution-child/child',subagent_type:'pilot-child'})}},{id:'parent-action',type:'function',function:{name:'pilot_action',arguments:'{"index":0}'}}] : user.startsWith('execution-') ? Array.from({ length: 4 }, (_, index) => ({ id: `execution-${index}`, type: 'function', function: { name: 'pilot_action', arguments: JSON.stringify({ index }) } })) : [{ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, type: 'function',
             function: user === 'budget-child-tools'
               ? { name: 'task', arguments: JSON.stringify({ description: 'budget-child-tools-child', subagent_type: 'pilot-child' }) }
               : { name: 'pilot_action', arguments: '{}' } }] } }],
@@ -79,6 +79,22 @@ try {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+  for (const name of ['execution-admission', 'execution-resource', 'execution-mutation', 'execution-signal', 'execution-cancel', 'execution-child']) {
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: await runtime.runExecutionScenario(name, dir, endpoint) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
+  {
+    const dir = join(directory, 'execution-isolation'); mkdirSync(dir);
+    try { report.results.push({ id: 'execution-isolation', passed: true, evidence: await runtime.runIsolationScenario(dir) }); }
+    catch (error) { report.results.push({ id: 'execution-isolation', passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
+  for (const name of ['execution-atomic', 'execution-plugin-cleanup', 'execution-mcp-lifecycle']) {
+    const dir = join(directory, name); mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: await runtime.verifyExtensions(name, dir) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
   for (const scenario of scenarios) {
     const dir = join(directory, scenario.id);
     mkdirSync(dir);
@@ -121,7 +137,7 @@ try {
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
   for (const observation of Object.values(report.knownDefects)) assert.equal(observation.observed, observation.expected);
-  report.passed = report.results.length === 70 && report.results.every(r => r.passed);
+  report.passed = report.results.length === 80 && report.results.every(r => r.passed);
 } catch (error) {
   report.error = String(error);
   report.failureClass = error.failureClass ?? 'infra';
