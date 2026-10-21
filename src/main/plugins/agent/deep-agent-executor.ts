@@ -16,7 +16,7 @@ import { defaultErrorTracker } from '../../services/forge-guardrails';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import { validateOutcomeConsistency } from '../../services/deep-agent/outcome-validator';
 import { recoverOrphanedOperation } from '../../services/deep-agent/operation-recovery';
-import { validateTokenBudget, ToolCallLoopDetector } from '../../services/deep-agent/runtime-state-validator';
+import { validateRunTokenBudget } from '../../services/deep-agent/runtime-state-validator';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
@@ -81,7 +81,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const outcomeText = createOutcomeTextCollector(hookDisplayTexts);
       const successfulToolNamesByBlockId = new Map<string, string>();
       const usageAccumulator = createUsageAccumulator();
-      const toolCallLoopDetector = new ToolCallLoopDetector();
       const executionAbortController = new AbortController();
       const abortFromParent = () => executionAbortController.abort(input.abortSignal.reason);
       if (input.abortSignal.aborted) {
@@ -97,15 +96,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         });
         if (event.type === 'assistant_block' && event.block.kind === 'text' && event.block.text !== undefined) {
           outcomeText.push(event.block.text);
-        }
-
-        // 工具调用循环检测
-        if (event.type === 'assistant_block' && event.block.kind === 'tool_call' && event.block.phase === 'end') {
-          const loopError = toolCallLoopDetector.recordToolCall(event.block.name, event.block.blockId);
-          if (loopError !== null) {
-            // 不中断运行,仅记录警告(让 Agent 自行纠正)
-            console.warn(`[ToolCallLoopDetector] ${loopError.message}`);
-          }
         }
 
         if (eventQueue.push(event)) {
@@ -135,6 +125,15 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         return;
       }
       const agent = harness.agent;
+      const deadline = input.snapshot.budget.deadlineAt;
+      let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+      const checkDeadline = (): void => {
+        if (deadline === null) return;
+        const remaining = Date.parse(deadline) - Date.now();
+        if (remaining <= 0) executionAbortController.abort(new Error('run_deadline_exhausted'));
+        else deadlineTimer = setTimeout(checkDeadline, Math.min(2_147_483_647, remaining));
+      };
+      checkDeadline();
       const runInput =
         input.resumePayload !== undefined
           ? new Command({ resume: input.resumePayload })
@@ -143,12 +142,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             : createInitialState(input.run.userInput, input.validatedAttachments);
       const rawRun = await agent.streamEvents(runInput as never, {
         version: 'v3',
+        callbacks: harness.callbacks,
         recursionLimit: 10000,
         configurable: {
           run_id: input.run.id,
           thread_id: input.run.threadId
         },
         signal: executionAbortController.signal
+      }).catch((error: unknown) => {
+        if (deadlineTimer !== null) clearTimeout(deadlineTimer);
+        input.abortSignal.removeEventListener('abort', abortFromParent);
+        throw error;
       });
       const projectToolOutput = createToolOutputProjector({
         artifactStore: options.contextArtifactStore,
@@ -212,9 +216,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             }
             const finalMessage = outcomeText.finish().trim();
 
-            // Token budget 校验：与工厂 runtime 同一来源，未手动填的已有模型也走默认 500K。
-            const contextBudgetTokens = input.modelHandle.langChainHandle?.runtime.contextBudgetTokens;
-            const budgetError = validateTokenBudget(usageAccumulator, contextBudgetTokens);
+            const budgetError = validateRunTokenBudget(usageAccumulator, input.snapshot.budget.maxTotalTokens);
             if (budgetError !== null) {
               throw new Error(budgetError.code);
             }
@@ -232,27 +234,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               throw new Error(validationError.code);
             }
 
-            const hasAnyModelOutput =
-              finalMessage.length > 0 ||
-              assistantChunks.some(chunk => chunk.trim().length > 0) ||
-              reasoningChunks.some(chunk => chunk.trim().length > 0) ||
-              successfulToolNamesByBlockId.size > 0 ||
-              hookDisplayTexts.length > 0;
-            if (!hasAnyModelOutput) {
-              const diagnostics = {
-                finalMessageLength: finalMessage.length,
-                assistantChunksCount: assistantChunks.length,
-                assistantTotalChars: assistantChunks.join('').length,
-                reasoningChunksCount: reasoningChunks.length,
-                reasoningTotalChars: reasoningChunks.join('').length,
-                successfulToolCount: successfulToolNamesByBlockId.size,
-                hookTextsCount: hookDisplayTexts.length,
-                finalAssistantText: finalAssistantText
-              };
-              const error = new Error('agent_model_response_empty');
-              (error as Error & { diagnostics: unknown }).diagnostics = diagnostics;
-              throw error;
-            }
             outcomePublished = true;
             resolveOutcome({
               status: 'completed',
@@ -279,6 +260,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         }
         await consumeRun;
       } finally {
+        if (deadlineTimer !== null) clearTimeout(deadlineTimer);
         executionAbortController.abort(new Error('chat_run_event_consumer_stopped'));
         await consumeRun.catch((error: unknown) => {
           rejectOutcome(error);

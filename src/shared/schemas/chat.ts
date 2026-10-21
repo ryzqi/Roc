@@ -285,6 +285,14 @@ export const activeChatRunSchema = z
   })
   .strict();
 
+export const chatCorrectRunRequestSchema = z.object({
+  runId: identifierSchema,
+  submissionId: identifierSchema,
+  content: z.string().trim().min(1).max(32000)
+}).strict();
+
+export const chatCorrectRunResultSchema = z.object({ sequence: z.number().int().positive() }).strict();
+
 export const chatActiveRunRequestSchema = z
   .object({
     threadId: identifierSchema

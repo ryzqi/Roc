@@ -157,11 +157,19 @@ export const runExecutionModeSchema = z.enum(['plan', 'run', 'task']);
 
 export const runBudgetSchema = z
   .object({
-    contextBudgetTokens: z.number().int().positive().nullable()
+    contextWindowTokens: z.number().int().positive().nullable(),
+    maxTotalTokens: z.number().int().positive().nullable(),
+    maxCostUsd: z.number().nonnegative().nullable(),
+    maxModelCalls: z.number().int().positive(),
+    maxToolCalls: z.number().int().positive(),
+    maxConcurrentModelCalls: z.number().int().positive(),
+    maxConcurrentToolCalls: z.number().int().positive(),
+    deadlineAt: z.string().datetime().nullable()
   })
   .strict();
 
 const runExecutionSnapshotShape = {
+  submissionHash: identifierSchema,
   runId: identifierSchema,
   threadId: identifierSchema,
   runOrigin: runOriginSchema,
@@ -190,7 +198,7 @@ const runExecutionSnapshotShape = {
 
 export const runExecutionSnapshotSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     ...runExecutionSnapshotShape,
     budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()

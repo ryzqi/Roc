@@ -37,7 +37,7 @@ try {
   process.env.LANGSMITH_TRACING = 'false';
   process.env.LANGCHAIN_TRACING_V2 = 'false';
   const runtime = await import(pathToFileURL(runtimePath).href);
-  report.knownDefects = runtime.observeBaseline();
+  report.knownDefects = runtime.observeBaseline(directory);
   for (const point of ['before-dispatch', 'remote-success', 'result-stored']) {
     const dir = join(directory, point);
     mkdirSync(dir);
@@ -58,15 +58,20 @@ try {
       const user = body.messages.findLast(m => m.role === 'user')?.content;
       const step = (requests.get(user) ?? 0) + 1;
       requests.set(user, step);
-      const done = body.messages.at(-1).role === 'tool';
-      assert.ok(step <= 2, 'unbounded provider calls');
+      const done = user === 'budget-child-tools: preserve correction' || (body.messages.at(-1).role === 'tool'
+        && user !== 'budget-loop' && (user !== 'budget-window' || step === 3));
+      assert.ok(step <= (user === 'budget-loop' || user === 'budget-window' ? 3 : 2), 'unbounded provider calls');
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, object: 'chat.completion', created: 0, model: 'roc-pilot',
         choices: [{ index: 0, finish_reason: done ? 'stop' : 'tool_calls', message: done
           ? { role: 'assistant', content: 'pilot-complete' }
-          : { role: 'assistant', content: null, tool_calls: [{ id: `pilot-${hash(String(user)).slice(0, 16)}`, type: 'function',
-            function: { name: 'pilot_action', arguments: '{}' } }] } }],
-        usage: { prompt_tokens: 64, completion_tokens: 16, total_tokens: 80 }
+          : { role: 'assistant', content: null, tool_calls: [{ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, type: 'function',
+            function: user === 'budget-child-tools'
+              ? { name: 'task', arguments: JSON.stringify({ description: 'budget-child-tools-child', subagent_type: 'pilot-child' }) }
+              : { name: 'pilot_action', arguments: '{}' } }] } }],
+        ...(user === 'budget-unknown' ? {} : { usage: user === 'budget-window'
+          ? { prompt_tokens: 40000, completion_tokens: 5000, total_tokens: 45000 }
+          : { prompt_tokens: 64, completion_tokens: 16, total_tokens: 80 } })
       }));
     } catch (error) {
       response.writeHead(500).end(JSON.stringify({ error: { message: String(error) } }));
@@ -89,7 +94,22 @@ try {
       report.results.push({ id: scenario.id, passed: false, failureClass: error.failureClass ?? (error.name === 'AssertionError' ? 'verifier' : 'infra'), error: String(error) });
     }
   }
-  report.passed = report.results.length === 51 && report.results.every(r => r.passed);
+  for (const name of ['budget-model', 'budget-token', 'budget-unknown', 'budget-restart', 'budget-loop', 'budget-cost', 'budget-deadline', 'budget-inbox', 'budget-retry', 'budget-concurrency', 'budget-window', 'budget-child-tools']) {
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    const before = [...requests.values()].reduce((a, b) => a + b, 0);
+    try {
+      const evidence = await runtime.runBudgetScenario(name, dir, endpoint);
+      const modelCalls = [...requests.values()].reduce((a, b) => a + b, 0) - before;
+      assert.equal(modelCalls, name === 'budget-child-tools' ? 4 : name === 'budget-cost' || name === 'budget-deadline' ? 0
+        : name === 'budget-loop' || name === 'budget-concurrency' || name === 'budget-window' ? 3 : name === 'budget-inbox' ? 2 : 1);
+      report.results.push({ id: name, passed: true, modelCalls, evidence });
+    } catch (error) {
+      report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) });
+    }
+  }
+  for (const observation of Object.values(report.knownDefects)) assert.equal(observation.observed, observation.expected);
+  report.passed = report.results.length === 63 && report.results.every(r => r.passed);
 } catch (error) {
   report.error = String(error);
   report.failureClass = error.failureClass ?? 'infra';

@@ -228,6 +228,7 @@ export const rocApi: RocPreloadApi = {
   chat: {
     startRun: (...args) => ipcRenderer.invoke(ipcChannels.chatStartRun, ...args),
     cancelRun: (...args) => ipcRenderer.invoke(ipcChannels.chatCancelRun, ...args),
+    correctRun: (...args) => ipcRenderer.invoke(ipcChannels.chatCorrectRun, ...args),
     resumeRun: (...args) => ipcRenderer.invoke(ipcChannels.chatResumeRun, ...args),
     getRunEvents: (...args) => ipcRenderer.invoke(ipcChannels.chatGetRunEvents, ...args),
     getActiveRun: (...args) => ipcRenderer.invoke(ipcChannels.chatGetActiveRun, ...args),

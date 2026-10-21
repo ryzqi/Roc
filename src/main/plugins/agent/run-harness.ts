@@ -48,6 +48,8 @@ import {
 import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
+import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
+import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
@@ -57,6 +59,7 @@ import { SecurityScanService } from '../../services/memory/security-scan';
 import type { SelfConfigDryRunConfirmRequest, SelfConfigService } from '../../services/self-config';
 
 export type RunHarnessServices = {
+  budgetLedger: RunBudgetLedger;
   capabilities: RocCapabilityRegistry;
   checkpointer: BaseCheckpointSaver;
   contextArtifactStore: ContextArtifactStore;
@@ -83,7 +86,8 @@ export type RunHarness =
   | { kind: 'blocked'; reason: string }
   | {
       kind: 'ready';
-      agent: ReturnType<typeof buildDeepAgent>;
+      agent: ReturnType<typeof buildDeepAgent>['agent'];
+      callbacks: RunBudgetObserver[];
       /** 指标与事件按来源分流：后台任务与主聊天分开统计。 */
       source: 'chat' | 'background_task';
       workspaceHash: string | null;
@@ -180,7 +184,7 @@ export async function buildRunHarness(
     referencedFileContexts,
     researchProjectId: request.snapshot.researchProjectId ?? null
   });
-  const contextWindowTokens = request.snapshot.budget.contextBudgetTokens;
+  const contextWindowTokens = request.snapshot.budget.contextWindowTokens;
   if (contextWindowTokens === null) {
     throw new Error('agent_context_budget_missing');
   }
@@ -201,7 +205,8 @@ export async function buildRunHarness(
   if (initialHookContexts.kind === 'blocked') {
     return initialHookContexts;
   }
-  const agent = buildDeepAgent({
+  const { agent, revision } = buildDeepAgent({
+    budgetLedger: services.budgetLedger,
     snapshot: request.snapshot,
     model: handle.model,
     systemPrompt: contextHarness.systemPrompt,
@@ -235,6 +240,7 @@ export async function buildRunHarness(
   return {
     kind: 'ready',
     agent,
+    callbacks: [new RunBudgetObserver(services.budgetLedger, request.run.id, request.snapshot.budget, revision)],
     source,
     workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
   };

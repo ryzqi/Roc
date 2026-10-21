@@ -25,6 +25,7 @@ import type {
   RunExecutionSnapshot
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
+import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
@@ -207,7 +208,7 @@ export class AgentPluginRuntime {
     if (dispatchKey !== null) {
       const existingRun = this.options.repository.findRunByDispatchKey(dispatchKey);
       if (existingRun !== null) {
-        return toExistingRunStartResult(this.options.repository, existingRun);
+        return toExistingRunStartResult(this.options.repository, existingRun, request);
       }
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
@@ -255,7 +256,7 @@ export class AgentPluginRuntime {
       if (existingRun === null) {
         throw error;
       }
-      return toExistingRunStartResult(this.options.repository, existingRun);
+      return toExistingRunStartResult(this.options.repository, existingRun, request);
     }
     const dispatchedRun = this.options.repository.transitionRun({
       endedAt: null,
@@ -1199,7 +1200,8 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    submissionHash: hashToolInput(input.request),
     runOrigin: resolveRunOrigin(input.request),
     model: {
       providerId: input.modelHandle.providerId,
@@ -1226,9 +1228,6 @@ function resolveDispatchKey(request: ChatStartRunRequest): string | null {
   if (request.dispatchKey === undefined) {
     return null;
   }
-  if (request.taskSource !== 'background_schedule') {
-    throw new Error('agent_dispatch_key_source_invalid');
-  }
   const dispatchKey = request.dispatchKey.trim();
   if (dispatchKey.length === 0) {
     throw new Error('agent_dispatch_key_empty');
@@ -1236,8 +1235,9 @@ function resolveDispatchKey(request: ChatStartRunRequest): string | null {
   return dispatchKey;
 }
 
-function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskRun): ChatStartRunResult {
+function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskRun, request: ChatStartRunRequest): ChatStartRunResult {
   const snapshot = repository.getRunExecutionSnapshot(run.id);
+  if (snapshot.submissionHash !== hashToolInput(request)) throw new Error('agent_submission_input_drift');
   return {
     runId: run.id,
     mode: createChatStartRunRequestFromSnapshot(snapshot, run).mode,

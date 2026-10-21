@@ -22,6 +22,9 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
+    if (/^(run_(model_concurrency_exhausted|tool_concurrency_exhausted|total_token_budget_exhausted|model_call_budget_exhausted|tool_call_budget_exhausted|deadline_exhausted|cost_estimate_unavailable|harness_revision_changed)|tool_call_loop_detected|agent_run_missing_conclusion)$/.test(error.message)) {
+      return { code: error.message, message: '运行已停止：' + error.message, retryable: false };
+    }
     const contextBudgetFailure = readContextBudgetFailure(error);
     if (contextBudgetFailure !== null) {
       return contextBudgetFailure;

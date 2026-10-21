@@ -18,6 +18,8 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
+import { dependencies } from '../../../../package.json';
+import { hashToolInput } from './tool-effect-store';
 import type { InterruptDecisionType, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
 import type { RocHookMiddlewareOptions } from '../hooks';
 import type { RescueToolCandidate } from '../forge-guardrails';
@@ -31,14 +33,17 @@ import {
   type ContextCompactionWiring,
   type DeepAgentMiddleware,
   type MiddlewareStackContext,
-  resolveMiddlewareStack
+  resolveMiddlewareStack,
+  readMiddlewareName
 } from './middleware-stack';
 import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
 import type { AgentToolEffectStore } from './tool-effect-store';
+import type { RunBudgetLedger } from './run-budget-ledger';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
   snapshot: RunExecutionSnapshot;
+  budgetLedger: RunBudgetLedger;
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -110,9 +115,9 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
     interruptOn: compileInterruptPolicy(snapshot),
     workspaceHash: snapshot.workspace === null ? null : snapshot.workspace.hash,
     workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
-    contextBudgetTokens: snapshot.budget.contextBudgetTokens === null
+    contextBudgetTokens: snapshot.budget.contextWindowTokens === null
       ? undefined
-      : snapshot.budget.contextBudgetTokens
+      : snapshot.budget.contextWindowTokens
   };
 }
 
@@ -141,7 +146,7 @@ function compileInterruptPolicy(
   return Object.keys(interruptOn).length === 0 ? undefined : interruptOn;
 }
 
-export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
+export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<typeof createDeepAgent>; revision: string } {
   ensureRocHarnessProfilesRegistered();
   const policy = compileDeepAgentBuildPolicy(input);
   const knownToolCandidates = (): RescueToolCandidate[] => {
@@ -156,7 +161,23 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   const tools = policy.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
   const subagents = createDeepAgentSubagents(input, policy, tools);
 
-  return createDeepAgent({
+  const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
+  const revision = input.budgetLedger.freezeRevision(input.snapshot.runId, {
+    schemaVersion: 1, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
+    manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 1,
+    promptHash: hashToolInput(input.systemPrompt),
+    tools: tools.map(tool => ({ name: tool.name, description: tool.description,
+      schema: 'schema' in tool ? (tool.schema instanceof z.ZodType ? z.toJSONSchema(tool.schema) : tool.schema) : null })),
+    middleware: middleware.map(readMiddlewareName),
+    permissions: policy.filesystemPermissions,
+    subagents: requireDeclarativeSubagents([GENERAL_PURPOSE_SUBAGENT, ...input.subagents]).map(spec => ({
+      name: spec.name, description: spec.description, systemPrompt: spec.systemPrompt,
+      skills: spec.skills ?? input.skillSources,
+      tools: (spec.tools ?? tools).map(tool => typeof tool === 'string' ? tool : tool.name),
+      permissions: spec.permissions ?? policy.filesystemPermissions
+    }))
+  });
+  const agent = createDeepAgent({
     model: input.model,
     systemPrompt: input.systemPrompt,
     backend: input.backend,
@@ -168,8 +189,9 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     permissions: policy.filesystemPermissions,
     interruptOn: policy.interruptOn,
     checkpointer: input.checkpointer,
-    middleware: resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates))
+    middleware
   });
+  return { agent, revision };
 }
 
 function createMiddlewareStackContext(
@@ -180,6 +202,8 @@ function createMiddlewareStackContext(
 ): MiddlewareStackContext {
   return {
     backend: input.backend,
+    budgetLedger: input.budgetLedger,
+    budgetLimits: input.snapshot.budget,
     contextCompaction: input.contextCompaction,
     executionScope,
     hookMiddleware: input.hookMiddleware,

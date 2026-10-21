@@ -37,6 +37,8 @@ import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPolicyMiddleware } from './shell-policy';
 import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
 import type { AgentToolEffectStore } from './tool-effect-store';
+import type { RunBudgetLedger, RunLimits } from './run-budget-ledger';
+import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-budget-middleware';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
@@ -65,6 +67,8 @@ export type MiddlewareStackPolicy = {
 };
 
 export type MiddlewareStackContext = {
+  budgetLedger: RunBudgetLedger;
+  budgetLimits: RunLimits;
   backend: RocCompositeBackend;
   contextCompaction: ContextCompactionWiring | undefined;
   executionScope: RunCapabilityExecutionScopeV1;
@@ -103,6 +107,12 @@ const ALL_MODES: readonly RunExecutionMode[] = ['plan', 'run', 'task'];
  * 那个相对位置由 createDeepAgent 拥有，不在这里表达。
  */
 const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
+  {
+    name: 'RocRunCorrectionMiddleware',
+    scopes: ['main'],
+    modes: ALL_MODES,
+    create: context => createRunCorrectionMiddleware(context.budgetLedger, context.policy.runId)
+  },
   {
     name: 'todoListMiddleware',
     scopes: ['main'],
@@ -244,6 +254,12 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       retryOn: shouldRetryNetworkToolError,
       backoffFactor: 1.5
     })
+  },
+  {
+    name: 'RocRunBudgetMiddleware',
+    scopes: ALL_SCOPES,
+    modes: ALL_MODES,
+    create: context => createRunBudgetMiddleware(context.budgetLedger, context.policy.runId, context.budgetLimits, context.toolEffectStore)
   },
   {
     name: 'RocToolRuntimeErrorMiddleware',

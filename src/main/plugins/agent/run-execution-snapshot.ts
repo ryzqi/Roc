@@ -40,7 +40,14 @@ export function createRunBudget(input: {
   contextBudgetTokens: number | null;
 }): RunExecutionSnapshot['budget'] {
   return {
-    contextBudgetTokens: input.contextBudgetTokens
+    contextWindowTokens: input.contextBudgetTokens,
+    maxTotalTokens: null,
+    maxCostUsd: null,
+    maxModelCalls: 100,
+    maxToolCalls: 500,
+    maxConcurrentModelCalls: 4,
+    maxConcurrentToolCalls: 4,
+    deadlineAt: null
   };
 }
 

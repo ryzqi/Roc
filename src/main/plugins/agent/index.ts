@@ -26,6 +26,8 @@ import {
   chatActiveRunRequestSchema,
   chatCancelRunRequestSchema,
   chatCancelRunResultSchema,
+  chatCorrectRunRequestSchema,
+  chatCorrectRunResultSchema,
   chatResumeRunRequestSchema,
   chatResumeRunResultSchema,
   chatRunEventsReplayRequestSchema,
@@ -36,6 +38,7 @@ import {
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
@@ -60,6 +63,7 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.config.preview', emptyInputSchema, deepAgentConfigPreviewSchema),
   descriptor('agent.run.start', chatStartRunRequestSchema, chatStartRunResultSchema),
   descriptor('agent.run.cancel', chatCancelRunRequestSchema, chatCancelRunResultSchema),
+  descriptor('agent.run.correct', chatCorrectRunRequestSchema, chatCorrectRunResultSchema),
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
   descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
@@ -120,6 +124,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const runEventLog = new AgentRunEventLog(db);
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
+      new RunBudgetLedger(db).reconcileStartup();
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository),
@@ -233,6 +238,7 @@ function resolveDeepAgentExecutor(
     sessionHistory: repository,
     store: option.memoryStore,
     selfConfigService: option.selfConfigService,
+    budgetLedger: new RunBudgetLedger(agentDb),
     toolEffectStore: new AgentToolEffectStore(agentDb)
   });
 }
@@ -321,6 +327,12 @@ function registerAgentCapabilities(
   context.capabilities.register(pluginId, baseDescriptor('agent.run.cancel'), async (input) =>
     runtime.cancelRun(chatCancelRunRequestSchema.parse(input))
   );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.correct'), async input => {
+    const request = chatCorrectRunRequestSchema.parse(input);
+    const sequence = new RunBudgetLedger(context.database.getConnection())
+      .enqueueCorrection(request.runId, request.submissionId, request.content);
+    return { sequence };
+  });
   context.capabilities.register(pluginId, baseDescriptor('agent.run.resume'), async (input) =>
     runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
   );

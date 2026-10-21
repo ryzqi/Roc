@@ -418,7 +418,11 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_json === null || (row.snapshot_version !== 1 && row.snapshot_version !== 2)) {
+    if (row.snapshot_version !== 3) {
+      this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
+      throw new Error('run_execution_snapshot_unsupported_version');
+    }
+    if (row.snapshot_json === null) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_missing');
       throw new Error('run_execution_snapshot_missing');
     }
@@ -1582,7 +1586,7 @@ function createRunTransitionInvalidError(input: { currentStatus: TaskStatus; nex
 }
 
 function isThreadLeaseConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('agent_run_leases.thread_id');
+  return error instanceof Error && (error.message.includes('agent_run_leases.thread_id') || error.message.includes('UNIQUE constraint failed: agent_runs.thread_id'));
 }
 
 function mapTaskRun(row: TaskRunRow): TaskRun {

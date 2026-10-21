@@ -45,7 +45,7 @@ export type StartRunInput = {
 
 export function startRun(client: RocClient, input: StartRunInput): Promise<IpcLikeResult<ChatStartRunResult>> {
   const request: ChatStartRunIpcRequest = { ...input };
-  return client.api.chat.startRun(request);
+  return client.api.chat.startRun({ ...request, dispatchKey: crypto.randomUUID() });
 }
 
 export function cancelRun(client: RocClient, runId: string): Promise<IpcLikeResult<{ runId: string; cancelled: boolean }>> {

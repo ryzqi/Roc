@@ -35,20 +35,12 @@ export function validateOutcomeConsistency(state: OutcomeState): OutcomeValidati
     };
   }
 
-  // 规则 2: 有工具调用但无文本输出(可疑)
-  if (hasTools && !hasText && !hasHooks) {
-    console.warn(
-      `[OutcomeValidator] 运行完成了 ${state.toolCallsByBlockId.size} 个工具调用,` +
-        `但没有生成 assistant 文本输出。这可能表示响应被截断。`
-    );
-  }
-
-  // 规则 3: 有推理但无结论(可疑)
-  if (hasReasoning && !hasText && !hasTools) {
-    console.warn(
-      `[OutcomeValidator] 运行生成了 ${state.reasoningChunks.join('').length} 字符的推理内容,` +
-        `但没有输出结论或工具调用。这可能表示模型被中断。`
-    );
+  if (!hasText && !hasHooks) {
+    return {
+      code: 'agent_run_missing_conclusion',
+      message: '运行缺少可交付的结论，任务尚未验证。',
+      diagnostics: { hasReasoning, toolCallsCount: state.toolCallsByBlockId.size }
+    };
   }
 
   return null;

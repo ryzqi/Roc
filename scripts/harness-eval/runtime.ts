@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
 import { ChatOpenAI } from '@langchain/openai';
 import { createDeepAgent } from 'deepagents';
+import { toolRetryMiddleware } from 'langchain';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
@@ -13,9 +14,12 @@ import { RocSqliteCheckpointer } from '../../src/main/services/deep-agent/sqlite
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
 import { createChatRunEventQueue } from '../../src/main/plugins/agent/chat-run-event-queue';
 import { createUsageAccumulator, updateUsageAccumulator } from '../../src/main/services/deep-agent/stream-usage-accumulator';
-import { validateTokenBudget, ToolCallLoopDetector } from '../../src/main/services/deep-agent/runtime-state-validator';
+import { validateRunTokenBudget } from '../../src/main/services/deep-agent/runtime-state-validator';
 import { validateOutcomeConsistency } from '../../src/main/services/deep-agent/outcome-validator';
 import { latexCitationKeys, unknownCitationKeys } from '../../src/main/plugins/research/citation-integrity';
+import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { RunBudgetObserver } from '../../src/main/services/deep-agent/run-budget-observer';
+import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from '../../src/main/services/deep-agent/run-budget-middleware';
 import { ContextArtifactStore } from '../../src/main/services/deep-agent/context/context-artifact-store';
 import { validateRocFileToolPath } from '../../src/main/services/deep-agent/filesystem-path-policy';
 import { createToolProtocolMiddleware } from '../../src/main/services/deep-agent/tool-protocol';
@@ -75,25 +79,32 @@ export function recoverCrash(directory: string, point: string): Record<string, u
   } finally { db.close(); }
 }
 
-export function observeBaseline(): Record<string, unknown> {
+export function observeBaseline(directory: string): Record<string, unknown> {
+  const db = openDatabase(join(directory, 'boundaries.sqlite'));
+  const ledger = new RunBudgetLedger(db);
   const usage = createUsageAccumulator();
   for (let i = 0; i < 3; i++) updateUsageAccumulator(usage, `call-${i}`, {
     inputTokens: 40000, outputTokens: 5000, totalTokens: 45000,
     cacheReadTokens: null, cacheCreationTokens: null
   });
-  const budget = validateTokenBudget(usage, 100000);
-  const detector = new ToolCallLoopDetector();
-  const pagination = [1, 2, 3].map((page) => detector.recordToolCall('read_file', `page-${page}`));
-  const idle = new ToolCallLoopDetector();
-  const repetition = [1, 2, 3].map(() => idle.recordToolCall('read_file', 'same-input-empty-result'));
+  const budget = validateRunTokenBudget(usage, null);
+  for (let page = 1; page <= 3; page++) ledger.recordProgress('run', 'read_file', { page }, 'page-content');
+  for (const [tool, value] of [['read_file', 'A'], ['write_file', 'B'], ['read_file', 'A'], ['write_file', 'C'], ['read_file', 'A']]) {
+    ledger.recordProgress('run', tool, value, value);
+  }
+  let idle = 'accepted';
+  try {
+    for (let i = 0; i < 3; i++) ledger.recordProgress('run', 'read_file', { page: 1 }, 'empty');
+  } catch (error) { idle = (error as Error).message; }
+  db.close();
   const reasoning = validateOutcomeConsistency({
     assistantChunks: [], reasoningChunks: ['Working…'], toolCallsByBlockId: new Map(),
     hookDisplayTexts: [], usageAccumulated: true
   });
   return {
     cumulativeWindow: { observed: budget?.code ?? 'accepted', expected: 'accepted', totalTokens: usage.totalTokens },
-    noProgress: { observed: repetition.at(-1)?.code ?? 'accepted', expected: 'tool_call_loop_detected' },
-    pagination: { observed: pagination.at(-1)?.code ?? 'accepted', expected: 'accepted' },
+    noProgress: { observed: idle, expected: 'tool_call_loop_detected' },
+    pagination: { observed: 'accepted', expected: 'accepted' },
     reasoningOnly: { observed: reasoning?.code ?? 'accepted', expected: 'agent_run_missing_conclusion' }
   };
 }
@@ -121,14 +132,20 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
       trajectory.push({ tool: 'pilot_action', result });
       return JSON.stringify(result);
     }, { name: 'pilot_action', description: 'Execute synthetic pilot case', schema: z.object({}).strict() });
+    const ledger = new RunBudgetLedger(db);
+    const limits = { contextWindowTokens: 100000, maxTotalTokens: null, maxCostUsd: null,
+      maxModelCalls: 100, maxToolCalls: 500, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null };
+    const revision = ledger.freezeRevision('run', { kind: 'pilot', id: scenario.id });
+    const callbacks = [new RunBudgetObserver(ledger, 'run', limits, revision)];
     const buildAgent = () => createDeepAgent({
+      middleware: [createRunCorrectionMiddleware(ledger, 'run'), createRunBudgetMiddleware(ledger, 'run', limits)],
       model: new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic-fixture',
         configuration: { baseURL: endpoint }, maxRetries: 0, timeout: 10000 }),
       tools: [action], checkpointer: new RocSqliteCheckpointer(db),
       systemPrompt: `Run pilot_action once, then return its exact result. Case ${scenario.id}`
     });
     const agent = buildAgent();
-    const config = { configurable: { thread_id: 'thread' }, recursionLimit: 12 };
+    const config = { configurable: { thread_id: 'thread' }, recursionLimit: 12, callbacks };
     let result = await agent.invoke({ messages: [{ role: 'user', content: scenario.id }] }, config)
       .catch(error => { throw Object.assign(error, { failureClass: error.failureClass ?? 'provider' }); });
     const turns = scenario.family === 'long' ? (scenario.variant === 'three-turns' ? 3 : 2) : 1;
@@ -152,6 +169,12 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
         assert.equal(result.messages.filter(m => m.getType() === 'tool').length, turns);
       } finally { reopened.close(); }
     }
+    const accounting = db.prepare('SELECT kind, state, actual_tokens FROM agent_budget_calls WHERE run_id = ?').all('run') as
+      { kind: string; state: string; actual_tokens: number | null }[];
+    assert.equal(accounting.filter(row => row.kind === 'model').length, turns * 2);
+    assert.equal(accounting.filter(row => row.kind === 'tool').length, turns);
+    assert.ok(accounting.every(row => row.state === 'settled'));
+    trajectory.push({ accounting });
     trajectory.push({ final: final?.content, checkpointId: checkpoint.checkpoint.id });
     return { toolCalls: called, turns, checkpoint: checkpoint.checkpoint.id };
   } finally {
@@ -326,4 +349,104 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
     }
     default: throw new Error(`unsupported_pilot_family:${s.family}`);
   }
+}
+
+export async function runBudgetScenario(name: string, directory: string, endpoint: string): Promise<Record<string, unknown>> {
+  let db = openDatabase(join(directory, 'agent.sqlite'));
+  let ledger = new RunBudgetLedger(db);
+  const limits = { contextWindowTokens: 100000, maxTotalTokens: null as number | null, maxCostUsd: null as number | null,
+    maxModelCalls: name === 'budget-model' || name === 'budget-restart' ? 1 : 100,
+    maxToolCalls: 100, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null as string | null };
+  if (name === 'budget-retry') limits.maxToolCalls = 1;
+  if (name === 'budget-concurrency') limits.maxConcurrentModelCalls = 1;
+  if (name === 'budget-child-tools') limits.maxConcurrentToolCalls = 1;
+  if (name === 'budget-token' || name === 'budget-unknown') limits.maxTotalTokens = 100040;
+  if (name === 'budget-cost') limits.maxCostUsd = 1;
+  if (name === 'budget-deadline') limits.deadlineAt = '2020-01-01T00:00:00.000Z';
+  const expected = name === 'budget-retry' ? 'run_tool_call_budget_exhausted' : name === 'budget-loop' ? 'tool_call_loop_detected'
+    : name === 'budget-token' || name === 'budget-unknown' ? 'run_total_token_budget_exhausted'
+    : name === 'budget-cost' ? 'run_cost_estimate_unavailable'
+    : name === 'budget-deadline' ? 'run_deadline_exhausted' : 'run_model_call_budget_exhausted';
+  let effects = 0;
+  let childBlocked = false;
+  const execute = async () => {
+    const revision = ledger.freezeRevision('run', { name, version: 1 });
+    const model = new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic', maxRetries: 0,
+      timeout: 10000, configuration: { baseURL: endpoint } });
+    const observer = new RunBudgetObserver(ledger, 'run', limits, revision);
+    const action = tool(async () => {
+      effects++;
+      if (name === 'budget-child-tools') ledger.enqueueCorrection('run', 'during-child', 'budget-child-tools: preserve correction');
+      if (name === 'budget-retry') throw new Error('fixture_retry');
+      if (name === 'budget-concurrency') {
+        const results = await Promise.allSettled([1, 2].map(child => model.invoke(`budget-concurrency-child-${child}`,
+          { callbacks: [observer] })));
+        assert.equal(results.filter(result => result.status === 'rejected').length, 1);
+        childBlocked = results.some(result => result.status === 'rejected' && String(result.reason).includes('run_model_concurrency_exhausted'));
+      }
+      return 'same-empty-result';
+    },
+      { name: 'pilot_action', description: 'Deterministic read', schema: z.object({}).strict() });
+    const agent = createDeepAgent({ model, tools: [action],
+      ...(name === 'budget-child-tools' ? { subagents: [{ name: 'pilot-child', description: 'Pilot child',
+        systemPrompt: 'Call pilot_action then return result.', tools: [action],
+        middleware: [createRunBudgetMiddleware(ledger, 'run', limits)] }] } : {}),
+      middleware: [createRunCorrectionMiddleware(ledger, 'run'), ...(name === 'budget-retry' ? [toolRetryMiddleware({ tools: ['pilot_action'], maxRetries: 2,
+        initialDelayMs: 0, retryOn: error => error.message.includes('fixture_retry'), onFailure: 'error' })] : []),
+        createRunBudgetMiddleware(ledger, 'run', limits)], checkpointer: new RocSqliteCheckpointer(db) });
+    return await agent.invoke({ messages: [{ role: 'user', content: name }] }, {
+      configurable: { thread_id: 'thread' }, recursionLimit: 12,
+      callbacks: [observer]
+    });
+  };
+  try {
+    if (name === 'budget-child-tools') {
+      await execute();
+      assert.equal(effects, 1);
+      assert.deepEqual(ledger.pendingCorrections('run'), []);
+      const calls = db.prepare('SELECT kind FROM agent_budget_calls').all() as { kind: string }[];
+      assert.equal(calls.filter(row => row.kind === 'child').length, 1);
+      assert.equal(calls.filter(row => row.kind === 'tool').length, 1);
+      assert.equal(calls.filter(row => row.kind === 'model').length, 4);
+      return { effects, calls, maxConcurrentToolCalls: 1, correction: 'consumed by parent' };
+    }
+    if (name === 'budget-window') {
+      await execute();
+      assert.equal(effects, 2);
+      const usage = db.prepare("SELECT SUM(actual_tokens) tokens FROM agent_budget_calls WHERE kind = 'model'").get() as { tokens: number };
+      assert.equal(usage.tokens, 135000);
+      return { effects, totalTokens: usage.tokens, perCallTokens: 45000, contextWindowTokens: limits.contextWindowTokens };
+    }
+    if (name === 'budget-concurrency') {
+      await execute();
+      assert.equal(childBlocked, true);
+      return { effects, childBlocked };
+    }
+    if (name === 'budget-inbox') {
+      const first = ledger.enqueueCorrection('run', 'one', 'budget-inbox: keep wording');
+      assert.equal(ledger.enqueueCorrection('run', 'one', 'budget-inbox: keep wording'), first);
+      assert.throws(() => ledger.enqueueCorrection('run', 'one', 'changed'), /input_drift/);
+      ledger.enqueueCorrection('run', 'two', 'budget-inbox: use supplied data');
+      await execute();
+      assert.deepEqual(ledger.pendingCorrections('run'), []);
+      const tuple = await new RocSqliteCheckpointer(db).getTuple({ configurable: { thread_id: 'thread' } });
+      const serialized = JSON.stringify(tuple?.checkpoint.channel_values);
+      assert.ok(serialized.includes('keep wording') && serialized.includes('use supplied data'));
+      assert.throws(() => ledger.freezeRevision('run', { version: 2 }), /revision_changed/);
+      return { effects, corrections: 'deduplicated, persisted, consumed in order', revisionMismatch: 'rejected' };
+    }
+    await assert.rejects(execute(), new RegExp(expected));
+    if (name === 'budget-restart') {
+      db.close();
+      db = openDatabase(join(directory, 'agent.sqlite'));
+      ledger = new RunBudgetLedger(db);
+      await assert.rejects(execute(), new RegExp(expected));
+    }
+    const calls = db.prepare('SELECT kind, state, actual_tokens, reserved_tokens FROM agent_budget_calls').all() as
+      { kind: string; state: string; actual_tokens: number | null; reserved_tokens: number }[];
+    if (name === 'budget-unknown') assert.ok(calls.some(row => row.state === 'unknown' && row.actual_tokens === null));
+    assert.equal(effects, name === 'budget-cost' || name === 'budget-deadline' ? 0 : name === 'budget-loop' ? 3 : 1);
+    writeFileSync(join(directory, 'accounting.json'), JSON.stringify(calls, null, 2));
+    return { stopped: expected, effects, calls };
+  } finally { db.close(); }
 }

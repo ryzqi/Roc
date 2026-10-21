@@ -305,8 +305,49 @@ CREATE TRIGGER session_messages_au AFTER UPDATE ON session_messages BEGIN
         INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
       END;
 `
+  },
+  {
+    version: 2,
+    name: 'durable_run_budget_and_revision',
+    sql: `
+CREATE UNIQUE INDEX idx_agent_runs_single_active ON agent_runs(thread_id)
+WHERE status IN ('waiting_next_turn','dispatch_pending','running','recovering','waiting_user');
+CREATE TABLE agent_run_inbox (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  submission_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  consumed_at TEXT,
+  UNIQUE(run_id, submission_id)
+);
+CREATE TABLE agent_budget_calls (
+  run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  call_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('model','tool','child')),
+  input_hash TEXT NOT NULL,
+  reserved_tokens INTEGER NOT NULL CHECK(reserved_tokens >= 0),
+  actual_tokens INTEGER CHECK(actual_tokens >= 0),
+  state TEXT NOT NULL CHECK(state IN ('reserved','settled','unknown')),
+  envelope_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, call_id)
+);
+CREATE TABLE agent_tool_progress (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  fingerprint TEXT NOT NULL
+);
+CREATE INDEX idx_agent_tool_progress_run ON agent_tool_progress(run_id, sequence);
+CREATE TABLE agent_harness_revisions (
+  run_id TEXT PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE,
+  revision_hash TEXT NOT NULL,
+  revision_json TEXT NOT NULL
+);
+`
   }
 ];
+
 
 export const memoryMigrations: RocDatabaseMigration[] = [
   {

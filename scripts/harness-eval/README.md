@@ -17,3 +17,11 @@ P0 baseline (2026-10-21, Roc `76d9ad0`): 51/51 pilot/crash cases; `pnpm typechec
 Evidence: `.artifacts/harness-eval/2026-10-21T08-16-47.249Z-10479/report.json`,
 `.artifacts/p4-gates/report.json`. Independent subagent review completed; findings fixed.
 Observed defects: cumulative-window conflation, pagination loop false positive, reasoning without conclusion.
+
+P1 (2026-10-21): 63/63 source graph cases, including actual three-call 45k usage,
+pre-dispatch limits, retry attempts, unknown usage, restart, child tools and correction ownership.
+The three P0 defects now match expected behavior. Build, existing 264 tests, IPC generation check,
+renderer chunk check and full Electron 52-assertion flow passed. Final child-accounting change is
+covered by the source graph fixture; Electron evidence uses the preceding build.
+Evidence: `.artifacts/harness-eval/2026-10-21T08-45-01.589Z-16438/report.json`,
+`.artifacts/harness-eval/ui-p1.log`. Independent review findings fixed.
