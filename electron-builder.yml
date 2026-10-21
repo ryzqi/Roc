@@ -86,6 +86,14 @@ mac:
       to: rtk-binaries
       filter:
         - darwin-${arch}/**
+    # ripgrep 随包：文件内容搜索（files.search）与 Agent grep 共用这一个二进制。
+    # 许可证文本一并分发（MIT OR Unlicense）。
+    - from: resources/ripgrep-binaries
+      to: ripgrep-binaries
+      filter:
+        - darwin-${arch}/**
+        - licenses/**
+        - ripgrep.lock.json
     - from: .runtime/research-toolchain/darwin-${arch}
       to: research-toolchain
       filter:

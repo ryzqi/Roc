@@ -41,3 +41,19 @@ export const researchLibraryArchiveRequestSchema = z.object({ id: z.string().min
 export const researchLibraryCitationKeyRequestSchema = z.object({
   id: z.string().min(1), expectedRevision: z.number().int().positive(), citationKey: researchCitationKeySchema
 }).strict();
+
+/**
+ * 撤稿核查（`retraction-check.ts`）。
+ *
+ * 结论只有三档，且 `unknown` **不是**「正常」：查不到/没 DOI/网络失败都落在这里，
+ * 界面与助手必须把它显示成「没查到」。`checkedAt` 是结论的一部分（这是核查时点的快照）。
+ */
+export const researchLibraryRetractionRequestSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(50)
+}).strict();
+export const researchLibraryRetractionSchema = z.object({
+  id: z.string().min(1), citationKey: researchCitationKeySchema, doi: z.string().nullable(),
+  status: z.enum(['retracted', 'clear', 'unknown']), checkedSource: z.literal('openalex'),
+  detail: z.string().nullable(), checkedAt: z.string()
+}).strict();
+export const researchLibraryRetractionResultSchema = z.object({ results: z.array(researchLibraryRetractionSchema) }).strict();

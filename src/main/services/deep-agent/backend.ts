@@ -23,7 +23,9 @@ import {
   ROC_FILE_TOOL_ROUTE_ERROR,
   validateRocFileToolPath
 } from './filesystem-tool-contract';
+import { RipgrepFilesystemBackend } from './ripgrep-filesystem-backend';
 import { RocStoreMemoryBackend } from './store-memory-backend';
+import { RipgrepService } from '../ripgrep-service';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
@@ -427,14 +429,24 @@ class RocNonExecutingCompositeBackend {
   }
 }
 
-function createRouteBackends(input: {
+/**
+ * 组装文件后端的输入。
+ *
+ * 它曾经在内部实现和导出的包装函数里各写一遍，新增字段得同步改两处才不漏——而漏掉的那次
+ * 不会有编译错误，只会让注入被静默忽略。现在包装函数合并回实现本身，这个类型是唯一入口。
+ */
+export type RocBackendInput = {
   workspaceService: WorkspaceService;
   paths: RocPaths;
   store: BaseStore;
   securityScan: SecurityScanService;
   capacity: CapacityService;
   selectedSkillIds?: readonly string[];
-}): {
+  /** 可注入的 ripgrep 服务；缺省按随包二进制解析。 */
+  ripgrep?: RipgrepService;
+};
+
+export function createBackend(input: RocBackendInput): {
   backend: RocCompositeBackend;
   memorySources: string[];
 } {
@@ -477,7 +489,9 @@ function createRouteBackends(input: {
         );
 
   if (workspace !== null) {
-    routes[WORKSPACE_ROUTE] = new FilesystemBackend({
+    // 工作区路由的 grep 走 Roc 自带的 ripgrep（`RipgrepFilesystemBackend` 里有取舍说明）；
+    // 其余路由（skills / memory）文件量小，保持上游实现，不再引入第二个差异点。
+    routes[WORKSPACE_ROUTE] = new RipgrepFilesystemBackend(input.ripgrep ?? new RipgrepService(), {
       rootDir: workspace.path,
       virtualMode: true
     });
@@ -490,18 +504,4 @@ function createRouteBackends(input: {
     backend,
     memorySources: slots.map((slot) => slot.virtualPath)
   };
-}
-
-export function createBackend(input: {
-  workspaceService: WorkspaceService;
-  paths: RocPaths;
-  store: BaseStore;
-  securityScan: SecurityScanService;
-  capacity: CapacityService;
-  selectedSkillIds?: readonly string[];
-}): {
-  backend: RocCompositeBackend;
-  memorySources: string[];
-} {
-  return createRouteBackends(input);
 }

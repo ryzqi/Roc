@@ -150,14 +150,56 @@ export class ResearchToolchain {
   async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
     const { root } = await this.resolve();
     const environment = await this.environment(root, input.jobDir);
+    // `--keep-intermediates` 是为了拿到 `.bbl`：arXiv 不运行 BibTeX，随包不带 `.bbl` 的提交
+    // 在那边会把每一处引用渲染成 `?`（`arxiv-preflight.ts` 的 `missing_bbl` 就是这条）。
+    // 中间文件只落在 `outputDir`（即导出的 scratch），不会进交付包——取 `.bbl` 是调用方的事。
     return await runResearchProcess({ command: join(root, 'bin/tectonic'),
-      args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--outdir', input.outputDir, input.entryPath],
+      args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--keep-intermediates',
+        '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
       timeoutMs: 180_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
-  async modelsStatus(): Promise<ResearchModelsStatus> {
-    return await this.models.status();
+  /**
+   * Typst 编译：只服务导出附带的**报告**（`typst-report.ts`），不进 LaTeX 主链。
+   *
+   * 三个边界与 `compile()` 一致：离线、只写 jobDir、只读工具链根与本次输入的根目录。
+   * 额外一条是字体：Typeface 在沙箱里没有 `$HOME/Library/Fonts`，也没有全盘读权限，
+   * 所以显式给 `--font-path`（系统字体目录），并把它加入 `readablePaths`。
+   * 这样同一台机器上生成的报告不会因为用户装了字型而变样（与 Vale 的 `--no-global` 同一个理由）。
+   */
+  async compileTypst(input: { rootPath: string; sourcePath: string; outputPath: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
+    const { root } = await this.resolve();
+    // 只加真实存在的目录：沙箱配置会对每个路径做 realpath，不存在就整次失败。
+    const fontPaths = ['/System/Library/Fonts', '/System/Library/Fonts/Supplemental'].filter((path) => existsSync(path));
+    const temporary = await createResearchDirectory(input.jobDir, 'tmp');
+    const cache = await createResearchDirectory(input.jobDir, 'cache');
+    const home = await createResearchDirectory(input.jobDir, 'home');
+    return await runResearchProcess({ command: join(root, 'bin/typst'),
+      args: ['compile', '--root', input.rootPath,
+        ...fontPaths.flatMap((path) => ['--font-path', path]),
+        input.sourcePath, input.outputPath],
+      cwd: input.jobDir,
+      readablePaths: [root, input.rootPath, ...fontPaths],
+      writablePaths: [input.jobDir],
+      environment: { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
+        HOME: home, TMPDIR: temporary, XDG_CACHE_HOME: cache },
+      timeoutMs: 120_000, signal: input.signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+  }
+
+  /**
+   * 读一份随包的 CSL 样式文件（`csl/<name>`）。
+   *
+   * 样式是**数据**：它决定报告里参考文献的排法，所以与 Vale 规则集一样进 `lockHashes`。
+   * 只允许 `csl/` 下的 `.csl` 文件名，不把路径拼串交给调用方。
+   */
+  async typstStyle(name: string): Promise<Buffer> {
+    if (!/^[\w.-]+\.csl$/u.test(name)) throw new ResearchProcessError('research_typst_style_invalid');
+    const { root } = await this.resolve();
+    return await readResearchFile(root, `csl/${name}`, 1024 * 1024);
+  }
+
+  async modelsStatus(): Promise<ResearchModelsStatus> {    return await this.models.status();
   }
 
   async downloadModels(): Promise<ResearchModelsStatus> {
@@ -302,7 +344,9 @@ export class ResearchToolchain {
       throw new ResearchProcessError('research_toolchain_integrity_mismatch');
     }
     let index = 0;
-    await Promise.all(Array.from({ length: 4 }, async () => {
+    // 抽成命名函数而不是内联 async 回调：`Array.from` 的回调必须显式返回值，
+    // 而这里是一个消费共享游标的 while 循环（四个 worker 并行校验条目）。
+    const verifyNextEntries = async (): Promise<void> => {
       while (index < manifest.entries.length) {
         const entry = manifest.entries[index++];
         if (isPackagedModelPath(entry.path)) continue;
@@ -323,13 +367,17 @@ export class ResearchToolchain {
           if (hash.digest('hex') !== entry.sha256) throw new ResearchProcessError('research_toolchain_integrity_mismatch');
         }
       }
-    }));
+    };
+    await Promise.all(Array.from({ length: 4 }, () => verifyNextEntries()));
     return { root, manifest };
   }
 }
 
-function parseJson(value: string): unknown {
-  try { return JSON.parse(value) as unknown; }
+/** 子进程/清单的 JSON 形状：先按结构收窄，再由调用方的 zod schema 决定是不是领域对象。 */
+type JsonDocument = string | number | boolean | null | JsonDocument[] | { [key: string]: JsonDocument };
+
+function parseJson(value: string): JsonDocument {
+  try { return JSON.parse(value) as JsonDocument; }
   catch { throw new ResearchProcessError('research_json_invalid'); }
 }
 

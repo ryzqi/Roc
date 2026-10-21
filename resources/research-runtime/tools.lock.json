@@ -4,6 +4,7 @@
   "uvVersion": "0.12.10",
   "tectonicVersion": "0.17.0",
   "valeVersion": "3.24.0",
+  "typstVersion": "0.15.0",
   "texBundle": {
     "url": "https://data1b.fullyjustified.net/tlextras-2022.0r0.tar",
     "sha256": "425685e124746c15ba9bb8e0596bdaad98fce886afa347fbcf9ec0e9acd7fe79",
@@ -29,6 +30,10 @@
       "vale": {
         "url": "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_macOS_arm64.tar.gz",
         "sha256": "87b513f26499f6657c15cf7175ba5b058a7c1ff2bb2d4e07265db2dd43451e44"
+      },
+      "typst": {
+        "url": "https://github.com/typst/typst/releases/download/v0.15.0/typst-aarch64-apple-darwin.tar.xz",
+        "sha256": "fe53838737abf93a774495952a1a797b4686e9c4a21c2d99b9fdf77f46cc3572"
       }
     },
     "x64": {
@@ -47,6 +52,10 @@
       "vale": {
         "url": "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_macOS_64-bit.tar.gz",
         "sha256": "eeb39e86f1daac27cc2a77fef3af1824d50559bdc22329fb25fb921c80c79472"
+      },
+      "typst": {
+        "url": "https://github.com/typst/typst/releases/download/v0.15.0/typst-x86_64-apple-darwin.tar.xz",
+        "sha256": "30210c7c539c7954db94c063cd98b43fd0a0cad285d656dbbce2a40aee2e79be"
       }
     }
   }

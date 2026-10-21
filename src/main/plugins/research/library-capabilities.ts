@@ -3,7 +3,8 @@ import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
   researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
-  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema
+  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema,
+  researchLibraryRetractionRequestSchema, researchLibraryRetractionResultSchema
 } from '../../../shared/schemas/research-library';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
@@ -20,7 +21,8 @@ const capabilities = {
   export: descriptor('research.library.export', researchLibraryExportRequestSchema, researchLibraryExportSchema),
   link: descriptor('research.library.linkProject', researchLibraryLinkRequestSchema, researchLibraryItemSchema),
   archive: descriptor('research.library.archive', researchLibraryArchiveRequestSchema, researchLibraryItemSchema),
-  citationKey: descriptor('research.library.setCitationKey', researchLibraryCitationKeyRequestSchema, researchLibraryItemSchema)
+  citationKey: descriptor('research.library.setCitationKey', researchLibraryCitationKeyRequestSchema, researchLibraryItemSchema),
+  retractions: descriptor('research.library.checkRetractions', researchLibraryRetractionRequestSchema, researchLibraryRetractionResultSchema)
 };
 export const researchLibraryCapabilities = Object.values(capabilities);
 
@@ -29,6 +31,7 @@ const libraryFailures: Record<string, { message: string; category: RocErrorCateg
   research_project_not_found: { message: '研究项目不存在。', category: 'not_found' },
   research_library_version_conflict: { message: '文献已被修改，请刷新后重试。', category: 'conflict' },
   research_citation_key_duplicate: { message: '选中文献的引用键重复，请修改引用键后导出。', category: 'conflict' },
+  research_library_storage_invalid: { message: '文献库记录无法解析，请从备份恢复。', category: 'degraded' },
   research_library_selection_duplicate: { message: '同一文献不能重复选择。', category: 'validation' },
   research_library_item_archived: { message: '请先恢复已归档文献。', category: 'conflict' },
   research_project_archived: { message: '请先恢复已归档的研究项目。', category: 'conflict' },
@@ -68,6 +71,7 @@ export function registerResearchLibraryCapabilities(context: RocPluginContext, r
   register(capabilities.link, (input) => repository.link(input.id, input.projectId, input.linked));
   register(capabilities.archive, (input) => repository.archive(input.id, input.expectedRevision, input.archived));
   register(capabilities.citationKey, (input) => repository.setCitationKey(input.id, input.expectedRevision, input.citationKey));
+  register(capabilities.retractions, (input) => service.checkRetractions(input));
 }
 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {

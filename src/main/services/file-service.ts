@@ -1,18 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  closeSync,
-  createReadStream,
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readSync,
-  readdirSync,
-  rmdirSync,
-  unlinkSync,
-  writeFileSync
-} from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
@@ -36,12 +23,14 @@ import type {
 } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
+import { RipgrepService } from './ripgrep-service';
 import type { WorkspaceService } from './workspace-service';
 
 const defaultPreviewBytes = 64 * 1024;
 const defaultListLimit = 200;
 const defaultSearchLimit = 100;
 const binaryProbeBytes = 4096;
+// 仅作为 ripgrep 缺失时的降级路径上限：rg 存在时搜索由它自己的遍历与 `--max-filesize` 承担。
 const defaultSearchMaxVisitedFiles = 2000;
 const defaultSearchMaxBytes = 4 * 1024 * 1024;
 const defaultNameSearchLimit = 20;
@@ -76,7 +65,8 @@ export class FileService {
   constructor(
     private readonly paths: RocPaths,
     private readonly database: FileRecoveryPointDatabase,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly ripgrep = new RipgrepService()
   ) {}
 
   async listTree(request: FileTreeRequest): Promise<FileTreeResult> {
@@ -119,6 +109,13 @@ export class FileService {
     };
   }
 
+  /**
+   * 内容搜索：优先 ripgrep，缺失时退回逐文件扫描。
+   *
+   * 降级路径保留的原因不是怀旧：`ripgrep-binaries` 是随包资源，被误删、被 Gatekeeper 拒绝执行、
+   * 或跑在未打分的开发树里都可能拿不到可执行文件。那时宁可慢，也要让 ⌘K 还能搜到东西。
+   * 目录黑名单与 `visitFiles` 共用同一份 `ignoredDirectoryNames`，两条路径不各说各话。
+   */
   async search(request: FileSearchRequest): Promise<FileSearchResult> {
     const query = request.query.trim();
     if (query.length === 0) {
@@ -133,6 +130,11 @@ export class FileService {
 
     const workspace = this.workspaceService.requireWorkspace();
     const maxResults = this.positiveLimit(request.maxResults, defaultSearchLimit);
+    const ripgrepResult = await this.searchWithRipgrep(workspace.path, query, maxResults);
+    if (ripgrepResult !== null) {
+      return { query, ...ripgrepResult };
+    }
+
     const matches: FileSearchResult['matches'] = [];
     let truncated = false;
     let visitedFiles = 0;
@@ -184,6 +186,41 @@ export class FileService {
       matches,
       truncated
     };
+  }
+
+  private async searchWithRipgrep(
+    rootDir: string,
+    query: string,
+    maxResults: number
+  ): Promise<Pick<FileSearchResult, 'matches' | 'truncated'> | null> {
+    if (!this.ripgrep.isAvailable()) {
+      return null;
+    }
+    try {
+      const result = await this.ripgrep.search({
+        rootDir,
+        query,
+        maxResults,
+        // 与旧扫描对齐：点文件也算（`.env` 里的关键词要能搜到），且不读 `.gitignore` /
+        // `.ignore` / 全局 gitignore——目录过滤只认 `ignoredDirectoryNames`，两条路径同一份。
+        includeHidden: true,
+        disableIgnoreRules: true,
+        excludeDirectories: [...ignoredDirectoryNames],
+        maxFileSizeBytes: defaultSearchMaxBytes
+      });
+      return {
+        matches: result.matches.map((match) => ({
+          relativePath: match.relativePath,
+          line: match.line,
+          column: match.column,
+          preview: match.preview
+        })),
+        truncated: result.truncated
+      };
+    } catch {
+      // rg 不存在、被杀或目标不可读都走降级；搜索失败不该让面板变红，只是变慢。
+      return null;
+    }
   }
 
   async searchByName(request: FileNameSearchRequest): Promise<FileNameSearchResult> {
@@ -516,18 +553,6 @@ export class FileService {
       return buffer.subarray(0, bytesRead);
     } finally {
       await handle.close();
-    }
-  }
-
-  private readFilePrefix(absolutePath: string, byteLimit: number): Buffer {
-    const targetBytes = Math.max(0, byteLimit);
-    const buffer = Buffer.alloc(targetBytes);
-    const fd = openSync(absolutePath, 'r');
-    try {
-      const bytesRead = readSync(fd, buffer, 0, targetBytes, 0);
-      return buffer.subarray(0, bytesRead);
-    } finally {
-      closeSync(fd);
     }
   }
 

@@ -116,11 +116,15 @@ test('the shipped lock satisfies the reader contract for every architecture it d
       assert.equal(typeof versions[name], 'string', `${name} lost its version for ${architecture}`);
     }
   }
-  // Vale is a declared tool like the others, so its version must be auditable too. An archive
-  // without a version is what `lockedToolVersions` rejects, and the rebuild would not notice.
-  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['python', 'tectonic', 'uv', 'vale']);
+  // 每个工具都是“被声明的工具”，版本必须可审计。没有版本的归档正是 `lockedToolVersions`
+  // 拒绝的形状，重建也不会发现。Typst 与 Vale 一样走这条通用规则，没有特判。
+  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['python', 'tectonic', 'typst', 'uv', 'vale']);
   assert.equal(typeof shipped.valeVersion, 'string');
   assert.equal(lockedToolVersions(shipped, 'arm64').vale, shipped.valeVersion);
+  assert.equal(typeof shipped.typstVersion, 'string');
+  assert.equal(lockedToolVersions(shipped, 'arm64').typst, shipped.typstVersion);
+  // 两个架构必须声明同一批工具：只给 arm64 加工具的 lock 会让 Intel 机器启动即失败。
+  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), Object.keys(shipped.architectures.x64).sort());
 });
 
 test('the recorded set must match the expected set key for key', () => {

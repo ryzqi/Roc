@@ -6,6 +6,7 @@ import {
   researchBibliographyEntrySchema, researchLibraryItemSchema, type researchLibraryListRequestSchema
 } from '../../../shared/schemas/research-library';
 import type { ResearchLiterature } from '../../../shared/types';
+import { citationKeySet } from './cite-key';
 import { bibliographyIdentity, literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import type { ResearchRepository } from './repository';
 
@@ -14,14 +15,28 @@ export type BibliographyEntry = z.infer<typeof researchBibliographyEntrySchema>;
 type LibraryRow = { id: string; identity_key: string; metadata_json: string; bibliography_json: string; sources_json: string;
   revision: number; archived: number; created_at: string; updated_at: string };
 
+/** 库里的 JSON 列：先按结构收窄，形状由各处的 zod schema 决定。 */
+type JsonColumn = string | number | boolean | null | JsonColumn[] | { [key: string]: JsonColumn };
+
+/**
+ * 读一个 JSON 列。
+ *
+ * `JSON.parse` 会抛，而「库里有一条被写坏的记录」不该以 `SyntaxError` 的形式冒到界面上：
+ * 它是存储层的领域错误（`research_library_storage_invalid`），调用方按 `degraded` 处理。
+ */
+function readJsonColumn(value: string): JsonColumn {
+  try { return JSON.parse(value) as JsonColumn; }
+  catch { throw new Error('research_library_storage_invalid'); }
+}
+
 export class ResearchLibraryRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
   get(id: string): LibraryItem {
     const row = this.db.prepare('SELECT * FROM research_library WHERE id = ?').get(id) as LibraryRow | undefined;
     if (row === undefined) throw new Error('research_library_item_not_found');
-    return researchLibraryItemSchema.parse({ id: row.id, metadata: JSON.parse(row.metadata_json), bibliography: JSON.parse(row.bibliography_json),
-      sources: JSON.parse(row.sources_json), revision: row.revision, archived: row.archived === 1, createdAt: row.created_at, updatedAt: row.updated_at,
+    return researchLibraryItemSchema.parse({ id: row.id, metadata: readJsonColumn(row.metadata_json), bibliography: readJsonColumn(row.bibliography_json),
+      sources: readJsonColumn(row.sources_json), revision: row.revision, archived: row.archived === 1, createdAt: row.created_at, updatedAt: row.updated_at,
       projectIds: this.db.prepare('SELECT project_id FROM research_library_projects WHERE item_id = ? ORDER BY project_id').all(id)
         .map((entry) => (entry as { project_id: string }).project_id) });
   }
@@ -41,10 +56,13 @@ export class ResearchLibraryRepository {
   list(request: z.infer<typeof researchLibraryListRequestSchema>): LibraryItem[] {
     if (request.projectId !== null) this.research.getProject(request.projectId);
     const query = `%${request.query.trim().replace(/[\\%_]/gu, '\\$&')}%`;
+    // 搜索同时看元数据与**引用键**：用户最常见的动作是从模板/旧稿里复制一个 `\cite{smith2020}`
+    // 里的键，然后想知道库里是哪一篇。只看 metadata_json 时这类搜索永远零命中。
     return (this.db.prepare(`SELECT l.id FROM research_library l WHERE (? = 1 OR archived = 0)
       AND (? IS NULL OR EXISTS (SELECT 1 FROM research_library_projects p WHERE p.item_id = l.id AND p.project_id = ?))
-      AND metadata_json LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, id LIMIT ?`)
-      .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
+      AND (metadata_json LIKE ? ESCAPE '\\' OR json_extract(bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\')
+      ORDER BY updated_at DESC, id LIMIT ?`)
+      .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
   import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry }[], projectId: string | null): {
@@ -153,6 +171,18 @@ export class ResearchLibraryRepository {
     })();
     this.research.flushKnowledgeFromSource();
     return archivedItem;
+  }
+
+  /**
+   * 当前库里所有引用键（小写）。
+   *
+   * 引用键生成（`cite-key.ts`）必须知道已占用的键才能追加消歧后缀；把这次查询放在仓库层，
+   * 是因为「哪些键存在」是库的事实，不是调用方的猜测。已归档条目也算：它们在导出里仍可能
+   * 被恢复引用，键冲突不该等到那一刻才暴露。
+   */
+  usedCitationKeys(): Set<string> {
+    const rows = this.db.prepare("SELECT json_extract(bibliography_json, '$.citationKey') AS key FROM research_library").all() as Array<{ key: string | null }>;
+    return citationKeySet(rows.flatMap((row) => (typeof row.key === 'string' && row.key.length > 0 ? [row.key] : [])));
   }
 
   setCitationKey(id: string, expectedRevision: number, citationKey: string): LibraryItem {

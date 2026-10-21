@@ -1,5 +1,8 @@
-# Roc 与科研工作流自有的术语。Vale 的 Vale.Spelling 目前未启用，这份词表的意义是：
-# 一旦启用拼写检查，这些词不应被报成拼错。
+# Roc 与科研工作流自有的术语。拼写规则是 `styles/RocAcademic/Spelling.yml`（`extends: spelling`），
+# 它读这份词表：这里的词不应被报成拼错。
+#
+# 加词的门槛：**领域术语、工具名、以及中文项目里会出现的英文专名**。普通英文单词不要加——
+# 把常见拼错的词塞进来等于把检查关掉。Vale 的词表匹配大小写不敏感地命中整个单词。
 Roc
 Vega-Lite
 Mermaid
@@ -29,3 +32,22 @@ provenance
 manuscript
 preprint
 dataset
+Typst
+hayagriva
+CSL
+Zotero
+JabRef
+EndNote
+Overleaf
+Pandoc
+Quarto
+MyST
+Vale
+ripgrep
+Electron
+macOS
+JSON
+YAML
+SQLite
+PDFium
+Tectonic

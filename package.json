@@ -42,7 +42,8 @@
     "smoke:electron": "node scripts/smoke-electron.mjs --full",
     "verify:native-packaging": "node scripts/verify-native-packaging.mjs",
     "verify:paths": "node scripts/verify-paths.mjs",
-    "sync:builtin-skills": "node scripts/sync-builtin-skills.mjs"
+    "sync:builtin-skills": "node scripts/sync-builtin-skills.mjs",
+    "sync:ripgrep": "node scripts/fetch-ripgrep.mjs"
   },
   "dependencies": {
     "@langchain/anthropic": "1.5.12",

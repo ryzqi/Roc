@@ -221,6 +221,48 @@ export function researchRuntimeSourcePath(targetProjectRoot = projectRoot) {
   return resolve(targetProjectRoot, 'resources', 'research-runtime');
 }
 
+export function ripgrepBinariesRoot(targetProjectRoot = projectRoot) {
+  return resolve(targetProjectRoot, 'resources', 'ripgrep-binaries');
+}
+
+/**
+ * 确认**目标架构**的 `rg` 在位，且与 `ripgrep.lock.json` 记录的 SHA-256 一致。
+ *
+ * 缺二进制**不会**让搜索挂掉（两条调用面都会降级），所以它很容易在打包时被默默漏掉，
+ * 用户拿到的是“能跑但慢”的 Roc。把校验放在打包口：漏了就失败，而不是发出去才发现。
+ *
+ * `architecture` 必须是**要打的那个架构**，不是宿主架构：在 arm64 Mac 上
+ * `electron-builder --x64` 是合法命令，校验宿主架构会放过一个根本没进包的 `darwin-x64/rg`。
+ */
+export function assertRipgrepBinaryForPackaging({
+  architecture = process.arch,
+  projectRoot: targetProjectRoot = projectRoot
+} = {}) {
+  const root = ripgrepBinariesRoot(targetProjectRoot);
+  const lockPath = resolve(root, 'ripgrep.lock.json');
+  let lock;
+  try {
+    lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`Missing or unreadable ripgrep lock: ${lockPath} (${error instanceof Error ? error.message : String(error)})`);
+  }
+  const entry = lock?.architectures?.[architecture];
+  if (entry === undefined) {
+    throw new Error(`ripgrep.lock.json declares no binary for ${architecture}: ${lockPath}`);
+  }
+  if (typeof entry.binarySha256 !== 'string' || entry.binarySha256.length === 0) {
+    throw new Error(`ripgrep.lock.json has no binarySha256 for ${architecture}; the binary would ship unverified: ${lockPath}`);
+  }
+  const binaryPath = resolve(root, entry.platformDir, 'rg');
+  if (!existsSync(binaryPath) || !statSync(binaryPath).isFile()) {
+    throw new Error(`Missing bundled ripgrep binary for packaging: ${binaryPath}. Run pnpm sync:ripgrep --arch ${architecture}`);
+  }
+  const digest = packagedToolchainSha256(binaryPath);
+  if (digest !== entry.binarySha256) {
+    throw new Error(`Bundled ripgrep binary does not match ${lockPath}: ${binaryPath} (sha256 ${digest})`);
+  }
+}
+
 function packagedToolchainSha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }

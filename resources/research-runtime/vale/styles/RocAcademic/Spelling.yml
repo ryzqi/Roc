@@ -1,0 +1,16 @@
+# 拼写检查。
+#
+# 为什么是 `extends: spelling` 而不是 `BasedOnStyles` 里加 `Vale`：Vale 自带的
+# `Vale.Spelling` 把每一处拼错都判成 **error**，而 Roc 的 error 档含义是「证据口径被破坏」
+# （见 `docs/research-prose.md` 的严重度表）。直接启用会让一个拼写错误升级成导出前的硬问题。
+# 用 Roc 自己的规则文件把它包一层，就能：
+#
+#   * 把 level 降成 `suggestion`——拼写是表达建议，不是证据问题；
+#   * 让规则参与 `lockHashes` 与 `research_toolchain_source_mismatch`（与其它 Roc 规则一致），
+#     改这条规则会要求重建工具链，而不是悄悄换了检查口径；
+#   * 词表仍然走 `Vocab = Roc`（`styles/config/vocabularies/Roc/accept.txt`）。
+#
+# 不用 Hunspell / Aspell：Vale 自带词典与词表机制，再打一个二进制进工具链是纯增重。
+extends: spelling
+message: "拼写：'%s' 不在 Roc 词表与词典里；如果是术语或人名，加进 accept.txt。"
+level: suggestion

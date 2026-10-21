@@ -4,10 +4,13 @@ import type { z } from 'zod';
 import type { ResearchLiterature } from '../../../shared/types';
 import type {
   researchLibraryDoiImportRequestSchema, researchLibraryFileImportRequestSchema, researchLibraryExportRequestSchema,
-  researchLibraryRecordImportRequestSchema, researchLibraryImportResultSchema, researchLibraryExportSchema
+  researchLibraryRecordImportRequestSchema, researchLibraryImportResultSchema, researchLibraryExportSchema,
+  researchLibraryRetractionRequestSchema, researchLibraryRetractionSchema, researchLibraryRetractionResultSchema
 } from '../../../shared/schemas/research-library';
 import { readResearchFile, researchWorkspace } from './research-files';
 import { bibliographyIdentity, normalizeResearchDoi, referenceKey } from './literature-identity';
+import { betterBibtexKey } from './cite-key';
+import { openAlexWorkUrl, readOpenAlexRetraction, unknownRetraction } from './retraction-check';
 import type { BibliographyEntry, ResearchLibraryRepository } from './library-repository';
 import type { ResearchToolchain } from './toolchain';
 
@@ -90,11 +93,57 @@ export class ResearchLibraryService {
       const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal });
       if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
       this.requireActive(signal);
-      const bibliography = entries[0];
+      const entry = entries[0];
+      // csl 里的 `id` / `citation-key` 是**内部临时标识**（`referenceKey(doi)`），只用于解析回写；
+      // 入库的引用键按 Better BibTeX 公式重新生成，与用户模板、Zotero 库叫同一个名字。
+      const bibliography = { ...entry,
+        citationKey: betterBibtexKey({ authors: entry.authors, publishedYear: entry.publishedYear, title: entry.title }, this.repository.usedCitationKeys()) };
       const metadata = { ...localMetadata(bibliography), id: `doi:${doi}`, source: 'doi' as const, externalId: doi,
         url: bibliography.url ?? `https://doi.org/${doi}` };
       return this.repository.import([{ metadata, bibliography }], request.projectId);
     });
+  }
+
+  /**
+   * 撤稿核查：**联网动作**，不进离线工具链，不写库、不改条目。
+   *
+   * 每个 DOI 打一次 OpenAlex；并发上限 4（≤50 条），响应上限 1 MiB，超时 30 s。
+   * 任何单条失败都落成 `unknown`（带 `detail`），**不把失败当安全**。
+   * 结论带 `checkedAt`：它是「核查时点的快照」，不是永久事实。
+   */
+  async checkRetractions(request: z.infer<typeof researchLibraryRetractionRequestSchema>): Promise<z.infer<typeof researchLibraryRetractionResultSchema>> {
+    if (new Set(request.ids).size !== request.ids.length) throw new Error('research_library_selection_duplicate');
+    const items = request.ids.map((id) => this.repository.get(id));
+    const results: z.infer<typeof researchLibraryRetractionSchema>[] = [];
+    for (let start = 0; start < items.length; start += 4) {
+      const batch = items.slice(start, start + 4);
+      results.push(...await Promise.all(batch.map((item) => this.checkRetraction(item))));
+    }
+    return { results };
+  }
+
+  private async checkRetraction(item: ReturnType<ResearchLibraryRepository['get']>): Promise<z.infer<typeof researchLibraryRetractionSchema>> {
+    const doi = item.bibliography.doi ?? item.metadata.doi;
+    const checkedAt = new Date().toISOString();
+    const base = { id: item.id, citationKey: item.bibliography.citationKey, doi, checkedSource: 'openalex' as const, checkedAt };
+    if (doi === null) return { ...base, status: 'unknown', detail: 'doi_missing' };
+    try {
+      const response = await this.fetchImpl(openAlexWorkUrl(doi), {
+        headers: { accept: 'application/json', 'user-agent': 'Roc-research/0.1' }, signal: AbortSignal.timeout(30_000)
+      });
+      // 404 是「OpenAlex 没有这条 work」，与网络失败分开写：用户能据此判断是标识符问题还是网络问题。
+      if (response.status === 404) return { ...base, status: 'unknown', detail: 'openalex_not_found' };
+      if (!response.ok) return { ...base, status: 'unknown', detail: `openalex_http_${response.status}` };
+      const text = (await response.text()).slice(0, 1024 * 1024);
+      let payload: unknown;
+      try { payload = JSON.parse(text); }
+      catch { return unknownRetraction({ id: item.id, citationKey: item.bibliography.citationKey, doi, detail: 'openalex_payload_invalid', checkedAt }); }
+      const read = readOpenAlexRetraction(payload);
+      return { ...base, status: read.status, detail: read.detail };
+    } catch (error) {
+      const detail = error instanceof Error && error.name === 'TimeoutError' ? 'openalex_timeout' : 'openalex_unreachable';
+      return { ...base, status: 'unknown', detail };
+    }
   }
 
   async export(request: z.infer<typeof researchLibraryExportRequestSchema>): Promise<z.infer<typeof researchLibraryExportSchema>> {

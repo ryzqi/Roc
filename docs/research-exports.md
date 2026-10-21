@@ -78,14 +78,42 @@ await research.prepareExport({
 
 原批准正文的 LaTeX 保持原样存档。交付源文件采用同一段落内容与版本，合入批准图稿及统一的 BibTeX 引用。编译使用固定 Tectonic、本地 TeX bundle 和受限进程；Tectonic 报告忽略了 BibTeX 错误时，即使退出码为 0 也拒绝交付。生成 PDF 后由 PDFium 打开并渲染验证。归档由主进程 TypeScript 读取清单登记且哈希一致的普通文件，拒绝链接、越界和已有归档。
 
+编译带 `--keep-intermediates`，目的只有一个：拿到 `.bbl` 并随包提供。arXiv 只跑一遍 `pdflatex`、
+**不运行 BibTeX**，缺 `.bbl` 的包在那边每一处引用都会渲染成 `?`。中间文件本身不进交付包。
+
 ZIP 包含：
 
 - `paper.pdf`：供预览和提交的 PDF。
-- `source/`：可重新编译的模板、正文、BibTeX 与 PNG/SVG/PDF 图稿。
+- `report.pdf`：**研究过程报告**（Typst 排版）：项目与研究目标、本版规模、证据索引、图稿清单、
+  按 CSL 样式（APA / IEEE / GB/T 7714，随项目文稿语言选默认）排版的完整参考文献。它不是正文的
+  第二个渲染——正文的真身仍是 claim 序列。取舍见 [ADR 0025](adr/0025-typst-report-engine.md)。
+  报告排版失败**不阻断导出**：只写 `logs/typst-report-error.txt`，交付包里就没有 `report.pdf`。
+- `report.typ`：报告的 Typst 源，用户手上有 Typst 就能改。
+- `source/`：可重新编译的模板、正文、BibTeX、编译产出的 `.bbl` 与 PNG/SVG/PDF 图稿。
 - `references.bib`：参考文献交换文件。
 - `provenance/`：原批准正文、主张/证据、模型/实验运行、代码/数据和模板占位文件。
-- `logs/`：编译输出与诊断。
+- `logs/`：编译输出、诊断、`arxiv-preflight.json`。
 - `manifest.json`：文件大小/哈希、工具链版本/摘要、来源版本和归档器摘要。
+
+## arXiv 预检
+
+`export-builder.ts` 在写完来源后跑一次 `arxiv-preflight.ts`，结论写 `logs/arxiv-preflight.json`。
+**全部是警告，不是闸门**：arXiv 的体裁要求不该让一份合法的内部交付包导不出来。检查的项：
+
+| 码 | 含义 |
+| --- | --- |
+| `missing_bbl` | 用了 BibTeX 但这次没拿到 `.bbl`（arXiv 上引用会变成 `?`） |
+| `unreachable_tex` | 从入口到不了、也没被任何可达文件提到的 `.tex`，已从 `source/` 剪掉 |
+| `draft_markup` / `todo_markup` / `commented_block` / `conditional_block` | `\todo{}`、`TODO/FIXME` 注释、`comment` 环境、`\iffalse` 残留在源里 |
+| `absolute_path` | 源里出现 `/Users/…` 这类绝对路径 |
+| `filename_not_portable` | 文件名含空格或非 ASCII |
+| `figure_extension` / `figure_size` | 图稿格式不在 pdf/png/jpg/eps 里，或单图超过 5 MB |
+| `missing_reference` | `\input` / `\includegraphics` 指向的文件不在模板里 |
+
+剪枝的边界写在那儿：只剪 `.tex`，只剪不可达且未被提到的，模板库与磁盘上的文件都不动，
+被剪文件的路径与 sha256 记进日志。`\input` 闭包按「相对引用文件所在目录」与「相对根目录」两种解析，
+**注释里提到过的文件名也算提到**（作者写的「备用入口」是线索，不是噪声）。
+不剥模板里的注释与草稿标记：模板文件的 sha256 是模板记录的一部分，改一个字节就会让 provenance 对不上。
 
 单文件上限 64 MiB，内容总量上限 512 MiB，最多 10,000 个文件。ZIP 上限 600 MiB，内部文件日期固定。`readExportFile({projectId, exportId, path})` 只读取登记文件，预览上限 4 MiB；失败作业保留已收集文件和错误信息。
 

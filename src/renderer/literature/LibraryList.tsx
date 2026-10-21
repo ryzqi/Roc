@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Archive, BookOpen, FilePlus2, Link2, Loader2, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, Link2, Loader2, RefreshCw, Search } from 'lucide-react';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -18,6 +18,13 @@ import { useLiterature } from './literature-scope';
  *
  * A row shows only what the record actually has: an absent year, citation count or
  * venue is rendered as absent, never as a plausible-looking default.
+ *
+ * ## 引用键
+ *
+ * 每一行带上条目自己的引用键（`bibliography.citationKey`）。它是用户与外部世界交接的那个
+ * 字符串——模板里的 `\cite{…}`、合作者的 Zotero 库、投稿系统里的参考文献表都认它。
+ * 所以这里不只显示，还能一键复制：从“看到一个键”到“拿到这个键”不该需要打开读写器。
+ * 后端搜索也认这个字段（`library-repository.list()`），粘贴一个键就能找到那一条。
  */
 
 export type LibraryListProps = {
@@ -43,6 +50,14 @@ const SOURCE_LABELS: Readonly<Record<ResearchLibraryItem['metadata']['source'], 
 export function LibraryList({ compact = false, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
   const [searchDraft, setSearchDraft] = useState(literature.query);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // 复制反馈只活 1.5 秒：它是“刚才那一下成功了”的确认，不是持久状态。
+  useEffect(() => {
+    if (copiedId === null) return undefined;
+    const timer = setTimeout(() => setCopiedId(null), 1500);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
 
   // Keep the box in sync when something else changes the query (e.g. clearing it
   // from a view switch) without fighting the user's typing.
@@ -147,8 +162,10 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             const selected = item.id === literature.selectedId;
             const venue = readVenue(item.bibliography);
             const linked = literature.projectId !== null && item.projectIds.includes(literature.projectId);
+            const copyKey = item.bibliography.citationKey;
+            const copied = copiedId === item.id;
             return (
-              <li key={item.id}>
+              <li key={item.id} className="relative">
                 <button
                   type="button"
                   onClick={() => {
@@ -157,7 +174,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                   }}
                   aria-current={selected ? 'true' : undefined}
                   data-testid={`literature-row-${item.id}`}
-                  className={`flex w-full flex-col gap-0.5 rounded-control text-left ${rowPad} ${
+                  className={`flex w-full flex-col gap-0.5 rounded-control pr-7 text-left ${rowPad} ${
                     selected
                       ? 'bg-accent-soft active:bg-[var(--accent-soft-strong)]'
                       : 'hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
@@ -171,6 +188,9 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                   <span className="flex flex-wrap items-center gap-1">
                     <span className="rounded-control border border-line px-1 text-subtle text-[var(--font-micro-size)]">
                       {SOURCE_LABELS[item.metadata.source]}
+                    </span>
+                    <span className="font-mono text-subtle text-[var(--font-micro-size)]" data-testid={`literature-citekey-${item.id}`}>
+                      {copyKey}
                     </span>
                     <span className="text-subtle text-[var(--font-micro-size)]">
                       {formatCitationCount(item.metadata.citationCount)}
@@ -188,6 +208,18 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                       </span>
                     ) : null}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(copyKey).then(() => setCopiedId(item.id), () => setCopiedId(null));
+                  }}
+                  aria-label={copied ? `已复制引用键 ${copyKey}` : `复制引用键 ${copyKey}`}
+                  title={copied ? '已复制' : '复制引用键'}
+                  data-testid={`literature-citekey-copy-${item.id}`}
+                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                >
+                  {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
                 </button>
               </li>
             );

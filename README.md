@@ -53,7 +53,7 @@ src/
   rtk-integration/# shell 输出压缩
 tests/
 scripts/
-resources/        # 图标、RTK binaries、科研工具链源、阶段 Skill、内置技能快照与 catalog
+resources/        # 图标、RTK / ripgrep binaries、科研工具链源、阶段 Skill、内置技能快照与 catalog
 ```
 
 设计口径没有单独的文档目录：真身是 `src/renderer/styles/tokens.css`（颜色与刻度）与 `src/renderer/shared/motion.ts`（动效），组件不得写死颜色。
@@ -92,6 +92,10 @@ Harness profile（`harness-profiles.ts`）：
 - 排除内置 `execute`；只暴露受控 `run_shell_command`
 
 文件工具只认 `/workspace/**`、`/memory/**`、`/skills/**`。不要把 `/workspace/...` 当 shell cwd。shell 使用真实 macOS 工作目录。RTK 见 [docs/rtk-integration.md](docs/rtk-integration.md)。
+
+`grep` 工具跑在随包的 ripgrep 上（`RipgrepFilesystemBackend` → `RipgrepService`，显式二进制路径，不看 PATH）；
+同一个服务也承担 ⌘K 的文件内容搜索。两条调用面在二进制缺失时都退回 deepagents / `FileService` 原有的实现
+（前者会再试一次 PATH 上的 `rg`），所以「不看 PATH」只在随包二进制在位时成立。见「外部集成」的 ripgrep 一节。
 
 未手动填写的模型上下文预算运行时回落到 `500_000`。单次最大输出（`maxTokens`）未填时不发送，由上游默认。
 
@@ -169,7 +173,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 - 本地缓存：`.runtime/`、`.artifacts/`（gitignore）
 - 仓库不保存真实密钥。测试只允许明显假数据
 
-推送前确认：不要提交 `.env`、真实 API Key、`~/.roc`、导出的 chat 数据库。二进制只保留 macOS arm64/x64 RTK。
+推送前确认：不要提交 `.env`、真实 API Key、`~/.roc`、导出的 chat 数据库。二进制只保留 macOS arm64/x64 的 RTK 与 ripgrep。
 
 ---
 
@@ -220,7 +224,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 
 - Apple Silicon：`release/mac-arm64/Roc.app`
 - Intel：在 x64 Mac 上安装匹配依赖，输出 `release/mac/Roc.app`
-- 包内只留当前架构的 SQLite、PTY、RTK 和科研工具链
+- 包内只留当前架构的 SQLite、PTY、RTK、ripgrep 和科研工具链
 - 随包分发 Python / Tectonic / Vale / TeX 子集；Docling 模型不进安装包，打开后下载到 `~/.roc/research-models`
 - 打包前用当前 `worker.py` / `figure.py` 覆盖 live 副本；排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。文献交换已在主进程 TypeScript（`bibliography.ts`）
 - ad-hoc 本地签名（`identity: "-"`），未做 Developer ID / 公证
@@ -261,8 +265,10 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | `tectonic`（Tectonic） | 0.17.0 | `https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.17.0` ✓ | MIT | 同上（`tectonicVersion` + `tectonic`）；文档 `https://tectonic-typesetting.github.io` ✓ |
 | TeX 资源（子集） | tlextras-2022.0r0 | `https://data1b.fullyjustified.net/tlextras-2022.0r0.tar`（上游默认 `https://relay.fullyjustified.net/default_bundle_v33.tar`） | 多许可证，随包保留入选文件原有声明 | 改 `tools.lock.json.texBundle` 的 url/sha256/size/zipSha256 + `tex-bundle-files.txt` → 重建 |
 | `vale`（Vale） | 3.24.0 | `https://github.com/vale-cli/vale/releases/tag/v3.24.0` ✓ | MIT | 改 `tools.lock.json` 的 `valeVersion` + `architectures[*].vale` → 重建。见 [docs/research-prose.md](docs/research-prose.md) |
+| `typst`（Typst） | 0.15.0 | `https://github.com/typst/typst/releases/tag/v0.15.0` ✓ | Apache-2.0 | 改 `tools.lock.json` 的 `typstVersion` + `architectures[*].typst` → 重建。**只服务导出附带的报告**（`src/main/plugins/research/typst-report.ts`），不进 LaTeX 主链；取舍见 [docs/adr/0025-typst-report-engine.md](docs/adr/0025-typst-report-engine.md) |
+| CSL 样式（数据） | 提交 `ffd2a7b9` | `https://github.com/citation-style-language/styles` ✓ | CC BY-SA 3.0 | 改 `resources/research-runtime/csl/**` → 重建（样式参与 `lockHashes`）；加样式同时要改 `typst-report.ts` 的样式表。见 `resources/research-runtime/csl/README.md` |
 
-**Vale 规则集是 Roc 自己写的**（`resources/research-runtime/vale/styles/`，8+8 条），不来自上游 style 包，所以改规则只需重建工具链，不涉及第三方许可。
+**Vale 规则集是 Roc 自己写的**（`resources/research-runtime/vale/styles/`，8+8+1 条），不来自上游 style 包，所以改规则只需重建工具链，不涉及第三方许可。拼写那条（`RocAcademic/Spelling.yml`）是 `extends: spelling` 的包装，把上游 `Vale.Spelling` 的 `error` 档降到 `suggestion`。
 
 ### 二、科研 Python 运行时
 
@@ -294,13 +300,46 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | `docling-project/docling-models`（TableFormer） | `fc0f2d45…` | CDLA-Permissive-2.0 |
 | `docling-project/CodeFormulaV2`（公式识别） | `ecedbe11…` | CDLA-Permissive-2.0 |
 
-### 四、RTK
+### 四、ripgrep（随包全文搜索）
+
+文件内容搜索（`files.search`，⌘K 的「文件内容」分组）与 Agent 的 `grep` 工具共用这一个二进制：
+`RipgrepService` 用显式路径启动它，所以结果不取决于用户机器 PATH 里有没有 `rg`。
+归口文件是 [`src/main/services/ripgrep-service.ts`](src/main/services/ripgrep-service.ts)（二进制解析、参数组装、
+`--json` 解析），Agent 侧的子类在
+[`src/main/services/deep-agent/ripgrep-filesystem-backend.ts`](src/main/services/deep-agent/ripgrep-filesystem-backend.ts)。
+
+版本、网址与两个架构的 archive / binary SHA-256 的单一真理源是
+[`resources/ripgrep-binaries/ripgrep.lock.json`](resources/ripgrep-binaries/ripgrep.lock.json)；
+`electron-builder.yml` 按 `darwin-${arch}` 只打**目标**架构，打包前由
+`assertRipgrepBinaryForPackaging`（`scripts/lib/native-packaging.mjs`）按 `context.arch` 核对目标架构的哈希
+（不是宿主架构：`--x64` 交叉打包是合法命令）。
+
+搜索口径（两条调用面**有意不同**）：
+
+- `files.search` 传 `--hidden --no-ignore --no-ignore-parent --no-ignore-global`：点文件要能搜到，结果也不受
+  仓库或全局 gitignore 影响——它替换的那次逐文件扫描本来就不看这些文件。目录过滤只认
+  `ignoredDirectoryNames`（`node_modules`、`.git`、`dist` 等）。
+- Agent `grep` 保持 ripgrep 默认的 ignore 语义（与 deepagents 自带调用一致），只把二进制换成随包的那一颗。
+
+`binarySha256` 钉的是**发布资产**（打包前）。打包时 electron-builder 会对 `Roc.app` 里的嵌套可执行文件做
+ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock 不同是正常的：`codesign --verify` 通过、
+`rg --version` 能跑就够了。不要拿包内二进制去比对 lock。
+
+| 组件 | 版本 | 来源 | 许可证 | 更新方式 |
+| --- | --- | --- | --- | --- |
+| `ripgrep`（`rg`） | 15.2.0 | `https://github.com/BurntSushi/ripgrep` ✓<br/>`https://github.com/BurntSushi/ripgrep/releases/tag/15.2.0` ✓ | MIT OR Unlicense | `pnpm sync:ripgrep` 按 lock 下载、核对 SHA-256、解出 `resources/ripgrep-binaries/darwin-*/rg`；许可证文本在 `resources/ripgrep-binaries/licenses/` |
+
+二进制缺失时的行为是**降级而不是报错**：`files.search` 退回逐文件 JS 扫描，Agent `grep` 退回 deepagents 的实现
+（先试 PATH 上的 `rg`，没有才落到字面量扫描）。所以漏打包不会让搜索挂掉，只会变慢——打包校验就是为了
+不让这件事悄悄发生。
+
+### 五、RTK
 
 | 组件 | 版本 | 来源 | 许可证 | 更新方式 |
 | --- | --- | --- | --- | --- |
 | RTK | v0.48.0 | `https://github.com/rtk-ai/rtk/releases/tag/v0.48.0` ✓ | Apache-2.0 | 双架构二进制放 `resources/rtk-binaries/darwin-*/rtk`；见 [docs/rtk-integration.md](docs/rtk-integration.md) |
 
-### 五、npm 依赖（含版本、来源与许可证）
+### 六、npm 依赖（含版本、来源与许可证）
 
 许可证由 `pnpm licenses list --prod` 实测得到。更新一律走 `pnpm add/upgrade` + `pnpm-lock.yaml`；
 **改依赖后要重跑 `pnpm check:renderer-chunks`**（首屏预算）与打包验证。
@@ -349,7 +388,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | `@playwright/test` | 1.64.0 | `https://github.com/microsoft/playwright` ✓ | Apache-2.0 | smoke 与验收闸门 |
 | `@types/*` | 见 package.json | 各自上游 | MIT | 类型声明 |
 
-### 六、在线学术 API
+### 七、在线学术 API
 
 都是只读 GET，无需密钥；响应经 `no-store` 缓存策略，不落盘。调用点集中在
 [`src/main/plugins/research/literature-service.ts`](src/main/plugins/research/literature-service.ts)。
@@ -357,13 +396,13 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | 数据源 | 端点 | 说明 |
 | --- | --- | --- |
 | Crossref | `https://api.crossref.org/works` | 元数据检索；DOI 解析走 `https://doi.org/<doi>`（`Accept: application/vnd.citationstyles.csl+json`） |
-| OpenAlex | `https://api.openalex.org/works` | 元数据检索 |
+| OpenAlex | `https://api.openalex.org/works` | 元数据检索；撤稿核查（`research.library.checkRetractions`，读 `is_retracted`）。主进程联网，离线工具链不碰它 |
 | Semantic Scholar | `https://api.semanticscholar.org/graph/v1/paper/search` | 元数据检索 |
 | Europe PMC | `https://www.ebi.ac.uk/europepmc/webservices/rest/search` | 生物医学文献 |
 | arXiv | `https://export.arxiv.org/api/query` | 预印本（Atom，用 `fast-xml-parser` 解析） |
 | Hugging Face | `https://huggingface.co/<repoId>/resolve/<revision>/<path>` | 解析模型下载（唯一会下大文件的联网点） |
 
-### 七、内置技能源
+### 八、内置技能源
 
 两个上游 Skill 仓库随安装包内置（离线可用），运行时每 24 小时比对提交并同步；细节见
 [docs/builtin-skills.md](docs/builtin-skills.md)。快照与提交号的单一真理源是
@@ -374,13 +413,15 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | Nature Skills（23 个技能） | 快照 `2a163b95` | `https://github.com/Yuan1z0825/nature-skills` ✓ | Apache-2.0 | `pnpm sync:builtin-skills` → 提交 `resources/builtin-skills/nature-skills.tar.gz` 与 `catalog.json`；运行时自动同步 |
 | Academic Research Skills（5 个技能） | 快照 `cfd081d8` | `https://github.com/Imbad0202/academic-research-skills` ✓ | **CC BY-NC 4.0** | 同上；许可证不允许默认分发，所以内置但不自动安装（管理 → 技能里显式接受后安装） |
 
-### 八、维护动作
+### 九、维护动作
 
 | 场景 | 动作 |
 | --- | --- |
 | 升级 npm 依赖 | `pnpm upgrade` → `pnpm check:ipc` → `pnpm check:renderer-chunks` → `pnpm typecheck` → `pnpm test:unit` → 重跑受影响的验收闸门 |
 | 升级工具链组件 | 改 `tools.lock.json` → **重建到新目录**（旧目录会被 `research_toolchain_version_mismatch` 拒） → 切路径 → `pnpm verify:native-packaging` |
 | 升级 Vale 规则 | 改 `resources/research-runtime/vale/**` → 重建（规则参与 `lockHashes`） |
+| 升级 CSL 样式 | 改 `resources/research-runtime/csl/**` → 重建（样式参与 `lockHashes`） |
+| 升级 ripgrep | 改 `ripgrep.lock.json`（版本、url、archive/binary SHA-256）→ `pnpm sync:ripgrep` → `pnpm test:unit`（核对 lock↔二进制 sha256，并真跑一次 `rg`）→ `pnpm verify:native-packaging`（`--arch` 可选，缺省本机架构） |
 | 升级解析模型 | 改 `models.lock.json` 的 revision + 各文件 sha256 → 重下模型缓存 |
 | 升级随包第三方资源 | 同步 `resources/research-runtime/licenses/sources.json` 的 url 与 sha256（`collect-licenses.ts` 与打包校验会读它） |
 | 新增任何外部组件 | 先在本节登记：版本、网址、许可证、归口文件、更新方式 |

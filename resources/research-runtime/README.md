@@ -8,6 +8,10 @@ Vale 3.24.0 作为第 4 个归档工具装到 `bin/vale`，供文稿检查（合
 
 本目录保存源文件和依赖声明。构建得到的解释器、环境与模型位于项目 `.runtime/`，不提交生成的第三方二进制。此目录提供可供应用打包的完整工具链；主进程接线与 Electron 打包校验已接入 `package:mac`。
 
+Typst 0.15.0 作为第 5 个归档工具装到 `bin/typst`，**只服务导出附带的 `report.pdf`**（`src/main/plugins/research/typst-report.ts`），不进 LaTeX 主链；为什么不全面采用它见 `docs/adr/0025-typst-report-engine.md`。它的归档是 `.tar.xz`：Node 没有 xz 解码器，`prepare.ts` 用系统 `/usr/bin/tar`（bsdtar）解包，只取归档里那一个 `typst` 二进制，其余内容丢弃——这一步只在构建机上跑，应用运行时从不调 `/usr/bin/tar`。
+
+`csl/` 是**引用格式化数据**（APA / IEEE / GB/T 7714），由 Typst 原生的 hayagriva 消费，不引第二个 CSL 引擎。与 `vale/` 一样原样复制进工具链并参与 `lockHashes`：改样式要重建，也会被运行时校验抓到。
+
 ## 准备和校验
 
 构建机需要与目标架构匹配的 macOS、可直接执行 TypeScript 的 Node 26，以及首次准备时的网络。应用运行时使用随包 CPython。下列命令以当前仓库路径为例；Intel Mac 使用 `--arch x64` 和对应输出目录。

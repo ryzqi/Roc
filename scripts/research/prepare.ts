@@ -41,6 +41,12 @@ type ToolsLock = {
    * Vale（prose linter）的版本。它不在归档里跑，而是作为 `bin/vale` 被 `lintProse()` 直接调。
    */
   valeVersion: string;
+  /**
+   * Typst 的版本。它只服务 `compileTypst()`（导出附带的报告），不进 LaTeX 主链。
+   * 归档是 `.tar.xz`：Node 没有 xz 解码器，所以走系统 `/usr/bin/tar`（bsdtar，linked liblzma）。
+   * 只取出归档里那一个 `typst` 二进制，其余内容丢弃。
+   */
+  typstVersion: string;
   texBundle: { url: string; sha256: string; size: number; zipSha256: string };
   architectures: Record<string, Record<string, { url: string; sha256: string }>>;
 };
@@ -148,8 +154,20 @@ async function runCommand(
   });
 }
 
-async function withPrepareLock(lockPath: string, work: () => Promise<void>): Promise<void> {
-  if ((await pathInfo(lockPath))?.isSymbolicLink()) fail('research_toolchain_lock_symlink');
+/**
+ * `.tar.xz` 的解包：用系统 bsdtar。
+ *
+ * 为什么不自己解 xz：Node 只内置 gzip/brotli，xz 需要 liblzma；为一个二进制引入纯 JS 的
+ * xz 解码器不划算。macOS 自带的 `/usr/bin/tar` 就是 bsdtar（linked liblzma），且**只在构建机**
+ * 上跑（应用运行时从不调它）。风险边界：解包后只从树里 copy 一个同名二进制进 `bin/`，
+ * 其余内容随 staging 一起删除；归档本身的 sha256 已在 `downloadVerified()` 验证过。
+ */
+async function extractTarXz(archive: string, destination: string): Promise<void> {
+  await mkdir(destination, { recursive: true });
+  await runCommand('/usr/bin/tar', ['-xf', archive, '-C', destination], { env: buildEnvironment(dirname(archive)) });
+}
+
+async function withPrepareLock(lockPath: string, work: () => Promise<void>): Promise<void> {  if ((await pathInfo(lockPath))?.isSymbolicLink()) fail('research_toolchain_lock_symlink');
   const flags = constants.O_RDWR | constants.O_CREAT | constants.O_NONBLOCK | DARWIN_O_EXLOCK;
   let handle;
   try {
@@ -221,9 +239,11 @@ export async function computeLockHashes(): Promise<Record<string, string>> {
   }
   // Vale 的规则集是**配置**而不是二进制：它决定了检查结论，所以必须进 lockHashes，
   // 否则改一条规则既不会要求重建工具链，也不会被 `research_toolchain_source_mismatch` 抓到。
-  const valeRoot = join(SOURCES, 'vale');
-  if (await pathInfo(valeRoot) !== null) {
-    for (const file of (await walkFiles(valeRoot)).sort()) {
+  // CSL 样式是同一类东西：它是引用格式化的数据，改了它报告里的参考文献会变。
+  for (const directory of ['vale', 'csl']) {
+    const root = join(SOURCES, directory);
+    if (await pathInfo(root) === null) continue;
+    for (const file of (await walkFiles(root)).sort()) {
       const info = await lstat(file);
       if (!info.isFile() || info.isSymbolicLink()) continue;
       lockHashes[relative(SOURCES, file).split(sep).join('/')] = await fileSha256(file);
@@ -250,7 +270,10 @@ export async function prepare(architecture: string, outputPath: string, cachePat
   const modelCache = resolve(modelCachePath);
   if (overlaps(output, cache) || overlaps(output, modelCache)) fail('research_toolchain_output_overlaps_cache');
   const lockHashes = await computeLockHashes();
-  const tools = JSON.parse(await readFile(join(SOURCES, 'tools.lock.json'), 'utf8')) as ToolsLock;
+  // `JSON.parse` 会抛：lock 被改坏时要报领域错误码，而不是把 SyntaxError 丢给构建者。
+  let tools: ToolsLock;
+  try { tools = JSON.parse(await readFile(join(SOURCES, 'tools.lock.json'), 'utf8')) as ToolsLock; }
+  catch { fail('research_tools_lock_invalid'); }
   if (tools.schemaVersion !== 1) fail('research_tools_lock_invalid');
   if (await pathInfo(output) !== null) {
     const existing = await verifyManifest(output);
@@ -271,9 +294,13 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       const archTools = tools.architectures[architecture];
       if (archTools === undefined) fail('research_tools_lock_invalid');
       for (const [name, item] of Object.entries(archTools)) {
-        const archive = await downloadVerified(item.url, item.sha256, join(cache, `${name}-${architecture}.tar.gz`));
+        const archiveName = item.url.endsWith('.tar.xz') ? `${name}-${architecture}.tar.xz` : `${name}-${architecture}.tar.gz`;
+        const archive = await downloadVerified(item.url, item.sha256, join(cache, archiveName));
         const extracted = join(staging, name);
-        await extractToolArchive(archive, extracted);
+        // xz 只有 `.tar.xz` 这一种（当前只有 typst）：Node 没有 xz 解码器，用系统 bsdtar。
+        // 安全边界留给调用方：只从解出来的树里 copy 一个同名二进制进 `bin/`，其余丢弃。
+        if (item.url.endsWith('.tar.xz')) await extractTarXz(archive, extracted);
+        else await extractToolArchive(archive, extracted);
         if (name === 'python') {
           await rename(join(extracted, 'python'), join(root, 'python'));
         } else {
@@ -316,10 +343,11 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       for (const name of LOCK_FILES) await copyPreservingMode(join(SOURCES, name), join(root, 'locks', name));
       await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
       await cp(join(SOURCES, 'vale'), join(root, 'vale'), { recursive: true, preserveTimestamps: true });
+      await cp(join(SOURCES, 'csl'), join(root, 'csl'), { recursive: true, preserveTimestamps: true });
       const collected = await collectPythonLicenses(root);
       await writeFile(join(root, 'licenses/python-packages.json'), `${JSON.stringify(collected, null, 2)}\n`, 'utf8');
       await portablePython(join(root, 'python'));
-      const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion, vale: tools.valeVersion };
+      const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion };
       const manifest = await writeManifest(root, { architecture, versions, lockHashes });
       await rename(root, output);
       console.log(`科研工具链已准备：${output}（${manifest.entries.length} 个文件或链接）`);

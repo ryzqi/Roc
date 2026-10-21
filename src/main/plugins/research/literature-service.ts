@@ -1,7 +1,8 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
-import { literatureIdentity, normalizeResearchDoi, referenceKey } from './literature-identity';
+import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 import type { ResearchRepository } from './repository';
 
@@ -203,14 +204,22 @@ type ArxivEntry = { id?: string; title?: string; summary?: string; published?: s
 type EuropePmcPayload = { resultList?: { result?: Array<{ id?: string; pmid?: string; doi?: string; title?: string; authorString?: string; abstractText?: string; pubYear?: string; citedByCount?: number; isOpenAccess?: string; source?: string }> } };
 
 export function ingestLiteratureRecord(repository: ResearchRepository, record: ResearchLiterature): void {
-  const identity = literatureIdentity(record);
-  const bibliography = bibliographyFromRecord(record, identity);
+  // 只做身份校验（没有 DOI 又没有来源标识时这里就抛），键不再由它推导。
+  literatureIdentity(record);
+  const bibliography = bibliographyFromRecord(record, repository.library.usedCitationKeys());
   repository.library.import([{ metadata: record, bibliography }], null);
 }
 
-function bibliographyFromRecord(record: ResearchLiterature, identity: string): BibliographyEntry {
+/**
+ * **引用键不再是身份哈希**。
+ *
+ * 键由 `cite-key.ts` 按 Better BibTeX 公式生成，并带上传入的已占用集合——同一批导入里
+ * 两篇同作者同年同标题开头的文献会依次得到 `…a`、`…b`，而不是把冲突留到导出时才报
+ * `research_export_citation_key_conflict`。
+ */
+function bibliographyFromRecord(record: ResearchLiterature, taken: Set<string>): BibliographyEntry {
   return {
-    citationKey: referenceKey(identity),
+    citationKey: betterBibtexKey({ authors: record.authors, publishedYear: record.publishedYear, title: record.title }, taken),
     entryType: 'article',
     preambles: [],
     csl: null,

@@ -11,6 +11,7 @@
 | [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
+| [awesome-scientific-writing-evaluation.md](awesome-scientific-writing-evaluation.md) | 外部开源清单对 Roc 的适用性评估（评估结论，非待办） |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
 与 [`src/renderer/shared/motion.ts`](../src/renderer/shared/motion.ts)，取舍理由见
