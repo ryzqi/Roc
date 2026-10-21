@@ -117,7 +117,7 @@ export function LatexPanel(): React.JSX.Element {
     // 「已保存 N 字节」与 recovery point 在不到一次 IPC 往返内抹掉（评审 P2）。清空只发生在换文件时。
   }, [isText, previewData, selectedPath]);
 
-  const onSelect = useCallback((path: string) => {
+  const onSelect = useCallback((path: string | null) => {
     loadedPathRef.current = null;
     setDraft(null);
     setNote(null);
@@ -142,14 +142,28 @@ export function LatexPanel(): React.JSX.Element {
   const dirty = canEdit && draft !== null && previewData !== null && draft !== previewData.content;
 
   return (
-    <div className="flex h-full min-h-0" data-testid="production-latex">
+    <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
+      <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+        <span className="shrink-0 text-muted text-[var(--font-meta-size)]">文稿</span>
+        <select
+          aria-label="选择文稿文件"
+          value={selectedPath ?? ""}
+          onChange={(event) => onSelect(event.target.value === "" ? null : event.target.value)}
+          className="h-8 min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        >
+          <option value="">选择文稿文件</option>
+          {(files.data ?? []).map((file) => (
+            <option key={file.path} value={file.path}>{file.path}</option>
+          ))}
+        </select>
+      </label>
       <nav
         aria-label="文稿文件"
-        className="flex w-[260px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-2"
+        className="production-latex-file-list flex w-[260px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-2"
         data-testid="production-latex-files"
       >
         <span className="text-subtle text-[var(--font-micro-size)]">
-          工作区可编辑文件（{files.data?.length ?? 0}）· files.listTree
+          文稿文件（{files.data?.length ?? 0}）
         </span>
         {files.status === 'error' ? (
           <ErrorBar error={{ level: 'page', message: files.error ?? '扫描文件失败', retry: files.reload }} />
@@ -194,13 +208,13 @@ export function LatexPanel(): React.JSX.Element {
           <EmptyState
             icon={FileText}
             title="选择一个文稿文件"
-            description="保存走 files.writeText（后端会先留一个 recovery point）。"
+            description="选择一个文稿文件开始编辑。保存前会保留一份备份。"
             testId="production-latex-no-file"
           />
         ) : (
           <PanelSection
             title={fileName(selectedPath)}
-            hint="files.preview / files.writeText（编译在模板面板：research.template.compile）"
+            hint="修改后保存；写入前会保留一份备份。"
             testId="production-latex-editor"
             action={{
               label: dirty ? '放弃修改' : '重新读取',
@@ -255,9 +269,7 @@ export function LatexPanel(): React.JSX.Element {
                           return;
                         }
                         setNote(`已保存 ${saved.bytesWritten} 字节。`);
-                        setRecovery(
-                          `recovery point ${saved.recoveryPoint.id} · 写入前 sha256 ${saved.recoveryPoint.contentSha256.slice(0, 12)}`
-                        );
+                        setRecovery('写入前已保留备份。');
                         loadedPathRef.current = null;
                         preview.reload();
                         files.reload();
@@ -293,15 +305,6 @@ export function LatexPanel(): React.JSX.Element {
           </PanelSection>
         )}
 
-        <div className="flex flex-wrap items-center gap-2" data-testid="production-latex-toolchain">
-          <span className="text-muted text-[var(--font-micro-size)]">
-            编译工具链：模板面板的 `research.template.compile`（后端固定 tectonic）
-          </span>
-        </div>
-        <p className="text-subtle text-[var(--font-micro-size)]" data-testid="production-latex-note">
-          这里不做本地编译：编译是模板面板的 `research.template.compile`（产物 PDF 供导出阶段使用），旧壳的 `setTimeout`
-          假编译已删除。工作区文件的写入没有 expectedHash，安全网是后端写入前的 recovery point。
-        </p>
       </div>
     </div>
   );

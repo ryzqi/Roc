@@ -54,6 +54,7 @@ export type ActivityBlockShellProps = {
   /** Secondary text (duration, handler id, tool count…) shown after the title. */
   meta?: string;
   tone?: ActivityTone;
+  visualDensity?: 'standard' | 'quiet';
   open: boolean;
   onToggle: (open: boolean) => void;
   /** The block has no body at all: no chevron, nothing to open. */
@@ -68,6 +69,7 @@ export function ActivityBlockShell({
   statusLabel,
   meta,
   tone = 'neutral',
+  visualDensity = 'standard',
   open,
   onToggle,
   expandable = true,
@@ -75,14 +77,21 @@ export function ActivityBlockShell({
 }: ActivityBlockShellProps): React.JSX.Element {
   return (
     <details
-      className="rounded-card border border-line bg-surface"
+      className={
+        visualDensity === 'quiet'
+          ? 'rounded-control border border-transparent bg-transparent hover:bg-[var(--overlay-hover)]'
+          : 'rounded-card border border-line bg-surface'
+      }
       data-testid={testId}
       data-tone={tone}
       open={open}
       onToggle={(event) => onToggle(event.currentTarget.open)}
     >
       <summary
-        className="flex cursor-default list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden"
+        className={[
+          'flex cursor-default list-none items-center gap-2 [&::-webkit-details-marker]:hidden',
+          visualDensity === 'quiet' ? 'px-2 py-1.5' : 'px-3 py-2'
+        ].join(' ')}
         data-testid={`${testId}-summary`}
       >
         <Icon size={13} aria-hidden="true" strokeWidth={2.5} className={`shrink-0 ${TONE_ICON[tone]}`} />

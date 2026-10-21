@@ -285,7 +285,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </span>
             </div>
             <p className={labelClass}>
-              后端接受 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件上限 512 MB。
+              支持 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件最大 512 MB。
             </p>
             {documentTarget === 'new-item' ? (
               <>
@@ -304,7 +304,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   data-testid="literature-import-document-title"
                 />
                 <label className={labelClass} htmlFor="literature-import-document-key">
-                  引用 key（必填，字母数字，不含空格与 ,{'{'}{'}'}\%#&quot;）
+                  引用键（必填）
                 </label>
                 <input
                   id="literature-import-document-key"
@@ -315,7 +315,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 />
                 {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
                   <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
-                    这个 key 不符合后端规则，导入会被拒绝。
+                    引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
                   </p>
                 ) : null}
                 {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
@@ -387,7 +387,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
 
         {tab === 'bibliography' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-bibliography">
-            <span className={labelClass}>格式（后端只支持这三种；RIS 无接口）</span>
+            <span className={labelClass}>参考文献格式</span>
             <div className="flex flex-wrap gap-1.5">
               {BIBLIOGRAPHY_FORMATS.map((entry) => (
                 <button
@@ -521,7 +521,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             />
             {effectiveManualKey.length > 0 && !isCitationKeyValid(effectiveManualKey) ? (
               <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
-                这个 key 不符合后端规则，导入会被拒绝。
+                引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
               </p>
             ) : null}
             <button
@@ -661,7 +661,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
 
         <p className={labelClass}>
           <FileText size={10} aria-hidden="true" className="mr-1 inline" />
-          导入的文档还需要在阅读器里点「解析」才会产生可检索内容；解析进度来自后端 run 记录。
+          添加文档后，在阅读器中选择「解析」即可提取可检索内容。
         </p>
       </div>
     </ModalShell>

@@ -373,7 +373,7 @@ export function PaperReader({
   const saveCitationKey = (): void => {
     const next = (keyDraft ?? '').trim();
     if (!isCitationKeyValid(next)) {
-      setActionNote('这个引用 key 不符合后端规则（不能有空格、逗号、花括号、反斜杠、% 或 #）。');
+      setActionNote('引用键含有不支持的字符，请移除空格、逗号、花括号、反斜杠、%、# 或引号。');
       return;
     }
     void runHeaderAction(async () => {
@@ -571,7 +571,7 @@ export function PaperReader({
                 <>
                   <span className="flex items-center gap-1 text-muted text-[var(--font-micro-size)]">
                     <Loader2 size={11} aria-hidden="true" className="animate-spin" />
-                    轮询后端 run 状态
+                    正在解析文档…
                   </span>
                   <button
                     type="button"
@@ -653,7 +653,7 @@ export function PaperReader({
                 disabled={modelsState.downloading || downloadPending}
                 onClick={startModelDownload}
                 data-testid="reader-models-download"
-                title="research.models.download：首次使用需要下载解析模型（体积很大）"
+                title="首次使用需下载解析模型，文件较大。"
                 className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
               >
                 {modelsState.downloading || downloadPending ? (
@@ -681,14 +681,14 @@ export function PaperReader({
               <EmptyState tone="loading" icon={Loader2} title="正在读取解析内容…" testId="reader-content-loading" />
             ) : contentError !== null ? (
               <ErrorBar
-                error={{ level: 'blocked', message: contentError, actionLabel: '解析状态来自 research.document.runs' }}
+                error={{ level: 'blocked', message: contentError, actionLabel: '检查文档后重新尝试解析。' }}
               />
             ) : content === null ? (
               activeDocument !== null && activeDocument.status !== 'ready' ? (
                 <EmptyState
                   icon={Timer}
                   title="这条文档还没有解析结果"
-                  description="点「解析」后，进度来自后端的 run 记录（running / ready / failed / cancelled）。"
+                  description="选择「解析」后，可在这里查看进度和结果。"
                   testId="reader-content-missing"
                 />
               ) : null

@@ -11,6 +11,7 @@ import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
 import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
+import { clearAssistantComposerDraft } from '../assistant/composer-draft';
 import type { ManagementTabId } from '../management/use-management-stores';
 import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
 import { ProjectPortalView } from '../project/ProjectPortalView';
@@ -603,9 +604,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               activeThreadId={assistantThreadId}
               onSelectThread={setAssistantThreadId}
               onStartNewThread={() => setAssistantThreadId(null)}
-              onThreadDeleted={(threadId) =>
-                setAssistantThreadId((current) => (current === threadId ? null : current))
-              }
+              onThreadDeleted={(threadId) => {
+                clearAssistantComposerDraft(route.projectId, threadId);
+                setAssistantThreadId((current) => (current === threadId ? null : current));
+              }}
               onSelectWorkspace={workspaceBinding.bind}
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}

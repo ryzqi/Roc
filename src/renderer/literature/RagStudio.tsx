@@ -353,7 +353,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <section className="mb-4">
-          <h3 className="mb-1.5 text-muted text-[var(--font-meta-size)]">检索（后端做关键词 + 向量 + RRF 融合）</h3>
+          <h3 className="mb-1.5 text-muted text-[var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
           <div className="flex gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2">
               <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -404,7 +404,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
           {result === null ? (
             <p className="mt-2 text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-search">
-              还没有检索。命中会显示关键词排名、向量排名与融合得分（都来自后端）。
+              还没有检索。结果会显示综合相关度，以及关键词与语义匹配情况。
             </p>
           ) : result.hits.length === 0 ? (
             <EmptyState compact icon={Search} title="没有命中" description="换一个说法，或先建索引。" testId="rag-no-hits" />
@@ -423,9 +423,9 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                     <header className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-ink text-[var(--font-meta-size)]">{hit.title}</span>
                       <span className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]">
-                        rrf {hit.rrfScore.toFixed(4)}
-                        {hit.keywordRank === null ? '' : ` · kw#${hit.keywordRank}`}
-                        {hit.vectorRank === null ? '' : ` · vec#${hit.vectorRank}`}
+                        综合相关度 {hit.rrfScore.toFixed(4)}
+                        {hit.keywordRank === null ? '' : ` · 关键词第 ${hit.keywordRank}`}
+                        {hit.vectorRank === null ? '' : ` · 语义第 ${hit.vectorRank}`}
                       </span>
                     </header>
                     <p className="mt-1 whitespace-pre-wrap text-muted text-[var(--font-meta-size)]">{hit.content}</p>
@@ -463,7 +463,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         type="button"
                         disabled={projectId === null}
                         onClick={() => captureHit(hit)}
-                        title="research.evidence.capture 需要 chunkId，所以只能从命中发起（B15）"
+                        title="将当前检索结果保存为项目证据。"
                         data-testid={`rag-hit-capture-${hit.chunkId}`}
                         className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                       >
@@ -473,7 +473,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                       <button
                         type="button"
                         onClick={() => saveHitAsNote(hit)}
-                        title="research.knowledge.upsert：把这条命中存成 note 来源的知识文档"
+                        title="将当前检索结果保存为知识库笔记。"
                         data-testid={`rag-hit-save-${hit.chunkId}`}
                         className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                       >
@@ -490,7 +490,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
         <section className="mb-4">
           <div className="mb-1.5 flex items-center gap-2">
-            <h3 className="text-muted text-[var(--font-meta-size)]">索引文件（后端只暴露文件层，分块不可浏览 — B14）</h3>
+            <h3 className="text-muted text-[var(--font-meta-size)]">已索引文件</h3>
             <input
               value={fileQuery}
               onChange={(event) => setFileQuery(event.target.value)}
@@ -504,7 +504,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             <ErrorBar error={{ level: 'page', message: filesResource.error ?? '读取索引文件失败', retry: reloadFiles }} />
           ) : indexedFiles.length === 0 ? (
             <p className="text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-files">
-              这个项目还没有被索引的文件。点「增量扫描」让后端扫描工作目录。
+              当前工作目录还没有已索引文件。选择「增量扫描」可添加新文件。
             </p>
           ) : (
             <table className="w-full border-collapse text-[var(--font-meta-size)]" data-testid="rag-files">

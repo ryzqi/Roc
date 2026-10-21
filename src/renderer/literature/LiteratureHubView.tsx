@@ -12,6 +12,7 @@ import { WikiView } from './WikiView';
 import type { ImportTabRequest, LiteratureSubView } from './hub-route';
 import { useLiterature } from './literature-scope';
 import { useLiteratureImportActions } from './use-literature-import-actions';
+import { libraryItemTitle } from './format';
 
 /**
  * The literature hub (P5): 阅读 / RAG / 知识库 / 图谱, plus the library list.
@@ -110,7 +111,7 @@ export function LiteratureHubView(): React.JSX.Element {
     );
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
+    <div className="literature-hub-container flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
       <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-line px-3">
         <div
           role="tablist"
@@ -166,13 +167,34 @@ export function LiteratureHubView(): React.JSX.Element {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* The hub's own copy of the sidebar tab; below `lg` the sidebar is the only
-            list, so this column collapses instead of competing with it. */}
-        <aside className="hidden w-72 shrink-0 border-r border-line lg:flex" aria-label="文献列表">
+        {/* At narrow canvas widths, the selector above replaces this list. */}
+        <aside className="literature-library-column hidden w-72 shrink-0 border-r border-line lg:flex" aria-label="文献列表">
           <LibraryList onRequestImport={() => openImport('document')} />
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
+          <label className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+            <span className="shrink-0 text-muted text-[var(--font-meta-size)]">当前文献</span>
+            <select
+              aria-label="选择当前文献"
+              value={store.selectedId ?? ""}
+              disabled={store.items.length === 0}
+              onChange={(event) => {
+                const id = event.target.value || null;
+                store.select(id);
+                if (id !== null) {
+                  setFocus({ parseId: null, locator: null });
+                  setSubView('reader');
+                }
+              }}
+              className="h-8 min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
+            >
+              <option value="">选择一篇文献</option>
+              {store.items.map((item) => (
+                <option key={item.id} value={item.id}>{libraryItemTitle(item)}</option>
+              ))}
+            </select>
+          </label>
           {subView === 'reader' ? (
             <PaperReader
               literature={store}
@@ -257,11 +279,6 @@ export function LiteratureHubView(): React.JSX.Element {
           </button>
         </p>
       )}
-
-      <p className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1 text-subtle text-[var(--font-micro-size)]">
-        <BookOpen size={10} aria-hidden="true" />
-        来源：research.library.* · research.document.* · research.index.* · research.knowledge.search · research.evidence.* · research.claims.*
-      </p>
 
       <ImportDialog
         open={importOpen}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, Image as ImageIcon, Loader2, Paperclip, Square, X } from 'lucide-react';
 import type { ChatImageAttachment, ChatRunMode } from '../../shared/types';
+import type { AssistantComposerDraft, AssistantComposerDraftUpdater } from './composer-draft';
 import {
   applyComposerCompletion,
   detectComposerTrigger
@@ -52,8 +53,8 @@ export type AssistantComposerProps = {
   mode: ChatRunMode;
   onModeChange: (mode: ChatRunMode) => void;
   skills: ComposerSkill[];
-  attachments: RendererImageAttachment[];
-  onAttachmentsChange: (items: RendererImageAttachment[]) => void;
+  draft: AssistantComposerDraft;
+  onDraftChange: (update: AssistantComposerDraftUpdater) => void;
   /** False when the current default model cannot take images (or no model is configured). */
   imageInputSupported: boolean;
   sending: boolean;
@@ -106,8 +107,8 @@ export function AssistantComposer({
   mode,
   onModeChange,
   skills,
-  attachments,
-  onAttachmentsChange,
+  draft,
+  onDraftChange,
   imageInputSupported,
   sending,
   running,
@@ -121,10 +122,15 @@ export function AssistantComposer({
   // A suspended question is answerable even though a run exists; a plain running run is not,
   // and an approval suspend is not answerable at all (the card owns that decision).
   const inputLocked = (running || suspended) && !replyMode;
-  const [text, setText] = useState('');
+  const { text, attachments } = draft;
   const [caret, setCaret] = useState(0);
-  const seedNonceRef = useRef<number | null>(null);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const seedNonceRef = useRef<number | null>(null);
+  const compositionRef = useRef(false);
+  const dragDepthRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const skillById = useMemo(() => new Map(skills.map((skill) => [skill.id, skill])), [skills]);
   const trigger = useMemo(() => (inputLocked ? null : detectComposerTrigger(text, caret)), [caret, inputLocked, text]);
@@ -139,14 +145,15 @@ export function AssistantComposer({
       return;
     }
     seedNonceRef.current = seed.nonce;
-    setText(seed.text);
+    onDraftChange((current) => ({ ...current, text: seed.text }));
+    setCaret(seed.text.length);
     const element = textareaRef.current;
     if (element !== null) {
       element.focus();
       element.setSelectionRange(seed.text.length, seed.text.length);
     }
     onSeedConsumed?.();
-  }, [onSeedConsumed, seed]);
+  }, [onDraftChange, onSeedConsumed, seed]);
 
   useEffect(() => {
     const element = textareaRef.current;
@@ -163,15 +170,16 @@ export function AssistantComposer({
         return;
       }
       const next = applyComposerCompletion(text, trigger, completion);
-      setText(next.value);
+      onDraftChange((current) => ({ ...current, text: next.value }));
       setCaret(next.caret);
+      setSuggestionsDismissed(false);
       const element = textareaRef.current;
       if (element !== null) {
         element.focus();
         element.setSelectionRange(next.caret, next.caret);
       }
     },
-    [text, trigger]
+    [onDraftChange, text, trigger]
   );
 
   const addFiles = useCallback(
@@ -190,13 +198,13 @@ export function AssistantComposer({
         for (const file of candidates) {
           created.push(await createFileImageAttachment(file, source));
         }
-        onAttachmentsChange([...attachments, ...created]);
+        onDraftChange((current) => ({ ...current, attachments: [...current.attachments, ...created] }));
         setAttachmentError(null);
       } catch (error) {
         setAttachmentError(error instanceof Error ? error.message : '图片附件无法读取。');
       }
     },
-    [attachments, imageInputSupported, onAttachmentsChange]
+    [attachments, imageInputSupported, onDraftChange]
   );
 
   const submit = useCallback(async (): Promise<void> => {
@@ -214,29 +222,51 @@ export function AssistantComposer({
       explicitSkillIds: parsed.kind === 'ok' ? parsed.explicitSkillIds : []
     });
     if (ok) {
-      setText('');
+      onDraftChange(() => ({ text: '', attachments: [] }));
       setCaret(0);
-      onAttachmentsChange([]);
       setAttachmentError(null);
     }
-  }, [attachments, inputLocked, onAttachmentsChange, onSend, sending, skills, text]);
+  }, [attachments, inputLocked, onDraftChange, onSend, sending, skills, text]);
 
   const suggestionItems =
-    trigger === null
+    suggestionsDismissed || trigger === null
       ? []
       : trigger.kind === 'skill'
         ? skills.filter((skill) => skill.id.toLowerCase().includes(trigger.query.toLowerCase())).slice(0, 6)
         : [];
+  const selectedSuggestionIndex =
+    suggestionItems.length === 0 ? 0 : Math.min(activeSuggestionIndex, suggestionItems.length - 1);
+
+  useEffect(() => {
+    setActiveSuggestionIndex(0);
+    setSuggestionsDismissed(false);
+  }, [skills.length, trigger?.kind, trigger?.query]);
 
   return (
     <div
       className="shrink-0 border-t border-line p-3"
       data-testid="assistant-composer"
-      onDragOver={(event) => {
+      onDragEnter={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes('Files')) return;
         event.preventDefault();
+        dragDepthRef.current += 1;
+        setDraggingFiles(true);
+      }}
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDraggingFiles(false);
       }}
       onDrop={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes('Files')) return;
         event.preventDefault();
+        dragDepthRef.current = 0;
+        setDraggingFiles(false);
         void addFiles([...event.dataTransfer.files], 'drop');
       }}
     >
@@ -256,7 +286,12 @@ export function AssistantComposer({
               <button
                 type="button"
                 aria-label={`移除附件 ${attachment.name}`}
-                onClick={() => onAttachmentsChange(attachments.filter((item) => item !== attachment))}
+                onClick={() =>
+                  onDraftChange((current) => ({
+                    ...current,
+                    attachments: current.attachments.filter((item) => item !== attachment)
+                  }))
+                }
                 className="flex h-4 w-4 items-center justify-center rounded-control text-subtle hover:text-ink"
               >
                 <X size={10} aria-hidden="true" />
@@ -274,16 +309,26 @@ export function AssistantComposer({
 
       {suggestionItems.length === 0 ? null : (
         <ul
+          id="assistant-composer-suggestions"
+          role="listbox"
+          aria-label="可用技能"
           className="mb-1.5 flex flex-col rounded-card border border-line bg-surface py-0.5"
           data-testid="assistant-composer-suggestions"
         >
-          {suggestionItems.map((skill) => (
+          {suggestionItems.map((skill, index) => (
             <li key={skill.id}>
               <button
+                id={`assistant-skill-option-${index}`}
                 type="button"
+                role="option"
+                aria-selected={index === selectedSuggestionIndex}
                 onClick={() => applyCompletion(`/${skill.id}`)}
                 data-testid={`assistant-skill-suggestion-${skill.id}`}
-                className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                className={
+                  index === activeSuggestionIndex
+                    ? 'flex w-full items-center gap-2 bg-[var(--overlay-hover)] px-2 py-1 text-left'
+                    : 'flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
+                }
               >
                 <span className="font-mono text-[var(--font-meta-size)]">/{skill.id}</span>
                 <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-micro-size)]">{skill.name}</span>
@@ -295,14 +340,29 @@ export function AssistantComposer({
 
       {/* One card holds the field and its own bottom bar (`rounded-2xl p-3 shadow-md`
           plus a bordered control row inside). */}
-      <div className="flex flex-col gap-2.5 rounded-window border border-line bg-surface p-3 shadow-[var(--shadow-card)]">
+      <div
+        className={[
+          'flex flex-col gap-2.5 rounded-window border bg-surface p-3 shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)]',
+          'focus-within:border-line-strong',
+          draggingFiles ? 'border-accent outline outline-2 outline-accent-soft-strong outline-offset-1' : 'border-line'
+        ].join(' ')}
+        data-dragging-files={draggingFiles ? 'true' : 'false'}
+      >
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
             rows={2}
             value={text}
             disabled={inputLocked}
+            role="combobox"
             aria-label="给助手的指令"
+            aria-autocomplete="list"
+            aria-multiline="true"
+            aria-expanded={suggestionItems.length > 0}
+            aria-controls={suggestionItems.length > 0 ? 'assistant-composer-suggestions' : undefined}
+            aria-activedescendant={
+              suggestionItems.length > 0 ? `assistant-skill-option-${selectedSuggestionIndex}` : undefined
+            }
             placeholder={
               replyMode
                 ? '输入回答后发送，运行会继续'
@@ -314,14 +374,48 @@ export function AssistantComposer({
             }
             data-testid="assistant-composer-input"
             onChange={(event) => {
-              setText(event.target.value);
+              onDraftChange((current) => ({ ...current, text: event.target.value }));
               setCaret(event.target.selectionStart);
+              setSuggestionsDismissed(false);
             }}
-            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+            onSelect={(event) => {
+              setCaret(event.currentTarget.selectionStart);
+              setSuggestionsDismissed(false);
+            }}
+            onCompositionStart={() => {
+              compositionRef.current = true;
+            }}
+            onCompositionEnd={(event) => {
+              compositionRef.current = false;
+              setCaret(event.currentTarget.selectionStart);
+            }}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || compositionRef.current || event.nativeEvent.keyCode === 229) {
+                return;
+              }
+              if (suggestionItems.length > 0 && event.key === 'ArrowDown') {
+                event.preventDefault();
+                setActiveSuggestionIndex((index) => (index + 1) % suggestionItems.length);
+                return;
+              }
+              if (suggestionItems.length > 0 && event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActiveSuggestionIndex((index) => (index - 1 + suggestionItems.length) % suggestionItems.length);
+                return;
+              }
+              if (suggestionItems.length > 0 && event.key === 'Escape') {
+                event.preventDefault();
+                setSuggestionsDismissed(true);
+                return;
+              }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                void submit();
+                if (suggestionItems.length > 0) {
+                  const selected = suggestionItems[selectedSuggestionIndex];
+                  if (selected !== undefined) applyCompletion(`/${selected.id}`);
+                } else {
+                  void submit();
+                }
               }
             }}
             onPaste={(event) => {
@@ -332,7 +426,7 @@ export function AssistantComposer({
               event.preventDefault();
               void addFiles(files, 'clipboard');
             }}
-            className="min-h-[2.5rem] min-w-0 flex-1 resize-none bg-transparent text-ink text-[var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60"
+            className="min-h-[2.5rem] min-w-0 flex-1 resize-none bg-transparent text-ink text-[var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60 focus-visible:outline-none"
           />
           <div className="flex shrink-0 flex-col items-end gap-1">
             <div className="flex items-center gap-1">
@@ -352,7 +446,7 @@ export function AssistantComposer({
                   };
                   input.click();
                 }}
-                className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+                className="flex h-7 w-7 items-center justify-center rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
               >
                 <Paperclip size={13} aria-hidden="true" />
               </button>
@@ -401,6 +495,17 @@ export function AssistantComposer({
           aria-label="运行模式"
           className="flex items-center gap-0.5"
           data-testid="assistant-composer-mode"
+          onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const currentIndex = MODES.findIndex((item) => item.id === mode);
+            const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+            const nextIndex = (currentIndex + direction + MODES.length) % MODES.length;
+            const nextMode = MODES[nextIndex];
+            if (nextMode === undefined) return;
+            onModeChange(nextMode.id);
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]')[nextIndex]?.focus();
+          }}
         >
           {MODES.map((item) => {
             const selected = item.id === mode;
@@ -410,6 +515,7 @@ export function AssistantComposer({
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
                 disabled={inputLocked}
                 onClick={() => onModeChange(item.id)}
                 data-testid={`assistant-composer-mode-${item.id}`}

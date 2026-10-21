@@ -141,7 +141,7 @@ export function WikiView({
     lines.push(
       `状态：${STATUS_LABELS[page.status]}`,
       '',
-      '来源：research.claims.list · research.evidence.list · research.library.list'
+      '来源：当前文献、主张与关联证据'
     );
     return lines.join('\n');
   };
@@ -153,7 +153,7 @@ export function WikiView({
           {projection.pages.length} 个概念 · {projection.backlinks.length} 条共现 · {projection.timeline.length} 个年份
         </span>
         <span className="text-subtle">
-          概念 = 一条主张 + 它引用的证据（后端没有概念表，这里是纯派生投影）
+          每个概念由一条主张和它引用的证据组成。
         </span>
         <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 sm:max-w-[240px]">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -411,7 +411,7 @@ export function WikiView({
               </footer>
 
               <p className="mt-1.5 text-subtle text-[var(--font-micro-size)]">
-                来源：research.claims.list · research.evidence.list · research.library.list
+                来源：当前文献、主张与关联证据
               </p>
             </article>
           )}

@@ -8,7 +8,12 @@ import type { RocClient } from '../shared/roc-client';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { AssistantComposer, type ComposerSkill } from './composer';
-import { isImageInputSupported, type ImageSupportSnapshot, type RendererImageAttachment } from './image-attachments';
+import {
+  clearAssistantComposerDraft,
+  migrateAssistantComposerDraft,
+  useAssistantComposerDraft
+} from './composer-draft';
+import { isImageInputSupported, type ImageSupportSnapshot } from './image-attachments';
 import { ChatTranscriptPanel } from './transcript-panel';
 import { useChatSession } from './use-chat-session';
 
@@ -102,21 +107,28 @@ export function AssistantPanel({
     label: '读取模型设置'
   });
   const [mode, setMode] = useState<ChatRunMode>('chat');
-  const [attachments, setAttachments] = useState<RendererImageAttachment[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const currentThreadIdRef = useRef(threadId);
+  currentThreadIdRef.current = threadId;
+  const { draft: composerDraft, updateDraft: updateComposerDraft } = useAssistantComposerDraft(projectId, threadId);
 
-  // A thread belongs to the project it was created in (gate 6); the shell clears the
-  // selection, this only drops the drafts that belonged to it.
-  useEffect(() => {
-    setAttachments([]);
-  }, [projectId, threadId]);
+  const handleSessionThreadId = useCallback(
+    (nextThreadId: string): void => {
+      if (currentThreadIdRef.current === null) {
+        migrateAssistantComposerDraft(projectId, null, nextThreadId);
+      }
+      currentThreadIdRef.current = nextThreadId;
+      onThreadIdChange(nextThreadId);
+    },
+    [onThreadIdChange, projectId]
+  );
 
   const session = useChatSession({
     client,
     threadId,
     projectId,
     workspacePath,
-    onThreadId: (next) => onThreadIdChange(next)
+    onThreadId: handleSessionThreadId
   });
 
   /**
@@ -214,26 +226,20 @@ export function AssistantPanel({
   );
 
   const header = (
-    <div className="flex shrink-0 flex-col gap-1 border-b border-line px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-meta-size)]" data-testid="assistant-context">
-          {projectName === null ? '未进入项目' : projectName}
-          {stageLabel === null ? '' : ` · ${stageLabel}`}
-        </span>
-        {/* The message count is the one number that says a long run is still producing
-            output. */}
-        <span
-          className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]"
-          data-testid="assistant-message-count"
-        >
-          {session.messages.length} 条消息
-        </span>
+    <div className="flex shrink-0 flex-col gap-1.5 border-b border-line px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <Bot size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
+        <span className="min-w-0 truncate font-medium text-ink text-[var(--font-meta-size)]">研究助手</span>
         {statusLabel === null ? null : (
           <span
             className={
-              runStatus === 'failed' || runStatus === 'recovering'
+              runStatus === 'failed'
                 ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-1.5 py-0.5 text-[var(--tool-st-error-text)] text-[var(--font-micro-size)]'
-                : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]'
+                : runStatus === 'completed'
+                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-1.5 py-0.5 text-[var(--tool-st-end-text)] text-[var(--font-micro-size)]'
+                  : runStatus === 'cancelled'
+                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[var(--font-micro-size)]'
+                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]'
             }
             data-testid="assistant-run-status"
             data-status={runStatus}
@@ -244,17 +250,6 @@ export function AssistantPanel({
             {statusLabel}
           </span>
         )}
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="模型与思考开关在设置中心（唯一可写位置）"
-          data-testid="assistant-model-settings"
-          className="flex h-[var(--control-height-compact)] min-w-0 max-w-[55%] shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
-        >
-          <Bot size={13} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
-          <span className="min-w-0 truncate font-medium tracking-tight">{modelLabel}</span>
-          <Settings2 size={11} aria-hidden="true" className="shrink-0 text-muted" />
-        </button>
         {onResetWidth === undefined ? null : (
           <button
             type="button"
@@ -262,11 +257,34 @@ export function AssistantPanel({
             title="重置助手宽度"
             aria-label="重置助手宽度"
             data-testid="assistant-reset-width"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           >
             <Minimize2 size={13} aria-hidden="true" />
           </button>
         )}
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="在设置中心配置模型"
+          aria-label="模型设置"
+          data-testid="assistant-model-settings"
+          className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        >
+          <Settings2 size={12} aria-hidden="true" className="shrink-0 text-muted" />
+          <span className="min-w-0 truncate font-medium tracking-tight" title={modelLabel}>{modelLabel}</span>
+        </button>
+        <span
+          className="min-w-0 max-w-[35%] truncate text-subtle text-[var(--font-micro-size)]"
+          data-testid="assistant-context"
+          title={projectName ?? '未进入项目'}
+        >
+          {stageLabel ?? projectName ?? '未进入项目'}
+        </span>
+        <span className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]" data-testid="assistant-message-count">
+          {session.messages.length} 条
+        </span>
       </div>
     </div>
   );
@@ -338,8 +356,8 @@ export function AssistantPanel({
         mode={mode}
         onModeChange={setMode}
         skills={skills}
-        attachments={attachments}
-        onAttachmentsChange={setAttachments}
+        draft={composerDraft}
+        onDraftChange={updateComposerDraft}
         imageInputSupported={imageSupport === null ? false : isImageInputSupported(imageSupport)}
         sending={session.sending}
         running={activeRun}
@@ -349,15 +367,20 @@ export function AssistantPanel({
         onSeedConsumed={onComposerSeedConsumed}
         onSend={async (input) => {
           // A suspended question takes the text as its answer; everything else starts a new run.
-          if (pendingQuestion !== null) {
-            return await session.resumeQuestion(pendingQuestion.interruptId, input.text);
+          const sent =
+            pendingQuestion !== null
+              ? await session.resumeQuestion(pendingQuestion.interruptId, input.text)
+              : await session.send({
+                  text: input.text,
+                  mode,
+                  skillIds: input.explicitSkillIds,
+                  attachments: input.attachments
+                });
+          if (sent) {
+            clearAssistantComposerDraft(projectId, threadId);
+            clearAssistantComposerDraft(projectId, currentThreadIdRef.current);
           }
-          return await session.send({
-            text: input.text,
-            mode,
-            skillIds: input.explicitSkillIds,
-            attachments: input.attachments
-          });
+          return sent;
         }}
         onStop={() => void session.cancel()}
       />

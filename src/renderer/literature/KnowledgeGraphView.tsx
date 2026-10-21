@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Bot, Compass, ExternalLink, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence } from '../../shared/types';
 import type { ResearchLibraryItem } from '../../shared/types';
-import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { deriveGraph, graphNeighbors, GRAPH_LAYOUT_NODE_LIMIT, type GraphNode, type GraphNodeKind } from './derive-graph';
 
@@ -65,7 +64,6 @@ export function KnowledgeGraphView({
   focusClaimId = null,
   onAskAssistantAboutNode
 }: KnowledgeGraphViewProps): React.JSX.Element {
-  const scope = useWorkspaceScope();
   const graph = useMemo(
     () => deriveGraph({ claims, evidence, libraryItems }),
     [claims, evidence, libraryItems]
@@ -258,17 +256,13 @@ export function KnowledgeGraphView({
                 </button>
               )}
               <p className="text-subtle text-[var(--font-micro-size)]">
-                关系只来自后端记录：主张→证据、证据→来源、共享证据的主张↔主张。不生成相似度边。
+                只显示已记录的关系，不根据文本相似度推测关联。
               </p>
             </>
           )}
         </aside>
       </div>
 
-      <p className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-subtle text-[var(--font-micro-size)]">
-        <Compass size={10} aria-hidden="true" />
-        来源：research.claims.list · research.evidence.list · research.library.list{scope.projectId === null ? '' : ''}
-      </p>
     </div>
   );
 }

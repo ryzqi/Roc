@@ -65,6 +65,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
       title={block.name}
       statusLabel={state.label}
       tone={state.tone}
+      visualDensity={block.status === 'end' ? 'quiet' : 'standard'}
       open={hasData && open}
       onToggle={setOpen}
       expandable={hasData}

@@ -9,6 +9,35 @@
 @import 'tailwindcss';
 @import './tokens.css';
 
+.workspace-canvas-container {
+  container-name: workspace-canvas;
+  container-type: inline-size;
+}
+
+@container workspace-canvas (max-width: 1023px) {
+  .literature-library-column {
+    display: none;
+  }
+
+  .literature-paper-picker {
+    display: flex;
+  }
+}
+
+@container workspace-canvas (max-width: 760px) {
+  .production-latex-layout {
+    flex-direction: column;
+  }
+
+  .production-latex-file-list {
+    display: none;
+  }
+
+  .latex-file-picker {
+    display: flex;
+  }
+}
+
 @theme {
   /* The palette is theme-flipped (see tokens.css), so `bg-zinc-900` means
      "surface" in both themes. */

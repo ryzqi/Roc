@@ -77,7 +77,7 @@ export function WorkspaceCanvas({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="canvas">
+    <div className="workspace-canvas-container flex h-full min-h-0 flex-col" data-testid="canvas">
       <div
         role="tablist"
         aria-label="画布"
