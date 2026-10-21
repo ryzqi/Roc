@@ -442,6 +442,44 @@ CREATE INDEX idx_memory_auto_audit_created
 CREATE INDEX idx_memory_events_created
         ON memory_events(created_at DESC);
 `
+  },
+  {
+    version: 2,
+    name: 'experience_records',
+    sql: `
+CREATE TABLE experience_records (
+        id TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK(version >= 1),
+        status TEXT NOT NULL CHECK(status IN ('active','quarantined','revoked')),
+        cue TEXT NOT NULL,
+        lesson TEXT NOT NULL,
+        confidence TEXT NOT NULL CHECK(confidence IN ('low','medium','high')),
+        evidence_json TEXT NOT NULL,
+        adoption_json TEXT NOT NULL,
+        counterexamples_json TEXT NOT NULL,
+        invalidation_json TEXT NOT NULL,
+        project_scope_hash TEXT,
+        task_hash TEXT NOT NULL,
+        cue_task_index INTEGER NOT NULL CHECK(cue_task_index >= 0),
+        execution_revision TEXT NOT NULL,
+        improvement_revision TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (id, version)
+      );
+CREATE TABLE experience_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        record_id TEXT NOT NULL,
+        record_version INTEGER,
+        type TEXT NOT NULL,
+        detail_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+CREATE INDEX idx_experience_records_latest
+        ON experience_records(id, version DESC);
+CREATE INDEX idx_experience_events_record
+        ON experience_events(record_id, sequence);
+`
   }
 ];
 

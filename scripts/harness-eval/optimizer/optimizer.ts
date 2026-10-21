@@ -16,6 +16,7 @@ import {
 
 /** P5-01: the fixture exposes exactly one editable component set. */
 export function baseSurface(): HarnessSurface {
+  // Sorted like every composed surface, so the base revision can be recomputed from its content.
   const components = [
     { id: 'prompt.role', kind: 'prompt' as const, value: 'terse-answer' },
     { id: 'prompt.constraint', kind: 'prompt' as const, value: 'rewrite-user-text' },
@@ -23,7 +24,7 @@ export function baseSurface(): HarnessSurface {
     { id: 'guidance.evidence', kind: 'guidance' as const, value: 'write-artifact' },
     { id: 'context.sources', kind: 'context' as const, value: 'attach-workspace' },
     { id: 'skill.flow', kind: 'skill' as const, value: 'search-evidence-compose' }
-  ];
+  ].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
   const hash = surfaceHash({ schemaVersion: 1, revision: 'base', components });
   return { schemaVersion: 1, revision: `rev-${hash.slice(0, 16)}`, components };
 }

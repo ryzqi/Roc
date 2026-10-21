@@ -77,3 +77,29 @@ P5-02) and the fixture price is not a provider price, so none of this is real-mo
 quality or cost evidence. The anonymous selector hides base/candidate labels from its own
 input, but remains in-process; it is not a security boundary. Evidence:
 `.artifacts/harness-eval/2026-10-21T15-45-54.415Z-23660/report.json`.
+
+P6 experience, release and pilot: 91/91 cases. `experience-records` stores an adopted
+candidate lesson only with a hashed adoption record and evidence, rejects holdout wording,
+absolute paths (any root), e-mail addresses and unknown fields, refuses a cue learned in a
+future task, refuses a different execution revision, and keeps quarantine/revocation
+append-only (revoke needs a counterexample and is terminal; rewriting a quarantined lesson
+keeps it quarantined). `experience-transfer` reports single-task and the three transfer
+strata separately with cluster-bootstrap intervals and downgrades a claim to
+`single-task-only` when a stratum shows no gain; the strata are currently **label-only**
+(the same deterministic adapter and dev scenarios relabelled), so this is plumbing, not a
+real cross-model/cross-project transfer result. `experience-retention` turns a production
+failure into an allowlisted, redacted fixture (shared credential policy, any absolute
+path), purges records and events on delete, and keeps the upgrade gate closed until a
+matching version re-test with a known receipt passes. `harness-release` signs a release
+(HMAC), re-reads the stored review report, rejects tampering, a widened baseline, an
+invalid interval, verifier failures, a non-positive holdout interval and a forged
+signature, reproduces a release from identical inputs, pins the release for a run so later
+activation leaves old runs untouched, and rolls back to the previous release.
+`pilot-gate` is off by default (normal requests never start a candidate search), requires
+an explicit budget acknowledgement, buckets by taskId, enforces read-only / low-side-effect
+grants and effect classes, trips a breaker on spending or repeated failure, and lets the
+user roll back. Evidence: `.artifacts/harness-eval/2026-10-21T16-43-26.986Z-54665/report.json`.
+Scope: release activation, the pilot decision and the upgrade gate are not wired into the
+production run path, and P5's numbers are fixture evidence. P6-02 (real transfer
+conditions) and P6-04 (product dispatch, budget-ledger reservation) therefore remain
+in progress; module contracts above are verified only as contracts.

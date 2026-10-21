@@ -2,6 +2,7 @@ export { verifyExtensions } from './extensions';
 export { verifyOptimizer } from './optimizer/optimizer';
 export { verifyTaskContracts } from './task-contract';
 export { runExecutionScenario, runIsolationScenario } from './execution';
+export { verifyP6 } from './p6-experience';
 import assert from 'node:assert/strict';
 import { verifyMemorySkills } from './memory-skills';
 import { verifyContext } from './context';
