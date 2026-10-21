@@ -2,12 +2,17 @@ import type { ResearchStageState } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 
-export function assertResearchStageArtifacts(repository: ResearchRepository, projectId: string, state: ResearchStageState): void {
+export function assertResearchStageArtifacts(
+  repository: ResearchRepository,
+  projectId: string,
+  state: ResearchStageState,
+  allowedStatuses: readonly ('draft' | 'approved')[] = ['draft']
+): void {
   if (!state.gateRequired && state.artifactIds.length === 0) return;
   if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
   for (const id of state.artifactIds) {
     const artifact = repository.getArtifact(id);
-    if (artifact.projectId !== projectId || artifact.stage !== state.stage || artifact.status !== 'draft' ||
+    if (artifact.projectId !== projectId || artifact.stage !== state.stage || artifact.status === 'superseded' || !allowedStatuses.includes(artifact.status) ||
         artifact.kind !== getResearchStageRoleProfile(state.stage).outputKind) {
       throw new Error('research_stage_artifact_invalid');
     }

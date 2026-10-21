@@ -66,6 +66,13 @@ export function resumeQuestion(
   return client.api.chat.resumeRun({ kind: 'question', ...input });
 }
 
+export function resumeCheckpoint(
+  client: RocClient,
+  input: { runId: string; threadId: string }
+): Promise<IpcLikeResult<{ runId: string; threadId: string; resumedAt: string }>> {
+  return client.api.chat.resumeRun({ kind: 'checkpoint', ...input });
+}
+
 export function getActiveRun(client: RocClient, threadId: string): Promise<IpcLikeResult<ActiveChatRun | null>> {
   return client.api.chat.getActiveRun({ threadId });
 }

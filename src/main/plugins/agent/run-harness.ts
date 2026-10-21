@@ -184,7 +184,8 @@ export async function buildRunHarness(
     threadId: request.run.threadId,
     explicitSkillContexts,
     referencedFileContexts,
-    researchProjectId: request.snapshot.researchProjectId ?? null
+    researchProjectId: request.snapshot.researchProjectId ?? null,
+    taskContract: request.snapshot.taskContract
   });
   const contextWindowTokens = request.snapshot.budget.contextWindowTokens;
   if (contextWindowTokens === null) {

@@ -13,6 +13,7 @@ import type {
   SessionMessagePhase,
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
+  TaskAcceptance,
   TaskEvent,
   TaskKind,
   TaskRun,
@@ -26,6 +27,7 @@ import {
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import { TaskContractStore } from '../../services/deep-agent/task-contract-store';
 import { RocDomainError } from '../../services/errors';
 import { AgentRunEventLog } from './run-event-log';
 import type { PendingInterrupt } from './interrupt-projection';
@@ -155,7 +157,7 @@ const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>>
   failed: [],
   cancelled: [],
   completed: [],
-  interrupted: [],
+  interrupted: ['dispatch_pending'],
   archived: []
 };
 
@@ -164,6 +166,7 @@ export class AgentSessionRepository {
   private readonly checkpointer: Pick<RocSqliteCheckpointer, 'hasCheckpoint' | 'readPendingInterrupts'>;
   private readonly runEventLog: Pick<AgentRunEventLog, 'recordRunEvent'>;
   private readonly toolEffectStore: Pick<AgentToolEffectStore, 'hasUnknown' | 'markRestartedUnknown'>;
+  readonly taskContracts: TaskContractStore;
   readonly interruptProjection: AgentInterruptProjection;
 
   constructor(
@@ -179,6 +182,7 @@ export class AgentSessionRepository {
     this.runEventLog = dependencies.runEventLog ?? new AgentRunEventLog(db);
     this.runTelemetryRepository = new AgentRunTelemetryRepository(db);
     this.toolEffectStore = dependencies.toolEffectStore ?? new AgentToolEffectStore(db);
+    this.taskContracts = new TaskContractStore(db);
     this.interruptProjection =
       dependencies.interruptProjection ?? new AgentInterruptProjection(db, this.checkpointer);
   }
@@ -283,6 +287,8 @@ export class AgentSessionRepository {
             snapshot.runOrigin,
             snapshot.dispatchKey
           );
+
+        this.taskContracts.initialize(runId, snapshot.taskContract);
 
         this.runTelemetryRepository.save(
           new AgentRunTelemetryAccumulator({ existing: null, run: taskRun, snapshot }).snapshot(),
@@ -418,7 +424,7 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_version !== 5) {
+    if (row.snapshot_version !== 7) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
       throw new Error('run_execution_snapshot_unsupported_version');
     }
@@ -487,8 +493,9 @@ export class AgentSessionRepository {
     runStartedAt: string;
     summary: string;
     telemetry: AgentRunTelemetryV1;
+    taskAcceptance: TaskAcceptance | null;
     workspaceHash: string | null;
-  }): { event: TaskEvent; message: SessionMessageEntry; run: TaskRun } {
+  }): { event: TaskEvent; message: SessionMessageEntry; run: TaskRun; acceptanceEvent: TaskEvent | null; acceptanceRunEvent: ChatRunEvent | null } {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: input.endedAt,
@@ -560,6 +567,23 @@ export class AgentSessionRepository {
         createdAt: input.endedAt
       });
 
+      let acceptanceEvent: TaskEvent | null = null;
+      let acceptanceRunEvent: ChatRunEvent | null = null;
+      if (input.taskAcceptance !== null) {
+        this.taskContracts.saveReport(input.runId, input.taskAcceptance);
+        acceptanceEvent = {
+          id: `event_${randomUUID()}`,
+          threadId: transition.run.threadId,
+          runId: transition.run.id,
+          type: 'task_acceptance',
+          payload: input.taskAcceptance,
+          createdAt: input.endedAt
+        };
+        this.insertEvent(acceptanceEvent);
+        acceptanceRunEvent = { type: 'task_acceptance', runId: input.runId, report: input.taskAcceptance };
+        this.runEventLog.recordRunEvent(acceptanceRunEvent, input.endedAt);
+      }
+
       const runCompletedEvent: ChatRunEvent = {
         type: 'run_completed',
         runId: transition.run.id,
@@ -597,9 +621,33 @@ export class AgentSessionRepository {
       return {
         event,
         message,
-        run: transition.run
+        run: transition.run,
+        acceptanceEvent,
+        acceptanceRunEvent
       };
     })();
+  }
+
+  recordTaskAcceptance(runId: string, report: TaskAcceptance): TaskEvent {
+    return this.db.transaction(() => {
+      const run = this.getRun(runId);
+      this.taskContracts.saveReport(runId, report);
+      const event = taskEventSchema.parse({
+        id: `event_${randomUUID()}`,
+        threadId: run.threadId,
+        runId,
+        type: 'task_acceptance',
+        payload: report,
+        createdAt: new Date().toISOString()
+      });
+      this.insertEvent(event);
+      this.runEventLog.recordRunEvent({ type: 'task_acceptance', runId, report }, event.createdAt);
+      return event;
+    })();
+  }
+
+  hasCheckpoint(runId: string): boolean {
+    return this.checkpointer.hasCheckpoint(this.getRun(runId).threadId);
   }
 
   failRunAtomically(input: Omit<TerminalFailureInput, 'status'> & { telemetry: AgentRunTelemetryV1 }): {
@@ -650,6 +698,7 @@ export class AgentSessionRepository {
           expectedStatus: candidate.status,
           runId: candidate.id
         });
+        this.ensureStartupHandoff(candidate.id, 'approval_pending');
         continue;
       }
       if (
@@ -659,6 +708,7 @@ export class AgentSessionRepository {
         checkpointInterrupts !== null
       ) {
         this.verifyWaitingUserSnapshot(candidate.id);
+        this.ensureStartupHandoff(candidate.id, 'approval_pending');
         continue;
       }
       if (
@@ -673,6 +723,7 @@ export class AgentSessionRepository {
           status: 'waiting_user'
         });
         this.verifyWaitingUserSnapshot(candidate.id);
+        this.ensureStartupHandoff(candidate.id, 'approval_pending');
         continue;
       }
       const providerId = requireNonEmpty(candidate.provider_id, 'agent_run_provider_missing');
@@ -706,10 +757,27 @@ export class AgentSessionRepository {
         runId: candidate.id,
         telemetry: telemetry.snapshot()
       });
+      this.ensureStartupHandoff(candidate.id, 'restart');
       reconciled.push(terminal.run);
     }
 
     return reconciled;
+  }
+
+  private ensureStartupHandoff(runId: string, reason: 'approval_pending' | 'restart'): void {
+    let changed = false;
+    if (this.taskContracts.readReport(runId) === null) {
+      this.taskContracts.createUnverifiedReport(runId, 'Process restarted before task acceptance was recorded.');
+      changed = true;
+    }
+    if (this.taskContracts.readHandoff(runId) === null) {
+      this.taskContracts.saveHandoff(runId, {
+        reason,
+        checkpointPresent: this.hasCheckpoint(runId)
+      });
+      changed = true;
+    }
+    if (changed) this.recordTaskAcceptance(runId, this.taskContracts.readReport(runId)!);
   }
 
   markRunInterrupted(input: {
@@ -812,6 +880,98 @@ export class AgentSessionRepository {
       throw error;
     }
     return { event: resumed.event, run: resumed.run, stream };
+  }
+
+  async dispatchCheckpointResume<TStream>(input: {
+    openStream: (run: TaskRun) => Promise<TStream>;
+    runId: string;
+    telemetry: AgentRunTelemetryV1;
+  }): Promise<{ run: TaskRun; stream: TStream }> {
+    const previousRun = this.getRun(input.runId);
+    const dispatch = this.beginCheckpointResumeDispatch({
+      expectedStateVersion: this.getRunTransitionState(input.runId).stateVersion,
+      runId: input.runId
+    });
+    let stream: TStream;
+    try {
+      stream = await input.openStream(dispatch.run);
+    } catch (error) {
+      this.rollbackCheckpointResumeDispatch({
+        endedAt: previousRun.endedAt,
+        expectedStateVersion: dispatch.stateVersion,
+        runId: input.runId
+      });
+      throw error;
+    }
+    try {
+      const run = this.commitCheckpointResumeDispatch({
+        expectedStateVersion: dispatch.stateVersion,
+        runId: input.runId,
+        telemetry: input.telemetry
+      });
+      return { run, stream };
+    } catch (error) {
+      this.rollbackCheckpointResumeDispatch({
+        endedAt: previousRun.endedAt,
+        expectedStateVersion: dispatch.stateVersion,
+        runId: input.runId
+      });
+      throw error;
+    }
+  }
+
+  private beginCheckpointResumeDispatch(input: { expectedStateVersion: number; runId: string }):
+    { run: TaskRun; stateVersion: number } {
+    return this.db.transaction(() => {
+      const transition = this.transitionRunInTransaction({
+        endedAt: null,
+        expected: { stateVersion: input.expectedStateVersion, status: 'interrupted' },
+        runId: input.runId,
+        status: 'dispatch_pending',
+        updatedAt: new Date().toISOString()
+      });
+      if (this.interruptProjection.readPending({ runId: input.runId, threadId: transition.run.threadId }).interrupts.length > 0) {
+        throw new Error('agent_pending_interrupt_collection_not_empty');
+      }
+      return transition;
+    })();
+  }
+
+  private commitCheckpointResumeDispatch(input: { expectedStateVersion: number; runId: string; telemetry: AgentRunTelemetryV1 }): TaskRun {
+    return this.db.transaction(() => {
+      const resumedAt = new Date().toISOString();
+      const transition = this.transitionRunInTransaction({
+        endedAt: null,
+        expected: { stateVersion: input.expectedStateVersion, status: 'dispatch_pending' },
+        runId: input.runId,
+        status: 'running',
+        updatedAt: resumedAt
+      });
+      this.saveTelemetryAfterCheckpointResume(input.telemetry, transition.run, resumedAt);
+      return transition.run;
+    })();
+  }
+
+  private saveTelemetryAfterCheckpointResume(telemetry: AgentRunTelemetryV1, run: TaskRun, updatedAt: string): void {
+    const persisted = this.runTelemetryRepository.get(run.id);
+    if (persisted === null) throw new Error('agent_run_telemetry_missing');
+    const snapshot = this.getRunExecutionSnapshot(run.id);
+    assertAgentRunTelemetryIdentity(persisted, run, snapshot);
+    assertAgentRunTelemetryIdentity(telemetry, run, snapshot);
+    if (persisted.terminal.status !== 'interrupted' || telemetry.terminal.status !== null) {
+      throw new Error('agent_run_telemetry_checkpoint_resume_mismatch');
+    }
+    this.runTelemetryRepository.save(telemetry, updatedAt);
+  }
+
+  private rollbackCheckpointResumeDispatch(input: { endedAt: string | null; expectedStateVersion: number; runId: string }): TaskRun {
+    return this.db.transaction(() => this.transitionRunInTransaction({
+      endedAt: input.endedAt,
+      expected: { stateVersion: input.expectedStateVersion, status: 'dispatch_pending' },
+      runId: input.runId,
+      status: 'interrupted',
+      updatedAt: new Date().toISOString()
+    }).run)();
   }
 
   private beginResumeDispatch(input: {

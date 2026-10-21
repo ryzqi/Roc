@@ -45,6 +45,8 @@ export function createRunBudget(input: {
     maxCostUsd: null,
     maxModelCalls: 100,
     maxToolCalls: 500,
+    maxChildTasks: 8,
+    maxConcurrentChildTasks: 2,
     maxConcurrentModelCalls: 4,
     maxConcurrentToolCalls: 4,
     deadlineAt: null
@@ -59,7 +61,8 @@ export function createChatStartRunRequestFromSnapshot(
     input: run.userInput,
     mode: toChatRunMode(snapshot.mode),
     threadId: snapshot.threadId,
-    enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities
+    enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
+    acceptanceCriteria: snapshot.taskContract.criteria
   };
   const workflowHint = readWorkflowHintFromSnapshot(snapshot.workflowHint);
   if (workflowHint !== null) {

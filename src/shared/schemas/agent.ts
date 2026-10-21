@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { taskContractSchema } from './task-acceptance';
 
 import { mcpServerConfigSchema } from './ipc-mcp-skills';
 import { hitlDecisionTypeSchema } from './hitl';
@@ -168,6 +169,8 @@ export const runBudgetSchema = z
     maxCostUsd: z.number().nonnegative().nullable(),
     maxModelCalls: z.number().int().positive(),
     maxToolCalls: z.number().int().positive(),
+    maxChildTasks: z.number().int().positive(),
+    maxConcurrentChildTasks: z.number().int().positive(),
     maxConcurrentModelCalls: z.number().int().positive(),
     maxConcurrentToolCalls: z.number().int().positive(),
     deadlineAt: z.string().datetime().nullable()
@@ -176,6 +179,7 @@ export const runBudgetSchema = z
 
 const runExecutionSnapshotShape = {
   submissionHash: identifierSchema,
+  taskContract: taskContractSchema,
   runId: identifierSchema,
   threadId: identifierSchema,
   runOrigin: runOriginSchema,
@@ -204,7 +208,7 @@ const runExecutionSnapshotShape = {
 
 export const runExecutionSnapshotSchema = z
   .object({
-    schemaVersion: z.literal(5),
+    schemaVersion: z.literal(7),
     ...runExecutionSnapshotShape,
     budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()

@@ -46,7 +46,50 @@ const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'di
 console.log(`P4 验收闸门实测 · target=${target.kind} · renderer=next · provider=${smokeProvider.endpoint}\n`);
 
 let app;
+let page;
+let restartOnlyFinished = false;
 const rendererErrors = [];
+
+function observeRendererErrors(targetPage) {
+  targetPage.on('console', (message) => {
+    if (message.type() === 'error') {
+      rendererErrors.push(message.text());
+      console.error('[renderer]', message.text().slice(0, 300));
+    }
+  });
+  targetPage.on('pageerror', (error) => {
+    rendererErrors.push(error.message);
+    console.error('[renderer:pageerror]', error.message.slice(0, 300));
+  });
+}
+
+async function trackFinishedRuns(targetPage) {
+  await targetPage.evaluate(() => {
+    window.__p4FinishedRuns = [];
+    window.roc.chat.onRunEvent((raw) => {
+      const event = raw !== null && typeof raw === 'object' && !('type' in raw) && 'event' in raw ? raw.event : raw;
+      if (event !== null && typeof event === 'object' && ['run_completed', 'run_cancelled', 'run_failed'].includes(event.type)) {
+        window.__p4FinishedRuns.push(event.runId);
+      }
+    });
+  });
+}
+
+async function launchSmokeApp() {
+  const launched = await electron.launch({
+    executablePath: target.executablePath,
+    args: target.launchArgs,
+    env: {
+      ...process.env,
+      ROC_SMOKE: '1',
+      ROC_DATA_ROOT: dataRoot,
+      ROC_SMOKE_API_KEY: 'smoke-test-key'
+    }
+  });
+  const launchedPage = await launched.firstWindow();
+  observeRendererErrors(launchedPage);
+  return { app: launched, page: launchedPage };
+}
 
 async function openAssistant(page, projectId) {
   // 视图写死为 `latex`：这里需要的只是「进入项目 + 助手打开」，而 `latex` 是 `?view=` 缺省时的
@@ -67,6 +110,18 @@ async function currentStatus(page) {
     return null;
   }
   return await element.getAttribute('data-status');
+}
+
+async function revealLatestTranscript(page) {
+  const clicked = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="assistant-scroll-bottom"]');
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  });
+  if (clicked) {
+    await page.waitForTimeout(100);
+  }
 }
 
 /**
@@ -166,6 +221,84 @@ async function expandBlock(page, testId) {
   }
 }
 
+async function verifyCrashCheckpointResume(threadId, projectId) {
+  const restartPrompt = p4Prompt(
+    '验收闸门 5：先列工作区，再在慢流期间崩溃恢复。 ROC-P4-MODE:restart ROC-P4-SLOW:200x80 ROC-P4-SLOW-TAG:P4CR'
+  );
+  const restartNonce = /ROC-P4-RUN:([A-Za-z0-9_-]+)/u.exec(restartPrompt)?.[1];
+  if (restartNonce === undefined) throw new Error('P4 restart fixture prompt has no run nonce.');
+  const restartCallId = `call_p4_restart_ls_${restartNonce}`;
+  await sendPrompt(page, restartPrompt);
+  await waitForStatus(page, 'running', 30_000);
+  await waitForTranscript(page, 'P4CR-0005', 60_000);
+  const activeRunResult = await page.evaluate(async (activeThreadId) =>
+    await window.roc.chat.getActiveRun({ threadId: activeThreadId }), threadId);
+  const restartRunId = activeRunResult.ok ? activeRunResult.data?.runId : undefined;
+  assertCheck('5 恢复', '慢流中可定位正在运行的 run', typeof restartRunId === 'string', activeRunResult.ok ? '' : activeRunResult.error.message);
+  if (typeof restartRunId !== 'string') throw new Error('P4 restart run was not active before process kill.');
+
+  const crashedProcess = app.process();
+  const processExit = new Promise((resolveExit, rejectExit) => {
+    const timeout = setTimeout(() => rejectExit(new Error('Electron did not exit after SIGKILL.')), 15_000);
+    crashedProcess.once('exit', (code, signal) => {
+      clearTimeout(timeout);
+      resolveExit({ code, signal });
+    });
+  });
+  if (!crashedProcess.kill('SIGKILL')) throw new Error('Could not SIGKILL the P4 smoke Electron process.');
+  const killed = await processExit;
+  assertCheck('5 恢复', 'Electron 进程被强制终止（模拟崩溃）', killed.signal === 'SIGKILL', JSON.stringify(killed));
+  app = undefined;
+
+  ({ app, page } = await launchSmokeApp());
+  await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
+  await trackFinishedRuns(page);
+  await openAssistant(page, projectId);
+  await page.click('[data-testid="sidebar-tab-sessions"]');
+  await waitForSessionRow(page, threadId, '5 恢复');
+  await page.click(`[data-testid="session-row-${threadId}"]`);
+  await page.waitForSelector('[data-testid="assistant-activity-task-acceptance"]', { timeout: 30_000 });
+  const latestAcceptance = page.locator('[data-testid="assistant-activity-task-acceptance"]').last();
+  if ((await latestAcceptance.getAttribute('open')) === null) await latestAcceptance.locator('summary').click();
+  const checkpointResume = page.locator('[data-testid="assistant-task-resume-checkpoint"]');
+  await checkpointResume.waitFor({ state: 'visible', timeout: 30_000 });
+  assertCheck('5 恢复', '重启后的持久验收卡允许检查点续跑', true, restartRunId);
+  await checkpointResume.click();
+  await page.waitForTimeout(1_000);
+  const checkpointDispatch = await page.evaluate(async ({ activeThreadId, runId }) => {
+    const status = document.querySelector('[data-testid="assistant-run-status"]')?.getAttribute('data-status') ?? null;
+    const error = document.querySelector('[data-testid="assistant-errors"]')?.textContent?.trim() ?? null;
+    const [active, replay] = await Promise.all([
+      window.roc.chat.getActiveRun({ threadId: activeThreadId }),
+      window.roc.chat.getRunEvents({ runId, afterSequence: 0 })
+    ]);
+    return {
+      status,
+      error,
+      active: active.ok ? active.data : active.error.message,
+      events: replay.ok ? replay.data.events.map((entry) => entry.event.type) : replay.error.message
+    };
+  }, { activeThreadId: threadId, runId: restartRunId });
+  if (checkpointDispatch.status !== 'running' && checkpointDispatch.status !== 'recovering') {
+    throw new Error(`Checkpoint dispatch did not enter running state: ${JSON.stringify(checkpointDispatch)}`);
+  }
+  await waitForStatus(page, 'running', 30_000);
+  await waitForStatus(page, 'completed', 90_000);
+  const recoveredText = await waitForTranscript(page, 'P4CR-0200', 30_000);
+  assertCheck('5 恢复', '进程重启后从已执行工具的检查点完成慢流', recoveredText.includes('P4CR-0200'), '');
+  const assistantErrorCount = await page.locator('[data-testid="assistant-errors"]').count();
+  assertCheck('5 恢复', '续跑后清除旧的重启中断错误提示', assistantErrorCount === 0,
+    assistantErrorCount === 0 ? '' : (await page.locator('[data-testid="assistant-errors"]').textContent()) ?? '');
+  const restartEvents = await page.evaluate(async (runId) => await window.roc.chat.getRunEvents({ runId, afterSequence: 0 }), restartRunId);
+  const runEvents = restartEvents.ok ? restartEvents.data.events.map((entry) => entry.event) : [];
+  const continuationCount = runEvents.filter((event) => event.type === 'run_continued').length;
+  const toolStarts = runEvents.filter((event) => event.type === 'assistant_block' && event.block.kind === 'tool_call' &&
+    event.block.callId === restartCallId && event.block.phase === 'start').length;
+  assertCheck('5 恢复', '恢复事件只续跑一次且不重复执行 ls', continuationCount === 1 && toolStarts === 1,
+    `continued=${continuationCount} ls-starts=${toolStarts}${restartEvents.ok ? '' : ` error=${restartEvents.error.message}`}`);
+  await page.screenshot({ path: join(artifactDir, '05-crash-checkpoint-resume.png') });
+}
+
 /**
  * Static source assertions (gates 7 and the R9 side of it).
  *
@@ -199,27 +332,7 @@ function listSourceFiles(dir) {
 }
 
 try {
-  app = await electron.launch({
-    executablePath: target.executablePath,
-    args: target.launchArgs,
-    env: {
-      ...process.env,
-      ROC_SMOKE: '1',
-      ROC_DATA_ROOT: dataRoot,
-      ROC_SMOKE_API_KEY: 'smoke-test-key',
-    }
-  });
-  const page = await app.firstWindow();
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      rendererErrors.push(message.text());
-      console.error('[renderer]', message.text().slice(0, 300));
-    }
-  });
-  page.on('pageerror', (error) => {
-    rendererErrors.push(error.message);
-    console.error('[renderer:pageerror]', error.message.slice(0, 300));
-  });
+  ({ app, page } = await launchSmokeApp());
 
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
   // Deterministic start state, and deliberately a hostile one: clear `ui-state`, then pin the
@@ -229,10 +342,25 @@ try {
   await page.evaluate(() => {
     window.localStorage.clear();
     window.localStorage.setItem('roc.ui.sidebar.tab', 'sessions');
+    window.localStorage.setItem('roc.ui.theme.override', 'light');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
   assertCheck('0 启动', '新壳在 smoke 模式下启动', (await page.getAttribute('[data-testid="roc-app"]', 'data-mode')) === 'smoke');
+  const lightTheme = await page.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    background: getComputedStyle(document.documentElement).getPropertyValue('--app-zinc-950').trim()
+  }));
+  assertCheck('0 启动', '助手壳可使用浅色主题', lightTheme.theme === 'light' && lightTheme.background !== '', JSON.stringify(lightTheme));
+  await page.evaluate(() => window.localStorage.setItem('roc.ui.theme.override', 'dark'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
+  const darkTheme = await page.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    background: getComputedStyle(document.documentElement).getPropertyValue('--app-zinc-950').trim()
+  }));
+  assertCheck('0 启动', '助手壳可使用深色主题并切换调色板', darkTheme.theme === 'dark' && darkTheme.background !== lightTheme.background,
+    `light=${lightTheme.background} dark=${darkTheme.background}`);
 
   // ---- 准备：provider + 默认模型 + 审批模式 ------------------------------------
   // 闸门 2 需要 `approvalPolicy.kind === 'required'` 的工具。默认权限是 fully_automatic，
@@ -314,15 +442,7 @@ try {
   const projectId = project.data.id;
 
   /** Resolves when the given run reaches a terminal state, via the live event stream. */
-  await page.evaluate(() => {
-    window.__p4FinishedRuns = [];
-    window.roc.chat.onRunEvent((raw) => {
-      const event = raw !== null && typeof raw === 'object' && !('type' in raw) && 'event' in raw ? raw.event : raw;
-      if (event !== null && typeof event === 'object' && ['run_completed', 'run_cancelled', 'run_failed'].includes(event.type)) {
-        window.__p4FinishedRuns.push(event.runId);
-      }
-    });
-  });
+  await trackFinishedRuns(page);
 
   await openAssistant(page, projectId);
   assertCheck('0 准备', '助手面板与输入区可用', true, '');
@@ -345,6 +465,8 @@ try {
   const toolDone = await waitForTranscript(page, 'P4-TOOL-DONE', 30_000);
   assertCheck('1 真跑一轮', '结束态为 completed', (await currentStatus(page)) === 'completed', '');
   assertCheck('1 真跑一轮', '文本流式渲染出结束段', toolDone.includes('P4-TOOL-DONE'), '');
+  const acceptanceVisible = await page.locator('[data-testid="assistant-activity-task-acceptance"]').textContent();
+  assertCheck('1 真跑一轮', '轻量问答验收进入助手时间线', acceptanceVisible?.includes('已满足') === true, acceptanceVisible ?? '');
 
   await expandBlock(page, 'assistant-activity-tool');
   const toolBody = (await page.locator('[data-testid="assistant-tool-body"]').textContent()) ?? '';
@@ -380,6 +502,16 @@ try {
     sessionRowAppeared ? '' : await describeSessionList(page, threadId)
   );
 
+  if (process.env.P4_RESTART_ONLY === '1') {
+    await verifyCrashCheckpointResume(threadId, projectId);
+    finishGate({
+      label: 'P4 崩溃恢复', artifactDir, results, rendererErrors,
+      expectedGates: ['0 启动', '0 准备', '1 真跑一轮', '5 恢复']
+    });
+    restartOnlyFinished = true;
+    throw new Error('P4_RESTART_ONLY_COMPLETE');
+  }
+
   // ---- 闸门 2：工具审批（批准 + 拒绝各一次） ------------------------------------
   const approveTarget = join(workspaceRoot, 'p4-approval-ok.txt');
   const rejectTarget = join(workspaceRoot, 'p4-approval-reject.txt');
@@ -388,6 +520,7 @@ try {
 
   await sendPrompt(page, p4Prompt('验收闸门 2：删除一个文件。 ROC-P4-MODE:approval ROC-P4-DELETE:/workspace/p4-approval-ok.txt'));
   await waitForStatus(page, 'waiting_user', 60_000);
+  await revealLatestTranscript(page);
   await page.waitForSelector('[data-testid="assistant-approval-card"]', { timeout: 20_000 });
   const approvalToolName = (await page.locator('[data-testid="assistant-approval-tool-name"]').textContent()) ?? '';
   assertCheck('2 审批', '审批卡显示被拦下的工具名', approvalToolName.trim() === 'delete_file', approvalToolName.trim());
@@ -406,16 +539,48 @@ try {
   );
   await page.screenshot({ path: join(artifactDir, '02-approval-card.png') });
 
-  await page.click('[data-testid="assistant-approval-approve"]');
+  await page.locator('[data-testid="assistant-approval-approve"]').focus();
+  const keyboardFocusedApprove = await page.evaluate(() =>
+    document.activeElement?.getAttribute('data-testid') === 'assistant-approval-approve'
+  );
+  assertCheck('2 审批', '批准决策按钮可获得键盘焦点', keyboardFocusedApprove, '');
+  await page.keyboard.press('Enter');
   await waitForStatus(page, 'completed', 90_000);
   await waitForTranscript(page, 'P4-APPROVAL-DONE', 30_000);
   assertCheck('2 审批', '批准后 run 继续并完成', (await currentStatus(page)) === 'completed', '');
   assertCheck('2 审批', '批准后文件真的被删除（审批决定到了后端）', !existsSync(approveTarget), 'p4-approval-ok.txt 不存在');
   assertCheck('2 审批', '批准后卡片消失', (await page.locator('[data-testid="assistant-approval-card"]').count()) === 0, '');
 
-  await sendPrompt(page, p4Prompt('验收闸门 2：删除另一个文件。 ROC-P4-MODE:approval ROC-P4-DELETE:/workspace/p4-approval-reject.txt'));
+  const rejectPrompt = p4Prompt('验收闸门 2：删除另一个文件。 ROC-P4-MODE:approval ROC-P4-DELETE:/workspace/p4-approval-reject.txt');
+  await sendPrompt(page, rejectPrompt);
   await waitForStatus(page, 'waiting_user', 60_000);
-  await page.waitForSelector('[data-testid="assistant-approval-card"]', { timeout: 20_000 });
+  await revealLatestTranscript(page);
+  const rejectCardVisible = await page.waitForSelector('[data-testid="assistant-approval-card"]', { timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!rejectCardVisible) {
+    const rejectionState = await page.evaluate(async ({ activeThreadId }) => {
+      const active = await window.roc.chat.getActiveRun({ threadId: activeThreadId });
+      const runId = active.ok ? active.data?.runId ?? null : null;
+      const replay = runId === null ? null : await window.roc.chat.getRunEvents({ runId, afterSequence: 0 });
+      return {
+        runId,
+        status: document.querySelector('[data-testid="assistant-run-status"]')?.getAttribute('data-status') ?? null,
+        error: document.querySelector('[data-testid="assistant-errors"]')?.textContent?.trim() ?? null,
+        active: active.ok ? active.data : active.error.message,
+        events: replay?.ok ? replay.data.events.map((entry) => entry.event.type === 'run_failed'
+          ? `run_failed:${entry.event.code}` : entry.event.type) : replay?.error.message ?? [],
+        approvalCards: [...document.querySelectorAll('[data-testid*="approval"], [data-testid*="interrupt"]')]
+          .map((node) => node.getAttribute('data-testid')),
+        transcript: document.querySelector('[data-testid="assistant-transcript"]')?.textContent?.slice(-800) ?? null
+      };
+    }, { activeThreadId: threadId });
+    const matchingRequests = smokeProvider.requests.filter((request) =>
+      JSON.stringify(request.body?.messages ?? []).includes(rejectPrompt.split(' ROC-P4-RUN:')[1] ?? '__missing__')
+    ).length;
+    await page.screenshot({ path: join(artifactDir, '02-approval-reject-missing.png') });
+    fail('2 审批', '拒绝场景显示审批卡', JSON.stringify({ rejectPrompt, matchingRequests, ...rejectionState }));
+  }
   await page.click('[data-testid="assistant-approval-reject"]');
   await waitForStatus(page, 'completed', 90_000);
   const rejectOutcome = await waitForTranscript(page, 'P4-APPROVAL-DONE', 30_000);
@@ -426,6 +591,7 @@ try {
   // ---- 闸门 3：提问中断 → 回答后续跑 -------------------------------------------
   await sendPrompt(page, p4Prompt('验收闸门 3：先问一个问题。 ROC-P4-MODE:question'));
   await waitForStatus(page, 'waiting_user', 60_000);
+  await revealLatestTranscript(page);
   await page.waitForSelector('[data-testid="assistant-question-card"]', { timeout: 20_000 });
   const questionText = (await page.locator('[data-testid="assistant-question-card"]').textContent()) ?? '';
   assertCheck('3 提问', '提问卡显示问题与候选回答', questionText.includes('这次运行要按哪个口径继续？') && questionText.includes('按最小范围继续'), '');
@@ -532,6 +698,9 @@ try {
   const afterComplete = await transcriptText(page);
   assertCheck('5 恢复', '慢流跑完后转录保留完整内容', afterComplete.includes('G5S-0400'), '');
   await page.screenshot({ path: join(artifactDir, '05-restored-run.png') });
+
+  // ---- 闸门 5：真实进程崩溃后从工具检查点续跑 -------------------------------
+  await verifyCrashCheckpointResume(threadId, projectId);
 
   // ---- 闸门 6：500 条消息时虚拟化仍生效 ----------------------------------------
   await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
@@ -678,13 +847,17 @@ try {
     ]
   });
 } catch (error) {
-  finishGate({ label: 'P4', artifactDir, results, rendererErrors, error });
+  if (!restartOnlyFinished) finishGate({ label: 'P4', artifactDir, results, rendererErrors, error });
 } finally {
   if (app !== undefined) {
     await app.close();
   }
   await smokeProvider.close();
-  rmSync(dataRoot, { recursive: true, force: true });
+  if (process.env.P4_KEEP_DATA_ON_FAILURE === '1' && process.exitCode !== 0) {
+    console.error(`保留失败诊断数据：${dataRoot}`);
+  } else {
+    rmSync(dataRoot, { recursive: true, force: true });
+  }
   rmSync(workspaceRoot, { recursive: true, force: true });
   rmSync(skillSourceRoot, { recursive: true, force: true });
   rmSync(remoteRoot, { recursive: true, force: true });

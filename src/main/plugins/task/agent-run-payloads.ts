@@ -95,7 +95,7 @@ export function readAgentRunFailedPayload(payload: unknown): {
 export function readAgentTaskEventPayload(payload: unknown): {
   runId: string;
   threadId: string;
-  type: 'approval_decision' | 'approval_requested' | 'assistant_block' | 'guardrail_nudge' | 'hook_completed' | 'hook_started' | 'subagent_event' | 'tool_call';
+  type: 'approval_decision' | 'approval_requested' | 'assistant_block' | 'guardrail_nudge' | 'hook_completed' | 'hook_started' | 'subagent_event' | 'task_acceptance' | 'tool_call';
   payload: Record<string, unknown>;
 } | null {
   const parsed = agentTaskEventPayloadSchema.safeParse(payload);

@@ -384,6 +384,16 @@ CREATE TABLE agent_tool_effect_reconciliations (
   created_at TEXT NOT NULL
 );
 `
+  },
+  {
+    version: 4,
+    name: 'durable_task_acceptance',
+    sql: `CREATE TABLE agent_task_contracts (
+      run_id TEXT PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE,
+      contract_json TEXT NOT NULL,
+      report_json TEXT,
+      handoff_json TEXT
+    );`
   }
 ];
 

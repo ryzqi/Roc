@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
@@ -24,6 +24,7 @@ import type {
   ResearchProjectCreateRequest,
   ResearchProjectUpdateRequest,
   ResearchStageState,
+  ResearchStage,
   ResearchWorkflowSnapshot,
   ResearchWorkflowTransitionRequest,
   ResearchKnowledgeDocument
@@ -517,6 +518,34 @@ export class ResearchRepository {
           ? null
           : { type: event.type, stage: event.stage, message: event.message, createdAt: event.created_at }
     });
+  }
+
+  verifyStageForTaskAcceptance(projectId: string, stage: ResearchStage): {
+    passed: boolean;
+    detail: string;
+    refs: { path: string; sha256: string }[];
+  } {
+    const project = this.getProject(projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    const workflow = this.getWorkflow(projectId);
+    const state = workflow.stages.find((item) => item.stage === stage);
+    if (state === undefined || !['waiting_approval', 'completed'].includes(state.status)) {
+      throw new Error('research_stage_not_verified');
+    }
+    if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
+    assertResearchStageArtifacts(this, projectId, state, ['draft', 'approved']);
+    const refs = state.artifactIds.map((artifactId) => {
+      const artifact = this.getArtifact(artifactId);
+      const content = this.db.prepare(`SELECT output_json FROM research_artifact_contents
+        WHERE project_id = ? AND artifact_id = ? ORDER BY created_at DESC LIMIT 1`)
+        .get(projectId, artifactId) as { output_json: string } | undefined;
+      const material = JSON.stringify({ artifact, output: content?.output_json ?? null });
+      return {
+        path: `research-artifact:${artifactId}`,
+        sha256: createHash('sha256').update(material).digest('hex')
+      };
+    });
+    return { passed: true, detail: `Existing research stage checks passed for ${refs.length} artifact(s).`, refs };
   }
 
   transitionWorkflow(request: ResearchWorkflowTransitionRequest): ResearchWorkflowSnapshot {

@@ -225,6 +225,11 @@ export function AssistantPanel({
     [session]
   );
 
+  const onResumeCheckpoint = useCallback(
+    (runId: string) => session.resumeCheckpoint(runId),
+    [session.resumeCheckpoint]
+  );
+
   const header = (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-line px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
@@ -341,6 +346,7 @@ export function AssistantPanel({
             onJumpToLatest={session.history.reloadLatest}
             scrollContainerRef={scrollContainerRef}
             onApprovalDecision={onApprovalDecision}
+            onResumeCheckpoint={onResumeCheckpoint}
           />
         )}
       </div>

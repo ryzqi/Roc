@@ -230,7 +230,7 @@ export function useChatRun(client: RocClient): ChatRunController {
       const event = normalizeSequencedChatRunEvent(rawEvent);
       pendingEventsRef.current = appendCoalescedChatRunEvent(pendingEventsRef.current, event);
 
-      if (event.type === 'run_started') {
+      if (event.type === 'run_started' || event.type === 'run_continued' || event.type === 'run_resumed') {
         setErrorMessage(null);
       } else if (event.type === 'run_failed') {
         setErrorMessage(event.message);
@@ -276,9 +276,13 @@ export function useChatRun(client: RocClient): ChatRunController {
     if (accepted.length === 0) {
       return;
     }
-    if (accepted.some((event) => event.type === 'run_failed')) {
-      const failed = accepted.find((event) => event.type === 'run_failed');
-      setErrorMessage(failed !== undefined && failed.type === 'run_failed' ? failed.message : null);
+    const latestErrorTransition = [...accepted].reverse().find((event) =>
+      event.type === 'run_failed' || event.type === 'run_started' || event.type === 'run_continued' || event.type === 'run_resumed'
+    );
+    if (latestErrorTransition?.type === 'run_failed') {
+      setErrorMessage(latestErrorTransition.message);
+    } else if (latestErrorTransition !== undefined) {
+      setErrorMessage(null);
     }
     startTransition(() => {
       setState((current) => applyChatRunEventBatch(current, accepted));

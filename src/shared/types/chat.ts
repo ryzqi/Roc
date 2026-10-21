@@ -1,4 +1,5 @@
 export { chatImageAttachmentMediaTypes } from '../schemas/chat';
+export type { TaskAcceptance } from '../schemas/task-acceptance';
 export type {
   ActiveChatRun,
   ChatApprovalInterruptPayload,

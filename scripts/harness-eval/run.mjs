@@ -9,6 +9,7 @@ import { createInventory, hash } from './inventory.mjs';
 import { scenarios } from './scenarios.mjs';
 
 const directory = resolve('.artifacts/harness-eval', new Date().toISOString().replaceAll(':', '-') + `-${process.pid}`);
+const expectedCaseCount = 81;
 mkdirSync(directory, { recursive: true });
 const save = (name, value) => writeFileSync(join(directory, name), JSON.stringify(value, null, 2));
 const report = { schemaVersion: 1, kind: 'deterministic-pilot', directory,
@@ -130,6 +131,13 @@ try {
     try { report.results.push({ id: name, passed: true, evidence: await runtime.runContextScenario(name, dir) }); }
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
+  {
+    const name = 'task-contracts';
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: await runtime.verifyTaskContracts(dir) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
   for (const name of ['memory-versions', 'skills-pinning']) {
     const dir = join(directory, name);
     mkdirSync(dir);
@@ -137,7 +145,7 @@ try {
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
   for (const observation of Object.values(report.knownDefects)) assert.equal(observation.observed, observation.expected);
-  report.passed = report.results.length === 80 && report.results.every(r => r.passed);
+  report.passed = report.results.length === expectedCaseCount && report.results.every(r => r.passed);
 } catch (error) {
   report.error = String(error);
   report.failureClass = error.failureClass ?? 'infra';

@@ -25,6 +25,7 @@ import {
   researchLiteratureSearchRequestSchema,
   researchStageRoleProfileSchema,
   researchStageRoleRequestSchema,
+  researchStageSchema,
   researchProvenanceCreateRequestSchema,
   researchProvenanceSchema,
   researchProvenanceListRequestSchema,
@@ -80,6 +81,7 @@ import { ResearchStageRuntime } from './stage-runtime';
 import { createResearchHumanGate } from './human-gate';
 import { applyResearchWorkflowTransition, shutdownResearchPlugin } from './research-plugin-lifecycle';
 import { createResearchProductionJob } from './research-production-job';
+import { researchContentHash } from './research-files';
 
 const pluginId = '@roc/plugin-research';
 const capabilityVersion = '1.0.0';
@@ -93,6 +95,11 @@ const workbenchCapabilities = {
   deleteProject: descriptor('research.projects.delete', researchProjectIdRequestSchema, z.object({ id: z.string(), deleted: z.literal(true) }).strict()),
   getWorkflow: descriptor('research.workflow.get', researchProjectIdRequestSchema, researchWorkflowSnapshotSchema),
   transitionWorkflow: descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
+  verifyStageArtifacts: descriptor(
+    'research.workflow.verifyStageArtifacts',
+    z.object({ projectId: z.string().min(1), stage: researchStageSchema }).strict(),
+    z.object({ passed: z.boolean(), detail: z.string(), refs: z.array(z.object({ path: z.string(), sha256: z.string() }).strict()) }).strict()
+  ),
   stageRole: descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema)
 };
 const literatureCapabilities = {
@@ -257,6 +264,45 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
         return result;
       });
       context.capabilities.register(pluginId, workbenchCapabilities.getWorkflow, async (input) => repository!.getWorkflow((input as { id: string }).id));
+      context.capabilities.register(pluginId, workbenchCapabilities.verifyStageArtifacts, async (input) => {
+        const request = z.object({ projectId: z.string().min(1), stage: researchStageSchema }).strict().parse(input);
+        const proof = repository!.verifyStageForTaskAcceptance(request.projectId, request.stage);
+        const refs = [...proof.refs];
+        const stage = researchRepository.getWorkflow(request.projectId).stages.find((item) => item.stage === request.stage);
+        if (stage === undefined) throw new Error('research_stage_not_found');
+        if (request.stage === 'experiment') {
+          for (const id of stage.artifactIds) {
+            const artifact = researchRepository.getArtifact(id);
+            const run = researchRepository.experiments.forArtifact(artifact);
+            const verified = await researchExperiments.snapshot(request.projectId, run.id);
+            const { artifactId: _artifactId, ...manifest } = verified;
+            refs.push({ path: `research-experiment:${run.id}/manifest.json`, sha256: researchContentHash(JSON.stringify(manifest, null, 2)) });
+            refs.push(...verified.files.map((file) => ({ path: `research-experiment:${run.id}/${file.area}/${file.path}`, sha256: file.sha256 })));
+            refs.push({ path: `research-experiment:${run.id}/environment`, sha256: researchContentHash(JSON.stringify(run.environment)) });
+          }
+        } else if (request.stage === 'figure') {
+          await researchFigures.verifyStage(request.projectId);
+          for (const id of stage.artifactIds) {
+            const artifact = researchRepository.getArtifact(id);
+            const publication = researchRepository.figures.forArtifact(artifact);
+            const run = researchRepository.figureRuns.get(request.projectId, publication.runId);
+            refs.push({ path: `research-figure:${run.id}/figure-manifest.json`, sha256: publication.manifestHash });
+            refs.push(...run.files.map((file) => ({ path: `research-figure:${run.id}/${file.area}/${file.path}`, sha256: file.sha256 })));
+            refs.push({ path: `research-figure:${run.id}/environment`, sha256: researchContentHash(JSON.stringify(run.environment)) });
+          }
+        } else if (request.stage === 'export') {
+          await researchExports.verifyStage(request.projectId);
+          for (const id of stage.artifactIds) {
+            const artifact = researchRepository.getArtifact(id);
+            const record = researchRepository.exports.forArtifact(artifact);
+            refs.push({ path: `research-export:${record.id}/sources`, sha256: record.sourceHash! });
+            refs.push(...record.files.map((file) => ({ path: `research-export:${record.id}/bundle/${file.path}`, sha256: file.sha256 })));
+            if (record.archive !== null) refs.push({ path: `research-export:${record.id}/${record.archive.path}`, sha256: record.archive.sha256 });
+          }
+        }
+        const uniqueRefs = [...new Map(refs.map((ref) => [ref.path, ref])).values()];
+        return { ...proof, detail: `${proof.detail} Full ${request.stage} verifier passed.`, refs: uniqueRefs };
+      });
       context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => applyResearchWorkflowTransition({
         request: researchWorkflowTransitionRequestSchema.parse(input),
         gate: humanGate,

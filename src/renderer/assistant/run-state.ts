@@ -6,7 +6,8 @@ import type {
   RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
-  SubagentStatus
+  SubagentStatus,
+  TaskAcceptance
 } from '../../shared/types';
 import type { RunExecutionMode } from '../../shared/types';
 import { applyPendingInterruptProjection, readLiveInterruptProjection } from './interrupt-projection';
@@ -40,7 +41,8 @@ export type ChatRunActivityBlock =
       additionalContext: string | null;
       requestContinue: string | null;
       commandDisplay: string;
-    };
+    }
+  | { id: string; kind: 'task_acceptance'; report: TaskAcceptance };
 
 export type ChatRunSubagentBlock =
   | {
@@ -160,6 +162,21 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     };
   }
 
+  if (event.type === 'task_acceptance') {
+    const block: Extract<ChatRunActivityBlock, { kind: 'task_acceptance' }> = {
+      id: `task-acceptance:${event.runId}`,
+      kind: 'task_acceptance',
+      report: event.report
+    };
+    const existing = state.activityBlocks.findIndex((item) => item.kind === 'task_acceptance');
+    return {
+      ...state,
+      activityBlocks: existing < 0
+        ? [...state.activityBlocks, block]
+        : state.activityBlocks.map((item, index) => index === existing ? block : item)
+    };
+  }
+
   if (event.type === 'run_completed') {
     const completedEvent = event;
     return {
@@ -201,7 +218,25 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       ...state,
       threadId: event.threadId,
       status: pendingInterrupts.length === 0 ? 'running' : 'waiting_user',
+      errorCode: null,
+      errorMessage: null,
+      recoveryAttempt: null,
+      retryable: false,
       pendingInterrupts,
+      resumeBusy: false
+    };
+  }
+
+  if (event.type === 'run_continued') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'running',
+      errorCode: null,
+      errorMessage: null,
+      recoveryAttempt: null,
+      retryable: false,
+      pendingInterrupts: [],
       resumeBusy: false
     };
   }

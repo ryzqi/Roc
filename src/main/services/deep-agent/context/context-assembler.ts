@@ -40,6 +40,7 @@ export function assembleContextHarness(input: {
   explicitSkillContexts: readonly ExplicitSkillContext[];
   referencedFileContexts: readonly ReferencedFileContext[];
   researchProjectId: string | null;
+  taskContract: RunExecutionSnapshot['taskContract'];
 }): ContextHarness {
   const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath);
   const sessionSearchTool = createSessionSearchTool({
@@ -81,6 +82,7 @@ export function assembleContextHarness(input: {
     explicitSkillContexts: input.explicitSkillContexts,
     referencedFileContexts: input.referencedFileContexts,
     researchProjectId: input.researchProjectId,
+    taskContract: input.taskContract,
     tools: tools.map(tool => ({
       name: tool.name,
       description: tool.description

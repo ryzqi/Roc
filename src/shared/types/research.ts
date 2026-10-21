@@ -116,7 +116,8 @@ import {
   researchWorkflowSnapshotSchema,
   researchWorkflowEventSchema,
   researchWorkflowEventsRequestSchema,
-  researchWorkflowTransitionRequestSchema
+  researchWorkflowTransitionRequestSchema,
+  researchStageSchema
   ,researchTemplateCompileRequestSchema
   ,researchTemplateImportRequestSchema
   ,researchTemplateSchema
@@ -132,6 +133,7 @@ export type ResearchProjectIdRequest = z.infer<typeof researchProjectIdRequestSc
 export type ResearchProjectCreateRequest = z.infer<typeof researchProjectCreateRequestSchema>;
 export type ResearchProjectUpdateRequest = z.infer<typeof researchProjectUpdateRequestSchema>;
 export type ResearchStageState = z.infer<typeof researchStageStateSchema>;
+export type ResearchStage = z.infer<typeof researchStageSchema>;
 export type ResearchWorkflowSnapshot = z.infer<typeof researchWorkflowSnapshotSchema>;
 export type ResearchWorkflowTransitionRequest = z.infer<typeof researchWorkflowTransitionRequestSchema>;
 export type ResearchArtifact = z.infer<typeof researchArtifactSchema>;

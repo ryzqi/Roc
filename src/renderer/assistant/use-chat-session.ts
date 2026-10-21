@@ -5,7 +5,7 @@ import { projectChatTranscript, readChatTranscriptMemoKey, type ChatTranscriptMe
 import { useChatRun } from './use-chat-run';
 import { usePersistedThreadHistory, type PersistedThreadHistory } from './use-persisted-thread-history';
 import type { ChatRunState } from './run-state';
-import { cancelRun, getActiveRun, getRunEvents, resumeApproval, resumeQuestion, startRun } from './session-store';
+import { cancelRun, getActiveRun, getRunEvents, resumeApproval, resumeCheckpoint as resumeCheckpointRequest, resumeQuestion, startRun } from './session-store';
 
 /**
  * The assistant's run wiring (T4.2/T4.3).
@@ -47,6 +47,7 @@ export type ChatSession = {
   cancel: () => Promise<void>;
   resumeApproval: (interruptId: string, decisions: ChatResumeDecision[]) => Promise<boolean>;
   resumeQuestion: (interruptId: string, answer: string) => Promise<boolean>;
+  resumeCheckpoint: (runId: string) => Promise<boolean>;
   restoreActiveRun: () => Promise<void>;
   /** Drops the live run state — used when switching to a different conversation. */
   resetRun: () => void;
@@ -162,6 +163,23 @@ export function useChatSession(input: {
     [client, run, threadId]
   );
 
+  const resumeFromCheckpoint = useCallback(async (runId: string): Promise<boolean> => {
+    const activeThreadId = run.state.threadId ?? threadId;
+    if (activeThreadId === null) return false;
+    const result = await resumeCheckpointRequest(client, { runId, threadId: activeThreadId });
+    if (!result.ok) {
+      run.setError(result.error.message);
+      return false;
+    }
+    const replayed = await getRunEvents(client, { runId, afterSequence: 0 });
+    if (!replayed.ok) {
+      run.setError(replayed.error.message);
+      return false;
+    }
+    run.applyReplay(replayed.data.events);
+    return true;
+  }, [client, run, threadId]);
+
   const resetRun = useCallback((): void => {
     run.reset();
     setPendingUserInput(null);
@@ -198,6 +216,7 @@ export function useChatSession(input: {
     cancel,
     resumeApproval: resumeWithApproval,
     resumeQuestion: resumeWithQuestion,
+    resumeCheckpoint: resumeFromCheckpoint,
     restoreActiveRun,
     resetRun
   };

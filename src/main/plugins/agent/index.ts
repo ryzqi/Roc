@@ -52,6 +52,7 @@ import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './r
 import { AgentPluginRuntime } from './runtime';
 import type { AgentLifecycleHookEmitter } from './runtime-types';
 import { AgentSessionRepository } from './session-repository';
+import type { ResearchProof } from '../../services/deep-agent/task-contract-store';
 
 const pluginId = '@roc/plugin-agent';
 const capabilityVersion = '1.0.0';
@@ -137,7 +138,10 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         status: options.status,
         statusProvider: options.statusProvider,
         workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {}),
-        researchProjectProvider: (projectId) => loadResearchProjectWorkspace(context, projectId)
+        researchProjectProvider: (projectId) => loadResearchProjectWorkspace(context, projectId),
+        researchStageProofProvider: async (projectId, stage) => await context.capabilities.invoke<
+          { projectId: string; stage: import('../../../shared/types').ResearchStage }, ResearchProof
+        >('research.workflow.verifyStageArtifacts', { projectId, stage })
       });
       registerAgentCapabilities(context, runtime, options);
     },

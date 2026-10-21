@@ -74,6 +74,9 @@ try {
   });
   const page = await app.firstWindow();
   const browserWindow = await app.browserWindow(page);
+  // The production minimum is 1184px; lower it only in this disposable audit window so the
+  // responsive drawer breakpoint at 1099px can be exercised with a real 980px Electron view.
+  await browserWindow.evaluate((window) => window.setMinimumSize(800, 600));
   page.on('console', (message) => {
     if (message.type() === 'error') {
       console.error('[renderer]', message.text());
@@ -131,6 +134,23 @@ try {
     await navigate(page, `${projectQuery}&view=latex&assistant=1`);
     await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
     await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });
+    const layout = await page.evaluate(() => ({
+      mode: document.querySelector('[data-testid="workspace-layout"]')?.getAttribute('data-layout-mode') ?? null,
+      sidebarColumn: document.querySelector('[data-testid="sidebar-column"]') !== null,
+      assistantColumn: document.querySelector('[data-testid="assistant-column"]') !== null,
+      sidebarDrawer: document.querySelector('[data-testid="sidebar-drawer"]') !== null,
+      assistantDrawer: document.querySelector('[data-testid="assistant-drawer"]') !== null
+    }));
+    const expectedMode = viewport.width < 1100 ? 'drawers' : 'columns';
+    if (layout.mode !== expectedMode) {
+      throw new Error(`assistant layout mode ${layout.mode} at ${viewport.width}px; expected ${expectedMode}`);
+    }
+    if (viewport.width < 1100 && (layout.sidebarColumn || layout.assistantColumn || !layout.sidebarDrawer || !layout.assistantDrawer)) {
+      throw new Error(`assistant drawers are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
+    }
+    if (viewport.width >= 1100 && (!layout.sidebarColumn || !layout.assistantColumn || layout.sidebarDrawer || layout.assistantDrawer)) {
+      throw new Error(`assistant columns are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
+    }
     await capture(page, `assistant-${viewport.id}`);
 
     await page.click('[data-testid="titlebar-settings"]');

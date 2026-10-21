@@ -11,6 +11,7 @@ import {
   isTaskApproval
 } from './approval-cards';
 import { GuardrailBlock } from './guardrail-block';
+import { TaskAcceptanceBlock } from './task-acceptance-block';
 import { HookCallBlock } from './hook-call-block';
 import { QuestionInterruptCard } from './question-card';
 import { ReasoningBlock } from './reasoning-block';
@@ -51,6 +52,7 @@ import { ToolCallBlock } from './tool-call-block';
 export type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
+  onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
 
 const finishedEnterKeys = new Set<string>();
@@ -117,7 +119,7 @@ function resolveActivityBlocks(
   ];
 }
 
-function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
+function ChatMessageRowImpl({ message, onApprovalDecision, onResumeCheckpoint }: ChatMessageRowProps): React.JSX.Element {
   const isAssistant = message.role === 'assistant';
   const attachments = message.attachments ?? [];
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
@@ -136,7 +138,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       {isAssistant ? (
         <article className="flex min-w-0 max-w-full flex-1 flex-col gap-3" data-testid="assistant-message-content">
           {activityBlocks.map((block) => (
-            <ChatActivityBlockView key={block.id} block={block} />
+            <ChatActivityBlockView key={block.id} block={block} onResumeCheckpoint={onResumeCheckpoint} />
           ))}
           {message.content.length === 0 ? null : (
             <StreamingText text={message.content} isStreaming={message.isStreaming} />
@@ -195,7 +197,9 @@ export const ChatMessageRow = memo(
     prev.message.reasoning === next.message.reasoning &&
     prev.message.blocks === next.message.blocks &&
     prev.message.interrupts === next.message.interrupts &&
-    prev.message.isStreaming === next.message.isStreaming
+    prev.message.isStreaming === next.message.isStreaming &&
+    prev.onApprovalDecision === next.onApprovalDecision &&
+    prev.onResumeCheckpoint === next.onResumeCheckpoint
 );
 
 /**
@@ -284,7 +288,10 @@ function ChatInterruptView(input: {
   );
 }
 
-function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }): React.JSX.Element {
+function ChatActivityBlockView({ block, onResumeCheckpoint }: {
+  block: ChatTranscriptActivityBlock;
+  onResumeCheckpoint?: (runId: string) => Promise<boolean>;
+}): React.JSX.Element {
   if (block.kind === 'reasoning') {
     return <ReasoningBlock id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
@@ -296,6 +303,9 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
   }
   if (block.kind === 'subagent') {
     return <SubagentActivityCard block={block} />;
+  }
+  if (block.kind === 'task_acceptance') {
+    return <TaskAcceptanceBlock block={block} onResumeCheckpoint={onResumeCheckpoint} />;
   }
   return <GuardrailBlock block={block} />;
 }

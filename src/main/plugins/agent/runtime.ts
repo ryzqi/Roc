@@ -22,7 +22,9 @@ import type {
   TaskRun,
   WorkflowHint,
   Workspace,
-  RunExecutionSnapshot
+  RunExecutionSnapshot,
+  ResearchStage,
+  TaskAcceptance
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
 import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
@@ -64,6 +66,7 @@ import {
   resolveNewRunThreadKind
 } from './runtime-helpers';
 import { parseShellAllowedCommands } from '../../services/deep-agent/shell-policy';
+import type { ResearchProof, TaskVerificationContext } from '../../services/deep-agent/task-contract-store';
 
 export const agentChatRunEventType = 'agent.chat.run-event';
 
@@ -152,6 +155,7 @@ export type AgentPluginRuntimeOptions = {
   statusProvider?: () => AgentRuntimeStatus;
   workspaceProvider?: () => Promise<Workspace | null>;
   researchProjectProvider?: (projectId: string) => Promise<{ workspacePath: string | null } | null>;
+  researchStageProofProvider?: (projectId: string, stage: ResearchStage) => Promise<ResearchProof>;
 };
 
 export class AgentPluginRuntime {
@@ -264,6 +268,7 @@ export class AgentPluginRuntime {
       status: 'dispatch_pending'
     });
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
+    this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
     const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, dispatchedRun);
     const abortController = new AbortController();
     this.activeRunLifecycle.activate({
@@ -365,6 +370,16 @@ export class AgentPluginRuntime {
     }
     this.runTelemetry.delete(input.runId);
     this.activeRunLifecycle.finish(input.runId);
+    const cancellationReport = await this.options.repository.taskContracts.verify(input.runId, this.createTaskVerificationContext({
+      response: null,
+      workspacePath: snapshot.workspace?.path ?? null,
+      researchProjectId: snapshot.researchProjectId ?? null
+    }), ['Run cancelled before all acceptance checks completed.']);
+    this.options.repository.taskContracts.saveHandoff(input.runId, {
+      reason: 'cancelled',
+      checkpointPresent: this.options.repository.hasCheckpoint(input.runId)
+    });
+    await this.publishTaskAcceptance(cancellationReport);
     void this.publish('agent.run.cancelled', {
       runId: terminal.run.id,
       threadId: terminal.run.threadId,
@@ -391,6 +406,7 @@ export class AgentPluginRuntime {
   }
 
   async resumeRun(request: ChatResumeRunRequest): Promise<ChatResumeRunResult> {
+    if (request.kind === 'checkpoint') return await this.resumeCheckpointRun(request);
     const pendingInterrupts = this.resolvePendingInterrupts(request.runId);
     if (pendingInterrupts.length === 0) {
       throw new Error('chat_resume_no_pending_interrupt');
@@ -413,6 +429,8 @@ export class AgentPluginRuntime {
       throw new Error('chat_resume_run_missing');
     }
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
+    this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
+    this.options.repository.taskContracts.assertHandoffCanResume(run.id, request.threadId, request.interruptId);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
       modelId: snapshot.model.modelId
@@ -470,6 +488,7 @@ export class AgentPluginRuntime {
           ),
         runId: run.id
       });
+      this.options.repository.taskContracts.clearHandoff(run.id);
     } catch (error) {
       abortController.abort();
       throw error;
@@ -522,6 +541,90 @@ export class AgentPluginRuntime {
     return result;
   }
 
+  private async resumeCheckpointRun(request: Extract<ChatResumeRunRequest, { kind: 'checkpoint' }>): Promise<ChatResumeRunResult> {
+    const run = this.options.repository.getRun(request.runId);
+    if (run.threadId !== request.threadId) throw new Error('chat_resume_thread_mismatch');
+    if (run.status !== 'interrupted') throw new Error('chat_resume_run_not_interrupted');
+    if (run.modelId === null) throw new Error('chat_resume_run_missing');
+    if (!this.options.repository.hasCheckpoint(run.id)) throw new Error('task_handoff_checkpoint_missing');
+    const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
+    this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
+    const previousReport = this.options.repository.taskContracts.readReport(run.id);
+    const refreshedReport = await this.options.repository.taskContracts.refreshReport(run.id, this.createTaskVerificationContext({
+      response: null,
+      workspacePath: snapshot.workspace?.path ?? null,
+      researchProjectId: snapshot.researchProjectId ?? null
+    }));
+    if (refreshedReport !== null && hashToolInput(refreshedReport) !== hashToolInput(previousReport)) {
+      await this.publishTaskAcceptance(refreshedReport);
+    }
+    this.options.repository.taskContracts.assertCheckpointHandoffCanResume(run.id, request.threadId);
+    const continuation = this.options.repository.taskContracts.createCheckpointContinuationContext(run.id);
+    this.options.repository.taskContracts.enqueueCheckpointContinuation(run.id, continuation);
+    const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
+      providerId: snapshot.model.providerId,
+      modelId: snapshot.model.modelId
+    });
+    if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
+      throw new Error('run_execution_snapshot_model_mismatch');
+    }
+    if (this.options.deepAgentExecutor === undefined) throw new Error('agent_deep_agent_executor_missing');
+    const deepAgentExecutor = this.options.deepAgentExecutor;
+    const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
+    telemetry.resumeAfterInterruption();
+    const abortController = new AbortController();
+    let resumed: { run: TaskRun; stream: AgentDeepAgentExecution };
+    try {
+      resumed = await this.options.repository.dispatchCheckpointResume({
+        openStream: async (dispatchedRun) => requireAgentExecution(await deepAgentExecutor.execute({
+          abortSignal: abortController.signal,
+          modelHandle,
+          observeModelUsage: usage => telemetry.observeModelUsage(usage),
+          resumeFromCheckpoint: true,
+          run: dispatchedRun,
+          snapshot
+        })),
+        runId: run.id,
+        telemetry: telemetry.snapshot()
+      });
+    } catch (error) {
+      abortController.abort();
+      this.runTelemetry.delete(run.id);
+      throw error;
+    }
+    this.options.repository.taskContracts.clearHandoff(run.id);
+    const hiddenResumeAction = this.options.repository.taskContracts.disableCheckpointResume(run.id);
+    if (hiddenResumeAction !== null && !hiddenResumeAction.checkpointResumeAvailable) {
+      await this.publishTaskAcceptance(hiddenResumeAction);
+    }
+    const resumedRun = resumed.run;
+    const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, resumedRun);
+    this.activeRunLifecycle.activate({ abortController, runId: run.id, request: resumedRequest, threadId: resumedRun.threadId });
+    const continuedAt = new Date().toISOString();
+    const result: ChatResumeRunResult = { runId: run.id, threadId: run.threadId, resumedAt: continuedAt };
+    await this.publish('agent.run.resumed', result);
+    await this.publishChatRunEvent({ type: 'run_continued', runId: run.id, threadId: run.threadId, continuedAt });
+    const pendingRun = this.executeRun({
+      abortSignal: abortController.signal,
+      enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
+      input: resumedRun.userInput,
+      mode: resumedRequest.mode,
+      modelHandle,
+      modelId: modelHandle.modelId,
+      providerId: modelHandle.providerId,
+      request: resumedRequest,
+      executionStream: resumed.stream,
+      resumeFromCheckpoint: true,
+      run: resumedRun,
+      runId: run.id,
+      snapshot,
+      threadId: resumedRun.threadId,
+      workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
+    });
+    this.activeRunLifecycle.trackPendingRun(run.id, pendingRun);
+    return result;
+  }
+
   listSessionMessages(input: { threadId: string; limit?: number }): SessionMessageEntry[] {
     return this.options.repository.listSessionMessages(input);
   }
@@ -530,9 +633,24 @@ export class AgentPluginRuntime {
     return this.options.repository.searchSessionMessages(input);
   }
 
-  listRunEvents(request: ChatRunEventsReplayRequest): ChatRunEventsReplayResult {
+  async listRunEvents(request: ChatRunEventsReplayRequest): Promise<ChatRunEventsReplayResult> {
     if (this.options.runEventLog === undefined) {
       throw new Error('agent_run_event_log_unavailable');
+    }
+    const previous = this.options.repository.taskContracts.readReport(request.runId);
+    if (previous !== null) {
+      const snapshot = this.options.repository.getRunExecutionSnapshot(request.runId);
+      this.options.repository.taskContracts.assertMatchesSnapshot(request.runId, snapshot.taskContract);
+      const refreshed = await this.options.repository.taskContracts.refreshReport(request.runId, this.createTaskVerificationContext({
+        response: this.options.repository.listSessionMessages({ threadId: snapshot.threadId, limit: 200 })
+          .filter((message) => message.role === 'assistant')
+          .at(-1)?.content ?? null,
+        workspacePath: snapshot.workspace?.path ?? null,
+        researchProjectId: snapshot.researchProjectId ?? null
+      }));
+      if (refreshed !== null && hashToolInput(refreshed) !== hashToolInput(previous)) {
+        await this.publishTaskAcceptance(refreshed);
+      }
     }
     return {
       runId: request.runId,
@@ -561,6 +679,13 @@ export class AgentPluginRuntime {
   }): Promise<{ run: TaskRun; message: SessionMessageEntry; event: TaskEvent }> {
     const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
     const currentRun = this.options.repository.getRun(input.runId);
+    const snapshot = this.options.repository.getRunExecutionSnapshot(input.runId);
+    this.options.repository.taskContracts.assertMatchesSnapshot(input.runId, snapshot.taskContract);
+    const taskAcceptance = await this.options.repository.taskContracts.evaluate(input.runId, this.createTaskVerificationContext({
+      response: input.assistantMessage,
+      workspacePath: snapshot.workspace?.path ?? (input.workspacePath === undefined ? null : input.workspacePath),
+      researchProjectId: snapshot.researchProjectId ?? null
+    }));
     const terminal = this.options.repository.completeRunAtomically({
       assistantMessage: input.assistantMessage,
       durationMs: input.durationMs,
@@ -571,10 +696,14 @@ export class AgentPluginRuntime {
       runStartedAt: currentRun.startedAt,
       summary: input.summary,
       telemetry: input.telemetry,
+      taskAcceptance,
       workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
     const run = terminal.run;
     this.activeRunLifecycle.finish(input.runId);
+    if (terminal.acceptanceEvent !== null && terminal.acceptanceRunEvent?.type === 'task_acceptance') {
+      await this.publishTaskAcceptance(terminal.acceptanceRunEvent.report, terminal.acceptanceEvent, terminal.acceptanceRunEvent);
+    }
     const completedPayload: {
       runId: string;
       threadId: string;
@@ -611,6 +740,18 @@ export class AgentPluginRuntime {
       assistantMessage: input.assistantMessage
     }, false);
     return terminal;
+  }
+
+  private createTaskVerificationContext(input: {
+    response: string | null;
+    workspacePath: string | null;
+    researchProjectId: string | null;
+  }): TaskVerificationContext {
+    const context: TaskVerificationContext = { workspacePath: input.workspacePath, response: input.response };
+    if (input.researchProjectId !== null && this.options.researchStageProofProvider !== undefined) {
+      context.researchProof = async (stage) => await this.options.researchStageProofProvider!(input.researchProjectId!, stage);
+    }
+    return context;
   }
 
   private async emitSessionEndBestEffort(input: Parameters<AgentLifecycleHookEmitter['emitSessionEnd']>[0]): Promise<void> {
@@ -682,6 +823,13 @@ export class AgentPluginRuntime {
       type: event.type,
       payload: event.payload
     });
+  }
+
+  private async publishTaskAcceptance(report: TaskAcceptance, taskEvent?: TaskEvent,
+    chatEvent?: Extract<ChatRunEvent, { type: 'task_acceptance' }>): Promise<void> {
+    const savedTaskEvent = taskEvent ?? this.options.repository.recordTaskAcceptance(report.runId, report);
+    await this.publishTaskEvent(savedTaskEvent);
+    await this.publishChatRunEventBestEffort(chatEvent ?? { type: 'task_acceptance', runId: report.runId, report }, false);
   }
 
   private async executeRun(input: ExecuteRunInput): Promise<void> {
@@ -894,6 +1042,17 @@ export class AgentPluginRuntime {
       suggestion: input.failure.suggestion,
       telemetry: input.telemetry.snapshot()
     });
+    const snapshot = this.options.repository.getRunExecutionSnapshot(input.input.runId);
+    const failureReport = await this.options.repository.taskContracts.verify(input.input.runId, this.createTaskVerificationContext({
+      response: null,
+      workspacePath: snapshot.workspace?.path ?? null,
+      researchProjectId: snapshot.researchProjectId ?? null
+    }), [`Run failed: ${input.failure.code}`]);
+    this.options.repository.taskContracts.saveHandoff(input.input.runId, {
+      reason: 'failed',
+      checkpointPresent: this.options.repository.hasCheckpoint(input.input.runId)
+    });
+    await this.publishTaskAcceptance(failureReport);
     this.runTelemetry.delete(input.input.runId);
     this.activeRunLifecycle.finish(input.input.runId);
     await this.emitSessionEndBestEffort({
@@ -1168,6 +1327,20 @@ export class AgentPluginRuntime {
     for (const event of interrupted.events) {
       await this.publishTaskEvent(event);
     }
+    const snapshot = this.options.repository.getRunExecutionSnapshot(input.runId);
+    const blockedBy = input.interrupts.map((interrupt) => interrupt.payload.kind === 'approval'
+      ? `Approval pending: ${interrupt.interruptId}`
+      : `Answer pending: ${interrupt.interruptId}`);
+    const report = await this.options.repository.taskContracts.verify(input.runId, this.createTaskVerificationContext({
+      response: null,
+      workspacePath: snapshot.workspace?.path ?? null,
+      researchProjectId: snapshot.researchProjectId ?? null
+    }), blockedBy);
+    this.options.repository.taskContracts.saveHandoff(input.runId, {
+      reason: 'approval_pending',
+      checkpointPresent: this.options.repository.hasCheckpoint(input.runId)
+    });
+    await this.publishTaskAcceptance(report);
   }
 }
 
@@ -1200,8 +1373,9 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 5,
+    schemaVersion: 7,
     submissionHash: hashToolInput(input.request),
+    taskContract: createTaskContract(input.request),
     runOrigin: resolveRunOrigin(input.request),
     model: {
       providerId: input.modelHandle.providerId,
@@ -1221,6 +1395,21 @@ function createRunExecutionSnapshotSeed(input: {
     explicitSkillIds: input.explicitSkillIds,
     dispatchKey: input.dispatchKey,
     researchProjectId: input.request.researchProjectId === undefined ? null : input.request.researchProjectId
+  };
+}
+
+function createTaskContract(request: ChatStartRunRequest): RunExecutionSnapshot['taskContract'] {
+  const isReply = request.mode === 'chat' && request.acceptanceCriteria === undefined;
+  return {
+    contractVersion: 1,
+    objective: request.input.trim(),
+    constraints: [],
+    kind: isReply ? 'reply' : 'task',
+    criteria: request.acceptanceCriteria ?? [{
+      id: 'A-01',
+      description: isReply ? 'Produce a visible response.' : 'No verifiable task acceptance criteria were supplied.',
+      check: isReply ? { kind: 'response' } : { kind: 'unverified' }
+    }]
   };
 }
 

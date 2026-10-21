@@ -590,6 +590,27 @@ async function writeP4ToolModeResponse(response, parsedBody, turn) {
 }
 
 /**
+ * P4 restart recovery: execute one read-only tool, then leave the model response streaming so the
+ * acceptance harness can kill the Electron process after the tool checkpoint has been persisted.
+ */
+async function writeP4RestartModeResponse(response, parsedBody, turn) {
+  const callId = smokeP4CallId('restart_ls', turn.nonce);
+  if (readToolResultText(parsedBody?.messages, callId) === null) {
+    writeStreamingToolCallOnlyResponse(
+      response,
+      { id: callId, name: 'ls', args: { path: '/workspace' } },
+      { prompt_tokens: 42, completion_tokens: 12, total_tokens: 54 }
+    );
+    return;
+  }
+  await writeP4SlowModeResponse(response, {
+    ...turn,
+    slow: turn.slow ?? ['ROC-P4-SLOW:200x80', '200', '80'],
+    tag: turn.tag === 'P4SLOW' ? 'P4CR' : turn.tag
+  });
+}
+
+/**
  * Gate 2: one `delete_file` call, which only interrupts when `permissions.mode === 'default'`
  * (`run-capability-manifest.ts` → `createInterruptPolicy`). The harness sets that mode through
  * `settings.save` and asserts the card, then approves in one run and rejects in another.
@@ -816,6 +837,10 @@ export async function startSmokeProvider(input = {}) {
         if (p4Turn !== null) {
           if (p4Turn.mode === 'tool') {
             await writeP4ToolModeResponse(response, parsedBody, p4Turn);
+            return;
+          }
+          if (p4Turn.mode === 'restart') {
+            await writeP4RestartModeResponse(response, parsedBody, p4Turn);
             return;
           }
           if (p4Turn.mode === 'approval') {

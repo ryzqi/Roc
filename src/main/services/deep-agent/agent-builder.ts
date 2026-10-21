@@ -211,7 +211,8 @@ function createMiddlewareStackContext(
     memorySources: input.memorySources,
     model: input.model,
     policy,
-    toolEffectStore: input.toolEffectStore
+    toolEffectStore: input.toolEffectStore,
+    taskContract: input.snapshot.taskContract
   };
 }
 
@@ -243,8 +244,12 @@ function createDeepAgentSubagents(input: DeepAgentBuildInput, policy: DeepAgentB
   );
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
-    tools: scopedTools as unknown as SubagentTools,
-    skills: [...input.skillSources],
+    tools: scopedTools.filter((tool) => {
+      const contract = policy.capabilityManifest.tools.find((entry) => entry.modelVisibleName === tool.name);
+      return contract !== undefined && (contract.effectClass === 'none' || contract.effectClass === 'network_read');
+    }) as unknown as SubagentTools,
+    skills: [],
+    permissions: createRocReadOnlyFilesystemPermissions(),
     middleware: resolveSubagentGuardrails(),
     ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
   };
@@ -373,6 +378,7 @@ function applySubagentMiddleware(
   return {
     ...subagent,
     tools: tools as unknown as SubagentTools,
+    permissions: createRocReadOnlyFilesystemPermissions(),
     ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
     middleware: [...declared, ...guardrails]
   };

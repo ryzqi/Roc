@@ -38,6 +38,7 @@ import { createRocShellPolicyMiddleware } from './shell-policy';
 import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunBudgetLedger, RunLimits } from './run-budget-ledger';
+import type { TaskContract } from '../../../shared/schemas/task-acceptance';
 import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-budget-middleware';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
@@ -84,6 +85,7 @@ export type MiddlewareStackContext = {
   model: BaseChatModel;
   policy: MiddlewareStackPolicy;
   toolEffectStore: AgentToolEffectStore | undefined;
+  taskContract: TaskContract;
 };
 
 type MiddlewareStackEntry = {
@@ -267,7 +269,7 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     name: 'RocRunBudgetMiddleware',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
-    create: context => createRunBudgetMiddleware(context.budgetLedger, context.policy.runId, context.budgetLimits, context.toolEffectStore)
+    create: context => createRunBudgetMiddleware(context.budgetLedger, context.policy.runId, context.budgetLimits, context.toolEffectStore, context.taskContract)
   },
   {
     name: 'RocToolRuntimeErrorMiddleware',

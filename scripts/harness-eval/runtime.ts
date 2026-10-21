@@ -1,4 +1,5 @@
 export { verifyExtensions } from './extensions';
+export { verifyTaskContracts } from './task-contract';
 export { runExecutionScenario, runIsolationScenario } from './execution';
 import assert from 'node:assert/strict';
 import { verifyMemorySkills } from './memory-skills';
@@ -144,7 +145,8 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
     }, { name: 'pilot_action', description: 'Execute synthetic pilot case', schema: z.object({}).strict() });
     const ledger = new RunBudgetLedger(db);
     const limits = { contextWindowTokens: 100000, maxTotalTokens: null, maxCostUsd: null,
-      maxModelCalls: 100, maxToolCalls: 500, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null };
+      maxModelCalls: 100, maxToolCalls: 500, maxChildTasks: 8, maxConcurrentChildTasks: 2,
+      maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null };
     const revision = ledger.freezeRevision('run', { kind: 'pilot', id: scenario.id });
     const callbacks = [new RunBudgetObserver(ledger, 'run', limits, revision)];
     const buildAgent = () => createDeepAgent({
@@ -366,10 +368,12 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
   let ledger = new RunBudgetLedger(db);
   const limits = { contextWindowTokens: 100000, maxTotalTokens: null as number | null, maxCostUsd: null as number | null,
     maxModelCalls: name === 'budget-model' || name === 'budget-restart' ? 1 : 100,
-    maxToolCalls: 100, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null as string | null };
+    maxToolCalls: 100, maxChildTasks: 8, maxConcurrentChildTasks: 2,
+    maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null as string | null };
   if (name === 'budget-retry') limits.maxToolCalls = 1;
   if (name === 'budget-concurrency') limits.maxConcurrentModelCalls = 1;
   if (name === 'budget-child-tools') limits.maxConcurrentToolCalls = 1;
+  if (name === 'budget-child-tools') limits.maxChildTasks = 1;
   if (name === 'budget-token' || name === 'budget-unknown') limits.maxTotalTokens = 100040;
   if (name === 'budget-cost') limits.maxCostUsd = 1;
   if (name === 'budget-deadline') limits.deadlineAt = '2020-01-01T00:00:00.000Z';
@@ -379,6 +383,15 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
     : name === 'budget-deadline' ? 'run_deadline_exhausted' : 'run_model_call_budget_exhausted';
   let effects = 0;
   let childBlocked = false;
+  const taskContract = {
+    contractVersion: 1 as const,
+    objective: 'Budget child work against acceptance requirements.',
+    constraints: [],
+    kind: 'task' as const,
+    criteria: [{ id: 'A-01', description: 'Use the expected artifact.',
+      check: { kind: 'artifact_sha256' as const, path: 'result.txt', sha256: 'a'.repeat(64) } }]
+  };
+  const budgetMiddleware = () => createRunBudgetMiddleware(ledger, 'run', limits, undefined, taskContract);
   const execute = async () => {
     const revision = ledger.freezeRevision('run', { name, version: 1 });
     const model = new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic', maxRetries: 0,
@@ -400,10 +413,10 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
     const agent = createDeepAgent({ model, tools: [action],
       ...(name === 'budget-child-tools' ? { subagents: [{ name: 'pilot-child', description: 'Pilot child',
         systemPrompt: 'Call pilot_action then return result.', tools: [action],
-        middleware: [createRunBudgetMiddleware(ledger, 'run', limits)] }] } : {}),
+        middleware: [budgetMiddleware()] }] } : {}),
       middleware: [createRunCorrectionMiddleware(ledger, 'run'), ...(name === 'budget-retry' ? [toolRetryMiddleware({ tools: ['pilot_action'], maxRetries: 2,
         initialDelayMs: 0, retryOn: error => error.message.includes('fixture_retry'), onFailure: 'error' })] : []),
-        createRunBudgetMiddleware(ledger, 'run', limits)], checkpointer: new RocSqliteCheckpointer(db) });
+        budgetMiddleware()], checkpointer: new RocSqliteCheckpointer(db) });
     return await agent.invoke({ messages: [{ role: 'user', content: name }] }, {
       configurable: { thread_id: 'thread' }, recursionLimit: 12,
       callbacks: [observer]
@@ -418,7 +431,26 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
       assert.equal(calls.filter(row => row.kind === 'child').length, 1);
       assert.equal(calls.filter(row => row.kind === 'tool').length, 1);
       assert.equal(calls.filter(row => row.kind === 'model').length, 4);
-      return { effects, calls, maxConcurrentToolCalls: 1, correction: 'consumed by parent' };
+      const childCall = db.prepare("SELECT call_id, input_hash, state, envelope_json FROM agent_budget_calls WHERE kind = 'child'")
+        .get() as { call_id: string; input_hash: string; state: string; envelope_json: string };
+      const envelope = JSON.parse(childCall.envelope_json) as Record<string, unknown>;
+      assert.equal(childCall.state, 'settled');
+      assert.equal(envelope.subagentType, 'pilot-child');
+      assert.equal(envelope.maxChildTasks, 1);
+      assert.equal(envelope.taskDescription, 'budget-child-tools-child');
+      assert.equal(envelope.taskDescriptionHash, hashToolInput('budget-child-tools-child'));
+      assert.deepEqual(envelope.acceptanceCriteria, [{ id: 'A-01', description: 'Use the expected artifact.' }]);
+      assert.deepEqual(envelope.artifactRefs, [{ path: 'result.txt', sha256: 'a'.repeat(64) }]);
+      assert.deepEqual(envelope.permissions, ['workspace_read', 'research_read', 'web_read']);
+      assert.equal(typeof envelope.outcomeHash, 'string');
+      assert.equal(envelope.outcomeStatus, 'completed');
+      assert.equal(childCall.envelope_json.includes('budget-child-tools-child'), true);
+      assert.throws(() => ledger.reserve('run', limits, { id: childCall.call_id, kind: 'child', tokens: 0,
+        inputHash: childCall.input_hash, envelope }), /run_budget_call_already_reserved/);
+      assert.throws(() => ledger.reserve('run', limits, { id: 'child-over-limit', kind: 'child', tokens: 0,
+        inputHash: 'over-limit', envelope }), /run_child_task_budget_exhausted/);
+      return { effects, calls, childEnvelope: envelope, replay: 'blocked', maxChildTasks: 1,
+        maxConcurrentToolCalls: 1, correction: 'consumed by parent' };
     }
     if (name === 'budget-window') {
       await execute();

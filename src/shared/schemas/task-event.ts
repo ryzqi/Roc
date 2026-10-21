@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { enabledCapabilitiesSchema } from './agent';
 import { hitlRequestSchema, hitlResumeDecisionSchema } from './hitl';
+import { taskAcceptanceSchema } from './task-acceptance';
 
 const identifierSchema = z.string().trim().min(1);
 const timestampSchema = z.string().datetime({ offset: true });
@@ -222,7 +223,8 @@ const structuredTaskEventSchemas = [
   taskEvent('background_task_created', backgroundTaskCreatedPayloadSchema),
   taskEvent('background_task_paused', backgroundTaskStatusPayloadSchema),
   taskEvent('background_task_resumed', backgroundTaskStatusPayloadSchema),
-  taskEvent('background_task_cancelled', backgroundTaskStatusPayloadSchema)
+  taskEvent('background_task_cancelled', backgroundTaskStatusPayloadSchema),
+  taskEvent('task_acceptance', taskAcceptanceSchema)
 ] as const;
 
 const genericTaskEventTypes = [
@@ -269,7 +271,8 @@ export const agentTaskEventPayloadSchema = z.discriminatedUnion('type', [
   agentTaskEventPayload('hook_started', hookRunSummarySchema),
   agentTaskEventPayload('hook_completed', hookRunSummarySchema),
   agentTaskEventPayload('approval_requested', approvalRequestedPayloadSchema),
-  agentTaskEventPayload('approval_decision', approvalDecisionPayloadSchema)
+  agentTaskEventPayload('approval_decision', approvalDecisionPayloadSchema),
+  agentTaskEventPayload('task_acceptance', taskAcceptanceSchema)
 ]);
 
 export const persistedTaskEventSchema = taskEventSchema.and(

@@ -71,6 +71,15 @@ export async function verifyContext(name: string, directory: string, db: Databas
     return { measured, calibration: 'local OpenAI text tokenizer; provider message framing remains estimated', cacheInvalidated: true };
   }
   const ledger = new RunBudgetLedger(db);
+  const createdAt = new Date().toISOString();
+  db.prepare(`INSERT OR IGNORE INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+    VALUES ('thread','chat','context fixture','context fixture','active',?,?)`).run(createdAt, createdAt);
+  db.prepare(`INSERT OR IGNORE INTO agent_runs
+    (id, thread_id, run_number, user_input, status, started_at, enabled_capabilities_json)
+    VALUES ('run','thread',1,'context fixture','running',?,'{}')`).run(createdAt);
+  db.prepare(`INSERT OR IGNORE INTO agent_task_contracts (run_id, contract_json)
+    VALUES ('run',?)`).run(JSON.stringify({ contractVersion: 1, objective: 'Preserve context fixture requirements',
+      constraints: [], kind: 'task', criteria: ['A-01', 'A-02'].map(id => ({ id, description: `${id} fixture`, check: { kind: 'unverified' } })) }));
   db.prepare(`INSERT INTO agent_pending_interrupts VALUES ('run','thread','approval',0,'{}',?,?)`)
     .run(new Date().toISOString(), new Date().toISOString());
   const messages: BaseMessage[] = [new HumanMessage({ id: 'goal', content: 'Revise only the supplied draft.' })];

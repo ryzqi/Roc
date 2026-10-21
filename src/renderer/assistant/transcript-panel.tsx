@@ -42,6 +42,7 @@ export type ChatTranscriptPanelProps = {
   onJumpToLatest(): Promise<void>;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
+  onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
 
 export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): ScrollToOptions {
@@ -78,7 +79,8 @@ export function ChatTranscriptPanel({
   loadOlder,
   onJumpToLatest,
   scrollContainerRef,
-  onApprovalDecision
+  onApprovalDecision,
+  onResumeCheckpoint
 }: ChatTranscriptPanelProps): React.JSX.Element {
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -137,7 +139,8 @@ export function ChatTranscriptPanel({
         increaseViewportBy={240}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
-        itemContent={(_index, message) => <ChatMessageRow message={message} onApprovalDecision={onApprovalDecision} />}
+        itemContent={(_index, message) => <ChatMessageRow message={message} onApprovalDecision={onApprovalDecision}
+          onResumeCheckpoint={onResumeCheckpoint} />}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {
             void loadOlder();

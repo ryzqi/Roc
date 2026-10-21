@@ -211,6 +211,12 @@ export class AgentRunTelemetryAccumulator {
     this.telemetry.runtime.recoveryCount += 1;
   }
 
+  resumeAfterInterruption(): void {
+    if (this.telemetry.terminal.status !== 'interrupted') throw new Error('agent_run_telemetry_not_interrupted');
+    this.telemetry.terminal = { status: null, errorCode: null, retryable: null, cancelSource: null };
+    this.recordRecovery();
+  }
+
   updateDuration(durationMs: number): void {
     requireNonNegativeInteger(durationMs, 'agent_run_telemetry_duration_invalid');
     this.telemetry.runtime.totalDurationMs = durationMs;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
 
 import {
   enabledCapabilitiesSchema,
@@ -111,7 +112,8 @@ const questionResumeRunRequestSchema = z
 
 export const chatResumeRunRequestSchema = z.discriminatedUnion('kind', [
   approvalResumeRunRequestSchema,
-  questionResumeRunRequestSchema
+  questionResumeRunRequestSchema,
+  z.object({ kind: z.literal('checkpoint'), runId: identifierSchema, threadId: identifierSchema }).strict()
 ]);
 
 export const chatResumeRunResultSchema = z
@@ -157,6 +159,7 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       interruptId: z.string()
     })
     .strict(),
+  z.object({ type: z.literal('run_continued'), runId: z.string(), threadId: z.string(), continuedAt: z.string() }).strict(),
   z
     .object({
       type: z.literal('run_recovering'),
@@ -211,6 +214,7 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       estimated: z.boolean().optional()
     })
     .strict(),
+  z.object({ type: z.literal('task_acceptance'), runId: z.string(), report: taskAcceptanceSchema }).strict(),
   ...rocHookRunEventSchemas,
   z
     .object({
@@ -302,6 +306,7 @@ export const chatActiveRunRequestSchema = z
 export const chatStartRunRequestSchema = z
   .object({
     input: z.string(),
+    acceptanceCriteria: z.array(taskCriterionSchema).min(1).max(20).optional(),
     mode: chatRunModeSchema,
     enabledCapabilities: enabledCapabilitiesSchema,
     threadId: z.string().nullable().optional(),

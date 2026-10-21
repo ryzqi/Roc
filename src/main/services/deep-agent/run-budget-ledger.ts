@@ -1,5 +1,6 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type { RunExecutionSnapshot } from '../../../shared/types';
+import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { hashToolInput } from './tool-effect-store';
 
 export type RunLimits = RunExecutionSnapshot['budget'];
@@ -27,10 +28,17 @@ export class RunBudgetLedger {
         COALESCE(SUM(CASE WHEN kind IN ('tool', 'child') THEN 1 ELSE 0 END), 0) tool_calls,
         COALESCE(SUM(COALESCE(actual_tokens, reserved_tokens)), 0) tokens,
         COALESCE(SUM(CASE WHEN kind = 'model' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_models,
-        COALESCE(SUM(CASE WHEN kind = 'tool' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_tools
-        FROM agent_budget_calls WHERE run_id = ?`).get(runId) as { model_calls: number; tool_calls: number; tokens: number; active_models: number; active_tools: number };
+        COALESCE(SUM(CASE WHEN kind = 'tool' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_tools,
+        COALESCE(SUM(CASE WHEN kind = 'child' THEN 1 ELSE 0 END), 0) child_calls,
+        COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_children
+        FROM agent_budget_calls WHERE run_id = ?`).get(runId) as {
+          model_calls: number; tool_calls: number; tokens: number; active_models: number; active_tools: number;
+          child_calls: number; active_children: number;
+        };
       if (input.kind === 'model' && totals.active_models >= limits.maxConcurrentModelCalls) throw new Error('run_model_concurrency_exhausted');
       if (input.kind === 'tool' && totals.active_tools >= limits.maxConcurrentToolCalls) throw new Error('run_tool_concurrency_exhausted');
+      if (input.kind === 'child' && totals.child_calls >= limits.maxChildTasks) throw new Error('run_child_task_budget_exhausted');
+      if (input.kind === 'child' && totals.active_children >= limits.maxConcurrentChildTasks) throw new Error('run_child_task_concurrency_exhausted');
       if (input.kind === 'model' && totals.model_calls >= limits.maxModelCalls) throw new Error('run_model_call_budget_exhausted');
       if (input.kind !== 'model' && totals.tool_calls >= limits.maxToolCalls) throw new Error('run_tool_call_budget_exhausted');
       if (limits.maxTotalTokens !== null && totals.tokens + input.tokens > limits.maxTotalTokens) {
@@ -45,18 +53,32 @@ export class RunBudgetLedger {
     }).immediate();
   }
 
-  settle(runId: string, callId: string, tokens: number | null, state: 'settled' | 'unknown'): void {
-    const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, state = ?
-      WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(tokens, state, runId, callId);
+  settle(runId: string, callId: string, tokens: number | null, state: 'settled' | 'unknown', outcomeHash?: string,
+    outcome: Record<string, unknown> = {}): void {
+    const existing = this.db.prepare('SELECT envelope_json FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
+      .get(runId, callId) as { envelope_json: string } | undefined;
+    if (existing === undefined) throw new Error('run_budget_settlement_invalid');
+    const envelope = JSON.stringify({
+      ...(JSON.parse(existing.envelope_json) as Record<string, unknown>),
+      ...(outcomeHash === undefined ? {} : { outcomeHash }),
+      ...outcome
+    });
+    const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, state = ?,
+      envelope_json = ?
+      WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(tokens, state, envelope, runId, callId);
     if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
   }
 
   readContextControlState(runId: string): { acceptanceIds: string[]; pendingEffects: string[]; pendingApprovals: string[] } {
+    const contractRow = this.db.prepare('SELECT contract_json FROM agent_task_contracts WHERE run_id = ?')
+      .get(runId) as { contract_json: string } | undefined;
+    if (contractRow === undefined) throw new Error('task_contract_missing');
+    const acceptanceIds = taskContractSchema.parse(JSON.parse(contractRow.contract_json)).criteria.map((criterion) => criterion.id);
     const effects = this.db.prepare(`SELECT tool_call_id FROM agent_tool_effects
       WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') ORDER BY tool_call_id`).all(runId) as { tool_call_id: string }[];
     const approvals = this.db.prepare(`SELECT interrupt_id FROM agent_pending_interrupts
       WHERE run_id = ? ORDER BY position`).all(runId) as { interrupt_id: string }[];
-    return { acceptanceIds: [], pendingEffects: effects.map(row => row.tool_call_id),
+    return { acceptanceIds, pendingEffects: effects.map(row => row.tool_call_id),
       pendingApprovals: approvals.map(row => row.interrupt_id) };
   }
 
