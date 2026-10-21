@@ -18,6 +18,7 @@
     "dev": "node scripts/dev-electron.mjs",
     "build": "pnpm typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "harness:eval": "node scripts/harness-eval/run.mjs",
     "test": "pnpm test:unit && node scripts/smoke-electron.mjs",
     "test:unit": "node --test tests/unit/",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",

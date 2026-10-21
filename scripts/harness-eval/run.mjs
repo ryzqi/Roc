@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+import { createInventory, hash } from './inventory.mjs';
+import { scenarios } from './scenarios.mjs';
+
+const directory = resolve('.artifacts/harness-eval', new Date().toISOString().replaceAll(':', '-') + `-${process.pid}`);
+mkdirSync(directory, { recursive: true });
+const save = (name, value) => writeFileSync(join(directory, name), JSON.stringify(value, null, 2));
+const report = { schemaVersion: 1, kind: 'deterministic-pilot', directory,
+  command: 'pnpm harness:eval', cwd: process.cwd(), results: [], knownDefects: {},
+  taxonomy: ['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent'],
+  qualityClaim: 'fixture transport only; real model quality not measured', costUsd: null, passed: false,
+  limits: { externalCalls: 0, modelCallsPerTurn: 2, maxTurnsPerTask: 3, recursionLimit: 12, requestTimeoutMs: 10000 },
+  thresholds: { contractFailures: 0, knownProductDefects: 'observed, not passed', qualityImprovement: 'not measured' } };
+let server;
+const started = performance.now();
+try {
+  const runtimePath = join(directory, 'runtime.mjs');
+  const compiled = await build({ entryPoints: ['scripts/harness-eval/runtime.ts'], outfile: runtimePath,
+    bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent', metafile: true });
+  const sourceInputs = Object.keys(compiled.metafile.inputs);
+  const inventory = createInventory({ sourceInputs });
+  assert.deepEqual(inventory, createInventory({ sourceInputs }));
+  const changed = createInventory({ sourceInputs, readComponent: path => path === 'scripts/harness-eval/scenarios.mjs'
+    ? Buffer.concat([readFileSync(path), Buffer.from('mutation')]) : readFileSync(path) });
+  assert.notEqual(inventory.hash, changed.hash);
+  assert.deepEqual(changed.components.filter((c, i) => c.hash !== inventory.components[i].hash)
+    .map(c => c.path), ['scripts/harness-eval/scenarios.mjs']);
+  save('inventory.json', inventory);
+  save('dataset.json', { hash: hash(JSON.stringify(scenarios)), scenarios });
+  // Prevent tracing from exporting synthetic trajectories using an ambient account.
+  process.env.LANGSMITH_TRACING = 'false';
+  process.env.LANGCHAIN_TRACING_V2 = 'false';
+  const runtime = await import(pathToFileURL(runtimePath).href);
+  report.knownDefects = runtime.observeBaseline();
+  for (const point of ['before-dispatch', 'remote-success', 'result-stored']) {
+    const dir = join(directory, point);
+    mkdirSync(dir);
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e',
+      `import { crashWorker } from ${JSON.stringify(pathToFileURL(runtimePath).href)}; crashWorker(${JSON.stringify(dir)}, ${JSON.stringify(point)});`
+    ], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(child.status, 73, child.stderr);
+    report.results.push({ id: point, passed: true, evidence: runtime.recoverCrash(dir, point) });
+  }
+  const requests = new Map();
+  server = createServer(async (request, response) => {
+    try {
+      assert.equal(request.url, '/v1/chat/completions');
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      assert.equal(body.stream, false);
+      const user = body.messages.findLast(m => m.role === 'user')?.content;
+      const step = (requests.get(user) ?? 0) + 1;
+      requests.set(user, step);
+      const done = body.messages.at(-1).role === 'tool';
+      assert.ok(step <= 2, 'unbounded provider calls');
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, object: 'chat.completion', created: 0, model: 'roc-pilot',
+        choices: [{ index: 0, finish_reason: done ? 'stop' : 'tool_calls', message: done
+          ? { role: 'assistant', content: 'pilot-complete' }
+          : { role: 'assistant', content: null, tool_calls: [{ id: `pilot-${hash(String(user)).slice(0, 16)}`, type: 'function',
+            function: { name: 'pilot_action', arguments: '{}' } }] } }],
+        usage: { prompt_tokens: 64, completion_tokens: 16, total_tokens: 80 }
+      }));
+    } catch (error) {
+      response.writeHead(500).end(JSON.stringify({ error: { message: String(error) } }));
+    }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+  for (const scenario of scenarios) {
+    const dir = join(directory, scenario.id);
+    mkdirSync(dir);
+    const start = performance.now();
+    try {
+      const evidence = await runtime.runScenario(scenario, dir, endpoint);
+      const modelCalls = [...requests].filter(([id]) => id === scenario.id || id.startsWith(scenario.id + '/turn-'))
+        .reduce((total, [, count]) => total + count, 0);
+      assert.equal(modelCalls, evidence.turns * 2);
+      report.results.push({ id: scenario.id, passed: true, durationMs: performance.now() - start,
+        modelCalls, tokenUsage: { source: 'fixture', totalTokens: modelCalls * 80 }, costUsd: null, evidence });
+    } catch (error) {
+      report.results.push({ id: scenario.id, passed: false, failureClass: error.failureClass ?? (error.name === 'AssertionError' ? 'verifier' : 'infra'), error: String(error) });
+    }
+  }
+  report.passed = report.results.length === 51 && report.results.every(r => r.passed);
+} catch (error) {
+  report.error = String(error);
+  report.failureClass = error.failureClass ?? 'infra';
+} finally {
+  if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  report.durationMs = performance.now() - started;
+  save('report.json', report);
+  console.log(JSON.stringify({ passed: report.passed, cases: report.results.length, report: join(directory, 'report.json'), error: report.error }));
+  if (!report.passed) process.exitCode = 1;
+}
