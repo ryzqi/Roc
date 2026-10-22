@@ -121,7 +121,10 @@ function readContextBudgetFailure(error: Error): RunFailure | null {
 }
 
 function readGraphRecursionFailure(error: Error): RunFailure | null {
-  if (error.name !== 'GraphRecursionError' && Reflect.get(error, 'lc_error_code') !== 'GRAPH_RECURSION_LIMIT') {
+  // LangChain decorates the error with a non-typed `lc_error_code`; read it through one narrow
+  // typed view instead of Reflect, so the shape is declared where it is used.
+  const langChainError = error as Error & { lc_error_code?: unknown };
+  if (error.name !== 'GraphRecursionError' && langChainError.lc_error_code !== 'GRAPH_RECURSION_LIMIT') {
     return null;
   }
   return {

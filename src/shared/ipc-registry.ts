@@ -570,13 +570,17 @@ export function parseIpcResult(channel: string, result: unknown): IpcResult<unkn
   return ipcResultSchema(entry.contract.result).parse(result);
 }
 
-export function parseIpcEventPayload(channel: string, payload: unknown): unknown {
+export function parseIpcEventPayload(channel: string, payload: unknown): IpcEventPayload {
   const entry = ipcRegistry.events.find((candidate) => candidate.channel === channel);
   if (entry === undefined) {
     throw new Error(`ipc_event_contract_not_found:${channel}`);
   }
   return entry.contract.payload.parse(payload);
 }
+
+/** Every registered event payload, as one distributable union. */
+type RegisteredEventPayloadSchema = (typeof ipcRegistry.events)[number]['contract']['payload'];
+export type IpcEventPayload = z.output<RegisteredEventPayloadSchema>;
 
 type RequestMethod<TEntry> = TEntry extends {
   contract: IpcMethodContract<infer TArgsSchema, infer TResultSchema>;

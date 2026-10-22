@@ -1,4 +1,5 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
+import { z } from 'zod';
 import type { RunExecutionSnapshot } from '../../../shared/types';
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { hashToolInput } from './tool-effect-store';
@@ -111,7 +112,7 @@ export class RunBudgetLedger {
       .get(runId, callId) as { envelope_json: string } | undefined;
     if (existing === undefined) throw new Error('run_budget_settlement_invalid');
     const envelope = JSON.stringify({
-      ...(JSON.parse(existing.envelope_json) as Record<string, unknown>),
+      ...parseStoredJson(existing.envelope_json, storedEnvelopeSchema, 'run_budget_envelope_corrupt'),
       ...(outcomeHash === undefined ? {} : { outcomeHash }),
       ...outcome
     });
@@ -188,7 +189,8 @@ export class RunBudgetLedger {
     const contractRow = this.db.prepare('SELECT contract_json FROM agent_task_contracts WHERE run_id = ?')
       .get(runId) as { contract_json: string } | undefined;
     if (contractRow === undefined) throw new Error('task_contract_missing');
-    const acceptanceIds = taskContractSchema.parse(JSON.parse(contractRow.contract_json)).criteria.map((criterion) => criterion.id);
+    const acceptanceIds = parseStoredJson(contractRow.contract_json, taskContractSchema, 'task_contract_corrupt')
+      .criteria.map((criterion) => criterion.id);
     const effects = this.db.prepare(`SELECT tool_call_id FROM agent_tool_effects
       WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') ORDER BY tool_call_id`).all(runId) as { tool_call_id: string }[];
     const approvals = this.db.prepare(`SELECT interrupt_id FROM agent_pending_interrupts
@@ -277,4 +279,31 @@ function toPilotRunRow(row: PilotRunDbRow): PilotRunRow {
     state: row.state,
     createdAt: row.created_at
   };
+}
+
+/**
+ * Stored JSON columns are written by this class, so a parse failure means corrupted state rather
+ * than untrusted input. Fail with a named code so the run's failure mapping stays meaningful
+ * instead of surfacing a bare SyntaxError.
+ */
+/** Envelope columns hold whatever the reservation wrote; the shape is free-form by design. */
+const storedEnvelopeSchema = z.record(z.string(), z.unknown());
+
+/**
+ * Stored JSON columns are written by this class, so a parse or shape failure means corrupted state
+ * rather than untrusted input. Decoding through the schema keeps the return type a named domain
+ * type and fails with a specific code instead of a bare SyntaxError.
+ */
+function parseStoredJson<T>(value: string, schema: z.ZodType<T>, errorCode: string): T {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(errorCode);
+  }
+  const decoded = schema.safeParse(parsed);
+  if (!decoded.success) {
+    throw new Error(errorCode);
+  }
+  return decoded.data;
 }
