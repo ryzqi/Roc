@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { fileSha256 } from './download-asset.ts';
+import { decodeJson } from '../lib/decode-json.ts';
 
 export type ManifestFileEntry = {
   path: string;
@@ -127,7 +128,7 @@ function sameEntries(actual: ManifestEntry[], recorded: unknown): boolean {
 export async function verifyManifest(root: string): Promise<Manifest> {
   const marker = join(root, 'manifest.json');
   if ((await pathInfo(marker))?.isSymbolicLink()) fail('research_toolchain_manifest_symlink');
-  const manifest = JSON.parse(await readFile(marker, 'utf8')) as Manifest;
+  const manifest = decodeJson<Manifest>(await readFile(marker, 'utf8'), 'research_toolchain_manifest_corrupt');
   if (manifest.schemaVersion !== 1 || manifest.platform !== 'darwin'
       || (manifest.architecture !== 'arm64' && manifest.architecture !== 'x64')) {
     fail('research_toolchain_manifest_invalid');

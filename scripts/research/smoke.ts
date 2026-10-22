@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { verifyManifest, type Manifest } from './manifest.ts';
+import { decodeJson } from '../lib/decode-json.ts';
 
 export const OFFLINE_PROFILE = '(version 1)(allow default)(deny network*)';
 export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
@@ -191,12 +192,15 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   await writeFile(join(output, 'render.stdout.log'), `${JSON.stringify({ path: rendered.path, text: rendered.text, pageCount: rendered.pageCount })}\n`, 'utf8');
   console.log('通过：render');
   if (!rendered.text.includes('研究数据与方法')) fail('research_smoke_pdf_text_missing');
-  const parsed = JSON.parse(await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-    request: {
-      operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
-      outputDir: join(output, 'parsed'), modelsPath: models
-    }
-  })) as { ok: boolean; result: { content: string; blocks: Array<{ kind: string }>; warnings: unknown } };
+  const parsed = decodeJson<{ ok: boolean; result: { content: string; blocks: Array<{ kind: string }>; warnings: unknown } }>(
+    await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
+      request: {
+        operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
+        outputDir: join(output, 'parsed'), modelsPath: models
+      }
+    }),
+    'research_smoke_worker_output_corrupt'
+  );
   if (!parsed.ok) fail('research_smoke_parse_failed');
   const content = parsed.result.content;
   const kinds = new Set(parsed.result.blocks.map((block) => block.kind));
@@ -205,12 +209,15 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     fail(`research_smoke_parse_content_incomplete:${[...kinds].sort().join(',')}`);
   }
   await writeFile(join(output, 'parse-result.json'), `${JSON.stringify(parsed.result, null, 2)}\n`, 'utf8');
-  const native = JSON.parse(await run('native-pdf', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-    request: {
-      operation: 'parse_document', projectRoot: output, sourcePath: pdf,
-      outputDir: join(output, 'parsed-pdf'), modelsPath: models
-    }
-  })) as { ok: boolean; result: { content: string; pageCount: number; blocks: unknown[] } };
+  const native = decodeJson<{ ok: boolean; result: { content: string; pageCount: number; blocks: unknown[] } }>(
+    await run('native-pdf', [python, '-I', '-B', join(toolchain, 'worker.py')], {
+      request: {
+        operation: 'parse_document', projectRoot: output, sourcePath: pdf,
+        outputDir: join(output, 'parsed-pdf'), modelsPath: models
+      }
+    }),
+    'research_smoke_worker_output_corrupt'
+  );
   if (!native.ok || !native.result.content.includes('Treatment') || native.result.pageCount !== 1) {
     fail('research_smoke_native_pdf_incomplete');
   }
@@ -218,12 +225,15 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   await writeFile(html, '<html><body><h1>研究方法</h1><p>Local HTML evidence.</p>'
     + '<table><tr><th>Group</th><th>Patients</th></tr><tr><td>Treatment</td><td>18</td></tr></table>'
     + '</body></html>', 'utf8');
-  const parsedHtml = JSON.parse(await run('html', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-    request: {
-      operation: 'parse_document', projectRoot: output, sourcePath: html,
-      outputDir: join(output, 'parsed-html'), modelsPath: models
-    }
-  })) as { ok: boolean; result: { content: string; blocks: unknown[] } };
+  const parsedHtml = decodeJson<{ ok: boolean; result: { content: string; blocks: unknown[] } }>(
+    await run('html', [python, '-I', '-B', join(toolchain, 'worker.py')], {
+      request: {
+        operation: 'parse_document', projectRoot: output, sourcePath: html,
+        outputDir: join(output, 'parsed-html'), modelsPath: models
+      }
+    }),
+    'research_smoke_worker_output_corrupt'
+  );
   if (!parsedHtml.ok || !parsedHtml.result.content.includes('研究方法') || !parsedHtml.result.content.includes('18')) {
     fail('research_smoke_html_incomplete');
   }

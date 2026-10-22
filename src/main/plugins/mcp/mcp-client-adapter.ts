@@ -58,7 +58,13 @@ class LangChainMcpClientAdapter implements McpClientAdapter {
       const discovered = await Promise.race([client.listTools(), cancelled]);
       if (this.clients.get(runId) !== client) throw new Error('mcp_run_released_during_load');
       return discovered.map(value => {
-        if (typeof value !== 'object' || value === null || typeof Reflect.get(value, 'invoke') !== 'function' || typeof Reflect.get(value, 'name') !== 'string' || Reflect.get(value, 'schema') === undefined) throw new Error('mcp_tool_contract_invalid');
+        if (typeof value !== 'object' || value === null) throw new Error('mcp_tool_contract_invalid');
+        // One typed narrowing instead of three Reflect reads: the discovered tool must expose
+        // `invoke`, a string `name` and a `schema`.
+        const candidate = value as { invoke?: unknown; name?: unknown; schema?: unknown };
+        if (typeof candidate.invoke !== 'function' || typeof candidate.name !== 'string' || candidate.schema === undefined) {
+          throw new Error('mcp_tool_contract_invalid');
+        }
         const source = value as StructuredToolInterface;
         return tool(async (args, config) => {
           const result: unknown = await source.invoke(args, { ...config, signal: config.signal === undefined ? AbortSignal.timeout(30000) : AbortSignal.any([config.signal, AbortSignal.timeout(30000)]) });

@@ -3,6 +3,7 @@ import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'nod
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
+import { decodeJson, decodeJsonOrNull } from '../lib/decode-json.ts';
 
 export type ModelSource = {
   repoId: string;
@@ -132,7 +133,7 @@ async function verifyInstalledModel(root: string, source: ModelSource): Promise<
   const markerPath = join(root, 'roc-source.json');
   const markerInfo = await pathInfo(markerPath);
   const marker = markerInfo !== null && markerInfo.isFile() && !markerInfo.isSymbolicLink()
-    ? JSON.parse(await readFile(markerPath, 'utf8')) as unknown
+    ? decodeJsonOrNull<ModelMarker>(await readFile(markerPath, 'utf8'))
     : null;
   const expectedMarker: ModelMarker = { repoId: source.repoId, revision: source.revision, license: source.license };
   if (!sameMarker(marker, expectedMarker)) fail('research_models_unavailable');
@@ -220,7 +221,7 @@ async function fetchLocked(
   if (destinationInfo !== null) {
     const markerInfo = await pathInfo(markerPath);
     const marker = markerInfo !== null && markerInfo.isFile() && !markerInfo.isSymbolicLink()
-      ? JSON.parse(await readFile(markerPath, 'utf8')) as unknown
+      ? decodeJsonOrNull<ModelMarker>(await readFile(markerPath, 'utf8'))
       : null;
     if (destinationInfo.isSymbolicLink() || markerInfo?.isSymbolicLink() || !sameMarker(marker, expectedMarker)) {
       fail(`research_model_existing_directory_conflict:${destination}`);
@@ -289,7 +290,11 @@ export async function fetchModels(
   if ((await pathInfo(outputPath))?.isSymbolicLink()) fail('research_model_output_symlink');
   const output = resolve(outputPath);
   await mkdir(output, { recursive: true });
-  await installModels(JSON.parse(await readFile(lockPath, 'utf8')) as unknown, output, options);
+  await installModels(
+    decodeJson<unknown>(await readFile(lockPath, 'utf8'), 'research_model_lock_corrupt'),
+    output,
+    options
+  );
 }
 
 export async function installModels(

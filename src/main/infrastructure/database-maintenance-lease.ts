@@ -159,5 +159,5 @@ function isProcessAlive(pid: number): boolean {
 }
 
 function isNodeErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && Reflect.get(error, 'code') === code;
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }

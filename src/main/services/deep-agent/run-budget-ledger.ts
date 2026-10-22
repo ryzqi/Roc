@@ -1,7 +1,7 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
-import { z } from 'zod';
 import type { RunExecutionSnapshot } from '../../../shared/types';
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
+import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { hashToolInput } from './tool-effect-store';
 
 export type RunLimits = RunExecutionSnapshot['budget'];
@@ -112,7 +112,7 @@ export class RunBudgetLedger {
       .get(runId, callId) as { envelope_json: string } | undefined;
     if (existing === undefined) throw new Error('run_budget_settlement_invalid');
     const envelope = JSON.stringify({
-      ...parseStoredJson(existing.envelope_json, storedEnvelopeSchema, 'run_budget_envelope_corrupt'),
+      ...parseStoredJsonObject(existing.envelope_json, 'run_budget_envelope_corrupt'),
       ...(outcomeHash === undefined ? {} : { outcomeHash }),
       ...outcome
     });
@@ -286,24 +286,3 @@ function toPilotRunRow(row: PilotRunDbRow): PilotRunRow {
  * than untrusted input. Fail with a named code so the run's failure mapping stays meaningful
  * instead of surfacing a bare SyntaxError.
  */
-/** Envelope columns hold whatever the reservation wrote; the shape is free-form by design. */
-const storedEnvelopeSchema = z.record(z.string(), z.unknown());
-
-/**
- * Stored JSON columns are written by this class, so a parse or shape failure means corrupted state
- * rather than untrusted input. Decoding through the schema keeps the return type a named domain
- * type and fails with a specific code instead of a bare SyntaxError.
- */
-function parseStoredJson<T>(value: string, schema: z.ZodType<T>, errorCode: string): T {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new Error(errorCode);
-  }
-  const decoded = schema.safeParse(parsed);
-  if (!decoded.success) {
-    throw new Error(errorCode);
-  }
-  return decoded.data;
-}

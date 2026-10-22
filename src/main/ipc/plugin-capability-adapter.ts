@@ -46,10 +46,22 @@ export function registerPluginCapabilityIpc(timedHandle: TimedHandle, invoker: P
   }
 }
 
+/**
+ * A value that crossed the preload boundary. The capability's own zod input schema validates it, so
+ * this type only has to be honest about the wire format: JSON values, never functions.
+ */
+type IpcArgumentValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly IpcArgumentValue[]
+  | { readonly [key: string]: IpcArgumentValue };
+
 function transformInput(
   transform: PluginCapabilityMapping['inputTransform'],
   args: readonly unknown[]
-): unknown {
+): IpcArgumentValue {
   if (transform.kind === 'none') {
     if (args.length !== 0) {
       throw new Error('ipc_capability_expected_no_args');
@@ -76,10 +88,12 @@ function assertNeverInputTransform(transform: never): never {
   throw new Error(`ipc_capability_input_transform_invalid:${String(transform)}`);
 }
 
-function firstArg(args: readonly unknown[]): unknown {
+function firstArg(args: readonly unknown[]): IpcArgumentValue {
   const value = args[0];
   if (value === undefined) {
     throw new Error('ipc_capability_missing_arg');
   }
-  return value;
+  // Decode at the boundary: everything below this point has been through the preload bridge, and
+  // the capability's input schema is the real validator.
+  return value as IpcArgumentValue;
 }

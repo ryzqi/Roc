@@ -12,6 +12,7 @@ import { collectUserConstraints, pinContextContract } from '../../src/main/servi
 import { createContextTokenCounter, deriveContextBudgetProfile } from '../../src/main/services/deep-agent/context/context-token-budget';
 import { BlockStability, buildPromptBlocks } from '../../src/main/services/deep-agent/context/prompt-blocks';
 import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { decodeJson } from '../lib/decode-json';
 
 export async function verifyContext(name: string, directory: string, db: Database.Database): Promise<unknown> {
   const artifacts = new ContextArtifactStore(db);
@@ -19,7 +20,10 @@ export async function verifyContext(name: string, directory: string, db: Databas
     const artifact = artifacts.persistArtifact({ content: '原始证据'.repeat(3000), kind: 'tool_result',
       runId: 'run', threadId: 'thread', workspaceHash: 'workspace' });
     const tool = createContextArtifactReadTool({ artifactStore: artifacts, threadId: 'thread', workspaceHash: 'workspace' });
-    const slice = JSON.parse(await tool.invoke({ artifactId: artifact.artifactId, sha256: artifact.sha256, offset: 100, limit: 50 }));
+    const slice = decodeJson<{ content: string; nextOffset: number }>(
+      String(await tool.invoke({ artifactId: artifact.artifactId, sha256: artifact.sha256, offset: 100, limit: 50 })),
+      'context_artifact_read_corrupt'
+    );
     assert.equal(slice.content, artifact.content.slice(100, 150));
     assert.equal(slice.nextOffset, 150);
     await assert.rejects(createContextArtifactReadTool({ artifactStore: artifacts, threadId: 'other', workspaceHash: 'workspace' })

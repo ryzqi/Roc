@@ -12,6 +12,7 @@ import type { RocPlugin, RocPluginContext } from '../../src/main/kernel/types';
 import { AtomicFilesystemBackend } from '../../src/main/services/deep-agent/atomic-filesystem-backend';
 import { createMcpClientAdapter } from '../../src/main/plugins/mcp/mcp-client-adapter';
 import { terminateProcessTree } from '../../src/main/services/process-tree';
+import { decodeJson } from '../lib/decode-json';
 
 export async function verifyExtensions(name: string, directory: string): Promise<unknown> {
   if (name === 'execution-atomic') {
@@ -33,7 +34,7 @@ export async function verifyExtensions(name: string, directory: string): Promise
     try { assert.equal((await backend.write('/data.json', next)).error, undefined); }
     finally { writing = false; await observe; }
     assert.equal((await backend.edit('/data.json', 'new', 'verified')).error, undefined);
-    assert.equal(JSON.parse(readFileSync(target, 'utf8')).value, 'verified');
+    assert.equal(decodeJson<{ value: string }>(readFileSync(target, 'utf8'), 'atomic_write_corrupt').value, 'verified');
     assert.equal((await backend.write('/../outside.txt', 'forbidden')).error === undefined, false);
     assert.ok(!(await readdir(directory)).some(file => file.startsWith('.roc-')));
     return { samples, result: 'atomic write/edit complete', temporaryFiles: 0 };
@@ -84,14 +85,18 @@ if(r.method==='ping')return send(r.id,{});console.log(JSON.stringify({jsonrpc:'2
   const first = await adapter.loadTools('run-a', [server], signal);
   const second = await adapter.loadTools('run-b', [server], signal);
   assert.equal(first.length, 1);
-  const invoke = (value: unknown, input: object) => (value as { invoke(args: object): Promise<unknown> }).invoke(input);
+  const invoke = (value: unknown, input: Record<string, unknown>) =>
+    (value as { invoke(args: Record<string, unknown>): Promise<unknown> }).invoke(input);
   assert.ok(JSON.stringify(await invoke(first[0], {})).includes('source:42'));
   await adapter.release('run-b');
   assert.ok(JSON.stringify(await invoke(first[0], {})).includes('source:42'));
   await assert.rejects(invoke(first[0], { large: true }), /output_limit/);
   await assert.rejects(adapter.loadTools('run-a', [server], signal), /already_loaded/);
   await adapter.close();
-  const pids = readFileSync(receipts, 'utf8').trim().split('\n').map(line => JSON.parse(line)).filter(row => row.pid && !row.call).map(row => row.pid);
+  const pids = readFileSync(receipts, 'utf8').trim().split('\n')
+    .map(line => decodeJson<{ pid?: number; call?: unknown }>(line, 'mcp_receipt_corrupt'))
+    .filter(row => row.pid !== undefined && row.call === undefined)
+    .map(row => row.pid as number);
   for (const pid of pids) {
     let alive = true;
     for (let attempt = 0; attempt < 100 && alive; attempt++) {
@@ -100,5 +105,5 @@ if(r.method==='ping')return send(r.id,{});console.log(JSON.stringify({jsonrpc:'2
     assert.equal(alive, false, 'released MCP process must exit');
   }
   assert.equal(existsSync(receipts), true);
-  return { clients: pids.length, frozenConnections: true, independentRelease: true, outputBound: true, processesReleased: true, toolNames: second.map(value => Reflect.get(value as object, 'name')) };
+  return { clients: pids.length, frozenConnections: true, independentRelease: true, outputBound: true, processesReleased: true, toolNames: second.map(value => (value as { name: string }).name) };
 }

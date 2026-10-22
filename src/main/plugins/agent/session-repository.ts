@@ -24,6 +24,8 @@ import {
   humanQuestionAnsweredPayloadSchema,
   taskEventSchema
 } from '../../../shared/schemas/task-event';
+import { enabledCapabilitiesSchema } from '../../../shared/schemas/agent';
+import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
@@ -1759,7 +1761,11 @@ function mapTaskRun(row: TaskRunRow): TaskRun {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     modelId: row.model_id,
-    enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
+    enabledCapabilities: parseStoredJson(
+      row.enabled_capabilities_json,
+      enabledCapabilitiesSchema,
+      'agent_run_capabilities_corrupt'
+    )
   };
 }
 
@@ -1769,7 +1775,7 @@ function mapTaskEvent(row: TaskEventRow): TaskEvent {
     threadId: row.thread_id,
     runId: row.run_id,
     type: row.type,
-    payload: JSON.parse(row.payload_json),
+    payload: parseStoredJsonObject(row.payload_json, 'task_event_payload_corrupt'),
     createdAt: row.created_at
   });
 }

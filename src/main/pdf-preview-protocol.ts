@@ -24,7 +24,12 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
     if (kernel === null) {
       return new Response('Preview service unavailable', { status: 503 });
     }
-    const url = new URL(request.url);
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response('Invalid preview URL', { status: 400 });
+    }
     if (url.hostname === 'research') {
       const exported = /^\/exports\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.pdf$/u.exec(url.pathname);
       if (exported !== null) {

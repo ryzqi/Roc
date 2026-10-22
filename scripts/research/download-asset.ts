@@ -5,6 +5,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { basename, join } from 'node:path';
 import type { IncomingMessage } from 'node:http';
+import { decodeJsonOrNull } from '../lib/decode-json.ts';
 
 /** 构建期下载：保留分块断点，校验资源身份与最终 SHA-256。 */
 
@@ -112,7 +113,12 @@ function send(lib: typeof http | typeof https, options: http.RequestOptions): Pr
 async function rangeRequest(url: string, extra: Record<string, string>, hops = 0): Promise<IncomingMessage> {
   applyProxy();
   if (hops > 10) throw Object.assign(new Error('research_download_incomplete'), { code: 'research_download_redirect_limit' });
-  const target = new URL(url);
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    fail('research_download_url_invalid');
+  }
   const lib = target.protocol === 'https:' ? https : http;
   const response = await send(lib, {
     protocol: target.protocol,
@@ -211,7 +217,7 @@ async function writeIdentity(marker: string, identity: SourceIdentity): Promise<
   const info = await pathInfo(marker);
   if (info?.isSymbolicLink()) fail('research_download_cache_symlink');
   if (info !== null) {
-    const existing: unknown = JSON.parse(await readFile(marker, 'utf8'));
+    const existing = decodeJsonOrNull<SourceIdentity>(await readFile(marker, 'utf8'));
     if (!isSourceIdentity(existing) || !sameIdentity(existing, identity)) {
       fail('research_download_source_changed');
     }

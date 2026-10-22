@@ -17,7 +17,13 @@ export class ConfigStore {
 
   migrateCurrentSettings(pluginId: string): void {
     const rawDocument = readFileSync(join(this.configDir, 'settings.json'), 'utf8');
-    const document = JSON.parse(rawDocument) as unknown;
+    // A corrupt settings document must name itself: a bare SyntaxError here reads like a crash.
+    let document: unknown;
+    try {
+      document = JSON.parse(rawDocument);
+    } catch {
+      throw new Error('config_document_corrupt');
+    }
     this.set(pluginId, 'settingsDocument', document);
   }
 
@@ -40,7 +46,11 @@ export class ConfigStore {
     if (typeof value !== 'string') {
       return null;
     }
-    return JSON.parse(value) as T;
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      throw new Error('config_value_corrupt');
+    }
   }
 
   private set<T>(pluginId: string, key: string, value: T): void {

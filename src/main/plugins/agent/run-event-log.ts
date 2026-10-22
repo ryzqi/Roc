@@ -2,6 +2,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import { chatRunEventSchema } from '../../../shared/schemas/chat';
 import type { ChatRunEvent, SequencedChatRunEvent } from '../../../shared/types';
+import { parseStoredJson } from '../../infrastructure/stored-json';
 
 export const agentRunEventLogMaxEvents = 10_000;
 
@@ -149,7 +150,7 @@ function rowToSequencedEvent(row: EventRow): SequencedChatRunEvent {
   return {
     runId: row.run_id,
     sequence: row.sequence,
-    event: chatRunEventSchema.parse(JSON.parse(row.event_json) as unknown),
+    event: parseStoredJson(row.event_json, chatRunEventSchema, 'agent_run_event_corrupt'),
     createdAt: row.created_at
   };
 }

@@ -391,7 +391,19 @@ function recordPromptCacheMetrics(input: {
   });
 }
 
-function createInitialState(input: string, attachments: readonly ChatValidatedImageAttachment[] | undefined): unknown {
+/**
+ * The initial LangGraph state. Named instead of `unknown` so the builder of this object and the
+ * `streamEvents` call site agree on its keys; the caller already narrows it with `as never`.
+ */
+type AgentInitialState = {
+  messages: HumanMessage[];
+  forge_error_tracker: ReturnType<typeof defaultErrorTracker>;
+};
+
+function createInitialState(
+  input: string,
+  attachments: readonly ChatValidatedImageAttachment[] | undefined
+): AgentInitialState {
   if (attachments !== undefined && attachments.length > 0) {
     return {
       messages: [
