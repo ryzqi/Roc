@@ -1,16 +1,12 @@
 import { mkdir, open, readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { pdfjsAssetDirectory } from './pdfjs-assets';
 import { researchJobError, runResearchJob, type ResearchJobPaths } from './research-job';
 
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SOURCE = 512 * 1024 * 1024;
-const pdfRequire = createRequire(import.meta.url);
-const pdfjsRoot = dirname(pdfRequire.resolve('pdfjs-dist/package.json'));
-const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot, directory)).href}/`;
 
 export async function renderResearchPdf(input: {
   projectRoot: string;
@@ -38,10 +34,10 @@ async function renderPage(job: ResearchJobPaths, pageNumber: number, scale: numb
     disableFontFace: true,
     useSystemFonts: true,
     useWorkerFetch: false,
-    cMapUrl: assetUrl('cmaps'),
+    cMapUrl: pdfjsAssetDirectory('cmaps'),
     cMapPacked: true,
-    standardFontDataUrl: assetUrl('standard_fonts'),
-    wasmUrl: assetUrl('wasm')
+    standardFontDataUrl: pdfjsAssetDirectory('standard_fonts'),
+    wasmUrl: pdfjsAssetDirectory('wasm')
   });
   const pdf = await loadingTask.promise;
   try {

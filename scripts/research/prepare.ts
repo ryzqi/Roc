@@ -13,7 +13,14 @@ import { verifyManifest, writeManifest } from './manifest.ts';
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
 const SCRIPTS = fileURLToPath(new URL('.', import.meta.url));
-const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'models.lock.json', 'tex-bundle-files.txt'] as const;
+const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'models.lock.json', 'tex-bundle-files.txt', '.python-version'] as const;
+/**
+ * 与脚本一起进 lockHashes 的 **src 文件**。
+ *
+ * `smoke.ts` 会 import 主进程的 pdf.js 资源目录助手，所以它也是构建输入：
+ * 不登记的话，改一行助手既不会要求重建工具链，也抓不到脏构建。
+ */
+const SCRIPTED_SRC_FILES = ['src/main/plugins/research/pdfjs-assets.ts'] as const;
 const SCRIPT_FILES = [
   'prepare.ts',
   'archive-utils.ts',
@@ -250,6 +257,7 @@ export async function computeLockHashes(): Promise<Record<string, string>> {
     }
   }
   for (const name of SCRIPT_FILES) lockHashes[`scripts/${name}`] = await fileSha256(join(SCRIPTS, name));
+  for (const name of SCRIPTED_SRC_FILES) lockHashes[name] = await fileSha256(join(PROJECT_ROOT, name));
   return lockHashes;
 }
 

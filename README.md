@@ -260,8 +260,8 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 | 组件 | 版本 | 来源 | 许可证 | 更新方式 |
 | --- | --- | --- | --- | --- |
-| `python`（CPython） | 3.12.14 | astral-sh/python-build-standalone（按架构下载）<br/>`https://github.com/astral-sh/python-build-standalone/releases/tag/20260901` ✓ | PSF | 改 `tools.lock.json` 的 `pythonVersion` + `architectures[*].python` 的 url/sha256 → 重建 |
-| `uv` | 0.12.10 | `https://github.com/astral-sh/uv/releases/tag/0.12.10` ✓ | MIT / Apache-2.0 | 同上（`uvVersion` + `uv`） |
+| `python`（CPython） | 3.12.15 | astral-sh/python-build-standalone（按架构下载）<br/>`https://github.com/astral-sh/python-build-standalone/releases/tag/20261021` ✓ | PSF | 改 `tools.lock.json` 的 `pythonVersion` + `architectures[*].python` 的 url/sha256 → 重建 |
+| `uv` | 0.13.5 | `https://github.com/astral-sh/uv/releases/tag/0.13.5` ✓ | MIT / Apache-2.0 | 同上（`uvVersion` + `uv`） |
 | `tectonic`（Tectonic） | 0.17.0 | `https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.17.0` ✓ | MIT | 同上（`tectonicVersion` + `tectonic`）；文档 `https://tectonic-typesetting.github.io` ✓ |
 | TeX 资源（子集） | tlextras-2022.0r0 | `https://data1b.fullyjustified.net/tlextras-2022.0r0.tar`（上游默认 `https://relay.fullyjustified.net/default_bundle_v33.tar`） | 多许可证，随包保留入选文件原有声明 | 改 `tools.lock.json.texBundle` 的 url/sha256/size/zipSha256 + `tex-bundle-files.txt` → 重建 |
 | `vale`（Vale） | 3.24.0 | `https://github.com/vale-cli/vale/releases/tag/v3.24.0` ✓ | MIT | 改 `tools.lock.json` 的 `valeVersion` + `architectures[*].vale` → 重建。见 [docs/research-prose.md](docs/research-prose.md) |
@@ -276,18 +276,18 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 | 包 | 版本 | 来源 | 用途 |
 | --- | --- | --- | --- |
-| docling | 2.126.0 | `https://github.com/docling-project/docling` ✓ | PDF 解析（PDFium 后端、布局/表格/公式） |
-| docling-ibm-models | 4.0.2 | `https://github.com/docling-project/docling-ibm-models` ✓ | 布局/表格/公式模型运行时 |
-| pypdfium2 | 5.13.0 | `https://github.com/pypdfium2-team/pypdfium2` ✓ | PDF 光栅化 |
+| docling | 2.141.0 | `https://github.com/docling-project/docling` ✓ | PDF 解析（PDFium 后端、布局/表格/公式） |
+| docling-ibm-models | 4.0.4 | `https://github.com/docling-project/docling-ibm-models` ✓ | 布局/表格/公式模型运行时 |
+| pypdfium2 | 5.14.0 | `https://github.com/pypdfium2-team/pypdfium2` ✓ | PDF 光栅化 |
 | ocrmac | 1.0.1 | `https://github.com/straussmaximilian/ocrmac` ✓（PyPI 首页，注意不是 `ocr` 开头的另一个仓库） | 系统 Vision OCR 绑定 |
-| matplotlib | 3.11.1 | `https://github.com/matplotlib/matplotlib` ✓ | 图稿渲染 |
+| matplotlib | 3.11.2 | `https://github.com/matplotlib/matplotlib` ✓ | 图稿渲染 |
 | pandas | >=2.2,<3 | `https://github.com/pandas-dev/pandas` ✓ | 数据分析 |
 | scipy | >=1.13,<2 | `https://github.com/scipy/scipy` ✓ | 数值计算 |
-| torch | 2.14.0(arm64) / 2.2.2(x64) | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
+| torch | 2.14.1(arm64) / 2.2.2(x64) | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
 | torchvision | 0.17.2(x64) | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
-| transformers | 4.51.3(x64) | `https://github.com/huggingface/transformers` ✓ | 模型推理 |
+| transformers | 4.51.3（两架构，上限 `<4.52`） | `https://github.com/huggingface/transformers` ✓ | 模型推理；`4.57` 实测让单页解析慢 10×，见 `pyproject.toml` 约束注释 |
 | numpy | 1.26.4(x64) | `https://github.com/numpy/numpy` ✓ | 数值计算 |
-| setuptools（构建约束） | 84.0.0 | `https://github.com/pypa/setuptools` | 构建期固定 |
+| setuptools（构建约束） | 84.2.1 | `https://github.com/pypa/setuptools` | 构建期固定 |
 
 ### 三、解析模型（不进安装包，按需下载）
 

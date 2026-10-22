@@ -1,6 +1,8 @@
 # 科研 Python 运行时
 
-Python 3.12.14 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
+Python 3.12.15 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
+
+`transformers` 被 `[tool.uv] constraint-dependencies` 钉在 `<4.52`：4.57.6 让 docling 的单页解析从 57s 涨到 619s（同一 worker、同一张 300dpi 页面、同一份模型缓存），4.51.3 回到 57s。上游原因未查明之前不能放行。
 
 Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。解析模型不随安装包分发：开发机使用 `.runtime/research-models`，打包后下载到 `~/.roc/research-models`。打包 extraResources 排除 models、旧 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件以及 Python include；afterPack 用当前 `worker.py` / `figure.py` 覆盖 live 副本并改写 manifest。文献交换在主进程 `bibliography.ts`，不随工具链分发 Python 入口。运行时禁止自动联网拉取。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
 

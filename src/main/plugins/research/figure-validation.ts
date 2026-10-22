@@ -1,18 +1,13 @@
-import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
 import { XMLParser } from 'fast-xml-parser';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { ResearchFigureOptions } from '../../../shared/schemas/research-plotting';
+import { pdfjsAssetDirectory } from './pdfjs-assets';
 import { experimentFileLimit } from './experiment-files';
 import { readResearchFile, researchContentHash } from './research-files';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const RESOURCE_ATTRIBUTES = new Set(['style', 'fill', 'stroke', 'filter', 'clip-path', 'mask', 'marker', 'marker-start', 'marker-mid', 'marker-end', 'cursor']);
-const figureRequire = createRequire(import.meta.url);
-const pdfjsRoot = dirname(figureRequire.resolve('pdfjs-dist/package.json'));
-const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot, directory)).href}/`;
 const svgParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '',
@@ -120,10 +115,10 @@ async function inspectPdf(bytes: Buffer, options: ResearchFigureOptions): Promis
     disableFontFace: true,
     useSystemFonts: true,
     useWorkerFetch: false,
-    cMapUrl: assetUrl('cmaps'),
+    cMapUrl: pdfjsAssetDirectory('cmaps'),
     cMapPacked: true,
-    standardFontDataUrl: assetUrl('standard_fonts'),
-    wasmUrl: assetUrl('wasm')
+    standardFontDataUrl: pdfjsAssetDirectory('standard_fonts'),
+    wasmUrl: pdfjsAssetDirectory('wasm')
   });
   const pdf = await loadingTask.promise;
   try {

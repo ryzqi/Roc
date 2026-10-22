@@ -329,6 +329,24 @@ export function isExcludedPackagedResearchPath(relativePath) {
   return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
 }
 
+/**
+ * 读一个 JSON 文件，把「文件坏了」变成带错误码的 Error。
+ * 打包校验是最后一道门，报错要说清楚哪个文件哪一步。
+ */
+function readJsonFile(path, code) {
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new Error(`${code}: cannot read ${path} (${error instanceof Error ? error.message : String(error)})`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${code}: invalid JSON in ${path} (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+
 export function assertLiveResearchToolchainForPackaging({
   architecture = process.arch,
   projectRoot: targetProjectRoot = projectRoot
@@ -357,6 +375,25 @@ export function assertLiveResearchToolchainForPackaging({
     const fullPath = resolve(sources, name);
     if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
       throw new Error(`Missing research runtime source for packaging: ${name}`);
+    }
+  }
+  // 版本也要对一遍。只看文件在不在的话，一套旧的 3.12.14/0.12.10 工具链能一路打包成功，
+  // 然后在运行时被 `research_toolchain_version_mismatch` 拒掉——整个科研插件不可用，
+  // 而且要等用户装上才发现。这里按 lock 里该架构声明的工具集逐项比。
+  const manifest = readJsonFile(resolve(root, 'manifest.json'), 'research_toolchain_manifest_invalid');
+  const lock = readJsonFile(resolve(sources, 'tools.lock.json'), 'research_toolchain_lock_invalid');
+  const declaredTools = lock?.architectures?.[String(architecture)];
+  if (typeof declaredTools !== 'object' || declaredTools === null) {
+    throw new Error(`Research toolchain lock declares no tools for architecture ${architecture}`);
+  }
+  for (const name of Object.keys(declaredTools)) {
+    const expected = lock[`${name}Version`];
+    const actual = manifest?.versions?.[name];
+    if (typeof expected !== 'string' || expected.length === 0 || actual !== expected) {
+      const prepareScript = resolve(targetProjectRoot, 'scripts/research/prepare.ts');
+      throw new Error(
+        `Research toolchain ${name} version mismatch for packaging: manifest=${String(actual)} lock=${String(expected)}. Rebuild ${root} with: rtk proxy node ${prepareScript} --arch ${architecture} --output ${root}`
+      );
     }
   }
 }

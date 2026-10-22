@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
 import { cp, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { createRequire } from 'node:module';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { pdfjsAssetDirectory } from '../../src/main/plugins/research/pdfjs-assets.ts';
 import { verifyManifest, type Manifest } from './manifest.ts';
 import { decodeJson } from '../lib/decode-json.ts';
 
@@ -40,10 +40,6 @@ async function pathInfo(path: string) {
   }
 }
 
-const require = createRequire(import.meta.url);
-const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
-const assetUrl = (directory: string): string => `${pathToFileURL(join(pdfjsRoot, directory)).href}/`;
-
 async function renderSmokePdf(sourcePath: string, outputDir: string): Promise<{ path: string; text: string; pageCount: number }> {
   const bytes = await readFile(sourcePath);
   const loadingTask = getDocument({
@@ -51,10 +47,10 @@ async function renderSmokePdf(sourcePath: string, outputDir: string): Promise<{ 
     disableFontFace: true,
     useSystemFonts: true,
     useWorkerFetch: false,
-    cMapUrl: assetUrl('cmaps'),
+    cMapUrl: pdfjsAssetDirectory('cmaps'),
     cMapPacked: true,
-    standardFontDataUrl: assetUrl('standard_fonts'),
-    wasmUrl: assetUrl('wasm')
+    standardFontDataUrl: pdfjsAssetDirectory('standard_fonts'),
+    wasmUrl: pdfjsAssetDirectory('wasm')
   });
   const pdf = await loadingTask.promise;
   try {
@@ -192,7 +188,7 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   await writeFile(join(output, 'render.stdout.log'), `${JSON.stringify({ path: rendered.path, text: rendered.text, pageCount: rendered.pageCount })}\n`, 'utf8');
   console.log('通过：render');
   if (!rendered.text.includes('研究数据与方法')) fail('research_smoke_pdf_text_missing');
-  const parsed = decodeJson<{ ok: boolean; result: { content: string; blocks: Array<{ kind: string }>; warnings: unknown } }>(
+  const parsed = decodeJson<{ ok: boolean; result: { content: string; blocks: Array<{ kind: string; text?: string }>; warnings: unknown } }>(
     await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
       request: {
         operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
@@ -204,7 +200,13 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   if (!parsed.ok) fail('research_smoke_parse_failed');
   const content = parsed.result.content;
   const kinds = new Set(parsed.result.blocks.map((block) => block.kind));
-  if (!content.includes('研究数据与方法') || !content.includes('Treatment') || !content.includes('18')
+  // 这一页是先把 PDF 渲染成 PNG 再 OCR 的，macOS Vision 会把表头里那个大写 T 认成 I
+  //（“Treatment” → “Ireatment”，docling 2.126 与 2.141 输出逐字一致）。所以断言只看
+  // **table 块自己的文本**：Control/Patients/18 都在表格里，而 Control 也是图里的轴标签，
+  // 拿整篇 content 去 includes 会把图上的字当成表格内容。
+  const tableText = parsed.result.blocks.find((block) => block.kind === 'table')?.text ?? '';
+  const tableCellsKept = ['Control', 'Patients', '18', 'Improvement'].every((token) => tableText.includes(token));
+  if (!content.includes('研究数据与方法') || !tableCellsKept
       || !['table', 'formula', 'figure'].every((kind) => kinds.has(kind))) {
     fail(`research_smoke_parse_content_incomplete:${[...kinds].sort().join(',')}`);
   }
