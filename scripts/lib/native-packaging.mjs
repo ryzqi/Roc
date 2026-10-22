@@ -487,7 +487,7 @@ export function finalizePackagedResearchToolchain({
   }
   removeExcludedPackagedResearchPaths(root);
   const manifestPath = resolve(root, 'manifest.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const manifest = readJsonFile(manifestPath, 'packaged_toolchain_manifest_invalid');
   if (manifest.platform !== 'darwin' || manifest.architecture !== architecture) {
     throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
   }
@@ -540,11 +540,11 @@ export function verifyPackagedResearchToolchain({
       throw new Error(`Missing packaged research toolchain file: ${relativePath}`);
     }
   }
-  const manifest = JSON.parse(readFileSync(resolve(root, 'manifest.json'), 'utf8'));
+  const manifest = readJsonFile(resolve(root, 'manifest.json'), 'packaged_toolchain_manifest_invalid');
   if (manifest.platform !== 'darwin' || manifest.architecture !== architecture) {
     throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
   }
-  const licenses = JSON.parse(readFileSync(resolve(root, 'licenses/python-packages.json'), 'utf8'));
+  const licenses = readJsonFile(resolve(root, 'licenses/python-packages.json'), 'packaged_toolchain_licenses_invalid');
   if (!Array.isArray(licenses) || licenses.length === 0) {
     throw new Error('Packaged research toolchain is missing python license records.');
   }

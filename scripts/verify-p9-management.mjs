@@ -635,7 +635,14 @@ try {
   await page.click('[data-testid="mgmt-skills-reload"]').catch(() => {});
   await page.waitForSelector(`[data-testid="mgmt-skill-${skillId}"]`, { timeout: 20_000 });
   const skillsSummary = await text('mgmt-skills-summary');
-  assertCheck('2 技能', '技能列表显示真实技能与摘要', skillsSummary.includes('1 个技能'), skillsSummary);
+  // 摘要里的总数要和后端 `skills.list` 的清单对得上，不能写死成“1 个技能”——内置技能
+  // 会随数据根一起装进来（今天 24 个），写死的数字只是在断言“内置技能没被装上”。
+  assertCheck(
+    '2 技能',
+    '技能列表显示真实技能与摘要',
+    skillImport.ids.length > 0 && skillsSummary.includes(`${skillImport.ids.length} 个技能`),
+    `${skillsSummary} · list=${skillImport.ids.length}`
+  );
 
   // 相对路径在 UI 上被拒（后端会按进程 cwd 解析，那不是用户选的目录）
   await page.fill('[data-testid="mgmt-skills-import-path"]', './relative-skill');
@@ -644,6 +651,9 @@ try {
   assertCheck('2 技能', '相对路径被拦下并说明原因', relativeHint.includes('绝对路径'), relativeHint.slice(0, 80));
 
   // 文件树与预览（SKILL.md 走 markdown 渲染）
+  // 先选中刚导入的那个技能：数据根里还有随包安装的内置技能，列表默认选中的不一定是它，
+  // 不选就直接点 SKILL.md 预览到的是别人的文件。
+  await page.click(`[data-testid="mgmt-skill-${skillId}"]`);
   await page.waitForSelector('[data-testid="mgmt-skill-entries"]', { timeout: 20_000 });
   await page.click('[data-testid="mgmt-skill-entry-SKILL.md"]');
   await page.waitForSelector('[data-testid="mgmt-skill-preview-markdown"]', { timeout: 30_000 });
@@ -664,12 +674,22 @@ try {
 
   // 关掉技能走**界面**（抽屉里的开关）：这正是 P9 要断言的用户路径 —— 它必须让助手的候选立即变化，
   // 而不是等下一次保存设置。直调 IPC 会绕过 `notifySettingsChanged()`，那测的是另一件事。
+  //
+  // 摘要里的已启用数不能写死成 0/1：数据根里还有随包安装的内置技能（全启用），所以断言的是
+  // “关掉这一个就少一个”，以及重新启用后回到原值。
+  const enabledCount = (summary) => Number(/(\d+) 个已启用/u.exec(summary)?.[1] ?? NaN);
   await openManagement('skills');
   await page.waitForSelector(`[data-testid="mgmt-skill-${skillId}"]`, { timeout: 20_000 });
+  const enabledBeforeDisable = enabledCount(await text('mgmt-skills-summary'));
   await page.locator(`[data-testid="mgmt-skill-enabled-${skillId}"]`).uncheck();
-  await waitForTextContains('mgmt-skills-summary', '0 个已启用', 20_000);
+  await waitForTextContains('mgmt-skills-summary', `${enabledBeforeDisable - 1} 个已启用`, 20_000);
   const summaryAfterDisable = await text('mgmt-skills-summary');
-  assertCheck('2 技能', '抽屉里的开关把技能关掉并刷新摘要', summaryAfterDisable.includes('0 个已启用'), summaryAfterDisable);
+  assertCheck(
+    '2 技能',
+    '抽屉里的开关把技能关掉并刷新摘要',
+    enabledCount(summaryAfterDisable) === enabledBeforeDisable - 1,
+    summaryAfterDisable
+  );
   await closeManagement();
 
   const suggestionsDisabled = await composerProbe();
@@ -678,7 +698,7 @@ try {
 
   await openManagement('skills');
   await page.locator(`[data-testid="mgmt-skill-enabled-${skillId}"]`).check();
-  await waitForTextContains('mgmt-skills-summary', '1 个已启用', 20_000);
+  await waitForTextContains('mgmt-skills-summary', `${enabledBeforeDisable} 个已启用`, 20_000);
   await closeManagement();
   const suggestionsRestored = await composerProbe();
   assertCheck('2 技能', '重新启用后候选又回来了（两个方向都看得见）', suggestionsRestored === 1, `count=${suggestionsRestored}`);
