@@ -33,13 +33,11 @@ export const formSecondaryButtonClass =
 
 export function FormSection({
   title,
-  hint,
   readOnly = false,
   children,
   testId
 }: {
   title: string;
-  hint?: string;
   readOnly?: boolean;
   children: ReactNode;
   testId: string;
@@ -53,7 +51,6 @@ export function FormSection({
             只读
           </span>
         ) : null}
-        {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       </header>
       {children}
     </section>
@@ -62,14 +59,12 @@ export function FormSection({
 
 export function Field({
   label,
-  hint,
   issue,
   children,
   testId,
   inline = false
 }: {
   label: string;
-  hint?: string;
   issue?: string | null;
   children: ReactNode;
   testId?: string;
@@ -81,7 +76,6 @@ export function Field({
       <div className={inline ? 'flex min-w-0 flex-1 items-center gap-2' : 'flex min-w-0 flex-col gap-1'}>
         {children}
       </div>
-      {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       {issue === undefined || issue === null ? null : (
         <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
@@ -98,7 +92,6 @@ export function TextField({
   onChange,
   disabled = false,
   placeholder,
-  hint,
   issue,
   testId,
   type = 'text'
@@ -108,7 +101,6 @@ export function TextField({
   onChange: (next: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  hint?: string;
   issue?: string | null;
   testId: string;
   type?: 'text' | 'password';
@@ -125,7 +117,6 @@ export function TextField({
         data-testid={testId}
         className={formInputClass}
       />
-      {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       {issue === undefined || issue === null ? null : (
         <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
@@ -154,7 +145,6 @@ export function NumberField({
   step = 1,
   allowEmpty = false,
   emptyValue = undefined,
-  hint,
   issue,
   testId
 }: {
@@ -167,7 +157,6 @@ export function NumberField({
   step?: number;
   allowEmpty?: boolean;
   emptyValue?: null | undefined;
-  hint?: string;
   issue?: string | null;
   testId: string;
 }): React.JSX.Element {
@@ -215,7 +204,6 @@ export function NumberField({
         data-testid={testId}
         className={formInputClass}
       />
-      {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
       {issue === undefined || issue === null ? null : (
         <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
@@ -267,7 +255,6 @@ export function SelectField<T extends string>({
   options,
   onChange,
   disabled = false,
-  hint,
   testId
 }: {
   label: string;
@@ -275,7 +262,6 @@ export function SelectField<T extends string>({
   options: ReadonlyArray<{ value: T; label: string }>;
   onChange: (next: T) => void;
   disabled?: boolean;
-  hint?: string;
   testId: string;
 }): React.JSX.Element {
   return (
@@ -294,7 +280,6 @@ export function SelectField<T extends string>({
           </option>
         ))}
       </select>
-      {hint === undefined ? null : <span className="text-subtle text-[var(--font-micro-size)]">{hint}</span>}
     </label>
   );
 }

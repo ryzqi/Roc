@@ -5,9 +5,6 @@ import { formatBytes } from '../../shared/format';
 import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
 import { DelayedFallback } from '../../shell/DelayedFallback';
 import {
-  BUILTIN_SKILLS_NOTE,
-  LICENSE_BOUNDARY_NOTE,
-  SKILL_FIELD_NOTE,
   builtinSourceActionLabel,
   builtinSourceSummary,
   formatBuiltinTimestamp,
@@ -65,7 +62,6 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-skills">
       <FormSection
         title="内置技能源"
-        hint="skills.builtin.status / check / autoUpdate / restore"
         testId="mgmt-skills-builtin"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +155,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                 )}
                 {source.installedCommit === null && source.license !== null && source.license !== 'Apache-2.0' ? (
                   <FormNote testId={`mgmt-skills-builtin-license-note-${source.id}`}>
-                    该来源使用 {source.license}，不能作为 Roc 核心开源内容默认启用；点上面的按钮即表示你接受该许可并安装。
+                    该来源使用 {source.license} 许可，点安装即表示接受。
                   </FormNote>
                 ) : null}
               </li>
@@ -167,12 +163,10 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           </ul>
         )}
 
-        <FormNote testId="mgmt-skills-builtin-note">{BUILTIN_SKILLS_NOTE}</FormNote>
       </FormSection>
 
       <FormSection
         title="已安装技能"
-        hint="skills.list / setEnabled / import / delete"
         testId="mgmt-skills-list-section"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -204,11 +198,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
 
         {skills.status === 'loading' && skills.skills.length === 0 ? (
           <FormNote testId="mgmt-skills-loading">正在读取技能目录…</FormNote>
-        ) : skills.skills.length === 0 ? (
-          <FormNote testId="mgmt-skills-empty">
-            还没有技能。用下面的「导入技能」把包含 SKILL.md 的目录复制进来。
-          </FormNote>
-        ) : (
+        ) : skills.skills.length === 0 ? null : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
             {sortSkills(skills.skills).map((skill) => {
               const selected = skill.id === skills.selectedId;
@@ -289,11 +279,9 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           </ul>
         )}
 
-        <FormNote testId="mgmt-skills-field-note">{SKILL_FIELD_NOTE}</FormNote>
-        <FormNote testId="mgmt-skills-license">{LICENSE_BOUNDARY_NOTE}</FormNote>
       </FormSection>
 
-      <FormSection title="导入技能" hint="skills.import（必须是含 SKILL.md 的目录）" testId="mgmt-skills-import">
+      <FormSection title="导入技能" testId="mgmt-skills-import">
         <label className="flex flex-col gap-0.5">
           <span className="text-subtle text-[var(--font-micro-size)]">技能目录的绝对路径</span>
           <input
@@ -327,16 +315,11 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
             {importRequired}
           </FormNote>
         )}
-        <FormNote testId="mgmt-skills-import-note">
-          原生选择器只能选「文件」（files.selectFromDialog），而唯一能选目录的对话框会把那个目录绑定成工作目录 ——
-          两者都不适合导入技能，所以这里请你直接给目录路径（B24）。技能服务也不接受 ZIP。
-        </FormNote>
       </FormSection>
 
       {skills.selected === null ? null : (
         <FormSection
           title={`文件（${skills.selected.name}）`}
-          hint="skills.files.list / skills.file.read（只读）"
           testId="mgmt-skills-files"
         >
           <dl className="flex flex-col gap-0.5">
@@ -432,7 +415,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           )}
           {skills.treeTruncated ? (
             <FormNote tone="warn" testId="mgmt-skill-tree-truncated">
-              目录条目被截断：这里只列出了前一部分。
+              目录条目过多，只显示前一部分。
             </FormNote>
           ) : null}
 
@@ -507,7 +490,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         open={deleteTarget !== null}
         title="删除这个技能？"
         message={`将删除技能目录 ${deleteSkillRecord?.path ?? deleteTarget ?? ''}。`}
-        detail="删除的是 Roc 技能目录下的副本，不会动你原来的技能源目录。"
+        detail="只删除 Roc 技能目录下的副本。"
         confirmLabel="删除"
         tone="destructive"
         testId="mgmt-skills-delete-confirm"

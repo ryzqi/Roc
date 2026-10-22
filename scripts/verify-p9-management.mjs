@@ -477,11 +477,6 @@ try {
     '项目槽位在界面里可编辑（没有「不可写」提示）',
     (await page.locator('[data-testid="mgmt-memory-slot-unavailable"]').count()) === 0
   );
-  assertCheck(
-    '1 记忆',
-    '绑定了工作目录后不再显示 workspaceHash 为 null 的说明',
-    (await page.locator('[data-testid="mgmt-memory-workspace-note"]').count()) === 0
-  );
   await page.fill('[data-testid="mgmt-memory-textarea"]', '# 项目记忆（界面写入）\n');
   assertCheck(
     '1 记忆',
@@ -646,9 +641,16 @@ try {
 
   // 相对路径在 UI 上被拒（后端会按进程 cwd 解析，那不是用户选的目录）
   await page.fill('[data-testid="mgmt-skills-import-path"]', './relative-skill');
-  await page.waitForSelector('[data-testid="mgmt-skills-import-hint"]', { timeout: 10_000 });
-  const relativeHint = await text('mgmt-skills-import-hint');
-  assertCheck('2 技能', '相对路径被拦下并说明原因', relativeHint.includes('绝对路径'), relativeHint.slice(0, 80));
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="mgmt-skills-import-run"]')?.hasAttribute('disabled') === true,
+    undefined,
+    { timeout: 10_000 }
+  );
+  assertCheck(
+    '2 技能',
+    '相对路径被拦下（导入按钮不可用）',
+    await page.locator('[data-testid="mgmt-skills-import-run"]').isDisabled()
+  );
 
   // 文件树与预览（SKILL.md 走 markdown 渲染）
   // 先选中刚导入的那个技能：数据根里还有随包安装的内置技能，列表默认选中的不一定是它，

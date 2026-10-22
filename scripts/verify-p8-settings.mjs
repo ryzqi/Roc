@@ -538,12 +538,11 @@ try {
     const snapshot = await window.roc.agent.getPilotStatus();
     return snapshot.ok ? snapshot.data.costState : null;
   });
-  const pilotAllowanceText = await text('settings-pilot-allowance');
   assertCheck(
     '1 分区读回',
-    '受限试点把美元成本声明为未知（后端字段 + 界面文案）',
-    pilotCostState === 'unknown_without_price_table' && pilotAllowanceText.includes('未知'),
-    `costState=${String(pilotCostState)} · ${pilotAllowanceText.slice(0, 100)}`
+    '受限试点把美元成本声明为未知（后端字段）',
+    pilotCostState === 'unknown_without_price_table',
+    `costState=${String(pilotCostState)}`
   );
   await page.click('[data-testid="settings-pilot-acknowledge"]');
   await page.click('[data-testid="settings-pilot-enable"]');
@@ -583,8 +582,6 @@ try {
   );
   const literatureReady = await text('settings-models-ready');
   assertCheck('1 分区读回', '文献与解析分区显示后端真实模型状态', literatureReady.endsWith('是') || literatureReady.endsWith('否'), literatureReady);
-  // 分区文本只在它挂载时存在（切换分区会卸载组件），所以要在切走之前读。
-  const literatureRemoved = await text('settings-literature-removed');
   await openSection('sandbox');
   // The toolchain status is a real IPC call; wait for it to resolve rather than reading the
   // 「读取中…」 placeholder (the same discipline the P6 diagnostics gate uses).
@@ -600,13 +597,6 @@ try {
     '编译与沙箱分区显示真实工具链状态',
     toolchainVerdict !== 'unknown',
     `${toolchainVerdict}（${toolchainText}）· rtk=${await text('settings-rtk-status')}`
-  );
-  const sandboxRemoved = await text('settings-sandbox-removed');
-  assertCheck(
-    '1 分区读回',
-    '两个只读分区都写明移除了哪些无后端字段的选项',
-    literatureRemoved.includes('已移除') && sandboxRemoved.includes('已移除'),
-    `${literatureRemoved.slice(0, 60)} | ${sandboxRemoved.slice(0, 60)}`
   );
 
   // ---- 闸门 2：密钥只显示「已配置」，localStorage / 导出快照 / 磁盘快照无明文 ----

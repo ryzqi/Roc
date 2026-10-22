@@ -74,7 +74,6 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
   return (
     <FormSection
       title="授权与安全"
-      hint="mcp.getConfig / setApprovalMode · mcp.listServers / setServerEnabled / testServer"
       testId="settings-section-authorization-body"
     >
       {config.error === null ? null : (
@@ -115,87 +114,82 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
         </FormNote>
       )}
 
-      {merged.length === 0 ? (
-        <FormNote testId="settings-mcp-empty">
-          后端还没有已授权的 MCP 服务（P9 的管理面板负责新增与编辑；这里只列出并开关已有的）。
-        </FormNote>
-      ) : (
-        <ul className="flex flex-col gap-2" data-testid="settings-mcp-list">
-          {merged.map(({ snapshot, authored }) => (
-            <li
-              key={snapshot.id}
-              className="flex flex-col gap-1 rounded-card border border-line bg-surface px-3 py-2"
-              data-testid={`settings-mcp-${snapshot.id}`}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-ink text-[var(--font-meta-size)]">{snapshot.name}</span>
-                <span className="font-mono text-subtle text-[var(--font-micro-size)]">{snapshot.id}</span>
-                <span className="text-subtle text-[var(--font-micro-size)]">
-                  {snapshot.transport} · {snapshot.tools} 个工具 ·{' '}
-                  {snapshot.status === 'ready' ? '已连接' : snapshot.status === 'error' ? '连接错误' : '未连接'}
+      <ul className="flex flex-col gap-2" data-testid="settings-mcp-list">
+        {merged.map(({ snapshot, authored }) => (
+          <li
+            key={snapshot.id}
+            className="flex flex-col gap-1 rounded-card border border-line bg-surface px-3 py-2"
+            data-testid={`settings-mcp-${snapshot.id}`}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-ink text-[var(--font-meta-size)]">{snapshot.name}</span>
+              <span className="font-mono text-subtle text-[var(--font-micro-size)]">{snapshot.id}</span>
+              <span className="text-subtle text-[var(--font-micro-size)]">
+                {snapshot.transport} · {snapshot.tools} 个工具 ·{' '}
+                {snapshot.status === 'ready' ? '已连接' : snapshot.status === 'error' ? '连接错误' : '未连接'}
+              </span>
+              {authored?.riskLevel === undefined ? null : (
+                <span className="text-subtle text-[var(--font-micro-size)]">风险：{authored.riskLevel}</span>
+              )}
+              {snapshot.preset === true || authored?.preset === true ? (
+                <span className="rounded-control border border-line px-1.5 text-subtle text-[var(--font-micro-size)]">
+                  预置
                 </span>
-                {authored?.riskLevel === undefined ? null : (
-                  <span className="text-subtle text-[var(--font-micro-size)]">风险：{authored.riskLevel}</span>
-                )}
-                {snapshot.preset === true || authored?.preset === true ? (
-                  <span className="rounded-control border border-line px-1.5 text-subtle text-[var(--font-micro-size)]">
-                    预置
-                  </span>
-                ) : null}
-              </div>
-              {snapshot.lastError === null || snapshot.lastError === undefined ? null : (
-                <FormNote tone="warn" testId={`settings-mcp-error-${snapshot.id}`}>
-                  {snapshot.lastError}
-                </FormNote>
+              ) : null}
+            </div>
+            {snapshot.lastError === null || snapshot.lastError === undefined ? null : (
+              <FormNote tone="warn" testId={`settings-mcp-error-${snapshot.id}`}>
+                {snapshot.lastError}
+              </FormNote>
+            )}
+            {authored === null || authored.allowedTools.length === 0 ? null : (
+              <p className="text-subtle text-[var(--font-micro-size)]">
+                允许的工具：{authored.allowedTools.join(', ')}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <CheckboxField
+                label="启用"
+                checked={snapshot.enabled}
+                onChange={(enabled) => {
+                  void setEnabled.run({ id: snapshot.id, enabled }).then((result) => {
+                    if (result !== null) {
+                      reloadServers();
+                      reloadConfig();
+                    }
+                  });
+                }}
+                testId={`settings-mcp-enabled-${snapshot.id}`}
+              />
+              <button
+                type="button"
+                data-testid={`settings-mcp-test-${snapshot.id}`}
+                disabled={test.pending}
+                onClick={() => {
+                  void test.run(snapshot.id).then((result) => {
+                    if (result !== null) {
+                      setTestResults((current) => ({ ...current, [snapshot.id]: result }));
+                      reloadServers();
+                    }
+                  });
+                }}
+                className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+              >
+                <PlugZap size={11} aria-hidden="true" />
+                校验配置
+              </button>
+              {testResults[snapshot.id] === undefined ? null : (
+                <span className="text-[var(--font-micro-size)] text-muted" data-testid={`settings-mcp-test-result-${snapshot.id}`}>
+                  {testResults[snapshot.id]?.status === 'ready'
+                    ? '配置完整'
+                    : `配置有问题：${testResults[snapshot.id]?.error ?? '未知原因'}`}
+                </span>
               )}
-              {authored === null || authored.allowedTools.length === 0 ? null : (
-                <p className="text-subtle text-[var(--font-micro-size)]">
-                  允许的工具：{authored.allowedTools.join(', ')}
-                </p>
-              )}
-              <div className="flex flex-wrap items-center gap-3">
-                <CheckboxField
-                  label="启用"
-                  checked={snapshot.enabled}
-                  onChange={(enabled) => {
-                    void setEnabled.run({ id: snapshot.id, enabled }).then((result) => {
-                      if (result !== null) {
-                        reloadServers();
-                        reloadConfig();
-                      }
-                    });
-                  }}
-                  testId={`settings-mcp-enabled-${snapshot.id}`}
-                />
-                <button
-                  type="button"
-                  data-testid={`settings-mcp-test-${snapshot.id}`}
-                  disabled={test.pending}
-                  onClick={() => {
-                    void test.run(snapshot.id).then((result) => {
-                      if (result !== null) {
-                        setTestResults((current) => ({ ...current, [snapshot.id]: result }));
-                        reloadServers();
-                      }
-                    });
-                  }}
-                  className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-                >
-                  <PlugZap size={11} aria-hidden="true" />
-                  校验配置
-                </button>
-                {testResults[snapshot.id] === undefined ? null : (
-                  <span className="text-[var(--font-micro-size)] text-muted" data-testid={`settings-mcp-test-result-${snapshot.id}`}>
-                    {testResults[snapshot.id]?.status === 'ready'
-                      ? '配置完整（后端只校验配置，不连接）'
-                      : `配置有问题：${testResults[snapshot.id]?.error ?? '后端没有给出原因'}`}
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    
 
       {setEnabled.error === null ? null : (
         <FormNote tone="warn" testId="settings-mcp-enable-error">
@@ -208,10 +202,6 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
         </FormNote>
       )}
 
-      <FormNote testId="settings-authorization-note">
-        MCP 服务的增删改（`mcp.upsertServer` / `deleteServer` / `ensureExaPreset`）在管理面板的授权分区（P9）；
-        这里管的是审批模式与已授权服务的开关。MCP 的审批模式与「智能体安全」里的工具审批模式是两套（后者管内置工具）。
-      </FormNote>
     </FormSection>
   );
 }

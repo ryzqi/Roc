@@ -32,7 +32,6 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
   return (
     <FormSection
       title="默认模型"
-      hint="settings.save 的 defaultModelId；未配置时需要模型的入口会先要求配置"
       testId="settings-section-default-model-body"
     >
       <label className="flex max-w-[420px] flex-col gap-0.5">
@@ -63,20 +62,11 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
 
       {resolvable ? null : (
         <FormNote tone="warn" testId="settings-default-model-unresolvable">
-          当前默认模型 {current} 不在已启用（且被启用）的模型里；后端保存时会把它清空为「未配置」。请改选一个，或到
-          「模型与服务」启用它。
+          默认模型 {current} 未启用；保存后会变成「未配置」。请改选一个，或到「模型与服务」启用它。
         </FormNote>
       )}
 
-      {current === null ? (
-        <FormNote testId="settings-default-model-missing">
-          未配置默认模型：助手的新会话与阶段运行都会要求先在这里选一个。
-        </FormNote>
-      ) : null}
 
-      <FormNote testId="settings-default-model-impact">
-        改动默认模型只影响之后新建的会话与阶段运行；正在进行的运行继续用启动时的模型。
-      </FormNote>
     </FormSection>
   );
 }

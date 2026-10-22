@@ -53,7 +53,6 @@ export function AppSection({
   return (
     <FormSection
       title="应用基础"
-      hint="settings.save 的 startup / globalHotkey · app.getStatus · hostIntegration"
       testId="settings-section-app-body"
     >
       {app.error === null ? null : (
@@ -106,7 +105,6 @@ export function AppSection({
             onChange={(value) =>
               store.update((next) => void (next.settings.globalHotkey = value.trim().length === 0 ? null : value))
             }
-            hint="Electron accelerator 语法；保存后由主进程注册。"
             testId="settings-global-hotkey"
           />
         </div>
@@ -149,9 +147,6 @@ export function AppSection({
             </button>
           ))}
         </div>
-        <FormNote testId="settings-theme-note">
-          外观覆盖是渲染层 UI 偏好（ui-state 的 `roc.ui.theme.override`），立即生效、不写后端，也不在设置草稿里。
-        </FormNote>
       </div>
     </FormSection>
   );
@@ -177,7 +172,6 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
   return (
     <FormSection
       title="任务与调度"
-      hint="settings.save 的 tasks · tasks.getSchedulerStatus · lifecycle.*"
       testId="settings-section-tasks-body"
     >
       <h4 className="text-ink text-[var(--font-meta-size)]">长任务判定阈值</h4>

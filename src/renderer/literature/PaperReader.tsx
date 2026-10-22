@@ -237,7 +237,6 @@ export function PaperReader({
       <EmptyState
         icon={FileSearch}
         title="尚未选择文献"
-        description="在左侧列表里选一条文献，这里会显示元数据、解析状态与正文。"
         testId="reader-no-selection"
       />
     );
@@ -460,7 +459,7 @@ export function PaperReader({
             disabled={actionBusy || literature.assistant.pending}
             onClick={askAssistant}
             data-testid="reader-ask-assistant"
-            title="用 chat.startRun 启动一轮对话，携带这条文献的真实 id（不是拼接好的摘要）"
+            title="就这条文献向助手提问"
             className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             {literature.assistant.pending ? (
@@ -535,7 +534,6 @@ export function PaperReader({
           <EmptyState
             icon={FileSearch}
             title="这条文献还没有文档"
-            description="在「导入」里选择 PDF / 图片 / HTML 并附加到这条文献，之后就能解析与检索。"
             testId="reader-no-document"
           />
         </div>
@@ -619,7 +617,7 @@ export function PaperReader({
                 type="button"
                 onClick={() => openInFilesView(activeDocument.filename)}
                 data-testid="reader-open-workspace-file"
-                title="导入的文档不在工作区里；原始 PDF 目前没有 IPC 通道（B16），这里只能试同名工作区文件"
+                title="在工作区找同名文件"
                 className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
               >
                 <FileSearch size={11} aria-hidden="true" />
@@ -688,7 +686,6 @@ export function PaperReader({
                 <EmptyState
                   icon={Timer}
                   title="这条文档还没有解析结果"
-                  description="选择「解析」后，可在这里查看进度和结果。"
                   testId="reader-content-missing"
                 />
               ) : null
@@ -737,10 +734,6 @@ export function PaperReader({
             )}
           </div>
 
-          <p className="flex shrink-0 items-center gap-1 border-t border-line px-3 py-1.5 text-subtle text-[var(--font-micro-size)]">
-            <RotateCcw size={10} aria-hidden="true" />
-            原文与图片资源没有通过 IPC 暴露（B16）；这里渲染的是解析出的文字块与 locator。
-          </p>
         </div>
       )}
     </div>

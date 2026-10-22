@@ -361,7 +361,7 @@ export function validateDraft(draft: SettingsDraft | null): DraftIssue[] {
       ) {
         issues.push({
           path: modelAt('options.anthropicThinking.budgetTokens'),
-          message: '思考预算是必须小于最大 token（后端会拒绝）。'
+          message: '思考预算必须小于最大 token。'
         });
       }
     });

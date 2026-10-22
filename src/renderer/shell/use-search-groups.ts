@@ -80,7 +80,7 @@ const UNAVAILABLE_GROUPS: Array<{ id: string; label: string; reason: string }> =
     // one stays out on purpose instead of promising a phase.
     id: 'artifacts',
     label: '产物',
-    reason: '产物按阶段列在阶段工作区里（P6）；⌘K 不做全局产物检索'
+    reason: '产物按阶段列在阶段工作区里'
   }
 ];
 
@@ -274,8 +274,8 @@ export function useSearchGroups({
       items: [
         { id: 'mgmt:memory', title: '记忆', subtitle: 'USER.md / AGENTS.md / MEMORY.md（markdown 内容）', onOpen: () => onOpenManagementView('memory') },
         { id: 'mgmt:skills', title: '技能', subtitle: '安装、启停、浏览技能文件', onOpen: () => onOpenManagementView('skills') },
-        { id: 'mgmt:mcp', title: 'MCP', subtitle: '授权服务与工具装配预览', onOpen: () => onOpenManagementView('mcp') },
-        { id: 'mgmt:tasks', title: '后台任务', subtitle: '定时任务与调度记录（打开管理面板的任务分区）', onOpen: () => onOpenManagementView('tasks') }
+        { id: 'mgmt:mcp', title: 'MCP', subtitle: '授权服务与工具', onOpen: () => onOpenManagementView('mcp') },
+        { id: 'mgmt:tasks', title: '后台任务', subtitle: '定时任务与调度记录', onOpen: () => onOpenManagementView('tasks') }
       ].filter((item) => trimmed.length === 0 || item.title.toLowerCase().includes(trimmed) || (item.subtitle ?? '').toLowerCase().includes(trimmed))
     };
 

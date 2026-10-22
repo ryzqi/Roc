@@ -85,7 +85,6 @@ export function McpSection({
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-mcp">
       <FormSection
         title="已授权服务"
-        hint="mcp.getConfig + mcp.listServers（配置与运行时快照按 id 合并）"
         testId="mgmt-mcp-servers"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -149,16 +148,9 @@ export function McpSection({
           >
             在设置中心修改审批模式
           </button>
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            审批模式是全局策略，唯一写入口在设置中心（P8），这里只显示当前值。
-          </span>
         </div>
 
-        {mcp.rows.length === 0 ? (
-          <FormNote testId="mgmt-mcp-empty">
-            还没有已授权的 MCP 服务。用「新建服务」或「预置 Exa」添加一个，然后校验配置；真正的连接发生在运行开始时（见下方说明）。
-          </FormNote>
-        ) : (
+        {mcp.rows.length === 0 ? null : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-mcp-rows">
             {mcp.rows.map(({ server, snapshot }) => {
               const tools = manifestToolsForServer(mcp.preview, server.id);
@@ -251,8 +243,8 @@ export function McpSection({
                       testId={`mgmt-mcp-test-result-${server.id}`}
                     >
                       {result.status === 'ready'
-                        ? '配置完整（后端只校验配置字段，不连接）'
-                        : `配置有问题：${result.error ?? '后端没有给出原因'}`}{' '}
+                        ? '配置完整'
+                        : `配置有问题：${result.error ?? '未知原因'}`}{' '}
                       · 检查项 {result.checked.join('、')}
                     </FormNote>
                   )}
@@ -261,17 +253,11 @@ export function McpSection({
             })}
           </ul>
         )}
-        <FormNote testId="mgmt-mcp-contract-note">
-          契约上没有 args / env / headers，也没有逐服务的审批模式与延迟字段：stdio 只有一个启动命令、审批模式是全局的，
-          「校验配置」只检查字段是否齐全（不 spawn、不发请求），因此没有延迟可显示。真正的连接发生在运行开始时（run 路径调
-          `mcp.tools.get`），工具名以装配预览为准（F24 ③）。
-        </FormNote>
       </FormSection>
 
       {mcp.draft === null ? null : (
         <FormSection
           title={mcp.editingId === null ? '新建 MCP 服务' : `编辑 ${mcp.editingId}`}
-          hint="mcp.upsertServer（整份 server 配置，按 id 覆盖）"
           testId="mgmt-mcp-editor"
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -412,7 +398,6 @@ export function McpSection({
 
       <FormSection
         title="助手的工具装配预览"
-        hint="agent.capability.preview（唯一能拿到逐服务工具名的地方）"
         testId="mgmt-mcp-preview"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -459,10 +444,6 @@ export function McpSection({
             )}
           </>
         )}
-        <FormNote testId="mgmt-mcp-preview-note">
-          这是「下一次运行会装配什么」的只读预览：`manifest.tools[].provenance` 带 serverId，所以逐服务的工具名只有
-          这里拿得到（`mcp.tools.get` 没有 IPC 通道，B25）。启用的服务与技能一变，预览就按新的 id 集合重读。
-        </FormNote>
       </FormSection>
 
       <ConfirmDialog

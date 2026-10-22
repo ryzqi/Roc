@@ -161,7 +161,6 @@ export function FilePreview({
           <EmptyState
             icon={FileWarning}
             title="无法显示图片"
-            description="该图片编码不受支持。可在系统默认应用中打开它。"
             testId="file-preview-image-failed"
           />
         );
@@ -189,7 +188,6 @@ export function FilePreview({
         <EmptyState
           icon={FileWarning}
           title="二进制文件"
-          description={`${formatBytes(loaded.sizeBytes)} · 无法以文本方式预览。`}
           testId="file-preview-binary"
         />
       );

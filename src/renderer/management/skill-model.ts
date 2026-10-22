@@ -25,15 +25,6 @@ import type {
  * is stated as text next to the list rather than invented per skill.
  */
 
-export const LICENSE_BOUNDARY_NOTE =
-  '许可边界：内置开源技能（Apache-2.0 / MIT 等）可随 Roc 分发；受 CC BY-NC 4.0 等限制的非商业技能插件只能在许可允许的边界内作为独立插件分发，不能伪装成 Roc 核心的标准开源内容。';
-
-export const BUILTIN_SKILLS_NOTE =
-  '两个上游仓库的技能快照随 Roc 分发出厂，离线可用；之后每天比对一次上游提交，有变化就同步到本机。Nature Skills 是 Apache-2.0；Academic Research Skills 是 CC BY-NC 4.0（非商业），只在你明确安装后才会启用和自动更新。';
-
-export const SKILL_FIELD_NOTE =
-  '技能快照是 id / 名称 / 描述 / 路径 / 启停 / 状态（ready·invalid）/ 来源（内置·用户）/ 上游仓库与提交：仍然没有分类与版本字段，所以这里不按分类或版本筛选。';
-
 export const skillStatusLabels: Readonly<Record<SkillSnapshot['status'], string>> = {
   ready: '可用',
   invalid: '无效'
@@ -70,7 +61,7 @@ export function validateSkillImportPath(path: string): string | null {
     return '路径不能包含空字符。';
   }
   if (!trimmed.startsWith('/') && !/^[A-Za-z]:[\\/]/u.test(trimmed)) {
-    return '请填绝对路径（后端会按进程工作目录解析相对路径，那不是你选的目录）。';
+    return '请填绝对路径。';
   }
   return null;
 }
@@ -136,12 +127,12 @@ export function filePreviewKind(preview: SkillFilePreviewResult): FilePreviewKin
 }
 
 export function previewSizeLabel(preview: SkillFilePreviewResult): string {
-  return `${preview.sizeBytes.toLocaleString('en-US')} B${preview.truncated ? ' · 已截断（只读预览）' : ''}`;
+  return `${preview.sizeBytes.toLocaleString('en-US')} B${preview.truncated ? ' · 已截断' : ''}`;
 }
 
 /** `truncated` means the panel must not offer an edit affordance (it never does) nor compare sizes. */
 export function previewTruncatedNote(preview: SkillFilePreviewResult): string | null {
-  return preview.truncated ? '预览被截断：文件比预览上限大，这里只显示开头部分。' : null;
+  return preview.truncated ? '预览已截断，只显示开头部分。' : null;
 }
 
 /* ------------------------------------------------------------------ */

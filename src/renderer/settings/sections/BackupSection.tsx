@@ -62,7 +62,6 @@ export function BackupSection({
   return (
     <FormSection
       title="偏好与备份"
-      hint="renderer 侧快照（无密钥）· 导入进草稿 · 本地界面偏好重置"
       testId="settings-section-backup-body"
     >
       <div className="flex flex-col gap-1">
@@ -118,7 +117,7 @@ export function BackupSection({
       </div>
 
       <div className="flex flex-col gap-1 border-t border-line pt-2">
-        <span className="text-subtle text-[var(--font-micro-size)]">从 JSON 导入（替换草稿，保存后才写入后端）</span>
+        <span className="text-subtle text-[var(--font-micro-size)]">从 JSON 导入</span>
         <textarea
           value={importText}
           rows={6}
@@ -184,21 +183,14 @@ export function BackupSection({
           >
             重置本地界面偏好
           </button>
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            清除 `roc.ui.*`（面板宽度、折叠、左栏 tab、星标、文件树展开、外观覆盖）。产品数据与后端设置不受影响。
-          </span>
         </div>
-        <FormNote testId="settings-reset-note">
-          后端没有「清除缓存 / 恢复默认设置」的 IPC，所以这里不做假动作：要恢复后端设置默认值目前只能手工改字段。
-          面板宽度这类实时布局值在下次启动时回到默认。
-        </FormNote>
       </div>
 
       <ConfirmDialog
         open={resetOpen}
         title="重置本地界面偏好？"
         message="将清除本机保存的界面偏好（roc.ui.*），回到默认值。"
-        detail="外观覆盖会重置为「跟随系统」（它本身就是一条偏好，重置后的值就是默认值）。产品数据、项目与后端设置不受影响，也不会删除密钥。"
+        detail="外观覆盖会重置为「跟随系统」。不会删除项目、设置或密钥。"
         confirmLabel="重置"
         tone="destructive"
         testId="settings-reset-confirm"

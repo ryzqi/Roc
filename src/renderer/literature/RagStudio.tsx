@@ -233,7 +233,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
     const opensInReader = hit.documentId.startsWith('document:') || hit.documentId.startsWith('library:');
     if (opensInReader && literature.status === 'ready' && !literature.items.some((item) => item.id === hit.sourceId)) {
       setJumpError(
-        `这条命中来自文献库条目 ${hit.sourceId}，它没有关联到当前项目（检索会包含不属于本项目的文档），所以这里打不开它。`
+        `这条命中来自未关联本项目的文献（${hit.sourceId}），无法在这里打开。`
       );
       return;
     }
@@ -256,7 +256,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
       return;
     }
     setJumpError(
-      `这条命中的来源是「${hit.documentId.split(':', 1)[0]}」，契约只给出 documentId（${hit.documentId}），无法定位到具体位置。`
+      `这条命中来自「${hit.documentId.split(':', 1)[0]}」，无法定位到具体位置。`
     );
   };
 
@@ -290,7 +290,6 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
       <EmptyState
         icon={DatabaseZap}
         title="索引属于项目"
-        description="进入一个项目后才能建索引：索引按项目的工作目录扫描。"
         testId="rag-no-project"
       />
     );
@@ -402,11 +401,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             </p>
           )}
 
-          {result === null ? (
-            <p className="mt-2 text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-search">
-              还没有检索。结果会显示综合相关度，以及关键词与语义匹配情况。
-            </p>
-          ) : result.hits.length === 0 ? (
+          {result === null ? null : result.hits.length === 0 ? (
             <EmptyState compact icon={Search} title="没有命中" description="换一个说法，或先建索引。" testId="rag-no-hits" />
           ) : (
             <>

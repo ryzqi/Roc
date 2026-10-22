@@ -163,9 +163,6 @@ export function ChatApprovalCard({
           </button>
         ) : null}
       </div>
-      <p className="mt-1.5 text-subtle text-[var(--font-micro-size)]">
-        决策会立即恢复挂起的运行；卡片不能直接关闭。
-      </p>
     </ApprovalShell>
   );
 }
@@ -330,9 +327,6 @@ export function TaskApprovalCard({
           拒绝
         </button>
       </div>
-      <p className="mt-1.5 text-subtle text-[var(--font-micro-size)]">
-        预览仅显示最小闭环（P6 补范围与影响）；决定会立即恢复运行。
-      </p>
     </ApprovalShell>
   );
 }

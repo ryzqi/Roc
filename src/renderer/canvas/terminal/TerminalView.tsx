@@ -257,7 +257,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         <EmptyState
           icon={TerminalSquare}
           title="未绑定工作目录"
-          description="终端需要一个工作目录作为起始路径。先在项目里选择目录。"
           testId="terminal-no-workspace"
         />
       </div>
@@ -279,7 +278,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         <EmptyState
           icon={TerminalSquare}
           title="归档项目不提供终端"
-          description="项目已归档，仅可阅读。恢复项目后才能打开交互式终端。"
           testId="terminal-readonly"
         />
       </div>

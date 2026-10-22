@@ -41,9 +41,6 @@ export function StartupFailure({
       <div className="max-w-md rounded-card border border-line bg-surface px-5 py-4">
         <p className="text-ink">{title}</p>
         <p className="mt-1 break-words text-muted">{message}</p>
-        <p className="mt-2 text-[var(--font-micro-size)] text-subtle">
-          可运行「运行诊断」查看主机检查；若持续失败，请重启 Roc。
-        </p>
       </div>
     </div>
   );

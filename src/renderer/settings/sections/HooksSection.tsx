@@ -111,7 +111,6 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
   return (
     <FormSection
       title="Hooks"
-      hint="settings.get 的 hooks 快照 · settings.hooks.save / trust"
       testId="settings-section-hooks-body"
     >
       <dl className="flex flex-col gap-0.5">
@@ -125,90 +124,85 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         </FormNote>
       )}
 
-      {handlers.length === 0 ? (
-        <FormNote testId="settings-hooks-empty">
-          还没有配置任何 hook。可以在下面的 JSON 里添加事件 → matcher 组 → command handler；保存后这里会列出它们。
-        </FormNote>
-      ) : (
-        <ul className="flex flex-col gap-2" data-testid="settings-hooks-list">
-          {handlers.map((handler) => (
-            <li
-              key={handler.id}
-              className="flex flex-col gap-1 rounded-card border border-line bg-surface px-3 py-2"
-              data-testid={`settings-hook-${handler.id}`}
-              data-trust={handler.trustState}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-ink text-[var(--font-meta-size)]">{handler.event}</span>
-                <span className="text-subtle text-[var(--font-micro-size)]">
-                  matcher: {handler.matcher ?? '（无）'}
-                </span>
-                <span className="text-subtle text-[var(--font-micro-size)]" data-testid={`settings-hook-state-${handler.id}`}>
-                  {handlerEnabled(draft, handler) ? '启用' : '停用'} ·{' '}
-                  {handler.failureMode === 'block' ? '阻塞失败' : '继续失败'}
-                </span>
-                <span
-                  className="ml-auto flex items-center gap-1 rounded-control border border-line px-1.5 text-[var(--font-micro-size)]"
-                  data-testid={`settings-hook-trust-${handler.id}`}
-                >
-                  {handler.trustState === 'trusted' ? (
-                    <ShieldCheck size={11} aria-hidden="true" className="text-[var(--st-ok)]" />
-                  ) : (
-                    <ShieldQuestion size={11} aria-hidden="true" className="text-[var(--st-warn)]" />
-                  )}
-                  {handler.trustState === 'trusted'
-                    ? '已信任'
-                    : handler.trustState === 'review_required'
-                      ? '需要复核'
-                      : handler.trustState === 'disabled'
-                        ? '已停用'
-                        : '配置无效'}
-                </span>
-              </div>
-              <p className="break-all font-mono text-muted text-[var(--font-micro-size)]">{handler.command}</p>
-              {handler.validationError === null ? null : (
-                <FormNote tone="warn" testId={`settings-hook-error-${handler.id}`}>
-                  {handler.validationError}
-                </FormNote>
-              )}
-              <div className="flex flex-wrap items-center gap-3">
-                <CheckboxField
-                  label="启用"
-                  // Checked state comes from the draft, not from the read-only snapshot: the two
-                  // would otherwise disagree the moment the box is clicked (P8 review P1-1).
-                  checked={handlerEnabled(draft, handler)}
-                  onChange={(enabled) => toggleHandler(handler.id, enabled)}
-                  testId={`settings-hook-enabled-${handler.id}`}
-                />
-                {handler.trustState === 'review_required' ? (
-                  <button
-                    type="button"
-                    data-testid={`settings-hook-trust-button-${handler.id}`}
-                    disabled={trust.pending}
-                    onClick={() => {
-                      void trust.run({ handlerId: handler.id, hash: handler.hash }).then((result) => {
-                        if (result !== null) {
-                          store.reload();
-                        }
-                      });
-                    }}
-                    className={formSecondaryButtonClass}
-                  >
-                    信任这条 hook
-                  </button>
-                ) : null}
-                {handler.lastRun === null ? (
-                  <span className="text-subtle text-[var(--font-micro-size)]">还没有运行记录</span>
+      <ul className="flex flex-col gap-2" data-testid="settings-hooks-list">
+        {handlers.map((handler) => (
+          <li
+            key={handler.id}
+            className="flex flex-col gap-1 rounded-card border border-line bg-surface px-3 py-2"
+            data-testid={`settings-hook-${handler.id}`}
+            data-trust={handler.trustState}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-ink text-[var(--font-meta-size)]">{handler.event}</span>
+              <span className="text-subtle text-[var(--font-micro-size)]">
+                matcher: {handler.matcher ?? '（无）'}
+              </span>
+              <span className="text-subtle text-[var(--font-micro-size)]" data-testid={`settings-hook-state-${handler.id}`}>
+                {handlerEnabled(draft, handler) ? '启用' : '停用'} ·{' '}
+                {handler.failureMode === 'block' ? '阻塞失败' : '继续失败'}
+              </span>
+              <span
+                className="ml-auto flex items-center gap-1 rounded-control border border-line px-1.5 text-[var(--font-micro-size)]"
+                data-testid={`settings-hook-trust-${handler.id}`}
+              >
+                {handler.trustState === 'trusted' ? (
+                  <ShieldCheck size={11} aria-hidden="true" className="text-[var(--st-ok)]" />
                 ) : (
-                  <span className="text-subtle text-[var(--font-micro-size)]">
-                    最近运行：{handler.lastRun.status}
-                  </span>
+                  <ShieldQuestion size={11} aria-hidden="true" className="text-[var(--st-warn)]" />
                 )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                {handler.trustState === 'trusted'
+                  ? '已信任'
+                  : handler.trustState === 'review_required'
+                    ? '需要复核'
+                    : handler.trustState === 'disabled'
+                      ? '已停用'
+                      : '配置无效'}
+              </span>
+            </div>
+            <p className="break-all font-mono text-muted text-[var(--font-micro-size)]">{handler.command}</p>
+            {handler.validationError === null ? null : (
+              <FormNote tone="warn" testId={`settings-hook-error-${handler.id}`}>
+                {handler.validationError}
+              </FormNote>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <CheckboxField
+                label="启用"
+                // Checked state comes from the draft, not from the read-only snapshot: the two
+                // would otherwise disagree the moment the box is clicked (P8 review P1-1).
+                checked={handlerEnabled(draft, handler)}
+                onChange={(enabled) => toggleHandler(handler.id, enabled)}
+                testId={`settings-hook-enabled-${handler.id}`}
+              />
+              {handler.trustState === 'review_required' ? (
+                <button
+                  type="button"
+                  data-testid={`settings-hook-trust-button-${handler.id}`}
+                  disabled={trust.pending}
+                  onClick={() => {
+                    void trust.run({ handlerId: handler.id, hash: handler.hash }).then((result) => {
+                      if (result !== null) {
+                        store.reload();
+                      }
+                    });
+                  }}
+                  className={formSecondaryButtonClass}
+                >
+                  信任这条 hook
+                </button>
+              ) : null}
+              {handler.lastRun === null ? (
+                <span className="text-subtle text-[var(--font-micro-size)]">还没有运行记录</span>
+              ) : (
+                <span className="text-subtle text-[var(--font-micro-size)]">
+                  最近运行：{handler.lastRun.status}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    
 
       {trust.error === null ? null : (
         <FormNote tone="warn" testId="settings-hooks-trust-error">
@@ -217,7 +211,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       )}
 
       <div className="flex flex-col gap-1 border-t border-line pt-2">
-        <span className="text-subtle text-[var(--font-micro-size)]">配置 JSON（用后端 schema 校验后再进草稿）</span>
+        <span className="text-subtle text-[var(--font-micro-size)]">配置 JSON</span>
         <textarea
           value={jsonText}
           rows={8}

@@ -271,7 +271,6 @@ export function ProjectPortalView({
         ) : all.length === 0 ? (
           <EmptyState
             title="还没有研究项目"
-            description="新建研究项目后才会进入该项目的工作台。"
             action={{ label: '新建研究项目', onClick: () => setCreateOpen(true) }}
             testId="portal-empty"
           />

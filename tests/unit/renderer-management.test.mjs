@@ -93,8 +93,6 @@ test('a slot the backend did not report is distinguishable from an empty one', (
   );
   assert.match(workspaceReason, /绑定工作目录/u);
   assert.doesNotMatch(workspaceReason, /B26/u);
-  assert.doesNotMatch(memory.MEMORY_WORKSPACE_UNAVAILABLE_NOTE, /永远不可用|B26/u);
-  assert.match(memory.MEMORY_WORKSPACE_UNAVAILABLE_NOTE, /workspaceHash/u);
   assert.equal(
     memory.slotUnavailableReason(
       { scope: 'global', kind: 'user', exists: true, charCount: 0, charLimit: 20000, absolutePath: '/memory/global/USER.md', effective: true, updatedAt: null },
@@ -245,8 +243,6 @@ test('image previews arrive as data URLs and markdown is recognised by extension
   assert.match(skill.previewSizeLabel({ ...base, kind: 'text', relativePath: 'a.md', truncated: true }), /已截断/);
   assert.match(skill.previewTruncatedNote({ ...base, kind: 'text', relativePath: 'a.md', truncated: true }), /截断/);
   assert.equal(skill.previewTruncatedNote({ ...base, kind: 'text', relativePath: 'a.md' }), null);
-  assert.match(skill.SKILL_FIELD_NOTE, /没有分类与版本字段/);
-  assert.match(skill.LICENSE_BOUNDARY_NOTE, /CC BY-NC 4\.0/);
 });
 
 /* ------------------------------------------------------------------ */

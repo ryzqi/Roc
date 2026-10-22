@@ -116,7 +116,6 @@ export function GitFileDiff({
     return (
       <EmptyState
         title="该文件没有可显示的 diff"
-        description="二进制文件、纯重命名或空改动都不会产生补丁。"
         testId="git-diff-empty"
       />
     );

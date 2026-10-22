@@ -162,7 +162,6 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
   return (
     <FormSection
       title="向量与 RAG"
-      hint="research.index.configure（按项目）· research.embedding.list / save"
       testId="settings-section-rag-body"
     >
       <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
@@ -176,11 +175,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           )}
         </header>
 
-        {store.projectId === null ? (
-          <FormNote testId="settings-index-no-project">
-            索引配置按项目存储（契约要求 projectId）。进入一个项目后再打开设置即可配置该项目的索引。
-          </FormNote>
-        ) : store.indexError !== null ? (
+        {store.projectId === null ? null : store.indexError !== null ? (
           <FormNote tone="warn" testId="settings-index-error">
             {store.indexError}
           </FormNote>
@@ -258,10 +253,6 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 </select>
               </label>
             </div>
-            <FormNote testId="settings-index-note">
-              索引的扫描/重建仍由 RAG Studio 触发（research.index.control）；这里只保存配置，保存后 RAG Studio
-              会立即读到新值。
-            </FormNote>
           </>
         )}
       </section>
@@ -299,37 +290,34 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           </FormNote>
         )}
 
-        {configs.length === 0 ? (
-          <FormNote testId="settings-embedding-empty">后端还没有嵌入配置。</FormNote>
-        ) : (
-          <ul className="flex flex-col gap-1" data-testid="settings-embedding-list">
-            {configs.map((config) => (
-              <li key={config.id} className="flex flex-wrap items-center gap-2 text-[var(--font-meta-size)]">
-                <button
-                  type="button"
-                  data-testid={`settings-embedding-select-${config.id}`}
-                  onClick={() => {
-                    setSelectedConfigId(config.id);
-                    setForm(formFromConfig(config));
-                    setApiKey('');
-                  }}
-                  className={
-                    config.id === selectedConfigId
-                      ? 'rounded-control bg-accent-soft px-2 py-0.5 text-left text-ink'
-                      : 'rounded-control px-2 py-0.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'
-                  }
-                >
-                  {config.name || config.id}
-                </button>
-                <span className="font-mono text-subtle text-[var(--font-micro-size)]">{config.model}</span>
-                <span className="text-subtle text-[var(--font-micro-size)]">
-                  {config.dimensions} 维 · {config.enabled ? '启用' : '停用'} ·{' '}
-                  {config.keyConfigured ? '密钥已配置' : '缺少密钥'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="flex flex-col gap-1" data-testid="settings-embedding-list">
+          {configs.map((config) => (
+            <li key={config.id} className="flex flex-wrap items-center gap-2 text-[var(--font-meta-size)]">
+              <button
+                type="button"
+                data-testid={`settings-embedding-select-${config.id}`}
+                onClick={() => {
+                  setSelectedConfigId(config.id);
+                  setForm(formFromConfig(config));
+                  setApiKey('');
+                }}
+                className={
+                  config.id === selectedConfigId
+                    ? 'rounded-control bg-accent-soft px-2 py-0.5 text-left text-ink'
+                    : 'rounded-control px-2 py-0.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'
+                }
+              >
+                {config.name || config.id}
+              </button>
+              <span className="font-mono text-subtle text-[var(--font-micro-size)]">{config.model}</span>
+              <span className="text-subtle text-[var(--font-micro-size)]">
+                {config.dimensions} 维 · {config.enabled ? '启用' : '停用'} ·{' '}
+                {config.keyConfigured ? '密钥已配置' : '缺少密钥'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      
 
         {form === null ? null : (
           <div className="flex flex-col gap-2 border-t border-line pt-2" data-testid="settings-embedding-editor">
@@ -367,11 +355,10 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 testId="settings-embedding-dimensions"
               />
               <TextField
-                label="API Key（后端要求每次保存都给出，B23）"
+                label="API Key（每次保存都需要填写）"
                 type="password"
                 value={apiKey}
                 onChange={setApiKey}
-                hint="只提交给 research.embedding.save；后端用与 settings.setProviderSecret 相同的 safeStorage 写入，随后立即从界面状态清除。"
                 testId="settings-embedding-apikey"
               />
             </div>
@@ -415,11 +402,6 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 {selectedConfig === null ? '新增' : `编辑 ${selectedConfig.id}`}
               </span>
             </div>
-            {apiKey.trim().length === 0 ? (
-              <FormNote testId="settings-embedding-key-required">
-                保存必须带 API Key（`research.embedding.save` 的契约如此）：即使只改维度也要重新输入一次，渲染层不保存明文。
-              </FormNote>
-            ) : null}
             {saveEmbedding.error === null ? null : (
               <FormNote tone="warn" testId="settings-embedding-save-error">
                 {saveEmbedding.error}
@@ -429,10 +411,6 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         )}
       </section>
 
-      <FormNote testId="settings-rag-removed">
-        旧前端的 chunk 大小 / 重叠 / topK / RRF k / 向量与关键词权重 / reranker / 相似度阈值 / 父块扩展 /
-        上下文前缀没有后端字段，已移除（不造字段）；知识检索的超参由后端索引服务固定。
-      </FormNote>
     </FormSection>
   );
 }

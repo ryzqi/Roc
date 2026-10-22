@@ -167,7 +167,6 @@ function renderPanel(
       <EmptyState
         tone="error"
         title="读取设置失败"
-        description={store.error ?? '后端没有返回原因。'}
         action={{ label: '重试', onClick: () => store.reload() }}
         testId="settings-load-error"
       />
@@ -433,7 +432,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         open={closeConfirmOpen}
         title="放弃未保存的设置？"
         message={`有 ${dirtyCount} 项设置尚未保存。`}
-        detail="放弃后这些改动不会写入后端，需要重新设置。"
+        detail="放弃后改动不会保存。"
         confirmLabel="放弃修改"
         cancelLabel="继续编辑"
         tone="destructive"

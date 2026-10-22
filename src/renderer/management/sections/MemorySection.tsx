@@ -5,7 +5,6 @@ import { formatBeijingDateTime } from '../../shared/format';
 import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
 import type { ManagementScope } from '../management-scope';
 import {
-  MEMORY_WORKSPACE_UNAVAILABLE_NOTE,
   auditRecordLine,
   buildMemoryAssistPrompt,
   capacityLabel,
@@ -119,7 +118,6 @@ export function MemorySection({
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-memory">
       <FormSection
         title="记忆文件（markdown，五份）"
-        hint="memory.status / memory.file.read / memory.file.write"
         testId="mgmt-memory-files"
       >
         <dl className="flex flex-col gap-0.5">
@@ -146,9 +144,6 @@ export function MemorySection({
           />
         </dl>
 
-        {memory.workspaceHash === null ? (
-          <FormNote testId="mgmt-memory-workspace-note">{MEMORY_WORKSPACE_UNAVAILABLE_NOTE}</FormNote>
-        ) : null}
 
         <div className="flex items-center gap-2">
           <button
@@ -161,9 +156,6 @@ export function MemorySection({
             <RefreshCw size={11} aria-hidden="true" />
             重新读取
           </button>
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            容量、会话保留、全文索引与审计记录都来自这一次读取；保存成功后会自动重读。
-          </span>
         </div>
 
         <ul className="flex flex-col gap-1" data-testid="mgmt-memory-slots">
@@ -198,7 +190,7 @@ export function MemorySection({
                   <span className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
                     <span className={capacityTone(state)} data-testid={`mgmt-memory-capacity-${slot.scope}-${slot.kind}`}>
                       {meta === null
-                        ? '后端未返回该槽位'
+                        ? '暂无内容'
                         : meta.exists
                           ? capacityLabel(meta)
                           : `${slot.requiresWorkspace && !meta.effective ? '不可用' : '空文件'} · ${capacityLabel(meta)}`}
@@ -218,7 +210,6 @@ export function MemorySection({
 
       <FormSection
         title={`编辑 ${files.selected.virtualPath}`}
-        hint="markdown 正文；结构化大纲只是这段文字的投影"
         testId="mgmt-memory-editor"
       >
         {files.contentError === null ? null : (
@@ -317,17 +308,12 @@ export function MemorySection({
                 ))}
               </ul>
             )}
-            <FormNote testId="mgmt-memory-projection-note">
-              没有「结构化记忆条目」这种实体：后端把记忆存成 markdown 内容（虚拟路径 + SQLite 记录），
-              `memory.entries.search` / `memory.entry.remember` 也没有 IPC 通道（B25）。所以上面的大纲是从编辑器文字实时派生的，不是第二份数据。
-            </FormNote>
           </div>
         </div>
       </FormSection>
 
       <FormSection
         title="注入快照预览"
-        hint="memory.snapshot.preview — 下一次运行真正会带上什么"
         testId="mgmt-memory-preview"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -366,7 +352,6 @@ export function MemorySection({
 
       <FormSection
         title="从会话里找"
-        hint="agent.sessions.search（memory 域没有条目检索的 IPC）"
         testId="mgmt-memory-search"
       >
         <div className="flex flex-wrap items-end gap-2">
@@ -416,11 +401,7 @@ export function MemorySection({
             {search.error}
           </FormNote>
         )}
-        {search.result === null ? (
-          <FormNote testId="mgmt-memory-search-hint">
-            检索的是持久化的会话消息（助手回复与提问答复）；用户提问本身不在检索面里（F17②）。
-          </FormNote>
-        ) : search.result.items.length === 0 ? (
+        {search.result === null ? null : search.result.items.length === 0 ? (
           <FormNote testId="mgmt-memory-search-empty">没有命中（共 {search.result.total} 条）。</FormNote>
         ) : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-memory-search-hits">
@@ -448,26 +429,20 @@ export function MemorySection({
 
       <FormSection
         title={`自动沉淀审计（最近 ${memory.autoMemory.recent.length} 条）`}
-        hint={`memory.status.autoMemory · 保留 ${memory.autoMemory.auditRetentionDays} 天 · ${memory.autoMemory.enabled ? '已启用' : '已停用'}`}
         testId="mgmt-memory-audit"
       >
-        {memory.autoMemory.recent.length === 0 ? (
-          <FormNote testId="mgmt-memory-audit-empty">
-            还没有审计记录（自动记忆在设置中心的「记忆策略」里开关，见 P8）。
-          </FormNote>
-        ) : (
-          <ul className="flex flex-col gap-0.5" data-testid="mgmt-memory-audit-list">
-            {memory.autoMemory.recent.map((record) => (
-              <li key={record.id} className="flex flex-col gap-0.5 text-[var(--font-micro-size)]">
-                <span className="text-muted">{auditRecordLine(record)}</span>
-                <span className="text-subtle">
-                  {record.createdAt} · {record.reason}
-                  {record.targetPath === null ? '' : ` · ${record.targetPath}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="flex flex-col gap-0.5" data-testid="mgmt-memory-audit-list">
+          {memory.autoMemory.recent.map((record) => (
+            <li key={record.id} className="flex flex-col gap-0.5 text-[var(--font-micro-size)]">
+              <span className="text-muted">{auditRecordLine(record)}</span>
+              <span className="text-subtle">
+                {record.createdAt} · {record.reason}
+                {record.targetPath === null ? '' : ` · ${record.targetPath}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      
       </FormSection>
     </div>
   );

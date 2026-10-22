@@ -68,7 +68,6 @@ export function SessionListView({
         compact
         icon={MessagesSquare}
         title="暂无会话"
-        description="在助手面板发送第一条指令时会自动建立会话。"
         testId="sidebar-empty-sessions"
       />
     );
@@ -126,10 +125,6 @@ export function SessionListView({
           );
         })}
       </ul>
-
-      <p className="shrink-0 px-2 py-1 text-subtle text-[var(--font-micro-size)]">
-        后端没有「会话按项目归属」字段，这里显示的是全部对话会话；重命名无接口（B3）。
-      </p>
 
       {threads.removeError === null ? null : (
         <p role="alert" className="px-3 pb-2 text-[var(--st-bad)] text-[var(--font-micro-size)]">

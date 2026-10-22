@@ -148,11 +148,6 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
           compact
           icon={BookOpen}
           title={literature.query.trim().length > 0 ? '没有匹配的文献' : '尚无文献'}
-          description={
-            literature.query.trim().length > 0
-              ? '换一个关键词，或清空搜索。'
-              : '导入 DOI、参考文献文件，或把 PDF / 图片 / HTML 作为文献导入。'
-          }
           action={{ label: '导入文献', onClick: onRequestImport }}
           testId="literature-empty"
         />
@@ -233,7 +228,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
           data-testid="literature-truncated"
           role="note"
         >
-          当前最多显示 200 条，请用搜索缩小范围。
+          只显示前 200 条。
         </p>
       ) : null}
 

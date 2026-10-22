@@ -26,7 +26,6 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
   return (
     <FormSection
       title="智能体安全"
-      hint="settings.save 的 permissions.mode 与 memory.securityScan / charLimits"
       testId="settings-section-guardrail-body"
     >
       <label className="flex max-w-[420px] flex-col gap-0.5">
@@ -41,17 +40,14 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
           data-testid="settings-approval-mode"
           className={formInputClass}
         >
-          <option value="default">默认：需要审批的工具会停下来等确认</option>
-          <option value="fully_automatic">全自动：不拦截工具调用</option>
+          <option value="default">默认</option>
+          <option value="fully_automatic">全自动</option>
         </select>
-        <span className="text-subtle text-[var(--font-micro-size)]">
-          这一项直接决定 P4/P6 里的审批卡会不会出现（`run-capability-manifest` 读它）。
-        </span>
       </label>
 
       {draft.permissions.mode === 'fully_automatic' ? (
         <FormNote tone="warn" testId="settings-approval-mode-warning">
-          全自动模式下删除文件、执行命令等工具不会请求确认 —— 仅在明确知道风险时使用。
+          全自动模式下删除文件、执行命令不会请求确认。
         </FormNote>
       ) : null}
 
@@ -143,10 +139,6 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
         />
       </div>
 
-      <FormNote testId="settings-guardrail-removed">
-        旧前端的 shell 安全等级 / 覆盖保护 / 会话 token 预算 / MCP 超时 / 外网开关在后端契约里没有字段，已移除。
-        文件写入与命令执行的边界由工具自己的能力清单与审批模式决定，不是一组可调阈值。
-      </FormNote>
     </FormSection>
   );
 }
@@ -161,12 +153,10 @@ export function MemorySection({ store }: { store: SettingsStore }): React.JSX.El
   return (
     <FormSection
       title="记忆策略"
-      hint="settings.save 的 memory.autoMemory（记忆文件本身在管理面板，P9）"
       testId="settings-section-memory-body"
     >
       <CheckboxField
         label="自动沉淀记忆"
-        description="运行结束后由后端从会话里提取候选记忆；关闭后不再写入。"
         checked={autoMemory.enabled}
         onChange={(enabled) => store.update((next) => void (next.settings.memory.autoMemory.enabled = enabled))}
         testId="settings-auto-memory-enabled"
@@ -216,10 +206,6 @@ export function MemorySection({ store }: { store: SettingsStore }): React.JSX.El
         />
       </div>
 
-      <FormNote testId="settings-memory-note">
-        记忆文件的读写与检索（USER.md / AGENTS.md / MEMORY.md、安全扫描结果、审计流水）在管理面板的「记忆」分区（P9）；
-        这里只设置后端用来决定「要不要沉淀、沉淀多少、留多久」的策略值。
-      </FormNote>
     </FormSection>
   );
 }

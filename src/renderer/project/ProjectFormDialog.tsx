@@ -191,9 +191,6 @@ export function ProjectFormDialog({
             data-testid="project-form-description"
             className="resize-none rounded-control border border-line bg-surface-strong px-2.5 py-2 text-ink"
           />
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            阶段运行与闸门判断都以它为依据；未写明运行时指令时也用它。
-          </span>
           {errors.description === undefined ? null : (
             <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-description-error">
               {errors.description}
@@ -261,9 +258,6 @@ export function ProjectFormDialog({
               选择目录
             </button>
           </div>
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            必须用系统目录选择器；一个目录同时只属于一个项目。
-          </span>
           {errors.workspacePath === undefined ? null : (
             <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-workspace-error">
               {errors.workspacePath}

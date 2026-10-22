@@ -215,11 +215,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
       onClose={onClose}
       testId="literature-import-dialog"
       widthClassName="max-w-2xl"
-      footer={
-        <span className={labelClass} data-testid="literature-import-hint">
-          解析（MinerU）模式与公式/表格开关在设置中心，不在这里。
-        </span>
-      }
+      footer={null}
     >
       <div className="flex flex-col gap-3" data-testid="literature-import-body">
         <div role="tablist" aria-label="导入方式" className="flex flex-wrap items-center gap-1">

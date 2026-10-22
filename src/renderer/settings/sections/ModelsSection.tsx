@@ -110,7 +110,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   );
 
   if (draft === null || provider === null) {
-    return <FormNote testId="settings-models-unavailable">设置尚未读取完成，或后端没有返回任何供应商。</FormNote>;
+    return <FormNote testId="settings-models-unavailable">设置尚未读取完成。</FormNote>;
   }
 
   const builtIn = isFixedProviderId(provider.id);
@@ -127,7 +127,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   return (
     <FormSection
       title="模型与服务"
-      hint="settings.get / save · settings.testProvider · settings.setProviderSecret"
       testId="settings-section-models-body"
     >
       <div className="flex flex-wrap items-end gap-2">
@@ -173,7 +172,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             className="rounded-control border border-line px-1.5 text-subtle text-[var(--font-micro-size)]"
             data-testid="settings-provider-builtin"
           >
-            内置：id / 名称 / 地址 / 凭据引用由后端规范化
+            内置
           </span>
         ) : (
           <button
@@ -216,7 +215,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         />
         <Field
           label="凭据引用（credentialRef）"
-          hint="密钥正文只存在系统钥匙串，这里只显示引用。"
           testId="settings-provider-credential"
         >
           <span
@@ -249,7 +247,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         </header>
         <div className="flex flex-wrap items-end gap-2">
           <TextField
-            label="新密钥（只提交给后端，不进入设置草稿）"
+            label="新密钥"
             type="password"
             value={secretInput}
             onChange={setSecretInput}
@@ -285,10 +283,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             清除密钥
           </button>
         </div>
-        <FormNote testId="settings-provider-secret-note">
-          密钥只写入系统钥匙串；这一步同时把凭据引用改成 <span className="font-mono">secret:{provider.id}</span>
-          ，点顶部「保存设置」写入后才对该供应商生效（模型工厂只认凭据引用）。
-        </FormNote>
         {setSecret.error === null ? null : (
           <FormNote tone="warn" testId="settings-provider-secret-error">
             {setSecret.error}
@@ -315,9 +309,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           </button>
         </header>
 
-        {provider.models.length === 0 ? (
-          <FormNote testId="settings-model-empty">该供应商还没有模型；至少需要一个才能用于助手。</FormNote>
-        ) : null}
 
         <ul className="flex flex-col gap-2">
           {provider.models.map((model, modelIndex) => (
@@ -440,7 +431,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
       </section>
 
       <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
-        <h4 className="text-ink text-[var(--font-meta-size)]">测速（后端真实调用）</h4>
+        <h4 className="text-ink text-[var(--font-meta-size)]">测速</h4>
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex w-[240px] flex-col gap-0.5">
             <span className="text-subtle text-[var(--font-micro-size)]">用于测试的模型</span>
@@ -480,9 +471,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             {test.pending ? '测试中…' : '测试连通'}
           </button>
         </div>
-        {testModelId === null ? (
-          <FormNote testId="settings-test-hint">先启用一个模型；契约要求测试同时给出 provider 与 model。</FormNote>
-        ) : null}
         {test.error === null ? null : (
           <FormNote tone="warn" testId="settings-test-error">
             {test.error}
@@ -491,8 +479,8 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         {testResult === null ? null : (
           <FormNote testId="settings-test-result">
             {testResult.status === 'ready'
-              ? `连通：${testResult.latencyMs === null ? '后端未返回延迟' : `${testResult.latencyMs} ms`}（检查项 ${testResult.checked.length}）`
-              : `不连通：${testResult.error ?? '后端没有给出原因'}`}
+              ? `连通：${testResult.latencyMs === null ? '未返回延迟' : `${testResult.latencyMs} ms`}（检查项 ${testResult.checked.length}）`
+              : `不连通：${testResult.error ?? '未知原因'}`}
           </FormNote>
         )}
       </section>
@@ -520,7 +508,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         open={removeProviderOpen}
         title="移除该供应商？"
         message={`将从设置中删除 ${provider.name || provider.id} 及其模型。`}
-        detail="保存设置后后端才会真正写入；已存的密钥不会被自动删除。"
+        detail="保存后生效；已存的密钥不会被删除。"
         confirmLabel="移除"
         tone="destructive"
         testId="settings-provider-remove-confirm"

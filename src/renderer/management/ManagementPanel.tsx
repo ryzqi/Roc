@@ -85,11 +85,7 @@ export function ManagementPanel({
             type="button"
             data-testid="mgmt-open-in-canvas"
             onClick={() => scope.openManagementView(tab)}
-            title={
-              tab === 'tasks'
-                ? '任务在画布上的家是任务看板（P6）'
-                : '在画布里打开同一组面板（和这里的抽屉共用组件）'
-            }
+            title="在画布中打开"
             className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           >
             {tab === 'tasks' ? '打开任务看板' : '在画布中打开'}
@@ -104,7 +100,7 @@ export function ManagementPanel({
       open={discardOpen}
       title="放弃未保存的记忆改动？"
       message={`有 ${stores.memory.dirtyCount} 份记忆文件尚未保存。`}
-      detail="放弃后这些改动不会写入后端。同一组面板在画布视图里也能编辑，两个编辑器各持一份草稿会互相覆盖。"
+      detail="放弃后改动不会保存。"
       confirmLabel="放弃修改"
       cancelLabel="继续编辑"
       tone="destructive"

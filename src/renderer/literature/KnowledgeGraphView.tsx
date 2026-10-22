@@ -96,7 +96,6 @@ export function KnowledgeGraphView({
       <EmptyState
         icon={Compass}
         title="尚无图谱数据"
-        description="图谱只由真实关系构成：文献、主张、证据与它们之间的引用。先导入文献、捕获证据并建立主张。"
         testId="graph-empty"
       />
     );
@@ -206,7 +205,7 @@ export function KnowledgeGraphView({
         <aside className="hidden w-72 shrink-0 flex-col gap-2 border-l border-line p-3 lg:flex" aria-label="节点详情">
           {selectedNode === null ? (
             <p className="text-muted text-[var(--font-meta-size)]" data-testid="graph-no-selection">
-              选一个节点查看它的真实关系。
+              选一个节点查看它的关系。
             </p>
           ) : (
             <>
@@ -255,9 +254,6 @@ export function KnowledgeGraphView({
                   让助手扩展这个节点
                 </button>
               )}
-              <p className="text-subtle text-[var(--font-micro-size)]">
-                只显示已记录的关系，不根据文本相似度推测关联。
-              </p>
             </>
           )}
         </aside>

@@ -29,9 +29,6 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
     <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-testid="management-view" data-view={view}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-ink text-[var(--font-h3-size)]">管理</span>
-        <span className="text-subtle text-[var(--font-micro-size)]">
-          与助手旁的管理抽屉是同一组面板（记忆 / 技能 / MCP / 任务）
-        </span>
       </div>
       <div className="max-w-[520px]">
         <ManagementTabStrip

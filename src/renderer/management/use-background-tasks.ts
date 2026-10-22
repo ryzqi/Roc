@@ -281,7 +281,7 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
       return false;
     }
     if (draft.reason.trim().length === 0) {
-      setMutationError('修改后台任务必须填写原因（updateBackgroundTask 的 reason 会记进任务溯源）。');
+      setMutationError('修改后台任务必须填写原因。');
       return false;
     }
     setPending(true);

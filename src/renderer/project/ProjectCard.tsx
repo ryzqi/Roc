@@ -116,7 +116,7 @@ export function ProjectCard({
           onClick={onTogglePin}
           aria-pressed={pinned}
           aria-label={pinned ? `取消置顶 ${project.title}` : `本机置顶 ${project.title}`}
-          title={pinned ? '取消本机置顶' : '本机置顶（仅本机偏好，不写后端）'}
+          title={pinned ? '取消置顶' : '置顶'}
           data-testid={`portal-card-pin-${project.id}`}
           className={
             pinned

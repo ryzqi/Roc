@@ -65,7 +65,6 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-tasks">
       <FormSection
         title="后台任务"
-        hint="task.background.list + task.scheduler.status"
         testId="mgmt-tasks-list-section"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -114,11 +113,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </FormNote>
         )}
 
-        {tasks.tasks.length === 0 ? (
-          <FormNote testId="mgmt-tasks-empty">
-            还没有后台任务。「新建任务」会先给出预览（是否调度、cron、下一次运行、风险等级），确认后才创建。
-          </FormNote>
-        ) : (
+        {tasks.tasks.length === 0 ? null : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-tasks-rows">
             {tasks.tasks.map((task) => {
               const availability = getTaskActionAvailability(task.status);
@@ -233,7 +228,6 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
       {tasks.selected === null ? null : (
         <FormSection
           title={`详情：${tasks.selected.goal}`}
-          hint="task.background.list 的任务字段 + tasks.listScheduledRuns 的调度记录"
           testId="mgmt-task-detail"
         >
           <dl className="flex flex-col gap-0.5">
@@ -299,17 +293,12 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               ))}
             </ul>
           )}
-          <FormNote testId="mgmt-task-runs-note">
-            调度描述与下次运行时间都来自后端的字段（`triggerDescription` / `cronExpression` / `nextRunAt`），
-            前端不算 cron；历史是 `tasks.listScheduledRuns` 的真实记录，不是前端生成的列表。
-          </FormNote>
         </FormSection>
       )}
 
       {draft === null ? null : (
         <FormSection
           title={tasks.mode === 'edit' ? '编辑任务' : '新建任务'}
-          hint={tasks.mode === 'edit' ? 'task.background.update（必须给 reason）' : 'preview → create'}
           testId="mgmt-task-editor"
         >
           <label className="flex flex-col gap-0.5">
@@ -497,10 +486,6 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               {tasks.update.error}
             </FormNote>
           )}
-          <FormNote testId="mgmt-task-editor-note">
-            失败策略与通知策略在契约里是固定字面量（`pause_and_report` / `failures_and_confirmations`），
-            所以这里不做成只有一个选项的下拉框。
-          </FormNote>
         </FormSection>
       )}
 

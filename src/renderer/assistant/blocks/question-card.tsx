@@ -38,7 +38,6 @@ export function QuestionInterruptCard({ question }: { question: ChatPendingQuest
           </ul>
         </>
       )}
-      <p className="mt-2 text-subtle text-[var(--font-micro-size)]">在下方输入回答后发送，运行会继续。</p>
     </section>
   );
 }

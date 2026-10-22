@@ -91,7 +91,6 @@ export function WikiView({
       <EmptyState
         icon={BookMarked}
         title="尚无概念页"
-        description="先导入文献并捕获证据，再把证据关联到主张；概念页由主张与证据派生，不预置示例内容。"
         testId="wiki-empty"
       />
     );
@@ -151,9 +150,6 @@ export function WikiView({
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-[var(--font-micro-size)]">
         <span className="text-muted" data-testid="wiki-counts">
           {projection.pages.length} 个概念 · {projection.backlinks.length} 条共现 · {projection.timeline.length} 个年份
-        </span>
-        <span className="text-subtle">
-          每个概念由一条主张和它引用的证据组成。
         </span>
         <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 sm:max-w-[240px]">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -251,7 +247,7 @@ export function WikiView({
             <section>
               <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[var(--font-micro-size)]">
                 <CalendarClock size={11} aria-hidden="true" />
-                演进时间线（只使用文献真实的年份）
+                演进时间线
               </h3>
               <ol className="flex flex-wrap items-center gap-1.5" data-testid="wiki-timeline">
                 {projection.timeline.map((entry) => (
@@ -282,9 +278,6 @@ export function WikiView({
               <h3 className="mb-1 text-muted text-[var(--font-micro-size)]">
                 未归类证据（{projection.orphanEvidence.length}）
               </h3>
-              <p className="mb-1 text-subtle text-[var(--font-micro-size)]">
-                这些证据还没有被任何主张引用；它们在图谱里是独立节点。
-              </p>
               <ul className="flex flex-col gap-1" data-testid="wiki-orphan-evidence">
                 {projection.orphanEvidence.map((card) => (
                   <li key={card.id} className="truncate text-[var(--font-micro-size)]">
@@ -302,7 +295,6 @@ export function WikiView({
             <EmptyState
               icon={Layers}
               title="没有可显示的概念"
-              description="当前筛选下没有匹配的概念页；清空搜索或换一个关键词。"
               testId="wiki-detail-empty"
             />
           ) : (
@@ -357,7 +349,7 @@ export function WikiView({
 
               {selected.hasMissingEvidence ? (
                 <p className="mt-1.5 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid={`wiki-page-missing-${selected.claimId}`}>
-                  这条主张引用了当前加载范围之外的证据（未加载的就显示为缺失，不会补造内容）。
+                  这条主张引用了当前未加载的证据。
                 </p>
               ) : null}
 

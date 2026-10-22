@@ -131,7 +131,6 @@ export function LatexPanel(): React.JSX.Element {
         <EmptyState
           icon={Code2}
           title="未绑定工作目录"
-          description="文稿编辑的是工作区里的真实文件；先在左栏选择工作目录。"
           action={{ label: '重试绑定', onClick: scope.rebindWorkspace }}
           testId="production-latex-no-workspace"
         />
@@ -169,10 +168,7 @@ export function LatexPanel(): React.JSX.Element {
           <ErrorBar error={{ level: 'page', message: files.error ?? '扫描文件失败', retry: files.reload }} />
         ) : null}
         {(files.data ?? []).length === 0 ? (
-          <InlineHint
-            text="工作区里没有可编辑的文稿文件（.tex/.bib/…）。用文件视图新建，或让助手写一份。"
-            testId="production-latex-empty"
-          />
+          <InlineHint text="没有可编辑的文稿文件。" testId="production-latex-empty" />
         ) : (
           <ul className="flex flex-col gap-0.5">
             {(files.data ?? []).map((file) => (
@@ -208,13 +204,11 @@ export function LatexPanel(): React.JSX.Element {
           <EmptyState
             icon={FileText}
             title="选择一个文稿文件"
-            description="选择一个文稿文件开始编辑。保存前会保留一份备份。"
             testId="production-latex-no-file"
           />
         ) : (
           <PanelSection
             title={fileName(selectedPath)}
-            hint="修改后保存；写入前会保留一份备份。"
             testId="production-latex-editor"
             action={{
               label: dirty ? '放弃修改' : '重新读取',
@@ -241,7 +235,7 @@ export function LatexPanel(): React.JSX.Element {
             ) : null}
             {isTruncated ? (
               <p className="text-[var(--st-warn)] text-[var(--font-meta-size)]" data-testid="production-latex-truncated" role="note">
-                这个文件太大，后端只返回了前一段（truncated）：为避免把文件覆盖成片段，编辑器在此只读。
+                文件过大，编辑器只读。
               </p>
             ) : null}
             {isText ? (

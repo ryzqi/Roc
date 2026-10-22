@@ -134,14 +134,6 @@ export function slotUnavailableReason(meta: MemoryFileMeta | null, slot: MemoryS
     : '当前不可用。';
 }
 
-/**
- * Shown above the slot list **only** while `memory.status.workspaceHash` is null, i.e. while the
- * two project slots genuinely cannot resolve. It explains how to make them work instead of
- * describing a gap in the build.
- */
-export const MEMORY_WORKSPACE_UNAVAILABLE_NOTE =
-  '项目级槽位（/memory/workspaces/current/{AGENTS,MEMORY}.md）需要绑定工作目录：绑定后 memory.status.workspaceHash 不再为 null，这两份文件会出现在槽位列表里且可读可写。三份全局文件不受影响。';
-
 /* ------------------------------------------------------------------ */
 /* Capacity                                                            */
 /* ------------------------------------------------------------------ */

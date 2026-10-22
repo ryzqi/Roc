@@ -44,7 +44,6 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
   return (
     <FormSection
       title="文献与解析"
-      hint="research.models.status / download（本地解析模型）"
       readOnly
       testId="settings-section-literature-body"
     >
@@ -68,9 +67,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         />
       </dl>
 
-      {status === null ? null : status.models.length === 0 ? (
-        <FormNote testId="settings-models-empty">后端还没有登记解析模型。</FormNote>
-      ) : (
+      {status === null ? null : (
         <ul className="flex flex-col gap-0.5" data-testid="settings-models-list">
           {status.models.map((model) => (
             <li key={model.repoId} className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
@@ -81,6 +78,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           ))}
         </ul>
       )}
+
 
       <div className="flex items-center gap-2">
         <button
@@ -99,7 +97,6 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           <Download size={11} aria-hidden="true" />
           {downloading ? '下载中…' : '下载/校验解析模型'}
         </button>
-        <span className="text-subtle text-[var(--font-micro-size)]">下载由后端执行；界面只在下载期间轮询状态。</span>
       </div>
       {download.error === null ? null : (
         <FormNote tone="warn" testId="settings-models-download-error">
@@ -107,11 +104,6 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         </FormNote>
       )}
 
-      <FormNote testId="settings-literature-removed">
-        旧前端的 MinerU 模式 / 地址 / Token / 公式与表格开关 / 语言，以及学术源（arXiv 镜像、Semantic Scholar
-        key、CrossRef 邮箱、代理、自动引用、BibTeX 风格）在后端契约里没有字段，已移除。解析参数由后端工具链固定，
-        文献导入仍可用（P5 的导入与解析面板）。
-      </FormNote>
     </FormSection>
   );
 }
@@ -128,7 +120,6 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
   return (
     <FormSection
       title="编译与沙箱"
-      hint="research.toolchain.status · rtk.status（只读）"
       readOnly
       testId="settings-section-sandbox-body"
     >
@@ -185,10 +176,6 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
         </dl>
       </div>
 
-      <FormNote testId="settings-sandbox-removed">
-        旧前端的 LaTeX 引擎选择 / 自动编译 / 防抖 / synctex / 沙箱运行时与端点 / 执行超时 / 绘图后端在后端契约里没有字段，已移除。
-        编译实际由模板包的 `research.template.compile`（tectonic）与实验运行的沙箱决定，二者都读这里的工具链状态。
-      </FormNote>
     </FormSection>
   );
 }

@@ -184,12 +184,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         <History size={11} aria-hidden="true" />
         提交历史
       </h3>
-      {git.lastCommit === null ? (
-        <p className="px-1 py-1 text-subtle text-[var(--font-micro-size)]">
-          后端没有提交历史接口（登记为 B5），这里只能显示当前分支
-          {currentBranch.length === 0 ? '' : ` ${currentBranch}`} 与本次会话中的提交。
-        </p>
-      ) : (
+      {git.lastCommit === null ? null : (
         <p className="px-1 py-1 text-muted text-[var(--font-micro-size)]" data-testid="git-last-commit">
           本次会话提交 <span className="font-mono">{git.lastCommit.commitSha.slice(0, 8)}</span> ·{' '}
           {git.lastCommit.commitMessage}
@@ -248,13 +243,6 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
                 ? '工作目录不存在'
                 : '当前目录不是 Git 仓库'
           }
-          description={
-            workspacePath === null
-              ? '先在项目里选择工作目录，Git 面板才有内容可显示。'
-              : missingWorkspace
-                ? '项目绑定的目录已经不存在或不可读。重新选择工作目录后再打开面板。'
-                : '这个目录没有 .git。换一个仓库目录，或在外部初始化仓库后再打开面板。'
-          }
           testId="git-unavailable"
         />
         {footer}
@@ -289,7 +277,6 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
     selectedChange === null ? (
       <EmptyState
         title="选择一个变更文件"
-        description="左侧列表中的文件被选中后，这里显示它的补丁。"
         testId="git-diff-none"
       />
     ) : (
@@ -392,7 +379,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         open={discardTarget !== null}
         title="丢弃改动？"
         message={`将丢弃 ${discardTarget ?? ''} 中未提交的改动。`}
-        detail="已暂存的内容也会一并丢弃，且无法通过撤销恢复（后端会保留恢复点，但不保证可用）。"
+        detail="已暂存的内容也会一并丢弃，无法撤销。"
         confirmLabel="丢弃"
         tone="destructive"
         testId="git-discard-confirm"

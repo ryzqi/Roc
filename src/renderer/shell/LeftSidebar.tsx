@@ -221,7 +221,6 @@ function SidebarFilesTab({
           compact
           icon={FolderTree}
           title="未选择工作区"
-          description="打开文件与代码前必须先绑定工作目录。"
           action={{ label: '选择目录', onClick: onSelectWorkspace, disabled: workspacePending }}
           testId="sidebar-files-no-workspace"
         />
@@ -254,7 +253,6 @@ function SidebarFilesTab({
           compact
           icon={FolderTree}
           title="工作目录无法绑定"
-          description={binding.error ?? workspaceError ?? '后端拒绝了该目录。'}
           action={{ label: '重试', onClick: binding.rebind }}
           testId="sidebar-files-bind-error"
         />

@@ -93,7 +93,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
   return (
     <FormSection
       title="受限试点"
-      hint="默认关闭 · 需明示额外预算 · 自动熔断 · 可随时回退"
       testId="settings-section-pilot-body"
     >
       <div className="flex flex-wrap items-center gap-2 text-[var(--font-meta-size)]" data-testid="settings-pilot-state">
@@ -110,11 +109,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         </span>
       </div>
 
-      <FormNote testId="settings-pilot-allowance">
-        额外预算上限 {settings.extraBudgetMicrousd} microusd；可计量额度：
-        {data.allowance.modelCalls} 次模型调用 / {data.allowance.toolCalls} 次工具调用 /{' '}
-        {data.allowance.totalTokens} tokens。美元成本为「未知」——没有价格表就不会显示金额，试点额度用尽即熔断。
-      </FormNote>
 
       <label className="flex max-w-[520px] flex-col gap-0.5">
         <span className="text-subtle text-[var(--font-micro-size)]">配置文件</span>
@@ -139,7 +133,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
             min={1}
             max={100}
             disabled={busy}
-            hint="按 submission hash 确定性分桶"
             testId="settings-pilot-rollout"
           />
         </div>
@@ -150,7 +143,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
             onChange={(next) => setExtraBudgetMicrousd(next === null || next === undefined ? 1 : next)}
             min={1}
             disabled={busy}
-            hint="必须显式给出，不能为 0"
             testId="settings-pilot-budget"
           />
         </div>
@@ -197,11 +189,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         </FormNote>
       )}
 
-      {data.lastRun === null ? (
-        <FormNote testId="settings-pilot-last-run-empty">
-          还没有试点运行。普通请求默认不会启动试点：没有决策记录就意味着这条运行按基础预算执行。
-        </FormNote>
-      ) : (
+      {data.lastRun === null ? null : (
         <div
           className="flex flex-col gap-0.5 text-[var(--font-meta-size)] text-muted"
           data-testid="settings-pilot-last-run"
@@ -219,6 +207,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
           </span>
         </div>
       )}
+
     </FormSection>
   );
 }

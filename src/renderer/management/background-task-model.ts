@@ -108,7 +108,7 @@ export function validateTaskDraft(draft: TaskDraft, workspacePath: string | null
     issues.push({ field: 'goal', message: '目标不能为空。' });
   }
   if (draft.triggerDescription.trim().length === 0) {
-    issues.push({ field: 'triggerDescription', message: '触发描述不能为空（它会显示在任务列表里）。' });
+    issues.push({ field: 'triggerDescription', message: '触发描述不能为空。' });
   }
   if (workspacePath === null || workspacePath.trim().length === 0) {
     issues.push({ field: 'goal', message: '后台任务必须有工作目录（先在项目里绑定工作目录）。' });

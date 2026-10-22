@@ -324,11 +324,6 @@ export function AssistantPanel({
         {session.messages.length === 0 ? (
           <EmptyState
             title={session.history.loadingInitial ? '正在读取会话…' : '开始一段研究对话'}
-            description={
-              session.history.loadingInitial
-                ? undefined
-                : '提问、让助手跑工具、或在任务/计划模式下发起一次结构化的运行。'
-            }
             tone={session.history.loadingInitial ? 'loading' : 'empty'}
             testId={session.history.loadingInitial ? 'assistant-history-loading' : 'assistant-empty'}
           />
