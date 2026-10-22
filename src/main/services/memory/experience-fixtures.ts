@@ -11,8 +11,6 @@ import { experienceContentHash } from './experience-records';
  * sample is still an information leak.
  */
 
-export const failureFixtureFields = ['failureClass', 'failureCode', 'toolName', 'stage', 'tokens'] as const;
-
 const fixtureInputSchema = z.object({
   failureClass: z.enum(['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent']),
   failureCode: z.string().min(1).max(120),

@@ -78,7 +78,7 @@ function canvasTabForView(view: AppViewId): CanvasTabId | null {
  *
  *   1. **They must be `import()`**, because `check-renderer-chunks.mjs` forbids
  *      `markdown|streamdown|highlight|settings` from the eager graph. The assistant
- *      pulls in the whole Markdown + KaTeX family in P4
+ *      pulls in the whole Markdown family in P4
  *      and settings pulls in every section in P8, so the boundary has to exist
  *      before those phases land.
  *   2. **They must be mounted on demand.** `React.lazy` starts fetching on first

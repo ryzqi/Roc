@@ -28,8 +28,6 @@
  */
 
 const OPENALEX_BASE = 'https://api.openalex.org/works';
-/** 单次核查上限：这是给人看的确认动作，不是批量抓取。 */
-export const retractionCheckLimit = 50;
 
 export type RetractionStatus = 'retracted' | 'clear' | 'unknown';
 

@@ -51,27 +51,6 @@ export function parseMemoryTopicStoreKey(storeKey: string): string | null {
   return topicSlugPattern.test(slug) ? slug : null;
 }
 
-/** 从虚拟路径（例如 `/memory/global/topics/build-pipeline.md`）解析主题 slug。 */
-export function parseMemoryTopicVirtualPath(
-  path: string
-): { scope: MemoryScope; slug: string } | null {
-  const routes: Array<{ scope: MemoryScope; prefix: string }> = [
-    { scope: 'global', prefix: '/memory/global/' },
-    { scope: 'workspace', prefix: '/memory/workspaces/current/' }
-  ];
-  for (const route of routes) {
-    if (!path.startsWith(route.prefix)) {
-      continue;
-    }
-    const slug = parseMemoryTopicStoreKey(`/${path.slice(route.prefix.length)}`);
-    if (slug === null) {
-      return null;
-    }
-    return { scope: route.scope, slug };
-  }
-  return null;
-}
-
 export function memoryTopicVirtualPath(scope: MemoryScope, slug: string): string {
   const prefix = scope === 'global' ? '/memory/global/' : '/memory/workspaces/current/';
   return `${prefix}${MEMORY_TOPIC_DIRECTORY}/${slug}.md`;
@@ -105,27 +84,6 @@ export function listMemorySlots(workspaceHash: string | null): MemorySlot[] {
     slots.push(createWorkspaceSlot('agents', workspaceHash), createWorkspaceSlot('memory', workspaceHash));
   }
   return slots;
-}
-
-export function resolveMemorySlotByVirtualPath(
-  path: string,
-  workspaceHash: string | null
-): MemorySlotResolveResult {
-  for (const slot of listMemorySlots(workspaceHash)) {
-    if (slot.virtualPath === path) {
-      return { ok: true, slot };
-    }
-  }
-  if (path === '/memory/workspaces/current/USER.md') {
-    return { ok: false, reason: 'invalid_path', detail: 'USER.md lives only at /memory/global/USER.md.' };
-  }
-  if (
-    workspaceHash === null &&
-    (path === '/memory/workspaces/current/AGENTS.md' || path === '/memory/workspaces/current/MEMORY.md')
-  ) {
-    return { ok: false, reason: 'workspace_required', detail: workspaceRequiredDetail };
-  }
-  return { ok: false, reason: 'invalid_path', detail: MEMORY_WHITELIST_ERROR };
 }
 
 export function resolveMemorySlotByScopeKind(

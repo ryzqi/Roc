@@ -55,14 +55,8 @@ export const popoverVariants: Variants = {
  * Collapsible detail sections (tool-call bodies, reasoning blocks).
  *
  * `height: 'auto'` in a variant is a layout read per frame; it needs
- * `overflow-hidden` on the same element. Two durations exist (0.16 and 0.15) —
- * both are exported rather than averaged, because collapsing a tool result is
- * the one transition the user triggers dozens of times per session and the
- * difference is visible in a trace.
+ * `overflow-hidden` on the same element.
  */
-export const collapseTransition: Transition = { duration: 0.16, ease: 'easeOut' };
-export const collapseTransitionShort: Transition = { duration: 0.15, ease: 'easeOut' };
-
 export function collapseVariants(): Variants {
   return {
     initial: { opacity: 0, height: 0 },

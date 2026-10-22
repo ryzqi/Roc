@@ -48,8 +48,6 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   { name: 'research_approve_gate', scope: 'app', effectClass: 'external_call', riskLevel: 'high', executionScopes: ['main'] }
 ];
 
-export const RESEARCH_TOOL_NAMES: readonly string[] = RESEARCH_TOOL_DESCRIPTORS.map((descriptor) => descriptor.name);
-
 const GATE_TOOL_NAME = 'research_approve_gate';
 const defaultLiteratureSources = ['openalex', 'crossref', 'arxiv'] as const;
 const maxInlineChars = 12000;

@@ -9,9 +9,6 @@ export type ForgeMessageType =
   | 'forge:context_digest';
 
 const TAG_KEY = 'forge_message_type';
-const NUDGE_VISIBILITY_KEY = 'forge_nudge_visibility';
-
-export type ForgeNudgeVisibility = 'internal' | 'visible';
 
 export function tagForgeMessage<M extends BaseMessage>(message: M, type: ForgeMessageType): M {
   const kwargs = (message.additional_kwargs ??= {});
@@ -19,19 +16,9 @@ export function tagForgeMessage<M extends BaseMessage>(message: M, type: ForgeMe
   return message;
 }
 
-export function markForgeNudgeInternal<M extends BaseMessage>(message: M): M {
-  const kwargs = (message.additional_kwargs ??= {});
-  kwargs[NUDGE_VISIBILITY_KEY] = 'internal';
-  return message;
-}
-
 export function readForgeMessageTag(message: BaseMessage): ForgeMessageType | null {
   const value = message.additional_kwargs?.[TAG_KEY];
   return isForgeMessageType(value) ? value : null;
-}
-
-export function readForgeNudgeVisibility(message: BaseMessage): ForgeNudgeVisibility {
-  return message.additional_kwargs?.[NUDGE_VISIBILITY_KEY] === 'internal' ? 'internal' : 'visible';
 }
 
 function isForgeMessageType(value: unknown): value is ForgeMessageType {
@@ -55,12 +42,3 @@ export function isForgeTransientMessage(message: BaseMessage): boolean {
   const tag = readForgeMessageTag(message);
   return tag !== null && FORGE_TRANSIENT_TYPES.has(tag);
 }
-
-export const FORGE_COMPACTION_PRIORITY: Record<ForgeMessageType, number> = {
-  'forge:retry_nudge': 1,
-  'forge:unknown_tool_nudge': 1,
-  'forge:context_warning': 1,
-  'forge:tool_resolution': 2,
-  'forge:reasoning': 4,
-  'forge:context_digest': 0
-};

@@ -1,25 +1,16 @@
-import type { ActiveTaskItem, BackgroundTask, TaskStatus } from '../../shared/types';
+import type { TaskStatus } from '../../shared/types';
 
 /**
- * Task-board derivations (P6/T6.6), ported from `views/tasks/task-view-model.ts`.
+ * Task action availability (P6/T6.6), ported from `views/tasks/task-view-model.ts`.
  *
- * Kept as pure functions with unit tests for the same reason as the workflow rules: the
- * lane membership and the action availability are *decisions about the contract*
- * (`taskStatusSchema` has 13 values), not styling. Getting them wrong shows a task in the
- * wrong column, or offers 暂停 on a task the backend will refuse.
+ * Kept a pure function with unit tests for the same reason as the workflow rules: which actions a
+ * status offers is *a decision about the contract* (`taskStatusSchema` has 13 values), not styling.
+ * Getting it wrong offers 暂停 on a task the backend will refuse.
  *
- * The status sets below are lifted verbatim from the legacy renderer, which had them
- * validated against the real backend; the new shell must not "improve" them without
- * evidence, so they are documented rather than reinterpreted.
+ * The status sets below are lifted verbatim from the legacy renderer, which had them validated
+ * against the real backend; the new shell must not "improve" them without evidence, so they are
+ * documented rather than reinterpreted.
  */
-
-export type TaskBoardLaneId = 'todo' | 'running' | 'paused' | 'done';
-
-export type TaskBoardLane = {
-  id: TaskBoardLaneId;
-  title: string;
-  items: ActiveTaskItem[];
-};
 
 export type TaskActionAvailability = {
   cancel: boolean;
@@ -28,17 +19,6 @@ export type TaskActionAvailability = {
   resume: boolean;
   runNow: boolean;
 };
-
-/** Statuses counted as "active" by the tray summary / nav meta. */
-const activeStatuses: ReadonlySet<TaskStatus> = new Set([
-  'dispatch_pending',
-  'running',
-  'recovering',
-  'waiting_user',
-  'waiting_next_turn',
-  'paused',
-  'pending_confirmation'
-]);
 
 /** `task.background.pause` accepts these (`pauseBackgroundTask` → status guard). */
 const pauseStatuses: ReadonlySet<TaskStatus> = new Set(['running', 'pending_confirmation']);
@@ -65,21 +45,6 @@ const runNowStatuses: ReadonlySet<TaskStatus> = new Set([
   'failed'
 ]);
 
-const laneConfig: Array<{ id: TaskBoardLaneId; title: string; statuses: TaskStatus[] }> = [
-  { id: 'todo', title: '待处理', statuses: ['draft', 'pending_confirmation', 'waiting_user'] },
-  { id: 'running', title: '进行中', statuses: ['dispatch_pending', 'running', 'recovering', 'waiting_next_turn'] },
-  { id: 'paused', title: '已暂停', statuses: ['paused'] },
-  { id: 'done', title: '已结束', statuses: ['failed', 'cancelled', 'completed', 'interrupted', 'archived'] }
-];
-
-export function buildTaskBoardLanes(items: readonly ActiveTaskItem[]): TaskBoardLane[] {
-  return laneConfig.map((lane) => ({
-    id: lane.id,
-    title: lane.title,
-    items: items.filter((item) => lane.statuses.includes(item.status))
-  }));
-}
-
 export function getTaskActionAvailability(status: TaskStatus): TaskActionAvailability {
   return {
     cancel: cancelStatuses.has(status),
@@ -88,30 +53,6 @@ export function getTaskActionAvailability(status: TaskStatus): TaskActionAvailab
     resume: status === 'paused',
     runNow: runNowStatuses.has(status)
   };
-}
-
-export type TaskNavMetaCounts = {
-  activeCount: number;
-  pendingApprovalCount: number;
-  scheduledCount: number;
-};
-
-export function countTaskNavMeta(items: readonly ActiveTaskItem[]): TaskNavMetaCounts {
-  let activeCount = 0;
-  let pendingApprovalCount = 0;
-  let scheduledCount = 0;
-  for (const item of items) {
-    if (activeStatuses.has(item.status)) {
-      activeCount += 1;
-    }
-    if (item.status === 'pending_confirmation') {
-      pendingApprovalCount += 1;
-    }
-    if (item.nextRunAt !== null && item.lastRunAt === null) {
-      scheduledCount += 1;
-    }
-  }
-  return { activeCount, pendingApprovalCount, scheduledCount };
 }
 
 export const taskStatusLabels: Record<TaskStatus, string> = {
@@ -128,10 +69,4 @@ export const taskStatusLabels: Record<TaskStatus, string> = {
   completed: '已完成',
   interrupted: '已中断',
   archived: '已归档'
-};
-
-export const backgroundTaskRiskLabels: Record<BackgroundTask['riskLevel'], string> = {
-  low: '低风险',
-  medium: '中风险',
-  high: '高风险'
 };

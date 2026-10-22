@@ -1,4 +1,4 @@
-import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem, ResearchKnowledgeSearchResult } from '../../shared/types';
+import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 
 /**
  * Derived LLM-Wiki projection.
@@ -209,17 +209,4 @@ export function deriveWiki(input: {
     .map(toEvidenceCard);
 
   return { pages, timeline, backlinks, orphanEvidence };
-}
-
-/**
- * Concept pages that match a retrieval result.
- *
- * Used to answer "what in the wiki is relevant to this query" **without**
- * pretending the wiki is searched: the hits are the real RAG result, and this
- * only joins them to claims by shared evidence.
- */
-export function conceptsForSearchResult(result: ResearchKnowledgeSearchResult, evidence: readonly ResearchEvidence[]): string[] {
-  const hitChunkIds = new Set(result.hits.map((hit) => hit.chunkId));
-  const evidenceIds = new Set(evidence.filter((record) => hitChunkIds.has(record.chunkId)).map((record) => record.id));
-  return [...evidenceIds];
 }

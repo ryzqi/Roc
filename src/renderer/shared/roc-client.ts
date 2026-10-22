@@ -10,11 +10,6 @@ export interface RocClient {
   readonly api: RocPreloadApi;
 }
 
-/** True when the preload script actually injected the bridge. */
-export function preloadApiAvailable(): boolean {
-  return typeof window !== 'undefined' && typeof window.roc !== 'undefined' && window.roc !== null;
-}
-
 export class PreloadUnavailableError extends Error {
   constructor() {
     super('预加载脚本未注入：window.roc 不存在，渲染进程无法访问本地能力。');

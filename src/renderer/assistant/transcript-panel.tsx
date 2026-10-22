@@ -45,10 +45,6 @@ export type ChatTranscriptPanelProps = {
   onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
 
-export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): ScrollToOptions {
-  return { top: scrollHeight };
-}
-
 export type TranscriptVirtuosoWindow = {
   firstItemIndex: number;
   initialTopMostItemIndex?: number;

@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 
 import type { BuiltinSkillSourceSpec } from './catalog';
 import { rewriteInstalledLinks, type LinkRewriteResult } from './links';
-import { readSkillState, writeSkillState, type SkillState } from '../skill-state';
+import { readSkillState, writeSkillState } from '../skill-state';
 
 /**
  * Materialise and install a built-in skill source.
@@ -191,35 +191,6 @@ export function readManagedSkillIds(skillsDir: string, sourceId: string): string
   return managed.sort((left, right) => left.localeCompare(right));
 }
 
-/** Reads the state a snapshot was written with (used by the status surface). */
-export function readSnapshotSource(snapshotDir: string): {
-  id: string;
-  repo: string;
-  ref: string;
-  commit: string;
-  skillRoot: string;
-  supportDirs: string[];
-  skillIds: string[];
-} | null {
-  const path = join(snapshotDir, 'source.json');
-  if (!existsSync(path)) {
-    return null;
-  }
-  try {
-    return JSON.parse(readFileSync(path, 'utf8')) as {
-      id: string;
-      repo: string;
-      ref: string;
-      commit: string;
-      skillRoot: string;
-      supportDirs: string[];
-      skillIds: string[];
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Deep Agents identifies a skill by its frontmatter `name`, and `SkillService` refuses a directory
  * whose `name` differs from it. Upstream can drift (nature-skills shipped `nature-proposal-writer`
@@ -270,16 +241,4 @@ function copyTree(source: string, target: string, spec: BuiltinSkillSourceSpec):
     }
     cpSync(entrySource, entryTarget);
   }
-}
-
-/** Default state for a newly installed built-in skill: enabled, owned by the source. */
-export function builtinSkillState(spec: BuiltinSkillSourceSpec, commit: string): SkillState {
-  return {
-    schemaVersion: 1,
-    enabled: true,
-    origin: 'builtin',
-    sourceId: spec.id,
-    upstreamRepo: spec.repo,
-    upstreamCommit: commit
-  };
 }

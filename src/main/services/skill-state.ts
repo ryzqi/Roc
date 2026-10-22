@@ -75,9 +75,3 @@ export function writeSkillState(skillDir: string, state: SkillState): void {
   };
   writeFileSync(join(skillDir, skillStateFileName), `${JSON.stringify(next, null, 2)}\n`, 'utf8');
 }
-
-/** True when the directory is managed by the given built-in source. */
-export function isSkillOwnedBy(skillDir: string, sourceId: string): boolean {
-  const state = readSkillState(skillDir);
-  return state.origin === 'builtin' && state.sourceId === sourceId;
-}

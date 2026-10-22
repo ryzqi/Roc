@@ -1,5 +1,4 @@
-import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
-import { buildPromptBlocks, serializePromptBlocks } from './context/prompt-blocks';
+import type { ChatStartRunRequest } from '../../../shared/types';
 
 export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   '',
@@ -12,25 +11,6 @@ export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   'propose 只填 goal、trigger；workspacePath 等策略字段由 runtime 注入。/workspace/ 仅用于文件工具。',
   '没有 previewId 不得 schedule；时间不明确时先向用户确认。'
 ] as const;
-
-export function buildSystemPrompt(input: {
-  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
-  workspacePath: string | null;
-  workflowHint: WorkflowHint;
-}): string {
-  return serializePromptBlocks(
-    buildPromptBlocks({
-      mode: 'run',
-      enabledCapabilities: input.enabledCapabilities,
-      workspacePath: input.workspacePath,
-      workflowHint: input.workflowHint,
-      tools: [],
-      explicitSkillContexts: [],
-      referencedFileContexts: [],
-      researchProjectId: null
-    })
-  );
-}
 
 export function createCapabilitySummary(enabledCapabilities: ChatStartRunRequest['enabledCapabilities']): string {
   const mcpServers =

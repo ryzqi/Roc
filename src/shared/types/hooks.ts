@@ -22,17 +22,6 @@ export type RocHookConfigSnapshot = z.infer<typeof rocHookConfigSnapshotSchema>;
 export type RocHookConfiguredHandlerSnapshot = RocHookConfigSnapshot['handlers'][number];
 export type RocHookTrustState = RocHookConfiguredHandlerSnapshot['trustState'];
 
-export const emptyRocHookConfigSnapshot: RocHookConfigSnapshot = {
-  configPath: '',
-  exists: false,
-  config: {
-    schemaVersion: 1,
-    hooks: {}
-  },
-  handlers: [],
-  validationErrors: []
-};
-
 export type RocHookTrustRequest = z.infer<typeof settingsTrustHookRequestSchema>;
 export type RocHookSaveConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
 export type RocHookRunSummary = z.infer<typeof hookRunSummarySchema>;

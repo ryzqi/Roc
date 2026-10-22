@@ -17,12 +17,12 @@ import type {
   TaskThread
 } from '../../../shared/types';
 import { taskEventSchema } from '../../../shared/schemas/task-event';
-import { enabledCapabilitiesSchema } from '../../../shared/schemas/agent';
-import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
+import { parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { RocDomainError } from '../../services/errors';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import { AgentRunEventLog } from './run-event-log';
+import { mapTaskRun, type TaskRunRow } from './task-run-mapper';
 const recentEventLimit = 50;
 
 export class AgentTaskHistoryContract {
@@ -584,18 +584,6 @@ type TaskEventRow = {
   created_at: string;
 };
 
-type TaskRunRow = {
-  id: string;
-  thread_id: string;
-  run_number: number;
-  user_input: string;
-  status: TaskRun['status'];
-  started_at: string;
-  ended_at: string | null;
-  model_id: string | null;
-  enabled_capabilities_json: string;
-};
-
 type TaskThreadRow = {
   id: string;
   kind: TaskKind;
@@ -616,24 +604,6 @@ function mapTaskEvent(row: TaskEventRow & { rowid?: number }): TaskEvent {
     createdAt: row.created_at,
     sequence: row.rowid
   });
-}
-
-function mapTaskRun(row: TaskRunRow): TaskRun {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    runNumber: row.run_number,
-    userInput: row.user_input,
-    status: row.status,
-    startedAt: row.started_at,
-    endedAt: row.ended_at,
-    modelId: row.model_id,
-    enabledCapabilities: parseStoredJson(
-      row.enabled_capabilities_json,
-      enabledCapabilitiesSchema,
-      'agent_run_capabilities_corrupt'
-    )
-  };
 }
 
 function mapTaskThread(row: TaskThreadRow): TaskThread {

@@ -500,7 +500,8 @@ export class TaskRepository {
       if (event.type !== 'background_task_paused' || typeof event.payload !== 'object' || event.payload === null) {
         return false;
       }
-      return Reflect.get(event.payload, 'taskId') === task.id && Reflect.get(event.payload, 'status') === 'paused';
+      const payload = event.payload as { taskId?: unknown; status?: unknown };
+      return payload.taskId === task.id && payload.status === 'paused';
     });
   }
 

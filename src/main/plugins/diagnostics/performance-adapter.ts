@@ -11,7 +11,6 @@ import type {
   PerformanceSampleRequest,
   PerformanceTimingSample
 } from '../../../shared/types';
-import { applyDiagnosticsDatabaseSchema } from '../../infrastructure/database-schemas';
 import { RocDomainError } from '../../services/errors';
 import { MetricsService } from '../../services/metrics-service';
 import { PerformanceObserverService } from '../../services/performance-observer-service';
@@ -166,10 +165,6 @@ export function createDiagnosticsPerformanceAdapter(
       return metrics.getSnapshot(filter);
     }
   };
-}
-
-export function applyDiagnosticsPluginSchema(db: DatabaseConnection): void {
-  applyDiagnosticsDatabaseSchema(db);
 }
 
 function readElectronMetrics(runtimeMetricsProvider: RuntimeMetricsProvider): PerformanceElectronMetrics {

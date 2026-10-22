@@ -57,11 +57,6 @@ export function formatRelativeBeijing(iso: string, now: Date = new Date()): stri
   return formatBeijingDateTime(iso);
 }
 
-/** Groups digits for counts so list columns do not jitter. */
-export function formatCount(value: number): string {
-  return new Intl.NumberFormat('zh-CN').format(value);
-}
-
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) {
     return '—';
@@ -75,26 +70,6 @@ export function formatBytes(bytes: number): string {
   }
   const rounded = unitIndex === 0 ? Math.round(value) : Math.round(value * 10) / 10;
   return `${rounded} ${units[unitIndex] ?? 'B'}`;
-}
-
-export function formatDurationMs(milliseconds: number): string {
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) {
-    return '—';
-  }
-  if (milliseconds < 1000) {
-    return `${Math.round(milliseconds)} ms`;
-  }
-  const totalSeconds = Math.round(milliseconds / 1000);
-  if (totalSeconds < 60) {
-    return `${totalSeconds} 秒`;
-  }
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) {
-    return seconds === 0 ? `${minutes} 分` : `${minutes} 分 ${seconds} 秒`;
-  }
-  const hours = Math.floor(minutes / 60);
-  return `${hours} 小时 ${minutes % 60} 分`;
 }
 
 /** Middle-truncates paths so both the root and the leaf stay readable. */

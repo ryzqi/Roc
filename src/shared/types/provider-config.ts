@@ -222,49 +222,6 @@ export function toTypedProviderConfig(
   }
 }
 
-export function fromTypedProviderConfig(typed: ProviderConfigTyped): ProviderConfig {
-  const modelOptions = providerOptionsFromTypedParams(typed);
-  return {
-    ...typed.config,
-    type: typed.type,
-    models:
-      Object.keys(modelOptions).length === 0
-        ? typed.config.models
-        : typed.config.models.map((model) => ({ ...model, options: modelOptions }))
-  };
-}
-
-function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderModelOptions {
-  switch (typed.type) {
-    case 'openai_compatible':
-    case 'nvidia':
-      return { ...typed.params };
-
-    case 'anthropic_compatible':
-      return {
-        temperature: typed.params.temperature,
-        maxTokens: typed.params.maxTokens,
-        topP: typed.params.topP,
-        topK: typed.params.topK,
-        stop: typed.params.stopSequences,
-        anthropicThinking: typed.params.thinking
-      };
-
-    case 'openrouter':
-      return {};
-
-    case 'llama_cpp':
-      return { ...typed.params };
-
-    default:
-      return assertNeverTypedConfig(typed);
-  }
-}
-
 function assertNeverProviderType(type: never): never {
   throw new Error(`Unhandled provider type: ${String(type)}`);
-}
-
-function assertNeverTypedConfig(typed: never): never {
-  throw new Error(`Unhandled typed provider config: ${JSON.stringify(typed)}`);
 }

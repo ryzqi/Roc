@@ -27,8 +27,8 @@ export const REGION_PATTERN = /\/\/#region[ \t]+node_modules\/\.pnpm\/([^\n]+)/g
  * Packages that must never appear in the entry's static graph.
  *
  * Each one is reachable only from a lazily loaded surface: the Git panel
- * (`react-diff-view`), the terminal (`@xterm/*`), literature/Markdown (`katex`,
- * `react-markdown`, `streamdown`, `highlight.js`) and long transcript lists
+ * (`react-diff-view`), the terminal (`@xterm/*`), literature/Markdown
+ * (`react-markdown`, `streamdown`, `highlight.js`) and long transcript lists
  * (`react-virtuoso`). Adding a package here is the assertion that the lazy
  * boundary around it is intentional.
  *
@@ -43,7 +43,6 @@ export const EAGER_FORBIDDEN_PACKAGES = [
   'react-diff-view',
   '@xterm/xterm',
   '@xterm/addon-fit',
-  'katex',
   'highlight.js',
   'react-markdown',
   'streamdown',

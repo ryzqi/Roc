@@ -54,19 +54,6 @@ export function resolveNewRunThreadKind(request: ChatStartRunRequest): TaskKind 
   return 'chat';
 }
 
-export function updateSuccessfulToolBlocks(successfulToolBlockIds: Set<string>, block: ChatAssistantBlock): void {
-  if (block.kind !== 'tool_call') {
-    return;
-  }
-  if (block.phase === 'end') {
-    successfulToolBlockIds.add(block.blockId);
-    return;
-  }
-  if (block.phase === 'error') {
-    successfulToolBlockIds.delete(block.blockId);
-  }
-}
-
 export function createBlockedAgentRuntimeStatus(): AgentRuntimeStatus {
   return {
     deepAgentsPackage: 'available',

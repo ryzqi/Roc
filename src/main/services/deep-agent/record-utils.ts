@@ -8,11 +8,17 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export function readRecordValue(value: unknown, key: string): unknown {
+/**
+ * A field read from an untyped LLM/IPC record. Callers must narrow it before use, which is why
+ * the name says what it is rather than repeating `unknown` at every call site.
+ */
+export type UntypedField = string | number | boolean | object | null | undefined;
+
+export function readRecordValue(value: unknown, key: string): UntypedField {
   if (!isRecord(value)) {
     return undefined;
   }
-  return value[key];
+  return value[key] as UntypedField;
 }
 
 export function readNonEmptyString(value: unknown): string | null {
@@ -570,18 +576,4 @@ function readOpenAiReasoningSummaryValues(value: unknown): string[] {
   return summary
     .map((item) => readNonEmptyString(readRecordValue(item, 'text')))
     .filter((item): item is string => item !== null);
-}
-
-export function readAsyncIterable(value: unknown): AsyncIterable<unknown> | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  if (typeof value !== 'object') {
-    return null;
-  }
-  const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator];
-  if (typeof iterator !== 'function') {
-    return null;
-  }
-  return value as AsyncIterable<unknown>;
 }

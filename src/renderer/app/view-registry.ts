@@ -20,7 +20,7 @@ import type { AppViewId } from './routes';
  * P0–P9 register placeholders through `viewLoaders`; each phase replaces its
  * entry with a real `() => import('...')`. Until then the factories live in the
  * eager entry, which is fine for placeholders but **the assistant, settings, the
- * terminal, the diff view and the Markdown/KaTeX families must stay real dynamic
+ * terminal, the diff view and the Markdown family must stay real dynamic
  * imports**, or `check-renderer-chunks.mjs`'s `forbidden` guard (or the eager
  * budget) fails.
  *

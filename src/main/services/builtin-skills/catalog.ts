@@ -210,8 +210,3 @@ export function builtinSkillsArchiveFilter(spec: BuiltinSkillSourceSpec): (path:
     return spec.supportDirs.some((dir) => relative === dir || relative.startsWith(`${dir}/`));
   };
 }
-
-/** Repository-relative root of the skill directories. */
-export function builtinSkillsRootFor(spec: BuiltinSkillSourceSpec): string {
-  return spec.skillRoot.length === 0 ? '' : spec.skillRoot;
-}

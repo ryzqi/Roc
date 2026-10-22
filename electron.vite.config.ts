@@ -66,10 +66,6 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
    * `scripts/report-renderer-eager-modules.mjs` prints the attribution by hand.
    */
   {
-    chunk: 'renderer-katex',
-    packages: ['katex']
-  },
-  {
     chunk: 'renderer-icons-safe',
     packages: ['lucide-react'],
     moduleIdPattern: /\/(settings|settings-2|markdown|highlight|streamdown)\.mjs$/u

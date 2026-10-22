@@ -7,7 +7,6 @@
 - `errors.ts` — RocToolResolutionError
 - `message-tags.ts` — forge_message_type 标签
 - `state-schema.ts` — LangGraph state schema
-- `nudge-templates.ts` — context warning 文案
 - `rescue-parser.ts` — 4 种野生格式解析
 - `sampling-defaults.ts` — 采样默认值
 - `preview-store.ts` — propose preview session-scoped 缓存

@@ -5,92 +5,7 @@ import type {
   TaskKind
 } from '../../../shared/types';
 import { agentTaskEventPayloadSchema } from '../../../shared/schemas/task-event';
-
-export function readAgentRunCompletedPayload(payload: unknown): {
-  runId: string;
-  threadId: string;
-  assistantMessage: string;
-  providerId: string;
-  modelId: string;
-  durationMs: number;
-  summary: string;
-  finishReason: string;
-} | null {
-  if (payload === null || typeof payload !== 'object') {
-    return null;
-  }
-  const runId = Reflect.get(payload, 'runId');
-  const threadId = Reflect.get(payload, 'threadId');
-  const assistantMessage = Reflect.get(payload, 'assistantMessage');
-  const providerId = Reflect.get(payload, 'providerId');
-  const modelId = Reflect.get(payload, 'modelId');
-  const durationMs = Reflect.get(payload, 'durationMs');
-  const summary = Reflect.get(payload, 'summary');
-  const finishReason = Reflect.get(payload, 'finishReason');
-  if (
-    typeof runId !== 'string' ||
-    typeof threadId !== 'string' ||
-    typeof assistantMessage !== 'string' ||
-    typeof providerId !== 'string' ||
-    typeof modelId !== 'string' ||
-    typeof durationMs !== 'number' ||
-    typeof summary !== 'string' ||
-    typeof finishReason !== 'string'
-  ) {
-    return null;
-  }
-  return {
-    runId,
-    threadId,
-    assistantMessage,
-    providerId,
-    modelId,
-    durationMs,
-    summary,
-    finishReason
-  };
-}
-
-export function readAgentRunFailedPayload(payload: unknown): {
-  runId: string;
-  threadId: string;
-  providerId: string;
-  modelId: string;
-  error: string;
-  code: string;
-  retryable: boolean;
-} | null {
-  if (payload === null || typeof payload !== 'object') {
-    return null;
-  }
-  const runId = Reflect.get(payload, 'runId');
-  const threadId = Reflect.get(payload, 'threadId');
-  const providerId = Reflect.get(payload, 'providerId');
-  const modelId = Reflect.get(payload, 'modelId');
-  const error = Reflect.get(payload, 'error');
-  const code = Reflect.get(payload, 'code');
-  const retryable = Reflect.get(payload, 'retryable');
-  if (
-    typeof runId !== 'string' ||
-    typeof threadId !== 'string' ||
-    typeof providerId !== 'string' ||
-    typeof modelId !== 'string' ||
-    typeof error !== 'string' ||
-    typeof code !== 'string' ||
-    typeof retryable !== 'boolean'
-  ) {
-    return null;
-  }
-  return {
-    runId,
-    threadId,
-    providerId,
-    modelId,
-    error,
-    code,
-    retryable
-  };
-}
+import { readRecordValue } from '../../services/deep-agent/record-utils';
 
 export function readAgentTaskEventPayload(payload: unknown): {
   runId: string;
@@ -117,16 +32,16 @@ export function readAgentRunStartedPayload(payload: unknown): {
   if (payload === null || typeof payload !== 'object') {
     return null;
   }
-  const runId = Reflect.get(payload, 'runId');
-  const threadId = Reflect.get(payload, 'threadId');
-  const mode = Reflect.get(payload, 'mode');
-  const userInput = Reflect.get(payload, 'userInput');
-  const providerId = Reflect.get(payload, 'providerId');
-  const modelId = Reflect.get(payload, 'modelId');
-  const enabledCapabilities = readEnabledCapabilities(Reflect.get(payload, 'enabledCapabilities'));
-  const workflowHint = readWorkflowHint(Reflect.get(payload, 'workflowHint'));
-  const capabilityPreview = readAgentCapabilityPreview(Reflect.get(payload, 'capabilityPreview'));
-  const createdAt = Reflect.get(payload, 'createdAt');
+  const runId = readRecordValue(payload, 'runId');
+  const threadId = readRecordValue(payload, 'threadId');
+  const mode = readRecordValue(payload, 'mode');
+  const userInput = readRecordValue(payload, 'userInput');
+  const providerId = readRecordValue(payload, 'providerId');
+  const modelId = readRecordValue(payload, 'modelId');
+  const enabledCapabilities = readEnabledCapabilities(readRecordValue(payload, 'enabledCapabilities'));
+  const workflowHint = readWorkflowHint(readRecordValue(payload, 'workflowHint'));
+  const capabilityPreview = readAgentCapabilityPreview(readRecordValue(payload, 'capabilityPreview'));
+  const createdAt = readRecordValue(payload, 'createdAt');
   if (
     typeof runId !== 'string' ||
     typeof threadId !== 'string' ||
@@ -185,16 +100,16 @@ function readAgentCapabilityPreview(value: unknown): AgentCapabilityPreview | un
   if (value === null || typeof value !== 'object') {
     return undefined;
   }
-  const manifest = Reflect.get(value, 'manifest');
+  const manifest = readRecordValue(value, 'manifest');
   if (manifest === null || typeof manifest !== 'object') {
     return undefined;
   }
-  const requestedCapabilities = readEnabledCapabilities(Reflect.get(manifest, 'requestedCapabilities'));
-  const selectedCapabilities = readEnabledCapabilities(Reflect.get(manifest, 'resolvedCapabilities'));
-  const skippedCapabilities = Reflect.get(manifest, 'skippedCapabilities');
-  const toolCards = Reflect.get(value, 'toolCards');
-  const skillCards = Reflect.get(value, 'skillCards');
-  const untrustedContextPolicy = Reflect.get(manifest, 'untrustedContextPolicy');
+  const requestedCapabilities = readEnabledCapabilities(readRecordValue(manifest, 'requestedCapabilities'));
+  const selectedCapabilities = readEnabledCapabilities(readRecordValue(manifest, 'resolvedCapabilities'));
+  const skippedCapabilities = readRecordValue(manifest, 'skippedCapabilities');
+  const toolCards = readRecordValue(value, 'toolCards');
+  const skillCards = readRecordValue(value, 'skillCards');
+  const untrustedContextPolicy = readRecordValue(manifest, 'untrustedContextPolicy');
   if (
     requestedCapabilities === null ||
     selectedCapabilities === null ||
@@ -212,8 +127,8 @@ function readEnabledCapabilities(value: unknown): EnabledCapabilities | null {
   if (value === null || typeof value !== 'object') {
     return null;
   }
-  const mcpServers = Reflect.get(value, 'mcpServers');
-  const skills = Reflect.get(value, 'skills');
+  const mcpServers = readRecordValue(value, 'mcpServers');
+  const skills = readRecordValue(value, 'skills');
   if (!isStringArray(mcpServers) || !isStringArray(skills)) {
     return null;
   }

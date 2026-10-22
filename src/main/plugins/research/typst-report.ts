@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResearchExportSources } from '../../../shared/schemas/research-exports';
 import { createResearchDirectory, readResearchFile } from './research-files';
@@ -169,12 +169,4 @@ export async function createTypstReport(input: {
   const pdf = await readResearchFile(directory, 'report.pdf', 32 * 1024 * 1024);
   if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('research_typst_report_invalid');
   return { filename: 'report.pdf', pdf, source, style };
-}
-
-/** 报告目录里允许写的内容（供调用方在 `try/catch` 里清理，测试也用得到）。 */
-export const typstReportDirectory = 'typst-report';
-
-/** 这个辅助只用于确保目录存在——`createResearchDirectory` 要求父目录已存在。 */
-export async function ensureTypstReportParent(jobDir: string): Promise<void> {
-  await mkdir(jobDir, { recursive: true });
 }

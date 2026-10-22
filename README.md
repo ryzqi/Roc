@@ -378,7 +378,6 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 | `@vitejs/plugin-react` | 6.1.2 | 同上 | MIT | 构建插件 |
 | `lucide-react` | 1.56.0 | `https://github.com/lucide-icons/lucide` ✓ | ISC | 图标（**不用 emoji**） |
 | `motion` | 14.2.0 | `https://github.com/motiondivision/motion` ✓ | MIT | 动效预设 |
-| `katex` | 0.19.0 | `https://github.com/KaTeX/KaTeX` ✓ | MIT | 数学公式渲染 |
 | `react-markdown` + `remark-gfm` | 10.1.0 / 4.0.1 | `https://github.com/remarkjs/react-markdown` ✓ / `https://github.com/remarkjs/remark-gfm` ✓ | MIT | 助手富块 |
 | `streamdown` | 2.7.0 | `https://github.com/vercel/streamdown` ✓ | MIT | 流式 markdown |
 | `react-virtuoso` | 4.18.19 | `https://github.com/petyosi/react-virtuoso` ✓ | MIT | 长列表虚拟化 |

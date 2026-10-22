@@ -70,27 +70,3 @@ export type LazyLoadState = {
   error: string | null;
   key: string | null;
 };
-
-export function idleLazyLoadState(key: string | null = null): LazyLoadState {
-  return { status: 'idle', error: null, key };
-}
-
-export function loadingLazyLoadState(key: string | null): LazyLoadState {
-  return { status: 'loading', error: null, key };
-}
-
-export function readyLazyLoadState(key: string | null): LazyLoadState {
-  return { status: 'ready', error: null, key };
-}
-
-export function failedLazyLoadState(key: string | null, error: string): LazyLoadState {
-  return { status: 'error', error, key };
-}
-
-/**
- * True when the state holds data for `key`. A key change makes a `ready` state
- * stale, which is how scope switches force a reload without extra bookkeeping.
- */
-export function lazyStateFresh(state: LazyLoadState, key: string | null): boolean {
-  return state.key === key && state.status === 'ready';
-}

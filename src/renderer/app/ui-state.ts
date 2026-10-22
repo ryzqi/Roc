@@ -16,7 +16,6 @@ export const uiStateKeys = {
   sidebarCollapsed: `${UI_STATE_PREFIX}sidebar.collapsed`,
   sidebarTab: `${UI_STATE_PREFIX}sidebar.tab`,
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
-  lastProjectId: `${UI_STATE_PREFIX}project.last`,
   themeOverride: `${UI_STATE_PREFIX}theme.override`,
   /** Local-only pinning. Not product data; the backend has no star field (B1). */
   starredProjectIds: `${UI_STATE_PREFIX}project.starred`,
@@ -172,15 +171,6 @@ export function writeAssistantWidth(width: number): void {
 /* ------------------------------------------------------------------ */
 /* Project highlight / pinning                                         */
 /* ------------------------------------------------------------------ */
-
-export function readLastProjectId(): string | null {
-  const raw = readRaw(uiStateKeys.lastProjectId);
-  return raw === null || raw.trim().length === 0 ? null : raw;
-}
-
-export function writeLastProjectId(projectId: string | null): void {
-  writeRaw(uiStateKeys.lastProjectId, projectId);
-}
 
 export function readStarredProjectIds(): string[] {
   return readStringList(uiStateKeys.starredProjectIds);

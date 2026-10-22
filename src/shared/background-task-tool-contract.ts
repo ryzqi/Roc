@@ -14,8 +14,6 @@ const PROPOSE_RUNTIME_DEFAULTS = {
   notificationPolicy: 'failures_and_confirmations'
 } as const;
 
-export const FORBIDDEN_TRIGGER_KEYS = ['schedule', 'expr', 'expression', 'cron', 'when', 'time'] as const;
-
 export const MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE = {
   goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
   trigger: {

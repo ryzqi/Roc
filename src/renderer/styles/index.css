@@ -299,14 +299,6 @@ details[open]::details-content {
   opacity: 1;
 }
 
-/* KaTeX display math scrolls instead of overflowing the canvas. */
-.katex-display {
-  margin: 0.6em 0 !important;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 4px 0;
-}
-
 /*
  * react-diff-view ships light-theme insert/delete greens and reds as variable
  * defaults (`--diff-code-insert-background-color` etc.). Mapping them onto the

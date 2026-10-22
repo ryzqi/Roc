@@ -24,8 +24,7 @@ import {
   humanQuestionAnsweredPayloadSchema,
   taskEventSchema
 } from '../../../shared/schemas/task-event';
-import { enabledCapabilitiesSchema } from '../../../shared/schemas/agent';
-import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
+import { parseStoredJsonObject } from '../../infrastructure/stored-json';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
@@ -34,6 +33,7 @@ import { RocDomainError } from '../../services/errors';
 import { AgentRunEventLog } from './run-event-log';
 import type { PendingInterrupt } from './interrupt-projection';
 import { AgentInterruptProjection, assertPendingInterrupts } from './interrupt-projection';
+import { mapTaskRun, type TaskRunRow } from './task-run-mapper';
 import {
   createRunExecutionSnapshot,
   parseRunExecutionSnapshot,
@@ -46,18 +46,6 @@ import {
   calculateAgentRunTelemetryDurationMs,
   type AgentRunTelemetryV1
 } from './run-telemetry';
-
-type TaskRunRow = {
-  id: string;
-  thread_id: string;
-  run_number: number;
-  user_input: string;
-  status: TaskStatus;
-  started_at: string;
-  ended_at: string | null;
-  model_id: string | null;
-  enabled_capabilities_json: string;
-};
 
 type TaskEventRow = {
   id: string;
@@ -1263,15 +1251,16 @@ export class AgentSessionRepository {
     if (phases.length === 0) {
       throw new Error('session_message_phases_empty');
     }
+    const phasePlaceholders = phases.map(() => '?').join(', ');
     const rows = this.db
       .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
-                tt.title AS thread_title
-         FROM session_messages sm
-         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
-         WHERE sm.thread_id = ? AND sm.phase IN (${phases.map(() => '?').join(', ')})
-         ORDER BY sm.created_at ASC, sm.id ASC
-         LIMIT ?`
+        'SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,\n' +
+          '                tt.title AS thread_title\n' +
+          '         FROM session_messages sm\n' +
+          '         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id\n' +
+          '         WHERE sm.thread_id = ? AND sm.phase IN (' + phasePlaceholders + ')\n' +
+          '         ORDER BY sm.created_at ASC, sm.id ASC\n' +
+          '         LIMIT ?'
       )
       .all(input.threadId, ...phases, limit) as SessionMessageRow[];
     return rows.map(mapSessionMessage);
@@ -1316,16 +1305,16 @@ export class AgentSessionRepository {
     params.push(limit);
     return this.db
       .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
-                tt.title AS thread_title,
-                snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet
-         FROM session_messages_fts
-         JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
-         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
-         WHERE session_messages_fts MATCH ?
-           ${whereClause}
-         ORDER BY session_messages_fts.rank, sm.created_at DESC
-         LIMIT ?`
+        'SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,\n' +
+          '                tt.title AS thread_title,\n' +
+          "                snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet\n" +
+          '         FROM session_messages_fts\n' +
+          '         JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid\n' +
+          '         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id\n' +
+          '         WHERE session_messages_fts MATCH ?\n' +
+          '           ' + whereClause + '\n' +
+          '         ORDER BY session_messages_fts.rank, sm.created_at DESC\n' +
+          '         LIMIT ?'
       )
       .all(...params) as SessionMessageSearchRow[];
   }
@@ -1342,13 +1331,13 @@ export class AgentSessionRepository {
     params.push(limit);
     const rows = this.db
       .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
-                tt.title AS thread_title
-         FROM session_messages sm
-         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
-         ${whereClause}
-         ORDER BY sm.created_at DESC
-         LIMIT ?`
+        'SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,\n' +
+          '                tt.title AS thread_title\n' +
+          '         FROM session_messages sm\n' +
+          '         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id\n' +
+          '         ' + whereClause + '\n' +
+          '         ORDER BY sm.created_at DESC\n' +
+          '         LIMIT ?'
       )
       .all(...params) as Array<Omit<SessionMessageSearchRow, 'snippet'>>;
     return rows.map((row) => ({ ...row, snippet: buildScanSnippet(row.content, scanTerms) }));
@@ -1749,24 +1738,6 @@ function createRunTransitionInvalidError(input: { currentStatus: TaskStatus; nex
 
 function isThreadLeaseConflict(error: unknown): boolean {
   return error instanceof Error && (error.message.includes('agent_run_leases.thread_id') || error.message.includes('UNIQUE constraint failed: agent_runs.thread_id'));
-}
-
-function mapTaskRun(row: TaskRunRow): TaskRun {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    runNumber: row.run_number,
-    userInput: row.user_input,
-    status: row.status,
-    startedAt: row.started_at,
-    endedAt: row.ended_at,
-    modelId: row.model_id,
-    enabledCapabilities: parseStoredJson(
-      row.enabled_capabilities_json,
-      enabledCapabilitiesSchema,
-      'agent_run_capabilities_corrupt'
-    )
-  };
 }
 
 function mapTaskEvent(row: TaskEventRow): TaskEvent {
