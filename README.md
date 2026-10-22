@@ -348,15 +348,15 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 
 | 包 | 版本 | 来源 | 许可证 | 用途 |
 | --- | --- | --- | --- | --- |
-| `langchain` | 1.5.16 | `https://github.com/langchain-ai/langchainjs` ✓ | MIT | agent 与工具框架 |
-| `@langchain/core` | 1.2.17 | 同上 | MIT | 核心抽象 |
-| `@langchain/langgraph` | 1.5.0 | 同上 | MIT | 运行状态机、`interrupt` 闸门 |
-| `@langchain/anthropic` / `@langchain/openai` | 1.5.12 / 1.6.2 | 同上 | MIT | provider 适配 |
+| `langchain` | 1.5.18 | `https://github.com/langchain-ai/langchainjs` ✓ | MIT | agent 与工具框架 |
+| `@langchain/core` | 1.2.20 | 同上 | MIT | 核心抽象 |
+| `@langchain/langgraph` | 1.5.2 | 同上 | MIT | 运行状态机、`interrupt` 闸门 |
+| `@langchain/anthropic` / `@langchain/openai` | 1.5.13 / 1.6.3 | 同上 | MIT | provider 适配 |
 | `@langchain/mcp-adapters` | 2.0.1 | 同上 | MIT | MCP 工具接入 |
-| `deepagents` | 1.14.2 | `https://github.com/langchain-ai/deepagentsjs` ✓ | MIT | 研究助手的 harness |
+| `deepagents` | 1.15.1 | `https://github.com/langchain-ai/deepagentsjs` ✓ | MIT | 研究助手的 harness |
 | `better-sqlite3` | 13.0.3 | `https://github.com/WiseLibs/better-sqlite3` ✓ | MIT | SQLite（原生模块） |
 | `sqlite-vec`<br/>`sqlite-vec-darwin-arm64`、`sqlite-vec-darwin-x64` | 0.1.9 | `https://github.com/asg017/sqlite-vec` ✓ | MIT / Apache-2.0 | 向量检索 |
-| `@napi-rs/canvas` | 1.0.11 | `https://github.com/Brooooooklyn/canvas` ✓ | MIT | PDF 页渲染、图像处理（原生，需 `asarUnpack`） |
+| `@napi-rs/canvas` | 1.0.13 | `https://github.com/Brooooooklyn/canvas` ✓ | MIT | PDF 页渲染、图像处理（原生，需 `asarUnpack`） |
 | `pdfjs-dist` | 6.4.299 | `https://github.com/mozilla/pdf.js` ✓ | Apache-2.0 | PDF 解析预览 |
 | `node-pty` | 1.1.0 | `https://github.com/microsoft/node-pty` ✓ | MIT | 终端（原生，需 `asarUnpack`） |
 | `shell-env` | 4.0.3 | `https://github.com/sindresorhus/shell-env` ✓ | MIT | Finder/Dock 启动时恢复登录 shell 的 PATH |
@@ -367,24 +367,24 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 
 | 包 | 版本 | 来源 | 许可证 | 用途 |
 | --- | --- | --- | --- | --- |
-| `electron` | 44.7.0 | `https://github.com/electron/electron` ✓ | MIT | 运行时 |
-| `electron-builder` | 26.17.0 | `https://github.com/electron-userland/electron-builder` ✓ | MIT | 打包 |
-| `electron-vite` | 6.0.0-beta.8 | `https://github.com/alex8088/electron-vite` ✓ | MIT | 三进程构建 |
-| `vite` | 8.3.4 | `https://github.com/vitejs/vite` ✓ | MIT | 渲染层构建 |
+| `electron` | 45.0.0 | `https://github.com/electron/electron` ✓ | MIT | 运行时 |
+| `electron-builder` | 26.18.0 | `https://github.com/electron-userland/electron-builder` ✓ | MIT | 打包 |
+| `electron-vite` | 6.0.0 | `https://github.com/alex8088/electron-vite` ✓ | MIT | 三进程构建 |
+| `vite` | 8.3.5 | `https://github.com/vitejs/vite` ✓ | MIT | 渲染层构建 |
 | `esbuild` | 0.28.2 | `https://github.com/evanw/esbuild` ✓ | MIT | 单测加载 TS、打包校验 |
 | `typescript` | 7.0.2 | `https://github.com/microsoft/TypeScript` ✓ | Apache-2.0 | 类型检查 |
 | `tailwindcss` + `@tailwindcss/vite` | 4.3.3 | `https://github.com/tailwindlabs/tailwindcss` ✓ | MIT | 样式 |
-| `react` / `react-dom` | 19.3.0 | `https://github.com/facebook/react` ✓ | MIT | UI |
+| `react` / `react-dom` | 19.3.1 | `https://github.com/facebook/react` ✓ | MIT | UI |
 | `@vitejs/plugin-react` | 6.1.2 | 同上 | MIT | 构建插件 |
-| `lucide-react` | 1.56.0 | `https://github.com/lucide-icons/lucide` ✓ | ISC | 图标（**不用 emoji**） |
-| `motion` | 14.2.0 | `https://github.com/motiondivision/motion` ✓ | MIT | 动效预设 |
+| `lucide-react` | 1.61.0 | `https://github.com/lucide-icons/lucide` ✓ | ISC | 图标（**不用 emoji**） |
+| `motion` | 14.5.0 | `https://github.com/motiondivision/motion` ✓ | MIT | 动效预设 |
 | `react-markdown` + `remark-gfm` | 10.1.0 / 4.0.1 | `https://github.com/remarkjs/react-markdown` ✓ / `https://github.com/remarkjs/remark-gfm` ✓ | MIT | 助手富块 |
-| `streamdown` | 2.7.0 | `https://github.com/vercel/streamdown` ✓ | MIT | 流式 markdown |
+| `streamdown` | 2.7.1 | `https://github.com/vercel/streamdown` ✓ | MIT | 流式 markdown |
 | `react-virtuoso` | 4.18.19 | `https://github.com/petyosi/react-virtuoso` ✓ | MIT | 长列表虚拟化 |
 | `react-diff-view` | 3.3.3 | `https://github.com/otakustay/react-diff-view` ✓ | MIT | 改动画布 |
 | `highlight.js` | 11.12.0 | `https://github.com/highlightjs/highlight.js` ✓ | BSD-3-Clause | 代码高亮 |
 | `@xterm/xterm` + `@xterm/addon-fit` | 6.0.0 / 0.11.0 | `https://github.com/xtermjs/xterm.js` ✓ | MIT | 终端渲染 |
-| `@playwright/test` | 1.64.0 | `https://github.com/microsoft/playwright` ✓ | Apache-2.0 | smoke 与验收闸门 |
+| `@playwright/test` | 1.64.1 | `https://github.com/microsoft/playwright` ✓ | Apache-2.0 | smoke 与验收闸门 |
 | `@types/*` | 见 package.json | 各自上游 | MIT | 类型声明 |
 
 ### 七、在线学术 API

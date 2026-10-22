@@ -7,7 +7,13 @@ dedupePeerDependents: true
 overrides:
   # 仅构建 macOS，移除非目标平台打包器。
   'app-builder-lib>electron-builder-squirrel-windows': '-'
-  '@langchain/langgraph': 1.5.0
+  # langgraph 的 StateSchema 含 private symbol（名义类型），peer 链上出现两份就会类型不兼容、
+  # 运行时判等失败。钉死到与根依赖一致的版本；**每次升 langgraph 必须同步改这一行**，
+  # 否则安装会因 peer 冲突失败（见文首 dedupePeerDependents 的说明）。
+  '@langchain/langgraph': 1.5.2
+  # langchain/deepagents 允许 ^1.1.5，langgraph 要求 ^1.2.1，区间本身不冲突；
+  # 留一条 override 避免锁文件留下两代 checkpoint 快照（BaseCheckpointSaver 跨实例）。
+  '@langchain/langgraph-checkpoint': 1.2.1
 
 ignoredOptionalDependencies:
   - '@esbuild/win32-*'
@@ -54,18 +60,20 @@ cacheDir: .runtime/pnpm-cache
 virtualStoreDir: node_modules/.pnpm
 
 # pnpm 12 默认 minimumReleaseAge=1d。下列条目用于让 frozen install 通过年龄门禁：
-# 前 5 条为人工声明，后 5 条由 `pnpm install` 自动追加（pnpm CHANGELOG #13687：install 会把
-# 年龄门禁下挑中的版本写回本清单）。全部版本于 2026-10-14T11:33Z 之后成熟。
-# 注意：pnpm 的 minimumReleaseAgeExcludePrune 只清理“锁文件中已不存在的版本”，
-# 而下列版本仍被 pnpm-lock.yaml 钉住，因此不会自动清理；成熟后保留无害（仅影响安装期的年龄校验）。
+# 每一次依赖升级轮次只保留当轮仍「未满 24h」的版本；已经成熟的旧条目在升级时删除
+# （pnpm 的 minimumReleaseAgeExcludePrune 只清理“锁文件中已不存在的版本”，不会自动收缩本清单）。
+# 本轮（2026-10-22T06:16Z 开始安装）中未满 24h 的版本：
+#   vite@8.3.5                     2026-10-21T06:38Z
+#   @napi-rs/canvas@1.0.13         2026-10-21T07:04Z
+#   @langchain/langgraph@1.5.2     2026-10-21T19:43Z
+#   @langchain/langgraph-checkpoint@1.2.1 2026-10-21T19:43Z
+#   @langchain/langgraph-sdk@1.12.6      2026-10-21T19:46Z
+# 末尾两条 `@napi-rs/canvas-darwin-*` 由 `pnpm install` 自动追加（同上 CHANGELOG #13687）。
 minimumReleaseAgeExclude:
-  - '@langchain/langgraph@1.5.0'
-  - lucide-react@1.56.0
-  - motion@14.2.0
-  - react-virtuoso@4.18.19
-  - zod@4.6.7
-  - '@langchain/langgraph-checkpoint@1.2.0'
-  - '@langchain/langgraph-sdk@1.12.4'
-  - framer-motion@14.2.0
-  - motion-dom@14.2.0
-  - motion-utils@14.1.1
+  - '@langchain/langgraph@1.5.2'
+  - '@langchain/langgraph-checkpoint@1.2.1'
+  - '@langchain/langgraph-sdk@1.12.6'
+  - vite@8.3.5
+  - '@napi-rs/canvas@1.0.13'
+  - '@napi-rs/canvas-darwin-arm64@1.0.13'
+  - '@napi-rs/canvas-darwin-x64@1.0.13'

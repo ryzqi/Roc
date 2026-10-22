@@ -87,16 +87,41 @@ export type AgentCapabilityPreviewProvider = (input: {
 
 type AgentResumeValue = HITLResponse | { answer: string };
 type AgentResumePayload = Record<string, AgentResumeValue>;
+type HitlDecision = HITLResponse['decisions'][number];
 
 /**
  * Roc 的 resume 决定多出科研闸门的第三态 'revise'，而 langchain 的 HITLResponse
- * 只认 approve/edit/reject。两者在运行期是同一份 payload（闸门工具自己解析 'revise'），
+ * 只认 approve/edit/reject/respond。两者在运行期是同一份 payload（闸门工具自己解析 'revise'），
  * 所以只在进入 langchain API 的边界上收敛类型，不在共享 schema 里删掉这一态。
+ *
+ * 这里逐项映射而不做类型谓词过滤：langchain 1.5.18 给 Decision 加了 'respond'，
+ * 谓词的返回类型因此比 Roc 的 ChatResumeDecision 更宽，收窄检查会在编译期失败。
  */
 function toHitlResumeValue(decisions: ChatResumeDecision[]): AgentResumeValue {
-  const hitlDecisions = decisions.filter(
-    (decision): decision is HITLResponse['decisions'][number] => decision.type !== 'revise'
-  );
+  const hitlDecisions: HitlDecision[] = [];
+  for (const decision of decisions) {
+    switch (decision.type) {
+      case 'revise':
+        break;
+      case 'approve':
+        hitlDecisions.push({ type: 'approve' });
+        break;
+      case 'reject':
+        hitlDecisions.push(
+          decision.message === undefined
+            ? { type: 'reject' }
+            : { type: 'reject', message: decision.message }
+        );
+        break;
+      case 'edit':
+        hitlDecisions.push({ type: 'edit', editedAction: decision.editedAction });
+        break;
+      default: {
+        const exhaustive: never = decision;
+        throw new Error(`未处理的 resume 决定类型: ${JSON.stringify(exhaustive)}`);
+      }
+    }
+  }
   if (hitlDecisions.length === 0) {
     return { answer: decisions.map((decision) => ('message' in decision && decision.message !== undefined ? decision.message : decision.type)).join('\n') };
   }
