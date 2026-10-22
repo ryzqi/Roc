@@ -1,5 +1,5 @@
 import { _electron as electron } from '@playwright/test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
@@ -48,6 +48,12 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 const workspaceA = join(workspaceRoot, 'project-a');
 mkdirSync(workspaceA, { recursive: true });
+// 文稿视图的断言要看后端真读到的**文件行**：面板的「文稿文件（0）」表头本身就有文字，
+// 只断言「面板里有文字」等于什么都没断言。种子文件用 .tex，顺带验证扩展名过滤。
+writeFileSync(
+  join(workspaceA, 'main.tex'),
+  ['\\documentclass{article}', '\\begin{document}', 'p8 smoke manuscript', '\\end{document}', ''].join('\n')
+);
 
 const smokeProvider = await startSmokeProvider({});
 const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
@@ -844,25 +850,23 @@ try {
   assertCheck('5 立即生效', 'RAG Studio 读回新 revision 与 include', ragAfter.includes('**/*.tex'), ragAfter.slice(0, 160));
 
   // 阶段策略面板（△ 阶段面已整体删除）：该面板已不存在，所以「模型下拉跟随设置
-  // 刷新」被另一块真的会刷新模型的界面接替——文稿视图的编译工具链状态读的是同一条 revision 机制，
-  // 且它的可用性本来就来自后端（research.toolchain.status），不是内联配置。
+  // 刷新」被另一块真的会刷新模型的界面接替。
+  //
+  // 文稿视图内联的编译工具链状态（`production-latex-toolchain`）已在 76d9ad0f 移除，
+  // 工具链可用性现在只由设置中心的只读分区读 `research.toolchain.status`（闸门 1 已断言
+  // `settings-toolchain-*`）。这里改为断言文稿视图自己读的是后端文件列表，
+  // 而不是本地的配置判断。
   await navigate(page, `page=research&project=${projectId}&view=latex`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
-  await page.waitForFunction(
-    () => {
-      const node = document.querySelector('[data-testid="production-latex-toolchain"]');
-      return node !== null && (node.textContent ?? '').trim().length > 0;
-    },
-    undefined,
-    { timeout: 20_000 }
-  );
-  const latexToolchainText =
-    (await page.textContent('[data-testid="production-latex-toolchain"]')) ?? '';
+  // 断言的是后端真读回来的那个文件行（种子文件见闸门 0），不是面板表头里的「文稿文件（N）」：
+  // 表头无论后端返回什么都有文字。
+  await page.waitForSelector('[data-testid="production-latex-file-main.tex"]', { timeout: 20_000 });
+  const latexFilesText = (await page.textContent('[data-testid="production-latex-files"]')) ?? '';
   assertCheck(
     '5 立即生效',
-    '文稿视图的编译工具链状态由后端读出（不是内联配置的本地判断）',
-    latexToolchainText.trim().length > 0,
-    latexToolchainText.replace(/\s+/gu, ' ').slice(0, 160)
+    '文稿视图的文件列表由后端读出（工作区里的 .tex 出现在列表里）',
+    latexFilesText.includes('main.tex'),
+    latexFilesText.replace(/\s+/gu, ' ').slice(0, 160)
   );
 
   record(
@@ -909,16 +913,28 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-testid="literature-import-dialog-panel"]', { state: 'detached', timeout: 15_000 });
 
-  // 文稿（LaTeX）视图：没有引擎选择，也没有本地假编译
-  // （它以前是阶段工作区的一个 tab；阶段面删除后它就是画布的一级 tab，同一份面板。）
+  // 文稿（LaTeX）视图：没有引擎选择，也没有本地编译入口。
+  //（它以前是阶段工作区的一个 tab；阶段面删除后它就是画布的一级 tab，同一份面板。）
+  //
+  // 76d9ad0f 移除了面板里「不做本地编译」的说明与引擎行，所以这里断言的是结构：
+  // 面板里没有引擎控件、也没有编译按钮；真正的编译只发生在模板/导出链路。
   await navigate(page, `page=research&project=${projectId}&view=latex`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   const latexText = ((await page.locator('[data-testid="production-latex"]').textContent()) ?? '').replace(/\s+/gu, ' ');
+  const latexEngineControls = await page
+    .locator(
+      // 只找「控件」且排掉文件行：文件行的 testid 带路径（`production-latex-file-<path>`），
+      // 一个叫 engine-notes.bib / compile.sh 的种子文件不该把这条断言弄红。
+      '[data-testid="production-latex"] :is(input,select,textarea,button)[name*="engine" i],' +
+        '[data-testid="production-latex"] [data-testid*="engine"]:not([data-testid^="production-latex-file-"]),' +
+        '[data-testid="production-latex"] [data-testid*="compile"]:not([data-testid^="production-latex-file-"])'
+    )
+    .count();
   assertCheck(
     '6 无内联配置',
-    '文稿视图没有引擎选择与本地编译，指向模板面板的真编译',
-    latexText.includes('不做本地编译') && !latexText.includes('latexEngine'),
-    latexText.slice(0, 120)
+    '文稿视图没有引擎选择与本地编译入口（编译只发生在模板链路）',
+    latexEngineControls === 0 && !latexText.includes('latexEngine'),
+    `engineControls=${latexEngineControls} · ${latexText.slice(0, 120)}`
   );
 
   const randomHits = searchSourceTree(resolve('src/renderer/settings'), 'Math.random(');

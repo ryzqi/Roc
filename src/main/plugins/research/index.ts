@@ -315,9 +315,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       context.capabilities.register(pluginId, literatureCapabilities.search, async (input) => {
         return literatureService.searchAndStore(researchRepository, input as ResearchLiteratureSearchRequest);
       });
-      context.capabilities.register(pluginId, knowledgeCapabilities.listEmbedding, async () => researchEmbeddings.listConfigs());
+      context.capabilities.register(pluginId, knowledgeCapabilities.listEmbedding, async () => await researchEmbeddings.listConfigs());
       context.capabilities.register(pluginId, knowledgeCapabilities.saveEmbedding, async (input) => {
-        const config = researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest);
+        const config = await researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest);
         researchIndexer.configurationChanged();
         return config;
       });

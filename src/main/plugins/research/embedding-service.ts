@@ -17,17 +17,18 @@ export class ResearchEmbeddingService {
   constructor(private readonly knowledge: ResearchKnowledgeRepository, private readonly client: OpenAICompatibleEmbeddingClient,
     private readonly context: Pick<RocPluginContext, 'secrets' | 'logger'>) {}
 
-  listConfigs(): ResearchEmbeddingConfig[] {
-    return this.knowledge.listEmbeddingConfigRows().map((row) => this.config(row));
+  async listConfigs(): Promise<ResearchEmbeddingConfig[]> {
+    const rows = this.knowledge.listEmbeddingConfigRows();
+    return await Promise.all(rows.map(async (row) => await this.config(row)));
   }
 
-  saveConfig(request: ResearchEmbeddingConfigSaveRequest): ResearchEmbeddingConfig {
+  async saveConfig(request: ResearchEmbeddingConfigSaveRequest): Promise<ResearchEmbeddingConfig> {
     this.requireOpen();
     const previous = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === request.id);
-    const reuse = previous !== undefined && this.context.secrets.get(previous.api_key_secret_key) === request.apiKey;
+    const reuse = previous !== undefined && (await this.context.secrets.get(previous.api_key_secret_key)) === request.apiKey;
     const key = reuse ? previous.api_key_secret_key : `research.embedding.${randomUUID()}`;
     try {
-      if (!reuse) this.context.secrets.set(key, request.apiKey);
+      if (!reuse) await this.context.secrets.set(key, request.apiKey);
       this.knowledge.saveEmbeddingConfig(request, key);
     } catch (error) {
       if (!reuse) {
@@ -45,7 +46,7 @@ export class ResearchEmbeddingService {
       try { this.context.secrets.clear(previous.api_key_secret_key); }
       catch { this.context.logger.warn('Unused research embedding credential could not be removed.', { configId: request.id }); }
     }
-    return this.config(saved);
+    return await this.config(saved);
   }
 
   async upsertFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}, signal?: AbortSignal): Promise<ResearchKnowledgeDocument> {
@@ -99,7 +100,7 @@ export class ResearchEmbeddingService {
     for (let offset = 0; offset < chunks.length; offset += 32) {
       this.requireActive(signal);
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-      const values = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row),
+      const values = await this.client.embed({ config: await this.config(row), apiKey: await this.apiKey(row),
         texts: chunks.slice(offset, offset + 32).map((chunk) => chunk.content), signal });
       vectors.push(...values.map(vectorToBlob));
     }
@@ -114,7 +115,7 @@ export class ResearchEmbeddingService {
       this.requireActive(active);
       if (row === null) return this.knowledge.searchKnowledge({ request, vector: null });
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-      const [value] = await this.client.embed({ config: this.config(row), apiKey: this.apiKey(row), texts: [request.query], signal: active });
+      const [value] = await this.client.embed({ config: await this.config(row), apiKey: await this.apiKey(row), texts: [request.query], signal: active });
       this.requireActive(active);
       return this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(value) } });
     });
@@ -154,15 +155,15 @@ export class ResearchEmbeddingService {
     return this.knowledge.requireEmbeddingConfig(row.id, row.revision);
   }
 
-  private apiKey(row: EmbeddingConfigRow): string {
-    const key = this.context.secrets.get(row.api_key_secret_key);
+  private async apiKey(row: EmbeddingConfigRow): Promise<string> {
+    const key = await this.context.secrets.get(row.api_key_secret_key);
     if (key === null) throw new Error('research_embedding_key_missing');
     return key;
   }
 
-  private config(row: EmbeddingConfigRow): ResearchEmbeddingConfig {
+  private async config(row: EmbeddingConfigRow): Promise<ResearchEmbeddingConfig> {
     return { id: row.id, name: row.name, baseUrl: row.base_url, model: row.model, dimensions: row.dimensions,
-      keyConfigured: this.context.secrets.get(row.api_key_secret_key) !== null, enabled: row.enabled === 1, updatedAt: row.updated_at };
+      keyConfigured: (await this.context.secrets.get(row.api_key_secret_key)) !== null, enabled: row.enabled === 1, updatedAt: row.updated_at };
   }
 
   private requireOpen(): void { if (this.closed) throw new Error('research_embeddings_closed'); }

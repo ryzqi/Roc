@@ -40,6 +40,15 @@ export function setLogService(logService: ErrorLogService | null): void {
   logServiceInstance = logService;
 }
 
+/**
+ * 记一条 warn 级日志，走 `wrapIpc` / `toRocError` 用的同一个 LogService 单例。
+ *
+ * 用于「已经降级、但必须留下痕迹」的路径：吞掉异常是对的，无声吞掉不是。
+ */
+export function logWarn(message: string, context: ErrorContext = {}): void {
+  logServiceInstance?.warn(message, buildLogContext(context));
+}
+
 export function toLogError(error: unknown): Error {
   if (error instanceof Error) {
     return error;

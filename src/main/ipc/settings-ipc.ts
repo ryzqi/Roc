@@ -56,8 +56,8 @@ export function registerSettingsIpc(
     wrapIpc(() => providerRuntimeService.testProvider(request))
   );
   timedHandle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
-    wrapIpc(() => {
-      secretService.setProviderSecret(request.providerId, request.plaintext);
+    wrapIpc(async () => {
+      await secretService.setProviderSecret(request.providerId, request.plaintext);
       return { providerId: request.providerId, stored: true as const };
     })
   );

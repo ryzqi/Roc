@@ -48,5 +48,7 @@
 | [0022](adr/0022-single-frontend-after-cutover.md) | 切换后仓库里只有一套前端 |
 | [0023](adr/0023-visual-and-motion-spec.md) | 视觉与动效口径、有意为之的取舍 |
 | [0024](adr/0024-stage-surface-removed.md) | 阶段面已删除；七个域登记为「有契约、无界面」 |
+| [0025](adr/0025-typst-report-engine.md) | 导出报告走 Typst；样式是数据 |
+| [0026](adr/0026-async-secret-storage.md) | 密钥存储只有异步一条路；重写必须带守卫 |
 
 工具链源与许可证：[resources/research-runtime/README.md](../resources/research-runtime/README.md)。阶段 Skill：[resources/research-skills](../resources/research-skills)。

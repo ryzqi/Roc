@@ -1,13 +1,18 @@
 import { BrowserWindow, app, safeStorage, type ProcessMetric } from 'electron';
 
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './plugins/diagnostics/runtime-metrics';
-import type { SafeStorageBackend } from './services/secret-service';
+import type { SafeStorageBackend } from './infrastructure/safe-storage-backend';
 
 export function createElectronSafeStorageBackend(): SafeStorageBackend {
   return {
-    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
-    encryptString: (plaintext) => safeStorage.encryptString(plaintext),
-    decryptString: (encrypted) => safeStorage.decryptString(encrypted)
+    // Electron 45 废弃了同步 *EncryptionAvailable / *String，46 会删除；这里只走异步 API。
+    // decryptStringAsync 返回 { result, shouldReEncrypt }，端口把后者显式传出去。
+    isEncryptionAvailable: async () => await safeStorage.isAsyncEncryptionAvailable(),
+    encryptString: async (plaintext) => await safeStorage.encryptStringAsync(plaintext),
+    decryptString: async (encrypted) => {
+      const decrypted = await safeStorage.decryptStringAsync(encrypted);
+      return { plaintext: decrypted.result, shouldReEncrypt: decrypted.shouldReEncrypt };
+    }
   };
 }
 

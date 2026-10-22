@@ -9,7 +9,7 @@ import type {
   SystemAppearanceSnapshot
 } from '../shared/types';
 import { setLogService } from './services/errors';
-import type { SafeStorageBackend } from './infrastructure/secret-manager';
+import type { SafeStorageBackend } from './infrastructure/safe-storage-backend';
 import type { DatabasePool } from './infrastructure/database-pool';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';

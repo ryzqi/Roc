@@ -58,7 +58,7 @@ export async function verifyExtensions(name: string, directory: string): Promise
       createContext: (plugin, capabilities): RocPluginContext => ({ pluginId: plugin.manifest.id, capabilities, eventBus: events,
         database: { getConnection: () => { throw new Error('fixture_database_not_used'); } },
         config: { get: () => null, set: () => { throw new Error('fixture_config_not_used'); } },
-        secrets: { get: () => null, set: () => { throw new Error('fixture_secrets_not_used'); }, clear: () => {} },
+        secrets: { get: async () => null, set: async () => { throw new Error('fixture_secrets_not_used'); }, clear: () => {} },
         logger: { info: () => {}, warn: () => {}, error: () => {} } }) });
     await loader.load([plugin, healthy]);
     await registry.invoke('fixture.failed', {}).then(() => assert.fail('failed plugin handler retained'), error => assert.match(String(error), /not_ready/));

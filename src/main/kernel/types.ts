@@ -61,7 +61,11 @@ export type RocPluginContext = {
     getConnection(): Database;
   };
   readonly config: { get<T>(key: string): T | null; set<T>(key: string, value: T): void };
-  readonly secrets: { get(key: string): string | null; set(key: string, plaintext: string): void; clear(key: string): void };
+  readonly secrets: {
+    get(key: string): Promise<string | null>;
+    set(key: string, plaintext: string): Promise<void>;
+    clear(key: string): void;
+  };
   readonly logger: {
     info(message: string, metadata?: Record<string, unknown>): void;
     warn(message: string, metadata?: Record<string, unknown>): void;

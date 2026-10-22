@@ -11,7 +11,8 @@ import { runDatabaseFastProbe } from '../infrastructure/database-fast-probe';
 import { DatabasePool } from '../infrastructure/database-pool';
 import { runDatabaseRetention, type RocDatabaseRetentionPolicy } from '../infrastructure/database-retention';
 import { InfrastructureLogger } from '../infrastructure/logger';
-import { SecretManager, type SafeStorageBackend } from '../infrastructure/secret-manager';
+import { SecretManager } from '../infrastructure/secret-manager';
+import type { SafeStorageBackend } from '../infrastructure/safe-storage-backend';
 import { CapabilityRegistry } from './capability-registry';
 import { EventBus } from './event-bus';
 import { PluginLoader } from './plugin-loader';
@@ -83,9 +84,13 @@ export class KernelRuntime {
 
       const coreDb = databasePool.getCoreConnection();
       const configStore = new ConfigStore(coreDb, join(this.options.rootDir, 'config'));
-      const secretManager = new SecretManager(coreDb, this.options.safeStorage);
       const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
       loggerToClose = logger;
+      const secretManager = new SecretManager(
+        coreDb,
+        this.options.safeStorage,
+        logger.createPluginLogger('@roc/plugin-kernel')
+      );
       const maintenanceService = new DatabaseMaintenanceService({
         pool: databasePool,
         jobs: {

@@ -1,4 +1,8 @@
 import { build } from 'esbuild';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * 把一个 TS 模块打进内存并 import 回来。
@@ -24,10 +28,16 @@ import { build } from 'esbuild';
  *（真 Electron、真 IPC）。
  *
  * @param {string} entry 仓库相对或绝对路径，例如 `src/shared/surfaces.ts`
- * @param {{ target?: string, platform?: 'neutral' | 'node' | 'browser' }} [options]
+ * @param {{ target?: string, platform?: 'neutral' | 'node' | 'browser', external?: string[], tempDir?: string }} [options]
+ *   `external` 是给 `platform: 'node'` 准备的逃生口：模块链里有原生依赖（`better-sqlite3`）时，
+ *   把它标成 external，由 Node 自己从 node_modules 解析，而不是让 esbuild 去打一份原生模块的 JS。
+ *
+ *   `external` 必须配 `tempDir`：`data:` URL 没有目录基址，裸模块名字（`better-sqlite3`）在那里
+ *   根本解析不了（`ERR_INVALID_URL`）。传一个**仓库内**的目录（`.runtime/tmp`）后，结果落成临时文件
+ *   再 import，Node 就能沿目录树找到 `node_modules`；文件在 `finally` 里删掉。默认仍走 `data:` URL。
  */
 export async function importTypeScriptModule(entry, options = {}) {
-  const { target = 'node22', platform = 'neutral' } = options;
+  const { target = 'node22', platform = 'neutral', external = [], tempDir = null } = options;
   const compiled = await build({
     bundle: true,
     entryPoints: [entry],
@@ -35,12 +45,23 @@ export async function importTypeScriptModule(entry, options = {}) {
     logLevel: 'silent',
     platform,
     target,
+    external,
     write: false
   });
   const output = compiled.outputFiles?.[0];
   if (output === undefined) {
     throw new Error(`bundle_produced_no_output:${entry}`);
   }
-  const moduleUrl = `data:text/javascript;base64,${Buffer.from(output.text).toString('base64')}`;
-  return await import(moduleUrl);
+  if (tempDir === null) {
+    const moduleUrl = `data:text/javascript;base64,${Buffer.from(output.text).toString('base64')}`;
+    return await import(moduleUrl);
+  }
+  mkdirSync(tempDir, { recursive: true });
+  const temporaryPath = join(tempDir, `bundle-${randomUUID()}.mjs`);
+  writeFileSync(temporaryPath, output.text, 'utf8');
+  try {
+    return await import(pathToFileURL(temporaryPath).href);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
 }

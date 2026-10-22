@@ -53,6 +53,36 @@ type AnthropicClientOptions = NonNullable<ChatAnthropicInput['clientOptions']>;
 const openAiNoAuthPlaceholderKey = 'roc-no-auth';
 const llamaCppProviderRequestTimeoutMs = 600_000;
 
+/**
+ * 解析用户在设置页填的 Provider 端点。
+ *
+ * `new URL` 对非 URL 字符串直接抛 `TypeError`，对 `localhost:11434`、`file:///…` 这类
+ * 能解析但不是 HTTP 端的字符串则默不作声地放过。两者都在这里换成同一个领域错误：
+ * 端点的唯一合法形态是 http(s)。
+ */
+function parseHttpEndpoint(endpoint: string): URL {
+  let url: URL;
+  try {
+    url = new URL(endpoint.trim());
+  } catch {
+    throw invalidProviderEndpoint();
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw invalidProviderEndpoint();
+  }
+  return url;
+}
+
+function invalidProviderEndpoint(): RocDomainError {
+  return new RocDomainError({
+    code: 'provider_endpoint_invalid',
+    message: 'Provider 端点不是合法的 http(s) URL。',
+    category: 'validation',
+    retryable: false,
+    userAction: '请在设置页把 Provider 端点改成完整的 http(s) 地址。'
+  });
+}
+
 function warnIfAnthropicCacheControlConfigured(model: ChatAnthropic, logService: ModelFactoryLogService | null): void {
   const defaultOptions = (model as ChatAnthropic & {
     defaultOptions?: {
@@ -237,7 +267,7 @@ export class LangChainModelFactory {
       });
     }
 
-    const apiKey = this.resolveCredential(provider);
+    const apiKey = await this.resolveCredential(provider);
     const modelOptions: ProviderModelOptions = targetModel.options ?? {};
     const typedProvider = isLangChainProviderType(provider.type) ? toTypedProviderConfig(provider, modelOptions) : null;
     const llamaCppSamplingProfile =
@@ -392,7 +422,7 @@ export class LangChainModelFactory {
       modelId,
       modelOptions,
       prompt,
-      apiKey: this.resolveCredential(provider),
+      apiKey: await this.resolveCredential(provider),
       logService: this.logService,
       options
     });
@@ -412,7 +442,7 @@ export class LangChainModelFactory {
   }
 
   private normalizeAnthropicApiUrl(endpoint: string): string {
-    const url = new URL(endpoint.trim());
+    const url = parseHttpEndpoint(endpoint);
     const path = url.pathname.replace(/\/+$/, '');
     if (path.endsWith('/v1/messages')) {
       url.pathname = path.slice(0, -'/v1/messages'.length) || '/';
@@ -426,7 +456,7 @@ export class LangChainModelFactory {
     return url.toString();
   }
 
-  private resolveCredential(provider: ProviderConfig): string {
+  private async resolveCredential(provider: ProviderConfig): Promise<string> {
     const credentialRef = provider.credentialRef;
     if (credentialRef === null) {
       if (provider.type === 'llama_cpp') {
@@ -481,7 +511,7 @@ export class LangChainModelFactory {
       });
     }
 
-    const value = this.secretService.getProviderSecret(provider.id);
+    const value = await this.secretService.getProviderSecret(provider.id);
     if (value.trim().length === 0) {
       throw new RocDomainError({
         code: 'provider_credential_unavailable',
