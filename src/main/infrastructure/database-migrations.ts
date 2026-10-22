@@ -17,6 +17,18 @@ export type RocSchemaMetadata = {
   updatedAt: string;
 };
 
+/**
+ * 把库推到 `migrations` 声明的形状。三条路：
+ *
+ * 1. **已经是最新**（`sqlite_master` 里的对象与清单逐字一致）：只补记 ledger。
+ * 2. **空库**（无对象、无 ledger）：从头跑全部迁移。
+ * 3. **已应用一部分**：只要是**追加式**变化（新增列/新增表），就把未应用的迁移按版本顺序跑完，
+ *    并在同一个事务里验证最终形状与清单一致。历史 migration 被改写（名字或 checksum 变了）、
+ *    或者跑完对不上，才要求重建。
+ *
+ * 第 3 条之前是缺的：只改一行 schema 也会让每个旧库抛 `database_schema_rebuild_required`，
+ * 于是 `pnpm database:migrate` 自称的「就地升级」实际上做不到，一个加列就得丢整库数据。
+ */
 export function applyDatabaseMigrations(
   db: DatabaseConnection,
   input: {
@@ -29,22 +41,56 @@ export function applyDatabaseMigrations(
   ensureLedgerTables(db);
   validateMigrationList(input.migrations);
   const applied = readAppliedMigrations(db, input.dbName);
-  if (schemaObjectsMatch(db, input.migrations)) {
+  // 预期形状只算一次：升级路径上要在事务里再验一次，不必把全部 migration 在探测库里重跑两遍。
+  const expectedObjects = readSchemaObjects(input.migrations.map((migration) => migration.sql).join('\n'));
+  if (schemaObjectsMatch(db, expectedObjects)) {
     if (!appliedMigrationsMatch(applied, input.migrations)) {
       recordCurrentMigrations(db, input.dbName, input.migrations, now);
     }
     return;
   }
-  if (applied.size !== 0 || readSchemaObjectsFromDatabase(db).size !== 0) {
+
+  const hasSchemaObjects = readSchemaObjectsFromDatabase(db).size !== 0;
+  if (!hasSchemaObjects && applied.size === 0) {
+    const applyAll = db.transaction(() => {
+      for (const migration of input.migrations) {
+        db.exec(migration.sql);
+      }
+      writeCurrentMigrationRows(db, input.dbName, input.migrations, now);
+    });
+    applyAll();
+    return;
+  }
+
+  if (applied.size === 0) {
+    // 有对象但没有 ledger：来历不明的库，不猜它停在哪个版本。
     throw new Error('database_schema_rebuild_required');
   }
-  const applyCurrent = db.transaction(() => {
-    for (const migration of input.migrations) {
+  const rewritten = [...applied.entries()].find(([version, record]) => {
+    const migration = input.migrations.find((entry) => entry.version === version);
+    return (
+      migration === undefined ||
+      migration.name !== record.name ||
+      checksumMigration(migration) !== record.checksum
+    );
+  });
+  if (rewritten !== undefined) {
+    // 已经执行过的 migration 被改写：没有可信的起点，只能重建。
+    throw new Error('database_schema_rebuild_required');
+  }
+
+  const pending = input.migrations.filter((migration) => !applied.has(migration.version));
+  const applyPending = db.transaction(() => {
+    for (const migration of pending) {
       db.exec(migration.sql);
     }
     writeCurrentMigrationRows(db, input.dbName, input.migrations, now);
+    if (!schemaObjectsMatch(db, expectedObjects)) {
+      // 事务在这抛就会整体回滚：不会留下一个半升级、下次又对不上的库。
+      throw new Error('database_schema_rebuild_required');
+    }
   });
-  applyCurrent();
+  applyPending();
 }
 
 export function readSchemaMetadata(db: DatabaseConnection, dbName: RocLogicalDatabaseName): RocSchemaMetadata | null {
@@ -164,8 +210,7 @@ function writeCurrentMigrationRows(
   writeMetadata(db, dbName, migrations, now());
 }
 
-function schemaObjectsMatch(db: DatabaseConnection, migrations: readonly RocDatabaseMigration[]): boolean {
-  const expected = readSchemaObjects(migrations.map((migration) => migration.sql).join('\n'));
+function schemaObjectsMatch(db: DatabaseConnection, expected: ReadonlyMap<string, string>): boolean {
   const actual = readSchemaObjectsFromDatabase(db);
   if (expected.size !== actual.size) {
     return false;

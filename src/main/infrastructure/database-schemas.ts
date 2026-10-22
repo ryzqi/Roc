@@ -420,6 +420,15 @@ CREATE TABLE agent_tool_effect_reconciliations (
       updated_at TEXT NOT NULL
     );
 CREATE INDEX idx_agent_pilot_runs_created ON agent_pilot_runs(created_at DESC);`
+  },
+  {
+    version: 6,
+    name: 'checkpoint_write_task_path',
+    // langgraph 1.5 起 pendingWrites 的排序键是 `(task_path, task_id, idx)`：并行 superstep 里
+    // 同一 DeltaChannel 的写入必须按任务路径而不是 uuid5 任务 id 重放，否则每次运行的顺序都不同。
+    // 旧行落成空字符串（就是根任务的路径），读回时按 task_id/idx 重新排序——升级前是按插入顺序，
+    // 那一点不再保留（上游契约要求排序键）。
+    sql: `ALTER TABLE langgraph_checkpoint_writes ADD COLUMN task_path TEXT NOT NULL DEFAULT '';`
   }
 ];
 

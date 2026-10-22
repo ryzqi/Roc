@@ -36,6 +36,7 @@ type StoredWriteRow = WriteRow & {
   checkpoint_id: string;
   idx: number;
   created_at: string;
+  task_path: string;
 };
 
 type CheckpointDeleteResult = {
@@ -180,26 +181,32 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
   override async putWrites(
     config: RunnableConfig,
     writes: Parameters<BaseCheckpointSaver['putWrites']>[1],
-    taskId: string
+    taskId: string,
+    taskPath?: string
   ): Promise<void> {
     const key = readCheckpointKeyForWrites(config);
     requireStorageKey(taskId, 'agent_checkpoint_task_id_missing');
+    // `taskPath` 是 langgraph 1.5 起 writes 的排序首键（`(task_path, task_id, idx)`）。
+    // 根任务的路径是空字符串；升级前的旧行也落成 ''，所以它们会被当作根任务写入，
+    // 按 task_id/idx 重新排序（旧实现按插入顺序返回，这一点不再保留——上游契约要求排序键）。
+    const storedTaskPath = taskPath ?? '';
     const now = new Date().toISOString();
     const insert = this.db.prepare(
       `INSERT INTO langgraph_checkpoint_writes
-       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at, task_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING`
     );
     const upsertSpecialWrite = this.db.prepare(
       `INSERT INTO langgraph_checkpoint_writes
-       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at, task_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
          channel = excluded.channel,
          value_type = excluded.value_type,
          value_blob = excluded.value_blob,
-         created_at = excluded.created_at`
+         created_at = excluded.created_at,
+         task_path = excluded.task_path`
     );
     const serializedWrites = await Promise.all(
       writes.map(async ([channel, value], index) => {
@@ -226,7 +233,8 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
           write.channel,
           write.valueType,
           Buffer.from(write.valueBytes),
-          now
+          now,
+          storedTaskPath
         );
       }
     })();
@@ -319,7 +327,10 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     );
     const writes = readSourceRows<StoredWriteRow>(
       source,
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
+      // 升级前的备份没有 `task_path` 列（`readSourceRows` 会吞掉 SQL 错误并返回空数组，
+      // 所以直接选它会让旧备份静默恢复不了任何 writes——必须先看列在不在）。
+      `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at,
+         ${hasTableColumn(source, 'langgraph_checkpoint_writes', 'task_path') ? 'task_path' : "'' AS task_path"}
        FROM langgraph_checkpoint_writes`
     );
     const insertCheckpoint = this.db.prepare(
@@ -331,9 +342,9 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     );
     const insertWrite = this.db.prepare(
       `INSERT INTO langgraph_checkpoint_writes (
-        thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
+        thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at, task_path
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const row of checkpoints) {
       try {
@@ -348,8 +359,11 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
           row.metadata_blob,
           row.created_at
         );
-      } catch {
-        continue;
+      } catch (error) {
+        if (isDuplicateRowError(error)) {
+          continue;
+        }
+        throw error;
       }
     }
     for (const row of writes) {
@@ -363,10 +377,16 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
           row.channel,
           row.value_type,
           row.value_blob,
-          row.created_at
+          row.created_at,
+          row.task_path
         );
-      } catch {
-        continue;
+      } catch (error) {
+        // 重复行跳过；其余错误必须响：以前这里一律 `continue`，一个列对不上就会**静默**恢复出
+        // 空的写入集，看起来跟「备份里本来就没内容」一模一样。
+        if (isDuplicateRowError(error)) {
+          continue;
+        }
+        throw error;
       }
     }
   }
@@ -644,12 +664,19 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     checkpointNs: string,
     checkpointId: string
   ): Promise<NonNullable<CheckpointTuple['pendingWrites']>> {
+    // 顺序是 langgraph 的 writes 排序键 `(task_path, task_id, idx)` —— 与活执行应用写入的顺序
+    // 一致，所以重放一次 superstep 不会因为 uuid5 任务 id 与运行无关的排列而变形。
+    //
+    // SQLite 默认的 BINARY 排序比较 UTF-8 字节，对**合法 UTF-8 文本**而言 UTF-8 字节序就是
+    // 码点序（含星平面字符），与上游 `compareWritesSortKeys` 的语义一致（它特意不用 UTF-16
+    // 码元序）。唯一的偏差是孤立代理项：绑定时会规范成 U+FFFD，排到 U+FFFD 的位置。
+    // `taskPathStr` 由图上的节点名拼成，走不到那个情况。
     const rows = this.db
       .prepare(
         `SELECT task_id, channel, value_type, value_blob
          FROM langgraph_checkpoint_writes
          WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
-         ORDER BY rowid ASC`
+         ORDER BY task_path ASC, task_id ASC, idx ASC`
       )
       .all(threadId, checkpointNs, checkpointId) as WriteRow[];
     const pendingWrites: NonNullable<CheckpointTuple['pendingWrites']> = [];
@@ -796,4 +823,27 @@ function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * better-sqlite3 把约束冲突抛成 `SQLITE_CONSTRAINT_*`。恢复备份时只有「这一行已经存在」该被忽略，
+ * 其余错误（列不存在、类型不对、外键、磁盘）必须往上抛。
+ */
+function isDuplicateRowError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT');
+}
+
+/**
+ * 恢复备份前先看列在不在。`readSourceRows` 会吞掉 SQL 错误并返回空数组，
+ * 所以「旧备份里没有新列」必须在这里分辨，不能靠一次 SELECT 失败去表达。
+ *
+ * 表名只能传本文件里的字面量，不要把它接到任何用户输入上。
+ */
+function hasTableColumn(source: DatabaseConnection, table: string, column: string): boolean {
+  const rows = source.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === column);
 }

@@ -201,7 +201,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 | 命令 | 作用 | 副作用 |
 | --- | --- | --- |
 | `pnpm database:backup` / `database:restore` | 备份 / 还原 `~/.roc` 数据库 | 就地覆盖；需先 `pnpm build`，因为跑的是 `dist/` 里的 JS |
-| `pnpm database:migrate` | 把 `~/.roc` 各插件库迁到代码里的最新 schema 版本 | 就地升级 schema |
+| `pnpm database:migrate` | 把 `~/.roc` 各插件库迁到代码里的最新 schema 版本 | 就地升级 schema；已应用的 migration 被改动、或库里有对象却没有迁移记账时仍要求重建 |
 | `pnpm database:clear-agent-history` | 清空 agent / task 历史表，保留 schema 与配置 | 破坏性：删除前自动备份到 `~/.roc/plugin-data/backups/manual-clear-history-<时间戳>/` |
 | `pnpm logs:query --level error --grep <关键字>` | 查询 `~/.roc/logs/app.jsonl` | 只读；过滤器另有 `--service`、`--traceId`、`--runId`、`--since` |
 | `pnpm audit:layout` | 三个视口 × 门户/画布/助手/设置四态的布局审查 | 需先 `pnpm build`；产出 `.artifacts/layout-audit/`；`release/` 里已有打包应用时优先用它 |
