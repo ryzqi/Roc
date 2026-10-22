@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { z } from 'zod';
 import type { BaseStore } from '@langchain/langgraph';
 
@@ -22,6 +23,10 @@ import {
   sessionMessageSearchResultSchema
 } from '../../../shared/schemas/agent';
 import {
+  pilotOptInRequestSchema,
+  pilotStatusSchema
+} from '../../../shared/schemas/harness-pilot';
+import {
   activeChatRunSchema,
   chatActiveRunRequestSchema,
   chatCancelRunRequestSchema,
@@ -39,6 +44,8 @@ import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../ke
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import { PilotStateStore } from '../../services/deep-agent/pilot-gate';
+import { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
@@ -67,6 +74,9 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.correct', chatCorrectRunRequestSchema, chatCorrectRunResultSchema),
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
+  descriptor('agent.pilot.status', emptyInputSchema, pilotStatusSchema),
+  descriptor('agent.pilot.enable', pilotOptInRequestSchema, pilotStatusSchema),
+  descriptor('agent.pilot.rollback', emptyInputSchema, pilotStatusSchema),
   descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
   descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
   descriptor('agent.sessions.search', sessionMessageSearchRequestSchema, sessionMessageSearchResultSchema)
@@ -125,13 +135,18 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const runEventLog = new AgentRunEventLog(db);
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
-      new RunBudgetLedger(db).reconcileStartup();
+      const budgetLedger = new RunBudgetLedger(db);
+      budgetLedger.reconcileStartup();
+      // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
+      // capability reports that instead of pretending a gate exists.
+      const pilot = createPilotCoordinator(options, budgetLedger);
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository),
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
         modelFactory,
+        pilot: pilot ?? undefined,
         pluginId,
         repository,
         runEventLog,
@@ -247,6 +262,25 @@ function resolveDeepAgentExecutor(
   });
 }
 
+/**
+ * P6-04: the pilot needs (a) a directory for its opt-in state and (b) the same ledger the runs use.
+ * Both only exist in the in-process executor composition; an injected executor has neither, so the
+ * pilot stays absent and its capabilities answer with `agent_pilot_unavailable`.
+ */
+function createPilotCoordinator(
+  options: AgentPluginOptions,
+  ledger: RunBudgetLedger
+): PilotRunCoordinator | null {
+  const executor = options.deepAgentExecutor;
+  if (executor === undefined || 'execute' in executor) {
+    return null;
+  }
+  return new PilotRunCoordinator({
+    store: new PilotStateStore({ directory: join(executor.paths.configDir, 'pilot') }),
+    ledger
+  });
+}
+
 function resolveLifecycleHooks(
   context: RocPluginContext,
   option: AgentPluginOptions['deepAgentExecutor']
@@ -342,6 +376,15 @@ function registerAgentCapabilities(
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.run.events.list'), async (input) =>
     runtime.listRunEvents(chatRunEventsReplayRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.status'), async () =>
+    runtime.getPilotStatus()
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.enable'), async (input) =>
+    runtime.enablePilot(pilotOptInRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.rollback'), async () =>
+    runtime.rollbackPilot()
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.run.active.get'), async (input) =>
     runtime.getActiveRun(chatActiveRunRequestSchema.parse(input))

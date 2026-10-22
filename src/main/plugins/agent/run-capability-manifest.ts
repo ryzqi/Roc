@@ -207,7 +207,7 @@ export function isRunCapabilityManifestIntegrityValid(manifest: RunCapabilityMan
   return manifestHash === createRunCapabilityManifestHash(withoutHash);
 }
 
-function createRunCapabilityManifestHash(input: Omit<RunCapabilityManifestV1, 'manifestHash'>): string {
+export function createRunCapabilityManifestHash(input: Omit<RunCapabilityManifestV1, 'manifestHash'>): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
 }
 

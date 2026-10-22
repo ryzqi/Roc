@@ -223,7 +223,10 @@ export const rocApi: RocPreloadApi = {
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),
     getConfigPreview: (...args) => ipcRenderer.invoke(ipcChannels.agentGetConfigPreview, ...args),
-    getCapabilityPreview: (...args) => ipcRenderer.invoke(ipcChannels.agentGetCapabilityPreview, ...args)
+    getCapabilityPreview: (...args) => ipcRenderer.invoke(ipcChannels.agentGetCapabilityPreview, ...args),
+    getPilotStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentPilotStatus, ...args),
+    enablePilot: (...args) => ipcRenderer.invoke(ipcChannels.agentPilotEnable, ...args),
+    rollbackPilot: (...args) => ipcRenderer.invoke(ipcChannels.agentPilotRollback, ...args)
   },
   chat: {
     startRun: (...args) => ipcRenderer.invoke(ipcChannels.chatStartRun, ...args),

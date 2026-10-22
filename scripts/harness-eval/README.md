@@ -96,10 +96,27 @@ invalid interval, verifier failures, a non-positive holdout interval and a forge
 signature, reproduces a release from identical inputs, pins the release for a run so later
 activation leaves old runs untouched, and rolls back to the previous release.
 `pilot-gate` is off by default (normal requests never start a candidate search), requires
-an explicit budget acknowledgement, buckets by taskId, enforces read-only / low-side-effect
-grants and effect classes, trips a breaker on spending or repeated failure, and lets the
-user roll back. Evidence: `.artifacts/harness-eval/2026-10-21T16-43-26.986Z-54665/report.json`.
-Scope: release activation, the pilot decision and the upgrade gate are not wired into the
-production run path, and P5's numbers are fixture evidence. P6-02 (real transfer
-conditions) and P6-04 (product dispatch, budget-ledger reservation) therefore remain
-in progress; module contracts above are verified only as contracts.
+an explicit budget acknowledgement, buckets by taskId, and trips a breaker on repeated
+failure or when the granted allowance runs out; the user can roll back at any time.
+
+The pilot now has two further cases that cover the product path rather than the gate module:
+
+- `pilot-product-path` — derives grants/effect classes from a frozen manifest, narrows the
+  manifest for a profile and re-seals its hash (identity-preserving when nothing is
+  removed), then exercises the real `agent_pilot_runs` table through `RunBudgetLedger`:
+  an ordinary run keeps the exact old budget errors and gets no pilot row, a granted run
+  overshoots by exactly the granted model/tool/token allowance, exhaustion is marked after
+  the reservation transaction rolls back and maps through `toRunFailure` to
+  `run_pilot_allowance_exhausted`, and completion/cancellation/rollback each land in their
+  own state.
+- `pilot-dispatch` — drives the real `AgentPluginRuntime.startRun`: the frozen snapshot and
+  the `agent.run.started` preview both carry the narrowed manifest hash, the bound tool set
+  really shrinks, the run gets its pilot row and disclosure, and cancelling it records
+  `cancelled` instead of `finished`. Reverting the snapshot seeding line makes this case
+  fail with `run_execution_snapshot_manifest_mismatch`, so it guards that wiring.
+
+Scope: release activation and the upgrade gate are still not wired into the production run
+path, the pilot does not start a candidate search (P5's numbers are fixture evidence), and
+the disclosed microusd ceiling is never metered (no price table, so cost stays `unknown`;
+only model calls, tool calls and tokens are metered). P6-02 (real transfer conditions)
+therefore remains in progress.

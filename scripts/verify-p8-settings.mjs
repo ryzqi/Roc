@@ -513,6 +513,58 @@ try {
   await openSection('tasks');
   assertCheck('1 分区读回', '界面读回任务与调度', (await readInput('settings-long-running-seconds')) === '90' && (await readInput('settings-scheduler-max-tasks')) === '120');
 
+  // ---- 受限试点 (P6-04)：默认关闭、需明示预算与确认、可回退且回退会熔断 ----
+  await openSection('pilot');
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="settings-pilot-loading"]') === null,
+    undefined,
+    { timeout: 20_000 }
+  );
+  const pilotClosed = await text('settings-pilot-state');
+  const pilotEnableDisabledByDefault = await page.locator('[data-testid="settings-pilot-enable"]').isDisabled();
+  assertCheck(
+    '1 分区读回',
+    '受限试点默认关闭且未确认预算时不能开启',
+    pilotClosed.includes('已关闭') && pilotEnableDisabledByDefault,
+    `${pilotClosed.replace(/\s+/gu, ' ')} · enableDisabled=${pilotEnableDisabledByDefault}`
+  );
+  const pilotCostState = await page.evaluate(async () => {
+    const snapshot = await window.roc.agent.getPilotStatus();
+    return snapshot.ok ? snapshot.data.costState : null;
+  });
+  const pilotAllowanceText = await text('settings-pilot-allowance');
+  assertCheck(
+    '1 分区读回',
+    '受限试点把美元成本声明为未知（后端字段 + 界面文案）',
+    pilotCostState === 'unknown_without_price_table' && pilotAllowanceText.includes('未知'),
+    `costState=${String(pilotCostState)} · ${pilotAllowanceText.slice(0, 100)}`
+  );
+  await page.click('[data-testid="settings-pilot-acknowledge"]');
+  await page.click('[data-testid="settings-pilot-enable"]');
+  await page.waitForFunction(
+    () => (document.querySelector('[data-testid="settings-pilot-state"]')?.textContent ?? '').includes('已开启'),
+    undefined,
+    { timeout: 20_000 }
+  );
+  const pilotOn = await text('settings-pilot-state');
+  assertCheck('1 分区读回', '确认预算后试点可以开启并读回服务端状态', pilotOn.includes('read-only'), pilotOn.replace(/\s+/gu, ' '));
+  await page.click('[data-testid="settings-pilot-rollback"]');
+  await page.waitForFunction(
+    () => {
+      const node = document.querySelector('[data-testid="settings-pilot-state"]');
+      return node !== null && (node.textContent ?? '').includes('已关闭') && (node.textContent ?? '').includes('熔断中');
+    },
+    undefined,
+    { timeout: 20_000 }
+  );
+  const pilotRolledBack = await text('settings-pilot-state');
+  assertCheck(
+    '1 分区读回',
+    '回退后试点关闭且熔断原因可见（用户回退）',
+    pilotRolledBack.includes('user_rollback') && !pilotRolledBack.includes('已开启'),
+    pilotRolledBack.replace(/\s+/gu, ' ')
+  );
+
   // 只读分区：真实状态 + 明确说明移除的字段
   await openSection('literature');
   // KeyValueRow renders the label and the value in one row, so the text is 「就绪是」/「就绪否」.

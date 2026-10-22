@@ -8,6 +8,7 @@ import {
   Cpu,
   Database,
   FileCode,
+  FlaskConical,
   KeyRound,
   Layers,
   Shield,
@@ -30,6 +31,7 @@ import { HooksSection } from './sections/HooksSection';
 import { ModelsSection } from './sections/ModelsSection';
 import { RagSection } from './sections/RagSection';
 import { LiteratureSection, SandboxSection } from './sections/ReadOnlySections';
+import { PilotSection } from './sections/PilotSection';
 import { GuardrailSection, MemorySection } from './sections/SecuritySections';
 
 /**
@@ -57,6 +59,7 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
   authorization: KeyRound,
   hooks: Webhook,
   memory: Brain,
+  pilot: FlaskConical,
   backup: ArchiveRestore
 };
 
@@ -66,7 +69,7 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
  * ## Fixed shape
  *
  * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 220px section list with 40px rows, a dirty bar
- * pinned above the scrolling form, and the twelve sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
+ * pinned above the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
  * settings window that scrolls the whole modal (header and section list included) loses the
  * dirty bar exactly when it matters.
  *
@@ -134,6 +137,8 @@ function renderSection(
       return <HooksSection store={store} />;
     case 'memory':
       return <MemorySection store={store} />;
+    case 'pilot':
+      return <PilotSection client={props.client} />;
     case 'backup':
       return (
         <BackupSection

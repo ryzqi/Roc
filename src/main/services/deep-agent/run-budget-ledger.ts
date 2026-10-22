@@ -6,6 +6,36 @@ import { hashToolInput } from './tool-effect-store';
 export type RunLimits = RunExecutionSnapshot['budget'];
 type Reservation = { id: string; kind: 'model' | 'tool' | 'child'; tokens: number; inputHash: string; envelope: unknown };
 
+/** The durable pilot grant for one run, plus what it has spent so far. */
+export type PilotRunRow = {
+  runId: string;
+  taskId: string;
+  decision: string;
+  disclosure: string;
+  profile: 'read-only' | 'low-side-effect' | null;
+  bucket: number;
+  extraBudgetMicrousd: number;
+  allowance: { modelCalls: number; toolCalls: number; totalTokens: number };
+  spent: { modelCalls: number; toolCalls: number; totalTokens: number };
+  state: 'active' | 'exhausted' | 'finished' | 'cancelled';
+  createdAt: string;
+};
+
+/** Internal marker: the public error is raised after the reservation transaction rolls back. */
+class PilotAllowanceExhausted extends Error {
+  constructor() {
+    super('pilot_allowance_exhausted');
+    this.name = 'PilotAllowanceExhausted';
+  }
+}
+
+type PilotRunDbRow = {
+  run_id: string; task_id: string; decision: string; disclosure: string; profile: PilotRunRow['profile']; bucket: number;
+  extra_budget_microusd: number; allowance_model_calls: number; allowance_tool_calls: number;
+  allowance_tokens: number; spent_model_calls: number; spent_tool_calls: number; spent_tokens: number;
+  state: PilotRunRow['state']; created_at: string;
+};
+
 /** One durable ledger per root run, shared by retries, summaries and child agents. */
 export class RunBudgetLedger {
   constructor(private readonly db: DatabaseConnection) {}
@@ -15,6 +45,21 @@ export class RunBudgetLedger {
   }
 
   reserve(runId: string, limits: RunLimits, input: Reservation): void {
+    try {
+      this.reserveWithinTransaction(runId, limits, input);
+    } catch (error) {
+      // The exhausted marker cannot live inside the rolled-back reservation transaction, so it is
+      // written here: the run is refused, and the next attempt (and the breaker) can see why.
+      if (error instanceof PilotAllowanceExhausted) {
+        this.db.prepare("UPDATE agent_pilot_runs SET state = 'exhausted', updated_at = ? WHERE run_id = ?")
+          .run(new Date().toISOString(), runId);
+        throw new Error('run_pilot_allowance_exhausted');
+      }
+      throw error;
+    }
+  }
+
+  private reserveWithinTransaction(runId: string, limits: RunLimits, input: Reservation): void {
     this.db.transaction(() => {
       if (limits.deadlineAt !== null && Date.now() >= Date.parse(limits.deadlineAt)) throw new Error('run_deadline_exhausted');
       const existing = this.db.prepare('SELECT input_hash FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
@@ -39,10 +84,17 @@ export class RunBudgetLedger {
       if (input.kind === 'tool' && totals.active_tools >= limits.maxConcurrentToolCalls) throw new Error('run_tool_concurrency_exhausted');
       if (input.kind === 'child' && totals.child_calls >= limits.maxChildTasks) throw new Error('run_child_task_budget_exhausted');
       if (input.kind === 'child' && totals.active_children >= limits.maxConcurrentChildTasks) throw new Error('run_child_task_concurrency_exhausted');
-      if (input.kind === 'model' && totals.model_calls >= limits.maxModelCalls) throw new Error('run_model_call_budget_exhausted');
-      if (input.kind !== 'model' && totals.tool_calls >= limits.maxToolCalls) throw new Error('run_tool_call_budget_exhausted');
+      // A started pilot run gets bounded extra headroom above the frozen budget. Without a pilot
+      // grant these branches throw exactly what they threw before, so ordinary requests are
+      // unchanged; with a grant the overshoot is metered and the breaker trips when it runs out.
+      if (input.kind === 'model' && totals.model_calls >= limits.maxModelCalls) {
+        this.consumePilotAllowance(runId, 'model', input.tokens, 'run_model_call_budget_exhausted');
+      }
+      if (input.kind !== 'model' && totals.tool_calls >= limits.maxToolCalls) {
+        this.consumePilotAllowance(runId, 'tool', 0, 'run_tool_call_budget_exhausted');
+      }
       if (limits.maxTotalTokens !== null && totals.tokens + input.tokens > limits.maxTotalTokens) {
-        throw new Error('run_total_token_budget_exhausted');
+        this.consumePilotAllowance(runId, 'token', input.tokens, 'run_total_token_budget_exhausted');
       }
       // No price table is configured yet. A cost limit must fail closed rather than count unknown as zero.
       if (input.kind === 'model' && limits.maxCostUsd !== null) throw new Error('run_cost_estimate_unavailable');
@@ -67,6 +119,69 @@ export class RunBudgetLedger {
       envelope_json = ?
       WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(tokens, state, envelope, runId, callId);
     if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
+  }
+
+  // --- P6-04 pilot allowance -----------------------------------------------------------------
+
+  /** Records the granted headroom for a run that the pilot gate started. Idempotent per run. */
+  grantPilotAllowance(runId: string, input: {
+    taskId: string;
+    decision: string;
+    disclosure: string;
+    profile: 'read-only' | 'low-side-effect' | null;
+    bucket: number;
+    extraBudgetMicrousd: number;
+    allowance: { modelCalls: number; toolCalls: number; totalTokens: number };
+  }): void {
+    const now = new Date().toISOString();
+    this.db.prepare(`INSERT OR IGNORE INTO agent_pilot_runs
+      (run_id, task_id, decision, disclosure, profile, bucket, extra_budget_microusd,
+       allowance_model_calls, allowance_tool_calls, allowance_tokens, state, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).run(
+      runId, input.taskId, input.decision, input.disclosure, input.profile, input.bucket,
+      input.extraBudgetMicrousd, input.allowance.modelCalls, input.allowance.toolCalls,
+      input.allowance.totalTokens, now, now);
+  }
+
+  readPilotRun(runId: string): PilotRunRow | null {
+    const row = this.db.prepare('SELECT * FROM agent_pilot_runs WHERE run_id = ?').get(runId) as PilotRunDbRow | undefined;
+    return row === undefined ? null : toPilotRunRow(row);
+  }
+
+  latestPilotRun(): PilotRunRow | null {
+    const row = this.db.prepare('SELECT * FROM agent_pilot_runs ORDER BY created_at DESC, run_id DESC LIMIT 1')
+      .get() as PilotRunDbRow | undefined;
+    return row === undefined ? null : toPilotRunRow(row);
+  }
+
+  finishPilotRun(runId: string, state: 'finished' | 'exhausted' | 'cancelled' = 'finished'): void {
+    this.db.prepare("UPDATE agent_pilot_runs SET state = ?, updated_at = ? WHERE run_id = ? AND state = 'active'")
+      .run(state, new Date().toISOString(), runId);
+  }
+
+  /**
+   * Metered overshoot above the frozen budget. Called only when a base limit is already reached, so
+   * a run without a pilot grant throws the original budget error and nothing changes for it.
+   */
+  private consumePilotAllowance(
+    runId: string,
+    kind: 'model' | 'tool' | 'token',
+    tokens: number,
+    baseError: string
+  ): void {
+    const row = this.db.prepare('SELECT * FROM agent_pilot_runs WHERE run_id = ?').get(runId) as PilotRunDbRow | undefined;
+    if (row === undefined || row.state !== 'active') throw new Error(baseError);
+    const spentModel = row.spent_model_calls + (kind === 'model' ? 1 : 0);
+    const spentTools = row.spent_tool_calls + (kind === 'tool' ? 1 : 0);
+    const spentTokens = row.spent_tokens + (kind === 'token' ? tokens : 0);
+    const exhausted = spentModel > row.allowance_model_calls
+      || spentTools > row.allowance_tool_calls
+      || spentTokens > row.allowance_tokens;
+    if (exhausted) {
+      throw new PilotAllowanceExhausted();
+    }
+    this.db.prepare(`UPDATE agent_pilot_runs SET spent_model_calls = ?, spent_tool_calls = ?, spent_tokens = ?,
+      updated_at = ? WHERE run_id = ?`).run(spentModel, spentTools, spentTokens, new Date().toISOString(), runId);
   }
 
   readContextControlState(runId: string): { acceptanceIds: string[]; pendingEffects: string[]; pendingApprovals: string[] } {
@@ -138,4 +253,28 @@ export class RunBudgetLedger {
       .run(runId, hash, JSON.stringify(revision));
     return hash;
   }
+}
+
+function toPilotRunRow(row: PilotRunDbRow): PilotRunRow {
+  return {
+    runId: row.run_id,
+    taskId: row.task_id,
+    decision: row.decision,
+    disclosure: row.disclosure,
+    profile: row.profile,
+    bucket: row.bucket,
+    extraBudgetMicrousd: row.extra_budget_microusd,
+    allowance: {
+      modelCalls: row.allowance_model_calls,
+      toolCalls: row.allowance_tool_calls,
+      totalTokens: row.allowance_tokens
+    },
+    spent: {
+      modelCalls: row.spent_model_calls,
+      toolCalls: row.spent_tool_calls,
+      totalTokens: row.spent_tokens
+    },
+    state: row.state,
+    createdAt: row.created_at
+  };
 }

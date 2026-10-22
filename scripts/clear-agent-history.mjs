@@ -28,6 +28,7 @@ const agentTables = [
   'langgraph_checkpoints',
   'langgraph_checkpoint_writes',
   'agent_tool_effects',
+  'agent_pilot_runs',
   'context_artifacts'
 ];
 

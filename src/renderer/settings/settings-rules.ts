@@ -45,6 +45,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'authorization', label: '授权与安全' },
   { id: 'hooks', label: 'Hooks' },
   { id: 'memory', label: '记忆策略' },
+  { id: 'pilot', label: '受限试点' },
   { id: 'backup', label: '偏好与备份' }
 ] as const;
 

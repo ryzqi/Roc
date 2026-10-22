@@ -394,6 +394,32 @@ CREATE TABLE agent_tool_effect_reconciliations (
       report_json TEXT,
       handoff_json TEXT
     );`
+  },
+  {
+    version: 5,
+    name: 'pilot_profile_runs',
+    // P6-04: one row per started pilot run. The grant is durable so retries and restarts see the
+    // same extra headroom, and the spent counters live here instead of the JSON settings so two
+    // concurrent runs cannot overwrite each other's accounting.
+    sql: `CREATE TABLE agent_pilot_runs (
+      run_id TEXT PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE,
+      task_id TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      disclosure TEXT NOT NULL,
+      profile TEXT CHECK(profile IN ('read-only','low-side-effect')),
+      bucket INTEGER NOT NULL CHECK(bucket >= 0 AND bucket < 100),
+      extra_budget_microusd INTEGER NOT NULL CHECK(extra_budget_microusd >= 0),
+      allowance_model_calls INTEGER NOT NULL CHECK(allowance_model_calls >= 0),
+      allowance_tool_calls INTEGER NOT NULL CHECK(allowance_tool_calls >= 0),
+      allowance_tokens INTEGER NOT NULL CHECK(allowance_tokens >= 0),
+      spent_model_calls INTEGER NOT NULL DEFAULT 0 CHECK(spent_model_calls >= 0),
+      spent_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK(spent_tool_calls >= 0),
+      spent_tokens INTEGER NOT NULL DEFAULT 0 CHECK(spent_tokens >= 0),
+      state TEXT NOT NULL CHECK(state IN ('active','exhausted','finished','cancelled')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+CREATE INDEX idx_agent_pilot_runs_created ON agent_pilot_runs(created_at DESC);`
   }
 ];
 

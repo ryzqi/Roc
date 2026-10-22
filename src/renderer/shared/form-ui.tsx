@@ -4,7 +4,7 @@ import { AlertTriangle, Info } from 'lucide-react';
 /**
  * Shared form primitives (extracted in P9 from P8's `settings/settings-ui.tsx`).
  *
- * Two features now build real forms — the settings centre's twelve sections and the
+ * Two features now build real forms — the settings centre's thirteen sections and the
  * management drawer's four — and a third copy of these controls would have drifted the same
  * way the legacy renderer's did. The names are feature-neutral for the same reason: a
  * management-only control must not be called `SettingsNote`.

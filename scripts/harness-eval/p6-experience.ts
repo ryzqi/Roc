@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { applyMemoryDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
@@ -11,12 +11,32 @@ import {
   buildFailureFixture, evaluateUpgradeGate, type VersionFingerprint
 } from '../../src/main/services/memory/experience-fixtures';
 import { HarnessReleaseStore } from '../../src/main/services/deep-agent/harness-release';
-import { PilotStateStore, defaultPilotSettings, evaluatePilotDecision } from '../../src/main/services/deep-agent/pilot-gate';
+import { PilotStateStore, defaultPilotSettings, evaluatePilotDecision, pilotAllowance } from '../../src/main/services/deep-agent/pilot-gate';
+import { PilotRunCoordinator } from '../../src/main/services/deep-agent/pilot-run';
+import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
+import { AgentSessionRepository } from '../../src/main/plugins/agent/session-repository';
+import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
+import { AgentPluginRuntime } from '../../src/main/plugins/agent/runtime';
+import { EventBus } from '../../src/main/kernel/event-bus';
+import {
+  derivePilotRequest,
+  restrictManifestForPilot
+} from '../../src/main/plugins/agent/pilot-profile';
+import { createRunCapabilityManifestHash, isRunCapabilityManifestIntegrityValid } from '../../src/main/plugins/agent/run-capability-manifest';
+import type {
+  RunCapabilityManifestToolV1,
+  RunCapabilityManifestV1,
+  RunExecutionSnapshot
+} from '../../src/shared/schemas/agent';
+import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { baseSurface } from './optimizer/optimizer';
 import { executeScenario } from './optimizer/eval-adapter';
 import { buildDataset, readSplit, type PairedObservation } from './optimizer/dataset';
 import { materialiseSurface } from './optimizer/surface';
 import { transferReport, transferStrata, type TransferStratum } from './optimizer/transfer';
+
+type RunBudgetLedgerLimits = RunExecutionSnapshot['budget'];
 
 const hex = (value: string): string => createHash('sha256').update(value).digest('hex');
 
@@ -444,15 +464,370 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
   };
 }
 
-export function verifyP6(name: string, directory: string): Record<string, unknown> {
-  const cases: Record<string, (target: string) => Record<string, unknown>> = {
+
+/**
+ * P6-04 product path: the gate is decided from the frozen manifest, the grant lands in the durable
+ * budget ledger, and the breaker reacts to exhaustion instead of the run silently retrying.
+ *
+ * Fixtures use a hand-written manifest so the grant/effect mapping is asserted directly, and a real
+ * `agent` SQLite database with the shipped migrations so the ledger columns are the production ones.
+ */
+function verifyPilotProductPath(directory: string): Record<string, unknown> {
+  const tool = (input: {
+    identity: string;
+    name: string;
+    scope: RunCapabilityManifestToolV1['resourceScope'];
+    effectClass: RunCapabilityManifestToolV1['effectClass'];
+  }): RunCapabilityManifestToolV1 => ({
+    canonicalIdentity: input.identity,
+    modelVisibleName: input.name,
+    provenance: { kind: 'builtin', source: 'roc' },
+    executionScopes: ['main'],
+    riskLevel: 'low',
+    effectClass: input.effectClass,
+    approvalPolicy: { kind: 'none' },
+    idempotencyStrategy: input.effectClass === 'none' ? 'none' : 'tool_call',
+    reconcileStrategy: 'none',
+    resourceScope: input.scope
+  });
+  const manifestOf = (tools: RunCapabilityManifestToolV1[]): RunCapabilityManifestV1 => {
+    const withoutHash = {
+      schemaVersion: 1 as const,
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      resolvedCapabilities: { mcpServers: [], skills: [] },
+      skippedCapabilities: [],
+      tools,
+      skills: [],
+      mcpServers: [],
+      untrustedContextPolicy: 'external_content_reference_only' as const
+    };
+    return { ...withoutHash, manifestHash: createRunCapabilityManifestHash(withoutHash) };
+  };
+
+  const full = manifestOf([
+    tool({ identity: 'builtin:read_file', name: 'read_file', scope: 'workspace', effectClass: 'none' }),
+    tool({ identity: 'builtin:delete_file', name: 'delete_file', scope: 'workspace', effectClass: 'workspace_mutation' }),
+    tool({ identity: 'builtin:run_shell_command', name: 'run_shell_command', scope: 'workspace', effectClass: 'host_execution' }),
+    tool({ identity: 'builtin:web_read', name: 'web_read', scope: 'network', effectClass: 'network_read' }),
+    tool({ identity: 'research:research_overview', name: 'research_overview', scope: 'app', effectClass: 'none' })
+  ]);
+  assert.equal(isRunCapabilityManifestIntegrityValid(full), true);
+
+  // The request is derived from the manifest: the model call itself plus every bound tool's grant.
+  const derived = derivePilotRequest(full, 'task-hash');
+  assert.deepEqual(derived.grants, ['network.read', 'provider.model', 'research.read', 'workspace.read', 'workspace.write']);
+  assert.deepEqual(derived.effectClasses, ['host_execution', 'network_read', 'workspace_mutation']);
+
+  const readOnly = restrictManifestForPilot(full, 'read-only');
+  assert.deepEqual(readOnly.removedTools, ['delete_file', 'run_shell_command', 'web_read']);
+  assert.notEqual(readOnly.manifest.manifestHash, full.manifestHash);
+  assert.equal(isRunCapabilityManifestIntegrityValid(readOnly.manifest), true);
+  // A restricted manifest no longer requests anything its profile denies, so the decision is coherent.
+  const revisited = derivePilotRequest(readOnly.manifest, 'task-hash');
+  assert.deepEqual(revisited.grants, ['provider.model', 'research.read', 'workspace.read']);
+  assert.deepEqual(revisited.effectClasses, []);
+
+  const lowSideEffect = restrictManifestForPilot(full, 'low-side-effect');
+  assert.deepEqual(lowSideEffect.removedTools, ['run_shell_command', 'web_read']);
+  assert.equal(isRunCapabilityManifestIntegrityValid(lowSideEffect.manifest), true);
+
+  // Nothing to remove keeps the exact object, so a non-pilot run's previewed hash cannot drift.
+  const readOnlyManifest = readOnly.manifest;
+  const unchanged = restrictManifestForPilot(readOnlyManifest, 'read-only');
+  assert.equal(unchanged.manifest, readOnlyManifest);
+  assert.deepEqual(unchanged.removedTools, []);
+
+  const db = new Database(join(directory, 'pilot-agent.sqlite'));
+  applyAgentDatabaseSchema(db);
+  try {
+    const now = new Date().toISOString();
+    const runIds = ['run-ordinary', 'run-model', 'run-tool', 'run-token', 'run-done'] as const;
+    for (const runId of runIds) {
+      const threadId = `thread-${runId}`;
+      db.prepare(`INSERT INTO agent_threads (id,kind,title,goal,status,created_at,updated_at)
+        VALUES (?, 'chat', 'pilot fixture', 'pilot fixture', 'active', ?, ?)`).run(threadId, now, now);
+      db.prepare(`INSERT INTO agent_runs (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json)
+        VALUES (?, ?, 1, 'pilot fixture', 'running', ?, '{}')`).run(runId, threadId, now);
+    }
+    const ledger = new RunBudgetLedger(db);
+    const limits = (overrides: Partial<RunBudgetLedgerLimits> = {}): RunBudgetLedgerLimits => ({
+      contextWindowTokens: 1000, maxTotalTokens: null, maxCostUsd: null, maxModelCalls: 1, maxToolCalls: 1,
+      maxChildTasks: 1, maxConcurrentChildTasks: 1, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4,
+      deadlineAt: null, ...overrides
+    });
+    const reserve = (runId: string, id: string, kind: 'model' | 'tool', tokens: number, budget = limits()): void => {
+      ledger.reserve(runId, budget, { id, kind, tokens, inputHash: hex(`${runId}:${id}`), envelope: { id } });
+    };
+
+    // Ordinary request: no pilot row, and the base limit throws exactly as before.
+    assert.equal(ledger.latestPilotRun(), null);
+    reserve('run-ordinary', 'model-1', 'model', 100);
+    assert.throws(() => reserve('run-ordinary', 'model-2', 'model', 100), /run_model_call_budget_exhausted/);
+    reserve('run-ordinary', 'tool-1', 'tool', 0);
+    assert.throws(() => reserve('run-ordinary', 'tool-2', 'tool', 0), /run_tool_call_budget_exhausted/);
+    assert.equal(ledger.readPilotRun('run-ordinary'), null);
+
+    const store = new PilotStateStore({ directory: join(directory, 'pilot-state'), now: () => '2026-10-21T13:00:00.000Z' });
+    const coordinator = new PilotRunCoordinator({ store, ledger });
+    // Default-off: the gate refuses, nothing is attached, and the status says why.
+    assert.equal(coordinator.plan(derived).start, false);
+    assert.equal(coordinator.status().lastRun, null);
+    // `costState` is a schema literal; the substantive claim is that no USD figure exists anywhere.
+    assert.equal(coordinator.status().costState, 'unknown_without_price_table');
+    assert.equal(coordinator.status().settings.spentMicrousd, 0);
+
+    // The unrestricted manifest is refused: deciding on it would refuse almost every real run.
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    const unrestricted = coordinator.plan(derived);
+    assert.equal(unrestricted.start, false);
+    assert.equal((unrestricted as { reason: string }).reason, 'pilot_profile_denied:network.read');
+
+    // The product path narrows the manifest to the profile first, then decides on that surface.
+    const lowSideEffectStart = coordinator.plan(derivePilotRequest(lowSideEffect.manifest, 'task-hash'));
+    const started = lowSideEffectStart;
+    assert.equal(started.start, true);
+    if (!started.start) throw new Error('pilot_fixture_not_started');
+    assert.equal(started.reason, 'pilot_started');
+    assert.equal(started.costState, 'unknown_without_price_table');
+    // The decision carries the documented constant; the ledger row below is what governs behaviour.
+    assert.deepEqual(started.allowance, pilotAllowance);
+
+    // Model allowance: 1 base call + the granted extra calls, then the breaker error.
+    coordinator.attach({ runId: 'run-model', taskId: 'task-hash', decision: started });
+    reserve('run-model', 'model-1', 'model', 100);
+    reserve('run-model', 'model-2', 'model', 100);
+    reserve('run-model', 'model-3', 'model', 100);
+    let exhaustionError: unknown = null;
+    try {
+      reserve('run-model', 'model-4', 'model', 100);
+    } catch (error) {
+      exhaustionError = error;
+    }
+    assert.match(String(exhaustionError), /run_pilot_allowance_exhausted/);
+    // The run's error code is produced by the production mapper, not by this fixture. Without the
+    // allowlist entry this became provider_execution_failed and the breaker never saw the reason.
+    const mapped = toRunFailure(exhaustionError);
+    assert.equal(mapped.code, 'run_pilot_allowance_exhausted');
+    const exhausted = ledger.readPilotRun('run-model');
+    assert.equal(exhausted?.state, 'exhausted');
+    assert.equal(exhausted?.spent.modelCalls, pilotAllowance.modelCalls);
+    assert.equal(exhausted?.extraBudgetMicrousd, 500);
+    // The disclosure the user saw at opt-in time is stored with the run, not just computed.
+    assert.match(exhausted?.disclosure ?? '', /500 microusd/u);
+    assert.match(exhausted?.disclosure ?? '', /cost unknown without a price table/u);
+    assert.match(exhausted?.disclosure ?? '', /24000 tokens/u);
+
+    // Exhaustion trips the breaker, and the reason survives into the status the surface renders.
+    coordinator.recordOutcome({ runId: 'run-model', status: 'failed', errorCode: mapped.code });
+    assert.equal(store.read().circuitOpen, true);
+    assert.equal(store.read().breakerReason, 'pilot_allowance_exhausted');
+    const trippedStatus = coordinator.status();
+    assert.equal(trippedStatus.lastRun?.runId, 'run-model');
+    assert.equal(trippedStatus.lastRun?.state, 'exhausted');
+    assert.equal(trippedStatus.settings.circuitOpen, true);
+
+    // A fresh opt-in clears the breaker; tool and token allowances meter independently.
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    const restarted = coordinator.plan(derivePilotRequest(lowSideEffect.manifest, 'task-hash'));
+    assert.equal(restarted.start, true);
+    if (!restarted.start) throw new Error('pilot_fixture_not_restarted');
+    coordinator.attach({ runId: 'run-tool', taskId: 'task-hash', decision: restarted });
+    reserve('run-tool', 'tool-1', 'tool', 0);
+    reserve('run-tool', 'tool-2', 'tool', 0);
+    assert.equal(ledger.readPilotRun('run-tool')?.spent.toolCalls, 1);
+    coordinator.attach({ runId: 'run-token', taskId: 'task-hash-token', decision: restarted });
+    // Model calls stay within the base allowance here, so only the token allowance is metered.
+    const tokenLimits = limits({ maxTotalTokens: 100, maxModelCalls: 5 });
+    reserve('run-token', 'model-1', 'model', 200, tokenLimits);
+    reserve('run-token', 'model-2', 'model', 200, tokenLimits);
+    const tokenRun = ledger.readPilotRun('run-token');
+    // Both reservations are above the frozen token budget, so both consume the token allowance.
+    assert.equal(tokenRun?.spent.totalTokens, 400);
+    assert.equal(tokenRun?.spent.modelCalls, 0);
+
+    // Completion closes the grant without changing the failure streak.
+    coordinator.attach({ runId: 'run-done', taskId: 'task-hash-done', decision: restarted });
+    coordinator.recordOutcome({ runId: 'run-done', status: 'completed', errorCode: null });
+    assert.equal(ledger.readPilotRun('run-done')?.state, 'finished');
+    assert.equal(store.read().failureStreak, 0);
+    assert.equal(store.read().circuitOpen, false);
+
+    // Rollback is user-facing and keeps the breaker open until a fresh opt-in.
+    const rolledBack = coordinator.rollback();
+    assert.equal(rolledBack.settings.enabled, false);
+    assert.equal(rolledBack.settings.circuitOpen, true);
+    assert.equal(rolledBack.settings.breakerReason, 'user_rollback');
+    assert.equal(coordinator.plan(derivePilotRequest(lowSideEffect.manifest, 'task-hash')).start, false);
+
+    return {
+      derivedGrants: derived.grants,
+      unrestrictedRefusal: (unrestricted as { reason: string }).reason,
+      readOnlyRemoved: readOnly.removedTools,
+      lowSideEffectRemoved: lowSideEffect.removedTools,
+      ordinaryRunHasNoGrant: ledger.readPilotRun('run-ordinary') === null,
+      modelAllowance: exhausted?.allowance,
+      breaker: { open: trippedStatus.settings.circuitOpen, reason: trippedStatus.settings.breakerReason },
+      costState: trippedStatus.costState,
+      mappedExhaustionCode: mapped.code,
+      rollback: rolledBack.settings
+    };
+  } finally {
+    db.close();
+  }
+}
+
+
+/**
+ * P6-04 dispatch: drives the real `AgentPluginRuntime.startRun`, not a copy of its sequence.
+ *
+ * This is the case that catches the class of bug the ledger+gate fixture cannot see: the frozen
+ * snapshot must carry the *narrowed* manifest (the repository rejects a preview/snapshot hash
+ * mismatch), the ordinary request must stay byte-identical with no pilot row, and cancellation must
+ * land in its own terminal state.
+ */
+async function verifyPilotDispatch(directory: string): Promise<Record<string, unknown>> {
+  const tool = (input: {
+    identity: string;
+    name: string;
+    scope: RunCapabilityManifestToolV1['resourceScope'];
+    effectClass: RunCapabilityManifestToolV1['effectClass'];
+  }): RunCapabilityManifestToolV1 => ({
+    canonicalIdentity: input.identity,
+    modelVisibleName: input.name,
+    provenance: { kind: 'builtin', source: 'roc' },
+    executionScopes: ['main'],
+    riskLevel: 'low',
+    effectClass: input.effectClass,
+    approvalPolicy: { kind: 'none' },
+    idempotencyStrategy: input.effectClass === 'none' ? 'none' : 'tool_call',
+    reconcileStrategy: 'none',
+    resourceScope: input.scope
+  });
+  const withoutHash = {
+    schemaVersion: 1 as const,
+    requestedCapabilities: { mcpServers: [], skills: [] },
+    resolvedCapabilities: { mcpServers: [], skills: [] },
+    skippedCapabilities: [],
+    tools: [
+      tool({ identity: 'builtin:read_file', name: 'read_file', scope: 'workspace', effectClass: 'none' }),
+      tool({ identity: 'builtin:delete_file', name: 'delete_file', scope: 'workspace', effectClass: 'workspace_mutation' }),
+      tool({ identity: 'builtin:run_shell_command', name: 'run_shell_command', scope: 'workspace', effectClass: 'host_execution' }),
+      tool({ identity: 'builtin:web_read', name: 'web_read', scope: 'network', effectClass: 'network_read' })
+    ],
+    skills: [],
+    mcpServers: [],
+    untrustedContextPolicy: 'external_content_reference_only' as const
+  };
+  const manifest: RunCapabilityManifestV1 = {
+    ...withoutHash,
+    manifestHash: createRunCapabilityManifestHash(withoutHash)
+  };
+  const preview = {
+    runnable: false as const,
+    modelId: 'pilot-fixture-model',
+    builtInTools: [],
+    toolCards: [],
+    skillCards: [],
+    subagents: [],
+    interruptOn: {},
+    manifest,
+    reason: 'pilot fixture preview'
+  };
+
+  const db = new Database(join(directory, 'dispatch.sqlite'));
+  applyAgentDatabaseSchema(db);
+  const workspacePath = join(directory, 'workspace');
+  mkdirSync(workspacePath, { recursive: true });
+  const store = new PilotStateStore({ directory: join(directory, 'pilot-state') });
+  const ledger = new RunBudgetLedger(db);
+  const coordinator = new PilotRunCoordinator({ store, ledger });
+  const eventBus = new EventBus({ error: () => {} });
+  const started: { manifestHash: string | null }[] = [];
+  eventBus.subscribe('agent.run.started', (event) => {
+    const payload = event.payload as { capabilityPreview?: { manifest?: { manifestHash?: string } } };
+    started.push({ manifestHash: payload.capabilityPreview?.manifest?.manifestHash ?? null });
+  });
+  const repository = new AgentSessionRepository(db, { runEventLog: new AgentRunEventLog(db) });
+  const runtime = new AgentPluginRuntime({
+    repository,
+    eventBus,
+    modelFactory: {
+      createDefaultModelHandle: async () => ({ providerId: 'pilot-fixture', modelId: 'pilot-fixture-model' }),
+      createModelHandleByProviderAndModel: async () => ({ providerId: 'pilot-fixture', modelId: 'pilot-fixture-model' })
+    },
+    capabilityPreviewProvider: async () => preview,
+    pilot: coordinator,
+    workspaceProvider: async () => ({
+      id: 'pilot-workspace',
+      path: workspacePath,
+      displayName: 'pilot workspace',
+      lastOpenedAt: new Date().toISOString(),
+      trustState: 'trusted'
+    })
+  });
+  // No workspacePath: main injects it from the current workspace, and a renderer-supplied path is
+  // rejected unless the run source is the workbench/background scheduler.
+  const request = (input: string) => ({
+    input,
+    mode: 'chat' as const,
+    enabledCapabilities: { mcpServers: [], skills: [] }
+  });
+  try {
+    // Ordinary request: accepted, frozen on the untouched manifest, and no pilot row.
+    const plain = await runtime.startRun(request('pilot dispatch fixture: ordinary request'));
+    const plainSnapshot = repository.getRunExecutionSnapshot(plain.runId);
+    assert.equal(plainSnapshot.capabilityManifest.manifestHash, manifest.manifestHash);
+    assert.equal(ledger.readPilotRun(plain.runId), null);
+    assert.equal(started.at(-1)?.manifestHash, manifest.manifestHash);
+    await runtime.cancelRun({ runId: plain.runId });
+
+    // Pilot request: the frozen snapshot itself carries the narrowed manifest, and the preview the
+    // event advertises is the same one.
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    const piloted = await runtime.startRun(request('pilot dispatch fixture: piloted request'));
+    const restricted = restrictManifestForPilot(manifest, 'low-side-effect');
+    const pilotedSnapshot = repository.getRunExecutionSnapshot(piloted.runId);
+    assert.equal(pilotedSnapshot.capabilityManifest.manifestHash, restricted.manifest.manifestHash);
+    assert.notEqual(pilotedSnapshot.capabilityManifest.manifestHash, manifest.manifestHash);
+    const boundTools = pilotedSnapshot.capabilityManifest.tools.map((entry) => entry.modelVisibleName).sort();
+    assert.deepEqual(boundTools, ['delete_file', 'read_file']);
+    assert.equal(started.at(-1)?.manifestHash, restricted.manifest.manifestHash);
+    const pilotRow = ledger.readPilotRun(piloted.runId);
+    assert.equal(pilotRow?.profile, 'low-side-effect');
+    assert.equal(pilotRow?.extraBudgetMicrousd, 500);
+    assert.match(pilotRow?.disclosure ?? '', /500 microusd/u);
+
+    // Cancelling the piloted run is its own terminal state, not "finished".
+    const cancellation = await runtime.cancelRun({ runId: piloted.runId });
+    if (cancellation.cancelled) {
+      assert.equal(ledger.readPilotRun(piloted.runId)?.state, 'cancelled');
+      assert.equal(store.read().failureStreak, 0);
+    }
+    return {
+      ordinaryManifestUnchanged: true,
+      ordinaryHasNoPilotRow: true,
+      pilotedSnapshotNarrowed: true,
+      boundTools,
+      pilotedPreviewMatchesSnapshot: started.at(-1)?.manifestHash === restricted.manifest.manifestHash,
+      pilotRunState: ledger.readPilotRun(piloted.runId)?.state ?? null
+    };
+  } finally {
+    await runtime.shutdown();
+    db.close();
+  }
+}
+
+export async function verifyP6(name: string, directory: string): Promise<Record<string, unknown>> {
+  const cases: Record<string, (target: string) => Record<string, unknown> | Promise<Record<string, unknown>>> = {
     'experience-records': verifyExperienceRecords,
     'experience-transfer': verifyExperienceTransfer,
     'experience-retention': verifyExperienceRetention,
     'harness-release': verifyHarnessRelease,
-    'pilot-gate': verifyPilotGate
+    'pilot-gate': verifyPilotGate,
+    'pilot-product-path': verifyPilotProductPath,
+    'pilot-dispatch': verifyPilotDispatch
   };
   const run = cases[name];
   if (run === undefined) throw new Error(`unsupported_p6_case:${name}`);
-  return run(directory);
+  return await run(directory);
 }

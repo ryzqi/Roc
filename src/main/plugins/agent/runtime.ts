@@ -24,7 +24,8 @@ import type {
   Workspace,
   RunExecutionSnapshot,
   ResearchStage,
-  TaskAcceptance
+  TaskAcceptance,
+  RunCapabilityManifestV1
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
 import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
@@ -33,6 +34,10 @@ import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/conte
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import { RocDomainError } from '../../services/errors';
 import type { RunFailure } from '../../services/deep-agent/types';
+import type { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
+import type { PilotDecision } from '../../services/deep-agent/pilot-gate';
+import type { PilotOptInRequest, PilotStatus } from '../../../shared/schemas/harness-pilot';
+import { derivePilotRequest, restrictManifestForPilot } from './pilot-profile';
 import { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import { AgentActiveRunLifecycle } from './active-run-lifecycle';
@@ -156,6 +161,8 @@ export type AgentPluginRuntimeOptions = {
   workspaceProvider?: () => Promise<Workspace | null>;
   researchProjectProvider?: (projectId: string) => Promise<{ workspacePath: string | null } | null>;
   researchStageProofProvider?: (projectId: string, stage: ResearchStage) => Promise<ResearchProof>;
+  /** P6-04: absent means the pilot is not wired in this composition (tests, blocked runtimes). */
+  pilot?: PilotRunCoordinator;
 };
 
 export class AgentPluginRuntime {
@@ -230,16 +237,25 @@ export class AgentPluginRuntime {
       modelHandle,
       researchProjectId: request.researchProjectId === undefined ? null : request.researchProjectId
     });
+    // P6-04: the pilot gate reads the frozen manifest, not a caller-supplied claim. The task id is
+    // the submission hash, so the same request always lands in the same deterministic bucket.
+    const submissionHash = hashToolInput(request);
+    const pilot = this.planPilotRun(submissionHash, capabilityPreview.manifest);
+    const effectivePreview = pilot === null
+      ? capabilityPreview
+      : narrowPreviewForPilot(capabilityPreview, pilot.manifest, pilot.removedTools);
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
     const workspace = await this.resolveRunWorkspace(request);
-    const explicitSkillIds = normalizeExplicitSkillIds(request.explicitSkillIds, capabilityPreview.manifest);
+    const explicitSkillIds = normalizeExplicitSkillIds(request.explicitSkillIds, effectivePreview.manifest);
     let run: TaskRun;
     try {
       run = this.options.repository.createTaskRun({
         attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
-        capabilityPreview,
+        capabilityPreview: effectivePreview,
         snapshot: createRunExecutionSnapshotSeed({
-          capabilityManifest: capabilityPreview.manifest,
+          // The narrowed preview is the only manifest source here, so the frozen snapshot and the
+          // preview cannot disagree (the repository rejects exactly that mismatch).
+          capabilityPreview: effectivePreview,
           dispatchKey,
           explicitSkillIds,
           modelHandle,
@@ -269,6 +285,15 @@ export class AgentPluginRuntime {
     });
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
+    if (pilot !== null && pilot.decision.start) {
+      // Pilot bookkeeping is best-effort: if the grant cannot be written, the run continues on its
+      // base budget instead of being left stranded in dispatch_pending without an event.
+      try {
+        this.options.pilot?.attach({ runId: run.id, taskId: submissionHash, decision: pilot.decision });
+      } catch (error) {
+        console.error('[AgentPluginRuntime] Pilot grant could not be recorded.', error);
+      }
+    }
     const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, dispatchedRun);
     const abortController = new AbortController();
     this.activeRunLifecycle.activate({
@@ -290,7 +315,7 @@ export class AgentPluginRuntime {
       enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
       userInput: input,
       workflowHint: snapshot.workflowHint,
-      capabilityPreview
+      capabilityPreview: effectivePreview
     });
     await this.publish(agentChatRunEventType, {
       type: 'run_started',
@@ -328,6 +353,58 @@ export class AgentPluginRuntime {
       this.activeRunLifecycle.trackPendingRun(run.id, pendingRun);
     });
     return result;
+  }
+
+  /**
+   * P6-04: decide the pilot before the run row exists, using the manifest the harness would freeze.
+   * A starting pilot narrows that manifest to its profile, and the narrowed manifest is what the
+   * snapshot, the preview and the telemetry all see — one manifest, not a labelled copy.
+   */
+  private planPilotRun(
+    taskId: string,
+    manifest: RunCapabilityManifestV1
+  ): PilotPlan | null {
+    const pilot = this.options.pilot;
+    if (pilot === undefined) {
+      return null;
+    }
+    const settings = pilot.settings();
+    if (!settings.enabled) {
+      // Nothing to check beyond the refusal reason, and the manifest must stay byte-identical.
+      return { decision: pilot.plan(derivePilotRequest(manifest, taskId)), manifest, removedTools: [] };
+    }
+    // A pilot profile *is* the surface it runs with, so the manifest is narrowed first and the
+    // decision is taken on that narrowed surface. Deciding on the full manifest would refuse every
+    // run that merely has an effectful tool bound, which is most of them.
+    const restricted = restrictManifestForPilot(manifest, settings.profile);
+    const decision = pilot.plan(derivePilotRequest(restricted.manifest, taskId));
+    return decision.start
+      ? { decision, manifest: restricted.manifest, removedTools: restricted.removedTools }
+      : { decision, manifest, removedTools: [] };
+  }
+
+  /**
+   * P6-04 surfaces. The pilot is opt-in, so reading it must work even when it is not wired; only
+   * mutating calls fail, and they fail by name instead of pretending success.
+   */
+  getPilotStatus(): PilotStatus {
+    return this.requirePilot().status();
+  }
+
+  enablePilot(request: PilotOptInRequest): PilotStatus {
+    return this.requirePilot().enable(request);
+  }
+
+  rollbackPilot(): PilotStatus {
+    return this.requirePilot().rollback();
+  }
+
+  private requirePilot(): PilotRunCoordinator {
+    const pilot = this.options.pilot;
+    if (pilot === undefined) {
+      throw new Error('agent_pilot_unavailable');
+    }
+    return pilot;
   }
 
   async cancelRun(input: { runId: string }): Promise<ChatCancelRunResult> {
@@ -370,6 +447,8 @@ export class AgentPluginRuntime {
     }
     this.runTelemetry.delete(input.runId);
     this.activeRunLifecycle.finish(input.runId);
+    // A cancellation is not a pilot failure: the breaker only opens on exhaustion or real failures.
+    this.options.pilot?.recordOutcome({ runId: input.runId, status: 'cancelled', errorCode: null });
     const cancellationReport = await this.options.repository.taskContracts.verify(input.runId, this.createTaskVerificationContext({
       response: null,
       workspacePath: snapshot.workspace?.path ?? null,
@@ -701,6 +780,7 @@ export class AgentPluginRuntime {
     });
     const run = terminal.run;
     this.activeRunLifecycle.finish(input.runId);
+    this.options.pilot?.recordOutcome({ runId: input.runId, status: 'completed', errorCode: null });
     if (terminal.acceptanceEvent !== null && terminal.acceptanceRunEvent?.type === 'task_acceptance') {
       await this.publishTaskAcceptance(terminal.acceptanceRunEvent.report, terminal.acceptanceEvent, terminal.acceptanceRunEvent);
     }
@@ -1042,6 +1122,7 @@ export class AgentPluginRuntime {
       suggestion: input.failure.suggestion,
       telemetry: input.telemetry.snapshot()
     });
+    this.options.pilot?.recordOutcome({ runId: input.input.runId, status: 'failed', errorCode: input.failure.code });
     const snapshot = this.options.repository.getRunExecutionSnapshot(input.input.runId);
     const failureReport = await this.options.repository.taskContracts.verify(input.input.runId, this.createTaskVerificationContext({
       response: null,
@@ -1362,8 +1443,39 @@ function requireAgentExecution(value: unknown): AgentDeepAgentExecution {
   return value as AgentDeepAgentExecution;
 }
 
+type PilotPlan = {
+  decision: PilotDecision;
+  manifest: RunCapabilityManifestV1;
+  removedTools: readonly string[];
+};
+
+/**
+ * Keeps the descriptive preview in step with the frozen manifest. Only the starting-pilot path
+ * removes tools; every other path passes the original preview through untouched, so the persisted
+ * `context_manifest` event never advertises a tool the run cannot call.
+ */
+function narrowPreviewForPilot(
+  preview: AgentCapabilityPreview,
+  manifest: RunCapabilityManifestV1,
+  removedTools: readonly string[]
+): AgentCapabilityPreview {
+  if (removedTools.length === 0) {
+    return { ...preview, manifest };
+  }
+  const removed = new Set(removedTools);
+  return {
+    ...preview,
+    manifest,
+    toolCards: preview.toolCards.filter((card) => !removed.has(card.name)),
+    subagents: preview.subagents.map((subagent) => ({
+      ...subagent,
+      tools: subagent.tools.filter((name) => !removed.has(name))
+    }))
+  };
+}
+
 function createRunExecutionSnapshotSeed(input: {
-  capabilityManifest: RunExecutionSnapshot['capabilityManifest'];
+  capabilityPreview: AgentCapabilityPreview;
   dispatchKey: string | null;
   explicitSkillIds: string[];
   modelHandle: AgentModelHandle;
@@ -1383,7 +1495,7 @@ function createRunExecutionSnapshotSeed(input: {
     },
     mode,
     workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
-    capabilityManifest: input.capabilityManifest,
+    capabilityManifest: input.capabilityPreview.manifest,
     shellAllowedCommands: input.shellAllowedCommands === undefined ? undefined : [...input.shellAllowedCommands],
     budget: createRunBudget({
         contextBudgetTokens:

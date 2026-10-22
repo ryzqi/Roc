@@ -156,6 +156,7 @@ test('every section id in the normative order is addressable', () => {
       'authorization',
       'hooks',
       'memory',
+      'pilot',
       'backup'
     ]
   );

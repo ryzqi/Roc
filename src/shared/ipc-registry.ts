@@ -9,6 +9,10 @@ import {
   deepAgentConfigPreviewSchema
 } from './schemas/agent';
 import {
+  pilotOptInRequestSchema,
+  pilotStatusSchema
+} from './schemas/harness-pilot';
+import {
   activeChatRunSchema,
   chatActiveRunRequestSchema,
   chatCancelRunResultSchema,
@@ -492,6 +496,9 @@ export const ipcRegistry = {
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),
+    request({ key: 'agentPilotStatus', channel: 'roc:agent:pilot-status', domain: 'agent', method: 'getPilotStatus', kind: 'plugin', capabilityName: 'agent.pilot.status', inputTransform: none, contract: methodContract(noArgs, pilotStatusSchema) }),
+    request({ key: 'agentPilotEnable', channel: 'roc:agent:pilot-enable', domain: 'agent', method: 'enablePilot', kind: 'plugin', capabilityName: 'agent.pilot.enable', inputTransform: first, contract: methodContract(oneArg(pilotOptInRequestSchema), pilotStatusSchema) }),
+    request({ key: 'agentPilotRollback', channel: 'roc:agent:pilot-rollback', domain: 'agent', method: 'rollbackPilot', kind: 'plugin', capabilityName: 'agent.pilot.rollback', inputTransform: none, contract: methodContract(noArgs, pilotStatusSchema) }),
     request({ key: 'chatStartRun', channel: 'roc:chat:start-run', domain: 'chat', method: 'startRun', kind: 'plugin', capabilityName: 'agent.run.start', inputTransform: first, contract: methodContract(oneArg(chatStartRunIpcRequestSchema), chatStartRunResultSchema) }),
     request({ key: 'chatCancelRun', channel: 'roc:chat:cancel-run', domain: 'chat', method: 'cancelRun', kind: 'plugin', capabilityName: 'agent.run.cancel', inputTransform: id('runId'), contract: methodContract(stringArg, chatCancelRunResultSchema) }),
     request({ key: 'chatCorrectRun', channel: 'roc:chat:correct-run', domain: 'chat', method: 'correctRun', kind: 'plugin', capabilityName: 'agent.run.correct', inputTransform: first, contract: methodContract(oneArg(chatCorrectRunRequestSchema), chatCorrectRunResultSchema) }),
