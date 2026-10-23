@@ -1,25 +1,18 @@
-import { Suspense, lazy, useState } from 'react';
-import { ChevronRight, DownloadCloud, File as FileIcon, Folder, Package, RefreshCw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { DownloadCloud, Package, RefreshCw, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
-import { formatBytes } from '../../shared/format';
-import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
-import { DelayedFallback } from '../../shell/DelayedFallback';
+import { FormNote, FormSection, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
 import {
   builtinSourceActionLabel,
   builtinSourceSummary,
   formatBuiltinTimestamp,
   shortCommit,
-  filePreviewKind,
-  joinRelativePath,
-  parentRelativePath,
-  pathSegments,
-  previewSizeLabel,
-  previewTruncatedNote,
   skillStatusLabels,
   sortSkills,
   skillSummary,
   validateSkillImportPathRequired
 } from '../skill-model';
+import { SkillFilesModal } from './SkillFilesModal';
 import type { SkillsStore } from '../use-skills';
 
 /**
@@ -33,26 +26,28 @@ import type { SkillsStore } from '../use-skills';
  * returns files and cannot select a directory at all. So the panel asks for an absolute path and
  * says why (B24); a ZIP is not accepted because the service has no ZIP path.
  *
- * ## The file browser is one level at a time
+ * ## 文件浏览器已经挪到浮层
  *
- * `skills.files.list` takes `{id, relativePath}` and returns that directory's entries, so the
- * panel keeps a path cursor with a breadcrumb instead of pretending it has a tree. A preview
- * stays on screen while you browse to a sibling directory (it is addressed by path, not by
- * directory contents).
+ * 它以前是本分区末尾的内联 `FormSection`，看完三块内容才在页面最下方出现（用户点一行技能要跨过
+ * 整个面板才知道点开了什么）。现在是 `SkillFilesModal`：选中即浮层，关闭即回列表。
  *
- * The markdown preview reuses the assistant's `MarkdownView` through a **lazy import** (the same
- * boundary `ArtifactPanel` uses), so `react-markdown`/`streamdown` never enter the management
- * chunk, let alone the eager graph.
+ * 文件浏览一次只给一层目录（`skills.files.list` 取 `{id, relativePath}`），所以游标 + 面包屑
+ * 仍然在 store 里；markdown 预览沿用助手的 `MarkdownView` 懒加载边界，`react-markdown`/`streamdown`
+ * 不会进入管理面板的 chunk，更不会进 eager 图。
  */
-
-const MarkdownView = lazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
 
 export function SkillsSection({ store: skills }: { store: SkillsStore }): React.JSX.Element {
   const [importPath, setImportPath] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  /**
+   * 文件浏览器浮层是否打开。
+   *
+   * 与 `skills.selectedId` 分开：store 记的是游标（抽屉重新打开或重建时仍在），
+   * 浮层开关是这一屏的瞬时状态。两个都在时浮层才算打开，所以关闭浮层并不需要丢弃游标。
+   */
+  const [browserOpen, setBrowserOpen] = useState(false);
 
   const importRequired = validateSkillImportPathRequired(importPath);
-  const segments = pathSegments(skills.dirPath);
   const deleteSkillRecord = skills.skills.find((skill) => skill.id === deleteTarget) ?? null;
 
   const builtin = skills.builtin;
@@ -201,7 +196,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         ) : skills.skills.length === 0 ? null : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
             {sortSkills(skills.skills).map((skill) => {
-              const selected = skill.id === skills.selectedId;
+              const selected = browserOpen && skill.id === skills.selectedId;
               return (
                 <li
                   key={skill.id}
@@ -215,9 +210,13 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => skills.select(skill.id)}
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        skills.select(skill.id);
+                        setBrowserOpen(true);
+                      }}
                       data-testid={`mgmt-skill-select-${skill.id}`}
-                      className="min-w-0 flex-1 text-left"
+                      className="min-w-0 flex-1 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                     >
                       <span className="flex flex-wrap items-center gap-2">
                         <Package size={12} aria-hidden="true" className="text-muted" />
@@ -317,174 +316,16 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         )}
       </FormSection>
 
-      {skills.selected === null ? null : (
-        <FormSection
-          title={`文件（${skills.selected.name}）`}
-          testId="mgmt-skills-files"
-        >
-          <dl className="flex flex-col gap-0.5">
-            <KeyValueRow label="根目录" value={skills.rootPath ?? skills.selected.path} testId="mgmt-skill-root" />
-            <KeyValueRow label="描述" value={skills.selected.description} testId="mgmt-skill-description" />
-          </dl>
-
-          <div className="flex flex-wrap items-center gap-1" data-testid="mgmt-skill-breadcrumb">
-            <button
-              type="button"
-              onClick={() => skills.setDirPath('')}
-              data-testid="mgmt-skill-crumb-root"
-              className="rounded-control px-1 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
-            >
-              {skills.selected.name}
-            </button>
-            {segments.map((segment, index) => {
-              const path = segments.slice(0, index + 1).join('/');
-              return (
-                <span key={path} className="flex items-center gap-1">
-                  <ChevronRight size={10} aria-hidden="true" className="text-subtle" />
-                  <button
-                    type="button"
-                    onClick={() => skills.setDirPath(path)}
-                    data-testid={`mgmt-skill-crumb-${path}`}
-                    className="rounded-control px-1 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
-                  >
-                    {segment}
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-
-          {skills.treeError === null ? null : (
-            <FormNote tone="warn" testId="mgmt-skill-tree-error">
-              {skills.treeError}
-            </FormNote>
-          )}
-          {skills.entries.length === 0 ? (
-            <FormNote testId="mgmt-skill-tree-empty">
-              {skills.treeStatus === 'loading' ? '读取目录中…' : '这个目录是空的。'}
-            </FormNote>
-          ) : (
-            <ul className="flex flex-col gap-0.5" data-testid="mgmt-skill-entries">
-              {skills.dirPath === '' ? null : (
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => skills.setDirPath(parentRelativePath(skills.dirPath))}
-                    data-testid="mgmt-skill-up"
-                    className="flex w-full items-center gap-1 rounded-control px-1 py-0.5 text-left text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
-                  >
-                    <Folder size={11} aria-hidden="true" />
-                    ..
-                  </button>
-                </li>
-              )}
-              {skills.entries.map((entry) => {
-                const path = joinRelativePath(skills.dirPath, entry.name);
-                return (
-                  <li key={entry.relativePath}>
-                    <button
-                      type="button"
-                      data-testid={`mgmt-skill-entry-${entry.relativePath}`}
-                      onClick={() => {
-                        if (entry.type === 'directory') {
-                          skills.setDirPath(path);
-                          return;
-                        }
-                        skills.openFile(path);
-                      }}
-                      className={
-                        entry.relativePath === skills.previewPath
-                          ? 'flex w-full items-center gap-1 rounded-control bg-accent-soft px-1 py-0.5 text-left'
-                          : 'flex w-full items-center gap-1 rounded-control px-1 py-0.5 text-left hover:bg-[var(--overlay-hover)]'
-                      }
-                    >
-                      {entry.type === 'directory' ? (
-                        <Folder size={11} aria-hidden="true" className="text-muted" />
-                      ) : (
-                        <FileIcon size={11} aria-hidden="true" className="text-muted" />
-                      )}
-                      <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-micro-size)]">{entry.name}</span>
-                      <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">
-                        {entry.type === 'directory' ? '' : formatBytes(entry.size)}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {skills.treeTruncated ? (
-            <FormNote tone="warn" testId="mgmt-skill-tree-truncated">
-              目录条目过多，只显示前一部分。
-            </FormNote>
-          ) : null}
-
-          {skills.previewPath === null ? null : (
-            <div className="flex flex-col gap-1 border-t border-line pt-2" data-testid="mgmt-skill-preview">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-muted text-[var(--font-micro-size)]">{skills.previewPath}</span>
-                {skills.preview === null ? null : (
-                  <span className="text-subtle text-[var(--font-micro-size)]">{previewSizeLabel(skills.preview)}</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => skills.closePreview()}
-                  data-testid="mgmt-skill-preview-close"
-                  className={`${formSecondaryButtonClass} ml-auto`}
-                >
-                  关闭预览
-                </button>
-              </div>
-              {skills.previewError === null ? null : (
-                <FormNote tone="warn" testId="mgmt-skill-preview-error">
-                  {skills.previewError}
-                </FormNote>
-              )}
-              {skills.preview === null ? (
-                <FormNote testId="mgmt-skill-preview-loading">
-                  {skills.previewStatus === 'loading' ? '读取中…' : '没有内容。'}
-                </FormNote>
-              ) : (
-                <>
-                  {previewTruncatedNote(skills.preview) === null ? null : (
-                    <FormNote tone="warn" testId="mgmt-skill-preview-truncated">
-                      {previewTruncatedNote(skills.preview)}
-                    </FormNote>
-                  )}
-                  {filePreviewKind(skills.preview) === 'image' ? (
-                    <img
-                      src={skills.preview.content}
-                      alt={skills.preview.relativePath}
-                      data-testid="mgmt-skill-preview-image"
-                      className="max-h-[240px] max-w-full rounded-card border border-line"
-                    />
-                  ) : filePreviewKind(skills.preview) === 'binary' ? (
-                    <FormNote testId="mgmt-skill-preview-binary">
-                      二进制文件：只显示大小与类型（{skills.preview.mediaType ?? '未知类型'}）。
-                    </FormNote>
-                  ) : filePreviewKind(skills.preview) === 'markdown' ? (
-                    <Suspense fallback={<DelayedFallback label="正在加载 Markdown 渲染…" />}>
-                      <div
-                        className="max-h-[320px] overflow-y-auto rounded-card border border-line bg-surface px-2 py-1.5"
-                        data-testid="mgmt-skill-preview-markdown"
-                      >
-                        <MarkdownView text={skills.preview.content} />
-                      </div>
-                    </Suspense>
-                  ) : (
-                    <pre
-                      className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-card border border-line bg-bg-soft px-2 py-1.5 font-mono text-[var(--font-code-size)] text-muted"
-                      data-testid="mgmt-skill-preview-text"
-                    >
-                      {skills.preview.content}
-                    </pre>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </FormSection>
-      )}
+      <SkillFilesModal
+        store={skills}
+        open={browserOpen}
+        onClose={() => {
+          setBrowserOpen(false);
+          // 取消选中：旧的内联版本也是这么收尾的，关闭后列表不再留一行高亮，
+          // 否则“关掉了”和“还开着”看起来没区别。
+          skills.select(null);
+        }}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
