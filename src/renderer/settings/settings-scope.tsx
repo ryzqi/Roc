@@ -128,9 +128,17 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
       // A different project owns a different index configuration, so the draft goes with it.
       scopeRef.current = scope;
       baselineSnapshotRef.current = null;
-    }
-    if (loadedSnapshot === null) {
       setState(null);
+    }
+    /**
+     * 重读期间 `data` 会变回 null（修订号是资源键的一部分），这**不是**「没有文档」。
+     *
+     * 早期版本在这里无条件 `setState(null)`，后果是保存成功后一推送修订号，草稿就被清掉；
+     * 而基准引用还在，等重读返回时走的是「基准已有」那条分支，永远不会再建草稿——整个面板
+     * 就停在「正在读取设置…」（P8 闸门在 hooks 列表处超时抓到）。保留已有草稿才是对的行为：
+     * 重读只刷新只读快照，删除草稿等于删掉十一个分区里的未保存修改。
+     */
+    if (loadedSnapshot === null) {
       return;
     }
     if (baselineSnapshotRef.current !== null) {
