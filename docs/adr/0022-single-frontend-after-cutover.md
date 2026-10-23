@@ -8,6 +8,7 @@ P0–P9 期间新旧两套前端并行存在：旧壳在 `src/renderer/`，新�
 - **不保留兼容层**：旧壳的 testid、旧视图 id、旧 URL 参数一律不做别名映射；旧壳的 smoke 套件直接删除，新壳的关键路径用新壳的 testid 重写。
 - **后端零改动**：契约、schema、插件与数据库都不动，`pnpm check:ipc` 是「后端未变」的证明。
 - 旧壳拥有的资产按需要搬迁：`declare module '*.css'`（旧的 `vite-env.d.ts`）移到新壳自己的 `src/renderer/vite-env.d.ts`。
+- 记忆页最近查看的分类是界面偏好，由 `src/renderer/app/ui-state.ts` 使用 `roc.ui.memory.category` 保存；值仅允许五类记忆的分类标识，不保存正文、草稿或预览。首次进入时，有绑定项目则显示项目记忆，否则显示全局长期记忆；项目分类在未绑定项目时回退到全局长期记忆。抽屉与画布共用同一实现。
 
 ## 理由
 

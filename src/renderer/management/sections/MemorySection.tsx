@@ -1,449 +1,168 @@
-import { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bot, FileText, RefreshCw, Save, Search, Undo2 } from 'lucide-react';
-import type { MemoryStatus } from '../../../shared/types';
+import { Suspense, lazy, useId, useRef, useState } from 'react';
+import { AlertTriangle, Bot, Check, FileText, History, Info, Pencil, RefreshCw, Search } from 'lucide-react';
 import { formatBeijingDateTime } from '../../shared/format';
-import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
+import { FormNote, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
 import type { ManagementScope } from '../management-scope';
-import {
-  auditRecordLine,
-  buildMemoryAssistPrompt,
-  capacityLabel,
-  capacityState,
-  codePointCount,
-  outlineFromMarkdown,
-  slotUnavailableReason,
-  snapshotIncludesSlot
-} from '../memory-model';
+import { autoMemoryActionLabels, autoMemoryTypeLabels, capacityLabel, codePointCount, buildMemoryAssistPrompt, slotUnavailableReason, snapshotIncludesSlot } from '../memory-model';
 import { useMemorySnapshot, useSessionSearch, type MemoryFilesStore } from '../use-memory';
+import './memory-section.css';
 
-/**
- * 记忆 (P9/T9.1).
- *
- * The surface is a **markdown editor over five slots** plus three read-only facts, because that is
- * what the contract has (F24):
- *
- *  - `memory.status` → the slot metadata, the capacity limits, the session-retention numbers, the
- *    full-text-index health and the auto-memory audit;
- *  - `memory.file.read` / `memory.file.write` → the editor. A refused write is a **domain
- *    outcome** (`{ok:false, reason, issues}`) and is rendered as a blocked save with the scan
- *    findings, never as a generic error;
- *  - `memory.snapshot.preview` → the text that would be injected into the next run;
- *  - `agent.sessions.search` → 「从会话里找」. The memory domain's own
- *    `memory.entries.search` / `memory.entry.remember` are declared by the plugin but have no IPC
- *    channel (B25), so there is no structured memory entity to browse — the outline next to the
- *    editor is a projection of the text on screen and nothing is stored twice.
- *
- * 「用助手整理记忆」 does not start a run: run state and the transcript belong to the assistant
- * panel, so the button hands a prompt to its composer (`onAskAssistant`) and the user decides what
- * to keep. Nothing is written without the normal save path (and its security scan).
- */
+const MarkdownView = lazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
+type MemoryTool = 'audit' | 'preview' | 'search' | 'details';
 
-/**
- * Outline indentation as Tailwind steps rather than an inline `paddingLeft`.
- *
- * (level - 1) * 8 + 4 px expressed in the 4px scale Tailwind already has: an inline style for a
- * static indent would be the one place in this panel that bypasses the design tokens.
- */
-const OUTLINE_INDENT = ['pl-1', 'pl-3', 'pl-5', 'pl-7', 'pl-9', 'pl-11'] as const;
-
-function capacityTone(state: ReturnType<typeof capacityState>): string {
-  if (state === 'over') {
-    return 'text-[var(--st-bad)]';
-  }
-  if (state === 'near') {
-    return 'text-[var(--st-warn)]';
-  }
-  return 'text-muted';
-}
-
-export function MemorySection({
-  scope,
-  store: files
-}: {
-  scope: ManagementScope;
-  store: MemoryFilesStore;
-}): React.JSX.Element {
-  const [previewOpen, setPreviewOpen] = useState(false);
+/** Reading and editing share the same five backend slots. Only category identity is persisted. */
+export function MemorySection({ scope, store: files }: { scope: ManagementScope; store: MemoryFilesStore }): React.JSX.Element {
+  const instanceId = useId();
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [tool, setTool] = useState<MemoryTool | null>(null);
   const [previewRevision, setPreviewRevision] = useState(0);
-  const preview = useMemorySnapshot(scope.client, previewRevision);
-  const search = useSessionSearch(scope.client, files.memory?.workspaceHash ?? null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const outline = useMemo(() => outlineFromMarkdown(files.draft), [files.draft]);
-  const draftLength = codePointCount(files.draft);
-  const selectedRow = files.rows.find((row) => row.slot.scope === files.selected.scope && row.slot.kind === files.selected.kind) ?? null;
-  const selectedMeta = selectedRow?.meta ?? null;
-  // An ineffective slot cannot be written: the backend returns `workspace_required`, so the button
-  // would be a guaranteed failure (and the reason is a missing working-directory binding, not a
-  // user mistake).
-  const slotWritable = selectedMeta !== null && selectedMeta.effective;
-
-  // Only "no status yet" is a loading state: a refresh keeps the files and the editor on screen.
-  if (files.memory === null) {
-    return files.status === 'error' ? (
-      <FormNote tone="warn" testId="mgmt-memory-error">
-        读取记忆状态失败：{files.error}
-      </FormNote>
-    ) : (
-      <FormNote testId="mgmt-memory-loading">正在读取记忆状态…</FormNote>
-    );
-  }
-
-  const memory: MemoryStatus = files.memory;
-  const saveOutcome = files.save.outcome;
-  const oldestSessionAt = memory.sessionMessages.oldestAt;
-  const fullTextIndexState = memory.fullTextIndex.healthy
-    ? '健康'
-    : '异常（全文索引不可用，会话检索会退化为无结果）';
-
-  const requestSave = (): void => {
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const selectedKey = `${files.selected.scope}:${files.selected.kind}`;
+  const editing = editingKey === selectedKey;
+  const selectedMeta = files.rows.find(({ slot }) => slot.scope === files.selected.scope && slot.kind === files.selected.kind)?.meta ?? null;
+  const writable = selectedMeta?.effective === true;
+  const dirty = files.dirty(files.selected);
+  const finishEditing = (): void => {
+    setEditingKey(null);
+    requestAnimationFrame(() => editButtonRef.current?.focus());
+  };
+  const save = (): void => {
     void files.save.run().then((saved) => {
       if (saved) {
         setPreviewRevision((current) => current + 1);
+        finishEditing();
       }
     });
   };
 
-  const selectOutline = (offset: number, title: string, level: number): void => {
-    const textarea = textareaRef.current;
-    if (textarea === null) {
-      return;
-    }
-    textarea.focus();
-    const start = offset + level + 1;
-    textarea.setSelectionRange(start, start + title.length);
-  };
+  if (files.memory === null) {
+    return <FormNote tone={files.status === 'error' ? 'warn' : 'default'} testId={files.status === 'error' ? 'mgmt-memory-error' : 'mgmt-memory-loading'}>
+      {files.status === 'error' ? `读取记忆状态失败：${files.error}` : '正在读取记忆…'}
+    </FormNote>;
+  }
 
+  const memory = files.memory;
+  const unavailable = slotUnavailableReason(selectedMeta, files.selected);
   return (
-    <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-memory">
-      <FormSection
-        title="记忆文件（markdown，五份）"
-        testId="mgmt-memory-files"
-      >
-        <dl className="flex flex-col gap-0.5">
-          <KeyValueRow label="存储位置" value={memory.root} testId="mgmt-memory-root" />
-          <KeyValueRow
-            label="工作目录"
-            value={memory.workspaceLabel ?? '未绑定（项目槽位不可用）'}
-            testId="mgmt-memory-workspace"
-          />
-          <KeyValueRow
-            label="快照注入"
-            value={`${memory.snapshot.enabled ? '启用' : '停用'} · ${memory.snapshot.totalChars} / ${memory.snapshot.totalLimit} 字符`}
-            testId="mgmt-memory-snapshot-state"
-          />
-          <KeyValueRow
-            label="会话消息"
-            value={`${memory.sessionMessages.totalRows} 行 · 保留 ${memory.sessionMessages.retentionDays} 天 · 最早 ${oldestSessionAt === null ? '—' : formatBeijingDateTime(oldestSessionAt)}`}
-            testId="mgmt-memory-sessions"
-          />
-          <KeyValueRow
-            label="全文索引"
-            value={fullTextIndexState}
-            testId="mgmt-memory-index"
-          />
-        </dl>
-
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="mgmt-memory-reload"
-            disabled={files.status === 'loading'}
-            onClick={() => files.reload()}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-          >
-            <RefreshCw size={11} aria-hidden="true" />
-            重新读取
-          </button>
-        </div>
-
-        <ul className="flex flex-col gap-1" data-testid="mgmt-memory-slots">
-          {files.rows.map(({ slot, meta }) => {
-            const selected = slot.scope === files.selected.scope && slot.kind === files.selected.kind;
-            const state = capacityState(meta);
-            const dirty = files.dirty(slot);
-            return (
-              <li key={`${slot.scope}:${slot.kind}`}>
-                <button
-                  type="button"
-                  onClick={() => files.selectSlot(slot.scope, slot.kind)}
-                  data-testid={`mgmt-memory-slot-${slot.scope}-${slot.kind}`}
-                  data-dirty={dirty ? 'true' : 'false'}
-                  className={
-                    selected
-                      ? 'flex w-full flex-col gap-0.5 rounded-card bg-accent-soft px-2 py-1.5 text-left'
-                      : 'flex w-full flex-col gap-0.5 rounded-card px-2 py-1.5 text-left hover:bg-[var(--overlay-hover)]'
-                  }
-                >
-                  <span className="flex flex-wrap items-center gap-2">
-                    <FileText size={12} aria-hidden="true" className="text-muted" />
-                    <span className="text-ink text-[var(--font-meta-size)]">{slot.label}</span>
-                    <span className="font-mono text-subtle text-[var(--font-micro-size)]">{slot.virtualPath}</span>
-                    {dirty ? (
-                      <span className="flex items-center gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]">
-                        <AlertTriangle size={10} aria-hidden="true" />
-                        未保存
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
-                    <span className={capacityTone(state)} data-testid={`mgmt-memory-capacity-${slot.scope}-${slot.kind}`}>
-                      {meta === null
-                        ? '暂无内容'
-                        : meta.exists
-                          ? capacityLabel(meta)
-                          : `${slot.requiresWorkspace && !meta.effective ? '不可用' : '空文件'} · ${capacityLabel(meta)}`}
-                    </span>
-                    {state === 'over' ? <span className="text-[var(--st-bad)]">超出上限，写入会被拒</span> : null}
-                    {state === 'near' ? <span className="text-[var(--st-warn)]">接近上限</span> : null}
-                    {meta?.updatedAt === null || meta?.updatedAt === undefined ? null : (
-                      <span className="text-subtle">更新于 {formatBeijingDateTime(meta.updatedAt)}</span>
-                    )}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </FormSection>
-
-      <FormSection
-        title={`编辑 ${files.selected.virtualPath}`}
-        testId="mgmt-memory-editor"
-      >
-        {files.contentError === null ? null : (
-          <FormNote tone="warn" testId="mgmt-memory-content-error">
-            读取文件失败：{files.contentError}
-          </FormNote>
-        )}
-        {slotWritable ? null : (
-          <FormNote tone="warn" testId="mgmt-memory-slot-unavailable">
-            {slotUnavailableReason(selectedMeta, files.selected) ?? '这个槽位当前不可写。'}
-          </FormNote>
-        )}
-        <div className="flex flex-col gap-2 lg:flex-row">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <textarea
-              ref={textareaRef}
-              value={files.draft}
-              rows={14}
-              spellCheck={false}
-              disabled={files.contentLoading}
-              onChange={(event) => files.setDraft(event.target.value)}
-              data-testid="mgmt-memory-textarea"
-              className={formTextAreaClass}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                data-testid="mgmt-memory-save"
-                disabled={!slotWritable || !files.dirty(files.selected) || files.save.pending}
-                onClick={requestSave}
-                className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-              >
-                <Save size={11} aria-hidden="true" />
-                {files.save.pending ? '保存中…' : '保存'}
-              </button>
-              <button
-                type="button"
-                data-testid="mgmt-memory-discard"
-                disabled={!files.dirty(files.selected)}
-                onClick={() => files.discard()}
-                className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-              >
-                <Undo2 size={11} aria-hidden="true" />
-                放弃本文件改动
-              </button>
-              <button
-                type="button"
-                data-testid="mgmt-memory-assist"
-                onClick={() => scope.onAskAssistant(buildMemoryAssistPrompt(files.selected, files.draft))}
-                className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-              >
-                <Bot size={11} aria-hidden="true" />
-                用助手整理（只给建议稿）
-              </button>
-              <span className="text-subtle text-[var(--font-micro-size)]" data-testid="mgmt-memory-length">
-                {draftLength.toLocaleString('en-US')} 字符
-                {selectedMeta === null ? '' : ` · 上限 ${selectedMeta.charLimit.toLocaleString('en-US')}`}
-              </span>
+    <div className="memory-page" data-testid="mgmt-memory">
+      <header className="memory-page-heading">
+        <div><h2>记忆</h2><p>助手长期保留的信息，可查看和修改</p></div>
+        <button type="button" data-testid="mgmt-memory-reload" disabled={files.status === 'loading' || files.save.pending} onClick={files.reload} className={formSecondaryButtonClass} aria-label="重新读取记忆状态" title="重新读取记忆状态">
+          <RefreshCw size={14} aria-hidden="true" />
+        </button>
+      </header>
+      {files.status === 'error' ? <FormNote tone="warn">刷新失败：{files.error}</FormNote> : null}
+      <div className="memory-layout" data-testid="mgmt-memory-files">
+        <nav className="memory-navigation" aria-label="记忆分类" data-testid="mgmt-memory-slots">
+          {(['workspace', 'global'] as const).map((group) => (
+            <div className="memory-navigation-group" key={group}>
+              <h3>{group === 'workspace' ? '当前项目' : '全局'}</h3>
+              {[...files.rows].filter(({ slot }) => slot.scope === group).sort((a, b) => group === 'workspace' ? Number(b.slot.kind === 'memory') - Number(a.slot.kind === 'memory') : 0).map(({ slot, meta }) => {
+                const selected = slot.scope === files.selected.scope && slot.kind === files.selected.kind;
+                const pending = files.dirty(slot);
+                return <button key={slot.kind} type="button" aria-current={selected ? 'page' : undefined} disabled={files.save.pending || (slot.requiresWorkspace && memory.workspaceHash === null)}
+                  data-testid={`mgmt-memory-slot-${slot.scope}-${slot.kind}`} data-dirty={pending ? 'true' : 'false'} title={slot.requiresWorkspace && memory.workspaceHash === null ? '打开项目后可查看' : slot.purpose}
+                  onClick={() => { setEditingKey(null); files.selectSlot(slot.scope, slot.kind); }}>
+                  <span>{slot.label}</span>
+                  {pending ? <span className="memory-draft-indicator"><AlertTriangle size={11} aria-hidden="true" /><span className="sr-only">未保存</span></span> : meta?.exists === false ? <span className="memory-empty-indicator">空</span> : null}
+                </button>;
+              })}
             </div>
-            {saveOutcome === null ? null : (
-              <FormNote tone={saveOutcome.status === 'saved' ? 'default' : 'warn'} testId="mgmt-memory-outcome">
-                {saveOutcome.status === 'saved' ? `已保存：${saveOutcome.message}` : `未保存：${saveOutcome.message}`}
-                {saveOutcome.issues.length === 0
-                  ? ''
-                  : ` · 命中：${saveOutcome.issues.map((issue) => `${issue.category}(${issue.pattern})`).join('、')}`}
-              </FormNote>
-            )}
-            {files.save.error === null ? null : (
-              <FormNote tone="warn" testId="mgmt-memory-save-error">
-                {files.save.error}
-              </FormNote>
-            )}
-          </div>
-
-          <div className="flex w-full shrink-0 flex-col gap-1 lg:w-[220px]">
-            <span className="text-subtle text-[var(--font-micro-size)]">
-              大纲（{outline.length} 个标题，点击定位）
-            </span>
-            {outline.length === 0 ? (
-              <span className="text-subtle text-[var(--font-micro-size)]" data-testid="mgmt-memory-outline-empty">
-                这段文字还没有 Markdown 标题。
-              </span>
-            ) : (
-              <ul className="flex max-h-[240px] flex-col gap-0.5 overflow-y-auto" data-testid="mgmt-memory-outline">
-                {outline.map((entry) => (
-                  <li key={`${entry.line}:${entry.title}`}>
-                    <button
-                      type="button"
-                      onClick={() => selectOutline(entry.offset, entry.title, entry.level)}
-                      data-testid={`mgmt-memory-outline-${entry.line}`}
-                      className={`w-full truncate rounded-control pr-1 py-0.5 text-left text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink ${OUTLINE_INDENT[entry.level - 1] ?? 'pl-1'}`}
-                    >
-                      {entry.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection
-        title="注入快照预览"
-        testId="mgmt-memory-preview"
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            data-testid="mgmt-memory-preview-toggle"
-            onClick={() => {
-              setPreviewOpen((current) => !current);
-              setPreviewRevision((current) => current + 1);
-            }}
-            className={formSecondaryButtonClass}
-          >
-            {previewOpen ? '收起快照' : '展开快照'}
-          </button>
-          <span className="text-subtle text-[var(--font-micro-size)]" data-testid="mgmt-memory-preview-count">
-            {preview.status === 'loading' ? '读取中…' : `${preview.charCount} 字符`}
-          </span>
-          <span className="text-subtle text-[var(--font-micro-size)]">
-            {snapshotIncludesSlot(preview.text ?? '', files.selected) ? '当前文件在快照里' : '当前文件不在快照里（空文件或槽位未生效）'}
-          </span>
-        </div>
-        {preview.error === null ? null : (
-          <FormNote tone="warn" testId="mgmt-memory-preview-error">
-            {preview.error}
-          </FormNote>
-        )}
-        {previewOpen ? (
-          <pre
-            className="max-h-[240px] overflow-auto whitespace-pre-wrap rounded-card border border-line bg-bg-soft px-2 py-1.5 font-mono text-[var(--font-code-size)] text-muted"
-            data-testid="mgmt-memory-preview-text"
-          >
-            {preview.text ?? ''}
-          </pre>
-        ) : null}
-      </FormSection>
-
-      <FormSection
-        title="从会话里找"
-        testId="mgmt-memory-search"
-      >
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-[220px] flex-1 flex-col gap-0.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">查询（全文检索会话消息）</span>
-            <input
-              value={search.query}
-              onChange={(event) => search.setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  search.run();
-                }
-              }}
-              placeholder="例如：构建失败"
-              data-testid="mgmt-memory-search-input"
-              className={formInputClass}
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">范围</span>
-            <select
-              value={search.workspaceScope}
-              onChange={(event) => search.setWorkspaceScope(event.target.value === 'current' ? 'current' : 'all')}
-              data-testid="mgmt-memory-search-scope"
-              className={formInputClass}
-            >
-              <option value="all">全部工作目录</option>
-              {/* `workspaceScope: 'current'` needs the backend's own hash; there is nothing to scope to until a directory is bound. */}
-              <option value="current" disabled={files.memory.workspaceHash === null}>
-                当前工作目录{files.memory.workspaceHash === null ? '（不可用）' : ''}
-              </option>
-            </select>
-          </label>
-          <button
-            type="button"
-            data-testid="mgmt-memory-search-run"
-            disabled={search.status === 'loading' || search.query.trim().length === 0}
-            onClick={() => search.run()}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-          >
-            <Search size={11} aria-hidden="true" />
-            {search.status === 'loading' ? '检索中…' : '检索'}
-          </button>
-        </div>
-        {search.error === null ? null : (
-          <FormNote tone="warn" testId="mgmt-memory-search-error">
-            {search.error}
-          </FormNote>
-        )}
-        {search.result === null ? null : search.result.items.length === 0 ? (
-          <FormNote testId="mgmt-memory-search-empty">没有命中（共 {search.result.total} 条）。</FormNote>
-        ) : (
-          <ul className="flex flex-col gap-1" data-testid="mgmt-memory-search-hits">
-            {search.result.items.map((item) => (
-              <li key={item.id} className="flex flex-col gap-0.5 rounded-card border border-line px-2 py-1">
-                <span className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
-                  <span className="text-ink">{item.threadTitle ?? '(无标题会话)'}</span>
-                  <span className="text-subtle">{item.role}</span>
-                  <span className="text-subtle">{formatBeijingDateTime(item.createdAt)}</span>
-                  <button
-                    type="button"
-                    data-testid={`mgmt-memory-search-open-${item.id}`}
-                    onClick={() => scope.onOpenThread(item.threadId)}
-                    className={`${formSecondaryButtonClass} ml-auto`}
-                  >
-                    打开会话
-                  </button>
-                </span>
-                <span className="text-muted text-[var(--font-meta-size)]">{item.snippet}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </FormSection>
-
-      <FormSection
-        title={`自动沉淀审计（最近 ${memory.autoMemory.recent.length} 条）`}
-        testId="mgmt-memory-audit"
-      >
-        <ul className="flex flex-col gap-0.5" data-testid="mgmt-memory-audit-list">
-          {memory.autoMemory.recent.map((record) => (
-            <li key={record.id} className="flex flex-col gap-0.5 text-[var(--font-micro-size)]">
-              <span className="text-muted">{auditRecordLine(record)}</span>
-              <span className="text-subtle">
-                {record.createdAt} · {record.reason}
-                {record.targetPath === null ? '' : ` · ${record.targetPath}`}
-              </span>
-            </li>
           ))}
-        </ul>
-      
-      </FormSection>
+          {memory.workspaceHash === null ? <p className="memory-navigation-hint">打开项目后可查看项目记忆</p> : null}
+        </nav>
+        <section className="memory-document" aria-labelledby={`${instanceId}-title`} data-testid="mgmt-memory-document">
+          <header className="memory-document-heading">
+            <div><h3 id={`${instanceId}-title`}>{files.selected.label}</h3><p>{files.selected.purpose}</p><span className="memory-scope">{files.selected.scope === 'workspace' ? `仅适用于 ${memory.workspaceLabel ?? '当前项目'}` : '适用于所有项目'}</span></div>
+            <button ref={editButtonRef} type="button" data-testid="mgmt-memory-edit" hidden={editing} disabled={!writable || files.contentLoading || files.contentError !== null} onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>
+              <Pencil size={12} aria-hidden="true" />{dirty ? '继续编辑' : '编辑'}
+            </button>
+          </header>
+          {files.contentError !== null ? <FormNote tone="warn" testId="mgmt-memory-content-error">读取内容失败：{files.contentError}</FormNote> : null}
+          {unavailable === null ? null : <FormNote tone="warn" testId="mgmt-memory-slot-unavailable">{unavailable}</FormNote>}
+          {files.save.outcome === null ? null : <div role="status"><FormNote tone={files.save.outcome.status === 'saved' ? 'default' : 'warn'} testId="mgmt-memory-outcome">
+            {files.save.outcome.status === 'saved' ? <span className="memory-inline"><Check size={12} aria-hidden="true" />已保存</span> : `未保存：${files.save.outcome.message}`}
+            {files.save.outcome.issues.length > 0 ? ` · 命中：${files.save.outcome.issues.map((issue) => `${issue.category}(${issue.pattern})`).join('、')}` : null}
+          </FormNote></div>}
+          {files.save.error === null ? null : <FormNote tone="warn" testId="mgmt-memory-save-error">{files.save.error}</FormNote>}
+          {files.contentLoading ? <FormNote>正在读取内容…</FormNote> : files.contentError !== null ? null : editing ? (
+            <div className="memory-editor" data-testid="mgmt-memory-editor" onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && dirty && !files.save.pending) { event.preventDefault(); save(); }
+              if (event.key === 'Escape' && !dirty && !files.save.pending) { event.stopPropagation(); finishEditing(); }
+            }}>
+              <label className="sr-only" htmlFor={`${instanceId}-editor`}>编辑{files.selected.label}</label>
+              <textarea id={`${instanceId}-editor`} ref={textareaRef} autoFocus value={files.draft} rows={16} spellCheck={false} disabled={files.save.pending} onChange={(event) => files.setDraft(event.target.value)} data-testid="mgmt-memory-textarea" className={formTextAreaClass} />
+              <div className="memory-editor-actions">
+                <button type="button" data-testid="mgmt-memory-save" disabled={!writable || !dirty || files.save.pending} onClick={save} className={formSecondaryButtonClass}>{files.save.pending ? '保存中…' : '保存'}</button>
+                <button type="button" data-testid="mgmt-memory-discard" disabled={files.save.pending} onClick={() => { files.discard(); finishEditing(); }} className={formSecondaryButtonClass}>取消</button>
+                <span data-testid="mgmt-memory-length">{codePointCount(files.draft).toLocaleString('en-US')} / {selectedMeta?.charLimit.toLocaleString('en-US') ?? '—'} 字符</span>
+                <button type="button" data-testid="mgmt-memory-assist" disabled={files.save.pending} onClick={() => scope.onAskAssistant(buildMemoryAssistPrompt(files.selected, files.draft))} className={formSecondaryButtonClass}><Bot size={12} aria-hidden="true" />请助手整理</button>
+              </div>
+              <p className="memory-editor-hint">支持 Markdown · ⌘ Enter 保存</p>
+            </div>
+          ) : (
+            <>
+              {dirty ? <div className="memory-unsaved-note" role="status"><AlertTriangle size={12} aria-hidden="true" />此分类有未保存的修改，正在展示已保存的内容。<button type="button" onClick={() => setEditingKey(selectedKey)}>继续编辑</button></div> : null}
+              {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4><p>以后保留在这里的信息会显示在此处。</p>{writable ? <button type="button" data-testid="mgmt-memory-add" onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>添加内容</button> : null}</div> :
+                <div className="memory-reading" data-testid="mgmt-memory-reading"><Suspense fallback={<FormNote>正在排版记忆…</FormNote>}><MarkdownView text={files.content ?? ''} /></Suspense></div>}
+              {selectedMeta?.updatedAt == null ? null : <p className="memory-updated">最近更新于 {formatBeijingDateTime(selectedMeta.updatedAt)}</p>}
+            </>
+          )}
+        </section>
+      </div>
+      <footer className="memory-tools" aria-label="记忆辅助工具">
+        {([{ id: 'audit', label: '最近变更', icon: History }, { id: 'preview', label: '生效内容预览', icon: FileText }, { id: 'search', label: '从会话中查找', icon: Search }, { id: 'details', label: '详情', icon: Info }] as const).map(({ id, label, icon: Icon }) =>
+          <button key={id} type="button" aria-expanded={tool === id} aria-controls={`${instanceId}-tool-${id}`} data-testid={`mgmt-memory-${id === 'preview' ? 'preview-toggle' : `${id}-toggle`}`} onClick={() => setTool((current) => current === id ? null : id)}><Icon size={13} aria-hidden="true" />{label}</button>
+        )}
+      </footer>
+      {tool === null ? null : <div className="memory-tool-panel" id={`${instanceId}-tool-${tool}`}>
+        <MemoryToolPanel key={tool} tool={tool} scope={scope} files={files} previewRevision={previewRevision} />
+      </div>}
     </div>
   );
+}
+
+function MemoryToolPanel({ tool, scope, files, previewRevision }: { tool: MemoryTool; scope: ManagementScope; files: MemoryFilesStore; previewRevision: number }): React.JSX.Element | null {
+  const memory = files.memory;
+  if (memory === null) return null;
+  if (tool === 'preview') return <MemoryPreview scope={scope} files={files} revision={previewRevision} />;
+  if (tool === 'search') return <MemorySessionSearch scope={scope} files={files} />;
+  if (tool === 'audit') return <section data-testid="mgmt-memory-audit"><h3>最近变更</h3><p className="memory-tool-description">助手自动整理记忆的最近记录</p>
+    {memory.autoMemory.recent.length === 0 ? <FormNote>还没有自动整理记录。</FormNote> : <ul className="memory-audit-list" data-testid="mgmt-memory-audit-list">{memory.autoMemory.recent.map((record) => <li key={record.id}>
+      <p>{record.summary}</p><div className="memory-audit-meta"><span>{autoMemoryActionLabels[record.action]}</span><span>{formatBeijingDateTime(record.createdAt)}</span></div>
+      <details><summary>处理详情</summary><p>{autoMemoryTypeLabels[record.type]} · {record.reason}</p>{record.targetPath === null ? null : <code>{record.targetPath}</code>}</details>
+    </li>)}</ul>}
+  </section>;
+  return <section data-testid="mgmt-memory-details"><h3>记忆详情</h3><dl>
+    <KeyValueRow label="存储位置" value={memory.root} testId="mgmt-memory-root" />
+    <KeyValueRow label="工作目录" value={memory.workspaceLabel ?? '未绑定'} testId="mgmt-memory-workspace" />
+    <KeyValueRow label="生效预览" value={`${memory.snapshot.enabled ? '启用' : '停用'} · ${memory.snapshot.totalChars} / ${memory.snapshot.totalLimit} 字符`} testId="mgmt-memory-snapshot-state" />
+    <KeyValueRow label="会话消息" value={`${memory.sessionMessages.totalRows} 行 · 保留 ${memory.sessionMessages.retentionDays} 天 · 最早 ${memory.sessionMessages.oldestAt === null ? '—' : formatBeijingDateTime(memory.sessionMessages.oldestAt)}`} testId="mgmt-memory-sessions" />
+    <KeyValueRow label="全文索引" value={memory.fullTextIndex.healthy ? '健康' : '异常（会话检索可能无结果）'} testId="mgmt-memory-index" />
+    {files.rows.map(({ slot, meta }) => <KeyValueRow key={slot.virtualPath} label={slot.label} value={`${slot.virtualPath} · ${capacityLabel(meta)}`} testId={`mgmt-memory-capacity-${slot.scope}-${slot.kind}`} />)}
+  </dl></section>;
+}
+
+function MemoryPreview({ scope, files, revision }: { scope: ManagementScope; files: MemoryFilesStore; revision: number }): React.JSX.Element {
+  const preview = useMemorySnapshot(scope.client, revision);
+  return <section data-testid="mgmt-memory-preview"><h3>生效内容预览</h3><p className="memory-tool-description">按当前配置生成下一次对话的记忆预览，可能与保存的完整内容不同。</p>
+    {preview.error !== null ? <FormNote tone="warn" testId="mgmt-memory-preview-error">{preview.error}</FormNote> : preview.status === 'loading' ? <FormNote>正在读取预览…</FormNote> : <>
+      <p className="memory-tool-description" data-testid="mgmt-memory-preview-count">{preview.charCount} 字符 · {snapshotIncludesSlot(preview.text ?? '', files.selected) ? '包含当前分类' : '未包含当前分类（内容为空或未生效）'}</p>
+      <pre data-testid="mgmt-memory-preview-text">{preview.text || '当前没有可带入的记忆。'}</pre>
+    </>}
+  </section>;
+}
+
+function MemorySessionSearch({ scope, files }: { scope: ManagementScope; files: MemoryFilesStore }): React.JSX.Element {
+  const search = useSessionSearch(scope.client, files.memory?.workspaceHash ?? null);
+  return <section data-testid="mgmt-memory-search"><h3>从会话中查找</h3><p className="memory-tool-description">查找历史对话中的信息，结果不代表已保存为记忆。</p>
+    <form className="memory-search-form" onSubmit={(event) => { event.preventDefault(); search.run(); }}>
+      <label><span className="sr-only">查找会话内容</span><input value={search.query} onChange={(event) => search.setQuery(event.target.value)} placeholder="输入要查找的内容" data-testid="mgmt-memory-search-input" className={formInputClass} /></label>
+      <label><span className="sr-only">查找范围</span><select value={search.workspaceScope} onChange={(event) => search.setWorkspaceScope(event.target.value === 'current' ? 'current' : 'all')} data-testid="mgmt-memory-search-scope" className={formInputClass}><option value="all">全部项目</option><option value="current" disabled={files.memory?.workspaceHash == null}>当前项目{files.memory?.workspaceHash == null ? '（不可用）' : ''}</option></select></label>
+      <button type="submit" data-testid="mgmt-memory-search-run" disabled={search.status === 'loading' || search.query.trim().length === 0} className={formSecondaryButtonClass}><Search size={12} aria-hidden="true" />{search.status === 'loading' ? '查找中…' : '查找'}</button>
+    </form>
+    {search.error === null ? null : <FormNote tone="warn" testId="mgmt-memory-search-error">{search.error}</FormNote>}
+    {search.result === null ? null : search.result.items.length === 0 ? <FormNote testId="mgmt-memory-search-empty">没有找到相关会话。</FormNote> : <ul className="memory-search-results" data-testid="mgmt-memory-search-hits">{search.result.items.map((item) => <li key={item.id}><div><strong>{item.threadTitle ?? '无标题会话'}</strong><span>{formatBeijingDateTime(item.createdAt)}</span><button type="button" data-testid={`mgmt-memory-search-open-${item.id}`} onClick={() => scope.onOpenThread(item.threadId)} className={formSecondaryButtonClass}>打开会话</button></div><p>{item.snippet}</p></li>)}</ul>}
+  </section>;
 }

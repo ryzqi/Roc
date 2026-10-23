@@ -20,7 +20,9 @@ export const uiStateKeys = {
   /** Local-only pinning. Not product data; the backend has no star field (B1). */
   starredProjectIds: `${UI_STATE_PREFIX}project.starred`,
   /** Per-project file-tree expansion, bucketed by project id. */
-  fileTreeExpanded: `${UI_STATE_PREFIX}files.expanded`
+  fileTreeExpanded: `${UI_STATE_PREFIX}files.expanded`,
+  /** Last viewed memory category; never stores memory content. */
+  memoryCategory: `${UI_STATE_PREFIX}memory.category`
 } as const;
 
 export type UiStateKey = (typeof uiStateKeys)[keyof typeof uiStateKeys];
@@ -157,6 +159,17 @@ export function readSidebarTab(): SidebarTab {
 
 export function writeSidebarTab(tab: SidebarTab): void {
   writeRaw(uiStateKeys.sidebarTab, tab);
+}
+
+export function readMemoryCategory(): string | null {
+  const raw = readRaw(uiStateKeys.memoryCategory);
+  return raw !== null && /^(global:(user|agents|memory)|workspace:(agents|memory))$/u.test(raw) ? raw : null;
+}
+
+export function writeMemoryCategory(category: string): void {
+  if (/^(global:(user|agents|memory)|workspace:(agents|memory))$/u.test(category)) {
+    writeRaw(uiStateKeys.memoryCategory, category);
+  }
 }
 
 export function readAssistantWidth(): number {

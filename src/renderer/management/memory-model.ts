@@ -64,7 +64,7 @@ export const MEMORY_SLOTS: readonly MemorySlot[] = [
     kind: 'user',
     fileName: 'USER.md',
     virtualPath: '/memory/global/USER.md',
-    label: 'USER.md（全局）',
+    label: '个人偏好',
     purpose: '你的长期偏好：称呼、语言、输出风格。',
     requiresWorkspace: false
   },
@@ -73,7 +73,7 @@ export const MEMORY_SLOTS: readonly MemorySlot[] = [
     kind: 'agents',
     fileName: 'AGENTS.md',
     virtualPath: '/memory/global/AGENTS.md',
-    label: 'AGENTS.md（全局）',
+    label: '工作准则',
     purpose: '跨项目的行为准则与工作方式。',
     requiresWorkspace: false
   },
@@ -82,8 +82,8 @@ export const MEMORY_SLOTS: readonly MemorySlot[] = [
     kind: 'memory',
     fileName: 'MEMORY.md',
     virtualPath: '/memory/global/MEMORY.md',
-    label: 'MEMORY.md（全局）',
-    purpose: '与项目无关的长期事实；主题文件从这里的索引指向。',
+    label: '长期记忆',
+    purpose: '跨项目保留的长期事实与经验。',
     requiresWorkspace: false
   },
   {
@@ -91,8 +91,8 @@ export const MEMORY_SLOTS: readonly MemorySlot[] = [
     kind: 'agents',
     fileName: 'AGENTS.md',
     virtualPath: '/memory/workspaces/current/AGENTS.md',
-    label: 'AGENTS.md（当前工作目录）',
-    purpose: '只在这个工作目录里生效的行为准则。',
+    label: '项目准则',
+    purpose: '助手在当前项目中遵循的工作方式。',
     requiresWorkspace: true
   },
   {
@@ -100,8 +100,8 @@ export const MEMORY_SLOTS: readonly MemorySlot[] = [
     kind: 'memory',
     fileName: 'MEMORY.md',
     virtualPath: '/memory/workspaces/current/MEMORY.md',
-    label: 'MEMORY.md（当前工作目录）',
-    purpose: '只属于这个工作目录的长期事实。',
+    label: '项目记忆',
+    purpose: '当前项目的背景、约定与已确认的决策。',
     requiresWorkspace: true
   }
 ];

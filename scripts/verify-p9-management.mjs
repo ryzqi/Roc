@@ -116,7 +116,7 @@ async function sleep(ms) {
 async function launchApp() {
   const launched = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'electron-profile')}`],
     env: launchEnv
   });
   const window = await launched.firstWindow();
@@ -407,6 +407,9 @@ try {
     sessionFacts.memory.fullTextIndex?.healthy === true && sessionFacts.memory.fullTextIndex?.status === 'ready',
     JSON.stringify(sessionFacts.memory.fullTextIndex)
   );
+  assertCheck('1 记忆', '默认阅读模式不显示编辑框', await page.locator('[data-testid="mgmt-memory-textarea"]').count() === 0);
+  assertCheck('1 记忆', '首次进入优先选择项目记忆', await page.locator('[data-testid="mgmt-memory-slot-workspace-memory"]').getAttribute('aria-current') === 'page');
+  await page.click('[data-testid="mgmt-memory-details-toggle"]');
   const sessionRowText = await text('mgmt-memory-sessions');
   assertCheck(
     '1 记忆',
@@ -417,6 +420,7 @@ try {
 
   // 写 global/user
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () => document.querySelector('[data-testid="mgmt-memory-textarea"]') !== null,
     undefined,
@@ -426,7 +430,8 @@ try {
   await page.click('[data-testid="mgmt-memory-save"]');
   await waitForTextContains('mgmt-memory-outcome', '已保存');
   const outcomeText = await text('mgmt-memory-outcome');
-  assertCheck('1 记忆', '保存后显示已写入的虚拟路径与字符数', outcomeText.includes('/memory/global/USER.md'), outcomeText);
+  assertCheck('1 记忆', '保存后回到阅读模式并确认已保存', outcomeText === '已保存' && await page.locator('[data-testid="mgmt-memory-textarea"]').count() === 0, outcomeText);
+  await waitForTextContains('mgmt-memory-reading', 'ROC-P9-MEMORY');
 
   const readBack = await page.evaluate(async () => {
     const result = await window.roc.memory.readFile({ scope: 'global', kind: 'user' });
@@ -464,6 +469,8 @@ try {
     JSON.stringify(workspaceWrite).slice(0, 140)
   );
   await page.click('[data-testid="mgmt-memory-slot-workspace-memory"]');
+  await page.click('[data-testid="mgmt-memory-reload"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () =>
       (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes(
@@ -543,6 +550,7 @@ try {
 
   // UI 上的拒写展示：把超限内容填进编辑器再保存，界面必须说清原因
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes('ROC-P9-MEMORY'),
     undefined,
@@ -564,10 +572,12 @@ try {
   await page.click('[data-testid="mgmt-memory-discard"]');
   
 
+  await page.click('[data-testid="mgmt-memory-details-toggle"]');
   await page.click('[data-testid="mgmt-memory-reload"]');
   await waitForTextContains('mgmt-memory-capacity-global-user', '字符', 20_000);
-  assertCheck('1 记忆', '「重新读取」在抽屉里可用且不清掉编辑器内容', (await readInput('mgmt-memory-textarea')).includes('ROC-P9-MEMORY'));
+  assertCheck('1 记忆', '重新读取保留已保存的阅读内容', (await text('mgmt-memory-reading')).includes('ROC-P9-MEMORY'));
 
+  await page.click('[data-testid="mgmt-memory-search-toggle"]');
   // 会话检索（记忆域没有条目检索的 IPC，B25）
   const currentScopeDisabled = await page.evaluate(() => {
     const select = document.querySelector('[data-testid="mgmt-memory-search-scope"]');
@@ -598,6 +608,7 @@ try {
   } else {
     record('1 记忆', '检索面本身可用（探针会话因 B18 未完成，未断言命中）', true, `hits=${searchHits}`, 'info');
   }
+  await page.click('[data-testid="mgmt-memory-audit-toggle"]');
   const auditNote = (await page.locator('[data-testid="mgmt-memory-audit"]').count()) === 1;
   assertCheck('1 记忆', '自动沉淀审计区渲染（记录或真实空态）', auditNote);
 
@@ -1003,6 +1014,7 @@ try {
   // 带未保存的记忆草稿关抽屉：必须确认，且放弃后草稿不残留（同一组面板在画布视图里也能编辑）
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes('ROC-P9-MEMORY'),
     undefined,
@@ -1026,6 +1038,7 @@ try {
   await page.waitForSelector('[data-testid="management-panel-panel"]', { state: 'detached', timeout: 15_000 });
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes('ROC-P9-MEMORY'),
     undefined,
@@ -1098,6 +1111,7 @@ try {
   await waitForProjectRoute();
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
+  await page.click('[data-testid="mgmt-memory-edit"]');
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="mgmt-memory-textarea"]')?.value ?? '').includes('ROC-P9-MEMORY'),
     undefined,

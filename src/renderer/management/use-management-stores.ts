@@ -39,12 +39,12 @@ export type ManagementStores = {
 };
 
 function memorySummary(memory: MemoryFilesStore): string {
-  const parts = [`记忆 ${memory.rows.length} 份（markdown 内容）`];
+  const parts = ['查看助手记住的项目背景与个人偏好'];
   if (memory.dirtyCount > 0) {
     parts.push(`未保存 ${memory.dirtyCount}`);
   }
   if (memory.memory !== null && memory.memory.workspaceHash === null) {
-    parts.push('未绑定工作目录，项目槽位不可用');
+    parts.push('打开项目后可查看项目记忆');
   }
   return parts.join(' · ');
 }

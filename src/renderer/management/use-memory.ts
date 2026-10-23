@@ -6,6 +6,7 @@ import type {
   SessionMessageSearchRequest,
   SessionMessageSearchResult
 } from '../../shared/types';
+import { readMemoryCategory, writeMemoryCategory } from '../app/ui-state';
 import type { AsyncStatus } from '../app/use-async-resource';
 import { useAsyncResource } from '../app/use-async-resource';
 import type { RocClient } from '../shared/roc-client';
@@ -70,19 +71,22 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
   const resource = useAsyncResource('memory:status', () => getMemoryStatus(client), { label: '读取记忆状态' });
   const memory = resource.data;
 
-  const [selectedKey, setSelectedKey] = useState<string>(() => memorySlotKey(MEMORY_SLOTS[0]?.scope ?? 'global', MEMORY_SLOTS[0]?.kind ?? 'user'));
+  const [selectedKey, setSelectedKey] = useState<string | null>(readMemoryCategory);
   const [contents, setContents] = useState<Record<string, string | null>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [contentLoading, setContentLoading] = useState(false);
-  const [contentError, setContentError] = useState<string | null>(null);
+  const [loadingSlots, setLoadingSlots] = useState<Record<string, boolean>>({});
+  const [contentErrors, setContentErrors] = useState<Record<string, string | null>>({});
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<WriteOutcomeDescription | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const selected = useMemo(() => {
     const slot = MEMORY_SLOTS.find((candidate) => memorySlotKey(candidate.scope, candidate.kind) === selectedKey);
-    return slot ?? (MEMORY_SLOTS[0] as MemorySlot);
-  }, [selectedKey]);
+    if (slot !== undefined && (!slot.requiresWorkspace || memory?.workspaceHash != null)) {
+      return slot;
+    }
+    return MEMORY_SLOTS.find((candidate) => candidate.kind === 'memory' && candidate.scope === (memory?.workspaceHash != null ? 'workspace' : 'global')) as MemorySlot;
+  }, [memory?.workspaceHash, selectedKey]);
 
   const loadedRef = useRef<Record<string, boolean>>({});
 
@@ -90,18 +94,18 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
     async (slot: MemorySlot): Promise<void> => {
       const key = memorySlotKey(slot.scope, slot.kind);
       loadedRef.current[key] = true;
-      setContentLoading(true);
-      setContentError(null);
+      setLoadingSlots((current) => ({ ...current, [key]: true }));
+      setContentErrors((current) => ({ ...current, [key]: null }));
       try {
         const result = await readMemoryFile(client, { scope: slot.scope, kind: slot.kind });
         setContents((current) => ({ ...current, [key]: result.ok ? result.data : null }));
         if (!result.ok) {
-          setContentError(result.error.message);
+          setContentErrors((current) => ({ ...current, [key]: result.error.message }));
         }
       } catch (caught) {
-        setContentError(caught instanceof Error ? caught.message : String(caught));
+        setContentErrors((current) => ({ ...current, [key]: caught instanceof Error ? caught.message : String(caught) }));
       } finally {
-        setContentLoading(false);
+        setLoadingSlots((current) => ({ ...current, [key]: false }));
       }
     },
     [client]
@@ -109,22 +113,27 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
 
   // Load the selected slot once (and again whenever the selection changes to an unloaded one).
   useEffect(() => {
+    if (memory === null) {
+      return;
+    }
     const key = memorySlotKey(selected.scope, selected.kind);
     if (loadedRef.current[key] === true) {
       return;
     }
     void loadSlot(selected);
-  }, [loadSlot, selected]);
+  }, [loadSlot, memory, selected]);
 
   // A failed status read must not leave a stale editor under it.
   const statusError = resource.error;
   useEffect(() => {
     if (statusError !== null) {
-      setContentError(null);
+      setContentErrors({});
     }
   }, [statusError]);
 
   const key = memorySlotKey(selected.scope, selected.kind);
+  const contentLoading = loadingSlots[key] === true || (memory !== null && loadedRef.current[key] !== true);
+  const contentError = contentErrors[key] ?? null;
   const content = contents[key] ?? null;
   const draft = drafts[key] ?? content ?? '';
   const dirty = (slot: MemorySlot): boolean => {
@@ -202,12 +211,21 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
       status: resource.status,
       error: resource.error,
       memory,
-      reload: reloadStatus,
+      reload: () => {
+        reloadStatus();
+        void loadSlot(selected);
+      },
       rows: MEMORY_SLOTS.map((slot) => ({
         slot,
         meta: memory === null ? null : memory.files.find((file) => file.scope === slot.scope && file.kind === slot.kind) ?? null
       })),
-      selectSlot: (scope, kind) => setSelectedKey(memorySlotKey(scope, kind)),
+      selectSlot: (scope, kind) => {
+        const nextKey = memorySlotKey(scope, kind);
+        setSelectedKey(nextKey);
+        writeMemoryCategory(nextKey);
+        setOutcome(null);
+        setSaveError(null);
+      },
       selected,
       content,
       contentLoading,
@@ -220,7 +238,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
       discard,
       discardAll
     }),
-    [resource.status, resource.error, memory, reloadStatus, selected, content, contentLoading, contentError, draft, setDraft, dirty, dirtyCount, pending, outcome, saveError, run, discard, discardAll]
+    [resource.status, resource.error, memory, reloadStatus, loadSlot, selected, content, contentLoading, contentError, draft, setDraft, dirty, dirtyCount, pending, outcome, saveError, run, discard, discardAll]
   );
 }
 
