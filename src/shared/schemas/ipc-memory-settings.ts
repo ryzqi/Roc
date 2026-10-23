@@ -507,6 +507,34 @@ export const settingsSetDefaultModelRequestSchema = z
   .object({ defaultModelId: z.string().trim().min(1).nullable() })
   .strict();
 
+/**
+ * 「列出这个端点上有什么模型」的最小请求。
+ *
+ * 只收端点与（可选的）明文密钥：模型的拉取发生在用户编辑草稿的过程中，此时草稿里的
+ * `credentialRef` 可能还没有对应密钥（刚填地址还没保存），所以允许直接带一次性的明文。
+ * 密钥不回传、不落库——它只用于这一次 GET /models。
+ */
+export const settingsListRemoteModelsRequestSchema = z
+  .object({
+    endpoint: z.string().trim().min(1),
+    apiKey: z.string().nullable().optional(),
+    /** 用已存好的 provider 凭据（设置页已经录过 key 的情况），与 `apiKey` 二选一。 */
+    providerId: z.string().trim().min(1).nullable().optional()
+  })
+  .strict();
+
+export const remoteModelEntrySchema = z
+  .object({ id: z.string(), ownedBy: z.string().nullable() })
+  .strict();
+
+export const settingsListRemoteModelsResultSchema = z
+  .object({
+    endpoint: z.string(),
+    models: z.array(remoteModelEntrySchema),
+    latencyMs: z.number()
+  })
+  .strict();
+
 export const hostIntegrationStatusSchema = z
   .object({
     startup: z

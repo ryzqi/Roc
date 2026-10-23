@@ -3,6 +3,7 @@ import type {
   McpServerSnapshot,
   ProviderSecretSetRequest,
   ProviderTestRequest,
+  SettingsListRemoteModelsRequest,
   SettingsSaveHookConfigRequest,
   SettingsSaveRequest,
   SettingsSetDefaultModelRequest,
@@ -11,7 +12,8 @@ import type {
   SkillSnapshot
 } from '../../shared/types';
 import type { ConfigService } from '../services/config-service';
-import { wrapIpc } from '../services/errors';
+import { logWarn, wrapIpc } from '../services/errors';
+import { listRemoteModels } from '../services/remote-model-catalog';
 import type { ProviderRuntimeService } from '../services/provider-runtime-service';
 import type { SecretService } from '../services/secret-service';
 import type { TimedHandle } from './ipc-common';
@@ -55,6 +57,22 @@ export function registerSettingsIpc(
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, request: ProviderTestRequest) =>
     wrapIpc(() => providerRuntimeService.testProvider(request))
+  );
+  /**
+   * 「拉取这个端点上有什么模型」（P10）。
+   *
+   * 密钥来源二选一，都在主进程里解决，不回传：
+   *  - `apiKey`：用户刚在输入框里敲进去、还没保存的一次性明文；
+   *  - `providerId`：设置里已经存好的凭据（用户的常见路径：建好 provider、存好 key，
+   *    然后才发现模型标识要填对）。
+   * 两者都没有时也允许发请求：本机推理服务（llama.cpp / LM Studio / Ollama）不需要凭据，
+   * 没有 key 就一定是错的判断会把这批用户挡在外面。
+   */
+  timedHandle(ipcChannels.settingsListRemoteModels, (_event, request: SettingsListRemoteModelsRequest) =>
+    wrapIpc(async () => {
+      const apiKey = await resolveListApiKey(secretService, request);
+      return listRemoteModels({ endpoint: request.endpoint, apiKey });
+    })
   );
   // 「换默认模型」 的窄通道：只写 `defaultModelId`，其余字段原样保留。
   // 复用它的是助手的输入区（不想为了一个字段重发整份设置文档），以及任何只想
@@ -148,4 +166,42 @@ function unavailableHookConfigSnapshot(): SettingsSnapshot['hooks'] {
     handlers: [],
     validationErrors: ['hook_settings_unavailable']
   };
+}
+
+/**
+ * 「拉取模型」要用的密钥，三种情况合并成一个值（P10）。
+ *
+ *  - 请求里带了明文 → 用它（用户刚输入、还没保存的那一份）；
+ *  - 没带，但给了 providerId → 读钥匙串；
+ *  - 读不到 → 返回 null 继续发请求。
+ *
+ * 最后一条是有意的：`getProviderSecret` 对未保存的凭据抛
+ * `provider_credential_unavailable`，对钥匙串不可用抛 `secret_storage_unavailable`。
+ * 前者必须当作「这个端点大概不需要密钥」继续（本机 llama.cpp / LM Studio / Ollama
+ * 是主要用例），后者也不该拦住列表请求——列表能否拿到只取决于端点，凭据缺失最多让
+ * 服务端回 401，而那条错误比这里的更具体。
+ */
+async function resolveListApiKey(
+  secretService: SecretService,
+  request: SettingsListRemoteModelsRequest
+): Promise<string | null> {
+  if (typeof request.apiKey === 'string' && request.apiKey.length > 0) {
+    return request.apiKey;
+  }
+  if (request.providerId === null || request.providerId === undefined) {
+    return null;
+  }
+  try {
+    const stored = await secretService.getProviderSecret(request.providerId);
+    return stored.length > 0 ? stored : null;
+  } catch (error) {
+    logWarn('Pulling models without a stored provider credential.', {
+      component: 'settings-ipc',
+      metadata: {
+        providerId: request.providerId,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    });
+    return null;
+  }
 }

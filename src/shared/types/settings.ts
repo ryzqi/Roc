@@ -16,10 +16,13 @@ import {
   providersConfigSchema,
   providerTestResultSchema,
   providerTestRequestSchema,
+  remoteModelEntrySchema,
   settingsDocumentSchema,
   settingsSaveHookConfigRequestSchema,
   settingsSaveRequestSchema,
   settingsSetDefaultModelRequestSchema,
+  settingsListRemoteModelsRequestSchema,
+  settingsListRemoteModelsResultSchema,
   settingsSnapshotSchema,
   settingsTrustHookRequestSchema,
   shortcutsConfigSchema
@@ -94,6 +97,10 @@ type ParsedSettingsSaveRequest = z.infer<typeof settingsSaveRequestSchema>;
 export type SettingsSaveRequest = Omit<ParsedSettingsSaveRequest, 'providers'> & { providers: ProviderConfig[] };
 /** 「换默认模型」 只改一个字段，不是整份文档保存（见 schema 注释）。 */
 export type SettingsSetDefaultModelRequest = z.infer<typeof settingsSetDefaultModelRequestSchema>;
+/** 「拉取端点上的模型列表」请求：端点 + 一次性明文或已存凭据的 provider 引用。 */
+export type SettingsListRemoteModelsRequest = z.infer<typeof settingsListRemoteModelsRequestSchema>;
+export type RemoteModelEntry = z.infer<typeof remoteModelEntrySchema>;
+export type SettingsListRemoteModelsResult = z.infer<typeof settingsListRemoteModelsResultSchema>;
 export type SettingsSaveHookConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
 export type SettingsTrustHookRequest = z.infer<typeof settingsTrustHookRequestSchema>;
 export type ProviderSecretSetRequest = z.infer<typeof providerSecretSetRequestSchema>;

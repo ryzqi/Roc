@@ -84,6 +84,8 @@ import {
   sessionMessageSearchResultSchema,
   settingsSaveHookConfigRequestSchema,
   settingsSaveRequestSchema,
+  settingsListRemoteModelsRequestSchema,
+  settingsListRemoteModelsResultSchema,
   settingsSetDefaultModelRequestSchema,
   settingsSnapshotSchema,
   settingsTrustHookRequestSchema
@@ -371,6 +373,7 @@ export const ipcRegistry = {
     request({ key: 'settingsGet', channel: 'roc:settings:get', domain: 'settings', method: 'get', kind: 'direct', contract: methodContract(noArgs, settingsSnapshotSchema) }),
     request({ key: 'settingsSave', channel: 'roc:settings:save', domain: 'settings', method: 'save', kind: 'direct', contract: methodContract(oneArg(settingsSaveRequestSchema), settingsSnapshotSchema) }),
     request({ key: 'settingsSetDefaultModel', channel: 'roc:settings:set-default-model', domain: 'settings', method: 'setDefaultModel', kind: 'direct', contract: methodContract(oneArg(settingsSetDefaultModelRequestSchema), settingsSnapshotSchema) }),
+    request({ key: 'settingsListRemoteModels', channel: 'roc:settings:list-remote-models', domain: 'settings', method: 'listRemoteModels', kind: 'direct', contract: methodContract(oneArg(settingsListRemoteModelsRequestSchema), settingsListRemoteModelsResultSchema) }),
     request({ key: 'settingsTestProvider', channel: 'roc:settings:test-provider', domain: 'settings', method: 'testProvider', kind: 'direct', contract: methodContract(oneArg(providerTestRequestSchema), providerTestResultSchema) }),
     request({ key: 'settingsSetProviderSecret', channel: 'roc:settings:set-provider-secret', domain: 'settings', method: 'setProviderSecret', kind: 'direct', contract: methodContract(oneArg(providerSecretSetRequestSchema), providerSecretSetResultSchema) }),
     request({ key: 'settingsClearProviderSecret', channel: 'roc:settings:clear-provider-secret', domain: 'settings', method: 'clearProviderSecret', kind: 'direct', contract: methodContract(stringArg, providerSecretClearResultSchema) }),

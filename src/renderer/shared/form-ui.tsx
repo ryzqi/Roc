@@ -30,6 +30,18 @@ export const formTextAreaClass =
   'w-full min-h-[72px] resize-y rounded-control border border-line bg-bg px-2 py-1 font-mono text-[var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 export const formSecondaryButtonClass =
   'h-[var(--control-height-compact)] rounded-control border border-line px-2 text-muted text-[var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+/**
+ * 与输入框同高的按钮（P10）。
+ *
+ * 设置页里「拉取模型」「测试连通」这类按钮总是和 `formInputClass` 的输入框并排出现。
+ * 用紧凑高度（28px）再配 `items-end`，底边齐了但顶边差 4px，一行的两条基线看起来就是歪的；
+ * 高度不一致也让 hover 区域与输入框不是同一条水平带。所以凡是与输入框同排的动作按钮用这个。
+ */
+export const formButtonClass =
+  'h-[var(--control-height)] rounded-control border border-line px-2.5 text-muted text-[var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+/** 与输入框同高的主按钮（保存/确认）。 */
+export const formPrimaryButtonClass =
+  'h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-3 text-ink text-[var(--font-meta-size)] hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 
 export function FormSection({
   title,

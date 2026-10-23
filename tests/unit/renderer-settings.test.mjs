@@ -408,3 +408,20 @@ test('a created model row has the legacy defaults (streaming and tools on, image
     supportsImages: false
   });
 });
+
+/**
+ * 「拉取模型」补上的那一行只在 id/displayName 上与手建行不同。
+ *
+ * 这两点值得钉住：id 必须正好是端点返回的标识（否则建出来的模型一调用就 404，而这正是
+ * 这个功能要消除的失败模式）；其余能力位沿用 createModelDraft，避免两条创建路径悄悄漂开。
+ */
+test('a model row created from a pulled identifier only fills id and display name', () => {
+  assert.deepEqual(rules.createModelDraftFromRemote('deepseek-chat'), {
+    id: 'deepseek-chat',
+    displayName: 'deepseek-chat',
+    enabled: true,
+    supportsStreaming: true,
+    supportsToolCalls: true,
+    supportsImages: false
+  });
+});

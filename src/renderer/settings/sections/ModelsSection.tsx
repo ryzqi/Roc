@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { KeyRound, Plus, Trash2 } from 'lucide-react';
-import type { ProviderConfig, ProviderTestResult } from '../../../shared/types';
+import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import type { ProviderConfig, ProviderTestResult, RemoteModelEntry } from '../../../shared/types';
 import { useAsyncAction } from '../../app/use-async-resource';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import {
   CREATABLE_PROVIDER_TYPES,
   PROVIDER_TYPE_LABELS,
   createModelDraft,
+  createModelDraftFromRemote,
   createProviderDraft,
   credentialRefFor,
   isFixedProviderId,
   testableModelOptions
 } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
+import { RemoteModelPicker } from '../RemoteModelPicker';
 import { clearProviderSecret, setProviderSecret, testProvider } from '../settings-store';
 import {
   CheckboxField,
@@ -22,6 +24,7 @@ import {
   FormNote,
   FormSection,
   TextField,
+  formButtonClass,
   formInputClass,
   formSecondaryButtonClass
 } from '../../shared/form-ui';
@@ -76,6 +79,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   const [removeProviderOpen, setRemoveProviderOpen] = useState(false);
   const [testModelId, setTestModelId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+  const [pullModelsOpen, setPullModelsOpen] = useState(false);
 
   // The same helper the unit test pins: only *enabled* models may be tested, because
   // `settings.testProvider` refuses a model that is missing or disabled.
@@ -130,7 +134,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
       testId="settings-section-models-body"
     >
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex w-[240px] flex-col gap-0.5">
+        <label className="flex w-[260px] flex-col gap-0.5">
           <span className="text-subtle text-[var(--font-micro-size)]">供应商</span>
           <select
             value={provider.id}
@@ -162,14 +166,14 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             });
             setSelectedId(created.id);
           }}
-          className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+          className={`${formButtonClass} inline-flex items-center gap-1`}
         >
           <Plus size={11} aria-hidden="true" />
           新增供应商
         </button>
         {builtIn ? (
           <span
-            className="rounded-control border border-line px-1.5 text-subtle text-[var(--font-micro-size)]"
+            className="inline-flex h-[var(--control-height)] items-center rounded-control border border-line px-2.5 text-subtle text-[var(--font-meta-size)]"
             data-testid="settings-provider-builtin"
           >
             内置
@@ -179,7 +183,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             type="button"
             data-testid="settings-provider-remove"
             onClick={() => setRemoveProviderOpen(true)}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <Trash2 size={11} aria-hidden="true" />
             移除供应商
@@ -217,8 +221,11 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           label="凭据引用"
           testId="settings-provider-credential"
         >
+          {/* 与输入框同高同框：这里是只读值，但不是「没有控件」—— 高度不一致会让这一行
+              的两个单元格看起来不在同一条基线上。 */}
           <span
-            className="font-mono text-muted text-[var(--font-meta-size)]"
+            className="flex h-[var(--control-height)] items-center truncate rounded-control border border-line bg-bg-soft px-2 font-mono text-muted text-[var(--font-meta-size)]"
+            title={provider.credentialRef ?? '未引用'}
             data-testid="settings-provider-credential-ref"
           >
             {provider.credentialRef ?? '未引用'}
@@ -245,7 +252,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             {stored ? '已配置（系统钥匙串）' : '未配置'}
           </span>
         </header>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <TextField
             label="新密钥"
             type="password"
@@ -269,7 +276,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                 reload();
               });
             }}
-            className={formSecondaryButtonClass}
+            className={formButtonClass}
           >
             保存密钥
           </button>
@@ -278,7 +285,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             data-testid="settings-provider-secret-clear"
             disabled={clearSecret.pending || !stored}
             onClick={() => setClearSecretOpen(true)}
-            className={formSecondaryButtonClass}
+            className={formButtonClass}
           >
             清除密钥
           </button>
@@ -300,15 +307,23 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           <h4 className="text-ink text-[var(--font-meta-size)]">模型（{provider.models.length}）</h4>
           <button
             type="button"
+            data-testid="settings-model-pull"
+            onClick={() => setPullModelsOpen(true)}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
+          >
+            <RefreshCw size={11} aria-hidden="true" />
+            拉取模型
+          </button>
+          <button
+            type="button"
             data-testid="settings-model-add"
             onClick={() => patchProvider((entry) => void entry.models.push(createModelDraft()))}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
-            添加模型
+            手动添加模型
           </button>
         </header>
-
 
         <ul className="flex flex-col gap-2">
           {provider.models.map((model, modelIndex) => (
@@ -432,8 +447,8 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
 
       <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
         <h4 className="text-ink text-[var(--font-meta-size)]">测速</h4>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex w-[240px] flex-col gap-0.5">
+        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="flex flex-col gap-0.5">
             <span className="text-subtle text-[var(--font-micro-size)]">用于测试的模型</span>
             <select
               value={testModelId ?? ''}
@@ -466,7 +481,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                 }
               });
             }}
-            className={formSecondaryButtonClass}
+            className={formButtonClass}
           >
             {test.pending ? '测试中…' : '测试连通'}
           </button>
@@ -484,6 +499,29 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           </FormNote>
         )}
       </section>
+
+      <RemoteModelPicker
+        open={pullModelsOpen}
+        client={store.client}
+        endpoint={provider.endpoint}
+        providerId={provider.id}
+        existingIds={provider.models.map((model) => model.id)}
+        testId="settings-provider-models-pull"
+        onClose={() => setPullModelsOpen(false)}
+        onConfirm={(entries: RemoteModelEntry[]) => {
+          patchProvider((entry) => {
+            for (const picked of entries) {
+              // 只补上缺的那几个：用户在浮层里已经看到「已添加」被禁用了，这里再防一次
+              // 是因为两次拉取之间列表可能被别处改过（比如默认模型页新增）。
+              if (entry.models.some((model) => model.id === picked.id)) {
+                continue;
+              }
+              entry.models.push(createModelDraftFromRemote(picked.id));
+            }
+          });
+          setPullModelsOpen(false);
+        }}
+      />
 
       <ConfirmDialog
         open={clearSecretOpen}

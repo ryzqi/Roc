@@ -13,6 +13,8 @@ import type {
   RocHookTrustRequest,
   RtkStatus,
   SchedulerStatus,
+  SettingsListRemoteModelsRequest,
+  SettingsListRemoteModelsResult,
   SettingsSaveRequest,
   SettingsSnapshot,
   TraySummary
@@ -69,6 +71,19 @@ export function setDefaultModel(
   defaultModelId: string | null
 ): Promise<IpcLikeResult<SettingsSnapshot>> {
   return client.api.settings.setDefaultModel({ defaultModelId });
+}
+
+/**
+ * 拉取用户填写的端点上的模型列表（P10）。
+ *
+ * 密钥二选一：`apiKey` 是用户刚输入、还没保存的一次性明文；`providerId` 表示用系统
+ * 钥匙串里已存的那一份。两者都不给也允许——本机推理服务无需凭据。
+ */
+export function listRemoteModels(
+  client: RocClient,
+  input: SettingsListRemoteModelsRequest
+): Promise<IpcLikeResult<SettingsListRemoteModelsResult>> {
+  return client.api.settings.listRemoteModels(input);
 }
 
 export function testProvider(

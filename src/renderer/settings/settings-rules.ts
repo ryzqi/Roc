@@ -701,6 +701,20 @@ export function createModelDraft(): ProviderConfig['models'][number] {
 }
 
 /**
+ * 把拉取到的模型标识变成一行可用的模型（P10）。
+ *
+ * 与 `createModelDraft` 的区别只在两个字段：`id` / `displayName` 都有值。拉取的意义就是
+ * 不用手打标识，所以显示名也直接用标识——不猜「deepseek-chat 应该叫 DeepSeek Chat」，
+ * 用户想改随时能在行里改。
+ *
+ * 能力位（流式/工具调用/图片）保守默认：与手建模型一致（流式 + 工具调用开，图片关）。
+ * 端点不返回这些信息，猜错会让用户以为自己选错了模型，而不是以为默认值不对。
+ */
+export function createModelDraftFromRemote(id: string): ProviderConfig['models'][number] {
+  return { ...createModelDraft(), id, displayName: id };
+}
+
+/**
  * A new provider draft with a unique id.
  *
  * Non-fixed providers keep `credentialRef` pointing at their own secret slot, which is
