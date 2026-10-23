@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
-import type { ChatRunMode } from '../../shared/types';
+import type { ChatRunMode, SettingsSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
-import { useAsyncResource } from '../app/use-async-resource';
-import { useSettingsRevision } from '../shared/settings-events';
+import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
+import { useSettingsRevision, notifySettingsChanged } from '../shared/settings-events';
 import type { RocClient } from '../shared/roc-client';
+import { setDefaultModel } from '../settings/settings-store';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
-import { AssistantComposer, type ComposerSkill } from './composer';
+import { AssistantComposer, type ComposerModel, type ComposerSkill } from './composer';
 import {
   clearAssistantComposerDraft,
   migrateAssistantComposerDraft,
@@ -35,18 +36,21 @@ import { useChatSession } from './use-chat-session';
  *     duplicating a half-write. Stage label arrives with P6; until then only the project name
  *     is shown rather than a guessed stage.
  *
- * ## The model pill
+ * ## The model control moved into the composer
  *
- * The pill (Bot glyph in `--icon-agent`, label, trailing affordance, raised surface) is the
- * header's visual signature, but it is a read-only display rather than a model switcher: the
- * only control it opens is the settings centre. That is a contract reason, not a scope one —
- * `settings.save` is a **whole document**, not a patch (`SettingsSaveRequest`). The settings
- * centre owns a dirty draft of that document and is the only surface that knows which fields
- * the user has already changed; a switcher in the assistant would have to re-send every field
- * it did not load, making it a second writer of a whole-document resource.
+ * The header used to carry a read-only model pill that only opened the settings centre.
+ * P10 moved model switching into the composer's bottom row (next to the run-shape choice),
+ * where 发送 and 模型 sit in the same visual block, and where a user actually chooses them.
  *
- * So the trailing affordance is `Settings2`, not `ChevronDown`: the control really does open
- * the settings centre, and a chevron would promise a menu that does not exist.
+ * The reason the old pill was read-only was real: `settings.save` is a **whole document**
+ * (`SettingsSaveRequest`), so a switcher built on it would have been a second writer of a
+ * whole-document resource. The fix is not to relax that rule but to stop reusing that
+ * channel: `settings.setDefaultModel({ defaultModelId })` writes that one field and returns
+ * the fresh snapshot, so the assistant never has to replay settings it did not load, and an
+ * unsaved draft in the settings centre is not clobbered.
+ *
+ * The header keeps the model *name* read-only in the composer picker's trigger instead — one
+ * control, not two, so the two surfaces cannot disagree about what the default model is.
  *
  * `threadId` is component state and is cleared when the project changes: a thread belongs to
  * one project's conversation, and carrying it across projects would be exactly the leak gate 6
@@ -106,6 +110,19 @@ export function AssistantPanel({
   const settings = useAsyncResource(`assistant:settings:${settingsRevision}`, () => client.api.settings.get(), {
     label: '读取模型设置'
   });
+  /**
+   * 刚刚写成功的快照，用来跨过「写入 → 广播修订号 → 重读」之间的那几帧。
+   *
+   * 资源以修订号为 key（见上），广播一次修订号就等于丢掉当前快照、重新进入 loading；
+   * 不补这一层的话，每次切换默认模型，输入区都会闪一下「模型设置读取中…」。
+   * 写入接口本来就返回整份新快照，用它顶上，等重读回来再交回给资源。
+   */
+  const [writtenSnapshot, setWrittenSnapshot] = useState<SettingsSnapshot | null>(null);
+  useEffect(() => {
+    if (settings.data !== null) {
+      setWrittenSnapshot(null);
+    }
+  }, [settings.data]);
   const [mode, setMode] = useState<ChatRunMode>('chat');
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const currentThreadIdRef = useRef(threadId);
@@ -152,7 +169,33 @@ export function AssistantPanel({
     void session.restoreActiveRun();
   }, [session, threadId]);
 
-  const snapshot = settings.data;
+  const snapshot = settings.data ?? writtenSnapshot;
+  // `useAsyncAction` 的 action 是 `(...args) => client...`：第一个参数才是 client，
+  // hook 会把 `run(...args)` 原样传下去，所以这里先锁住 client。
+  const switchingModel = useAsyncAction(
+    (key: string) => setDefaultModel(client, key),
+    { label: '切换默认模型' }
+  );
+
+  /**
+   * 切换默认模型。
+   *
+   * 不重发整份设置文档（见组件顶部注释）；写成功后广播一次设置修订号，
+   * 让助手的快照、设置中心里那些只读展示以及画布上的其他读方都回到同一份配置。
+   * 失败原因留在选择器里（那里是发起写入的地方）。
+   */
+  const selectDefaultModel = useCallback(
+    (key: string): void => {
+      void (async () => {
+        const next = await switchingModel.run(key);
+        if (next !== null) {
+          setWrittenSnapshot(next);
+          notifySettingsChanged();
+        }
+      })();
+    },
+    [switchingModel]
+  );
   const imageSupport: ImageSupportSnapshot | null = useMemo(
     () =>
       snapshot === null
@@ -191,6 +234,26 @@ export function AssistantPanel({
     }
     return snapshot.defaultModelId;
   }, [settings.status, snapshot]);
+
+  /**
+   * 选择器的选项：所有 provider 下的所有模型，包括停用的（显示为「已停用」而不是隐藏）。
+   *
+   * 停用的模型必须可见：一个模型刚刚被关掉时，隐藏它会让用户以为它被删了；
+   * 后端 `setDefaultModel` 会拒绝停用的模型，而把拒绝原因就近显示在选择器里比藏在设置页好找。
+   */
+  const modelChoices: ComposerModel[] = useMemo(
+    () =>
+      (snapshot?.providers ?? []).flatMap((provider) =>
+        provider.models.map((model) => ({
+          key: buildProviderModelKey(provider.id, model.id),
+          label: model.displayName,
+          providerId: provider.id,
+          providerLabel: provider.name,
+          enabled: provider.enabled && model.enabled
+        }))
+      ),
+    [snapshot]
+  );
 
   const runStatus = session.runState.status;
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
@@ -269,25 +332,14 @@ export function AssistantPanel({
         )}
       </div>
       <div className="flex min-w-0 items-center gap-2">
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="在设置中心配置模型"
-          aria-label="模型设置"
-          data-testid="assistant-model-settings"
-          className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-micro-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-        >
-          <Settings2 size={12} aria-hidden="true" className="shrink-0 text-muted" />
-          <span className="min-w-0 truncate font-medium tracking-tight" title={modelLabel}>{modelLabel}</span>
-        </button>
         <span
-          className="min-w-0 max-w-[35%] truncate text-subtle text-[var(--font-micro-size)]"
+          className="min-w-0 max-w-[45%] truncate text-subtle text-[var(--font-micro-size)]"
           data-testid="assistant-context"
           title={projectName ?? '未进入项目'}
         >
           {stageLabel ?? projectName ?? '未进入项目'}
         </span>
-        <span className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]" data-testid="assistant-message-count">
+        <span className="ml-auto shrink-0 font-mono text-subtle text-[var(--font-micro-size)]" data-testid="assistant-message-count">
           {session.messages.length} 条
         </span>
       </div>
@@ -356,6 +408,15 @@ export function AssistantPanel({
       <AssistantComposer
         mode={mode}
         onModeChange={setMode}
+        model={{
+          label: modelLabel,
+          currentKey: snapshot?.defaultModelId ?? null,
+          choices: modelChoices,
+          pending: switchingModel.pending,
+          error: switchingModel.error,
+          onSelect: selectDefaultModel,
+          onOpenSettings
+        }}
         skills={skills}
         draft={composerDraft}
         onDraftChange={updateComposerDraft}

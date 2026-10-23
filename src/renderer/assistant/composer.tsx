@@ -12,6 +12,7 @@ import {
   type RendererImageAttachment
 } from './image-attachments';
 import { parseSlashSkillCommand } from './slash-skill-command';
+import { ModelPicker } from './model-picker';
 
 /**
  * Composer (T4.5). Written fresh for the new shell (D3: the input area is redone, only the
@@ -39,19 +40,57 @@ import { parseSlashSkillCommand } from './slash-skill-command';
  * request carries `input` / `mode` / `threadId` / `workflowHint` / `taskSource` /
  * `workspacePath` / `shellAllowedCommands` / `attachments` / `explicitSkillIds` and nothing
  * else. A switch that never reaches the backend is a control that lies, so the row carries
- * the one run-shape choice the contract does have (`mode`: 对话 / 任务 / 计划) instead, and
+ * the one run-shape choice the contract does have (`mode`: 对话 / 任务) instead, and
  * capability stays where it is actually enforced — `enabledCapabilities` on the request and
  * the run's own manifest (with the approval cards as the surface that shows it).
  *
  * 联网搜索 in particular is not a switch in this build at all: a run either has the web
  * tools per its manifest or it does not.
+ *
+ * ## 底部一行（P10）
+ *
+ * 旧的底部条是三选一模式 + 「N 个技能可用」；模型切换在助手头部，是一个只能跳设置页的只读
+ * 按钮。现在两者合并到输入框下方的同一行：运行形状、分隔线、默认模型选择器（浮层，见
+ * `model-picker.tsx`）。高度统一取 `--control-height-compact`（28px），卡片的下边缘因此
+ * 是一条齐平的线；选择器吃掉剩余宽度，所以窗口变窄时先被截断的是模型名，而不是按钮。
  */
 
 export type ComposerSkill = { id: string; name: string };
 
+/**
+ * 输入区可以选择的默认模型（P10，从助手头部挪下来）。
+ *
+ * 只带选择器要显示的东西：键（`provider:model`）、显示名、provider 分组名、是否启用。
+ * 数据来自 `settings.get` 的快照，写入走 `settings.setDefaultModel` 这条只改一个字段的窄通道
+ * ——不再像旧头部那样只是「去设置中心」的跳转。
+ */
+export type ComposerModel = {
+  key: string;
+  label: string;
+  providerId: string;
+  providerLabel: string;
+  enabled: boolean;
+};
+
 export type AssistantComposerProps = {
   mode: ChatRunMode;
   onModeChange: (mode: ChatRunMode) => void;
+  /**
+   * 默认模型选择器。
+   *
+   * 读设置期间也照样渲染（选项为空、标签是「读取模型…」）：占位符换成不可点的一行可会让
+   * 「读取中」看起来像「没配置」，而读取失败时用户真正要做的事（去设置页检查 provider）
+   * 需要一个能点开的入口。
+   */
+  model: {
+    label: string;
+    currentKey: string | null;
+    choices: ComposerModel[];
+    pending: boolean;
+    error: string | null;
+    onSelect: (key: string) => void;
+    onOpenSettings: () => void;
+  };
   skills: ComposerSkill[];
   draft: AssistantComposerDraft;
   onDraftChange: (update: AssistantComposerDraftUpdater) => void;
@@ -95,10 +134,17 @@ export type AssistantComposerProps = {
   onSeedConsumed?: (() => void) | undefined;
 };
 
+/**
+ * 输入区只保留两种运行形状（P10）。
+ *
+ * 计划模式从界面上删掉了：它的产物（一份计划）在助手列里没有对应的呈现与继续执行入口，
+ * 选了它等于把一轮运行推进一个界面兑现不了的状态。`chat` 与 `task` 的差别是可见的
+ * ——任务模式的运行会进任务看板，所以这两项留下。共享契约里的 `'plan'` 成员仍被主进程的
+ * 运行快照使用（历史数据、`runExecutionModeSchema`），这里只是不再提供入口。
+ */
 const MODES: Array<{ id: ChatRunMode; label: string }> = [
   { id: 'chat', label: '对话' },
-  { id: 'task', label: '任务' },
-  { id: 'plan', label: '计划' }
+  { id: 'task', label: '任务' }
 ];
 
 const MAX_TEXTAREA_HEIGHT = 200;
@@ -106,6 +152,7 @@ const MAX_TEXTAREA_HEIGHT = 200;
 export function AssistantComposer({
   mode,
   onModeChange,
+  model,
   skills,
   draft,
   onDraftChange,
@@ -426,7 +473,7 @@ export function AssistantComposer({
               event.preventDefault();
               void addFiles(files, 'clipboard');
             }}
-            className="min-h-[2.5rem] min-w-0 flex-1 resize-none bg-transparent text-ink text-[var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60 focus-visible:outline-none"
+            className="min-h-[2.5rem] min-w-0 flex-1 resize-none bg-transparent py-1 text-ink text-[var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60 focus-visible:outline-none"
           />
           <div className="flex shrink-0 flex-col items-end gap-1">
             <div className="flex items-center gap-1">
@@ -489,56 +536,72 @@ export function AssistantComposer({
           </div>
         </div>
 
-      <div className="flex items-center gap-2 border-t border-line-soft pt-2">
-        <div
-          role="radiogroup"
-          aria-label="运行模式"
-          className="flex items-center gap-0.5"
-          data-testid="assistant-composer-mode"
-          onKeyDown={(event) => {
-            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-            event.preventDefault();
-            const currentIndex = MODES.findIndex((item) => item.id === mode);
-            const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-            const nextIndex = (currentIndex + direction + MODES.length) % MODES.length;
-            const nextMode = MODES[nextIndex];
-            if (nextMode === undefined) return;
-            onModeChange(nextMode.id);
-            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]')[nextIndex]?.focus();
-          }}
-        >
-          {MODES.map((item) => {
-            const selected = item.id === mode;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                tabIndex={selected ? 0 : -1}
-                disabled={inputLocked}
-                onClick={() => onModeChange(item.id)}
-                data-testid={`assistant-composer-mode-${item.id}`}
-                className={
-                  selected
-                    ? 'h-6 rounded-control bg-accent-soft px-2 text-ink active:bg-[var(--accent-soft-strong)]'
-                    : 'h-6 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
-                }
-              >
-                <span className="text-[var(--font-micro-size)]">{item.label}</span>
-              </button>
-            );
-          })}
+        {/* 底部一行（P10）：运行形状（对话 / 任务）+ 默认模型选择器（浮层）+ `/skill` 摘要。
+
+            旧版这里是「对话 / 任务 / 计划」三选一，而模型只是头部一个只读链接；现在
+            模型切换就在输入框下方，选择器和模式条的控件高度一致（都是
+            `--control-height-compact`），底线对齐后输入卡片的下缘看起来是一条完整的横线。 */}
+        <div className="flex items-center gap-2 border-t border-line-soft pt-2">
+          <div
+            role="radiogroup"
+            aria-label="运行模式"
+            className="flex shrink-0 items-center gap-0.5"
+            data-testid="assistant-composer-mode"
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+              event.preventDefault();
+              const currentIndex = MODES.findIndex((item) => item.id === mode);
+              const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+              const nextIndex = (currentIndex + direction + MODES.length) % MODES.length;
+              const nextMode = MODES[nextIndex];
+              if (nextMode === undefined) return;
+              onModeChange(nextMode.id);
+              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]')[nextIndex]?.focus();
+            }}
+          >
+            {MODES.map((item) => {
+              const selected = item.id === mode;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  tabIndex={selected ? 0 : -1}
+                  disabled={inputLocked}
+                  onClick={() => onModeChange(item.id)}
+                  data-testid={`assistant-composer-mode-${item.id}`}
+                  className={
+                    selected
+                      ? 'flex h-[var(--control-height-compact)] items-center rounded-control bg-accent-soft px-2 text-ink active:bg-[var(--accent-soft-strong)]'
+                      : 'flex h-[var(--control-height-compact)] items-center rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                  }
+                >
+                  <span className="text-[var(--font-micro-size)]">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="h-4 w-px shrink-0 bg-line" aria-hidden="true" />
+          <ModelPicker
+            choices={model.choices}
+            currentKey={model.currentKey}
+            label={model.label}
+            pending={model.pending}
+            error={model.error}
+            onOpenSettings={model.onOpenSettings}
+            onSelect={model.onSelect}
+          />
+          {slashCommand.kind !== 'ok' ? null : (
+            <span
+              className="max-w-[40%] min-w-0 shrink-0 truncate text-subtle text-[var(--font-micro-size)]"
+              data-testid="assistant-composer-skills"
+              title={slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
+            >
+              技能：{slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
+            </span>
+          )}
         </div>
-        {slashCommand.kind !== 'ok' ? null : (
-          <span className="text-subtle text-[var(--font-micro-size)]" data-testid="assistant-composer-skills">
-            技能：{slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
-          </span>
-        )}
-        <span className="ml-auto text-subtle text-[var(--font-micro-size)]">
-          {skills.length === 0 ? '' : `${skills.length} 个技能可用`}
-        </span>
-      </div>
       </div>
     </div>
   );

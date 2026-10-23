@@ -5,7 +5,7 @@ import type { AsyncResource } from '../app/use-async-resource';
 import { useAsyncResource } from '../app/use-async-resource';
 import type { RocClient } from '../shared/roc-client';
 import { getIndexStatus, getSettingsSnapshot, saveHookConfig, saveIndexSettings, saveSettings } from './settings-store';
-import { notifySettingsChanged } from '../shared/settings-events';
+import { notifySettingsChanged, useSettingsRevision } from '../shared/settings-events';
 import {
   cloneDraft,
   diffDraft,
@@ -83,7 +83,16 @@ export type SettingsStore = {
 };
 
 export function useSettingsStore(client: RocClient, projectId: string | null): SettingsStore {
-  const snapshotResource = useAsyncResource('settings:snapshot', () => getSettingsSnapshot(client), {
+  /**
+   * 资源键带上修订号：这个中心不是唯一写者。
+   *
+   * 实力器的模型选择器走 `settings.setDefaultModel`（只改一个字段的窄通道），技能的启停、
+   * MCP 服务的新增/删除也会改写快照里的 `skills` / `mcpServers`。写成功的一方广播修订号，
+   * 这里重新读一次快照，否则**基准文档**停在旧值上，用户下一次保存任何一个不相关的字段
+   * 就会把别人的写入改回去（整份文档写入，F22）。
+   */
+  const settingsRevision = useSettingsRevision();
+  const snapshotResource = useAsyncResource(`settings:snapshot:${settingsRevision}`, () => getSettingsSnapshot(client), {
     label: '读取设置'
   });
   const indexResource = useAsyncResource(
@@ -125,6 +134,28 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
       return;
     }
     if (baselineSnapshotRef.current !== null) {
+      /**
+       * 基准已有，但快照变了：说明是**别人**写的（修订号变了才会重新读）。
+       *
+       * 只接上用户没动过的那个字段，不重建草稿——重建会删掉十一个分区里的未保存修改，
+       * 而不接则会用旧基准把别人的写入改回去。两条都不能选，所以分路径判断：
+       * 草稿里 `defaultModelId` 仍是基准值，就跟着新基准走；已经改过就以用户为准。
+       *
+       * 窄通道目前只能改 `defaultModelId`，其余字段（模型列表、权限、技能/MCP 列表）仍然
+       * 只由这个中心写，所以不需要更通用的三方合并。
+       */
+      const baseline = baselineSnapshotRef.current;
+      if (loadedSnapshot.defaultModelId !== baseline.defaultModelId) {
+        setState((current) =>
+          current === null || current.draft.defaultModelId !== baseline.defaultModelId
+            ? current
+            : {
+                base: { ...current.base, defaultModelId: loadedSnapshot.defaultModelId },
+                draft: { ...current.draft, defaultModelId: loadedSnapshot.defaultModelId }
+              }
+        );
+      }
+      baselineSnapshotRef.current = loadedSnapshot;
       return;
     }
     /**

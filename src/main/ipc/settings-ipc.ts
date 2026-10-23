@@ -5,6 +5,7 @@ import type {
   ProviderTestRequest,
   SettingsSaveHookConfigRequest,
   SettingsSaveRequest,
+  SettingsSetDefaultModelRequest,
   SettingsSnapshot,
   SettingsTrustHookRequest,
   SkillSnapshot
@@ -54,6 +55,15 @@ export function registerSettingsIpc(
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, request: ProviderTestRequest) =>
     wrapIpc(() => providerRuntimeService.testProvider(request))
+  );
+  // 「换默认模型」 的窄通道：只写 `defaultModelId`，其余字段原样保留。
+  // 复用它的是助手的输入区（不想为了一个字段重发整份设置文档），以及任何只想
+  // 改默认模型而手里没有完整草稿的调用方。返回整份快照，调用方据此刷新。
+  timedHandle(ipcChannels.settingsSetDefaultModel, (_event, request: SettingsSetDefaultModelRequest) =>
+    wrapIpc(async () => {
+      configService.setDefaultModel(request.defaultModelId);
+      return buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls, hooks);
+    })
   );
   timedHandle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
     wrapIpc(async () => {

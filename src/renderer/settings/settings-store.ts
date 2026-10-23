@@ -56,6 +56,21 @@ export function saveSettings(client: RocClient, request: SettingsSaveRequest): P
   return client.api.settings.save(request);
 }
 
+/**
+ * 「换默认模型」 的窄写路径：只改 `defaultModelId`，不重发整份设置文档。
+ *
+ * `settings.save` 是整份文档写入（F22），所以任何只想改一个字段的地方（当前是助手的
+ * 输入区）如果复用整份保存，就必须回放它自己没编辑过的字段，等于第二个整份文档写者。
+ * 这个通道由主进程直接调 `configService.setDefaultModel`，并返回刷新后的快照，
+ * 调用方据此更新显示且不影响设置中心里可能存在的未保存草稿。
+ */
+export function setDefaultModel(
+  client: RocClient,
+  defaultModelId: string | null
+): Promise<IpcLikeResult<SettingsSnapshot>> {
+  return client.api.settings.setDefaultModel({ defaultModelId });
+}
+
 export function testProvider(
   client: RocClient,
   input: { providerId: string; modelId: string }

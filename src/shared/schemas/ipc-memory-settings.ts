@@ -495,6 +495,18 @@ export const providerSecretSetRequestSchema = z
   .object({ providerId: z.string(), plaintext: z.string() })
   .strict();
 
+/**
+ * 「换一个默认模型」 的最小请求。
+ *
+ * 存在的原因是 `settings.save` 写的是**整份文档**（F22）：助手的输入区只想改一个字段，
+ * 如果它复用整份保存，就必须把十二个设置分区里用户可能已经改过的字段一起重发，
+ * 那等于第二个整份文档写者。这里只接受一个 `provider:model` 键（或 null 清空），
+ * 后端只改 `defaultModelId` 并原样保留其余字段。
+ */
+export const settingsSetDefaultModelRequestSchema = z
+  .object({ defaultModelId: z.string().trim().min(1).nullable() })
+  .strict();
+
 export const hostIntegrationStatusSchema = z
   .object({
     startup: z

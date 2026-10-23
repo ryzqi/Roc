@@ -19,6 +19,7 @@ import {
   settingsDocumentSchema,
   settingsSaveHookConfigRequestSchema,
   settingsSaveRequestSchema,
+  settingsSetDefaultModelRequestSchema,
   settingsSnapshotSchema,
   settingsTrustHookRequestSchema,
   shortcutsConfigSchema
@@ -91,6 +92,8 @@ type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = Omit<ParsedSettingsSnapshot, 'providers'> & { providers: ProviderConfig[] };
 type ParsedSettingsSaveRequest = z.infer<typeof settingsSaveRequestSchema>;
 export type SettingsSaveRequest = Omit<ParsedSettingsSaveRequest, 'providers'> & { providers: ProviderConfig[] };
+/** 「换默认模型」 只改一个字段，不是整份文档保存（见 schema 注释）。 */
+export type SettingsSetDefaultModelRequest = z.infer<typeof settingsSetDefaultModelRequestSchema>;
 export type SettingsSaveHookConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
 export type SettingsTrustHookRequest = z.infer<typeof settingsTrustHookRequestSchema>;
 export type ProviderSecretSetRequest = z.infer<typeof providerSecretSetRequestSchema>;
