@@ -51,14 +51,11 @@ export class RTKBinaryManager {
   }
 
   private resolvePlatformBinary(): PlatformBinary | null {
-    const arch = this.arch();
-    if (arch === 'x64') {
-      return { platformDir: 'darwin-x64', binaryName: 'rtk' };
+    // 只随包 darwin-arm64/rtk；别的架构返回 null，由调用方降级。
+    if (this.arch() !== 'arm64') {
+      return null;
     }
-    if (arch === 'arm64') {
-      return { platformDir: 'darwin-arm64', binaryName: 'rtk' };
-    }
-    return null;
+    return { platformDir: 'darwin-arm64', binaryName: 'rtk' };
   }
 
   private resourceBaseDir(): string {

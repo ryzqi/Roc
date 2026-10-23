@@ -1110,6 +1110,28 @@ CREATE TRIGGER research_projects_origin_complete_update
         WHEN ((NEW.origin_project_id IS NULL) = 1) + ((NEW.origin_artifact_id IS NULL) = 1) + ((NEW.origin_version IS NULL) = 1) NOT IN (0, 3)
         BEGIN SELECT RAISE(ABORT, 'research_project_origin_invalid'); END;
 `
+  },
+  {
+    version: 2,
+    name: 'research_derivation_generation',
+    // 派生代际标记（提案 §8「无向后兼容」）：记录本库已完成到哪一代派生契约。
+    // 只是开关，不存派生数据；切换本身在 document-repository 的事务里完成。
+    sql: `
+CREATE TABLE research_generations (
+        name TEXT PRIMARY KEY,
+        contract_version INTEGER NOT NULL,
+        switched_at TEXT NOT NULL
+      );
+`
+  },
+  {
+    version: 3,
+    name: 'research_evidence_reference_state',
+    // 证据引用失效（提案 §8.4）：旧代际或重新解析后被换代删除的块，其证据行打上失效标记。
+    // 只加一列 NULL —— 追加式变化，旧库可直接升级。
+    sql: `
+ALTER TABLE research_evidence ADD COLUMN invalidated_at TEXT;
+`
   }
 ];
 

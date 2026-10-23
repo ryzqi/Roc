@@ -32,7 +32,7 @@ Tectonic + TeX bundle）**。本 ADR 用实测数据回答后者，并记录前�
 
 1. **不全面采用 Typst。** LaTeX 主链（claims → `latex-source.ts` 确定性重算 → Tectonic → PDFium）
    不动。全面替换的收益与代价完全不成比例：
-   - 省下的是 51.5 MB 二进制 + 34 MB bundle，而工具链整体 2.3 GB（Python + docling + 模型占 99%），
+   - 省下的是 51.5 MB 二进制 + 34 MB bundle，而工具链整体约 2.5 GB（Python + MinerU + 模型占 99%），
      **节省 3.7% 的重量，换来重写整条导出合同**（`docs/research-exports.md` 的槽位、
      `citation-integrity.ts`、模板导入、BibTeX 闸门全部只对 LaTeX 成立）；
    - 投稿生态只收 `.tex`：arXiv、绝大多数期刊的系统都要求 LaTeX 源。Typst 全面替代意味着

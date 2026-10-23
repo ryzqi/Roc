@@ -302,9 +302,6 @@ importers:
       sqlite-vec-darwin-arm64:
         specifier: 0.1.9
         version: 0.1.9
-      sqlite-vec-darwin-x64:
-        specifier: 0.1.9
-        version: 0.1.9
 
 packages:
 

@@ -4,35 +4,24 @@ version = "0.1.0"
 description = "Roc 科研工具运行时"
 requires-python = ">=3.12.15,<3.13"
 dependencies = [
-  "docling==2.141.0",
-  "docling-ibm-models==4.0.4",
+  # 唯一文档解析引擎。`[torch]` 是必需 extras：默认档位的小模型走 Torch/MPS，
+  # 不带它 MinerU 只会装纯 Python 骨架（P0 实测）。
+  "mineru[torch]==4.0.12",
+  # MinerU 的 Torch 扩展要求 >=5.10.1,<6；钉到实测通过的 5.20.2。
+  # 不能沿用旧栈的 `<4.52`：那是 Docling 的性能回退约束，与 MinerU 无冲突关系。
+  "transformers==5.20.2",
+  # 预检与 PDF 单页渲染（展示用途，不构成第二条解析链）。
   "pypdfium2==5.14.0",
-  "ocrmac==1.0.1",
   "matplotlib==3.11.2",
   "pandas>=2.2,<3",
   "scipy>=1.13,<2",
-  "torch==2.14.1; platform_machine == 'arm64'",
-  "torch==2.2.2; platform_machine == 'x86_64'",
-  "torchvision==0.17.2; platform_machine == 'x86_64'",
-  "transformers==4.51.3; platform_machine == 'x86_64'",
-  "numpy==1.26.4; platform_machine == 'x86_64'",
 ]
 
 [tool.uv]
 package = false
 build-constraint-dependencies = ["setuptools==84.2.1"]
-# 这一轮只跟非 major 版本。下面几个是上游“多放开了一个大版本”的传递依赖
-# （docling-ibm-models 现在允许 transformers<6），不钉上限它们会自动跳大版本。
-#
-# `transformers<4.52` 不只是“不跟 major”：实测 4.57.6 让 docling 的单页解析从 57s
-# 涨到 619s（同一个 worker、同一张 300dpi 页面、同一份模型缓存），
-# 而 4.51.3 回到 57s。在找到上游原因之前，不能把它发出去。
-constraint-dependencies = ["transformers<4.52", "python-dateutil<3", "soupsieve<3"]
-environments = [
-  "sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "sys_platform == 'darwin' and platform_machine == 'x86_64'",
-]
-required-environments = [
-  "sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "sys_platform == 'darwin' and platform_machine == 'x86_64'",
-]
+# 只钉上游「多放开了一个大版本」的传递依赖，避免裸锁自动跳 major。
+constraint-dependencies = ["python-dateutil<3", "soupsieve<3"]
+# 仅 Apple Silicon：Intel 构建、Rosetta 与旧架构钉版全部移除（proposal §3、§4）。
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]

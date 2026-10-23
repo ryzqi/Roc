@@ -130,7 +130,7 @@ export async function verifyManifest(root: string): Promise<Manifest> {
   if ((await pathInfo(marker))?.isSymbolicLink()) fail('research_toolchain_manifest_symlink');
   const manifest = decodeJson<Manifest>(await readFile(marker, 'utf8'), 'research_toolchain_manifest_corrupt');
   if (manifest.schemaVersion !== 1 || manifest.platform !== 'darwin'
-      || (manifest.architecture !== 'arm64' && manifest.architecture !== 'x64')) {
+      || manifest.architecture !== 'arm64') {
     fail('research_toolchain_manifest_invalid');
   }
   if (!sameEntries(await inventory(root), manifest.entries)) fail('research_toolchain_integrity_mismatch');

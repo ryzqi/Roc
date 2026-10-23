@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   researchDocumentAssetRequestSchema, researchDocumentIdRequestSchema, researchDocumentImportRequestSchema,
   researchDocumentListRequestSchema, researchDocumentParseRequestSchema, researchDocumentParseSchema,
+  researchDocumentStartParseRequestSchema, researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema,
   researchDocumentRunSchema, researchDocumentSchema, researchDocumentSourceRequestSchema
 } from '../../../shared/schemas/research-documents';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
@@ -13,7 +14,8 @@ const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),
   list: descriptor('research.document.list', researchDocumentListRequestSchema, researchDocumentSchema.array()),
   get: descriptor('research.document.get', researchDocumentIdRequestSchema, researchDocumentSchema),
-  parse: descriptor('research.document.parse', researchDocumentIdRequestSchema, researchDocumentSchema),
+  parse: descriptor('research.document.parse', researchDocumentStartParseRequestSchema, researchDocumentSchema),
+  parseMany: descriptor('research.document.parseMany', researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema),
   cancel: descriptor('research.document.cancel', researchDocumentParseRequestSchema, researchDocumentSchema),
   runs: descriptor('research.document.runs', researchDocumentIdRequestSchema, researchDocumentRunSchema.array()),
   content: descriptor('research.document.content', researchDocumentParseRequestSchema, researchDocumentParseSchema),
@@ -46,10 +48,26 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
   register(capabilities.import, (input) => service.import(input));
   register(capabilities.list, (input) => repository.list(input.libraryItemId));
   register(capabilities.get, (input) => repository.get(input.documentId));
-  register(capabilities.parse, (input) => service.parse(input.documentId));
+  register(capabilities.parse, (input) => service.parse(input.documentId, input.tier));
+  register(capabilities.parseMany, (input) => service.parseMany(input));
   register(capabilities.cancel, (input) => service.cancel(input.documentId, input.parseId));
   register(capabilities.runs, (input) => repository.runs(input.documentId));
-  register(capabilities.content, (input) => service.parsed(input.documentId, input.parseId));
+  register(capabilities.content, (input) => {
+    try {
+      return service.parsed(input.documentId, input.parseId);
+    } catch (error) {
+      // 旧代际/已撤销的结果：明确告诉消费者「引用待重建」，不冒充 not_ready/not_found。
+      if (error instanceof Error && error.message === 'research_document_parse_superseded') {
+        throw new RocDomainError({
+          code: 'research_document_parse_superseded',
+          message: '该引用基于上一代解析结果，已随解析引擎切换失效；原文仍可打开，重新解析后可重新定位。',
+          category: 'conflict',
+          retryable: false
+        });
+      }
+      throw error;
+    }
+  });
   register(capabilities.source, async (input) => {
     const resource = await service.source(input);
     const html = resource.mediaType === 'text/html';

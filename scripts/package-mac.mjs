@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import { projectRoot, packageJsonPath } from './lib/electron-version.mjs';
 import { assertLiveResearchToolchainForPackaging, createPackagingEnvironment, runCommand } from './lib/native-packaging.mjs';
 
-if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) {
-  throw new Error('package:mac requires an arm64 or x64 macOS host with a matching installed Electron distribution.');
+// 只发 Apple Silicon：MinerU 的 MPS/llama.cpp 后端与随包 Python 都只有 arm64。
+// 在接受 x64 的宿主上打包会产出一个能启动但解析必然失败的 .app。
+if (process.platform !== 'darwin' || process.arch !== 'arm64') {
+  throw new Error('package:mac requires an arm64 macOS host.');
 }
 if (process.argv.length > 2) {
   throw new Error('package:mac builds the current Mac architecture and does not accept extra arguments.');
@@ -17,15 +19,15 @@ assertLiveResearchToolchainForPackaging();
 const env = createPackagingEnvironment();
 const { version } = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 const releaseDir = join(projectRoot, 'release');
-const appPath = join(releaseDir, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Roc.app');
+const appPath = join(releaseDir, 'mac-arm64', 'Roc.app');
 for (const artifactPath of [
-  join(releaseDir, `Roc-${version}-mac-${process.arch}.zip`),
-  join(releaseDir, `Roc-${version}-mac-${process.arch}.zip.sha256`),
-  join(releaseDir, `Roc-${version}-mac-${process.arch}.dmg`),
-  join(releaseDir, `Roc-${version}-mac-${process.arch}.dmg.sha256`),
+  join(releaseDir, `Roc-${version}-mac-arm64.zip`),
+  join(releaseDir, `Roc-${version}-mac-arm64.zip.sha256`),
+  join(releaseDir, `Roc-${version}-mac-arm64.dmg`),
+  join(releaseDir, `Roc-${version}-mac-arm64.dmg.sha256`),
   join(releaseDir, 'builder-debug.yml'),
   join(releaseDir, 'builder-effective-config.yaml'),
-  join(releaseDir, `mac-${process.arch}-build.json`)
+  join(releaseDir, 'mac-arm64-build.json')
 ]) {
   rmSync(artifactPath, { force: true });
 }
@@ -39,9 +41,9 @@ function run(command, args) {
 
 run('pnpm', ['build']);
 run('pnpm', ['check:renderer-chunks']);
-run('pnpm', ['exec', 'electron-builder', '--mac', '--dir', `--${process.arch}`, '--publish', 'never', '--config', join(projectRoot, 'electron-builder.yml')]);
+run('pnpm', ['exec', 'electron-builder', '--mac', '--dir', '--arm64', '--publish', 'never', '--config', join(projectRoot, 'electron-builder.yml')]);
 run(process.execPath, [join(projectRoot, 'scripts', 'smoke-mac.mjs'), appPath]);
 for (const metadataPath of [join(releaseDir, 'builder-debug.yml'), join(releaseDir, 'builder-effective-config.yaml')]) {
   rmSync(metadataPath, { force: true });
 }
-console.log(JSON.stringify({ arch: process.arch, appPath }, null, 2));
+console.log(JSON.stringify({ arch: 'arm64', appPath }, null, 2));

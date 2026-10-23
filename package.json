@@ -9,8 +9,7 @@
     "darwin"
   ],
   "cpu": [
-    "arm64",
-    "x64"
+    "arm64"
   ],
   "main": "dist/main/index.js",
   "scripts": {
@@ -42,6 +41,7 @@
     "smoke:performance": "node scripts/smoke-performance.mjs",
     "smoke:electron": "node scripts/smoke-electron.mjs --full",
     "verify:native-packaging": "node scripts/verify-native-packaging.mjs",
+    "verify:arm64-only": "node scripts/verify-arm64-only.mjs",
     "verify:paths": "node scripts/verify-paths.mjs",
     "sync:builtin-skills": "node scripts/sync-builtin-skills.mjs",
     "sync:ripgrep": "node scripts/fetch-ripgrep.mjs"
@@ -65,8 +65,7 @@
     "zod": "4.6.7"
   },
   "optionalDependencies": {
-    "sqlite-vec-darwin-arm64": "0.1.9",
-    "sqlite-vec-darwin-x64": "0.1.9"
+    "sqlite-vec-darwin-arm64": "0.1.9"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

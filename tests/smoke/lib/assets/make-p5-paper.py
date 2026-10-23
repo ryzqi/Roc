@@ -3,17 +3,17 @@ r"""Regenerates `p5-paper.pdf` — the parse fixture for the P5 acceptance gates
 Why a committed PDF instead of a generated one: gate 1 asserts that a real
 document parse yields a heading, at least one **formula** and at least one
 **table**, and the only honest way to assert that is to feed the real pipeline
-(`docling`, via `resources/research-runtime/worker.py`) a document that contains
+(`MinerU`, via `resources/research-runtime/worker.py`) a document that contains
 them. A PDF written by hand as bytes cannot guarantee that, and a fixture that
 silently degrades to "paragraphs only" would turn the gate into a check that a
 parse returns *something*.
 
 Measured with the pinned toolchain (`.runtime/research-toolchain/darwin-arm64`,
-docling 2.126.0) and the pinned models: one page, ~2 minutes on CPU, output
-blocks **heading → paragraph → paragraph → formula → table → paragraph → heading →
-paragraph** with locators `pages 1; #/texts/N` and `pages 1; #/tables/0`. The
-`formula` block carries LaTeX extracted by CodeFormulaV2 (`\frac`, `\sum`), which
-is what `reader-block-formula` renders.
+MinerU 4.0.12) and the pinned models: one page, output blocks are
+**heading → paragraph → paragraph → formula → table → paragraph → heading →
+paragraph**, each with its own locator. The `formula` block carries LaTeX
+exported by MinerU's formula model (`\frac`, `\sum`), which is what
+`reader-block-formula` renders.
 
 Run (any Python with matplotlib; the toolchain interpreter works):
 
@@ -26,7 +26,7 @@ inline in a sentence is a text region and the table needs real cell borders."""
 
 # The runtime is the toolchain interpreter (see the docstring); this file is never
 # bundled or imported by the app, so a checker pointed at the workspace interpreter
-# cannot resolve matplotlib/docling and that is an environment fact, not a defect —
+# cannot resolve matplotlib/MinerU and that is an environment fact, not a defect —
 # the same situation as `resources/research-runtime/worker.py`.
 # pyright: reportMissingImports=false
 

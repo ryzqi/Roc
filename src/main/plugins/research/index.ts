@@ -52,6 +52,7 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
 import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
+import { researchParseContractVersion } from '../../../shared/schemas/research-production';
 import { ResearchProseLintService } from './prose-lint-service';
 import { registerResearchProseCapabilities, researchProseCapabilities } from './prose-lint-capabilities';
 import { ResearchLibraryService } from './library-service';
@@ -175,6 +176,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
+      // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
+      // 否则用户选的解析配置每次重启都会丢。
+      toolchain.attachModelConfig(context.config);
       const db = context.database.getConnection();
       loadResearchVectorExtension(db);
       repository = new ResearchRepository(db);
@@ -215,7 +219,12 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
       researchRepository.documents.recover();
-      documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null);
+      // 派生代际切换（提案 §8）：旧代际结果一律不读，文档回到“有原文、无结果”。
+      // 必须放在 `documents` 服务构造前：切换后任何 `current_parse_id` 都不可能指向旧块。
+      if (researchRepository.documents.switchDerivationGeneration(researchParseContractVersion)) {
+        context.logger.info('research_derivation_generation_switched', { contractVersion: researchParseContractVersion });
+      }
+      documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
       const effects = new ResearchProductionEffectService(researchRepository, new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString()),
         researchExperiments, researchFigures, researchTemplates, researchExports);

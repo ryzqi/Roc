@@ -25,8 +25,8 @@ if (process.env.NODE_USE_ENV_PROXY !== '1' && proxyEnvNames.some((name) => (proc
 /**
  * 重新拉取随包分发的 ripgrep 二进制。
  *
- * 为什么是脚本而不是 `pnpm add @vscode/ripgrep`：Roc 只分发 darwin arm64/x64，二进制必须
- * 与 `electron-builder.yml` 的 `darwin-${arch}` 过滤一一对应，且升级时要同时记录版本、上游
+ * 为什么是脚本而不是 `pnpm add @vscode/ripgrep`：Roc 只分发 darwin arm64，二进制必须
+ * 与 `electron-builder.yml` 的 `darwin-arm64` 过滤一一对应，且升级时要同时记录版本、上游
  * 网址、许可证与 SHA-256（README 的「外部集成」是这些事实的唯一登记处）。npm 包会把工具链
  * 的完整性交给第三方 postinstall，这里改为对齐 `resources/research-runtime/tools.lock.json`
  * 的做法：锁定文件是真理源，脚本只负责按锁定文件取物并核对。

@@ -7,7 +7,8 @@ import type {
   ResearchDocumentRun,
   ResearchEvidence,
   ResearchLibraryItem,
-  ResearchLiterature
+  ResearchLiterature,
+  ResearchParseTier
 } from '../../shared/types';
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
@@ -30,6 +31,7 @@ import {
   listEvidence,
   listLibrary,
   parseDocument,
+  parseDocuments,
   setLibraryCitationKey,
   upsertKnowledgeDocument,
   writeWorkspaceText
@@ -119,7 +121,13 @@ export type LiteratureStore = {
     citationKey: string;
   }) => Promise<LiteratureImportOutcome>;
   addPdfToItem: (input: { sourcePath: string; libraryItemId: string }) => Promise<LiteratureImportOutcome>;
-  startParse: (documentId: string) => Promise<boolean>;
+  startParse: (documentId: string, tier?: ResearchParseTier | null) => Promise<boolean>;
+  /**
+   * 批量重解析（提案 §8.5）：用户换了解析模型/档位后，显式把待重解析的文档一次性重跑。
+   * `documentIds` 传 null 表示“全部待重解析的”，由后端枚举，不在前端拼一份会过期的列表。
+   * 返回失败项而不是整体失败：一篇坏文件不该让其余文档也跟着不解析。
+   */
+  startParseMany: (input: { documentIds: string[] | null; tier: ResearchParseTier | null }) => Promise<{ ok: number; failed: number } | null>;
   /**
    * The document whose parse this store started and has not seen finish.
    *
@@ -466,10 +474,10 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    * re-read.
    */
   const startParse = useCallback(
-    async (documentId: string): Promise<boolean> => {
+    async (documentId: string, tier: ResearchParseTier | null = null): Promise<boolean> => {
       setParseInFlight(documentId);
       setActionError(null);
-      const settled = parseDocument(client, documentId)
+      const settled = parseDocument(client, documentId, tier)
         .then((result) => {
           if (!result.ok) {
             setActionError(result.error.message);
@@ -503,6 +511,34 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       return true;
     },
     [client, reloadDocuments, runAction]
+  );
+
+  /**
+   * 批量重解析。与 `startParse` 不同，这里**等待**整批结束：批量是一次显式操作，
+   * 用户要的是一份“成功 N 篇、失败 M 篇”的交代，而不是又一个看不见进度的按钮。
+   * 单篇的错误不抛出去——后端已经逐篇隔离，这里只统计。
+   */
+  const startParseMany = useCallback(
+    async (input: { documentIds: string[] | null; tier: ResearchParseTier | null }) => {
+      setActionError(null);
+      try {
+        const result = await parseDocuments(client, input);
+        if (!result.ok) {
+          setActionError(result.error.message);
+          return null;
+        }
+        if (result.data.failed.length > 0) {
+          setActionError(`${result.data.failed.length} 篇解析失败：${result.data.failed[0].error}`);
+        }
+        return { ok: result.data.documents.length, failed: result.data.failed.length };
+      } catch (error: unknown) {
+        setActionError(error instanceof Error ? error.message : String(error));
+        return null;
+      } finally {
+        reloadDocuments();
+      }
+    },
+    [client, reloadDocuments]
   );
 
   const loadDocumentContent = useCallback(
@@ -681,6 +717,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     addPdfToNewItem,
     addPdfToItem,
     startParse,
+    startParseMany,
     cancelParse: cancelParseAction,
     loadDocumentContent,
     parseInFlight,

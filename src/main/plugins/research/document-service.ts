@@ -4,15 +4,16 @@ import { basename, dirname, extname, isAbsolute, join, relative } from 'node:pat
 import type { z } from 'zod';
 import type {
   researchDocumentAssetRequestSchema, researchDocumentImportRequestSchema, researchDocumentParseSchema, researchDocumentSourceRequestSchema
-} from '../../../shared/schemas/research-documents';
-import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
+} from '../../../shared/schemas/research-documents';import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
+import type { ResearchParseTier } from '../../../shared/schemas/research-production';
 import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes } from './document-files';
 import type { ResearchDocument } from './document-repository';
+import type { ResearchParseBudget } from './parse-budget';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath, researchWorkspace } from './research-files';
 
-type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography'>;
+type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography' | 'defaultParseOptions'>;
 type ImportTask = { controller: AbortController; promise: Promise<ResearchDocument> };
 type ParseTask = ImportTask & { parseId: string };
 
@@ -21,7 +22,8 @@ export class ResearchDocumentService {
   private readonly parses = new Map<string, ParseTask>();
   private closed = false;
 
-  constructor(private readonly repository: ResearchRepository, private readonly tools: DocumentTools, private readonly rootPath: string | null) {}
+  constructor(private readonly repository: ResearchRepository, private readonly tools: DocumentTools, private readonly rootPath: string | null,
+    private readonly budget: ResearchParseBudget | null = null) {}
 
   async import(request: z.infer<typeof researchDocumentImportRequestSchema>): Promise<ResearchDocument> {
     this.requireOpen();
@@ -34,17 +36,36 @@ export class ResearchDocumentService {
     finally { this.tasks.delete(task); }
   }
 
-  async parse(documentId: string): Promise<ResearchDocument> {
+  async parse(documentId: string, tier: ResearchParseTier | null = null): Promise<ResearchDocument> {
     this.requireOpen();
     const active = this.parses.get(documentId);
     if (active !== undefined) return await active.promise;
     const parseId = `parse_${randomUUID()}`;
     const controller = new AbortController();
-    const task: ParseTask = { parseId, controller, promise: this.parseFile(documentId, parseId, controller.signal) };
+    const task: ParseTask = { parseId, controller, promise: this.parseFile(documentId, parseId, controller.signal, tier) };
     this.parses.set(documentId, task);
     this.tasks.add(task);
     try { return await task.promise; }
     finally { this.tasks.delete(task); if (this.parses.get(documentId) === task) this.parses.delete(documentId); }
+  }
+
+  /**
+   * 批量重解析（提案 §8.5）。串行执行：共享解析预算并发为 1，并行只会把同一份内存竞态
+   * 推到更晚失败。单个文档失败不影响其余文档，失败项连同错误码一起回给调用方。
+   */
+  async parseMany(input: { documentIds: string[] | null; tier: ResearchParseTier | null }): Promise<{ documents: ResearchDocument[]; failed: Array<{ documentId: string; error: string }> }> {
+    this.requireOpen();
+    const targets = input.documentIds === null
+      ? this.repository.documents.needsReparse().map((document) => document.id)
+      : input.documentIds;
+    const documents: ResearchDocument[] = [];
+    const failed: Array<{ documentId: string; error: string }> = [];
+    for (const documentId of targets) {
+      if (this.closed) throw new Error('research_documents_closed');
+      try { documents.push(await this.parse(documentId, input.tier)); }
+      catch (error) { failed.push({ documentId, error: failureCode(error) }); }
+    }
+    return { documents, failed };
   }
 
   cancel(documentId: string, parseId: string): ResearchDocument {
@@ -125,7 +146,7 @@ export class ResearchDocumentService {
     } finally { if (!persisted) await rm(directory, { recursive: true, force: true }); }
   }
 
-  private async parseFile(documentId: string, parseId: string, signal: AbortSignal): Promise<ResearchDocument> {
+  private async parseFile(documentId: string, parseId: string, signal: AbortSignal, tier: ResearchParseTier | null): Promise<ResearchDocument> {
     const document = this.repository.documents.get(documentId);
     this.repository.documents.begin(documentId, parseId);
     let directory: string | null = null;
@@ -140,7 +161,15 @@ export class ResearchDocumentService {
       directory = job;
       const output = join(job, 'output');
       const sourcePath = await researchPath(root, this.repository.documents.sourcePath(documentId));
-      const result = await this.tools.parseDocument({ projectRoot: root, sourcePath, outputDir: output, jobDir: job, signal });
+      const options = this.tools.defaultParseOptions(document.mediaType);
+      // 显式用户解析优先于后台索引（提案 §6）：共享预算的排队顺序由这里声明的优先级决定。
+      const budget = this.budget;
+      const slot = budget === null ? null : await budget.acquire('user', signal);
+      let result: Awaited<ReturnType<DocumentTools['parseDocument']>>;
+      try {
+        result = await this.tools.parseDocument({ projectRoot: root, sourcePath, outputDir: output, jobDir: job, signal,
+          options: tier === null ? options : { ...options, tier } });
+      } finally { if (slot !== null) budget?.release(slot); }
       this.requireActive(signal);
       const data = await collectDocumentContent(root, output, result);
       await this.sourceBytes(root, document);

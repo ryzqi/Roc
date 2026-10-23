@@ -123,8 +123,9 @@ test('the shipped lock satisfies the reader contract for every architecture it d
   assert.equal(lockedToolVersions(shipped, 'arm64').vale, shipped.valeVersion);
   assert.equal(typeof shipped.typstVersion, 'string');
   assert.equal(lockedToolVersions(shipped, 'arm64').typst, shipped.typstVersion);
-  // 两个架构必须声明同一批工具：只给 arm64 加工具的 lock 会让 Intel 机器启动即失败。
-  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), Object.keys(shipped.architectures.x64).sort());
+  // Roc 只发 Apple Silicon：lock 里除了 arm64 不该再有别的架构。留一个 x64 分支会让
+  // 「应用只有 arm64」这条交付事实在源码层就失真，也会让人以为 Intel 机器还受支持。
+  assert.deepEqual(architectures, ['arm64']);
 });
 
 test('the recorded set must match the expected set key for key', () => {

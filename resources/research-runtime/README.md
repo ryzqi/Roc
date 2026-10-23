@@ -1,10 +1,10 @@
 # 科研 Python 运行时
 
-Python 3.12.15 随应用分发。该版本同时覆盖 Apple Silicon 和 Intel Mac 的已发布科学计算 wheel；两个架构使用同一份 `uv.lock`，仅对 PyTorch、TorchVision、Transformers 与 NumPy 使用必要的架构约束。
+Python 3.12.15 随应用分发，只有 Apple Silicon 版本。`uv.lock` 是单架构（arm64）的解析结果：MinerU 4.x 依赖的 torch / MPS 后端没有可用的 x64 wheel。
 
-`transformers` 被 `[tool.uv] constraint-dependencies` 钉在 `<4.52`：4.57.6 让 docling 的单页解析从 57s 涨到 619s（同一 worker、同一张 300dpi 页面、同一份模型缓存），4.51.3 回到 57s。上游原因未查明之前不能放行。
+`transformers` 被钉在 `==5.20.2`（`mineru[torch]==4.0.12` 声明的下限）：4.x 的 `transformers` 已经删掉 MinerU 需要用到的旧 API，5.20.2 是 P0 实测能装、能离线跑、能在 sandbox 内用 MPS 的唯一区间。
 
-Docling 使用 PDFium 后端进行 PDF 解析、布局/表格识别与公式识别；OCR 使用系统 Vision 框架及 MIT 许可的 ocrmac。解析模型不随安装包分发：开发机使用 `.runtime/research-models`，打包后下载到 `~/.roc/research-models`。打包 extraResources 排除 models、旧 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件以及 Python include；afterPack 用当前 `worker.py` / `figure.py` 覆盖 live 副本并改写 manifest。文献交换在主进程 `bibliography.ts`，不随工具链分发 Python 入口。运行时禁止自动联网拉取。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
+MinerU 4.0.12 负责 PDF / 图片 / HTML 解析：版面（PP-DocLayoutV2）、公式、表格走 torch 小模型；`standard` / `advanced` 档位再加一个 llama.cpp VLM（`mineru-llama-cpp`，Metal 加速）做逐块理解。OCR 在 MinerU 内部完成（`ocr_mode` 为 `auto`/`txt`/`ocr`），**不再有独立的 Vision/ocrmac 链路**。解析模型不随安装包分发：开发机使用 `.runtime/research-models`，打包后下载到 `~/.roc/research-models`；模型自带的 `.mineru_complete` 标记由官方下载器写入，运行时只校验不伪造。打包 extraResources 排除 models、旧 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、faker/polyfactory、torch 头文件以及 Python include；afterPack 用当前 `worker.py` / `figure.py` 覆盖 live 副本并改写 manifest。文献交换在主进程 `bibliography.ts`，不随工具链分发 Python 入口。运行时禁止自动联网拉取。Matplotlib 渲染仍由随包 Python 完成。模板 ZIP、文献、PDF 单页渲染、导出 ZIP 和图稿校验由主进程 TypeScript 实现。
 
 Vale 3.24.0 作为第 4 个归档工具装到 `bin/vale`，供文稿检查（合同见仓库根的 `docs/research-prose.md`）。它的**规则集是 Roc 自己写的**，放在本目录 `vale/` 并原样复制进工具链：规则参与 `lockHashes`，所以改规则会要求重建，也会被运行时的 `research_toolchain_source_mismatch` 抓到。
 
@@ -16,7 +16,7 @@ Typst 0.15.0 作为第 5 个归档工具装到 `bin/typst`，**只服务导出�
 
 ## 准备和校验
 
-构建机需要与目标架构匹配的 macOS、可直接执行 TypeScript 的 Node 26，以及首次准备时的网络。应用运行时使用随包 CPython。下列命令以当前仓库路径为例；Intel Mac 使用 `--arch x64` 和对应输出目录。
+构建机需要 Apple Silicon 上的 macOS、可直接执行 TypeScript 的 Node 26，以及首次准备时的网络。应用运行时使用随包 CPython。`prepare` 只接受 `--arch arm64`：Intel 与 cross-arch 构建都会以 `research_toolchain_build_requires_matching_macos_host` 失败。下列命令以当前仓库路径为例。
 
 ```bash
 rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/prepare.ts --arch arm64 --output /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64
@@ -29,15 +29,17 @@ rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --tool
 
 TeX 资源从固定 TAR `tlextras-2022.0r0` 按 `tex-bundle-files.txt` 做成离线编译子集 ZIP。保留原始文件字节，并重写 `SHA256SUM`。源 TAR 哈希、子集 ZIP 哈希均在 `tools.lock.json`。运行时 `tectonic --only-cached`，不下载其余 TeX Live 包。缺包即编译失败。哈希不符、资源身份变化或归档越界都会失败，不会回退到 PATH 中的工具或临时下载其他版本。
 
-`smoke.ts` 使用空缓存和 macOS sandbox 禁止外网，执行中英文 LaTeX 编译、TypeScript PDF 渲染、扫描图 OCR、表格/公式/图稿提取，以及 Matplotlib 的 PNG/SVG/PDF 输出。输出目录必须不存在；成功后写入 `result.json`，并保留 PDF、页面图、解析结果和日志。验证搬迁时将完整工具链复制或移到含空格的新路径后执行同一命令。
+`smoke.ts` 使用空缓存和 macOS sandbox 禁止外网，执行中英文 LaTeX 编译、TypeScript PDF 渲染、扫描图解析（MinerU 自带 OCR）、表格/公式/图稿提取，以及 Matplotlib 的 PNG/SVG/PDF 输出。输出目录必须不存在；成功后写入 `result.json`，并保留 PDF、页面图、解析结果和日志。验证搬迁时将完整工具链复制或移到含空格的新路径后执行同一命令。
 
 ## Worker 协议
 
 `worker.py` 只处理 `parse_document`。每次从 stdin 接收一条 JSON 请求，在 stdout 返回 `{"ok":true,"result":...}` 或 `{"ok":false,"error":{"code":...,"type":...}}`；库日志走 stderr。成功退出码为 0，失败为 1。调用时使用私有 Python 的 `-I -B` 参数，外层负责超时、取消、缓存目录和进程权限。
 
-- `parse_document`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、固定的 `modelsPath`。
+- `parse_document`：必填 `projectRoot`、`sourcePath`、新的 `outputDir`、`options`；`modelsPath` 对 `flash` 档位可为 `null`，其余档位必填。
 
-路径必须为绝对路径，输入与输出都必须处于项目内；拒绝覆盖已有输出。解析返回带源文件摘要、页码、边界框坐标原点和节点定位的文本/表格/公式/图稿，生成页面图及 Docling 原始结构。任何失败都清理本次新建的输出目录，来源在处理期间变化也会失败。
+`options` 是冻结的解析配置，字段集合必须完全一致：`tier`（`basic`/`standard`/`advanced`/`flash`）、`smallBackend`（只接受 `torch`）、`vlmEngine`（`auto`/`llama-cpp`/`mlx`；非 VLM 档位只能 `auto`）、`device`（`mps`/`cpu`）、`pageRange`（空串为全文）、`ocrMode`（`auto`/`txt`/`ocr`）。每一项都进 `parserFingerprint`——换档位、换设备、换 OCR 策略都会产生新的指纹，不会复用旧结果。
+
+路径必须为绝对路径，输入与输出都必须处于项目内；拒绝覆盖已有输出。解析返回带源文件摘要、页码、边界框坐标原点和节点定位的文本/表格/公式/图稿，生成页面图，并在 `artifacts/` 下写出 MinerU 的 `middle_json.json`、`markdown.md` 与 `structured_content.json`（相对路径登记在结果的 `artifacts` 字段，缺失即视为失败）。`modelManifest` 为空串表示本次没有模型参与。任何失败都清理本次新建的输出目录，来源在处理期间变化也会失败。
 
 Worker 使用内置 MIME 类型表；不读取开发机的 Apache 或用户 MIME 配置。异常 traceback 输出至 stderr，便于主进程诊断，JSON stdout 不混入日志。
 

@@ -215,7 +215,7 @@ export class ResearchFigureService {
           ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: out, ROC_PARAMETERS_JSON: JSON.stringify(initial.request.parameters),
           ...command.environment
         },
-        timeoutMs: initial.request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: 'none'
+        timeoutMs: initial.request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: 'none'
       });
       if (output.exitCode !== 0) throw new Error('research_figure_process_failed');
       await finishFigureOutput(initial, out, signal);

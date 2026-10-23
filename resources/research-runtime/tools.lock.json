@@ -35,28 +35,6 @@
         "url": "https://github.com/typst/typst/releases/download/v0.15.0/typst-aarch64-apple-darwin.tar.xz",
         "sha256": "fe53838737abf93a774495952a1a797b4686e9c4a21c2d99b9fdf77f46cc3572"
       }
-    },
-    "x64": {
-      "python": {
-        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        "sha256": "f12e0504397683d6be0745ffd4c39ef45a455cec169adf35c628840d06133773"
-      },
-      "uv": {
-        "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-apple-darwin.tar.gz",
-        "sha256": "b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66"
-      },
-      "tectonic": {
-        "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-apple-darwin.tar.gz",
-        "sha256": "7c90ef5b6ddb1eb1937e4337add5237b79338e4b9676459fa91187d24d6cdf80"
-      },
-      "vale": {
-        "url": "https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_macOS_64-bit.tar.gz",
-        "sha256": "eeb39e86f1daac27cc2a77fef3af1824d50559bdc22329fb25fb921c80c79472"
-      },
-      "typst": {
-        "url": "https://github.com/typst/typst/releases/download/v0.15.0/typst-x86_64-apple-darwin.tar.xz",
-        "sha256": "30210c7c539c7954db94c063cd98b43fd0a0cad285d656dbbce2a40aee2e79be"
-      }
     }
   }
 }

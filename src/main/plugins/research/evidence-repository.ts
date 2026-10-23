@@ -51,8 +51,7 @@ export class ResearchEvidenceRepository {
     if (row.source_type === 'note') throw new Error('research_evidence_source_unsupported');
     if (row.locator === null || row.locator.trim().length === 0) throw new Error('research_evidence_locator_required');
     if (row.content_hash !== hash(row.content)) throw new Error('research_evidence_integrity_invalid');
-    const metadata: unknown = JSON.parse(row.metadata_json);
-    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('research_evidence_metadata_invalid');
+    const metadata = parseMetadata(row.metadata_json);
     const hasMetadata = Object.keys(metadata).length > 0;
     const sourceIdentity: unknown[] = [row.source_version, row.source_type, row.source_id, row.title];
     if (hasMetadata) sourceIdentity.push(metadata);
@@ -85,8 +84,7 @@ export class ResearchEvidenceRepository {
     if (exists === undefined) throw new Error('research_evidence_not_found');
     const row = this.db.prepare('SELECT metadata_json FROM research_evidence_source_metadata WHERE evidence_id = ?').get(evidenceId) as { metadata_json: string } | undefined;
     if (row === undefined) return null;
-    const metadata: unknown = JSON.parse(row.metadata_json);
-    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('research_evidence_metadata_invalid');
+    const metadata = parseMetadata(row.metadata_json);
     return metadata as Record<string, unknown>;
   }
 
@@ -143,7 +141,7 @@ export class ResearchEvidenceRepository {
   claimHistory(id: string): ResearchClaim[] {
     this.getClaim(id);
     return this.db.prepare('SELECT snapshot_json FROM research_claim_revisions WHERE claim_id = ? ORDER BY version DESC')
-      .all(id).map((row) => researchClaimSchema.parse(JSON.parse((row as { snapshot_json: string }).snapshot_json)));
+      .all(id).map((row) => researchClaimSchema.parse(parseSnapshot((row as { snapshot_json: string }).snapshot_json)));
   }
 
   listClaims(request: ResearchClaimListRequest): ResearchClaim[] {
@@ -175,12 +173,34 @@ export class ResearchEvidenceRepository {
   }
 
   getEvidence(id: string, projectId: string): ResearchEvidence {
-    const row = this.db.prepare(`SELECT ${evidenceColumns} FROM research_evidence WHERE id = ?`).get(id);
+    const row = this.db.prepare(`SELECT id, project_id AS projectId, document_id AS documentId, chunk_id AS chunkId,
+      source_type AS sourceType, source_id AS sourceId, source_version AS sourceVersion, title,
+      locator, excerpt, content_hash AS contentHash, created_at AS createdAt, invalidated_at
+      FROM research_evidence WHERE id = ?`).get(id) as (Record<string, unknown> & { invalidated_at?: string | null }) | undefined;
     if (row === undefined) throw new Error('research_evidence_not_found');
-    const evidence = researchEvidenceSchema.parse(row);
+    // invalidated_at 是失效标记本身，不属于证据契约（schema 是 strict 的），先摘掉再校验。
+    const { invalidated_at: invalidatedAt, ...fields } = row;
+    const evidence = researchEvidenceSchema.parse(fields);
     if (evidence.projectId !== projectId) throw new Error('research_evidence_project_mismatch');
+    // 引用失效（提案 §8.4）：该证据引用的块已随代际切换或重新解析换掉/删除。原文与证据行都
+    // 还在，只是块定位不再成立 —— 必须明确报「引用待重建」，不得静默指向新块，也不得退化成
+    // not_found（那会让用户以为证据被删掉了）。失效标记由真正改变块身份的两个事件写入。
+    if (invalidatedAt !== null && invalidatedAt !== undefined) throw new Error('research_evidence_reference_superseded');
     if (evidence.contentHash !== hash(evidence.excerpt)) throw new Error('research_evidence_integrity_invalid');
     return evidence;
+  }
+
+  /**
+   * 某个知识文档（即某次解析结果）被删除：指向它块的证据全部失效（提案 §8.4）。
+   *
+   * 解析结果的块 id 是 `${knowledgeDocumentId}:chunk:${index}`，且每次解析都是一个新的知识
+   * 文档 —— 重解析、归档、删除、代际切换都是“删旧的、建新的”，所以块要么原样留着，要么整批
+   * 消失，不存在“同一个块原地改内容”。因此不需要比对内容哈希，也不需要看块是否已不存在：
+   * 调用方（删块的那几个点）在删除之前调这里，语义就是“这批块即将消失”。
+   */
+  invalidateChunksOf(knowledgeDocumentId: string): number {
+    return this.db.prepare('UPDATE research_evidence SET invalidated_at = ?\n      WHERE invalidated_at IS NULL AND chunk_id LIKE ?')
+      .run(this.now(), `${knowledgeDocumentId}:chunk:%`).changes;
   }
 
   private validateSupport(claim: Pick<ResearchClaim, 'projectId' | 'status' | 'evidenceIds'>): void {
@@ -228,10 +248,66 @@ export class ResearchEvidenceRepository {
   }
 }
 
+/**
+ * `metadata_json` 是捕获证据时写入的键值对，读回来要参与 `sourceVersion` 计算。
+ *
+ * 坏行只可能来自损坏的库，所以给领域码而不是让 `SyntaxError` 冒到捕获/导出路径。
+ */
+function parseMetadata(value: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('research_evidence_metadata_invalid');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('research_evidence_metadata_invalid');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * `snapshot_json` 同理：内部写入的快照，坏行给领域码而不是 `SyntaxError`。
+ * 返回 `Record<string, unknown>` 而不是 `unknown`：`researchClaimSchema.parse` 本来就要一个对象，
+ * 非对象的快照是这个码的唯一结果，所以边界就在这里把形状确定下来。
+ */
+function parseSnapshot(value: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('research_claim_snapshot_corrupt');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('research_claim_snapshot_corrupt');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 function parseClaimRow(value: unknown): ResearchClaim {
   const row = value as { evidence_ids_json: string };
   const { evidence_ids_json, ...fields } = row;
-  return researchClaimSchema.parse({ ...fields, evidenceIds: JSON.parse(evidence_ids_json) });
+  return researchClaimSchema.parse({ ...fields, evidenceIds: parseEvidenceIds(evidence_ids_json) });
+}
+
+/**
+ * `evidence_ids_json` 是**内部写入**的列，不是外部输入：库里的坏行只能来自写坏的数据/损坏的库。
+ *
+ * 不包 try/catch 的话，一个坏行会把 `JSON.parse` 的 `SyntaxError` 原样抛到证据列表/导出路径，
+ * 用户看到 `Unexpected token` 而不知道是哪个 claim 坏了。换成确定的领域码后，调用方可以
+ * 把它归到「数据损坏」而不是「程序错误」。
+ */
+function parseEvidenceIds(value: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('research_claim_evidence_ids_invalid');
+  }
+  if (!Array.isArray(parsed) || !parsed.every((id): id is string => typeof id === 'string')) {
+    throw new Error('research_claim_evidence_ids_invalid');
+  }
+  return parsed;
 }
 
 function hash(value: string): string {

@@ -1,20 +1,25 @@
 import { watch } from 'node:fs';
-import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, matchesGlob, relative } from 'node:path';
 import type { z } from 'zod';
 import {
   researchIndexOptionsSchema, researchIndexSourceMetadataSchema,
   type researchIndexControlRequestSchema, type researchIndexSettingsSaveSchema, type researchIndexStatusSchema, type researchIndexedSourceSchema
 } from '../../../shared/schemas/research-index';
+import { researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
 import type { RocPluginContext } from '../../kernel/types';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 import type { ResearchEmbeddingService } from './embedding-service';
 import { embeddingKey, knowledgeId, type IndexJob, type IndexPayload } from './index-repository';
 import { indexFileSignature, indexLocatedText, indexText, readIndexFile, scanIndexFiles, type IndexFileKind } from './index-files';
+import { maximumArtifactBytes } from './document-files';
+import { pruneResearchArtifacts } from './artifact-gc';
+import type { ResearchArtifactGcReport } from './artifact-gc';
+import { ResearchParseBudget } from './parse-budget';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath, researchWorkspace } from './research-files';
 
-type WatchHandle = { close(): void; on(event: 'error', listener: (error: Error) => void): unknown };
+type WatchHandle = { close(): void; on(event: 'error', listener: (error: Error) => void): WatchHandle };
 export type ResearchIndexWatch = (path: string, listener: (event: string, filename: string | Buffer | null) => void) => WatchHandle;
 type ScanTask = { controller: AbortController; promise: Promise<void> };
 type ActiveJob = { job: IndexJob; controller: AbortController };
@@ -43,8 +48,12 @@ export class ResearchIndexService {
   private readonly tasks = new Set<Promise<void>>();
   private active: ActiveJob | null = null;
   private draining: Promise<void> | null = null;
+  private readonly budget = new ResearchParseBudget(1);
 
-  constructor(private readonly repository: ResearchRepository, private readonly tools: Pick<ResearchToolchain, 'parseDocument' | 'identity'>,
+  /** 共享解析预算（提案 §6）：文献解析与项目索引共享同一个全局并发上限。 */
+  get parseBudget(): ResearchParseBudget { return this.budget; }
+
+  constructor(private readonly repository: ResearchRepository, private readonly tools: Pick<ResearchToolchain, 'parseDocument' | 'identity' | 'defaultParseOptions'>,
     private readonly embeddings: ResearchEmbeddingService, private readonly rootPath: string | null,
     private readonly logger: RocPluginContext['logger'], private readonly watchFactory: ResearchIndexWatch = (path, listener) => watch(path, { recursive: true }, listener)) {}
 
@@ -52,6 +61,25 @@ export class ResearchIndexService {
     this.repository.indexing.recover();
     for (const project of this.repository.listProjects()) this.projectChanged(project.id);
     this.pump();
+    // 磁盘回收（提案 §8）：启动时一次，不阻塞索引泵。失败只记日志——清理是收尾，
+    // 不是启动的前置条件，不能因为回收出错就让用户打不开项目。
+    void this.pruneArtifacts()
+      .then((report) => { if (report.removed > 0) this.logger.info('research_artifacts_pruned', report); })
+      .catch((error: unknown) => this.logger.warn('research_artifacts_prune_failed', { error: String(error) }));
+  }
+
+  /**
+   * 回收派生工件。
+   *
+   * 路径必须走 `storage()`，不能拼 `rootPath`：那里已经对符号链接报错并取 realpath，
+   * 而回收是会 `rm` 的——在未校验的路径上删目录，一旦 rootPath 是个链接就删到了别处。
+   * `rootPath === null`（存储未就绪）时直接跳过，而不是拼出一个 `/artifacts`。
+   */
+  private async pruneArtifacts(): Promise<ResearchArtifactGcReport> {
+    if (this.rootPath === null) return { scanned: 0, removed: 0, bytesReclaimed: 0, keptBytes: 0, overBudget: false };
+    const storage = await this.storage();
+    return await pruneResearchArtifacts({ root: join(storage, 'artifacts'),
+      referenced: this.repository.indexing.referencedArtifacts() });
   }
 
   releaseProject(projectId: string): void {
@@ -271,14 +299,23 @@ export class ResearchIndexService {
       let payload: IndexPayload;
       if (cachedText !== null) payload = cachedText;
       else if (!['pdf', 'image', 'html'].includes(job.input.kind)) {
-        payload = { ...indexText(await readResearchFile(storage, source.relativePath, 16 * 1024 * 1024)), sourceHash: source.sourceHash, parserKey: job.input.parserKey };
+        payload = { ...indexText(await readResearchFile(storage, source.relativePath, 16 * 1024 * 1024)), sourceHash: source.sourceHash, parserKey: job.input.parserKey,
+          // 纯文本输入没有解析工件：显式 null，不与“文档解析成功”混为一谈（提案 §1 职责边界）。
+          parseArtifactId: null, artifactPath: null, parserFingerprint: null };
       } else {
         const jobs = await createResearchDirectory(storage, 'jobs');
         work = await mkdtemp(join(jobs, `${job.id}-`));
-        const parsed = await this.tools.parseDocument({ projectRoot: storage, sourcePath: source.path, outputDir: join(work, 'output'), jobDir: work, signal });
+        // 后台索引只拿 background 优先级：用户显式解析一到，就等它先走（提案 §6）。
+        const slot = await this.budget.acquire('background', signal);
+        let parsed: z.infer<typeof researchParsedDocumentSchema>;
+        try {
+          parsed = await this.tools.parseDocument({ projectRoot: storage, sourcePath: source.path, outputDir: join(work, 'output'), jobDir: work, signal,
+            options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') });
+        } finally { this.budget.release(slot); }
         if (parsed.sourceHash !== source.sourceHash) throw new Error('research_index_source_changed');
         const chunks = parsed.blocks.flatMap((block) => indexLocatedText(block.text, block.locator));
-        payload = { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: parsed.parserVersion, sourceHash: source.sourceHash, parserKey: job.input.parserKey };
+        payload = { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: parsed.parserVersion, sourceHash: source.sourceHash, parserKey: job.input.parserKey,
+          ...await this.publishArtifact(storage, source.sourceHash, parsed, work) };
       }
       await this.verifyJob(job, signal);
       const replacedText = this.repository.indexing.publishText(job, payload, source.relativePath);
@@ -293,6 +330,43 @@ export class ResearchIndexService {
       if (running && (signal.aborted || this.closed)) this.repository.indexing.requestScan(job.projectId, job.input.force);
       if (!this.closed && !signal.aborted && ['research_index_source_changed', 'research_index_parser_changed', 'research_index_embedding_changed', 'research_index_workspace_changed', 'research_file_changed_during_read'].includes(code)) this.schedule(job.projectId, false);
     } finally { if (work !== null) await rm(work, { recursive: true, force: true }); }
+  }
+
+  /**
+   * 把一次真解析的完整工件（MiddleJson / Markdown / 结构化结果 / 图片）发布成**不可变**工件。
+   *
+   * 提案 §8 要求两条消费者（文献阅读器与项目索引）共享同一份工件，而且索引链**不得**在取完
+   * 文本后删掉它——只留 chunks 会让检索命中无法回到 `parseId`/`locator`，也让“工具目录已经
+   * 清理掉了”变成一种静默的数据丢失。做法是先在同一文件系统上写 staging，再原子 rename 到
+   * `artifacts/<sourceHash>/<fingerprint>`；重复解析同一源+同一 fingerprint 直接复用。
+   */
+  private async publishArtifact(storage: string, sourceHash: string,
+    parsed: z.infer<typeof researchParsedDocumentSchema>, workPath: string): Promise<{ parseArtifactId: string; artifactPath: string; parserFingerprint: string }> {
+    // 工件身份由源内容 + 解析身份决定：同一份 PDF 换档位/换模型必须得到新身份（提案 §8 缓存键）。
+    const parseArtifactId = `${sourceHash.slice(0, 16)}-${parsed.parserFingerprint.slice(0, 16)}`;
+    const root = await createResearchDirectory(storage, 'artifacts');
+    const target = join(root, parseArtifactId);
+    const artifactPath = researchRelativePath(relative(storage, target));
+    // `target` 只会由一次原子 rename 产生，所以“存在”就意味着上一次发布已完整。
+    // 存在性检查不用 try/catch 包住 read：`ENOENT` 是正常分支，而“结果文件读不出来”
+    // 必须是一个真实错误，不能变成“那就重新发布一次”。
+    if (await pathExists(target)) {
+      await readResearchFile(target, 'result.json', maximumArtifactBytes);
+      return { parseArtifactId, artifactPath, parserFingerprint: parsed.parserFingerprint };
+    }
+    const staging = `${target}.staging-${process.pid}-${Date.now()}`;
+    await mkdir(staging, { mode: 0o700 });
+    try {
+      // 完整原件：MiddleJson / Markdown / structured_content / images 全在本次 job 的 output 里。
+      await cp(join(workPath, 'output'), staging, { recursive: true, errorOnExist: false });
+      await writeFile(join(staging, 'result.json'), JSON.stringify(parsed), { mode: 0o600, flag: 'wx' });
+      await rename(staging, target);
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true });
+      // 并发发布同一次解析（两个消费者）时，后来者看到 EEXIST 就是正确结果，不是失败。
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    return { parseArtifactId, artifactPath, parserFingerprint: parsed.parserFingerprint };
   }
 
   private async cacheSource(storage: string, job: IndexJob): Promise<{ path: string; relativePath: string; sourceHash: string }> {
@@ -321,7 +395,11 @@ export class ResearchIndexService {
   }
 
   private async parserKey(kind: IndexFileKind): Promise<string> {
-    return ['pdf', 'image', 'html'].includes(kind) ? `docling:${await this.tools.identity()}` : 'roc-text-1';
+    // 解析档位是“可影响索引内容”的配置，所以 fingerprint 必须进入 parserKey；
+    // 否则换档位后旧索引会被当成命中，用户看不到新结果。
+    return ['pdf', 'image', 'html'].includes(kind)
+      ? `mineru:${this.tools.identity()}:${this.tools.defaultParseOptions(kind === 'html' ? 'text/html' : 'application/pdf').tier}`
+      : 'roc-text-1';
   }
 
   private async storage(): Promise<string> {
@@ -366,6 +444,12 @@ export class ResearchIndexService {
     };
     void promise.then(() => finish(true), (error: unknown) => { this.logger.warn('Research index background operation failed.', { error: failureCode(error) }); finish(false); });
   }
+}
+
+/** `ENOENT` 是正常分支；其它错误（权限、I/O）必须原样冒出去，不能被当成“不存在”。 */
+async function pathExists(path: string): Promise<boolean> {
+  try { await lstat(path); return true; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
 }
 
 function failureCode(error: unknown): string {

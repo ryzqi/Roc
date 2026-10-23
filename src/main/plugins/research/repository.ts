@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import {
+  researchLatexDiagnosticSchema,
   researchProjectSchema,
   researchTemplateSchema,
   researchStageStateSchema,
@@ -629,7 +630,7 @@ export class ResearchRepository {
     }>;
     return rows.map((row) => researchWorkflowEventSchema.parse({
       id: row.id, projectId: row.project_id, stage: row.stage, type: row.type,
-      message: row.message, payload: JSON.parse(row.payload_json), createdAt: row.created_at
+      message: row.message, payload: decodeWorkflowPayload(row.payload_json), createdAt: row.created_at
     }));
   }
 
@@ -870,6 +871,39 @@ function toStageState(row: ResearchStageStateRow): ResearchStageState {
   });
 }
 
+/**
+ * 工作流事件的 `payload_json` 是内部写入的列。
+ *
+ * `errors_json` 已经在下面单独 try/catch 了；`payload_json` 曾经没有——同一个函数里两列
+ * 一条包了、一条没包，坏行就会以 `SyntaxError` 的身份冒到事件列表里。统一成领域码。
+ */
+function decodeWorkflowPayload(value: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('research_workflow_event_payload_invalid');
+  }
+  // schema 要的就是 `Record<string, unknown>`；非对象只可能是坏行，就在边界上判掉。
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('research_workflow_event_payload_invalid');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/** 同上：`diagnostics_json` 是编译产物诊断，坏行给领域码而不是 `SyntaxError`。 */
+function decodeTemplateDiagnostics(value: string): ResearchTemplate['diagnostics'] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('research_template_diagnostics_invalid');
+  }
+  const result = researchLatexDiagnosticSchema.array().safeParse(parsed);
+  if (!result.success) throw new Error('research_template_diagnostics_invalid');
+  return result.data;
+}
+
 function toTemplate(row: TemplateRow): ResearchTemplate {
   let errors: unknown;
   try {
@@ -885,7 +919,7 @@ function toTemplate(row: TemplateRow): ResearchTemplate {
     status: row.status,
     pdfPath: row.pdf_path,
     errors,
-    diagnostics: JSON.parse(row.diagnostics_json),
+    diagnostics: decodeTemplateDiagnostics(row.diagnostics_json),
     revision: row.revision,
     compiledRevision: row.compiled_revision,
     sourceDigest: row.source_digest,

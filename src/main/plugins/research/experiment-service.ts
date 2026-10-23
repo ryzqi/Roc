@@ -213,7 +213,7 @@ export class ResearchExperimentService {
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
       writablePaths: [output, scratch], environment,
-      timeoutMs: request.timeoutMs, signal, allowOcrAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
+      timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }
 

@@ -145,11 +145,12 @@ test('disabling ignore rules covers repo, parent and global gitignore', () => {
 /* 二进制定位                                                          */
 /* ------------------------------------------------------------------ */
 
-test('the binary path follows the packaged resources layout and arch', () => {
+test('the binary path follows the packaged resources layout and is arm64-only', () => {
+  // Roc 只随包 darwin-arm64/rg（proposal §4「只产出 arm64」）。x64 以前也能拼出一条路径，
+  // 那条路径对应的目录已经不会被打进包——继续返回它只会让“找到了”与“文件存在”脱节。
   const arm = new ripgrep.RipgrepBinaryManager({ arch: 'arm64', resourcesPath: '/Applications/Roc.app/Contents/Resources' });
   assert.equal(arm.getBinaryPath(), '/Applications/Roc.app/Contents/Resources/ripgrep-binaries/darwin-arm64/rg');
-  const x64 = new ripgrep.RipgrepBinaryManager({ arch: 'x64', resourcesPath: '/Applications/Roc.app/Contents/Resources' });
-  assert.equal(x64.getBinaryPath(), '/Applications/Roc.app/Contents/Resources/ripgrep-binaries/darwin-x64/rg');
+  assert.equal(new ripgrep.RipgrepBinaryManager({ arch: 'x64', resourcesPath: '/Applications/Roc.app/Contents/Resources' }).getBinaryPath(), null);
   assert.equal(new ripgrep.RipgrepBinaryManager({ arch: 'ia32', resourcesPath: '/x' }).getBinaryPath(), null);
   assert.equal(new ripgrep.RipgrepBinaryManager({ arch: 'arm64', resourceRoot: '/repo' }).getBinaryPath(), '/repo/resources/ripgrep-binaries/darwin-arm64/rg');
 });
@@ -310,11 +311,11 @@ test('the bundled binaries are executable', { skip: serviceAvailable ? false : '
   assert.match(version, /^ripgrep \d+\.\d+\.\d+/u);
 });
 
-test('every committed binary matches the lock, and the host one reports the locked version', () => {
-  // 打包口只校验当前架构；过期的另一架构二进制、或“换了二进制忘了改 lock”只能在这里抓到。
-  // 两个架构都核对 sha256，但只有本机能执行的哪一个才核对 `--version`：在 arm64 上跑 x64
-  // 的 rg 需要 Rosetta，缺了它这条不该红。
+test('the committed binary matches the lock and reports the locked version', () => {
+  // 打包口只校验当前架构；“换了二进制忘了改 lock”、或目录里留着一份过期二进制，只能在这里抓到。
+  // 现在只有 arm64 一份，所以 sha256 与 `--version` 都必须在主机上真的核对上。
   const lock = JSON.parse(readFileSync(join(repoRoot, 'resources', 'ripgrep-binaries', 'ripgrep.lock.json'), 'utf8'));
+  assert.deepEqual(Object.keys(lock.architectures), ['arm64']);
   for (const [arch, entry] of Object.entries(lock.architectures)) {
     const binaryPath = join(repoRoot, 'resources', 'ripgrep-binaries', entry.platformDir, 'rg');
     const digest = createHash('sha256').update(readFileSync(binaryPath)).digest('hex');

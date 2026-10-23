@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { researchCitationKeySchema } from './research-library';
-import { researchParsedDocumentSchema } from './research-production';
+import { researchParsedDocumentSchema, researchParseTiers } from './research-production';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchDocumentSchema = z.object({
@@ -31,5 +31,24 @@ export const researchDocumentContentSchema = researchParsedDocumentSchema.omit({
 }).strict();
 export const researchDocumentParseSchema = z.object({ run: researchDocumentRunSchema, content: researchDocumentContentSchema }).strict();
 export const researchDocumentParseRequestSchema = researchDocumentIdRequestSchema.extend({ parseId: z.string().min(1) }).strict();
+/**
+ * 发起解析。`tier` 为 null 时用按媒体类型推导的默认档位（HTML 固定 flash）。
+ * 只允许选档位，不开放 `pageRange`/`device`：它们是本地调试参数，不应成为持久 API。
+ */
+export const researchDocumentStartParseRequestSchema = researchDocumentIdRequestSchema.extend({
+  tier: z.enum(researchParseTiers).nullable()
+}).strict();
+/**
+ * 批量重解析（提案 §8.5「用户选择模型后，显式单篇/批量重解析」）。
+ * `documentIds` 为 null 表示“全部待重解析的文档”（有原文、无当前结果），由后端枚举而不是
+ * 前端拼一份可能已过期的列表。
+ */
+export const researchDocumentBatchParseRequestSchema = z.object({
+  documentIds: z.array(z.string().min(1)).max(500).nullable(),
+  tier: z.enum(researchParseTiers).nullable()
+}).strict();
+export const researchDocumentBatchParseSchema = z.object({
+  documents: z.array(researchDocumentSchema), failed: z.array(z.object({ documentId: z.string(), error: z.string() }).strict())
+}).strict();
 export const researchDocumentSourceRequestSchema = researchDocumentIdRequestSchema.extend({ sourceHash: hash }).strict();
 export const researchDocumentAssetRequestSchema = researchDocumentParseRequestSchema.extend({ assetId: z.string().min(1), sha256: hash }).strict();

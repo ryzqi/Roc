@@ -44,10 +44,9 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
   - node_modules/@napi-rs/canvas/**
-  - node_modules/@napi-rs/canvas-darwin-${arch}/**
+  - node_modules/@napi-rs/canvas-darwin-arm64/**
   - node_modules/pdfjs-dist/**
   - node_modules/sqlite-vec-darwin-arm64/**
-  - node_modules/sqlite-vec-darwin-x64/**
 beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterExtract: ./scripts/builder-hooks/after-extract.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
@@ -63,14 +62,14 @@ mac:
     - package.json
     - "!dist/**/*.map"
     - "!dist/renderer/.vite/**"
-    - "!node_modules/better-sqlite3/prebuilds/!(darwin-${arch}).node"
-    - "!node_modules/node-pty/prebuilds/!(darwin-${arch})/**"
+    - "!node_modules/better-sqlite3/prebuilds/!(darwin-arm64).node"
+    - "!node_modules/node-pty/prebuilds/!(darwin-arm64)/**"
     - "!node_modules/node-pty/third_party/**"
     - "!node_modules/node-pty/node_modules/node-addon-api/**"
     - "!node_modules/@napi-rs/canvas-linux-*/**"
     - "!node_modules/@napi-rs/canvas-win32-*/**"
     - "!node_modules/@napi-rs/canvas-android-*/**"
-    - "!node_modules/@napi-rs/canvas-darwin-!(${arch})/**"
+    - "!node_modules/@napi-rs/canvas-darwin-!(arm64)/**"
     - "!node_modules/pdfjs-dist/build/**"
     - "!node_modules/pdfjs-dist/web/**"
     - "!node_modules/pdfjs-dist/types/**"
@@ -85,16 +84,16 @@ mac:
     - from: resources/rtk-binaries
       to: rtk-binaries
       filter:
-        - darwin-${arch}/**
+        - darwin-arm64/**
     # ripgrep 随包：文件内容搜索（files.search）与 Agent grep 共用这一个二进制。
     # 许可证文本一并分发（MIT OR Unlicense）。
     - from: resources/ripgrep-binaries
       to: ripgrep-binaries
       filter:
-        - darwin-${arch}/**
+        - darwin-arm64/**
         - licenses/**
         - ripgrep.lock.json
-    - from: .runtime/research-toolchain/darwin-${arch}
+    - from: .runtime/research-toolchain/darwin-arm64
       to: research-toolchain
       filter:
         - "**/*"
@@ -127,15 +126,16 @@ mac:
         - "!**/rapidocr"
         - "!**/rapidocr/**"
         - "!**/rapidocr-*"
-        - "!**/torchgen"
-        - "!**/torchgen/**"
-        - "!**/torchgen-*"
+        # torchgen 不能剔：torch 2.14 的 torch/utils/_python_dispatch.py 在导入期就 import torchgen。
         - "!**/torch/include"
         - "!**/torch/include/**"
-        - "!**/torch/bin"
-        - "!**/torch/bin/**"
-        - "!**/torch/testing"
-        - "!**/torch/testing/**"
+        # 只剔除 torch/bin 里的 protoc（各 3.8 MB 的代码生成器，解析时用不到）。
+        # **不能整目录剔除**：torch 2.x 的 `import torch` 会在 `_C._initExtension()` 里找
+        # `torch/bin/torch_shm_manager`，缺了就直接 `RuntimeError: Unable to find
+        # torch_shm_manager` —— 那是解析一启动就失败，而不是某个可选特性不可用。
+        - "!**/torch/bin/protoc"
+        - "!**/torch/bin/protoc-*"
+        # torch/testing 同样不能剔：裸 `import torch` 会载入 torch.testing。
         - "!python/include"
         - "!python/include/**"
         - "!**/__pycache__"

@@ -125,16 +125,12 @@ export class RipgrepBinaryManager {
   }
 
   private resolveBinaryPath(): string | null {
-    const arch = this.options.arch ?? process.arch;
-    let platformDir: string | null = null;
-    if (arch === 'arm64') {
-      platformDir = 'darwin-arm64';
-    } else if (arch === 'x64') {
-      platformDir = 'darwin-x64';
-    }
-    if (platformDir === null) {
+    // Roc 只随包 darwin-arm64/rg。别的架构上返回 null 让 `files.search` 走它已有的
+    // JS 回退/报不可用路径，而不是去拼一个不存在的 darwin-x64 目录。
+    if ((this.options.arch ?? process.arch) !== 'arm64') {
       return null;
     }
+    const platformDir = 'darwin-arm64';
     return path.join(this.resourceBaseDir(), 'ripgrep-binaries', platformDir, 'rg');
   }
 

@@ -10,7 +10,7 @@ export type ResearchProcessRequest = {
   writablePaths: readonly string[];
   environment: NodeJS.ProcessEnv;
   timeoutMs: number;
-  allowOcrAcceleration: boolean;
+  allowGpuAcceleration: boolean;
   networkAccess: 'none' | 'loopback' | 'full';
   allowPosixSpawn: boolean;
   additionalExecutables?: readonly string[];
@@ -28,8 +28,8 @@ export class ResearchProcessError extends Error {
   }
 }
 
-export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowOcrAcceleration' | 'networkAccess' | 'allowPosixSpawn' | 'additionalExecutables'>): Promise<string> {
-  if (typeof request.allowOcrAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
+export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'allowPosixSpawn' | 'additionalExecutables'>): Promise<string> {
+  if (typeof request.allowGpuAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
   if (!['none', 'loopback', 'full'].includes(request.networkAccess)) throw new Error('research_process_network_policy_required');
   if (typeof request.allowPosixSpawn !== 'boolean') throw new Error('research_process_spawn_policy_required');
   const filter = async (path: string): Promise<string> => {
@@ -54,8 +54,10 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
     ...(request.networkAccess === 'full' ? ['(allow network*)'] : request.networkAccess === 'loopback'
       ? ['(allow network-outbound (remote ip "localhost:*"))', '(allow network-inbound (local ip "localhost:*"))', '(allow network-bind (local ip "localhost:*"))'] : []),
-    // Vision 需要 IOSurface、GPU 和 ANE；只允许计算客户端，不开放整个 IOKit。
-    ...(request.allowOcrAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient" "H11ANEInDirectPathClient" "H1xANELoadBalancerDirectPathClient"))'] : [])
+    // Torch/MPS 与 llama.cpp/Metal 需要 GPU 计算客户端：实测只放行 AGX/IOGPU 就够了，
+    // IOSurface 单独放行并不够（`torch.backends.mps.is_available()` 仍为 False）。
+    // 这里只剩 GPU 客户端，ANE 两个类随独立 Vision/ocrmac OCR 链一起删除。
+    ...(request.allowGpuAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient"))'] : [])
   ].join('\n');
 }
 

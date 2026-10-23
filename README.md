@@ -4,7 +4,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 
 底层是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
-- 平台：仅 macOS，Apple Silicon 与 Intel（按架构打包 RTK 与科研工具链）
+- 平台：仅 macOS，仅 Apple Silicon（arm64）。解析栈依赖 MinerU 的 MPS / llama.cpp-Metal，Intel Mac 不再支持
 - 默认界面：项目门户（`page=research`，未选项目）→ 三栏工作台（选中项目后）
 - Agent：研究助手与阶段角色，不是产品主页
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
@@ -173,7 +173,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc verify:paths
 - 本地缓存：`.runtime/`、`.artifacts/`（gitignore）
 - 仓库不保存真实密钥。测试只允许明显假数据
 
-推送前确认：不要提交 `.env`、真实 API Key、`~/.roc`、导出的 chat 数据库。二进制只保留 macOS arm64/x64 的 RTK 与 ripgrep。
+推送前确认：不要提交 `.env`、真实 API Key、`~/.roc`、导出的 chat 数据库。二进制只保留 macOS arm64 的 RTK 与 ripgrep。
 
 ---
 
@@ -222,11 +222,10 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 
 `package:mac`：校验 live 科研工具链 → `pnpm build`（含 typecheck）→ 首屏体积检查 → `electron-builder --mac --dir` → `smoke-mac`。输出当前架构的 `.app`（不打 zip/dmg）。构建缓存在 `.runtime/`，验证截图在 `.artifacts/mac-package/`。
 
-- Apple Silicon：`release/mac-arm64/Roc.app`
-- Intel：在 x64 Mac 上安装匹配依赖，输出 `release/mac/Roc.app`
-- 包内只留当前架构的 SQLite、PTY、RTK、ripgrep 和科研工具链
-- 随包分发 Python / Tectonic / Vale / TeX 子集；Docling 模型不进安装包，打开后下载到 `~/.roc/research-models`
-- 打包前用当前 `worker.py` / `figure.py` 覆盖 live 副本；排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、RapidOCR、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。文献交换已在主进程 TypeScript（`bibliography.ts`）
+- 产物：`release/mac-arm64/Roc.app`（只产出 arm64；构建脚本在非 arm64 宿主上直接失败）
+- 包内只留 arm64 的 SQLite、PTY、RTK、ripgrep 和科研工具链
+- 随包分发 Python / Tectonic / Vale / TeX 子集；MinerU 解析模型不进安装包，打开后下载到 `~/.roc/research-models`
+- 打包前用当前 `worker.py` / `figure.py` 覆盖 live 副本；排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。文献交换已在主进程 TypeScript（`bibliography.ts`）
 - ad-hoc 本地签名（`identity: "-"`），未做 Developer ID / 公证
 - 关窗口保留后台任务；菜单或 `Cmd+Q` 退出
 - 终端走用户登录 Shell 与 zsh；Finder/Dock 启动用 `shell-env` 恢复 PATH
@@ -276,17 +275,16 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 | 包 | 版本 | 来源 | 用途 |
 | --- | --- | --- | --- |
-| docling | 2.141.0 | `https://github.com/docling-project/docling` ✓ | PDF 解析（PDFium 后端、布局/表格/公式） |
-| docling-ibm-models | 4.0.4 | `https://github.com/docling-project/docling-ibm-models` ✓ | 布局/表格/公式模型运行时 |
+| mineru | 4.0.12 | `https://github.com/opendatalab/MinerU` ✓ | PDF / 图片 / HTML 解析（版面、表格、公式、内置 OCR） |
+| mineru-llama-cpp | 0.2.0 | `https://github.com/opendatalab/MinerU` ✓ | `standard`/`advanced` 档位的本地 VLM 推理（Metal） |
 | pypdfium2 | 5.14.0 | `https://github.com/pypdfium2-team/pypdfium2` ✓ | PDF 光栅化 |
-| ocrmac | 1.0.1 | `https://github.com/straussmaximilian/ocrmac` ✓（PyPI 首页，注意不是 `ocr` 开头的另一个仓库） | 系统 Vision OCR 绑定 |
 | matplotlib | 3.11.2 | `https://github.com/matplotlib/matplotlib` ✓ | 图稿渲染 |
 | pandas | >=2.2,<3 | `https://github.com/pandas-dev/pandas` ✓ | 数据分析 |
 | scipy | >=1.13,<2 | `https://github.com/scipy/scipy` ✓ | 数值计算 |
-| torch | 2.14.1(arm64) / 2.2.2(x64) | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
-| torchvision | 0.17.2(x64) | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
-| transformers | 4.51.3（两架构，上限 `<4.52`） | `https://github.com/huggingface/transformers` ✓ | 模型推理；`4.57` 实测让单页解析慢 10×，见 `pyproject.toml` 约束注释 |
-| numpy | 1.26.4(x64) | `https://github.com/numpy/numpy` ✓ | 数值计算 |
+| torch | 2.14.1 | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
+| torchvision | 0.29.1 | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
+| transformers | 5.20.2 | `https://github.com/huggingface/transformers` ✓ | 模型推理；`mineru[torch]==4.0.12` 的下限，4.x 已删掉 MinerU 依赖的旧 API |
+| numpy | 2.5.4 | `https://github.com/numpy/numpy` ✓ | 数值计算 |
 | setuptools（构建约束） | 84.2.1 | `https://github.com/pypa/setuptools` | 构建期固定 |
 
 ### 三、解析模型（不进安装包，按需下载）
@@ -294,11 +292,12 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 声明在 `resources/research-runtime/models.lock.json`（每个文件带 sha256 与 revision），下载源是 `https://huggingface.co/<repoId>/resolve/<revision>/<path>`；
 运行时 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，所以模型只在用户确认下载时联网。
 
-| 模型 | revision | 许可证 |
+| 模型 | 内容 | 许可证 |
 | --- | --- | --- |
-| `docling-project/docling-layout-heron`（`https://huggingface.co/docling-project/docling-layout-heron`） | `8f39ad3c…` | Apache-2.0 |
-| `docling-project/docling-models`（TableFormer） | `fc0f2d45…` | CDLA-Permissive-2.0 |
-| `docling-project/CodeFormulaV2`（公式识别） | `ecedbe11…` | CDLA-Permissive-2.0 |
+| `opendatalab/MinerU-4_models_torch` | 版面 `PP-DocLayoutV2`、公式 `PP-FormulaNet_plus-M`、表格、内置 OCR | Apache-2.0 |
+| `42ailab/MinerU2.5-Pro-2605-1.2B-GGUF` | `standard`/`advanced` 档位的 1.2B VLM（Q8_0 权重 + mmproj），量化自 `opendatalab/MinerU2.5-Pro-2605-1.2B` | Apache-2.0 |
+
+模型仓库由 MinerU 官方下载器写入 `.mineru_complete` 标记，Roc 只校验不伪造；每个文件的大小与 sha256 记在 lock 文件里，解析前全量校验。MinerU 程序本体按 **MinerU Open Source License**（Apache-2.0 附加商用阈值与在线服务署名条款）分发，原文随 `python-packages.json` 保留。
 
 ### 四、ripgrep（随包全文搜索）
 
@@ -308,11 +307,11 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 `--json` 解析），Agent 侧的子类在
 [`src/main/services/deep-agent/ripgrep-filesystem-backend.ts`](src/main/services/deep-agent/ripgrep-filesystem-backend.ts)。
 
-版本、网址与两个架构的 archive / binary SHA-256 的单一真理源是
+版本、网址与 archive / binary SHA-256 的单一真理源是
 [`resources/ripgrep-binaries/ripgrep.lock.json`](resources/ripgrep-binaries/ripgrep.lock.json)；
-`electron-builder.yml` 按 `darwin-${arch}` 只打**目标**架构，打包前由
-`assertRipgrepBinaryForPackaging`（`scripts/lib/native-packaging.mjs`）按 `context.arch` 核对目标架构的哈希
-（不是宿主架构：`--x64` 交叉打包是合法命令）。
+它只声明 `darwin-arm64` 一份。`electron-builder.yml` 按 `darwin-arm64` 取二进制，打包前由
+`assertRipgrepBinaryForPackaging`（`scripts/lib/native-packaging.mjs`）核对哈希；`before-pack` 拒绝
+arm64 以外的目标架构（含 universal），所以不存在“交叉打包出一个没有 rg 的包”。
 
 搜索口径（两条调用面**有意不同**）：
 
@@ -355,7 +354,7 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 | `@langchain/mcp-adapters` | 2.0.1 | 同上 | MIT | MCP 工具接入 |
 | `deepagents` | 1.15.1 | `https://github.com/langchain-ai/deepagentsjs` ✓ | MIT | 研究助手的 harness |
 | `better-sqlite3` | 13.0.3 | `https://github.com/WiseLibs/better-sqlite3` ✓ | MIT | SQLite（原生模块） |
-| `sqlite-vec`<br/>`sqlite-vec-darwin-arm64`、`sqlite-vec-darwin-x64` | 0.1.9 | `https://github.com/asg017/sqlite-vec` ✓ | MIT / Apache-2.0 | 向量检索 |
+| `sqlite-vec`<br/>`sqlite-vec-darwin-arm64` | 0.1.9 | `https://github.com/asg017/sqlite-vec` ✓ | MIT / Apache-2.0 | 向量检索 |
 | `@napi-rs/canvas` | 1.0.13 | `https://github.com/Brooooooklyn/canvas` ✓ | MIT | PDF 页渲染、图像处理（原生，需 `asarUnpack`） |
 | `pdfjs-dist` | 6.4.299 | `https://github.com/mozilla/pdf.js` ✓ | Apache-2.0 | PDF 解析预览 |
 | `node-pty` | 1.1.0 | `https://github.com/microsoft/node-pty` ✓ | MIT | 终端（原生，需 `asarUnpack`） |

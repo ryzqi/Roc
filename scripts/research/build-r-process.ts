@@ -29,21 +29,17 @@ export async function buildRProcess(root = PROJECT_ROOT): Promise<string> {
     data?: string;
   } = {
     sourceHash: createHash('sha256').update(sourceBytes).digest('hex'),
-    architectures: ['arm64', 'x64']
+    architectures: ['arm64']
   };
   const temporary = await mkdtemp(join(tmpdir(), 'roc-r-process-build-'));
   try {
-    const slices: string[] = [];
-    for (const [architecture, target] of [['arm64', 'arm64'], ['x64', 'x86_64']] as const) {
-      const library = join(temporary, `roc-research-r-process-${architecture}.dylib`);
-      await run('/usr/bin/xcrun', [
-        'clang', '-arch', target, '-mmacosx-version-min=11.0', '-dynamiclib', '-O2', '-g0', '-fvisibility=hidden',
-        '-Wall', '-Wextra', '-Werror', '-Wl,-install_name,@rpath/roc-research-r-process.dylib', source, '-o', library
-      ]);
-      slices.push(library);
-    }
+    // 只编译 arm64 一片：Roc 不再分发 x64，`lipo` 合成双架构只会产出一个用不上的 slice，
+    // 并且让「应用只有 arm64」这条交付事实在二进制层面失真。
     const library = join(temporary, 'roc-research-r-process.dylib');
-    await run('/usr/bin/xcrun', ['lipo', '-create', ...slices, '-output', library]);
+    await run('/usr/bin/xcrun', [
+      'clang', '-arch', 'arm64', '-mmacosx-version-min=11.0', '-dynamiclib', '-O2', '-g0', '-fvisibility=hidden',
+      '-Wall', '-Wextra', '-Werror', '-Wl,-install_name,@rpath/roc-research-r-process.dylib', source, '-o', library
+    ]);
     await run('/usr/bin/codesign', ['--force', '--sign', '-', library]);
     const data = await readFile(library);
     result.sha256 = createHash('sha256').update(data).digest('hex');

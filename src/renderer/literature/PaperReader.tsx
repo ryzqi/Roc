@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, RotateCcw, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
-import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun } from '../../shared/types';
+import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun, ResearchParseTier } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -12,8 +12,14 @@ import { deriveCitationKey, formatDoi, isCitationKeyValid } from './format';
 import { downloadModels, getModelsStatus } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 
-/**
- * The paper reader (P5/T5.4).
+const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
+  { value: 'basic', label: 'Basic', title: '本地小模型：版面/表格/公式，速度快，不需要 VLM 权重' },
+  { value: 'standard', label: 'Standard', title: 'Basic + llama.cpp VLM 逐块理解，需要额外下载 VLM 权重' },
+  { value: 'advanced', label: 'Advanced', title: '复用 Standard 权重，更高的 VLM 预算' },
+  { value: 'flash', label: 'Flash', title: '只跑 HTML 快速路径；扫描件仍需要小模型' }
+];
+
+/** The paper reader (P5/T5.4).
  *
  * Scope, stated honestly: this renders what the contract can actually deliver —
  * metadata from the library record, and the parse's `blocks` (heading / paragraph /
@@ -101,7 +107,40 @@ export function PaperReader({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
+  /**
+   * 解析档位（`document.parse` 的 `tier`）。
+   *
+   * 默认 `basic`：它不需要 VLM 权重，是唯一“只下了小模型也能成功”的档位。
+   * 选 `standard`/`advanced` 但没有 GGUF 权重时，worker 会明确失败而不是自动降档——
+   * 这正是验收要求的「不自动切换档位」，所以这里也不做任何静默回退。
+   */
+  const [parseTier, setParseTier] = useState<ResearchParseTier>('basic');
+  /** 批量重解析的进行中状态：null = 没在跑；否则是这一批结束后的成/败计数。 */
+  const [reparsePending, setReparsePending] = useState<{ ok: number; failed: number } | null>(null);
   const jumpHandledFor = useRef<string | null>(null);
+
+  /**
+   * 还没有解析结果的文档数，决定「重解析待处理文档」是否出现。
+   *
+   * 只看本文献下的文档：批量入口放在阅读器里，作用域就必须和用户眼前看到的一致，
+   * 否则一个「重解析（3）」会去动用户没在看的文献。`imported`/`failed` 才算待处理，
+   * `parsing` 的正在跑，不该被再排一次队。
+   */
+  const pendingReparseCount = documents.filter(
+    (document) => document.status === 'imported' || document.status === 'failed'
+  ).length;
+  const startReparseAll = useCallback(async () => {
+    const documentIds = documents
+      .filter((document) => document.status === 'imported' || document.status === 'failed')
+      .map((document) => document.id);
+    if (documentIds.length === 0) return;
+    setReparsePending({ ok: 0, failed: 0 });
+    const outcome = await literature.startParseMany({ documentIds, tier: parseTier });
+    setReparsePending(outcome);
+    // 结果留在按钮上而不是弹窗：批量是这次点击的直接交代，用户不需要再关一个框。
+    if (outcome !== null) window.setTimeout(() => setReparsePending(null), 6_000);
+    else setReparsePending(null);
+  }, [documents, literature, parseTier]);
 
   /**
    * Parse-model state (`research.models.status`).
@@ -304,7 +343,7 @@ export function PaperReader({
   const startModelDownload = (): void => {
     setDownloadError(null);
     setDownloadPending(true);
-    void downloadModels(literature.client)
+    void downloadModels(literature.client, { pack: models.data?.selectedPack ?? 'basic', source: models.data?.source ?? 'auto' })
       .then((result) => {
         if (!result.ok) {
           setDownloadError(result.error.message);
@@ -589,13 +628,30 @@ export function PaperReader({
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  disabled={literature.parseInFlight !== null || literature.projectId === null}
-                  onClick={() => void literature.startParse(activeDocument.id)}
-                  data-testid="reader-start-parse"
-                  className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-                >
+                <>
+                  <label className="flex items-center gap-1 text-muted" title="解析档位">
+                    <span className="sr-only">解析档位</span>
+                    <select
+                      value={parseTier}
+                      disabled={literature.parseInFlight !== null || literature.projectId === null}
+                      onChange={(event) => setParseTier(event.target.value as ResearchParseTier)}
+                      data-testid="reader-parse-tier"
+                      className="h-[var(--control-height-compact)] rounded-control border border-line bg-surface px-1 text-ink text-[var(--font-micro-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-40"
+                    >
+                      {TIER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value} title={option.title}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={literature.parseInFlight !== null || literature.projectId === null}
+                    onClick={() => void literature.startParse(activeDocument.id, parseTier)}
+                    data-testid="reader-start-parse"
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                  >
                   {literature.parseInFlight === activeDocument.id ? (
                     <Loader2 size={11} aria-hidden="true" className="animate-spin" />
                   ) : (
@@ -606,7 +662,8 @@ export function PaperReader({
                     : activeDocument.status === 'ready'
                       ? '重新解析'
                       : '解析'}
-                </button>
+                  </button>
+                </>
               )}
               {activeDocument.error === null ? null : (
                 <span className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="reader-document-error">
@@ -666,6 +723,27 @@ export function PaperReader({
               <span className="font-mono text-subtle" data-testid="reader-models-count">
                 {modelsState.modelCount} 个模型
               </span>
+            )}
+            {/*
+              批量重解析（提案 §8.5）：换了解析模型或档位后，旧的解析结果不再代表「用当前
+              模型解析出来的内容」。这是显式操作、不是自动触发——解析要跑分钟级，不能替用户
+              决定什么时候占机器。只处理本文献下还没有当前结果的文档，已解析的仍需在单篇上
+              显式「重新解析」，避免一次点击把整个库的块全部换代、连带证据引用失效。
+            */}
+            {pendingReparseCount === 0 && reparsePending === null ? null : (
+              <button
+                type="button"
+                disabled={!modelsState.ready || reparsePending !== null}
+                onClick={() => void startReparseAll()}
+                data-testid="reader-reparse-pending"
+                title="按当前档位重新解析所有还没有解析结果的文档。"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+              >
+                {reparsePending === null ? null : <Loader2 size={10} aria-hidden="true" className="animate-spin" />}
+                {reparsePending === null
+                  ? `重解析待处理文档（${pendingReparseCount}）`
+                  : `正在重解析 ${reparsePending.ok + reparsePending.failed}…`}
+              </button>
             )}
           </div>
 

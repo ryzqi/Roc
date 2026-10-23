@@ -7,7 +7,6 @@ import { parseArgs } from 'node:util';
 import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
 import { collectPythonLicenses } from './collect-licenses.ts';
-import { fetchModels } from './fetch-models.ts';
 import { verifyManifest, writeManifest } from './manifest.ts';
 
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -71,11 +70,15 @@ async function pathInfo(path: string) {
   }
 }
 
-function hostArchitecture(): 'arm64' | 'x64' {
-  if (process.platform !== 'darwin' || (process.arch !== 'arm64' && process.arch !== 'x64')) {
+/**
+ * Roc 只发布 Apple Silicon。工具链的下载归档、随包 Python、MinerU 的 MPS/llama.cpp 后端
+ * 都只有 arm64 版本，所以这里**只能**返回 arm64，而不是「支持的两个架构之一」。
+ */
+function hostArchitecture(): 'arm64' {
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') {
     fail('research_toolchain_build_requires_matching_macos_host');
   }
-  return process.arch;
+  return 'arm64';
 }
 
 function overlaps(left: string, right: string): boolean {
@@ -266,17 +269,15 @@ function sameRecord(left: Record<string, string>, right: Record<string, string>)
   return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
 }
 
-export async function prepare(architecture: string, outputPath: string, cachePath: string, modelCachePath: string): Promise<void> {
+export async function prepare(architecture: string, outputPath: string, cachePath: string): Promise<void> {
   if (architecture !== hostArchitecture()) fail('research_toolchain_build_requires_matching_macos_host');
   if ((await pathInfo(outputPath))?.isSymbolicLink()
-      || (await pathInfo(cachePath))?.isSymbolicLink()
-      || (await pathInfo(modelCachePath))?.isSymbolicLink()) {
+      || (await pathInfo(cachePath))?.isSymbolicLink()) {
     fail('research_toolchain_directory_symlink');
   }
   const output = resolve(outputPath);
   const cache = resolve(cachePath);
-  const modelCache = resolve(modelCachePath);
-  if (overlaps(output, cache) || overlaps(output, modelCache)) fail('research_toolchain_output_overlaps_cache');
+  if (overlaps(output, cache)) fail('research_toolchain_output_overlaps_cache');
   const lockHashes = await computeLockHashes();
   // `JSON.parse` 会抛：lock 被改坏时要报领域错误码，而不是把 SyntaxError 丢给构建者。
   let tools: ToolsLock;
@@ -330,7 +331,8 @@ export async function prepare(architecture: string, outputPath: string, cachePat
         'pip', 'sync', '--python', python, '--require-hashes', '--strict', '--link-mode', 'copy',
         '--default-index', 'https://pypi.org/simple', '--build-constraints', constraints, requirements
       ], { env: environment });
-      await fetchModels(join(SOURCES, 'models.lock.json'), modelCache);
+      // 模型不再进工具链归档（提案 §5）：它们由 `research.models.*` 落到用户数据目录，
+      // 工具链只保留代码与 Python 依赖，构建也不再联网拉 2 GB 权重。
       const bundle = tools.texBundle;
       const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
         expectedSize: bundle.size
@@ -368,17 +370,16 @@ export async function prepare(architecture: string, outputPath: string, cachePat
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
-      arch: { type: 'string' },
+      // 只有一个合法值，所以默认就是它：让调用方为一个必填常量传参没有意义。
+      arch: { type: 'string', default: 'arm64' },
       output: { type: 'string' },
-      cache: { type: 'string', default: join(PROJECT_ROOT, '.runtime/research-downloads') },
-      models: { type: 'string', default: join(PROJECT_ROOT, '.runtime/research-models') }
+      cache: { type: 'string', default: join(PROJECT_ROOT, '.runtime/research-downloads') }
     },
     strict: true
   });
-  if (values.arch !== 'arm64' && values.arch !== 'x64') fail('research_toolchain_build_requires_matching_macos_host');
+  if (values.arch !== 'arm64') fail('research_toolchain_build_requires_matching_macos_host');
   if (values.output === undefined || values.output === '') fail('research_toolchain_output_required');
-  await prepare(values.arch, values.output, values.cache ?? join(PROJECT_ROOT, '.runtime/research-downloads'),
-    values.models ?? join(PROJECT_ROOT, '.runtime/research-models'));
+  await prepare(values.arch, values.output, values.cache ?? join(PROJECT_ROOT, '.runtime/research-downloads'));
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

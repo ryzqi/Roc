@@ -231,8 +231,9 @@ export function ripgrepBinariesRoot(targetProjectRoot = projectRoot) {
  * 缺二进制**不会**让搜索挂掉（两条调用面都会降级），所以它很容易在打包时被默默漏掉，
  * 用户拿到的是“能跑但慢”的 Roc。把校验放在打包口：漏了就失败，而不是发出去才发现。
  *
- * `architecture` 必须是**要打的那个架构**，不是宿主架构：在 arm64 Mac 上
- * `electron-builder --x64` 是合法命令，校验宿主架构会放过一个根本没进包的 `darwin-x64/rg`。
+ * `architecture` 必须是**要打的那个架构**，不是宿主架构——两者在交叉构建时并不相同。
+ * 现在 Roc 只发 arm64，`before-pack` 会先拒掉其他目标架构，这里仍按传入的架构取值，
+ * 以免某天再次放开目标架构时静默放一个没进包的二进制过去。
  */
 export function assertRipgrepBinaryForPackaging({
   architecture = process.arch,
@@ -287,7 +288,6 @@ const packagedResearchLeftoverNames = new Set([
   'tornado',
   'zmq',
   'prompt_toolkit',
-  'wcwidth',
   'pexpect',
   'ptyprocess',
   'appnope',
@@ -301,8 +301,12 @@ const packagedResearchLeftoverNames = new Set([
   'nest_asyncio2.py',
   'faker',
   'polyfactory',
-  'rapidocr',
-  'torchgen'
+  'rapidocr'
+  // `wcwidth` 曾经在这里：它看起来只被 prompt_toolkit 用，但 mineru 的 docvortex 会经 ftfy
+  // （`ftfy/formatting.py:11 from wcwidth import wcswidth, wcwidth`）在**导入期**拿到它。
+  // 这类「间接导入期依赖」不能靠读 requirements 判断，只能实测导出模块闭包。
+  // `torchgen` 曾经在这里：torch 2.14 的 `torch/utils/_python_dispatch.py:13` 在**导入期**就
+  // `import torchgen`，所以剔掉它等于剔掉 `import torch` 本身（省 2.3 MB，换来解析全挂）。
 ]);
 
 function isPackagedResearchLeftoverPart(part) {
@@ -325,7 +329,16 @@ export function isExcludedPackagedResearchPath(relativePath) {
   if (relativePath === 'bibliography.py') return true;
   if (relativePath.endsWith('.pyc')) return true;
   if (relativePath === 'python/include' || relativePath.startsWith('python/include/')) return true;
-  if (/(?:^|\/)torch\/(?:include|bin|testing)(?:\/|$)/.test(relativePath)) return true;
+  // 这些剔除项**必须逐个实测**，不能按名字猜：
+  //   - `torch/include`（62 MB C 头文件）：纯编译期资料，`import torch` 不读它，可以剔。
+  //   - `torch/testing`：**不能剔**。裸 `import torch` 就会把它载入 `sys.modules`
+  //     （经 `torch/_dynamo/test_case.py`），剔掉后 `from torch.nn.modules import *` 抛
+  //     `ModuleNotFoundError: No module named 'torch.testing'`。
+  //   - `torch/bin`：**不能整目录剔**。`_C._initExtension()` 硬找
+  //     `torch/bin/torch_shm_manager`，缺了就是启动即 `RuntimeError`。目录里真正该剔的
+  //     只有两个 3.8 MB 的 protoc 代码生成器。
+  if (/(?:^|\/)torch\/include(?:\/|$)/.test(relativePath)) return true;
+  if (/(?:^|\/)torch\/bin\/protoc(?:-|$|\.)/.test(relativePath)) return true;
   return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
 }
 
@@ -532,7 +545,17 @@ export function verifyPackagedResearchToolchain({
     'licenses/uv-MIT.txt',
     'licenses/uv-APACHE.txt',
     'licenses/vale-MIT.txt',
-    'licenses/CDLA-Permissive-2.0.txt'
+    'licenses/CDLA-Permissive-2.0.txt',
+    // 运行时**导入期**真正需要的、曾经被剔除清单误删的文件。
+    // 它们都不是「某个可选特性才用」的东西：缺任何一项，`parse_document` 一启动就抛异常。
+    //   - torch/bin/torch_shm_manager：`import torch` → `_C._initExtension()` 硬找它。
+    //   - torchgen/：torch 2.14 的 `torch/utils/_python_dispatch.py:13` 导入期 import。
+    //   - torch/testing/：裸 `import torch` 会载入 `torch.testing`。
+    //   - wcwidth/：docvortex → ftfy 在导入期 import。
+    'python/lib/python3.12/site-packages/torch/bin/torch_shm_manager',
+    'python/lib/python3.12/site-packages/torchgen/__init__.py',
+    'python/lib/python3.12/site-packages/torch/testing/__init__.py',
+    'python/lib/python3.12/site-packages/wcwidth/__init__.py'
   ];
   for (const relativePath of required) {
     const fullPath = resolve(root, relativePath);

@@ -54,7 +54,7 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
       : { command: executable, args: [...juliaExperimentFlags, `--project=${workspace}`, '-e', juliaEnvironmentProbe] };
     const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, workspace], writablePaths: [jobDir],
       additionalExecutables: [executable], environment: { ...environment, ROC_PROJECT_ROOT: workspace, ROC_R_LIBRARY: prefix, ROC_JULIA_DEPOT: prefix, ROC_ENVIRONMENT_REPORT: reportPath },
-      timeoutMs: 60000, signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
+      timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);
     const bytes = await readResearchFile(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json', 4 * 1024 * 1024);

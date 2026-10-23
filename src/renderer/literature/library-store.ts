@@ -21,7 +21,8 @@ import type {
   ResearchLibraryListRequest,
   ResearchLiterature,
   ResearchLiteratureSearchRequest,
-  ResearchModelsStatus
+  ResearchModelsStatus,
+  ResearchParseTier
 } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -162,8 +163,19 @@ export function getDocument(client: RocClient, documentId: string): Promise<IpcL
   return client.api.research.getDocument({ documentId });
 }
 
-export function parseDocument(client: RocClient, documentId: string): Promise<IpcLikeResult<ResearchDocument>> {
-  return client.api.research.parseDocument({ documentId });
+export function parseDocument(
+  client: RocClient,
+  documentId: string,
+  tier: ResearchParseTier | null = null
+): Promise<IpcLikeResult<ResearchDocument>> {
+  return client.api.research.parseDocument({ documentId, tier });
+}
+
+export function parseDocuments(
+  client: RocClient,
+  input: { documentIds: string[] | null; tier: ResearchParseTier | null },
+): Promise<IpcLikeResult<{ documents: ResearchDocument[]; failed: Array<{ documentId: string; error: string }> }>> {
+  return client.api.research.parseDocuments(input);
 }
 
 export function cancelDocumentParse(
@@ -196,8 +208,29 @@ export function getModelsStatus(client: RocClient): Promise<IpcLikeResult<Resear
   return client.api.research.getModelsStatus();
 }
 
-export function downloadModels(client: RocClient): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.downloadModels();
+export function downloadModels(
+  client: RocClient,
+  input: { pack: ResearchModelsStatus['selectedPack']; source: ResearchModelsStatus['source'] }
+): Promise<IpcLikeResult<ResearchModelsStatus>> {
+  return client.api.research.downloadModels(input);
+}
+
+export function selectModels(
+  client: RocClient,
+  input: { pack: ResearchModelsStatus['selectedPack']; source?: ResearchModelsStatus['source'] }
+): Promise<IpcLikeResult<ResearchModelsStatus>> {
+  return client.api.research.selectModels(input);
+}
+
+export function importModels(client: RocClient, directory: string): Promise<IpcLikeResult<ResearchModelsStatus>> {
+  return client.api.research.importModels({ directory });
+}
+
+export function removeModels(
+  client: RocClient,
+  pack: ResearchModelsStatus['selectedPack']
+): Promise<IpcLikeResult<ResearchModelsStatus>> {
+  return client.api.research.removeModels({ pack });
 }
 
 // ---- index + retrieval (T5.5) ----------------------------------------------

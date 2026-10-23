@@ -10,6 +10,11 @@ import { verifyManifest, type Manifest } from './manifest.ts';
 import { decodeJson } from '../lib/decode-json.ts';
 
 export const OFFLINE_PROFILE = '(version 1)(allow default)(deny network*)';
+
+/** 冻结的解析配置：smoke 与主进程共用同一组字段，不各自编默认值。 */
+const smokeOptions = (tier: 'basic' | 'flash', pageRange = '') => ({
+  tier, smallBackend: 'torch', vlmEngine: tier === 'basic' ? 'auto' : 'auto', device: 'cpu', pageRange, ocrMode: 'auto'
+});
 export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
 export const PLOT = "import matplotlib\nmatplotlib.use('Agg')\nfrom matplotlib import pyplot as plt\nfig, ax = plt.subplots(figsize=(5, 2.5), layout='constrained')\nax.bar(['Control', 'Treatment'], [10, 50], color=['#66788a', '#20736b'])\nax.set_ylabel('Improvement (percent)')\nfor extension in ['png', 'svg', 'pdf']:\n    fig.savefig(f'figure.{extension}', dpi=180)\nplt.close(fig)\n";
 
@@ -192,7 +197,7 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
       request: {
         operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
-        outputDir: join(output, 'parsed'), modelsPath: models
+        outputDir: join(output, 'parsed'), modelsPath: models, options: smokeOptions('basic')
       }
     }),
     'research_smoke_worker_output_corrupt'
@@ -200,9 +205,8 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   if (!parsed.ok) fail('research_smoke_parse_failed');
   const content = parsed.result.content;
   const kinds = new Set(parsed.result.blocks.map((block) => block.kind));
-  // 这一页是先把 PDF 渲染成 PNG 再 OCR 的，macOS Vision 会把表头里那个大写 T 认成 I
-  //（“Treatment” → “Ireatment”，docling 2.126 与 2.141 输出逐字一致）。所以断言只看
-  // **table 块自己的文本**：Control/Patients/18 都在表格里，而 Control 也是图里的轴标签，
+  // 这一页是先把 PDF 渲染成 PNG 再解析的，走的是 MinerU 自带的 OCR（`ocrMode: auto`）。
+  // 断言只看 **table 块自己的文本**：Control/Patients/18 都在表格里，而 Control 也是图里的轴标签，
   // 拿整篇 content 去 includes 会把图上的字当成表格内容。
   const tableText = parsed.result.blocks.find((block) => block.kind === 'table')?.text ?? '';
   const tableCellsKept = ['Control', 'Patients', '18', 'Improvement'].every((token) => tableText.includes(token));
@@ -215,7 +219,7 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     await run('native-pdf', [python, '-I', '-B', join(toolchain, 'worker.py')], {
       request: {
         operation: 'parse_document', projectRoot: output, sourcePath: pdf,
-        outputDir: join(output, 'parsed-pdf'), modelsPath: models
+        outputDir: join(output, 'parsed-pdf'), modelsPath: models, options: smokeOptions('basic')
       }
     }),
     'research_smoke_worker_output_corrupt'
@@ -231,7 +235,8 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     await run('html', [python, '-I', '-B', join(toolchain, 'worker.py')], {
       request: {
         operation: 'parse_document', projectRoot: output, sourcePath: html,
-        outputDir: join(output, 'parsed-html'), modelsPath: models
+        // HTML 固定 flash（提案 §6）：不加载模型，也不建虚构页码。
+        outputDir: join(output, 'parsed-html'), modelsPath: null, options: smokeOptions('flash')
       }
     }),
     'research_smoke_worker_output_corrupt'

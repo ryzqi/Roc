@@ -3,7 +3,9 @@ import { researchTemplateCompileRequestSchema, researchTemplateImportRequestSche
 import {
   researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
-  researchTemplatePreviewRequestSchema, researchToolchainStatusSchema, researchModelsStatusSchema
+  researchTemplatePreviewRequestSchema, researchToolchainStatusSchema, researchModelsStatusSchema,
+  researchModelsSelectRequestSchema, researchModelsDownloadRequestSchema, researchModelsImportRequestSchema,
+  researchModelsRemoveRequestSchema
 } from '../../../shared/schemas/research-production';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
@@ -13,7 +15,11 @@ import type { ResearchToolchain } from './toolchain';
 const capabilities = {
   status: descriptor('research.toolchain.status', z.object({}).strict(), researchToolchainStatusSchema),
   modelsStatus: descriptor('research.models.status', z.object({}).strict(), researchModelsStatusSchema),
-  modelsDownload: descriptor('research.models.download', z.object({}).strict(), researchModelsStatusSchema),
+  modelsSelect: descriptor('research.models.select', researchModelsSelectRequestSchema, researchModelsStatusSchema),
+  modelsDownload: descriptor('research.models.download', researchModelsDownloadRequestSchema, researchModelsStatusSchema),
+  modelsImport: descriptor('research.models.import', researchModelsImportRequestSchema, researchModelsStatusSchema),
+  modelsRemove: descriptor('research.models.remove', researchModelsRemoveRequestSchema, researchModelsStatusSchema),
+  modelsCancel: descriptor('research.models.cancel', z.object({}).strict(), researchModelsStatusSchema),
   import: descriptor('research.template.import', researchTemplateImportRequestSchema, researchTemplateSchema),
   compile: descriptor('research.template.compile', researchTemplateCompileRequestSchema, researchTemplateSchema),
   get: descriptor('research.template.get', researchTemplateCompileRequestSchema, researchTemplateSchema),
@@ -41,7 +47,11 @@ export function registerResearchProductionCapabilities(context: RocPluginContext
   }
   register(capabilities.status, () => tools.status());
   registerModels(capabilities.modelsStatus, () => tools.modelsStatus());
-  registerModels(capabilities.modelsDownload, () => tools.downloadModels());
+  registerModels(capabilities.modelsSelect, (input) => tools.selectModels(input.pack, input.source));
+  registerModels(capabilities.modelsDownload, (input) => tools.downloadModels(input.pack, input.source));
+  registerModels(capabilities.modelsImport, (input) => tools.importModels(input.directory));
+  registerModels(capabilities.modelsRemove, (input) => tools.removeModels(input.pack));
+  registerModels(capabilities.modelsCancel, () => tools.cancelModelsDownload());
   register(capabilities.import, (input) => templates.importTemplate(input));
   register(capabilities.compile, (input) => templates.compile(input));
   register(capabilities.get, (input) => templates.get(input));
@@ -61,21 +71,28 @@ function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput
   return { name, version: '1.0.0', inputSchema, outputSchema };
 }
 
+const MODEL_ERROR_MESSAGES: Readonly<Record<string, { message: string; category: RocDomainError['category']; retryable: boolean }>> = {
+  research_models_unavailable: { message: '解析模型尚未下载，请先在科研工作台下载。', category: 'degraded', retryable: false },
+  research_model_download_locked: { message: '已有模型下载任务在进行，请等待完成或取消它。', category: 'conflict', retryable: false },
+  research_model_downloader_unavailable: { message: '模型下载入口不可用：工具链尚未就绪。', category: 'degraded', retryable: false },
+  research_model_import_missing: { message: '指定目录不存在。', category: 'validation', retryable: false },
+  research_model_import_invalid: { message: '指定路径不是目录。', category: 'validation', retryable: false },
+  research_model_import_empty: { message: '该目录里没有可识别的 MinerU 模型仓库。', category: 'validation', retryable: false },
+  research_model_import_path_invalid: { message: '请选择绝对路径。', category: 'validation', retryable: false },
+  // 取消是用户意图，不能当失败报：UI 上它是终态，不是错误。
+  research_process_cancelled: { message: '模型下载已取消，已下载的文件保留，可重新发起续传。', category: 'conflict', retryable: false }
+};
+
 function mapResearchModelError(error: unknown): never {
   if (error instanceof RocDomainError) throw error;
   const code = error instanceof Error ? error.message.split(':', 1)[0] : '';
-  if (code === 'research_models_unavailable') {
-    throw new RocDomainError({
-      code,
-      message: '解析模型尚未下载，请先在科研工作台下载。',
-      category: 'degraded',
-      retryable: false
-    });
-  }
+  const known = MODEL_ERROR_MESSAGES[code];
+  if (known !== undefined) throw new RocDomainError({ code, ...known });
   if (code.startsWith('research_model_') || code.startsWith('research_download_')) {
+    // 具体失败原因（`research_model_missing:<repo>/<file>`）留在 code 里，UI 才能指向确实缺的文件。
     throw new RocDomainError({
       code,
-      message: '解析模型下载失败，请检查网络后重试。',
+      message: '解析模型下载或校验失败，请检查网络与磁盘后重试。',
       category: 'external',
       retryable: true
     });

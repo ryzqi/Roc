@@ -10,7 +10,7 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
  * P5 验收闸门的自动化实测（真应用 / 真 IPC / 真文档解析 / 真索引 / 真检索）。
  *
  * 为什么需要它：P5 的闸门描述的全是**运行时事实** —— 一篇真 PDF 是否真的被
- * MinerU（docling）解析出章节 + 公式 + 表格、索引是否真的扫到工作目录里的文件、
+ * MinerU 解析出章节 + 公式 + 表格、索引是否真的扫到工作目录里的文件、
  * 检索命中是否真的能跳回原文位置、空项目下 Wiki/图谱是否真的不画示意数据。
  * 静态阅读与单测都不覆盖这些（P3/P4 的实测已经证明：类型正确、单测全绿、
  * 用户看到的仍可能是坏的）。
@@ -26,7 +26,7 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
  *      `<workspace>/assets/smoke-image.png`，因此**无法**用它选中夹具 PDF。
  *      导入这一步用 `research.document.import`；对话框本身按它能做的事断言
  *      （5 个 tab、题名/citationKey 必填、选择器回填、手工录入真写库）。
- *   3. **索引不重复解析 PDF。** 索引的 docling 分支与闸门 1 的 `document.parse`
+ *   3. **索引不重复解析 PDF。** 索引的解析分支与闸门 1 的 `document.parse`
  *      是**同一个** `ResearchToolchain.parseDocument` 调用，再跑一遍要多花 ~2 分钟
  *      而没有新覆盖。索引闸门改用真实可索引的 markdown 文件（快、确定），并把它
  *      真实报告两个坏文件（种子里那对占位 PDF/PNG）当作失败可见性的证据。
@@ -69,7 +69,7 @@ const smokeModelId = 'p5-smoke-model';
 const smokeProviderId = 'p5-smoke-provider';
 const smokeModelKey = `${smokeProviderId}:${smokeModelId}`;
 
-/** docling CPU 一轮 ≈ 2 分钟；给足余量，但不要无限等。 */
+/** MinerU basic 档 CPU 上 15 页 ≈ 2 分钟（实测 123s / 9.7 GB 峰值）；给足余量，但不要无限等。 */
 const parseTimeoutMs = 20 * 60_000;
 
 const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
@@ -243,7 +243,7 @@ try {
   );
   record(
     '0 前置检查',
-    modelsReady ? '闸门 1 路线：真解析（MinerU/docling）' : '闸门 1 路线：断言真实降级文案 + 其余断言走索引/派生路径',
+    modelsReady ? '闸门 1 路线：真解析（MinerU）' : '闸门 1 路线：断言真实降级文案 + 其余断言走索引/派生路径',
     true,
     modelsReady ? '真 PDF → 真解析 → 阅读器章节/公式/表格' : '解析模型未装：document.parse 只会失败，断言失败态与模型提示',
     'info'

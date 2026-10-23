@@ -11,6 +11,7 @@ import {
   researchEvidenceSchema
 } from '../../../shared/schemas/research-evidence';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
+import { RocDomainError } from '../../services/errors';
 import type { ResearchEvidenceRepository } from './evidence-repository';
 
 const capabilities = {
@@ -26,7 +27,20 @@ export const researchEvidenceCapabilities = Object.values(capabilities);
 
 export function registerResearchEvidenceCapabilities(context: RocPluginContext, repository: ResearchEvidenceRepository): void {
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
-    context.capabilities.register(context.pluginId, capability, async (input) => run(capability.inputSchema.parse(input)));
+    context.capabilities.register(context.pluginId, capability, async (input) => {
+      try { return run(capability.inputSchema.parse(input)); }
+      catch (error) {
+        // 引用失效不是普通错误：原文和证据都还在，只是块定位随重新解析失效（提案 §8.4）。
+        if (error instanceof Error && error.message === 'research_evidence_reference_superseded') {
+          throw new RocDomainError({
+            code: 'research_evidence_reference_superseded',
+            message: '该证据引用的解析块已随重新解析失效；原文仍可打开，重新采集一次即可恢复定位。',
+            category: 'conflict', retryable: false
+          });
+        }
+        throw error;
+      }
+    });
   }
   register(capabilities.capture, (request) => repository.capture(request));
   register(capabilities.list, (request) => repository.list(request.projectId));

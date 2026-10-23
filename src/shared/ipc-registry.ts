@@ -142,7 +142,9 @@ import {
 import {
   researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
-  researchToolchainStatusSchema, researchModelsStatusSchema
+  researchToolchainStatusSchema, researchModelsStatusSchema,
+  researchModelsSelectRequestSchema, researchModelsDownloadRequestSchema, researchModelsImportRequestSchema,
+  researchModelsRemoveRequestSchema
 } from './schemas/research-production';
 import { researchProseLintReportSchema, researchProseLintRequestSchema } from './schemas/research-prose';
 import {
@@ -153,7 +155,8 @@ import {
 } from './schemas/research-library';
 import {
   researchDocumentIdRequestSchema, researchDocumentImportRequestSchema, researchDocumentListRequestSchema,
-  researchDocumentParseRequestSchema, researchDocumentParseSchema, researchDocumentRunSchema, researchDocumentSchema
+  researchDocumentParseRequestSchema, researchDocumentParseSchema, researchDocumentRunSchema, researchDocumentSchema,
+  researchDocumentStartParseRequestSchema, researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema
 } from './schemas/research-documents';
 import {
   researchIndexedFileSchema, researchIndexedSourceSchema, researchIndexControlRequestSchema, researchIndexEvidenceSourceRequestSchema,
@@ -463,7 +466,11 @@ export const ipcRegistry = {
     request({ key: 'researchToolchainStatus', channel: 'roc:research:toolchain-status', domain: 'research', method: 'getToolchainStatus', kind: 'plugin', capabilityName: 'research.toolchain.status', inputTransform: none, contract: methodContract(noArgs, researchToolchainStatusSchema) }),
     request({ key: 'researchProseLint', channel: 'roc:research:prose-lint', domain: 'research', method: 'lintManuscript', kind: 'plugin', capabilityName: 'research.prose.lint', inputTransform: first, contract: methodContract(oneArg(researchProseLintRequestSchema), researchProseLintReportSchema) }),
     request({ key: 'researchModelsStatus', channel: 'roc:research:models-status', domain: 'research', method: 'getModelsStatus', kind: 'plugin', capabilityName: 'research.models.status', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
-    request({ key: 'researchModelsDownload', channel: 'roc:research:models-download', domain: 'research', method: 'downloadModels', kind: 'plugin', capabilityName: 'research.models.download', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
+    request({ key: 'researchModelsSelect', channel: 'roc:research:models-select', domain: 'research', method: 'selectModels', kind: 'plugin', capabilityName: 'research.models.select', inputTransform: first, contract: methodContract(oneArg(researchModelsSelectRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsImport', channel: 'roc:research:models-import', domain: 'research', method: 'importModels', kind: 'plugin', capabilityName: 'research.models.import', inputTransform: first, contract: methodContract(oneArg(researchModelsImportRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsRemove', channel: 'roc:research:models-remove', domain: 'research', method: 'removeModels', kind: 'plugin', capabilityName: 'research.models.remove', inputTransform: first, contract: methodContract(oneArg(researchModelsRemoveRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsDownload', channel: 'roc:research:models-download', domain: 'research', method: 'downloadModels', kind: 'plugin', capabilityName: 'research.models.download', inputTransform: first, contract: methodContract(oneArg(researchModelsDownloadRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsCancel', channel: 'roc:research:models-cancel', domain: 'research', method: 'cancelModelsDownload', kind: 'plugin', capabilityName: 'research.models.cancel', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
     request({ key: 'researchTemplateGet', channel: 'roc:research:template-get', domain: 'research', method: 'getTemplate', kind: 'plugin', capabilityName: 'research.template.get', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchTemplateList', channel: 'roc:research:template-list', domain: 'research', method: 'listTemplates', kind: 'plugin', capabilityName: 'research.template.list', inputTransform: first, contract: methodContract(oneArg(researchTemplateListRequestSchema), researchTemplateSchema.array()) }),
     request({ key: 'researchTemplateFiles', channel: 'roc:research:template-files', domain: 'research', method: 'getTemplateFiles', kind: 'plugin', capabilityName: 'research.template.files', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateFileSchema.array()) }),
@@ -483,7 +490,8 @@ export const ipcRegistry = {
     request({ key: 'researchDocumentImport', channel: 'roc:research:document-import', domain: 'research', method: 'importDocument', kind: 'plugin', capabilityName: 'research.document.import', inputTransform: first, contract: methodContract(oneArg(researchDocumentImportRequestSchema), researchDocumentSchema) }),
     request({ key: 'researchDocumentList', channel: 'roc:research:document-list', domain: 'research', method: 'listDocuments', kind: 'plugin', capabilityName: 'research.document.list', inputTransform: first, contract: methodContract(oneArg(researchDocumentListRequestSchema), researchDocumentSchema.array()) }),
     request({ key: 'researchDocumentGet', channel: 'roc:research:document-get', domain: 'research', method: 'getDocument', kind: 'plugin', capabilityName: 'research.document.get', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentSchema) }),
-    request({ key: 'researchDocumentParse', channel: 'roc:research:document-parse', domain: 'research', method: 'parseDocument', kind: 'plugin', capabilityName: 'research.document.parse', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentParse', channel: 'roc:research:document-parse', domain: 'research', method: 'parseDocument', kind: 'plugin', capabilityName: 'research.document.parse', inputTransform: first, contract: methodContract(oneArg(researchDocumentStartParseRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentParseMany', channel: 'roc:research:document-parse-many', domain: 'research', method: 'parseDocuments', kind: 'plugin', capabilityName: 'research.document.parseMany', inputTransform: first, contract: methodContract(oneArg(researchDocumentBatchParseRequestSchema), researchDocumentBatchParseSchema) }),
     request({ key: 'researchDocumentCancel', channel: 'roc:research:document-cancel', domain: 'research', method: 'cancelDocumentParse', kind: 'plugin', capabilityName: 'research.document.cancel', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentSchema) }),
     request({ key: 'researchDocumentRuns', channel: 'roc:research:document-runs', domain: 'research', method: 'listDocumentParses', kind: 'plugin', capabilityName: 'research.document.runs', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentRunSchema.array()) }),
     request({ key: 'researchDocumentContent', channel: 'roc:research:document-content', domain: 'research', method: 'getDocumentContent', kind: 'plugin', capabilityName: 'research.document.content', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentParseSchema) }),

@@ -6,6 +6,8 @@ import type { StoredDocumentContent } from './document-repository';
 import { readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 
 export const maximumDocumentBytes = 512 * 1024 * 1024;
+// MiddleJson / Markdown 工件上限：P0 实测 15 页论文约 2 MB，留足两页扫描件余量。
+export const maximumArtifactBytes = 128 * 1024 * 1024;
 export const documentMediaTypes: Readonly<Record<string, string>> = {
   '.pdf': 'application/pdf', '.html': 'text/html', '.htm': 'text/html', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp', '.webp': 'image/webp'
@@ -50,6 +52,19 @@ export async function collectDocumentContent(root: string, output: string, input
     if (imageAssetId === undefined) throw new Error('research_document_asset_unlisted');
     return { ...block, imageAssetId };
   });
-  return { outputPath: researchRelativePath(relative(root, output)), files,
-    content: { sourceHash: parsed.sourceHash, parserVersion: parsed.parserVersion, pageCount: parsed.pageCount, content: parsed.content, warnings: parsed.warnings, blocks, assets } };
+  // 工件是发布的一部分：缺件不能被当成一次完整成功（提案 §7/§8）。
+  for (const artifact of Object.values(parsed.artifacts)) {
+    await readResearchFile(output, researchRelativePath(artifact), maximumArtifactBytes);
+  }
+  return {
+    outputPath: researchRelativePath(relative(root, output)),
+    files,
+    content: {
+      contractVersion: parsed.contractVersion, engine: parsed.engine, engineVersion: parsed.engineVersion,
+      adapterVersion: parsed.adapterVersion, parserVersion: parsed.parserVersion, parserFingerprint: parsed.parserFingerprint,
+      modelManifest: parsed.modelManifest, runtime: parsed.runtime, tier: parsed.tier, reportedTier: parsed.reportedTier,
+      parseMode: parsed.parseMode, device: parsed.device, artifacts: parsed.artifacts,
+      sourceHash: parsed.sourceHash, pageCount: parsed.pageCount, content: parsed.content, warnings: parsed.warnings, blocks, assets
+    }
+  };
 }

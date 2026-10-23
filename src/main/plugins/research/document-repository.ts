@@ -107,8 +107,14 @@ export class ResearchDocumentRepository {
     this.get(documentId);
     const row = this.db.prepare('SELECT * FROM research_document_parses WHERE id = ? AND document_id = ?').get(parseId, documentId) as RunRow | undefined;
     if (row === undefined) throw new Error('research_document_parse_not_found');
+    // 旧代际（或已被代际切换撤销）的结果不构成“当前结果”。提案 §8.4 要求这类引用明确
+    // 返回「引用待重建」，而不是 `not_ready`（那是“还在跑”）也不是 `not_found`（那是删了）。
+    // 原文仍可按文档身份打开，只是不再承诺块定位，更不允许静默指向新块。
+    if (row.status === 'failed' && row.error === 'research_document_parse_superseded') {
+      throw new Error('research_document_parse_superseded');
+    }
     if (row.status !== 'ready' || row.data_json === null) throw new Error('research_document_parse_not_ready');
-    return { run: toRun(row), data: storedDocumentContentSchema.parse(JSON.parse(row.data_json)) };
+    return { run: toRun(row), data: parseStoredContent(row.data_json) };
   }
 
   syncLibraryIndex(libraryItemId: string): void {
@@ -126,6 +132,42 @@ export class ResearchDocumentRepository {
     for (const row of rows) this.fail(row.id, row.active_parse_id, 'research_document_parse_interrupted', false);
   }
 
+  /**
+   * 启动时的一次性派生重建（提案 §8「无向后兼容」）。
+   *
+   * 旧代际（Docling）的 `data_json` 不反序列化、不迁移。事务内只做三件事：解除
+   * `current_parse_id`/`active_parse_id` 引用、把解析记录标成旧代际失败、撤掉指向旧块的检索条目。
+   * 原文、sourceHash、元数据、引用键与用户内容全部保留——文档本身只回到 `imported`，
+   * 即“有原文、无结果”，就是它的准确含义。
+   *
+   * 可重复执行：`marker` 写入 `research_evidence_source_metadata`（本表已有键值语义，且无需
+   * 改 CHECK 约束）；切换后文档的 `current_parse_id` 已为 NULL，再次启动走空集合。
+   */
+  switchDerivationGeneration(contractVersion: number): boolean {
+    const key = 'derivation-generation';
+    return this.db.transaction(() => {
+      const current = this.db.prepare('SELECT contract_version FROM research_generations WHERE name = ?')
+        .get(key) as { contract_version: number } | undefined;
+      if (current?.contract_version === contractVersion) return false;
+      const stale = this.db.prepare('SELECT id,current_parse_id FROM research_documents WHERE current_parse_id IS NOT NULL OR active_parse_id IS NOT NULL').all() as Array<{ id: string; current_parse_id: string | null }>;
+      for (const row of stale) {
+        if (row.current_parse_id !== null) this.removeIndex(row.current_parse_id);
+        // 旧结果的“成功”不再成立：标成 failed 而不是留成 ready，否则 `parsed()` 会把它当当前结果返回。
+        this.db.prepare("UPDATE research_document_parses SET status = 'failed', error = 'research_document_parse_superseded' WHERE document_id = ? AND status IN ('ready','running')").run(row.id);
+      }
+      this.db.prepare("UPDATE research_documents SET status = 'imported',current_parse_id = NULL,active_parse_id = NULL,error = NULL,updated_at = ?").run(this.now());
+      this.db.prepare('INSERT INTO research_generations (name,contract_version,switched_at) VALUES (?,?,?) ON CONFLICT(name) DO UPDATE SET contract_version = excluded.contract_version,switched_at = excluded.switched_at')
+        .run(key, contractVersion, this.now());
+      return true;
+    })();
+  }
+
+  /** 待重解析的文档：有原文、没有当前结果。用于显式批量重解析。 */
+  needsReparse(): ResearchDocument[] {
+    return (this.db.prepare("SELECT id FROM research_documents WHERE current_parse_id IS NULL AND active_parse_id IS NULL AND status IN ('imported','failed')")
+      .all() as Array<{ id: string }>).map((row) => this.get(row.id));
+  }
+
   private row(id: string): DocumentRow {
     const row = this.db.prepare('SELECT * FROM research_documents WHERE id = ?').get(id) as DocumentRow | undefined;
     if (row === undefined) throw new Error('research_document_not_found');
@@ -133,6 +175,9 @@ export class ResearchDocumentRepository {
   }
 
   private removeIndex(parseId: string): void {
+    // 删块前先把指向这些块的证据标成失效：证据行本身不删（原文与出处还在），只是块定位
+    // 不再成立。顺序反了就去不到块 id 了（提案 §8.4）。
+    this.research.evidence.invalidateChunksOf(`document:${parseId}`);
     this.db.prepare('DELETE FROM research_knowledge_documents WHERE id = ?').run(`document:${parseId}`);
   }
 
@@ -147,4 +192,23 @@ export class ResearchDocumentRepository {
 
 function toRun(row: RunRow): ResearchDocumentRun {
   return researchDocumentRunSchema.parse({ id: row.id, documentId: row.document_id, status: row.status, error: row.error, createdAt: row.created_at, finishedAt: row.finished_at });
+}
+
+/**
+ * 反序列化一条历史解析记录（提案 §8「派生数据切换：无向后兼容」）。
+ *
+ * 旧代际（Docling）的 `data_json` **不解析**：它缺少 `contractVersion`/`engine`/工件身份，
+ * 也指向已被删除的工件目录。把它当作“待重建”报出去，而不是让一个字段缺失的 zod 错误
+ * 傅到 UI 层——那会把「旧结果不再读取」变成「一条看不懂的校验失败」。
+ */
+function parseStoredContent(json: string): StoredDocumentContent {
+  let value: unknown;
+  try { value = JSON.parse(json); }
+  catch { throw new Error('research_document_parse_corrupt'); }
+  if (typeof value !== 'object' || value === null || !('content' in value)
+      || typeof (value as { content?: unknown }).content !== 'object'
+      || !('contractVersion' in ((value as { content: object }).content))) {
+    throw new Error('research_document_parse_legacy');
+  }
+  return storedDocumentContentSchema.parse(value);
 }

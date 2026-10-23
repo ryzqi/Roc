@@ -21,6 +21,8 @@ import type {
 export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
 export type ResearchDocumentContent = z.infer<typeof researchDocumentContentSchema>;
 export type ResearchDocumentParse = z.infer<typeof researchDocumentParseSchema>;
+/** 解析档位：`basic`/`standard`/`advanced` 需模型，`flash` 不需要。 */
+export type { ResearchParseTier, ResearchParseOptions } from '../schemas/research-production';
 export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
 export type ResearchDocumentImportRequest = z.infer<typeof researchDocumentImportRequestSchema>;
 export type ResearchDocumentIdRequest = z.infer<typeof researchDocumentIdRequestSchema>;

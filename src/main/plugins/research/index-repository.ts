@@ -23,7 +23,12 @@ const jobInputSchema = z.object({ path: z.string(), kind: researchIndexedFileSch
   embedding: z.object({ configId: z.string(), revision: z.number().int().positive() }).strict().nullable() }).strict();
 export type IndexJob = z.infer<typeof researchIndexJobSchema> & { input: z.infer<typeof jobInputSchema> };
 const indexPayloadSchema = z.object({ content: z.string(), chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().min(1) }).strict()),
-  sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), parserKey: z.string().min(1), parserVersion: z.string().min(1) }).strict();
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), parserKey: z.string().min(1), parserVersion: z.string().min(1),
+  // 解析工件（提案 §8「工件发布与恢复」）：索引链取完文本**不能**删掉中间产物，
+  // 否则阅读器与索引就不再共享同一份不可变工件。非文档输入（纯文本）为 null。
+  parseArtifactId: z.string().min(1).nullable().default(null),
+  artifactPath: z.string().min(1).nullable().default(null),
+  parserFingerprint: z.string().regex(/^[a-f0-9]{64}$/u).nullable().default(null) }).strict();
 export type IndexPayload = z.infer<typeof indexPayloadSchema>;
 
 export class ResearchIndexRepository {
@@ -44,7 +49,8 @@ export class ResearchIndexRepository {
 
   settings(projectId: string): z.infer<typeof researchIndexSettingsSchema> {
     const row = this.scope(projectId);
-    return researchIndexSettingsSchema.parse({ ...JSON.parse(row.options_json), projectId, revision: row.revision });
+    // 设置损坏时要报“索引设置已损坏”，而不是让一个 SyntaxError 从 UI 里溢出来。
+    return researchIndexSettingsSchema.parse({ ...decodeObject(row.options_json, 'research_index_settings_corrupt'), projectId, revision: row.revision });
   }
 
   saveSettings(projectId: string, revision: number, options: Options): void {
@@ -171,7 +177,7 @@ export class ResearchIndexRepository {
   job(id: string): IndexJob {
     const row = this.db.prepare('SELECT * FROM research_index_jobs WHERE id = ?').get(id) as JobRow | undefined;
     if (row === undefined) throw new Error('research_index_job_not_found');
-    return { ...jobView(row), input: jobInputSchema.parse(JSON.parse(row.snapshot_json)) };
+    return { ...jobView(row), input: decodeJobInput(row.snapshot_json) };
   }
 
   beginJob(id: string): IndexJob {
@@ -186,7 +192,7 @@ export class ResearchIndexRepository {
 
   cached(fileId: string): { payload: IndexPayload | null; embeddingKey: string; published: boolean } {
     const row = this.fileRow(fileId);
-    return { payload: row.payload_json === null ? null : indexPayloadSchema.parse(JSON.parse(row.payload_json)), embeddingKey: row.embedding_key, published: this.hasPublishedText(row) };
+    return { payload: parseIndexPayload(row.payload_json), embeddingKey: row.embedding_key, published: this.hasPublishedText(row) };
   }
 
   publishText(job: IndexJob, input: IndexPayload, cachePath: string): boolean {
@@ -265,6 +271,19 @@ export class ResearchIndexRepository {
       error: unavailable ?? row.error, lastScanAt: row.last_scan_at, counts });
   }
 
+  /**
+   * 仍被索引文件引用的工件 id 集合（提案 §8「工件发布与恢复」）：垃圾回收只动无人引用的目录。
+   * 读全部 payload_json；数量级是项目数×文件数，一次启动扫一遍完全可接受。
+   */
+  referencedArtifacts(): Set<string> {
+    const referenced = new Set<string>();
+    for (const row of this.db.prepare('SELECT payload_json FROM research_index_files WHERE payload_json LIKE ?').all('%parseArtifactId%') as Array<{ payload_json: string }>) {
+      const payload = parseIndexPayload(row.payload_json);
+      if (payload?.parseArtifactId !== null && payload?.parseArtifactId !== undefined) referenced.add(payload.parseArtifactId);
+    }
+    return referenced;
+  }
+
   source(projectId: string, fileId: string, sourceHash: string): { source: z.infer<typeof researchIndexedSourceSchema>; cachePath: string } {
     const file = this.fileRow(fileId);
     if (file.project_id !== projectId) throw new Error('research_index_project_mismatch');
@@ -300,7 +319,9 @@ export class ResearchIndexRepository {
 
   private latestParserKey(fileId: string): string | null {
     const row = this.db.prepare('SELECT snapshot_json FROM research_index_jobs WHERE file_id = ? ORDER BY rowid DESC LIMIT 1').get(fileId) as { snapshot_json: string } | undefined;
-    return row === undefined ? null : jobInputSchema.parse(JSON.parse(row.snapshot_json)).parserKey;
+    if (row === undefined) return null;
+    try { return decodeJobInput(row.snapshot_json).parserKey; }
+    catch { return null; }
   }
 
   private enqueue(projectId: string, fileId: string, generation: number, input: IndexJob['input']): void {
@@ -320,7 +341,7 @@ export class ResearchIndexRepository {
     const row = this.db.prepare('SELECT project_id,source_type,source_id,metadata_json FROM research_knowledge_documents WHERE id = ?').get(knowledgeId(file.id)) as
       { project_id: string | null; source_type: string; source_id: string; metadata_json: string } | undefined;
     if (row === undefined || row.project_id !== file.project_id || row.source_type !== 'file' || row.source_id !== file.path) return false;
-    const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+    const metadata = decodeObject(row.metadata_json, 'research_index_metadata_corrupt') as Record<string, unknown>;
     return metadata.type === 'project-index' && metadata.fileId === file.id && metadata.sourceHash === file.indexed_hash && metadata.parserKey === file.parser_key;
   }
 
@@ -329,11 +350,40 @@ export class ResearchIndexRepository {
   }
 
   private removeText(projectId: string, fileId: string): void {
+    // 同样是“删块前先失效引用”：索引文件被移除时，指向它块的证据不能再指着一个不存在的块。
+    this.research.evidence.invalidateChunksOf(knowledgeId(fileId));
     this.db.prepare('DELETE FROM research_knowledge_documents WHERE id = ? AND project_id = ?').run(knowledgeId(fileId), projectId);
   }
 }
 
 export function knowledgeId(fileId: string): string { return `project-index:${fileId}`; }
+
+/**
+ * 读回缓存的索引 payload。库文件可能被外部改坏，此时应当当作“没有缓存、重新索引一次”，
+ * 而不是把 SyntaxError 抛进索引泵把整个项目卡在 failed。
+ */
+function parseIndexPayload(json: string | null): IndexPayload | null {
+  if (json === null) return null;
+  let value: unknown;
+  try { value = JSON.parse(json); }
+  catch { return null; }
+  const parsed = indexPayloadSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** 解析一段 Roc 自己写入的 JSON 对象；损坏时报显式错误，不让 SyntaxError 穿过边界。 */
+function decodeObject(json: string, code: string): Record<string, unknown> {
+  let value: unknown;
+  try { value = JSON.parse(json); }
+  catch { throw new Error(code); }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(code);
+  return value as Record<string, unknown>;
+}
+
+function decodeJobInput(json: string): IndexJob['input'] {
+  try { return jobInputSchema.parse(JSON.parse(json)); }
+  catch { throw new Error('research_index_job_corrupt'); }
+}
 export function embeddingKey(receipt: ResearchEmbeddingReceipt): string { return receipt === null ? 'none' : JSON.stringify([receipt.configId, receipt.revision]); }
 function fileIdentity(projectId: string, path: string): string { return `index_file_${createHash('sha256').update(JSON.stringify([projectId, path])).digest('hex')}`; }
 function fileView(row: FileRow, published: boolean): z.infer<typeof researchIndexedFileSchema> {

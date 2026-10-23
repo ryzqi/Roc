@@ -1,51 +1,98 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "engine": "mineru",
+  "engineVersion": "4.0.12",
   "models": [
     {
-      "repoId": "docling-project/docling-layout-heron",
-      "revision": "8f39ad3c0b4c58e9c2d2c84a38465abf757272d8",
-      "directory": "docling-project--docling-layout-heron",
+      "name": "MinerU-4_models_torch",
+      "kind": "torch",
       "license": "Apache-2.0",
+      "licenseNote": "opendatalab/MinerU-4_models_torch 在 Hugging Face 上标注 apache-2.0；模型说明（README）随权重保留。MinerU 程序本体另按 MinerU Open Source License（Apache-2.0 附加条款）分发。",
       "files": {
-        "README.md": "175700839bc7808eac6af1d0c23e4f483606ab2276fe01122f4093e61a1a65b6",
-        "config.json": "fdea30805ce2f5666b147fca941dcdd27ad468e27d6ed21902207d3da056a97d",
-        "model.safetensors": "00333a43451945aaf89db8ca9c0a17e75d1537c17db60fdb91aa95f4c7929e0c",
-        "preprocessor_config.json": "cd38cd59999e7a95d68e487fbe5132df3d4e5c32a0836add57e6126ba0c4eaf1"
-      }
+        "Layout/PP-DocLayoutV2/.mineru_complete": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "Layout/PP-DocLayoutV2/config.json": {
+          "bytes": 3787,
+          "sha256": "18a696b54c64c4fa582afcd3a41407c4b65a99dc7ab187ad2fed8af8e4128ad8"
+        },
+        "Layout/PP-DocLayoutV2/inference.yml": {
+          "bytes": 1482,
+          "sha256": "93100e0fb2cd76b9d246a853deea85e191d8333b2cfca7be76e82e4c4ebfa819"
+        },
+        "Layout/PP-DocLayoutV2/model.safetensors": {
+          "bytes": 214798436,
+          "sha256": "e60f3725aeedc88fd319416ef166bda79171a41516a301c27cab9132dc2739d2"
+        },
+        "Layout/PP-DocLayoutV2/preprocessor_config.json": {
+          "bytes": 575,
+          "sha256": "56281a70c931a291dcaf653605fb4df713fd823f65e939aecd6005c26346a103"
+        },
+        "MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M.pth": {
+          "bytes": 617465525,
+          "sha256": "bd9d40fd9c7759805e93cb54f14f5e91448a80b14aadc2bfb25c4c948b2974e8"
+        },
+        "MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M_inference.yml": {
+          "bytes": 2243888,
+          "sha256": "e57ba132b657d08d52d6c19bee94f1eefe12190fddc23e9b1f6a54b8f31e051f"
+        },
+        "OCR/paddleocr/.mineru_complete": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "OCR/paddleocr/ch_PP-OCRv6_small_rec_infer.safetensors": {
+          "bytes": 21204736,
+          "sha256": "f65a332afe5aa663f0b9d5706f4ae8457b5b4058a842d5c1eb22df505c27d642"
+        },
+        "OCR/paddleocr/ch_PP-OCRv6_tiny_det_infer.safetensors": {
+          "bytes": 1786412,
+          "sha256": "cae3c88d2a9902fd0293e6b17990428f54bfa7ec98f800a4368e95423a754d16"
+        },
+        "OCR/paddleocr/seal_PP-OCRv4_det_infer.pth": {
+          "bytes": 14506268,
+          "sha256": "a7777ca66448ab90948ce5a3257e4c959d6eacf0489fbadd5133dbe8f89662ae"
+        },
+        "Table/PP-LCNet_x1_0_table_cls.onnx": {
+          "bytes": 6776877,
+          "sha256": "c84bf1d79c1c74d534b5b12adb14dd12151c42f7ae3e4be4f1042b830f80b949"
+        },
+        "Table/slanet-plus.onnx": {
+          "bytes": 7758305,
+          "sha256": "d57a942af6a2f57d6a4a0372573c696a2379bf5857c45e2ac69993f3b334514b"
+        },
+        "Table/unet.onnx": {
+          "bytes": 8335007,
+          "sha256": "0ea48d3a17e35ef5c2e498a5e799566073234d39b1079ca21d9f4fafe73c6d20"
+        }
+      },
+      "bytes": 894881298
     },
     {
-      "repoId": "docling-project/docling-models",
-      "revision": "fc0f2d45e2218ea24bce5045f58a389aed16dc23",
-      "directory": "docling-project--docling-models",
-      "license": "CDLA-Permissive-2.0",
+      "name": "MinerU2.5-Pro-2605-1.2B-GGUF",
+      "kind": "gguf",
+      "license": "Apache-2.0",
+      "licenseNote": "42ailab/MinerU2.5-Pro-2605-1.2B-GGUF 标注 apache-2.0，量化自 opendatalab/MinerU2.5-Pro-2605-1.2B（同为 apache-2.0）。",
       "files": {
-        "README.md": "d17f233378eff1240b623b36da76ee8b40afcca05d505949713bf03f7e00822a",
-        "config.json": "9c34024dc28ff47b75818f415e769809798c29bf9bde6f2ccc63a4acb62396d9",
-        "model_artifacts/tableformer/accurate/tableformer_accurate.safetensors": "2a7d6c924b3cd12fb99a09280ca9c33a89c5d60b93253617d2e088c1a40374d9",
-        "model_artifacts/tableformer/accurate/tm_config.json": "984e122ceb8ccf84d84c9d2882f6f2302a44b4f1e577babd6289892c36f3cffd",
-        "model_artifacts/tableformer/fast/tableformer_fast.safetensors": "3119563aab5a7c96fda4d621119b63fd8806272b86c30936d15507616422f718",
-        "model_artifacts/tableformer/fast/tm_config.json": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a"
-      }
-    },
-    {
-      "repoId": "docling-project/CodeFormulaV2",
-      "revision": "ecedbe111d15c2dc60bfd4a823cbe80127b58af4",
-      "directory": "docling-project--CodeFormulaV2",
-      "license": "CDLA-Permissive-2.0",
-      "files": {
-        "README.md": "684604c08aa8cc32b3d65049bc9794b57f3fc510953148ad3ba61d35f60bef9a",
-        "added_tokens.json": "002686b2efb9535c359458cd1121de8e1b58e67426a46e2bd4425843766a3a5e",
-        "chat_template.json": "c9d21553af689882ac89ad8e8412164662d1605f6595119664e85626df7be421",
-        "config.json": "98f55cfe07dd168f9fab1f1eec35f754b23631ea1a9a7c9759b1b7cb41ab76b1",
-        "generation_config.json": "b17f1890b2b2baf172761c9c4d6eb956482ffa05964f357e67544ec998c9851f",
-        "model.safetensors": "4b04e77af34c4e682a7ab1617628340d658f3c3dcd12456dd2a7fff805cf79d2",
-        "preprocessor_config.json": "6cb6e36d6fcb88ca1502c4a26750715dc3e7dedddc9a8f17b27d8d167d1457e7",
-        "processor_config.json": "e7bff42da73ae9eec9042ef20e066e11f1ee20f025358ff79131e3c0fb549b46",
-        "special_tokens_map.json": "1b17e900a73384d256db6f1a7591fd0d95c09e6aede680022b047386b97afcba",
-        "tokenizer.json": "5ec5d3780a2e01b140cf34f023eb600263855a99aacdc3eb0f2600d7b1b4ac96",
-        "tokenizer_config.json": "37a0e94be9c9ab5197b2188e61cf764bbc015f45261013881fe37bd2fe8599e6",
-        "vocab.json": "8922f7e91084b9862d270c16ce1027071214aa252a1567a4b410f952101005fc"
-      }
+        ".gitattributes": {
+          "bytes": 2075,
+          "sha256": "247a3cfc672484dd40bdf07af0f83ee7a4457e9a995dadb47eedc36c630103b6"
+        },
+        ".mineru_complete": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "MinerU2.5-Pro-2605-1.2B-Q8_0.gguf": {
+          "bytes": 531066496,
+          "sha256": "3f3523429c880d675c0330cb3de78240452bc40a961d037e24f91ab8488f03e7"
+        },
+        "mmproj-MinerU2.5-Pro-2605-1.2B-Q8_0.gguf": {
+          "bytes": 709409600,
+          "sha256": "b6c08ab50352677f7396af45ee60682f353f55488e26911d8154bfc37514d3f8"
+        }
+      },
+      "bytes": 1240478171
     }
-  ]
+  ],
+  "totalBytes": 2135359469
 }

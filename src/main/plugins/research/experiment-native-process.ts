@@ -9,7 +9,8 @@ export async function runRExperimentProcess(request: ResearchProcessRequest,
   run: (request: ResearchProcessRequest) => Promise<ResearchProcessResult>): Promise<ResearchProcessResult> {
   request.signal?.throwIfAborted();
   if (request.command !== '/usr/bin/env') throw new Error('research_experiment_r_launcher_invalid');
-  if (process.arch !== 'arm64' && process.arch !== 'x64') throw new Error('research_experiment_r_architecture_unsupported');
+  // 桥接库只有 arm64 一片；在别的架构上 DYLD_INSERT_LIBRARIES 会静默不生效。
+  if (process.arch !== 'arm64') throw new Error('research_experiment_r_architecture_unsupported');
   const bytes = Buffer.from(bridge.data, 'base64');
   if (researchContentHash(bytes) !== bridge.sha256 || researchContentHash(bridgeSource) !== bridge.sourceHash) throw new Error('research_experiment_r_bridge_changed');
   // R 的初始化拒绝带空格的 TMPDIR；此目录仅属于本次进程，结束后统一清理。

@@ -8,6 +8,24 @@ import { runResearchProcess, ResearchProcessError, type ResearchProcessRequest }
 import type { ResearchToolchain } from './toolchain';
 import { inspectNativeExperimentEnvironment } from './experiment-native-environment';
 
+/**
+ * 实验环境探测的输出是**子进程**给的，不是本地写入的列：`JSON.parse` 在这里失败是常态
+ * （解释器起不来、被信号杀掉、输出被截断），所以必须给领域码而不是让 `SyntaxError`
+ * 变成「Roc 内部错误」。
+ */
+function decodeExperimentReport(stdout: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new Error('research_experiment_report_invalid');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('research_experiment_report_invalid');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 const pythonReportSchema = researchExperimentEnvironmentSchema.omit({ runtime: true, toolchainHash: true, metadataHash: true, lockFiles: true, hash: true })
   .extend({ metadataPaths: z.array(z.string().min(1)).max(10000) });
 export type PreparedExperimentEnvironment = {
@@ -50,10 +68,10 @@ export class ResearchExperimentEnvironmentService {
     try {
       const probeEnvironment = (await this.tools.experimentRuntime(probeRoot)).environment;
       result = await this.run({ command: executable, args: ['-I', '-B', '-c', inspectPythonEnvironment],
-        cwd: probeRoot, readablePaths, writablePaths: [probeRoot], environment: probeEnvironment, timeoutMs: 30000, signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+        cwd: probeRoot, readablePaths, writablePaths: [probeRoot], environment: probeEnvironment, timeoutMs: 30000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
     } finally { await rm(probeRoot, { recursive: true, force: true }); }
     if (result.exitCode !== 0) throw new ResearchProcessError('research_experiment_environment_probe_failed', result.stdout, result.stderr);
-    const { metadataPaths, ...report } = pythonReportSchema.parse(JSON.parse(result.stdout) as unknown);
+    const { metadataPaths, ...report } = pythonReportSchema.parse(decodeExperimentReport(result.stdout));
     if (await realpath(report.prefix) !== environmentRoot || await realpath(report.basePrefix) !== dirname(dirname(basePython))
         || await realpath(report.executable) !== basePython || report.version !== tools.pythonVersion) throw new Error('research_experiment_python_environment_invalid');
     let metadataHash = tools.hash;
@@ -68,7 +86,7 @@ export class ResearchExperimentEnvironmentService {
           args: ['sync', '--project', root, '--locked', '--check', '--offline', '--no-python-downloads', '--no-build', '--python', join(checkRoot, 'bin/python')],
           cwd: root, readablePaths: [tools.root, root], writablePaths: [checkRoot], additionalExecutables: [basePython],
           environment: { ...checkEnvironment, XDG_CONFIG_HOME: await createResearchDirectory(checkRoot, 'config'), UV_PROJECT_ENVIRONMENT: checkRoot, UV_CACHE_DIR: join(checkRoot, 'cache/uv') },
-          timeoutMs: 60000, signal, allowOcrAcceleration: false, networkAccess: 'none', allowPosixSpawn: true });
+          timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: true });
         if (checked.exitCode !== 0) throw new ResearchProcessError('research_experiment_environment_outdated', checked.stdout, checked.stderr);
         for (const file of copied.files) if (researchContentHash(await readResearchFile(environmentRoot, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
       } finally { await rm(checkRoot, { recursive: true, force: true }); }
