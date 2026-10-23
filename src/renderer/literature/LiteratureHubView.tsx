@@ -158,7 +158,7 @@ export function LiteratureHubView(): React.JSX.Element {
             type="button"
             onClick={() => openImport('document')}
             data-testid="literature-hub-import"
-            className="flex h-7 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] active:opacity-90"
+            className="flex h-7 items-center gap-1.5 rounded-control bg-accent px-3 font-medium text-on-accent text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
           >
             <Plus size={13} aria-hidden="true" />
             导入
