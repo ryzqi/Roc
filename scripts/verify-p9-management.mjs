@@ -1064,11 +1064,18 @@ try {
 
   // ---- 闸门 6：两个入口 + 重启保持 ----------------------------------------------
   await openManagement('memory');
-  await page.click('[data-testid="mgmt-open-in-canvas"]');
+  await closeManagement();
+  // 抽屉里不再有「在画布中打开」按钮（P10 删掉）：画布入口只剩 ⌘K 命令组，
+  // 所以这里走真实用户的第二条路径，而不是一个已经不存在的控件。
+  await page.click('[data-testid="titlebar-search"]');
+  await page.waitForSelector('[data-testid="search-palette-input"]', { timeout: 20_000 });
+  await page.fill('[data-testid="search-palette-input"]', '记忆');
+  await page.waitForSelector('[data-testid="search-item-mgmt:memory"]', { timeout: 20_000 });
+  await page.click('[data-testid="search-item-mgmt:memory"]');
   await page.waitForSelector('[data-testid="management-view"]', { timeout: 20_000 });
   assertCheck(
     '6 两入口',
-    '抽屉的「在画布中打开」渲染同一组面板（记忆 tab）',
+    '⌘K 的管理入口渲染同一组面板（记忆 tab）',
     (await page.locator('[data-testid="mgmt-view-panel-memory"]').count()) === 1 &&
       (await page.locator('[data-testid="mgmt-panel-memory"]').count()) === 0,
     await text('mgmt-view-summary')

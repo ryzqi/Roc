@@ -370,8 +370,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       openSettings: () => {
         setManagementOpen(false);
         navigate({ ...routeRef.current, page: 'settings' });
-      },
-      openManagementView: openManagementSection
+      }
     }),
     [client, route.projectId, boundWorkspace.path, navigate, openManagementSection]
   );

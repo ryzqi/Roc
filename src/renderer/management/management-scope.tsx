@@ -1,5 +1,4 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { DrawerSectionId } from '../../shared/surfaces';
 import type { RocClient } from '../shared/roc-client';
 
 /**
@@ -36,14 +35,6 @@ export type ManagementScope = {
    * drawer would be two writers for one value with no way to reconcile them if both are open.
    */
   openSettings: () => void;
-  /**
-   * 打开一个管理分区，落在它真正拥有的宿主上。
-   *
-   * 记忆 / 技能 / MCP 有两个落点（画布视图与抽屉分区），任务只有抽屉（ADR 0024：两个界面盯一个数据集
-   * 就是发散）。选哪一个由壳决定，所以这些分区永远不会长出第二条导航路径——而参数类型来自面表，
-   * 不是手写的字面量联合。
-   */
-  openManagementView: (section: DrawerSectionId) => void;
 };
 
 const ManagementContext = createContext<ManagementScope | null>(null);

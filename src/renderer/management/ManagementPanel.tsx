@@ -19,6 +19,12 @@ import { useManagementStores, type ManagementTabId } from './use-management-stor
  * column forced the editors into a scroll of their own (the draft and its outline could not be seen
  * together). The tab strip, the per-tab summary and the section bodies come from
  * `management-shell-parts` so the canvas views cannot drift from the drawer.
+ *
+ * **The 「在画布中打开」 button is gone (P10).** It competed with the tab strip for the same row
+ * and it was not the only way in: the command palette (⌘K → 管理) reaches every canvas management
+ * view through `AppShell`'s `openManagementSection`. The drawer is the drawer; canvas management is
+ * entered from the palette (menu intents do not carry canvas views — `menuPages` has settings /
+ * new-project / chat / tasks).
  */
 
 export type ManagementPanelProps = {
@@ -77,20 +83,9 @@ export function ManagementPanel({
           testIdPrefix="mgmt"
         />
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <p className="min-w-0 flex-1 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-summary">
-            {managementSummary(tab, stores.summaries)}
-          </p>
-          <button
-            type="button"
-            data-testid="mgmt-open-in-canvas"
-            onClick={() => scope.openManagementView(tab)}
-            title="在画布中打开"
-            className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-          >
-            {tab === 'tasks' ? '打开任务看板' : '在画布中打开'}
-          </button>
-        </div>
+        <p className="shrink-0 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-summary">
+          {managementSummary(tab, stores.summaries)}
+        </p>
 
         <ManagementSectionBody tab={tab} scope={scope} stores={stores} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
       </div>
