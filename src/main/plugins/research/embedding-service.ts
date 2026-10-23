@@ -3,6 +3,7 @@ import type { ResearchEmbeddingConfig, ResearchEmbeddingConfigSaveRequest, Resea
   ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult } from '../../../shared/types';
 import type { RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
+import { researchEmbeddingConfigSaveRequestSchema } from '../../../shared/schemas/research';
 import type { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { vectorToBlob } from './embedding-vectors';
 import type { EmbeddingConfigRow, KnowledgeSourceWrite, ResearchKnowledgeRepository } from './knowledge-repository';
@@ -24,12 +25,26 @@ export class ResearchEmbeddingService {
 
   async saveConfig(request: ResearchEmbeddingConfigSaveRequest): Promise<ResearchEmbeddingConfig> {
     this.requireOpen();
-    const previous = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === request.id);
-    const reuse = previous !== undefined && (await this.context.secrets.get(previous.api_key_secret_key)) === request.apiKey;
+    /**
+     * 先校验，再探测，最后落盘（P10）。
+     *
+     * 校验必须排在探测前面：一个拼错的 baseUrl / 空的 model 应该当场报「字段不合法」，
+     * 而不是先发一次注定失败的 HTTP 请求再把网络错误当成结论。
+     *
+     * 维度未指定时（`null`），用一次真实嵌入量出来。先探后存是有意的顺序：探测失败就该
+     * 保存失败。存一份维度不明的配置比报错更糟——索引器会拿着一个错数字跑完整个项目，
+     * 然后每一片向量都对不上。
+     */
+    const parsed = researchEmbeddingConfigSaveRequestSchema.parse(request);
+    const dimensions =
+      parsed.dimensions === null ? await this.probeDimensions(parsed) : parsed.dimensions;
+    const normalized = researchEmbeddingConfigSaveRequestSchema.parse({ ...parsed, dimensions });
+    const previous = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === normalized.id);
+    const reuse = previous !== undefined && (await this.context.secrets.get(previous.api_key_secret_key)) === normalized.apiKey;
     const key = reuse ? previous.api_key_secret_key : `research.embedding.${randomUUID()}`;
     try {
-      if (!reuse) await this.context.secrets.set(key, request.apiKey);
-      this.knowledge.saveEmbeddingConfig(request, key);
+      if (!reuse) await this.context.secrets.set(key, normalized.apiKey);
+      this.knowledge.saveEmbeddingConfig(normalized, key);
     } catch (error) {
       if (!reuse) {
         try { this.context.secrets.clear(key); }
@@ -37,14 +52,14 @@ export class ResearchEmbeddingService {
       }
       throw error;
     }
-    const saved = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === request.id);
+    const saved = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === normalized.id);
     if (saved === undefined) throw new Error('research_embedding_config_missing_after_save');
     if (previous !== undefined && saved.revision !== previous.revision) {
-      for (const task of this.tasks) if (task.configId === request.id) task.controller.abort();
+      for (const task of this.tasks) if (task.configId === normalized.id) task.controller.abort();
     }
     if (!reuse && previous !== undefined) {
       try { this.context.secrets.clear(previous.api_key_secret_key); }
-      catch { this.context.logger.warn('Unused research embedding credential could not be removed.', { configId: request.id }); }
+      catch { this.context.logger.warn('Unused research embedding credential could not be removed.', { configId: normalized.id }); }
     }
     return await this.config(saved);
   }
@@ -164,6 +179,35 @@ export class ResearchEmbeddingService {
   private async config(row: EmbeddingConfigRow): Promise<ResearchEmbeddingConfig> {
     return { id: row.id, name: row.name, baseUrl: row.base_url, model: row.model, dimensions: row.dimensions,
       keyConfigured: (await this.context.secrets.get(row.api_key_secret_key)) !== null, enabled: row.enabled === 1, updatedAt: row.updated_at };
+  }
+
+  /**
+   * 自动探测维度的失败要能被用户读懂。
+   *
+   * `probeDimensions` 抛出的是协议层的错误码（`embedding_provider_http_401` 之类），直接透给
+   * 界面等于让用户去看一串词；而这一行唯一需要告诉他的是「要么改地址/密钥，要么手填维度」。
+   * 所以转成 `RocDomainError` 并给出可执行的下一步，原始错误码仍留在消息里。
+   */
+  private async probeDimensions(request: ResearchEmbeddingConfigSaveRequest): Promise<number> {
+    try {
+      return await this.client.probeDimensions({
+        baseUrl: request.baseUrl,
+        model: request.model,
+        apiKey: request.apiKey
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      const unauthorized = code.endsWith('_401') || code.endsWith('_403');
+      throw new RocDomainError({
+        code: unauthorized ? 'research_embedding_dimensions_unauthorized' : 'research_embedding_dimensions_probe_failed',
+        message: unauthorized
+          ? '无法自动探测维度：嵌入端点的凭据被拒绝。'
+          : `无法自动探测维度：${code.length > 0 ? code : '端点未返回可用向量'}。`,
+        category: unauthorized ? 'validation' : 'external',
+        retryable: !unauthorized,
+        userAction: '修正接入地址与 API Key，或在「维度」里手动填入该模型的实际向量维度。'
+      });
+    }
   }
 
   private requireOpen(): void { if (this.closed) throw new Error('research_embeddings_closed'); }

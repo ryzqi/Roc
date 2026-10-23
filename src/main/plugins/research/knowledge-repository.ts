@@ -57,6 +57,15 @@ export class ResearchKnowledgeRepository {
   ) {}
 
   saveEmbeddingConfig(request: ResearchEmbeddingConfigSaveRequest, apiKeySecretKey: string): void {
+    /**
+     * 维度在这里是最后一道门：`null` 表示「保存前还没探测到」。
+     *
+     * 列是 `NOT NULL`，而插一个猜的默认值会把错误推到索引时才暴露。服务层的 `saveConfig`
+     * 会先把 `null` 探成真实数字再进来，所以能走到这里的 `null` 是调用方漏了一步。
+     */
+    if (request.dimensions === null) {
+      throw new Error('research_embedding_dimensions_required');
+    }
     const timestamp = this.now();
     this.db
       .prepare(

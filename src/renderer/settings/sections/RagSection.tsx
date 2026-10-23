@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { ResearchEmbeddingConfig } from '../../../shared/types/research';
+import type { RemoteModelEntry } from '../../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
+import { RemoteModelPicker } from '../RemoteModelPicker';
 import {
   INDEX_KIND_LABELS,
   linesToPatterns,
@@ -17,8 +19,8 @@ import {
   FormNote,
   FormSection,
   TextField,
+  formButtonClass,
   formInputClass,
-  formSecondaryButtonClass,
   formTextAreaClass
 } from '../../shared/form-ui';
 
@@ -49,7 +51,13 @@ type EmbeddingForm = {
   name: string;
   baseUrl: string;
   model: string;
-  dimensions: number;
+  /**
+   * `null` = 交给主进程探测（P10）。
+   *
+   * 从端点拉到的模型并不知道维度，所以拉取之后这个字段先变成 `null`；保存时服务端发一次
+   * 真实嵌入量出准确值。用户也可以手填覆盖（自建部署的截断维度、或想固定维度时）。
+   */
+  dimensions: number | null;
   enabled: boolean;
 };
 
@@ -74,7 +82,7 @@ function newEmbeddingForm(existing: readonly ResearchEmbeddingConfig[]): Embeddi
     name: '',
     baseUrl: 'https://api.openai.com/v1',
     model: 'text-embedding-3-small',
-    dimensions: 1536,
+    dimensions: null,
     enabled: true
   };
 }
@@ -127,6 +135,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [form, setForm] = useState<EmbeddingForm | null>(null);
   const [apiKey, setApiKey] = useState('');
+  const [pullModelsOpen, setPullModelsOpen] = useState(false);
 
   const selectedConfig = configs.find((config) => config.id === selectedConfigId) ?? null;
   useEffect(() => {
@@ -140,8 +149,15 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
   }, [configs, form]);
 
   const saveEmbedding = useAsyncAction(
-    (input: { id: string; name: string; baseUrl: string; model: string; dimensions: number; apiKey: string; enabled: boolean }) =>
-      saveEmbeddingConfig(client, input),
+    (input: {
+      id: string;
+      name: string;
+      baseUrl: string;
+      model: string;
+      dimensions: number | null;
+      apiKey: string;
+      enabled: boolean;
+    }) => saveEmbeddingConfig(client, input),
     { label: '保存嵌入配置' }
   );
 
@@ -232,7 +248,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 onChange={(paused) => updateIndex((target) => void (target.paused = paused))}
                 testId="settings-index-paused"
               />
-              <label className="flex w-[240px] flex-col gap-0.5">
+              <label className="flex w-[260px] flex-col gap-0.5">
                 <span className="text-subtle text-[var(--font-micro-size)]">嵌入配置</span>
                 <select
                   value={index.embeddingConfigId ?? ''}
@@ -268,16 +284,26 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               setForm(newEmbeddingForm(configs));
               setApiKey('');
             }}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
             新增嵌入配置
           </button>
           <button
             type="button"
+            data-testid="settings-embedding-pull"
+            disabled={form === null}
+            onClick={() => setPullModelsOpen(true)}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
+          >
+            <RefreshCw size={11} aria-hidden="true" />
+            拉取模型
+          </button>
+          <button
+            type="button"
             data-testid="settings-embedding-reload"
             onClick={() => embeddings.reload()}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <RefreshCw size={11} aria-hidden="true" />
             重新读取
@@ -348,10 +374,14 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 testId="settings-embedding-model"
               />
               <NumberField
-                label="维度"
+                label="维度（留空则保存时自动探测）"
                 value={form.dimensions}
                 min={1}
-                onChange={(dimensions) => setForm({ ...form, dimensions: typeof dimensions === 'number' ? dimensions : 1 })}
+                allowEmpty
+                emptyValue={null}
+                onChange={(dimensions) =>
+                  setForm({ ...form, dimensions: typeof dimensions === 'number' ? dimensions : null })
+                }
                 testId="settings-embedding-dimensions"
               />
               <TextField
@@ -394,12 +424,13 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                       embeddings.reload();
                     });
                 }}
-                className={formSecondaryButtonClass}
+                className={formButtonClass}
               >
                 保存嵌入配置
               </button>
               <span className="text-subtle text-[var(--font-micro-size)]">
                 {selectedConfig === null ? '新增' : `编辑 ${selectedConfig.id}`}
+                {form.dimensions === null ? ' · 保存时探测维度' : ''}
               </span>
             </div>
             {saveEmbedding.error === null ? null : (
@@ -410,6 +441,30 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           </div>
         )}
       </section>
+
+      <RemoteModelPicker
+        open={pullModelsOpen && form !== null}
+        client={client}
+        endpoint={form?.baseUrl ?? ''}
+        multiple={false}
+        testId="settings-embedding-pull-models"
+        onClose={() => setPullModelsOpen(false)}
+        onConfirm={(entries: RemoteModelEntry[]) => {
+          const picked = entries[0];
+          if (picked === undefined || form === null) {
+            return;
+          }
+          // 拉到的只是一个模型标识，维度仍然未知 —— 置成 null（留空）让保存时探测。
+          // 名称只在还空着的时候补，避免覆盖用户已经写好的中文名。
+          setForm({
+            ...form,
+            model: picked.id,
+            name: form.name.trim().length === 0 ? picked.id : form.name,
+            dimensions: null
+          });
+          setPullModelsOpen(false);
+        }}
+      />
 
     </FormSection>
   );

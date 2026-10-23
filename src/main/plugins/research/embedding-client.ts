@@ -6,6 +6,30 @@ export type EmbeddingFetch = (input: string, init: RequestInit) => Promise<Respo
 export class OpenAICompatibleEmbeddingClient {
   constructor(private readonly fetchImpl: EmbeddingFetch = (input, init) => fetch(input, init)) {}
 
+  /**
+   * 探一次真实向量，读回它的长度（P10：维度自动探测）。
+   *
+   * 嵌入维度不是元数据，它只能从一次真实响应里量出来：`text-embedding-3-small` 可以是
+   * 1536 或（截断后的）更小值，自建 bge / m3e 更是随部署而变。用户手填维度而猜错，失败会
+   * 发生在「索引跑到一半」——所以这里用一条短文本换一个准确数字。
+   *
+   * 不复用 `embed()`：那条路径会把长度与 `config.dimensions` 比对，而这里的目的正是
+   * 在还不知道维度时去量它。
+   */
+  async probeDimensions(input: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    signal?: AbortSignal;
+  }): Promise<number> {
+    const rows = await this.requestVectors({ ...input, texts: ['dimension probe'] });
+    const first = rows[0];
+    if (first === undefined || first.length === 0) {
+      throw new Error('embedding_provider_dimensions_unknown');
+    }
+    return first.length;
+  }
+
   async embed(input: {
     config: ResearchEmbeddingConfig;
     apiKey: string;
@@ -15,25 +39,13 @@ export class OpenAICompatibleEmbeddingClient {
     if (input.texts.length === 0) {
       return [];
     }
-    const endpoint = input.config.baseUrl.replace(/\/+$/u, '').endsWith('/embeddings')
-      ? input.config.baseUrl.replace(/\/+$/u, '')
-      : `${input.config.baseUrl.replace(/\/+$/u, '')}/embeddings`;
-    const signal = input.signal === undefined ? AbortSignal.timeout(60_000) : AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]);
-    signal.throwIfAborted();
-    const response = await this.fetchImpl(endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${input.apiKey}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({ model: input.config.model, input: input.texts, encoding_format: 'float' }), signal
+    const rows = await this.requestVectors({
+      baseUrl: input.config.baseUrl,
+      model: input.config.model,
+      apiKey: input.apiKey,
+      texts: input.texts,
+      signal: input.signal
     });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`embedding_provider_http_${response.status}`);
-    }
-    const payload = await readPayload(response, signal);
-    const rows = parseEmbeddingResponse(payload);
     if (rows.length !== input.texts.length) {
       throw new Error('embedding_provider_count_mismatch');
     }
@@ -44,6 +56,34 @@ export class OpenAICompatibleEmbeddingClient {
       vectorToBlob(vector);
     }
     return rows;
+  }
+
+  private async requestVectors(input: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    texts: readonly string[];
+    signal?: AbortSignal;
+  }): Promise<number[][]> {
+    const endpoint = input.baseUrl.replace(/\/+$/u, '').endsWith('/embeddings')
+      ? input.baseUrl.replace(/\/+$/u, '')
+      : `${input.baseUrl.replace(/\/+$/u, '')}/embeddings`;
+    const signal = input.signal === undefined ? AbortSignal.timeout(60_000) : AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]);
+    signal.throwIfAborted();
+    const response = await this.fetchImpl(endpoint, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${input.apiKey}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ model: input.model, input: input.texts, encoding_format: 'float' }), signal
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`embedding_provider_http_${response.status}`);
+    }
+    const payload = await readPayload(response, signal);
+    return parseEmbeddingResponse(payload);
   }
 }
 

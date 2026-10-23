@@ -255,7 +255,14 @@ export const researchEmbeddingConfigSaveRequestSchema = z
     name: z.string().trim().min(1),
     baseUrl: z.string().url(),
     model: z.string().trim().min(1),
-    dimensions: z.number().int().positive(),
+    /**
+     * `null` = 「不知道，请探测」（P10）。
+     *
+     * 新增一条嵌入配置时，维度要么是用户从端点拉取时自动量到的值，要么还没量到。手填一个
+     * 猜的维度会留下一份“能保存但一索引就失败”的配置，所以允许把这个字段交给后端去量：
+     * 服务端一次真实嵌入就能读出准确值（见 `OpenAICompatibleEmbeddingClient.probeDimensions`）。
+     */
+    dimensions: z.number().int().positive().nullable(),
     apiKey: z.string().trim().min(1),
     enabled: z.boolean()
   })
