@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Database, Layers, Loader2, Plus, Share2, Zap } from 'lucide-react';
+import { AlertCircle, BookOpen, Database, Layers, Loader2, Plus, Share2 } from 'lucide-react';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -40,15 +40,11 @@ import { libraryItemTitle } from './format';
  *
  * ## The header
  *
- * One recessed tab track on the left (four equal chips, the active one raised) and the two
- * global actions on the right — 「设置」 with the amber bolt, and 「导入」 as the screen's
- * single solid primary button. Two details are deliberate:
+ * One recessed tab track on the left (four equal chips, the active one raised) and the
+ * 「导入」 action on the right as the screen's single solid primary button. One detail is deliberate:
  *
  *   - the labels are 阅读 / 检索 / 知识库 / 图谱: 知识库 is this product's established word
  *     for the derived concept view (its testids and docs all say `wiki`/知识库);
- *   - 「设置」 opens the settings centre at its own default, not at a named section: the
- *     route contract has one `page=settings` value.
- *
  * The cross-view `FocusRequest` hand-off (检索 → 阅读, 知识库 → 图谱) is unchanged.
  */
 
@@ -144,16 +140,6 @@ export function LiteratureHubView(): React.JSX.Element {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={scope.openSettings}
-            title="配置 MinerU 与学术源（⌘,）"
-            data-testid="literature-hub-settings"
-            className="flex h-7 items-center gap-1 rounded-control border border-line bg-surface px-2.5 text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)]"
-          >
-            <Zap size={12} aria-hidden="true" className="text-[var(--icon-wiki)]" />
-            设置
-          </button>
           <button
             type="button"
             onClick={() => openImport('document')}
