@@ -550,7 +550,7 @@ export function parseSettingsImport(text: string): SettingsImportResult {
     return { ok: false, error: 'permissions.mode 只能是 fully_automatic 或 default。' };
   }
   if (!isRecord(parsed.hooks) || parsed.hooks.schemaVersion !== 1 || !isRecord(parsed.hooks.hooks)) {
-    return { ok: false, error: '缺少 hooks 配置（schemaVersion 1）。' };
+    return { ok: false, error: '缺少 hooks 配置。' };
   }
   // SAFETY: every branch above has checked the shape this document needs
   // (schemaVersion 1, record settings, provider array with id/name/endpoint/models,

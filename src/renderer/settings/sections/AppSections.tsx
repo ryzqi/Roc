@@ -63,7 +63,7 @@ export function AppSection({
       <dl className="flex flex-col gap-0.5">
         <KeyValueRow
           label="应用"
-          value={status === null ? '读取中…' : `${status.appName} ${status.version}（${status.mode}）`}
+          value={status === null ? '读取中…' : `${status.appName} ${status.version}`}
           testId="settings-app-status"
         />
         <KeyValueRow
@@ -75,7 +75,7 @@ export function AppSection({
 
       <div className="flex flex-col gap-2 border-t border-line pt-2">
         <CheckboxField
-          label="开机时启动 Roc（openAtLogin）"
+          label="开机时启动 Roc"
           checked={draft.settings.startup.openAtLogin}
           onChange={(openAtLogin) =>
             store.update((next) => void (next.settings.startup.openAtLogin = openAtLogin))
@@ -220,7 +220,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       <h4 className="text-ink text-[var(--font-meta-size)]">调度器</h4>
       <div className="flex flex-wrap items-end gap-3">
         <CheckboxField
-          label="启动时补跑错过的任务（catchUpOnStartup）"
+          label="启动时补跑错过的任务"
           checked={tasks.scheduler.catchUpOnStartup}
           onChange={(catchUpOnStartup) =>
             store.update((next) => void (next.settings.tasks.scheduler.catchUpOnStartup = catchUpOnStartup))

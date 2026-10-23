@@ -138,7 +138,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         </div>
         <div className="w-[180px]">
           <NumberField
-            label="额外预算上限（microusd）"
+            label="额外预算上限（微美元）"
             value={extraBudgetMicrousd}
             onChange={(next) => setExtraBudgetMicrousd(next === null || next === undefined ? 1 : next)}
             min={1}

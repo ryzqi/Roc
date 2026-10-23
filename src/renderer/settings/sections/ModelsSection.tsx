@@ -207,14 +207,14 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           testId="settings-provider-type"
         />
         <TextField
-          label="接入地址（baseUrl）"
+          label="接入地址"
           value={provider.endpoint}
           disabled={builtIn}
           onChange={(endpoint) => patchProvider((entry) => void (entry.endpoint = endpoint))}
           testId="settings-provider-endpoint"
         />
         <Field
-          label="凭据引用（credentialRef）"
+          label="凭据引用"
           testId="settings-provider-credential"
         >
           <span
@@ -333,7 +333,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <NumberField
-                  label="温度（temperature）"
+                  label="温度"
                   value={model.options?.temperature}
                   allowEmpty
                   step={0.1}
@@ -351,7 +351,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                   testId={`settings-model-temperature-${modelIndex}`}
                 />
                 <NumberField
-                  label="最大 token（maxTokens）"
+                  label="最大 token"
                   value={model.options?.maxTokens}
                   allowEmpty
                   min={1}
@@ -400,7 +400,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                   testId={`settings-model-images-${modelIndex}`}
                 />
                 <CheckboxField
-                  label="思考（thinking）"
+                  label="思考"
                   checked={model.options?.thinking === true}
                   onChange={(thinking) =>
                     patchModel(modelIndex, (target) => {

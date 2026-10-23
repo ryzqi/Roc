@@ -221,13 +221,13 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
 
             <div className="flex flex-wrap items-end gap-3">
               <CheckboxField
-                label="监听文件变化（watch）"
+                label="监听文件变化"
                 checked={index.watch}
                 onChange={(watch) => updateIndex((target) => void (target.watch = watch))}
                 testId="settings-index-watch"
               />
               <CheckboxField
-                label="暂停索引（paused）"
+                label="暂停索引"
                 checked={index.paused}
                 onChange={(paused) => updateIndex((target) => void (target.paused = paused))}
                 testId="settings-index-paused"
@@ -323,7 +323,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           <div className="flex flex-col gap-2 border-t border-line pt-2" data-testid="settings-embedding-editor">
             <div className="grid grid-cols-2 gap-2">
               <TextField
-                label="标识（id）"
+                label="标识"
                 value={form.id}
                 disabled={selectedConfig !== null}
                 onChange={(id) => setForm({ ...form, id })}
@@ -336,7 +336,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 testId="settings-embedding-name"
               />
               <TextField
-                label="接入地址（baseUrl）"
+                label="接入地址"
                 value={form.baseUrl}
                 onChange={(baseUrl) => setForm({ ...form, baseUrl })}
                 testId="settings-embedding-baseurl"
@@ -348,7 +348,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 testId="settings-embedding-model"
               />
               <NumberField
-                label="维度（dimensions）"
+                label="维度"
                 value={form.dimensions}
                 min={1}
                 onChange={(dimensions) => setForm({ ...form, dimensions: typeof dimensions === 'number' ? dimensions : 1 })}

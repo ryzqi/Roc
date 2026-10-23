@@ -82,7 +82,7 @@ export function AuthorizationSection({ store }: { store: SettingsStore }): React
         </FormNote>
       )}
       <label className="flex max-w-[420px] flex-col gap-0.5">
-        <span className="text-subtle text-[var(--font-micro-size)]">MCP 审批模式（mcp.approvalMode）</span>
+        <span className="text-subtle text-[var(--font-micro-size)]">MCP 审批模式</span>
         <select
           value={config.data?.approvalMode ?? 'default'}
           disabled={config.data === null || approvalMode.pending}

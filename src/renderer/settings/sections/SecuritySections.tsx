@@ -29,7 +29,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
       testId="settings-section-guardrail-body"
     >
       <label className="flex max-w-[420px] flex-col gap-0.5">
-        <span className="text-subtle text-[var(--font-micro-size)]">工具审批模式（permissions.mode）</span>
+        <span className="text-subtle text-[var(--font-micro-size)]">工具审批模式</span>
         <select
           value={draft.permissions.mode}
           onChange={(event) =>

@@ -103,8 +103,7 @@ export function BackupSection({
         {/* Not hidden while writing: the sentence describes the snapshot's contents, and hiding it
             exactly when the write happens reads like a state change. */}
         <p className="text-subtle text-[var(--font-micro-size)]" data-testid="settings-export-note">
-          快照只含 settings / providers / defaultModelId / permissions / hooks；密钥正文不在其中（只保留
-          credentialRef 与「已配置」状态）。
+          快照只含 settings / providers / defaultModelId / permissions / hooks；密钥正文不在其中，只保留凭据引用与「已配置」状态。
         </p>
         <textarea
           value={exportText ?? ''}
@@ -189,7 +188,7 @@ export function BackupSection({
       <ConfirmDialog
         open={resetOpen}
         title="重置本地界面偏好？"
-        message="将清除本机保存的界面偏好（roc.ui.*），回到默认值。"
+        message="将清除本机保存的界面偏好，回到默认值。"
         detail="外观覆盖会重置为「跟随系统」。不会删除项目、设置或密钥。"
         confirmLabel="重置"
         tone="destructive"
