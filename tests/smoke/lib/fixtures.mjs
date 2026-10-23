@@ -121,6 +121,24 @@ const smokeP4SlowPattern = /ROC-P4-SLOW:(\d+)x(\d+)/u;
 const smokeP4SlowTagPattern = /ROC-P4-SLOW-TAG:([A-Za-z0-9_-]+)/u;
 const smokeProviderText =
   'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
+/**
+ * 模拟主机的模型目录（P10 拉取模型闸门用）。
+ *
+ * 两条记录分别来自两种真实形状：OpenAI 风格的 `owned_by` 与无所有者的裸标识。
+ * 名称不能与其它闸门已知的 `p8-smoke-model` 重样 —— 闸门断言的是「新拉到的标识出现在列表里」，
+ * 同名会让这个断言自带通过。
+ */
+const smokeRemoteModels = [
+  { id: 'p8-pulled-model-a', owned_by: 'smoke-lab' },
+  { id: 'p8-pulled-model-b' }
+];
+
+function readSmokeModelCatalog() {
+  return smokeRemoteModels;
+}
+
+/** 模拟嵌入服务的向量维度：与任何内置默认值都不同，避免假通过。 */
+const smokeEmbeddingDimensions = 8;
 const smokeTaskProposalClockPattern = /每天\s*(\d{1,2}):(\d{2})/;
 
 function readTextContent(value) {
@@ -821,6 +839,7 @@ export async function startSmokeProvider(input = {}) {
   const server = createServer((request, response) => {
     void (async () => {
       const rawBody = await readRequestBody(request);
+      // GET 没有 body（例如 `GET /v1/models`），JSON.parse('') 会抛——先判空再解析。
       const parsedBody = rawBody.length === 0 ? null : JSON.parse(rawBody);
       requests.push({
         method: request.method,
@@ -828,6 +847,31 @@ export async function startSmokeProvider(input = {}) {
         authorization: request.headers.authorization,
         body: parsedBody
       });
+      if (request.method === 'GET' && request.url?.endsWith('/models') === true) {
+        response.statusCode = 200;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ data: readSmokeModelCatalog() }));
+        return;
+      }
+      // 嵌入端点（P10 维度自动探测闸门用）：每条输入回一条 8 维向量。
+      // 8 这个数故意与任何默认值都不同（不是 1536），这样「保存的维度 = 探测结果」
+      // 断言不会被一个碰巧相同的默认值弄成假通过。
+      if (request.method === 'POST' && request.url?.endsWith('/embeddings') === true) {
+        const inputs = Array.isArray(parsedBody?.input) ? parsedBody.input : [];
+        response.statusCode = 200;
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            data: inputs.map((_text, index) => ({
+              index,
+              embedding: Array.from({ length: smokeEmbeddingDimensions }, (_, position) =>
+                Number(((index + position + 1) / 100).toFixed(4))
+              )
+            }))
+          })
+        );
+        return;
+      }
       if (parsedBody?.stream === true || request.headers.accept === 'text/event-stream') {
         response.statusCode = 200;
         response.setHeader('content-type', 'text/event-stream');

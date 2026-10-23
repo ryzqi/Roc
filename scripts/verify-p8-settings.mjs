@@ -867,6 +867,108 @@ try {
     'info'
   );
 
+  // ---- 闸门 5b：从端点拉取模型 / 嵌入维度自动探测（P10） --------------------------
+  //
+  // 两条都是「用户不必记住一串拼写」的功能，所以要验的是**真的发了请求、真的把结果落到表单/
+  // 后端**，而不是按钮能点。模型端点由 smoke provider 提供（`GET /v1/models`），嵌入维度用它
+  // 的 `/v1/embeddings` 回 8 维向量——8 与任何内置默认值都不同，所以「存的维度＝探测结果」
+  // 不会被一个碰巧相同的默认值做成假通过。
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await waitForProjectRoute();
+  await ensureSettingsOpen();
+  await openSection('models');
+  await page.selectOption('[data-testid="settings-provider-select"]', smokeProviderId);
+  await page.click('[data-testid="settings-model-pull"]');
+  await page.waitForSelector('[data-testid="settings-provider-models-pull-panel"]', { timeout: 15_000 });
+  await page.fill('[data-testid="settings-provider-models-pull-endpoint"]', smokeProvider.endpoint);
+  await page.click('[data-testid="settings-provider-models-pull-fetch"]');
+  await page.waitForSelector('[data-testid="settings-provider-models-pull-option-p8-pulled-model-a"]', { timeout: 25_000 });
+  const pulledOptionCount = await text('settings-provider-models-pull-count');
+  assertCheck(
+    '5b 拉取模型',
+    '模型与服务：端点声明的模型出现在浮层里（含 owned_by 与无所有者两种形状）',
+    pulledOptionCount.includes('2/2') &&
+      (await page.locator('[data-testid="settings-provider-models-pull-option-p8-pulled-model-b"]').count()) === 1,
+    pulledOptionCount
+  );
+  const pullAuth = smokeProvider.requests.filter((request) => request.url?.endsWith('/models') === true).at(-1);
+  assertCheck(
+    '5b 拉取模型',
+    '列表请求带上了已存的 provider 凭据（Authorization: Bearer）',
+    pullAuth?.authorization === `Bearer ${smokeSecret}`,
+    String(pullAuth?.authorization ?? null)
+  );
+  await page.click('[data-testid="settings-provider-models-pull-option-p8-pulled-model-a"]');
+  await page.click('[data-testid="settings-provider-models-pull-confirm"]');
+  await page.waitForSelector('[data-testid="settings-provider-models-pull-panel"]', { state: 'detached', timeout: 15_000 });
+  await saveThroughUi();
+  const pulledPersisted = await page.evaluate(async (providerId) => {
+    const snapshot = await window.roc.settings.get();
+    if (!snapshot.ok) {
+      return [];
+    }
+    const provider = snapshot.data.providers.find((entry) => entry.id === providerId);
+    return provider === undefined ? [] : provider.models.map((model) => model.id);
+  }, smokeProviderId);
+  assertCheck(
+    '5b 拉取模型',
+    '勾选后模型落成普通模型行并写进后端文档',
+    pulledPersisted.includes('p8-pulled-model-a') && pulledPersisted.includes('p8-smoke-model'),
+    JSON.stringify(pulledPersisted)
+  );
+
+  await openSection('rag');
+  await page.click('[data-testid="settings-embedding-add"]');
+  await page.fill('[data-testid="settings-embedding-name"]', 'P8 Pulled Embedding');
+  await page.fill('[data-testid="settings-embedding-baseurl"]', smokeProvider.endpoint);
+  await page.click('[data-testid="settings-embedding-pull"]');
+  await page.waitForSelector('[data-testid="settings-embedding-pull-models-panel"]', { timeout: 15_000 });
+  await page.click('[data-testid="settings-embedding-pull-models-fetch"]');
+  await page.waitForSelector('[data-testid="settings-embedding-pull-models-option-p8-pulled-model-b"]', { timeout: 25_000 });
+  await page.click('[data-testid="settings-embedding-pull-models-option-p8-pulled-model-b"]');
+  await page.click('[data-testid="settings-embedding-pull-models-confirm"]');
+  await page.waitForSelector('[data-testid="settings-embedding-pull-models-panel"]', { state: 'detached', timeout: 15_000 });
+  const dimensionFieldAfterPull = await readInput('settings-embedding-dimensions');
+  assertCheck(
+    '5b 拉取模型',
+    '向量与 RAG：拉到的标识写入模型字段，维度留空等保存时探测',
+    (await readInput('settings-embedding-model')) === 'p8-pulled-model-b' && dimensionFieldAfterPull === '',
+    `model=${await readInput('settings-embedding-model')} dimensions=${dimensionFieldAfterPull}`
+  );
+  await page.fill('[data-testid="settings-embedding-apikey"]', smokeSecret);
+  await page.click('[data-testid="settings-embedding-save"]');
+  await page.waitForFunction(
+    () =>
+      (document.querySelector('[data-testid="settings-embedding-save-error"]') !== null) ||
+      Array.from(document.querySelectorAll('[data-testid^="settings-embedding-select-"]')).some((node) =>
+        (node.textContent ?? '').includes('P8 Pulled Embedding')
+      ),
+    undefined,
+    { timeout: 30_000 }
+  );
+  assertCheck(
+    '5b 拉取模型',
+    '保存嵌入配置没报错',
+    (await page.locator('[data-testid="settings-embedding-save-error"]').count()) === 0,
+    (await page.locator('[data-testid="settings-embedding-save-error"]').count()) === 0 ? '无错误' : await text('settings-embedding-save-error')
+  );
+  const savedEmbedding = await page.evaluate(async () => {
+    const listed = await window.roc.research.listEmbeddingConfigs();
+    if (!listed.ok) {
+      return null;
+    }
+    return listed.data.find((config) => config.name === 'P8 Pulled Embedding') ?? null;
+  });
+  assertCheck(
+    '5b 拉取模型',
+    '维度留空时由服务端探测出真实值（8 维）并落盘',
+    savedEmbedding?.dimensions === 8 && savedEmbedding?.model === 'p8-pulled-model-b',
+    JSON.stringify(savedEmbedding)
+  );
+  const embedProbeCalls = smokeProvider.requests.filter((request) => request.url?.endsWith('/embeddings') === true).length;
+  assertCheck('5b 拉取模型', '探测维度真的发了一次嵌入请求', embedProbeCalls >= 1, `calls=${embedProbeCalls}`);
+  await closeSettings();
+
   // ---- 闸门 6：业务页无内联配置残留 ---------------------------------------------
   const rendererRoot = resolve('src/renderer');
   for (const [needle, label] of [
@@ -890,15 +992,26 @@ try {
     return button === null ? null : button.textContent?.trim() ?? '';
   });
   assertCheck('6 无内联配置', 'RAG Studio 以「打开设置中心」代替内联配置', ragOpenSettings !== null, String(ragOpenSettings));
-  // 文献导入弹窗：MinerU 开关已移走，弹窗只说明写入口在设置中心
+  // 文献导入弹窗：MinerU 解析模式与公式/表格开关只存在于设置中心，弹窗里不该有这些控件。
+  //
+  // 这里断言的是**控件**而不是文案：2da070b5 删掉了原先那句「…在设置中心，不在这里」的
+  // 提示，若继续等那句话，这条闸门会在功能完全正确的时候报红（它就是这么红的——不是回归）。
   await page.click('[data-testid="literature-hub-import"]');
   await page.waitForSelector('[data-testid="literature-import-dialog-panel"]', { timeout: 20_000 });
   const importDialogText = ((await page.locator('[data-testid="literature-import-dialog-panel"]').textContent()) ?? '').replace(/\s+/gu, ' ');
+  const importParseControls = await page
+    .locator(
+      '[data-testid="literature-import-dialog-panel"] :is(input,select,textarea,button)[name*="mineru" i],' +
+        '[data-testid="literature-import-dialog-panel"] [data-testid*="mineru" i],' +
+        '[data-testid="literature-import-dialog-panel"] [data-testid*="formula" i],' +
+        '[data-testid="literature-import-dialog-panel"] [data-testid*="table-mode" i]'
+    )
+    .count();
   assertCheck(
     '6 无内联配置',
-    '文献导入弹窗没有 MinerU / 公式 / 表格开关，只指向设置中心',
-    importDialogText.includes('解析（MinerU）模式与公式/表格开关在设置中心') && !importDialogText.includes('云服务地址'),
-    importDialogText.slice(0, 120)
+    '文献导入弹窗没有 MinerU / 公式 / 表格控件，也没有云服务地址输入',
+    importParseControls === 0 && !importDialogText.includes('云服务地址'),
+    `controls=${importParseControls} · ${importDialogText.slice(0, 120)}`
   );
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-testid="literature-import-dialog-panel"]', { state: 'detached', timeout: 15_000 });
