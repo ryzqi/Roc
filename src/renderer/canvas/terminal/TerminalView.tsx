@@ -8,7 +8,6 @@ import { useWorkspaceScope } from '../../app/workspace-scope';
 import type { RocClient } from '../../shared/roc-client';
 import { EmptyState } from '../../shell/EmptyState';
 import { ErrorBar } from '../../shell/ErrorBar';
-import { useRtkStatus } from '../../workspace/use-rtk-status';
 
 /**
  * Embedded terminal (P3/T3.6) — a real PTY session, not a replay.
@@ -112,8 +111,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
   const [phase, setPhase] = useState<SessionPhase>(workspacePath === null ? 'error' : 'starting');
   const [error, setError] = useState<string | null>(null);
   const [sessionNonce, setSessionNonce] = useState(0);
-  const [exitCode, setExitCode] = useState<number | null>(null);
-  const rtk = useRtkStatus(client, workspacePath !== null && writable);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -124,7 +121,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     setPhase('starting');
     setError(null);
     setSession(null);
-    setExitCode(null);
 
     const terminal = new Terminal({
       convertEol: true,
@@ -160,7 +156,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
       }
       sessionId = null;
       setPhase('exited');
-      setExitCode(event.exitCode);
       setSession((current) =>
         current === null ? current : { ...current, status: 'exited', exitCode: event.exitCode }
       );
@@ -175,13 +170,8 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     });
 
     /**
-     * Pushes the measured geometry to the pty and stores the snapshot back.
-     *
-     * The write-back is not cosmetic: `terminal.resize` answers with the new
-     * `TerminalSessionSnapshot`, and the footer renders `cols x rows` from it. Firing
-     * the call and dropping the result leaves the pty correctly resized while the
-     * footer keeps claiming the old size — and it makes "did the resize reach the
-     * pty?" unobservable from the UI (which is exactly what the P3 gate checks).
+     * Pushes the measured geometry to the pty and keeps the latest session snapshot.
+     * The snapshot also supplies the shell and working directory shown by this view.
      */
     const pushGeometry = (): void => {
       if (sessionId === null) {
@@ -284,15 +274,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     );
   }
 
-  const statusLabel =
-    phase === 'starting'
-      ? '正在启动会话…'
-      : phase === 'ready'
-        ? '会话运行中'
-        : phase === 'exited'
-          ? `会话已退出（退出码 ${exitCode ?? '未知'}）`
-          : '会话启动失败';
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--terminal-bg)]" data-testid="terminal-view" data-phase={phase}>
       {error === null ? null : (
@@ -326,12 +307,6 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         <span className="min-w-0 flex-1 truncate font-mono" data-testid="terminal-cwd" title={session?.cwd ?? workspacePath}>
           {session?.cwd ?? workspacePath}
         </span>
-        <span data-testid="terminal-status" data-phase={phase}>
-          {statusLabel}
-        </span>
-        <span className="font-mono" data-testid="terminal-geometry">
-          {terminalGeometryLabel(session)}
-        </span>
         {phase === 'exited' || phase === 'error' ? (
           <button
             type="button"
@@ -343,27 +318,9 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
             重新连接
           </button>
         ) : null}
-        {rtk.status === 'idle' ? null : (
-          <span
-            data-testid="terminal-rtk-status"
-            data-tone={rtk.summary?.tone ?? 'muted'}
-            title={rtk.summary?.detail ?? rtk.error ?? ''}
-            className={rtk.summary?.tone === 'warn' ? 'text-[var(--st-warn)]' : 'opacity-80'}
-          >
-            {rtk.status === 'loading' ? 'RTK 状态读取中…' : rtk.status === 'error' ? 'RTK 状态不可用' : rtk.summary?.label}
-          </span>
-        )}
       </div>
     </div>
   );
-}
-
-/** `80x24`, or a dash until the session reports its geometry. */
-function terminalGeometryLabel(session: TerminalSessionSnapshot | null): string {
-  if (session === null) {
-    return '—';
-  }
-  return `${session.cols}x${session.rows}`;
 }
 
 /**
