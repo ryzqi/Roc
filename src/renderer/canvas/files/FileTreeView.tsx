@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { fileTreeWindow } from './file-tree-window';
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import type { FileEntry } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
@@ -24,8 +25,8 @@ import {
  * visible slice (plus overscan) with spacer elements preserving scroll height.
  * Rows are a fixed 24px so the arithmetic is exact; the plan asks for
  * virtualisation past 200 rows and large repositories hit that immediately. The
- * focused row is always inside the slice, otherwise roving focus would point at
- * an element that is not rendered.
+ * focused row stays mounted as a separate pinned row when outside the viewport,
+ * preserving roving focus without mounting every intervening row.
  *
  * **Keyboard model** (AGENTS.md "every important action must be keyboard
  * accessible"). This is the ARIA tree pattern with a roving `tabIndex`:
@@ -166,7 +167,7 @@ export function FileTreeView({
     observer.observe(element);
     setViewportHeight(element.clientHeight);
     return () => observer.disconnect();
-  }, [workspacePathKey]);
+  }, [workspacePathKey, tree.rows.length === 0]);
 
   const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
@@ -191,9 +192,7 @@ export function FileTreeView({
   const windowEnd = virtualise
     ? Math.min(tree.rows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
     : tree.rows.length;
-  const startIndex = virtualise && activeIndex >= 0 ? Math.min(windowStart, activeIndex) : windowStart;
-  const endIndex = virtualise && activeIndex >= 0 ? Math.max(windowEnd, activeIndex + 1) : windowEnd;
-  const visible = tree.rows.slice(startIndex, endIndex);
+  const { indices, trailingRows } = fileTreeWindow(tree.rows.length, windowStart, windowEnd, activeIndex);
 
   useEffect(() => {
     if (pendingFocusPath === null) {
@@ -415,11 +414,10 @@ export function FileTreeView({
         aria-label="文件树"
         className="min-h-0 flex-1 overflow-y-auto py-1"
       >
-        {virtualise && startIndex > 0 ? (
-          <div aria-hidden="true" style={{ height: startIndex * ROW_HEIGHT }} />
-        ) : null}
-
-        {visible.map((row) => (
+        {indices.map(({ index, gap }) => {
+          const row = tree.rows[index]!;
+          return <Fragment key={row.entry.relativePath}>
+            {gap > 0 ? <div aria-hidden="true" style={{ height: gap * ROW_HEIGHT }} /> : null}
           <TreeRow
             key={row.entry.relativePath}
             row={row}
@@ -447,10 +445,11 @@ export function FileTreeView({
               setFocusedPath(row.entry.relativePath);
             }}
           />
-        ))}
+          </Fragment>;
+        })}
 
-        {virtualise && endIndex < tree.rows.length ? (
-          <div aria-hidden="true" style={{ height: (tree.rows.length - endIndex) * ROW_HEIGHT }} />
+        {trailingRows > 0 ? (
+          <div aria-hidden="true" style={{ height: trailingRows * ROW_HEIGHT }} />
         ) : null}
       </div>
     </div>
