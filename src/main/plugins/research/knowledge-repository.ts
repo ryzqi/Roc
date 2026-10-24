@@ -261,19 +261,28 @@ export class ResearchKnowledgeRepository {
     vector: { spaceKey: string; dimensions: number; blob: Buffer }
   ): ResearchKnowledgeSearchHit[] {
     const blob = normalizeEmbeddingBlob(vector.blob, vector.dimensions);
-    const projectClause = projectId === null ? '' : 'AND (c.project_id = ? OR c.project_id IS NULL)';
+    const projectJoin = projectId === null ? '' : 'JOIN research_knowledge_chunks scoped ON scoped.id = e.chunk_id';
+    const projectClause = projectId === null ? '' : 'AND (scoped.project_id = ? OR scoped.project_id IS NULL)';
+    // Rank narrow vector rows first; hydrate document text only for the selected hits.
+    // MATERIALIZED keeps SQLite from flattening the joins back into the full scan.
     const args = projectId === null
-      ? [vector.spaceKey, vector.dimensions, blob, limit]
-      : [vector.spaceKey, vector.dimensions, projectId, blob, limit];
+      ? [blob, vector.spaceKey, vector.dimensions, limit]
+      : [blob, vector.spaceKey, vector.dimensions, projectId, limit];
     const rows = this.db
       .prepare(
-        `SELECT e.chunk_id, c.document_id, d.title, c.content, c.locator,
+        `WITH nearest AS MATERIALIZED (
+           SELECT e.chunk_id, vec_distance_cosine(e.vector_blob, ?) AS distance
+           FROM research_knowledge_embeddings e
+           ${projectJoin}
+           WHERE e.space_key = ? AND e.dimensions = ? ${projectClause}
+           ORDER BY distance ASC LIMIT ?
+         )
+         SELECT nearest.chunk_id, c.document_id, d.title, c.content, c.locator,
                 d.source_type, d.source_id
-         FROM research_knowledge_embeddings e
-         JOIN research_knowledge_chunks c ON c.id = e.chunk_id
+         FROM nearest
+         JOIN research_knowledge_chunks c ON c.id = nearest.chunk_id
          JOIN research_knowledge_documents d ON d.id = c.document_id
-         WHERE e.space_key = ? AND e.dimensions = ? ${projectClause}
-         ORDER BY vec_distance_cosine(e.vector_blob, ?) ASC LIMIT ?`
+         ORDER BY nearest.distance ASC`
       )
       .all(...args) as KnowledgeHitRow[];
     return rows.map((row) => toKnowledgeHit(row));
