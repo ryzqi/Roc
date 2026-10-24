@@ -117,7 +117,7 @@ export class ResearchIndexRepository {
       .run(message, consumeScan ? 1 : 0, projectId);
   }
 
-  reconcile(projectId: string, scan: { scanId: string; generation: number }, files: readonly ScannedIndexFile[], force: boolean, embedding: ResearchEmbeddingReceipt, parserKeys: ReadonlyMap<IndexFileKind, string>): void {
+  reconcile(projectId: string, scan: { scanId: string; generation: number }, files: readonly ScannedIndexFile[], force: boolean, embedding: ResearchEmbeddingReceipt, parserKeys: ReadonlyMap<IndexFileKind, string>, changedPaths?: ReadonlySet<string>): void {
     this.db.transaction(() => {
       const scope = this.requireActive(projectId, scan.generation);
       if (scope.scan_id !== scan.scanId || scope.root_path === null) throw new Error('research_index_scan_stale');
@@ -147,7 +147,12 @@ export class ResearchIndexRepository {
           this.enqueue(projectId, id, scan.generation, { ...file, root: scope.root_path, force: force || existing?.force_needed === 1, parserKey, embeddingConfigId: options.embeddingConfigId, embedding });
         }
       }
-      const previous = this.db.prepare("SELECT id FROM research_index_files WHERE project_id = ? AND status <> 'missing'").all(projectId) as Array<{ id: string }>;
+      if (changedPaths !== undefined && (this.db.prepare("SELECT count(*) AS count FROM research_index_files WHERE project_id = ? AND status <> 'missing'").get(projectId) as { count: number }).count > 10_000) {
+        throw new Error('research_index_file_limit');
+      }
+      const previous = changedPaths === undefined
+        ? this.db.prepare("SELECT id FROM research_index_files WHERE project_id = ? AND status <> 'missing'").all(projectId) as Array<{ id: string }>
+        : [...changedPaths].map((path) => ({ id: fileIdentity(projectId, path) }));
       for (const file of previous) {
         if (seen.has(file.id)) continue;
         this.cancelFileJobs(file.id);

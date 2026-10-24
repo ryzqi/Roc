@@ -2,7 +2,7 @@ import { lstat, readdir, realpath } from 'node:fs/promises';
 import { extname, isAbsolute, join, matchesGlob, relative, sep } from 'node:path';
 import type { z } from 'zod';
 import type { researchIndexKindSchema, researchIndexOptionsSchema } from '../../../shared/schemas/research-index';
-import { assertResearchDescendant, readResearchFile, researchContentHash, researchPath } from './research-files';
+import { assertResearchDescendant, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 
 export type IndexFileKind = z.infer<typeof researchIndexKindSchema>;
 export type ScannedIndexFile = { path: string; kind: IndexFileKind; size: number; signature: string };
@@ -52,6 +52,32 @@ export async function scanIndexFiles(root: string, options: z.infer<typeof resea
   };
   await walk(root);
   return result.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+}
+
+/** null requests a full scan when a watcher cannot identify a safe file-only change. */
+export async function scanChangedIndexFiles(root: string, paths: ReadonlySet<string>, options: z.infer<typeof researchIndexOptionsSchema>, storageRoot: string, signal: AbortSignal): Promise<ScannedIndexFile[] | null> {
+  const files: ScannedIndexFile[] = [];
+  for (const name of paths) {
+    signal.throwIfAborted();
+    try {
+      researchRelativePath(name);
+      const parts = name.split('/');
+      if (parts.some((_, index) => {
+        const ancestor = parts.slice(0, index + 1).join('/');
+        return options.exclude.some((pattern) => matchesGlob(ancestor, pattern) || (index < parts.length - 1 && matchesGlob(`${ancestor}/`, pattern)));
+      })) continue;
+      const path = await researchPath(root, name);
+      const fromStorage = relative(storageRoot, path);
+      if (fromStorage === '' || (!fromStorage.startsWith(`..${sep}`) && fromStorage !== '..' && !isAbsolute(fromStorage))) continue;
+      if (!(await lstat(path)).isFile()) return null;
+      const kind = indexFileKind(name);
+      if (kind === null || !options.kinds.includes(kind) || !options.include.some((pattern) => matchesGlob(name, pattern))) continue;
+      files.push({ path: name, kind, ...await indexFileSignature(path) });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return null;
+    }
+  }
+  return files;
 }
 
 export async function readIndexFile(root: string, file: ScannedIndexFile): Promise<{ bytes: Buffer; sourceHash: string }> {

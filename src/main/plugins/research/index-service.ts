@@ -12,7 +12,7 @@ import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 import type { ResearchEmbeddingService } from './embedding-service';
 import { embeddingKey, knowledgeId, type IndexJob, type IndexPayload } from './index-repository';
-import { indexFileSignature, indexLocatedText, indexText, readIndexFile, scanIndexFiles, type IndexFileKind } from './index-files';
+import { indexFileSignature, indexLocatedText, indexText, readIndexFile, scanChangedIndexFiles, scanIndexFiles, type IndexFileKind } from './index-files';
 import { maximumArtifactBytes } from './document-files';
 import { pruneResearchArtifacts } from './artifact-gc';
 import type { ResearchArtifactGcReport } from './artifact-gc';
@@ -44,6 +44,7 @@ export class ResearchIndexService {
   private closed = false;
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly watchers = new Map<string, { root: string; handle: WatchHandle }>();
+  private readonly dirtyPaths = new Map<string, Set<string> | null>();
   private readonly scans = new Map<string, ScanTask>();
   private readonly tasks = new Set<Promise<void>>();
   private active: ActiveJob | null = null;
@@ -164,6 +165,7 @@ export class ResearchIndexService {
     this.closed = true;
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
+    this.dirtyPaths.clear();
     for (const scan of this.scans.values()) scan.controller.abort();
     this.active?.controller.abort();
     const errors: unknown[] = [];
@@ -175,8 +177,14 @@ export class ResearchIndexService {
     if (errors.length > 0) throw new AggregateError(errors, 'research_index_shutdown_failed');
   }
 
-  private schedule(projectId: string, force: boolean, delay = 200): void {
+  private schedule(projectId: string, force: boolean, delay = 200, changedPaths: ReadonlySet<string> | null = null): void {
     if (this.closed) return;
+    const previous = this.dirtyPaths.get(projectId);
+    if (force || changedPaths === null || previous === null) this.dirtyPaths.set(projectId, null);
+    else {
+      const merged = new Set([...(previous ?? []), ...changedPaths]);
+      this.dirtyPaths.set(projectId, merged.size > 1_000 ? null : merged);
+    }
     this.repository.indexing.requestScan(projectId, force);
     const scope = this.repository.indexing.scope(projectId);
     if (this.rootPath === null || scope.archived || scope.workspace_path === null || this.repository.indexing.settings(projectId).paused) return;
@@ -191,7 +199,7 @@ export class ResearchIndexService {
       this.scans.set(projectId, task);
       this.track(promise, () => {
         if (this.scans.get(projectId) === task) this.scans.delete(projectId);
-        if (!this.closed && this.repository.indexing.scope(projectId).scan_requested) this.schedule(projectId, false);
+        if (!this.closed && this.repository.indexing.scope(projectId).scan_requested) this.schedule(projectId, false, 200, this.dirtyPaths.get(projectId) ?? null);
         this.pump();
       });
     }, delay));
@@ -206,17 +214,21 @@ export class ResearchIndexService {
       this.requireActive(signal);
       if (this.repository.indexing.scope(projectId).generation !== initial.generation) throw new Error('research_index_scope_changed');
       if (initial.root_path !== root) { this.repository.indexing.bindRoot(projectId, root); this.activeFor(projectId)?.controller.abort(); this.closeWatcher(projectId); }
+      const changedPaths = this.dirtyPaths.get(projectId);
+      this.dirtyPaths.delete(projectId);
       scan = this.repository.indexing.beginScan(projectId);
       const settings = this.repository.indexing.settings(projectId);
       const watchError = this.setupWatch(projectId, root, settings.watch, storage);
-      const files = await scanIndexFiles(root, settings, storage, signal);
+      const incremental = !scan.force && initial.root_path === root && initial.last_scan_at !== null && changedPaths != null
+        ? await scanChangedIndexFiles(root, changedPaths, settings, storage, signal) : null;
+      const files = incremental ?? await scanIndexFiles(root, settings, storage, signal);
       const parserKeys = new Map<IndexFileKind, string>();
       for (const file of files) if (!parserKeys.has(file.kind)) {
         parserKeys.set(file.kind, await this.parserKey(file.kind));
       }
       this.requireActive(signal);
       if (await researchWorkspace(this.repository.getProject(projectId).workspacePath) !== root) throw new Error('research_index_workspace_changed');
-      this.repository.indexing.reconcile(projectId, scan, files, scan.force, this.embeddings.selectedConfiguration(settings.embeddingConfigId), parserKeys);
+      this.repository.indexing.reconcile(projectId, scan, files, scan.force, this.embeddings.selectedConfiguration(settings.embeddingConfigId), parserKeys, incremental === null ? undefined : changedPaths ?? undefined);
       if (watchError !== null) this.repository.indexing.error(projectId, 'research_index_watch_failed');
       const active = this.activeFor(projectId);
       if (active !== null && this.repository.indexing.job(active.job.id).status !== 'running') active.controller.abort();
@@ -237,7 +249,7 @@ export class ResearchIndexService {
     this.closeWatcher(projectId);
     try {
       let handle: WatchHandle | null = null;
-      handle = this.watchFactory(root, (_event, filename) => {
+      handle = this.watchFactory(root, (event, filename) => {
         if (this.closed || handle === null || this.watchers.get(projectId)?.handle !== handle) return;
         try {
           const path = filename === null ? null : filename.toString();
@@ -249,7 +261,7 @@ export class ResearchIndexService {
           }
           const current = this.watchers.get(projectId);
           if (current !== undefined) this.retainWatcher(projectId, current);
-          this.schedule(projectId, false);
+          this.schedule(projectId, false, 200, event === 'change' && path !== null ? new Set([path]) : null);
         } catch (error) { this.logger.warn('Research index watcher notification failed.', { projectId, error: failureCode(error) }); }
       });
       this.retainWatcher(projectId, { root, handle });
@@ -414,6 +426,7 @@ export class ResearchIndexService {
     const timer = this.timers.get(projectId);
     if (timer !== undefined) clearTimeout(timer);
     this.timers.delete(projectId);
+    this.dirtyPaths.delete(projectId);
     this.scans.get(projectId)?.controller.abort();
     this.activeFor(projectId)?.controller.abort();
     this.closeWatcher(projectId);
