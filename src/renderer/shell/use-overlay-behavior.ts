@@ -1,5 +1,8 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus, trapDialogTabFocus } from './focus-trap';
+import { hasOpenDialog, popOverlay, pushOverlay, topOverlayId, type OverlayLayer } from './overlay-stack';
+
+export { overlayStackDepth, topOverlayId } from './overlay-stack';
 
 /**
  * Overlay behaviour: focus trap, Escape layering, focus restore, background
@@ -10,16 +13,19 @@ import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus, tra
  *
  * ## Layering rules
  *
- * All three interactions key off the same shared stack, which is what makes
- * stacked overlays behave:
+ * All three interactions key off the shared stack in `overlay-stack.ts`, which is what
+ * makes stacked overlays behave:
  *
  *   - **Escape** closes only the top layer (sequential case).
  *   - **Tab** is trapped only by the top layer. Without this, every open
  *     overlay's capture listener would refocus *its own* first element and Tab
  *     would ping-pong instead of advancing.
- *   - **`aria-hidden` on `#root`** is applied once, when the stack goes from
- *     empty to non-empty, and removed only when it empties again. Storing a
- *     per-overlay "previous value" instead breaks as soon as two overlays close
+ *   - **`aria-hidden` on `#root`** follows the presence of a *dialog*, not the stack
+ *     depth: an ambient drawer (the narrow-window sidebar) is part of the page and must
+ *     not make the page look inert, while any dialog above it must.
+ *
+ * The stack is layered rather than strictly ordered by open time — see that module's
+ * header for the covered dropdown this fixes.
  *     out of order: the first closer restores `null` while the second is still
  *     open, and the second then leaves `#root` permanently hidden from
  *     assistive technology.
@@ -44,17 +50,6 @@ import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus, tra
  * therefore resolve in the same order they did before the animation existed.
  */
 
-const openOverlayStack: string[] = [];
-
-export function topOverlayId(): string | null {
-  return openOverlayStack[openOverlayStack.length - 1] ?? null;
-}
-
-/** True when any modal/drawer is open, so shells can suppress global shortcuts. */
-export function overlayStackDepth(): number {
-  return openOverlayStack.length;
-}
-
 export type OverlayBehaviorOptions = {
   open: boolean;
   panelRef: RefObject<HTMLElement | null>;
@@ -64,6 +59,8 @@ export type OverlayBehaviorOptions = {
   initialFocusRef?: RefObject<HTMLElement | null> | undefined;
   /** Stable id used for stack ordering. */
   overlayId: string;
+  /** Which layer this overlay lives in; see `overlay-stack.ts`. Defaults to `dialog`. */
+  layer?: OverlayLayer;
   /** Set false to leave the app accessible behind this overlay (non-modal). */
   inertBackground?: boolean;
 };
@@ -75,6 +72,7 @@ export function useOverlayBehavior({
   canClose,
   initialFocusRef,
   overlayId,
+  layer = 'dialog',
   inertBackground = true
 }: OverlayBehaviorOptions): void {
   // Keep the latest callbacks reachable from a listener installed once per open.
@@ -88,11 +86,13 @@ export function useOverlayBehavior({
       return;
     }
 
-    const wasEmpty = openOverlayStack.length === 0;
-    openOverlayStack.push(overlayId);
+    const hadDialog = hasOpenDialog();
+    pushOverlay(overlayId, layer);
 
     const root = document.getElementById('root');
-    if (inertBackground && wasEmpty && root !== null) {
+    // Inheritedness follows the presence of a *dialog*, not the depth: an ambient drawer is
+    // part of the page, so the page behind it is still the page. Only a dialog makes it inert.
+    if (inertBackground && !hadDialog && hasOpenDialog() && root !== null) {
       root.setAttribute('aria-hidden', 'true');
     }
 
@@ -129,16 +129,13 @@ export function useOverlayBehavior({
     window.addEventListener('keydown', onKeyDown, true);
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
-      const index = openOverlayStack.indexOf(overlayId);
-      if (index >= 0) {
-        openOverlayStack.splice(index, 1);
-      }
-      // Only re-expose the app once nothing is layered on it any more.
-      if (inertBackground && openOverlayStack.length === 0 && root !== null) {
+      popOverlay(overlayId);
+      // Only re-expose the app once no dialog is layered on it any more.
+      if (inertBackground && !hasOpenDialog() && root !== null) {
         root.removeAttribute('aria-hidden');
       }
     };
-  }, [open, overlayId, panelRef, initialFocusRef, inertBackground]);
+  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground]);
 }
 
 /**

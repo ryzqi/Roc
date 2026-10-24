@@ -11,6 +11,7 @@ import {
   scrimVariants
 } from '../shared/motion';
 import { useOverlayBehavior, OverlayFocusRestore } from './use-overlay-behavior';
+import { OVERLAY_Z_INDEX, type OverlayLayer } from './overlay-stack';
 
 /**
  * Shared overlay shell for drawers and modals.
@@ -80,6 +81,15 @@ export type ModalShellProps = {
    * in the attribute decides nothing.
    */
   bodyPadding?: 'default' | 'none';
+  /**
+   * Which layering band the overlay is painted in.
+   *
+   * `dialog` (default) is every overlay the user opens. `ambient` is for surfaces the
+   * *layout* raises on its own — the sidebar and assistant drawers at narrow widths — which
+   * belong to the page background and must never paint over a dialog. See
+   * `overlay-stack.ts` for the bug this encodes.
+   */
+  layer?: OverlayLayer;
 };
 
 export function ModalShell({
@@ -95,7 +105,8 @@ export function ModalShell({
   returnFocusSelector,
   beforeClose,
   closeOnBackdrop = true,
-  bodyPadding = 'default'
+  bodyPadding = 'default',
+  layer = 'dialog'
 }: ModalShellProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -115,7 +126,7 @@ export function ModalShell({
 
   // Background inertness lives in the hook, which reference-counts the overlay
   // stack so layers closing out of order cannot leave `#root` hidden forever.
-  useOverlayBehavior({ open, panelRef, overlayId, onRequestClose: onClose, canClose, initialFocusRef });
+  useOverlayBehavior({ open, panelRef, overlayId, layer, onRequestClose: onClose, canClose, initialFocusRef });
 
   const close = (): void => {
     if (!openRef.current || !canClose()) {
@@ -130,9 +141,14 @@ export function ModalShell({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-50 flex"
+          // The z-index comes from the shared layering table, never from a literal: two
+          // overlays both written as `z-50` are ordered by DOM order, which is how the
+          // narrow-window sidebar drawer ended up painted on top of the settings panel.
+          style={{ zIndex: OVERLAY_Z_INDEX[layer] }}
+          className="fixed inset-0 flex"
           data-testid={testId ?? 'overlay'}
           data-overlay-kind={kind}
+          data-overlay-layer={layer}
         >
           {/* Mounted with the panel, not with `ModalShell`: its unmount is the panel's
               removal, which is when focus may safely go back to the opener. */}

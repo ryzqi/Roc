@@ -111,6 +111,7 @@ export function WorkspaceLayout({
           onClose={onToggleSidebar}
           widthClassName="w-[360px]"
           testId="sidebar-drawer"
+          layer="ambient"
         >
           {sidebar}
         </ModalShell>
@@ -124,6 +125,7 @@ export function WorkspaceLayout({
           onClose={onToggleAssistant}
           widthClassName="w-[520px]"
           testId="assistant-drawer"
+          layer="ambient"
         >
           {assistant}
         </ModalShell>

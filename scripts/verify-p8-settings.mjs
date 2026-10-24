@@ -33,7 +33,7 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
 
 const artifactDir = prepareArtifactDir(resolve('.artifacts/p8-gates'));
 
-const { results, record, fail, assertCheck } = createGateRecorder();
+const { results, record, fail, assertCheck, info } = createGateRecorder();
 
 const smokeModelId = 'p8-smoke-model';
 const smokeProviderId = 'p8-smoke-provider';
@@ -969,6 +969,76 @@ try {
   assertCheck('5b 拉取模型', '探测维度真的发了一次嵌入请求', embedProbeCalls >= 1, `calls=${embedProbeCalls}`);
   await closeSettings();
 
+  // ---- 闸门 5c：浮层层级（窄窗抽屉不得压住对话框） -------------------------------
+  //
+  // 回归：所有浮层都用同一个 `z-50`，于是层级只由 DOM 顺序决定。窗口跨过 1100px 断点时
+  // 左栏变成抽屉 ⇒ 它比设置面板后挂载 ⇒ 它以同样高度整片盖住设置面板，抽屉右边缘正好
+  // 切掉「智能体安全」里「工具审批模式」下拉框的左边一截，同时抢走 Esc 与 Tab 圈禁。
+  //
+  // 断言的是几何与命中测试（elementFromPoint），不是 class 名：只看 class 会允许下一个组件
+  // 再随手写一个同层 z-index 把问题带回来。
+  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await waitForProjectRoute();
+  await ensureSettingsOpen();
+  await openSection('guardrail');
+  await page.waitForSelector('[data-testid="settings-approval-mode"]', { timeout: 15_000 });
+  const narrowLayout = await page.evaluate(() => {
+    const layout = document.querySelector('[data-testid="workspace-layout"]');
+    return layout?.getAttribute('data-layout-mode') ?? null;
+  });
+  const probeApprovalSelect = () =>
+    page.evaluate(() => {
+      const select = document.querySelector('[data-testid="settings-approval-mode"]');
+      if (select === null) {
+        return null;
+      }
+      const box = select.getBoundingClientRect();
+      const at = (x, y) => {
+        const hit = document.elementFromPoint(x, y);
+        if (hit === null) {
+          return null;
+        }
+        return hit === select || select.contains(hit) ? 'select' : (hit.getAttribute('data-testid') ?? hit.tagName.toLowerCase());
+      };
+      return {
+        leftEdge: at(box.x + 4, box.y + box.height / 2),
+        middle: at(box.x + box.width / 2, box.y + box.height / 2),
+        layers: Array.from(document.querySelectorAll('[data-overlay-layer]')).map(
+          (node) => `${node.getAttribute('data-testid')}:${node.getAttribute('data-overlay-layer')}:${getComputedStyle(node).zIndex}`
+        )
+      };
+    });
+
+  const approvalProbe = await probeApprovalSelect();
+  assertCheck(
+    '5c 浮层层级',
+    '智能体安全：工具审批模式的下拉框在最上层且未被任何浮层遮挡',
+    approvalProbe !== null && approvalProbe.leftEdge === 'select' && approvalProbe.middle === 'select',
+    JSON.stringify(approvalProbe)
+  );
+  if (narrowLayout === 'drawers') {
+    assertCheck(
+      '5c 浮层层级',
+      '窄窗下左侧抽屉属于环境层，永远画在设置对话框之下',
+      approvalProbe !== null && approvalProbe.layers.includes('sidebar-drawer:ambient:40'),
+      JSON.stringify(approvalProbe?.layers ?? null)
+    );
+  } else {
+    // 宽窗里没有抽屉，但仍要把那条分层规则记一笔（说明性记录，不参与通过率）。
+    info('5c 浮层层级', `当前窗口是 ${String(narrowLayout)}，未生成左栏抽屉；分层断言由 tests/unit/renderer-overlay-stack.test.mjs 覆盖`);
+  }
+  await page.selectOption('[data-testid="settings-approval-mode"]', 'fully_automatic');
+  await page.waitForTimeout(300);
+  const approvalProbeAfter = await probeApprovalSelect();
+  assertCheck(
+    '5c 浮层层级',
+    '选择「全自动」后下拉框仍在最上层（出现警告条也不会被挤到分栏下面）',
+    approvalProbeAfter !== null && approvalProbeAfter.leftEdge === 'select' && approvalProbeAfter.middle === 'select',
+    JSON.stringify(approvalProbeAfter)
+  );
+  await page.selectOption('[data-testid="settings-approval-mode"]', 'default');
+  await page.waitForTimeout(200);
+
   // ---- 闸门 6：业务页无内联配置残留 ---------------------------------------------
   const rendererRoot = resolve('src/renderer');
   for (const [needle, label] of [
@@ -1102,6 +1172,8 @@ try {
       '2 密钥',
       '3 测速',
       '4 关闭确认',
+      '5b 拉取模型',
+      '5c 浮层层级',
       '5 立即生效',
       '6 无内联配置',
       '7 typecheck',
