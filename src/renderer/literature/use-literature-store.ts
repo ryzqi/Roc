@@ -284,6 +284,26 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const reloadDocuments = documents.reload;
   const reloadList = list.reload;
 
+  useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (refreshTimer !== undefined) return;
+      refreshTimer = setTimeout(() => { refreshTimer = undefined; reloadList(); }, 100);
+    };
+    const unsubscribe = client.api.research.onLibraryChanged((event) => {
+      if (projectId === null || event.affectedProjectIds.includes(projectId)) refresh();
+    });
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsubscribe();
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [client, projectId, reloadList]);
+
   /**
    * Polls while a parse is in flight.
    *

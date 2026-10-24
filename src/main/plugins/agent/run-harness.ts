@@ -133,6 +133,7 @@ export async function buildRunHarness(
     threadId: request.run.threadId
   });
   const tools = await createExecutorTools({
+    threadId: request.run.threadId,
     capabilities: services.capabilities,
     runId: request.run.id,
     capabilityManifest: request.snapshot.capabilityManifest,
@@ -387,6 +388,7 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshot): Workspace 
  * 缺席的组直接空数组，不影响其余组的相对次序。
  */
 async function createExecutorTools(input: {
+  threadId: string;
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
   runId: string;
@@ -437,6 +439,8 @@ async function createExecutorTools(input: {
  * 按清单过滤而不是按项目 id 直接信任，保证运行时工具集与冻结的清单一致。
  */
 function createManifestAuthorizedResearchTools(input: {
+  threadId: string;
+  runId: string;
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
   abortSignal: AbortSignal;
@@ -449,6 +453,8 @@ function createManifestAuthorizedResearchTools(input: {
   return createResearchTools({
     capabilities: input.capabilities,
     projectId: input.researchProjectId,
+    threadId: input.threadId,
+    runId: input.runId,
     signal: input.abortSignal
   }).filter((tool) => manifestToolNames.has(tool.name)) as ClientTool[];
 }

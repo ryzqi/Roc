@@ -15,6 +15,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
+import type { LiteratureLibraryChanged } from '../shared/schemas/literature-import';
 import type { MenuPage } from '../shared/surfaces';
 import type { BuiltinSkillsStatus, ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
@@ -391,6 +392,9 @@ async function createWindow(): Promise<void> {
     broadcastToWindows([mainWindow], ipcChannels.workspaceChanged, event.payload, {
       include: (_window, index) => index === 0
     });
+  });
+  kernel.subscribeEvent<LiteratureLibraryChanged>('research.library.changed', (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.researchLibraryChanged, event.payload);
   });
   kernel.subscribeEvent<ChatRunEvent>(agentChatRunEventType, (event) => {
     broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event.payload, {

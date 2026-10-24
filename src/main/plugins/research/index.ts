@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { LiteratureImportService } from './literature-import-service';
+import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
 import { z } from 'zod';
 import * as sqliteVec from 'sqlite-vec';
 import type { Database } from 'better-sqlite3';
@@ -21,8 +24,6 @@ import {
   researchKnowledgeDocumentUpsertRequestSchema,
   researchKnowledgeSearchRequestSchema,
   researchKnowledgeSearchResultSchema,
-  researchLiteratureSchema,
-  researchLiteratureSearchRequestSchema,
   researchStageRoleProfileSchema,
   researchStageRoleRequestSchema,
   researchStageSchema,
@@ -38,7 +39,6 @@ import type {
   ResearchEmbeddingConfigSaveRequest,
   ResearchKnowledgeDocumentUpsertRequest,
   ResearchKnowledgeSearchRequest,
-  ResearchLiteratureSearchRequest,
   ResearchStageRoleRequest,
   ResearchProvenanceCreateRequest,
   ResearchProvenanceListRequest
@@ -103,9 +103,6 @@ const workbenchCapabilities = {
   ),
   stageRole: descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema)
 };
-const literatureCapabilities = {
-  search: descriptor('research.literature.search', researchLiteratureSearchRequestSchema, researchLiteratureSchema.array())
-};
 const knowledgeCapabilities = {
   listEmbedding: descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
   saveEmbedding: descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
@@ -118,7 +115,7 @@ const provenanceCapabilities = {
 };
 const researchCapabilityDescriptors = [
   ...Object.values(workbenchCapabilities),
-  ...Object.values(literatureCapabilities),
+  ...literatureImportCapabilities,
   ...Object.values(knowledgeCapabilities),
   ...Object.values(provenanceCapabilities)
 ];
@@ -161,6 +158,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
   let productionInputs: ResearchProductionInputService | null = null;
   let prose: ResearchProseLintService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
+  let literatureImports: LiteratureImportService | null = null;
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
   return {
@@ -218,6 +216,20 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       registerResearchProseCapabilities(context, researchProse);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
+      const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key', operationId: string | null = null) => {
+        await context.eventBus.publish({ type: 'research.library.changed', source: pluginId, createdAt: new Date().toISOString(),
+          payload: { eventId: randomUUID(), operationId, affectedItemIds: items.map((item) => item.id),
+            affectedProjectIds: [...new Set(items.flatMap((item) => item.projectIds))], changeKind, occurredAt: new Date().toISOString() } });
+      };
+      researchRepository.library.onChanged = (items, kind) => {
+        void publishLibraryChange(items, kind).catch(() => context.logger.warn('research_library_change_publish_failed'));
+      };
+      literatureImports = new LiteratureImportService(db, researchRepository.library, literatureService, library, async (result) => {
+        const items = result.items.flatMap((item) => item.libraryItemId === null ? [] : [researchRepository.library.get(item.libraryItemId)]);
+        await publishLibraryChange(items, 'import', result.operationId);
+      });
+      literatureImports.recover();
+      registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
       // 派生代际切换（提案 §8）：旧代际结果一律不读，文档回到“有原文、无结果”。
       // 必须放在 `documents` 服务构造前：切换后任何 `current_parse_id` 都不可能指向旧块。
@@ -321,9 +333,6 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       context.capabilities.register(pluginId, workbenchCapabilities.stageRole, async (input) =>
         getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
       );
-      context.capabilities.register(pluginId, literatureCapabilities.search, async (input) => {
-        return literatureService.searchAndStore(researchRepository, input as ResearchLiteratureSearchRequest);
-      });
       context.capabilities.register(pluginId, knowledgeCapabilities.listEmbedding, async () => await researchEmbeddings.listConfigs());
       context.capabilities.register(pluginId, knowledgeCapabilities.saveEmbedding, async (input) => {
         const config = await researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest);
@@ -338,6 +347,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
     },
     shutdown: async () => {
       try {
+        await literatureImports?.shutdown();
         await shutdownResearchPlugin({ productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
       } finally {
         productionInputs = null;

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, Search, TriangleAlert } from 'lucide-react';
+import type { LiteratureSearchResult, LiteratureCandidate } from '../../shared/schemas/literature-import';
+import type { LiteratureImportActions } from './use-literature-import-actions';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
 import { ModalShell } from '../shell/ModalShell';
 import type { ImportTabRequest } from './hub-route';
@@ -13,7 +15,6 @@ import {
   documentKindLabel,
   isCitationKeyValid,
   isDocumentPathSupported,
-  literatureRecordFromSearchHit,
   normalizeDoi,
   parseAuthorsInput,
   parseYearInput
@@ -31,7 +32,7 @@ import {
  *   | DOI      | `research.library.importDoi`          | DOI is normalized locally first |
  *   | 参考文献   | `files.selectFromDialog` → `research.library.importFile` | **no RIS** — the contract's formats are bibtex/biblatex/csl-json |
  *   | 手工录入   | `research.library.importRecord`       | the record is built by a pure helper; the *random arXiv id* of the legacy form is gone |
- *   | 检索      | `research.literature.search` → `importRecord` | arXiv ids go through the same search path |
+ *   | 检索      | `research.literature.search` → `addLiterature` | 导入已保存候选 |
  *
  * Deliberately absent: the legacy form's MinerU mode and formula/table switches.
  * Those are settings, and the parse step reads them from the settings
@@ -50,11 +51,8 @@ export type ImportDialogProps = {
   importBibliographyFile: (sourcePath: string, format: ResearchBibliographyFormat) => Promise<LiteratureImportOutcome>;
   importRecord: (record: ResearchLiterature, citationKey: string) => Promise<LiteratureImportOutcome>;
   pickFile: () => Promise<string | null>;
-  searchLiterature: (
-    query: string,
-    sources: LiteratureSearchSource[],
-    limit: number
-  ) => Promise<{ ok: true; hits: ResearchLiterature[] } | { ok: false; message: string }>;
+  searchLiterature: LiteratureImportActions['searchLiterature'];
+  addCandidate: LiteratureImportActions['addCandidate'];
   addDocumentToNewItem: (input: {
     sourcePath: string;
     title: string;
@@ -136,7 +134,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
 
   // Search tab
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchHits, setSearchHits] = useState<ResearchLiterature[]>([]);
+  const [searchHits, setSearchHits] = useState<LiteratureCandidate[]>([]);
+  const [searchResult, setSearchResult] = useState<LiteratureSearchResult | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -163,6 +162,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setManualKey('');
     setSearchQuery('');
     setSearchHits([]);
+    setSearchResult(null);
     setSearchError(null);
     setTab(initialTab);
     setDocumentTarget(props.selectedItem === null ? 'new-item' : 'library-item');
@@ -571,11 +571,13 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   const sources: LiteratureSearchSource[] = arxivId === null ? SEARCH_SOURCES : ['arxiv'];
                   setPending(true);
                   setSearchError(null);
+                  setSearchResult(null);
                   void props
                     .searchLiterature(query, sources, 10)
                     .then((result) => {
                       if (result.ok) {
-                        setSearchHits(result.hits);
+                        setSearchHits(result.result.candidates);
+                        setSearchResult(result.result);
                         return;
                       }
                       setSearchHits([]);
@@ -600,12 +602,18 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 {searchError}
               </p>
             )}
+            {searchResult === null ? null : (
+              <p role="status" className="text-muted text-[var(--font-micro-size)]">
+                {searchResult.status === 'failed' ? '检索失败，请稍后重试。' : searchResult.status === 'partial' ? '部分来源未完成，以下为可用结果。' : `找到 ${searchResult.total} 篇候选，尚未加入文献库。`}
+                {searchResult.warnings.join(' ')}
+              </p>
+            )}
             {searchHits.length === 0 ? null : (
               <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto" aria-label="检索结果">
-                {searchHits.map((hit) => {
-                  const key = deriveCitationKey({ title: hit.title, authors: hit.authors, year: hit.publishedYear });
+                {searchHits.map((candidate) => {
+                  const hit = candidate.record;
                   return (
-                    <li key={`${hit.source}:${hit.id}`} className="flex items-start gap-2 rounded-control border border-line px-2 py-1.5">
+                    <li key={candidate.candidateId} className="flex items-start gap-2 rounded-control border border-line px-2 py-1.5">
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-ink text-[var(--font-meta-size)]">{hit.title}</span>
                         <span className="block truncate text-muted text-[var(--font-micro-size)]">
@@ -614,18 +622,16 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                       </span>
                       <button
                         type="button"
-                        disabled={pending || key === null}
-                        title={key === null ? '题名里没有可用的词，请用「手工录入」指定 key' : `导入为 ${key}`}
+                        disabled={pending || candidate.archived || searchResult === null}
+                        title={candidate.archived ? '文献已归档，请先在文献库恢复' : '加入元数据；不下载或解析PDF'}
                         onClick={() => {
-                          if (key === null) {
-                            return;
-                          }
-                          void run(() => props.importRecord(literatureRecordFromSearchHit(hit), key));
+                          if (searchResult === null) return;
+                          void run(() => props.addCandidate(searchResult.searchId, candidate.candidateId));
                         }}
                         data-testid={`literature-import-hit-${hit.id}`}
                         className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                       >
-                        导入
+                        {candidate.archived ? '已归档' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
                       </button>
                     </li>
                   );

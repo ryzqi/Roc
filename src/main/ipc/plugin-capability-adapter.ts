@@ -1,3 +1,4 @@
+import { withLiteratureContext } from '../services/literature-context';
 import {
   pluginCapabilityMappings,
   type GeneratedPluginCapabilityMapping
@@ -15,7 +16,7 @@ export type PluginCapabilityInvoker = {
 export type PluginCapabilityMapping = GeneratedPluginCapabilityMapping;
 
 export type PluginCapabilityAdapter = {
-  invoke(preloadMethod: string, args: readonly unknown[]): Promise<IpcResult<unknown>>;
+  invoke(preloadMethod: string, args: readonly unknown[], windowId?: number): Promise<IpcResult<unknown>>;
 };
 
 export { pluginCapabilityMappings };
@@ -25,16 +26,21 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
     pluginCapabilityMappings.map((item) => [item.preloadMethod, item])
   );
   return {
-    async invoke(preloadMethod, args) {
+    async invoke(preloadMethod, args, windowId = 0) {
       const target = mappingsByMethod.get(preloadMethod);
       if (target === undefined) {
         return await wrapIpc(() => {
           throw new Error(`plugin_capability_mapping_missing:${preloadMethod}`);
         });
       }
-      return await wrapIpc(async () =>
-        await invoker.invokeCapability(target.capabilityName, transformInput(target.inputTransform, args))
-      );
+      return await wrapIpc(async () => {
+        const input = transformInput(target.inputTransform, args);
+        const scoped = ['research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature',
+          'research.library.getImportOperation', 'research.library.cancelImportOperation'].includes(target.capabilityName);
+        if (!scoped) return invoker.invokeCapability(target.capabilityName, input);
+        const projectId = typeof input === 'object' && input !== null && !Array.isArray(input) && 'projectId' in input && typeof input.projectId === 'string' ? input.projectId : null;
+        return withLiteratureContext({ owner: `window:${windowId}`, projectId }, () => invoker.invokeCapability(target.capabilityName, input));
+      });
     }
   };
 }
@@ -42,7 +48,7 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
 export function registerPluginCapabilityIpc(timedHandle: TimedHandle, invoker: PluginCapabilityInvoker): void {
   const adapter = createPluginCapabilityAdapter(invoker);
   for (const target of pluginCapabilityMappings) {
-    timedHandle(target.channel, (_event: unknown, ...args: unknown[]) => adapter.invoke(target.preloadMethod, args));
+    timedHandle(target.channel, (event: { sender: { id: number } }, ...args: unknown[]) => adapter.invoke(target.preloadMethod, args, event.sender.id));
   }
 }
 

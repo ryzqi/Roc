@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { ResearchLiterature } from '../../shared/types';
-import type { LiteratureStore } from './use-literature-store';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { LiteratureSearchResult } from '../../shared/schemas/literature-import';
+import type { LiteratureImportOutcome, LiteratureStore } from './use-literature-store';
 import type { LiteratureSearchSource } from './library-store';
 
 /**
@@ -20,13 +20,16 @@ export type LiteratureImportActions = {
     query: string,
     sources: LiteratureSearchSource[],
     limit: number
-  ) => Promise<{ ok: true; hits: ResearchLiterature[] } | { ok: false; message: string }>;
+  ) => Promise<{ ok: true; result: LiteratureSearchResult } | { ok: false; message: string }>;
+  addCandidate: (searchId: string, candidateId: string) => Promise<LiteratureImportOutcome>;
   /** Set when the native picker itself failed (permission, dialog error). */
   pickError: string | null;
 };
 
 export function useLiteratureImportActions({ store }: { store: LiteratureStore }): LiteratureImportActions {
   const client = store.client;
+  const { projectId, reload } = store;
+  const requests = useRef(new Map<string, string>());
   const [pickError, setPickError] = useState<string | null>(null);
 
   const pickFile = useCallback(async (): Promise<string | null> => {
@@ -46,17 +49,33 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
 
   const searchLiterature = useCallback(
     async (query: string, sources: LiteratureSearchSource[], limit: number) => {
-      const result = await client.api.research.searchLiterature({ query, sources, limit });
+      const result = await client.api.research.searchLiterature({ query, sources, limit, projectId });
       if (!result.ok) {
         return { ok: false as const, message: result.error.message };
       }
-      return { ok: true as const, hits: result.data };
+      return { ok: true as const, result: result.data };
     },
-    [client]
+    [client, projectId]
   );
 
+  const addCandidate = useCallback(async (searchId: string, candidateId: string): Promise<LiteratureImportOutcome> => {
+    const key = `${projectId}:${searchId}:${candidateId}`;
+    let requestId = requests.current.get(key);
+    if (requestId === undefined) { requestId = crypto.randomUUID(); requests.current.set(key, requestId); }
+    const response = await client.api.research.addLiterature({ projectId, requestId,
+      destination: projectId === null ? 'library_only' : 'current_project', entries: [{ kind: 'candidate', searchId, candidateId }] });
+    if (!response.ok) return { ok: false, message: response.error.message };
+    reload();
+    const { counts } = response.data;
+    if (counts.failed + counts.cancelled + counts.skippedArchived > 0) {
+      requests.current.delete(key);
+      return { ok: false, message: counts.skippedArchived > 0 ? '文献已归档，请先在文献库恢复后再加入。' : '元数据导入未完成，请查看导入结果。' };
+    }
+    return { ok: true, createdCount: counts.created + counts.linked, duplicateCount: counts.alreadyPresent };
+  }, [client, projectId, reload]);
+
   return useMemo(
-    () => ({ pickFile, searchLiterature, pickError }),
-    [pickFile, pickError, searchLiterature]
+    () => ({ pickFile, searchLiterature, addCandidate, pickError }),
+    [pickFile, pickError, searchLiterature, addCandidate]
   );
 }

@@ -277,6 +277,7 @@ export function LiteratureHubView(): React.JSX.Element {
         importRecord={store.importRecord}
         pickFile={actions.pickFile}
         searchLiterature={actions.searchLiterature}
+        addCandidate={actions.addCandidate}
         addDocumentToNewItem={store.addPdfToNewItem}
         addDocumentToItem={store.addPdfToItem}
       />

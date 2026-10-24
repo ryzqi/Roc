@@ -1,3 +1,4 @@
+import type { LiteratureSearchInput, LiteratureSearchResult } from '../../shared/schemas/literature-import';
 import type {
   FileWriteResult,
   ResearchBibliographyFormat,
@@ -20,7 +21,6 @@ import type {
   ResearchLibraryItem,
   ResearchLibraryListRequest,
   ResearchLiterature,
-  ResearchLiteratureSearchRequest,
   ResearchModelsStatus,
   ResearchParseTier
 } from '../../shared/types';
@@ -84,7 +84,7 @@ export function importLibraryDoi(
  * Derived from the request type rather than re-declared, so it cannot drift from
  * the contract (the schema's union is not exported as its own type).
  */
-export type LiteratureSearchSource = ResearchLiteratureSearchRequest['sources'][number];
+export type LiteratureSearchSource = LiteratureSearchInput['sources'][number];
 
 /**
  * Imports a `.bib` / `.biblatex` / CSL-JSON file.
@@ -134,8 +134,8 @@ export function setLibraryCitationKey(
 
 export function searchLiterature(
   client: RocClient,
-  input: { query: string; sources: LiteratureSearchSource[]; limit: number }
-): Promise<IpcLikeResult<ResearchLiterature[]>> {
+  input: LiteratureSearchInput
+): Promise<IpcLikeResult<LiteratureSearchResult>> {
   return client.api.research.searchLiterature(input);
 }
 

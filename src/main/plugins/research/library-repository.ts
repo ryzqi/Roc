@@ -30,7 +30,16 @@ function readJsonColumn(value: string): JsonColumn {
 }
 
 export class ResearchLibraryRepository {
+  onChanged?: (items: LibraryItem[], changeKind: 'import' | 'link' | 'archive' | 'citation_key') => void;
+
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
+
+  findByIdentity(identity: string): LibraryItem | null {
+    const row = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ?').get(identity) as { id: string } | undefined;
+    return row === undefined ? null : this.get(row.id);
+  }
+
+  flushIndex(): void { this.research.flushKnowledgeFromSource(); }
 
   get(id: string): LibraryItem {
     const row = this.db.prepare('SELECT * FROM research_library WHERE id = ?').get(id) as LibraryRow | undefined;
@@ -65,7 +74,8 @@ export class ResearchLibraryRepository {
       .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
-  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry }[], projectId: string | null): {
+  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry }[], projectId: string | null,
+    options: { flush?: boolean; notify?: boolean; skipArchived?: boolean } = {}): {
     items: LibraryItem[]; createdCount: number; duplicateCount: number;
   } {
     this.validateDestination(projectId);
@@ -95,6 +105,7 @@ export class ResearchLibraryRepository {
         } else {
           id = existing.id;
           const current = this.get(id);
+          if (current.archived && options.skipArchived === true) throw new Error('research_library_item_archived');
           if (current.archived) restoredIds.add(id);
           const sources = [...current.sources];
           const fingerprint = bibliographyIdentity(entry.bibliography);
@@ -144,7 +155,8 @@ export class ResearchLibraryRepository {
       for (const id of restoredIds) this.research.documents.syncLibraryIndex(id);
       return { items, createdCount, duplicateCount };
     })();
-    this.research.flushKnowledgeFromSource();
+    if (options.notify !== false) this.onChanged?.(imported.items, 'import');
+    if (options.flush !== false) this.research.flushKnowledgeFromSource();
     return imported;
   }
 
@@ -154,7 +166,9 @@ export class ResearchLibraryRepository {
     if (linked && item.archived) throw new Error('research_library_item_archived');
     if (linked) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);
     else this.db.prepare('DELETE FROM research_library_projects WHERE item_id = ? AND project_id = ?').run(id, projectId);
-    return this.get(id);
+    const linkedItem = this.get(id);
+    this.onChanged?.([{ ...linkedItem, projectIds: [...new Set([...item.projectIds, projectId])] }], 'link');
+    return linkedItem;
   }
 
   archive(id: string, expectedRevision: number, archived: boolean): LibraryItem {
@@ -169,6 +183,7 @@ export class ResearchLibraryRepository {
       this.research.documents.syncLibraryIndex(id);
       return item;
     })();
+    this.onChanged?.([archivedItem], 'archive');
     this.research.flushKnowledgeFromSource();
     return archivedItem;
   }
@@ -191,7 +206,9 @@ export class ResearchLibraryRepository {
     const result = this.db.prepare('UPDATE research_library SET bibliography_json = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?')
       .run(JSON.stringify(bibliography), this.now(), id, expectedRevision);
     if (result.changes !== 1) throw new Error('research_library_version_conflict');
-    return this.get(id);
+    const item = this.get(id);
+    this.onChanged?.([item], 'citation_key');
+    return item;
   }
 
   validateDestination(id: string | null): void {

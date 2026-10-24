@@ -55,7 +55,24 @@ export class ResearchLibraryService {
 
   async importDoi(request: z.infer<typeof researchLibraryDoiImportRequestSchema>): Promise<ImportResult> {
     this.repository.validateDestination(request.projectId);
-    const doi = normalizeResearchDoi(request.doi);
+    const entry = await this.prepareDoi(request.doi);
+    return this.repository.import([entry], request.projectId);
+  }
+
+  async prepareRecord(record: ResearchLiterature, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+    return this.job(async (root, directory, jobSignal) => {
+      const source = join(directory, 'metadata.json');
+      await writeFile(source, JSON.stringify([{ metadata: record, citationKey: 'candidate' }]), { flag: 'wx', mode: 0o600 });
+      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal: jobSignal });
+      this.requireActive(jobSignal);
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      const bibliography = entries[0];
+      return { metadata: { ...record, title: bibliography.title, authors: bibliography.authors }, bibliography };
+    }, signal);
+  }
+
+  async prepareDoi(inputDoi: string, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+    const doi = normalizeResearchDoi(inputDoi);
     return await this.job(async (root, directory, signal) => {
       const response = await this.fetchImpl(`https://doi.org/${encodeURIComponent(doi)}`, {
         headers: { accept: 'application/vnd.citationstyles.csl+json', 'user-agent': 'Roc-research/0.1' }, signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)])
@@ -100,8 +117,8 @@ export class ResearchLibraryService {
         citationKey: betterBibtexKey({ authors: entry.authors, publishedYear: entry.publishedYear, title: entry.title }, this.repository.usedCitationKeys()) };
       const metadata = { ...localMetadata(bibliography), id: `doi:${doi}`, source: 'doi' as const, externalId: doi,
         url: bibliography.url ?? `https://doi.org/${doi}` };
-      return this.repository.import([{ metadata, bibliography }], request.projectId);
-    });
+      return { metadata, bibliography };
+    }, signal);
   }
 
   /**
@@ -166,9 +183,10 @@ export class ResearchLibraryService {
     await Promise.allSettled([...this.active].map((task) => task.promise));
   }
 
-  private async job<T>(operation: (root: string, directory: string, signal: AbortSignal) => Promise<T>): Promise<T> {
+  private async job<T>(operation: (root: string, directory: string, signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal): Promise<T> {
     if (this.closed) throw new Error('research_library_closed');
     const controller = new AbortController();
+    const signal = parentSignal === undefined ? controller.signal : AbortSignal.any([controller.signal, parentSignal]);
     const task: { controller: AbortController; promise: Promise<unknown> } = { controller, promise: Promise.resolve() };
     const execute = async (): Promise<T> => {
       if (this.rootPath === null || !isAbsolute(this.rootPath)) throw new Error('research_library_storage_unavailable');
@@ -178,7 +196,7 @@ export class ResearchLibraryService {
       await mkdir(this.rootPath, { recursive: true, mode: 0o700 });
       const root = await realpath(this.rootPath);
       const directory = await mkdtemp(join(root, '.bibliography-'));
-      try { this.requireActive(controller.signal); return await operation(root, directory, controller.signal); }
+      try { this.requireActive(signal); return await operation(root, directory, signal); }
       finally { await rm(directory, { recursive: true, force: true }); }
     };
     this.active.add(task);

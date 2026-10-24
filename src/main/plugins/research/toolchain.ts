@@ -326,12 +326,23 @@ export class ResearchToolchain {
       return await this.jobInProcess(input, operation, schema);
     }
     const require = createRequire(import.meta.url);
+    const canvasRequire = createRequire(require.resolve('@napi-rs/canvas/package.json'));
     const optionalNative = (specifier: string): string[] => {
-      try { return [dirname(require.resolve(`${specifier}/package.json`))]; }
+      try { return [dirname(canvasRequire.resolve(`${specifier}/package.json`))]; }
       catch { return []; }
     };
+    // Unpacked dist/dev output lives below the repository package scope. Node
+    // reads that package.json to load ESM, and Zod remains an external dependency.
+    // Grant these exact paths rather than exposing the repository or node_modules.
+    let packageScope = dirname(packagedCli);
+    while (!existsSync(join(packageScope, 'package.json')) && dirname(packageScope) !== packageScope) {
+      packageScope = dirname(packageScope);
+    }
+    const packageScopeFiles = existsSync(join(packageScope, 'package.json')) ? [join(packageScope, 'package.json')] : [];
     const readablePaths = [
       dirname(packagedCli),
+      ...packageScopeFiles,
+      dirname(require.resolve('zod/package.json')),
       dirname(require.resolve('pdfjs-dist/package.json')),
       dirname(require.resolve('@napi-rs/canvas/package.json')),
       // 只可能有 arm64 的原生 canvas：x64 那份不再进包，解析它只会得到一条无用的放行路径。
@@ -358,7 +369,7 @@ export class ResearchToolchain {
     const envelope = z.discriminatedUnion('ok', [
       z.object({ ok: z.literal(true), result: schema }).strict(),
       z.object({ ok: z.literal(false), error: z.object({ code: z.string(), type: z.string() }).strict() }).strict()
-    ]).safeParse(parseJson(result.stdout));
+    ]).safeParse(parseJson(result.stdout, result.stderr));
     if (!envelope.success) throw new ResearchProcessError('research_worker_response_invalid', '', result.stderr);
     if (!envelope.data.ok) throw new ResearchProcessError(envelope.data.error.code, '', result.stderr);
     if (result.exitCode !== 0) throw new ResearchProcessError('research_worker_failed', '', result.stderr);
@@ -505,9 +516,9 @@ export class ResearchToolchain {
 /** 子进程/清单的 JSON 形状：先按结构收窄，再由调用方的 zod schema 决定是不是领域对象。 */
 type JsonDocument = string | number | boolean | null | JsonDocument[] | { [key: string]: JsonDocument };
 
-function parseJson(value: string): JsonDocument {
+function parseJson(value: string, stderr = ''): JsonDocument {
   try { return JSON.parse(value) as JsonDocument; }
-  catch { throw new ResearchProcessError('research_json_invalid'); }
+  catch { throw new ResearchProcessError('research_json_invalid', value, stderr); }
 }
 
 /**

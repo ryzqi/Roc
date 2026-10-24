@@ -155,6 +155,10 @@ export const rocApi: RocPreloadApi = {
     getIdeaCanvasHistory: (...args) => ipcRenderer.invoke(ipcChannels.researchIdeasHistory, ...args),
     promoteIdeaCanvas: (...args) => ipcRenderer.invoke(ipcChannels.researchIdeasPromote, ...args),
     searchLiterature: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureSearch, ...args),
+    readLiteratureSearch: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureReadSearch, ...args),
+    addLiterature: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureAdd, ...args),
+    getLiteratureImport: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureGetImport, ...args),
+    cancelLiteratureImport: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureCancelImport, ...args),
     listEmbeddingConfigs: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingList, ...args),
     saveEmbeddingConfig: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingSave, ...args),
     upsertKnowledgeDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchKnowledgeUpsert, ...args),
@@ -225,7 +229,12 @@ export const rocApi: RocPreloadApi = {
     controlIndex: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexControl, ...args),
     listIndexedFiles: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexFiles, ...args),
     listIndexJobs: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexJobs, ...args),
-    getEvidenceIndexSource: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexEvidenceSource, ...args)
+    getEvidenceIndexSource: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexEvidenceSource, ...args),
+    onLibraryChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.researchLibraryChanged, listener);
+      return () => ipcRenderer.off(ipcChannels.researchLibraryChanged, listener);
+    }
   },
   agent: {
     getStatus: (...args) => ipcRenderer.invoke(ipcChannels.agentGetStatus, ...args),

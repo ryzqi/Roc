@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportSchema, literatureImportResultSchema,
+  literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
 
 import { menuPages } from './surfaces';
 
@@ -122,8 +124,6 @@ import {
   researchKnowledgeDocumentUpsertRequestSchema,
   researchKnowledgeSearchRequestSchema,
   researchKnowledgeSearchResultSchema,
-  researchLiteratureSearchRequestSchema,
-  researchLiteratureSchema,
   researchStageRoleProfileSchema,
   researchStageRoleRequestSchema,
   researchProvenanceCreateRequestSchema,
@@ -434,7 +434,11 @@ export const ipcRegistry = {
     request({ key: 'researchIdeasGet', channel: 'roc:research:ideas-get', domain: 'research', method: 'getIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasGetRequestSchema), researchIdeaCanvasSchema.nullable()) }),
     request({ key: 'researchIdeasHistory', channel: 'roc:research:ideas-history', domain: 'research', method: 'getIdeaCanvasHistory', kind: 'plugin', capabilityName: 'research.ideas.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasHistoryRequestSchema), researchIdeaCanvasSchema.array()) }),
     request({ key: 'researchIdeasPromote', channel: 'roc:research:ideas-promote', domain: 'research', method: 'promoteIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.promote', inputTransform: first, contract: methodContract(oneArg(researchIdeaPromoteRequestSchema), researchIdeaPromotionSchema) }),
-    request({ key: 'researchLiteratureSearch', channel: 'roc:research:literature-search', domain: 'research', method: 'searchLiterature', kind: 'plugin', capabilityName: 'research.literature.search', inputTransform: first, contract: methodContract(oneArg(researchLiteratureSearchRequestSchema), researchLiteratureSchema.array()) }),
+    request({ key: 'researchLiteratureSearch', channel: 'roc:research:literature-search', domain: 'research', method: 'searchLiterature', kind: 'plugin', capabilityName: 'research.literature.search', inputTransform: first, contract: methodContract(oneArg(literatureSearchInputSchema), literatureSearchResultSchema) }),
+    request({ key: 'researchLiteratureReadSearch', channel: 'roc:research:literature-read-search', domain: 'research', method: 'readLiteratureSearch', kind: 'plugin', capabilityName: 'research.literature.getSearch', inputTransform: first, contract: methodContract(oneArg(literatureReadSearchSchema), literatureSearchResultSchema) }),
+    request({ key: 'researchLiteratureAdd', channel: 'roc:research:literature-add', domain: 'research', method: 'addLiterature', kind: 'plugin', capabilityName: 'research.library.addLiterature', inputTransform: first, contract: methodContract(oneArg(literatureAddSchema), literatureImportResultSchema) }),
+    request({ key: 'researchLiteratureGetImport', channel: 'roc:research:literature-get-import', domain: 'research', method: 'getLiteratureImport', kind: 'plugin', capabilityName: 'research.library.getImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureGetImportSchema), literatureImportResultSchema) }),
+    request({ key: 'researchLiteratureCancelImport', channel: 'roc:research:literature-cancel-import', domain: 'research', method: 'cancelLiteratureImport', kind: 'plugin', capabilityName: 'research.library.cancelImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureCancelImportSchema), literatureImportResultSchema) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),
     request({ key: 'researchKnowledgeUpsert', channel: 'roc:research:knowledge-upsert', domain: 'research', method: 'upsertKnowledgeDocument', kind: 'plugin', capabilityName: 'research.knowledge.upsert', inputTransform: first, contract: methodContract(oneArg(researchKnowledgeDocumentUpsertRequestSchema), researchKnowledgeDocumentSchema) }),
@@ -549,6 +553,7 @@ export const ipcRegistry = {
     request({ key: 'shellConfirm', channel: 'roc:shell:confirm', domain: 'shell', method: 'confirm', kind: 'direct', contract: methodContract(oneArg(shellConfirmationRequestSchema), shellConfirmationResultSchema) })
   ],
   events: [
+    event({ key: 'researchLibraryChanged', channel: 'roc:research:library-changed', domain: 'research', method: 'onLibraryChanged', contract: eventContract(literatureLibraryChangedSchema) }),
     event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),
     event({ key: 'navigate', channel: 'roc:navigate', domain: 'app', method: 'onNavigate', contract: eventContract(z.string()) }),
     event({ key: 'windowHidden', channel: 'roc:window:hidden', domain: 'window', method: 'onHidden', contract: eventContract(windowHiddenSnapshotSchema) }),

@@ -3,6 +3,10 @@ import type { ResearchStageRoleProfile } from '../../../shared/types';
 export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.knowledge.search': 'search_knowledge',
   'research.literature.search': 'search_literature',
+  'research.literature.getSearch': 'read_literature_search',
+  'research.library.addLiterature': 'add_literature',
+  'research.library.getImportOperation': 'get_literature_import',
+  'research.library.cancelImportOperation': 'cancel_literature_import',
   'research.evidence.capture': 'capture_evidence',
   'research.evidence.list': 'list_evidence',
   'research.artifacts.get': 'read_artifact',
@@ -35,7 +39,7 @@ const exportEffects = ['research.template.readOwned', 'research.template.saveOwn
 
 const profiles: Record<ResearchStageRoleProfile['stage'], ResearchStageRoleProfile> = {
   discovery: { stage: 'discovery', role: 'research-discovery-agent', skillIds: ['roc-research-discovery'], allowedCapabilities: readCapabilities, outputKind: 'search_strategy' },
-  retrieval: { stage: 'retrieval', role: 'literature-retrieval-agent', skillIds: ['roc-literature-retrieval'], allowedCapabilities: [...evidenceCapabilities, 'research.literature.search'], outputKind: 'source_corpus' },
+  retrieval: { stage: 'retrieval', role: 'literature-retrieval-agent', skillIds: ['roc-literature-retrieval'], allowedCapabilities: [...evidenceCapabilities, 'research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature', 'research.library.getImportOperation', 'research.library.cancelImportOperation'], outputKind: 'source_corpus' },
   reading: { stage: 'reading', role: 'paper-reading-agent', skillIds: ['roc-paper-reading'], allowedCapabilities: evidenceCapabilities, outputKind: 'reading_notes' },
   ideation: { stage: 'ideation', role: 'research-ideation-agent', skillIds: ['roc-research-ideation'], allowedCapabilities: evidenceCapabilities, outputKind: 'idea_canvas' },
   planning: { stage: 'planning', role: 'research-planning-agent', skillIds: ['roc-research-planning'], allowedCapabilities: evidenceCapabilities, outputKind: 'research_plan' },

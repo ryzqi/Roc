@@ -106,6 +106,10 @@ export const ipcChannels = {
   researchIdeasHistory: 'roc:research:ideas-history',
   researchIdeasPromote: 'roc:research:ideas-promote',
   researchLiteratureSearch: 'roc:research:literature-search',
+  researchLiteratureReadSearch: 'roc:research:literature-read-search',
+  researchLiteratureAdd: 'roc:research:literature-add',
+  researchLiteratureGetImport: 'roc:research:literature-get-import',
+  researchLiteratureCancelImport: 'roc:research:literature-cancel-import',
   researchEmbeddingList: 'roc:research:embedding-list',
   researchEmbeddingSave: 'roc:research:embedding-save',
   researchKnowledgeUpsert: 'roc:research:knowledge-upsert',
@@ -218,6 +222,7 @@ export const ipcChannels = {
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute',
   shellConfirm: 'roc:shell:confirm',
+  researchLibraryChanged: 'roc:research:library-changed',
   appearanceUpdated: 'roc:appearance:updated',
   navigate: 'roc:navigate',
   windowHidden: 'roc:window:hidden',
@@ -333,6 +338,10 @@ export const ipcRequestChannelKeys = [
   'researchIdeasHistory',
   'researchIdeasPromote',
   'researchLiteratureSearch',
+  'researchLiteratureReadSearch',
+  'researchLiteratureAdd',
+  'researchLiteratureGetImport',
+  'researchLiteratureCancelImport',
   'researchEmbeddingList',
   'researchEmbeddingSave',
   'researchKnowledgeUpsert',
@@ -448,6 +457,7 @@ export const ipcRequestChannelKeys = [
 ] as const;
 
 export const ipcEventChannelKeys = [
+  'researchLibraryChanged',
   'appearanceUpdated',
   'navigate',
   'windowHidden',
@@ -563,6 +573,10 @@ export const ipcRequestDefinitions = [
   { key: 'researchIdeasHistory', channel: ipcChannels.researchIdeasHistory, domain: 'research', method: 'getIdeaCanvasHistory', kind: 'plugin' },
   { key: 'researchIdeasPromote', channel: ipcChannels.researchIdeasPromote, domain: 'research', method: 'promoteIdeaCanvas', kind: 'plugin' },
   { key: 'researchLiteratureSearch', channel: ipcChannels.researchLiteratureSearch, domain: 'research', method: 'searchLiterature', kind: 'plugin' },
+  { key: 'researchLiteratureReadSearch', channel: ipcChannels.researchLiteratureReadSearch, domain: 'research', method: 'readLiteratureSearch', kind: 'plugin' },
+  { key: 'researchLiteratureAdd', channel: ipcChannels.researchLiteratureAdd, domain: 'research', method: 'addLiterature', kind: 'plugin' },
+  { key: 'researchLiteratureGetImport', channel: ipcChannels.researchLiteratureGetImport, domain: 'research', method: 'getLiteratureImport', kind: 'plugin' },
+  { key: 'researchLiteratureCancelImport', channel: ipcChannels.researchLiteratureCancelImport, domain: 'research', method: 'cancelLiteratureImport', kind: 'plugin' },
   { key: 'researchEmbeddingList', channel: ipcChannels.researchEmbeddingList, domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin' },
   { key: 'researchEmbeddingSave', channel: ipcChannels.researchEmbeddingSave, domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin' },
   { key: 'researchKnowledgeUpsert', channel: ipcChannels.researchKnowledgeUpsert, domain: 'research', method: 'upsertKnowledgeDocument', kind: 'plugin' },
@@ -678,6 +692,7 @@ export const ipcRequestDefinitions = [
 ] as const;
 
 export const ipcEventDefinitions = [
+  { key: 'researchLibraryChanged', channel: ipcChannels.researchLibraryChanged, domain: 'research', method: 'onLibraryChanged' },
   { key: 'appearanceUpdated', channel: ipcChannels.appearanceUpdated, domain: 'app', method: 'onAppearanceUpdated' },
   { key: 'navigate', channel: ipcChannels.navigate, domain: 'app', method: 'onNavigate' },
   { key: 'windowHidden', channel: ipcChannels.windowHidden, domain: 'window', method: 'onHidden' },
@@ -776,6 +791,10 @@ export const pluginCapabilityMappings = [
   { domain: 'research', preloadMethod: 'research.getIdeaCanvasHistory', channel: ipcChannels.researchIdeasHistory, capabilityName: 'research.ideas.history', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.promoteIdeaCanvas', channel: ipcChannels.researchIdeasPromote, capabilityName: 'research.ideas.promote', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.searchLiterature', channel: ipcChannels.researchLiteratureSearch, capabilityName: 'research.literature.search', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.readLiteratureSearch', channel: ipcChannels.researchLiteratureReadSearch, capabilityName: 'research.literature.getSearch', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.addLiterature', channel: ipcChannels.researchLiteratureAdd, capabilityName: 'research.library.addLiterature', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.getLiteratureImport', channel: ipcChannels.researchLiteratureGetImport, capabilityName: 'research.library.getImportOperation', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.cancelLiteratureImport', channel: ipcChannels.researchLiteratureCancelImport, capabilityName: 'research.library.cancelImportOperation', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.listEmbeddingConfigs', channel: ipcChannels.researchEmbeddingList, capabilityName: 'research.embedding.list', inputTransform: { kind: 'none' } },
   { domain: 'research', preloadMethod: 'research.saveEmbeddingConfig', channel: ipcChannels.researchEmbeddingSave, capabilityName: 'research.embedding.save', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.upsertKnowledgeDocument', channel: ipcChannels.researchKnowledgeUpsert, capabilityName: 'research.knowledge.upsert', inputTransform: { kind: 'first' } },

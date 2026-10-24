@@ -1,4 +1,8 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
 import { XMLParser } from 'fast-xml-parser';
+import { researchLiteratureSchema } from '../../../shared/schemas/research';
+import type { LiteratureSearchInput, LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
@@ -11,25 +15,48 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 
-  constructor(private readonly fetchImpl: FetchLike = (input, init) => fetch(input, init)) {}
+  constructor(private readonly fetchImpl: FetchLike = fetchLiteratureProvider) {}
+
+  private readonly requests = new AsyncLocalStorage<AbortSignal>();
 
   async search(request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
-    const results = await Promise.allSettled(
-      request.sources.map((source) => this.searchSource(source, request.query, request.limit))
-    );
-    const records = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
-    if (records.length === 0) {
-      const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-      throw failure?.reason instanceof Error ? failure.reason : new Error('literature_search_empty');
-    }
-    return dedupeLiterature(records).slice(0, request.limit);
+    const result = await this.searchDetailed(request);
+    return dedupeLiterature(result.records).slice(0, request.limit);
   }
 
-  searchAndStore(repository: ResearchRepository, request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
-    return this.search(request).then((records) => {
-      for (const record of records) ingestLiteratureRecord(repository, record);
-      return records;
-    });
+  async searchDetailed(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
+    records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
+  }> {
+    const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
+    const sources: LiteratureSearchResult['sources'] = [];
+    const records: ResearchLiterature[] = [];
+    const selected = [...new Set(request.sources)].filter((source) => source !== 'local');
+    for (let offset = 0; offset < selected.length; offset += 3) {
+      await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
+        const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
+        try {
+          const found = await this.requests.run(providerSignal, () => this.searchSource(source, request.query, request.limit));
+          const valid = found.map((record) => researchLiteratureSchema.parse(record));
+          records.push(...valid);
+          sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length, errorCode: null, retryAfterMs: null });
+        } catch (error) {
+          signal?.throwIfAborted();
+          const rateLimited = error instanceof ProviderError && error.status === 429;
+          sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
+            errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' : 'literature_provider_error',
+            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null });
+          return undefined;
+        }
+        return undefined;
+      }));
+    }
+    signal?.throwIfAborted();
+    // Promise completion order must not change candidate ordering or identity.
+    records.sort((a, b) => selected.indexOf(a.source as typeof selected[number]) - selected.indexOf(b.source as typeof selected[number]));
+    sources.sort((a, b) => selected.indexOf(a.source) - selected.indexOf(b.source));
+    const failures = sources.filter((source) => source.status !== 'ok' && source.status !== 'empty').length;
+    return { records, sources, status: failures === 0 ? 'complete' : failures === sources.length ? 'failed' : 'partial',
+      truncated: dedupeLiterature(records).length > request.limit, warnings: failures === 0 ? [] : ['部分来源不可用；结果不代表穷尽检索。'] };
   }
 
   private async searchSource(
@@ -127,7 +154,8 @@ export class LiteratureSearchService {
   }
 
   private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc'): Promise<ResearchLiterature[]> {
-    const payload = await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=${limit}`) as EuropePmcPayload;
+    const medQuery = source === 'pubmed' ? `(${query}) AND SRC:MED` : query;
+    const payload = await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}`) as EuropePmcPayload;
     return (payload.resultList?.result ?? []).map((item) => ({
       id: `${source}:${item.id ?? item.pmid ?? crypto.randomUUID()}`,
       source,
@@ -146,16 +174,60 @@ export class LiteratureSearchService {
   }
 
   private async getJson(url: string): Promise<unknown> {
-    const response = await this.fetchImpl(url, { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error(`literature_provider_http_${response.status}`);
-    return response.json();
+    const response = await this.readResponse(url, 'application/json');
+    try { return JSON.parse(response) as unknown; }
+    catch (cause) { throw new Error('literature_provider_response_invalid', { cause }); }
   }
 
   private async getText(url: string): Promise<string> {
-    const response = await this.fetchImpl(url, { headers: { accept: 'application/atom+xml, application/xml, text/xml' } });
-    if (!response.ok) throw new Error(`literature_provider_http_${response.status}`);
-    return response.text();
+    return this.readResponse(url, 'application/atom+xml, application/xml, text/xml');
   }
+
+  private async readResponse(url: string, accept: string): Promise<string> {
+    const allowed = ['https://api.openalex.org/', 'https://api.crossref.org/', 'https://api.semanticscholar.org/', 'https://export.arxiv.org/', 'https://www.ebi.ac.uk/'];
+    if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
+    const signal = this.requests.getStore() ?? AbortSignal.timeout(15_000);
+    for (let attempt = 0; ; attempt += 1) {
+      signal.throwIfAborted();
+      const response = await this.fetchImpl(url, { headers: { accept }, signal, redirect: 'error' });
+      if (!response.ok) {
+        const header = response.headers.get('retry-after');
+        const seconds = header === null ? NaN : Number(header);
+        const retryAfterMs = header === null ? null : Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Math.max(0, Date.parse(header) - Date.now());
+        await response.body?.cancel();
+        if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+          await delay(retryAfterMs !== null && Number.isFinite(retryAfterMs) ? retryAfterMs : 250 * 2 ** attempt, undefined, { signal });
+          continue;
+        }
+        throw new ProviderError(response.status, retryAfterMs !== null && Number.isFinite(retryAfterMs) ? retryAfterMs : null);
+      }
+      if (response.body === null) throw new Error('literature_provider_body_missing');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          signal.throwIfAborted();
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > 4 * 1024 * 1024) throw new Error('literature_provider_response_too_large');
+          chunks.push(next.value);
+        }
+      } finally { await reader.cancel(); }
+      return Buffer.concat(chunks).toString('utf8');
+    }
+  }
+}
+
+function fetchLiteratureProvider(url: string, init?: RequestInit): Promise<Response> {
+  const allowed = ['https://api.openalex.org/', 'https://api.crossref.org/', 'https://api.semanticscholar.org/', 'https://export.arxiv.org/', 'https://www.ebi.ac.uk/'];
+  if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
+  return fetch(url, { ...init, redirect: 'error' });
+}
+
+class ProviderError extends Error {
+  constructor(readonly status: number, readonly retryAfterMs: number | null) { super(`literature_provider_http_${status}`); }
 }
 
 function dedupeLiterature(records: ResearchLiterature[]): ResearchLiterature[] {
@@ -217,7 +289,7 @@ export function ingestLiteratureRecord(repository: ResearchRepository, record: R
  * 两篇同作者同年同标题开头的文献会依次得到 `…a`、`…b`，而不是把冲突留到导出时才报
  * `research_export_citation_key_conflict`。
  */
-function bibliographyFromRecord(record: ResearchLiterature, taken: Set<string>): BibliographyEntry {
+export function bibliographyFromRecord(record: ResearchLiterature, taken: Set<string>): BibliographyEntry {
   return {
     citationKey: betterBibtexKey({ authors: record.authors, publishedYear: record.publishedYear, title: record.title }, taken),
     entryType: 'article',

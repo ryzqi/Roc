@@ -2,13 +2,13 @@ import { tool } from 'langchain';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { z } from 'zod';
 
-import { researchLiteratureSearchRequestSchema } from '../../../shared/schemas/research';
+import { createLiteratureTools } from '../agent/literature-tools';
 import { researchOwnedExperimentStartSchema } from '../../../shared/schemas/research-experiments';
 import { researchOwnedFigureStartSchema } from '../../../shared/schemas/research-figures';
 import { researchOwnedExportPrepareSchema } from '../../../shared/schemas/research-exports';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputSchema,
   type ResearchProductionInput } from '../../../shared/schemas/research-production-inputs';
-import type { ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult, ResearchLiterature, ResearchStageRun } from '../../../shared/types';
+import type { ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult, ResearchStageRun } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchRepository } from './repository';
@@ -99,13 +99,6 @@ export function createResearchRoleTools(input: {
       return { artifactId, ...page(JSON.stringify(artifact), offset, limit) };
     }, { name: 'read_artifact', description: '分页读取本次运行固定的已批准输入产物，保留其原始内容和证据引用。',
       schema: z.object({ artifactId: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
-    search_literature: () => tool(async (request) => {
-      assertActive();
-      const records = await input.capabilities.invoke<typeof request, ResearchLiterature[]>('research.literature.search', request);
-      assertActive();
-      return records.map((record) => ({ ...record, abstract: record.abstract?.slice(0, 4000) ?? null }));
-    }, { name: 'search_literature', description: '通过开放学术 API 查找文献；真实摘要自动进入全局知识库，之后可检索和捕获证据。',
-      schema: researchLiteratureSearchRequestSchema }),
     read_workspace_file: () => tool(async ({ path, offset, limit }) => {
       const file = await effects().readWorkspaceFile(input.run.id, input.run.projectId, path);
       return after({ path: file.path, sha256: file.sha256, revision: file.revision, ...page(file.content, offset, limit) });
@@ -171,6 +164,10 @@ export function createResearchRoleTools(input: {
     }, { name: 'publish_export', description: '把本次运行准备好的导出关联到审核闸门。不能交付最终文件或宣称已批准。',
       schema: z.object({ exportId: z.string().min(1), replacesExportId: z.string().min(1).nullable() }).strict() })
   };
+  const literatureTools = createLiteratureTools(input.capabilities, {
+    owner: `stage:${input.run.id}`, projectId: input.run.projectId, runId: input.run.id, signal: input.signal, assertActive
+  }, { search: 'search_literature', read: 'read_literature_search', add: 'add_literature', get: 'get_literature_import', cancel: 'cancel_literature_import' });
+  for (const entry of literatureTools) factories[entry.name] = () => entry;
   return input.run.toolNames.map((name) => {
     const factory = factories[name];
     if (factory === undefined) throw new Error('research_role_tool_unavailable');

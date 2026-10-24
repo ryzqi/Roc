@@ -4,13 +4,13 @@ import { interrupt } from '@langchain/langgraph';
 import { tool } from 'langchain';
 import { z } from 'zod';
 
-import { researchLiteratureSourceSchema, researchStageSchema } from '../../../shared/schemas/research';
+import { createLiteratureTools } from './literature-tools';
+import { researchStageSchema } from '../../../shared/schemas/research';
 import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
 import type {
   ResearchArtifact,
   ResearchArtifactContent,
   ResearchEvidence,
-  ResearchLiterature,
   ResearchProject,
   ResearchStageRun,
   ResearchWorkflowSnapshot
@@ -42,6 +42,10 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   { name: 'research_stage_runs', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_knowledge', scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_literature', scope: 'network', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
+  { name: 'research_read_literature_search', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: ['main'] },
+  { name: 'research_add_literature', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main'] },
+  { name: 'research_get_literature_import', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: ['main'] },
+  { name: 'research_cancel_literature_import', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main'] },
   { name: 'research_capture_evidence', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main'] },
   { name: 'research_run_stage', scope: 'app', effectClass: 'external_call', riskLevel: 'medium', executionScopes: ['main'] },
   { name: 'research_cancel_stage_run', scope: 'app', effectClass: 'external_call', riskLevel: 'medium', executionScopes: ['main'] },
@@ -49,12 +53,13 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
 ];
 
 const GATE_TOOL_NAME = 'research_approve_gate';
-const defaultLiteratureSources = ['openalex', 'crossref', 'arxiv'] as const;
 const maxInlineChars = 12000;
 
 export function createResearchTools(input: {
   capabilities: RocCapabilityRegistry;
   projectId: string;
+  threadId?: string;
+  runId?: string;
   signal: AbortSignal;
 }): StructuredToolInterface[] {
   const projectId = input.projectId;
@@ -172,24 +177,10 @@ export function createResearchTools(input: {
       description: '先用它检索本项目与全局文献材料，返回真实 chunkId 和定位。拿到 chunkId 后可用 research_capture_evidence 存成证据。',
       schema: z.object({ query: z.string().trim().min(1), limit: z.number().int().min(1).max(20).optional() }).strict()
     }),
-    tool(async ({ query, limit, sources }) => {
-      const records = await invoke<ResearchLiterature[]>('research.literature.search', {
-        query,
-        sources: sources === undefined || sources.length === 0 ? [...defaultLiteratureSources] : sources,
-        limit: limit ?? 10
-      });
-      return records.map((record) => ({
-        id: record.id, source: record.source, title: record.title, doi: record.doi, publishedYear: record.publishedYear,
-        citationCount: record.citationCount, url: record.url, abstract: record.abstract === null ? null : clip(record.abstract, 1500)
-      }));
-    }, {
-      name: 'research_search_literature',
-      description: '按关键词检索开放学术 API。真实摘要会自动进入全局知识库，之后可检索并捕获为证据。不传 sources 时用默认来源。',
-      schema: z.object({
-        query: z.string().trim().min(1),
-        limit: z.number().int().min(1).max(30).optional(),
-        sources: z.array(researchLiteratureSourceSchema.exclude(['doi'])).optional()
-      }).strict()
+    ...createLiteratureTools(input.capabilities, { owner: `thread:${input.threadId ?? projectId}`, projectId,
+      runId: input.runId, signal: input.signal }, {
+      search: 'research_search_literature', read: 'research_read_literature_search', add: 'research_add_literature',
+      get: 'research_get_literature_import', cancel: 'research_cancel_literature_import'
     }),
     tool(async ({ chunkId }) => {
       const evidence = await invoke<ResearchEvidence>('research.evidence.capture', { projectId, chunkId });

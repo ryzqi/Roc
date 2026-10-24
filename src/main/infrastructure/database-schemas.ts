@@ -1132,6 +1132,24 @@ CREATE TABLE research_generations (
     sql: `
 ALTER TABLE research_evidence ADD COLUMN invalidated_at TEXT;
 `
+  },
+  {
+    version: 4,
+    name: 'literature_search_and_import_operations',
+    sql: `
+CREATE TABLE research_literature_searches (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT,
+  request_json TEXT NOT NULL, result_json TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE INDEX research_literature_search_owner ON research_literature_searches(owner, project_id);
+CREATE TABLE research_literature_imports (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, scope_project TEXT NOT NULL,
+  run_id TEXT, request_id TEXT NOT NULL, input_hash TEXT NOT NULL,
+  frozen_json TEXT NOT NULL, result_json TEXT NOT NULL, cancel_requested INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(owner, scope_project, request_id)
+);
+`
   }
 ];
 
