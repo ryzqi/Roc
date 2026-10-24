@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 import { BookOpen, FileText, Terminal } from 'lucide-react';
 import { canvasTabIds, surfaceFor, type CanvasTabId } from '../../shared/surfaces';
 import { tabIndicatorTransition } from '../shared/motion';

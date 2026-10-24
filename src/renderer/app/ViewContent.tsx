@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
 import type { AppViewId } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { viewFadeTransition, viewFadeVariants } from '../shared/motion';

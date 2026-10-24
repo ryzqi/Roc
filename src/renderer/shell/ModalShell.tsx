@@ -1,6 +1,7 @@
 import { useCallback, useId, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
 import { X } from 'lucide-react';
 import {
   drawerTransition,

@@ -66,33 +66,28 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
     if (eventCount === 0) {
       return;
     }
-    const runId = `run-${threadId}`;
     agentDb
       .prepare(
         `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
          VALUES (?, 'chat', ?, ?, 'completed', ?, ?)`
       )
       .run(threadId, `Profile ${eventCount}`, `Profile ${eventCount}`, '2026-07-10T00:00:00.000Z', '2026-07-10T00:00:00.000Z');
-    agentDb
-      .prepare(
-        `INSERT INTO agent_runs
-         (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
-          enabled_capabilities_json, workspace_path, task_source, workflow_hint)
-         VALUES (?, ?, 1, 'profile', 'completed', ?, ?, NULL, NULL, ?, NULL, NULL, NULL)`
-      )
-      .run(
-        runId,
-        threadId,
-        '2026-07-10T00:00:00.000Z',
-        '2026-07-10T00:10:00.000Z',
-        JSON.stringify({ mcpServers: [], skills: [] })
-      );
+    // Each user turn belongs to a distinct run, as in a normal conversation.
+    // A single run with 10k prompts reuses occurrence-based keys after paging.
+    const insertRun = agentDb.prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+       VALUES (?, ?, ?, 'profile', 'completed', ?, ?, NULL, NULL, ?, NULL, NULL, NULL)`
+    );
     const insert = agentDb.prepare(
       `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
        VALUES (?, ?, ?, ?, 'message', ?, ?)`
     );
     agentDb.transaction(() => {
       for (let sequence = 1; sequence <= eventCount; sequence += 1) {
+        const runId = `run-${threadId}-${sequence}`;
+        insertRun.run(runId, threadId, sequence, '2026-07-10T00:00:00.000Z', '2026-07-10T00:10:00.000Z', JSON.stringify({ mcpServers: [], skills: [] }));
         insert.run(
           `event-${threadId}-${sequence}`,
           threadId,

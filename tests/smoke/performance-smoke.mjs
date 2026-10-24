@@ -12,6 +12,7 @@ const packagedExe = resolve('release', process.arch === 'arm64' ? 'mac-arm64' : 
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget = resolveSmokeTarget({ packagedExe, distMainPath });
 const profileRoots = readProfileRoots();
+const prependSampleCount = 20;
 
 function writeResult(result) {
   writeFileSync(artifactPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
@@ -81,6 +82,11 @@ async function runProfile(input) {
     } catch (error) {
       throw new Error(`performance_profile_failed:${input.name}:${error instanceof Error ? error.message : String(error)}`);
     }
+    const firstContentfulPaintMs = await page.evaluate(async () => {
+      // Allow the ready shell to reach a painted frame before recording readiness.
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      return performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null;
+    });
     const rendererReadyMs = performance.now() - launchStartedAt;
     // 默认入口是项目门户（ADR 0002）：冷启动不会自动进入项目，
     // 而对话输入挂在项目内，所以先显式进入项目，再量对话输入的可用延迟。
@@ -129,10 +135,11 @@ async function runProfile(input) {
     }
     const sample = await samplePerformance(page, input.memoryBudgetMb);
     const domMessageRows = await page.locator('[data-testid^="assistant-message-"]').count();
-    const prepends = input.eventCount === 10_000 ? await measurePrepends(page, 20) : { durations: [], observations: [], notObserved: false };
+    const prepends = input.eventCount === 10_000 ? await measurePrepends(page, prependSampleCount) : { durations: [], observations: [], notObserved: false };
     return {
       ...input,
       rendererReadyMs,
+      firstContentfulPaintMs,
       mainInputReadyMs,
       interactiveMs,
       sample,
@@ -147,39 +154,44 @@ async function runProfile(input) {
 }
 
 /**
- * 向上翻页（prepend）延迟。
- *
- * 新壳的历史是一个 400 事件的有界窗口（`maxRetainedPersistedEvents`），所以「翻上去加载更早的」
- * 不一定表现为 `data-message-count` 变大。P10 实测：把转录滚到顶（合成 scroll、真实
- * `scrollIntoView`、真实滚轮三种都试过）之后 10 秒内计数不变，最老的 marker 也不变 ——
- * 也就是说这条度量在当前实现里**观察不到**，而不是「很慢」。
- *
- * 不假装它通过、也不把它算成失败：把原始诊断写进工件，并让调用方按 `notObserved` 记录。
- * 翻页本身是 P4 的代码（P10 未改），已登记为风险 R21 去跟进。
+ * Observe completed history prepends through the pager revision. The retained
+ * window is bounded, so a successful prepend need not increase message count.
+ * Missing observations are reported as incomplete coverage and fail the gate.
  */
 async function measurePrepends(page, count) {
   const durations = [];
   const observations = [];
   const scrollSurface = page.locator('[data-testid="assistant-panel"] .overflow-y-auto').first();
-  const transcript = page.getByTestId('assistant-transcript');
   await scrollSurface.evaluate((element) => {
     element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 100);
     element.dispatchEvent(new Event('scroll'));
   });
   await page.getByTestId('assistant-scroll-bottom').waitFor({ timeout: 5_000 });
   for (let index = 0; index < count; index += 1) {
+    // Leave the start boundary between requests: Virtuoso's startReached fires
+    // on entering it, so repeatedly assigning scrollTop=0 observes only one page.
+    await scrollSurface.evaluate(async (element) => {
+      element.scrollTop = Math.min(element.scrollHeight - element.clientHeight, element.clientHeight * 2);
+      element.dispatchEvent(new Event('scroll'));
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    });
+    await page.waitForFunction(() => Number(document.querySelector('[data-testid="assistant-transcript"] [data-index]')?.getAttribute('data-index')) > 0);
     const before = await readTranscriptFacts(page);
+    if (!before.hasMoreBefore) break;
     const startedAt = performance.now();
-    // 真实滚动（把第一条已渲染的虚拟行滚进视野），而不是只改 scrollTop。
-    await page.locator('[data-index]').first().scrollIntoViewIfNeeded({ timeout: 5_000 });
+    await scrollSurface.evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event('scroll'));
+    });
     let observed = false;
     try {
       await page.waitForFunction(
         (previous) => {
           const host = document.querySelector('[data-testid="assistant-transcript"]');
-          return Number(host?.getAttribute('data-message-count')) > previous;
+          return Number(host?.getAttribute('data-prepend-revision')) > previous &&
+            host?.getAttribute('data-loading-older') === 'false';
         },
-        before.messageCount,
+        before.prependRevision,
         { timeout: 10_000 }
       );
       observed = true;
@@ -200,9 +212,12 @@ async function readTranscriptFacts(page) {
   return await page.evaluate(() => {
     const host = document.querySelector('[data-testid="assistant-transcript"]');
     const surface = document.querySelector('[data-testid="assistant-panel"] .overflow-y-auto');
-    const virtualRows = [...document.querySelectorAll('[data-index]')];
+    const virtualRows = [...document.querySelectorAll('[data-testid="assistant-transcript"] [data-index]')];
     return {
       messageCount: Number(host?.getAttribute('data-message-count')),
+      prependRevision: Number(host?.getAttribute('data-prepend-revision')),
+      firstItemIndex: Number(host?.getAttribute('data-first-item-index')),
+      hasMoreBefore: host?.getAttribute('data-has-more-before') === 'true',
       scrollTop: surface === null ? null : Math.round(surface.scrollTop),
       scrollHeight: surface === null ? null : surface.scrollHeight,
       clientHeight: surface === null ? null : surface.clientHeight,
@@ -232,6 +247,10 @@ try {
   const mainReady = empty.sample.timing.samples.find((item) => item.phase === 'main_ready');
   if (mainReady === undefined) {
     throw new Error('performance_main_ready_sample_missing');
+  }
+  if (typeof mainReady.metadata.processToMainReadyMs !== 'number' ||
+      typeof mainReady.metadata.bootstrapAndImportsMs !== 'number' || empty.firstContentfulPaintMs === null) {
+    throw new Error('performance_startup_coverage_incomplete');
   }
   if (mainReady.durationMs > 500 || empty.rendererReadyMs > 2500) {
     throw new Error(`performance_ready_budget_exceeded:${mainReady.durationMs}:${empty.rendererReadyMs}`);
@@ -270,7 +289,9 @@ try {
     throw new Error(`profile_10k_working_set_exceeded:${profile10000.sample.totalWorkingSetMb}:${workingSetBudgetMb}`);
   }
   const prependP95 =
-    profile10000.prependNotObserved || profile10000.prependDurationsMs.length === 0 ? null : percentile95(profile10000.prependDurationsMs);
+    profile10000.prependNotObserved || profile10000.prependDurationsMs.length !== prependSampleCount
+      ? null
+      : percentile95(profile10000.prependDurationsMs);
   if (prependP95 !== null && prependP95 > 250) {
     throw new Error(`profile_10k_prepend_p95_exceeded:${prependP95}`);
   }
@@ -286,7 +307,8 @@ try {
   });
 
   writeResult({
-    passed: true,
+    passed: prependP95 !== null,
+    coverage: { prepend: prependP95 === null ? 'incomplete' : 'measured', observedSamples: profile10000.prependDurationsMs.length },
     checkedAt: new Date().toISOString(),
     smokeTarget: { kind: smokeTarget.kind, path: smokeTarget.path, packagedExeExists: existsSync(packagedExe) },
     profiles: { empty, profile1000, profile10000 },
@@ -309,6 +331,10 @@ try {
       finalSample: profile10000.sample
     })
   });
+  if (prependP95 === null) {
+    console.error('performance_prepend_coverage_incomplete');
+    process.exitCode = 1;
+  }
 } catch (error) {
   const result = {
     passed: false,

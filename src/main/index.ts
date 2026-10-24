@@ -64,6 +64,9 @@ const trayIconPath = isDevelopment
   ? join(mainModuleDir, '../../resources/trayTemplate.png')
   : join(process.resourcesPath, 'trayTemplate.png');
 const mainReadyStartedAtMs = performance.now();
+// Keep the existing module-ready budget comparable while also measuring the
+// Electron bootstrap and static dependencies that ran before this module body.
+const processStartedAtMs = mainReadyStartedAtMs - process.uptime() * 1000;
 let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
 
@@ -296,7 +299,9 @@ async function createWindow(): Promise<void> {
       startedAtMs: mainReadyStartedAtMs,
       durationMs: performance.now() - mainReadyStartedAtMs,
       metadata: {
-        packaged: app.isPackaged
+        packaged: app.isPackaged,
+        bootstrapAndImportsMs: mainReadyStartedAtMs - processStartedAtMs,
+        processToMainReadyMs: performance.now() - processStartedAtMs
       }
     });
   });
@@ -330,7 +335,8 @@ async function createWindow(): Promise<void> {
       startedAtMs: mainReadyStartedAtMs,
       durationMs: performance.now() - mainReadyStartedAtMs,
       metadata: {
-        window: 'main'
+        window: 'main',
+        processToReadyToShowMs: performance.now() - processStartedAtMs
       }
     });
     mainWindow?.show();

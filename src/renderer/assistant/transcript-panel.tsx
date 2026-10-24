@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-m';
 import { ChevronDown } from 'lucide-react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import type { ChatResumeDecision } from '../../shared/types';
@@ -125,6 +126,10 @@ export function ChatTranscriptPanel({
         className="h-full"
         data-testid="assistant-transcript"
         data-message-count={messages.length}
+        data-prepend-revision={prependRevision}
+        data-first-item-index={virtualIndex}
+        data-has-more-before={hasMoreBefore}
+        data-loading-older={loadingOlder}
         style={{ height: '100%' }}
         customScrollParent={scrollParent === null ? undefined : scrollParent}
         alignToBottom
