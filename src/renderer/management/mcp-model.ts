@@ -128,7 +128,7 @@ export function validateMcpDraft(draft: McpDraft): McpDraftIssue[] {
   } else if (!SERVER_ID_PATTERN.test(id)) {
     issues.push({
       field: 'id',
-      message: 'id 只允许字母、数字、点、下划线和短横线 —— 它会进工具名（mcp:<id>:<tool>）。'
+      message: 'id 只允许字母、数字、点、下划线和短横线。'
     });
   }
   if (draft.name.trim().length === 0) {
@@ -136,12 +136,12 @@ export function validateMcpDraft(draft: McpDraft): McpDraftIssue[] {
   }
   if (draft.transport === 'stdio') {
     if (draft.command.trim().length === 0) {
-      issues.push({ field: 'command', message: 'stdio 服务必须填启动命令（后端会拒绝）。' });
+      issues.push({ field: 'command', message: '请填写本地服务的启动命令。' });
     }
   } else {
     const url = draft.url.trim();
     if (url.length === 0) {
-      issues.push({ field: 'url', message: 'http/sse 服务必须填 URL（后端会拒绝）。' });
+      issues.push({ field: 'url', message: '请填写服务地址。' });
     } else {
       try {
         const parsed = new URL(url);

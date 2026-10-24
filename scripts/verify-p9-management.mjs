@@ -747,8 +747,10 @@ try {
   );
 
   await page.waitForSelector('[data-testid="mgmt-mcp-server-p9-stdio"]', { timeout: 20_000 });
-  await page.click('[data-testid="mgmt-mcp-test-p9-stdio"]');
+  await page.click('[data-testid="mgmt-mcp-detail-p9-stdio"]');
+  await page.click('[data-testid="mgmt-mcp-check-config"]');
   await waitForTextContains('mgmt-mcp-test-result-p9-stdio', '连接', 20_000);
+  await page.click('[data-testid="mgmt-mcp-back"]');
 
   // 启用 → 装配预览里出现逐服务工具（manifest.provenance.serverId）
   const previewAfterEnable = await page.evaluate(async () => {
@@ -779,6 +781,7 @@ try {
 
   await openTab('mcp');
   await page.click('[data-testid="mgmt-mcp-reload"]');
+  await page.click('[data-testid="mgmt-mcp-detail-p9-stdio"]');
   await waitForTextContains('mgmt-mcp-tools-p9-stdio', fixtureToolName, 20_000).catch(() => {});
   const toolLine = await text('mgmt-mcp-tools-p9-stdio');
   assertCheck('3 MCP', '面板显示逐服务的工具名与审批要求', toolLine.includes(fixtureToolName), toolLine.slice(0, 120));
@@ -819,20 +822,26 @@ try {
 
   // UI 增删：新建一个 http 服务（不连通也无所谓，配置层面）→ 删除确认
   await openTab('mcp');
+  await page.click('[data-testid="mgmt-mcp-back"]');
   await page.click('[data-testid="mgmt-mcp-create"]');
+  await page.click('[data-testid="mgmt-mcp-custom"]');
   await page.waitForSelector('[data-testid="mgmt-mcp-editor"]', { timeout: 15_000 });
   await page.fill('[data-testid="mgmt-mcp-draft-id"]', 'p9-ui-http');
   await page.fill('[data-testid="mgmt-mcp-draft-name"]', 'P9 UI HTTP');
   await page.selectOption('[data-testid="mgmt-mcp-draft-transport"]', 'http');
   await page.waitForSelector('[data-testid="mgmt-mcp-draft-url"]', { timeout: 10_000 });
   await page.fill('[data-testid="mgmt-mcp-draft-url"]', 'not a url');
-  await page.waitForSelector('[data-testid="mgmt-mcp-issue-url"]', { timeout: 10_000 });
-  const urlIssue = await text('mgmt-mcp-issue-url');
+  const urlIssueField = page.locator('[data-testid="mgmt-mcp-draft-url-field"] [role="alert"]');
+  await urlIssueField.waitFor({ timeout: 10_000 });
+  const urlIssue = await urlIssueField.textContent() ?? '';
   assertCheck('3 MCP', 'UI 对非绝对 URL 给出字段级错误并禁用保存', urlIssue.includes('绝对地址'), urlIssue.slice(0, 80));
   await page.fill('[data-testid="mgmt-mcp-draft-url"]', 'https://mcp.example.test/mcp');
   await page.click('[data-testid="mgmt-mcp-save"]');
+  await page.waitForSelector('[data-testid="mgmt-mcp-service-detail"]', { timeout: 20_000 });
+  await page.click('[data-testid="mgmt-mcp-back"]');
   await page.waitForSelector('[data-testid="mgmt-mcp-server-p9-ui-http"]', { timeout: 20_000 });
   assertCheck('3 MCP', 'UI 新建的 http 服务保存成功并出现在列表里', true);
+  await page.locator('[data-testid="mgmt-mcp-server-p9-ui-http"] summary').click();
   await page.click('[data-testid="mgmt-mcp-delete-p9-ui-http"]');
   await page.waitForSelector('[data-testid="mgmt-mcp-delete-confirm-confirm"]', { timeout: 10_000 });
   await page.click('[data-testid="mgmt-mcp-delete-confirm-confirm"]');
@@ -851,7 +860,7 @@ try {
   assertCheck(
     '3 MCP',
     '写失败后乐观开关回到快照值（勾选框重新是选中）',
-    (await isChecked('mgmt-mcp-enabled-p9-stdio')) === true,
+    (await page.locator('[data-testid="mgmt-mcp-enabled-p9-stdio"]').getAttribute('aria-checked')) === 'true',
     'mcp_server_not_found → clearFlags()'
   );
   // 把服务放回去，闸门 6 的重启断言要它还在配置里。
@@ -871,7 +880,10 @@ try {
     { id: 'p9-stdio', command: `node ${mcpFixturePath}` }
   );
 
+  await page.click('[data-testid="mgmt-mcp-create"]');
   await page.click('[data-testid="mgmt-mcp-preset"]');
+  await page.waitForSelector('[data-testid="mgmt-mcp-editor"]', { timeout: 20_000 });
+  await page.click('[data-testid="mgmt-mcp-back"]');
   await page.waitForSelector('[data-testid="mgmt-mcp-server-exa-hosted"]', { timeout: 20_000 });
   const approvalLine = await text('mgmt-mcp-approval-mode');
   assertCheck('3 MCP', '审批模式在抽屉里只读显示并可跳到设置中心', approvalLine.includes('审批') || approvalLine.includes('自动'), approvalLine.slice(0, 60));

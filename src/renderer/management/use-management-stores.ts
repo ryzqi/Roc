@@ -61,10 +61,10 @@ export function useManagementStores(scope: ManagementScope): ManagementStores {
     () => ({
       memory: memorySummary(memory),
       skills: skillSummary(skills.skills),
-      mcp: `MCP ${mcp.rows.length} 个服务 · ${mcp.rows.filter((row) => row.server.enabled).length} 已启用 · 装配预览 ${mcp.preview?.toolCards.length ?? 0} 个工具`,
+      mcp: `${mcp.rows.length} 个服务 · ${mcp.rows.filter((row) => mcp.serverEnabled(row.server)).length} 个已启用`,
       tasks: `后台任务 ${tasks.tasks.length} 个 · 调度器 ${schedulerStatusWord(tasks.scheduler)}`
     }),
-    [memory, skills.skills, mcp.rows, mcp.preview, tasks.tasks.length, tasks.scheduler]
+    [memory, skills.skills, mcp, tasks.tasks.length, tasks.scheduler]
   );
 
   return useMemo(

@@ -251,9 +251,21 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[]): M
         setMutationError(result.error.message);
         return false;
       }
+      setConfig((current) => current === null ? current : {
+        ...current,
+        servers: current.servers.some((server) => server.id === result.data.id)
+          ? current.servers.map((server) => server.id === result.data.id ? result.data : server)
+          : [...current.servers, result.data]
+      });
       setEditingId(result.data.id);
       setDraftState(draftFromServer(result.data));
+      setTestResults((current) => {
+        const next = { ...current };
+        delete next[result.data.id];
+        return next;
+      });
       reload();
+      reloadPreview();
       // `settings.get()` carries `mcpServers`, so a consumer's cached configuration is stale now.
       notifySettingsChanged();
       return true;
@@ -263,7 +275,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[]): M
     } finally {
       setPending(false);
     }
-  }, [client, config, draft, editingId, issues.length, reload]);
+  }, [client, config, draft, editingId, issues.length, reload, reloadPreview]);
 
   const remove = useCallback(
     async (serverId: string): Promise<boolean> => {
@@ -311,13 +323,14 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[]): M
         notifySettingsChanged();
         return true;
       } catch (caught) {
+        clearFlags();
         setMutationError(errorMessage(caught));
         return false;
       } finally {
         setTogglePending(false);
       }
     },
-    [client, setFlag, reload, reloadPreview]
+    [client, setFlag, clearFlags, reload, reloadPreview]
   );
 
   const test = useCallback(
