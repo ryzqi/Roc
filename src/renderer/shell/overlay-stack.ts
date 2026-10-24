@@ -34,7 +34,7 @@ export const OVERLAY_Z_INDEX: Readonly<Record<OverlayLayer, number>> = {
   dialog: 50
 };
 
-const stacks: Record<OverlayLayer, string[]> = { dialog: [], ambient: [] };
+const stacks: { dialog: string[]; ambient: string[] } = { dialog: [], ambient: [] };
 export function pushOverlay(overlayId: string, layer: OverlayLayer): void {
   const stack = stacks[layer];
   const existing = stack.indexOf(overlayId);
