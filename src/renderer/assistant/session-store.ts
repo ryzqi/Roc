@@ -84,14 +84,24 @@ export function getActiveRun(client: RocClient, threadId: string): Promise<IpcLi
  * safe: a resumed panel asks for everything after the last sequence it has already
  * applied, so a re-delivered event cannot double-apply.
  */
-export function getRunEvents(
+export async function getRunEvents(
   client: RocClient,
   input: { runId: string; afterSequence: number }
 ): Promise<IpcLikeResult<{ runId: string; events: SequencedChatRunEvent[] }>> {
-  // Sequenced: each event carries its `sequence`, which is what
-  // `shouldApplySequencedRunEvent` de-duplicates on when a live event and a replayed
-  // one describe the same step.
-  return client.api.chat.getRunEvents(input);
+  // Bound each IPC payload. The durable log retains at most 10,000 events, so
+  // concurrent live writes cannot keep a reconnect paging indefinitely.
+  const events: SequencedChatRunEvent[] = [];
+  let afterSequence = input.afterSequence;
+  while (events.length < 10_000) {
+    const page = await client.api.chat.getRunEvents({ ...input, afterSequence, limit: 500 });
+    if (!page.ok) return page;
+    events.push(...page.data.events);
+    const last = page.data.events.at(-1);
+    if (last === undefined || page.data.events.length < 500) break;
+    if (last.sequence <= afterSequence) throw new Error('chat_replay_cursor_not_advanced');
+    afterSequence = last.sequence;
+  }
+  return { ok: true, data: { runId: input.runId, events } };
 }
 
 /** Every thread the backend knows about; the caller filters by `kind`. */

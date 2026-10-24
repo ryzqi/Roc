@@ -14,18 +14,37 @@ type EventRow = {
 };
 
 export class AgentRunEventLog {
-  constructor(private readonly db: DatabaseConnection) {}
+  private readonly insert;
+  private readonly cursor;
+  private readonly insertCursor;
+  private readonly updateCursor;
+  private readonly count;
+  private readonly trim;
+  private lastWrite: { runId: string; nextSequence: number; count: number } | undefined;
+
+  constructor(private readonly db: DatabaseConnection) {
+    this.insert = db.prepare('INSERT INTO agent_run_events (run_id, sequence, event_json, created_at) VALUES (?, ?, ?, ?)');
+    this.cursor = db.prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?');
+    this.insertCursor = db.prepare('INSERT INTO agent_run_event_cursors (run_id, next_sequence) VALUES (?, ?)');
+    this.updateCursor = db.prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?');
+    this.count = db.prepare('SELECT COUNT(*) AS count FROM agent_run_events WHERE run_id = ?');
+    this.trim = db.prepare(`DELETE FROM agent_run_events WHERE run_id = ? AND sequence IN (
+      SELECT sequence FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC LIMIT ?
+    )`);
+  }
 
   recordRunEvent(event: ChatRunEvent, createdAt = new Date().toISOString()): SequencedChatRunEvent {
-    return this.db.transaction(() => {
+    let committed: typeof this.lastWrite;
+    const result = this.db.transaction(() => {
       const sequence = this.nextSequence(event.runId);
-      this.db
-        .prepare(
-          `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-           VALUES (?, ?, ?, ?)`
-        )
-        .run(event.runId, sequence, JSON.stringify(event), createdAt);
-      this.trimToCapacity(event.runId);
+      // A rollback or another writer changes the durable cursor and invalidates this hint.
+      const count = this.lastWrite?.runId === event.runId && this.lastWrite.nextSequence === sequence
+        ? this.lastWrite.count
+        : (this.count.get(event.runId) as { count: number }).count;
+      this.insert.run(event.runId, sequence, JSON.stringify(event), createdAt);
+      const overflow = Math.max(0, count + 1 - agentRunEventLogMaxEvents);
+      if (overflow > 0) this.trim.run(event.runId, event.runId, overflow);
+      committed = { runId: event.runId, nextSequence: sequence + 1, count: count + 1 - overflow };
       return {
         runId: event.runId,
         sequence,
@@ -33,21 +52,24 @@ export class AgentRunEventLog {
         createdAt
       };
     })();
+    this.lastWrite = committed;
+    return result;
   }
 
-  listRunEvents(input: { runId: string; afterSequence: number }): SequencedChatRunEvent[] {
+  listRunEvents(input: { runId: string; afterSequence: number; limit?: number }): SequencedChatRunEvent[] {
     const rows = this.db
       .prepare(
         `SELECT run_id, sequence, event_json, created_at
          FROM agent_run_events
          WHERE run_id = ? AND sequence > ?
-         ORDER BY sequence ASC`
+         ORDER BY sequence ASC LIMIT ?`
       )
-      .all(input.runId, input.afterSequence) as EventRow[];
+      .all(input.runId, input.afterSequence, input.limit ?? agentRunEventLogMaxEvents) as EventRow[];
     return rows.map(rowToSequencedEvent);
   }
 
   restoreRunEvent(input: { runId: string; sequence: number; eventJson: string; createdAt: string }): void {
+    this.lastWrite = undefined;
     this.db.transaction(() => {
       this.db
         .prepare(
@@ -98,6 +120,7 @@ export class AgentRunEventLog {
   }
 
   deleteForRunIds(runIds: readonly string[]): number {
+    this.lastWrite = undefined;
     const deleteEvents = this.db.prepare('DELETE FROM agent_run_events WHERE run_id = ?');
     const deleteCursor = this.db.prepare('DELETE FROM agent_run_event_cursors WHERE run_id = ?');
     return this.db.transaction(() => {
@@ -111,19 +134,12 @@ export class AgentRunEventLog {
   }
 
   private nextSequence(runId: string): number {
-    const row = this.db
-      .prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?')
-      .get(runId) as { next_sequence: number } | undefined;
+    const row = this.cursor.get(runId) as { next_sequence: number } | undefined;
     if (row === undefined) {
-      this.db
-        .prepare(
-          `INSERT INTO agent_run_event_cursors (run_id, next_sequence)
-           VALUES (?, ?)`
-        )
-        .run(runId, 2);
+      this.insertCursor.run(runId, 2);
       return 1;
     }
-    this.db.prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?').run(row.next_sequence + 1, runId);
+    this.updateCursor.run(row.next_sequence + 1, runId);
     return row.next_sequence;
   }
 

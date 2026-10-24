@@ -270,7 +270,8 @@ export const sequencedChatRunEventSchema = z
 export const chatRunEventsReplayRequestSchema = z
   .object({
     runId: identifierSchema,
-    afterSequence: z.number().int().min(0)
+    afterSequence: z.number().int().min(0),
+    limit: z.number().int().min(1).max(1_000).optional()
   })
   .strict();
 
