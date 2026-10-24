@@ -204,7 +204,7 @@ function createDefaultMainKernelPlugins(input: {
   // the capability) and the memory plugin reads it, so the two project memory slots
   // (`/memory/workspaces/current/{AGENTS,MEMORY}.md`) resolve against the directory the shell
   // actually bound instead of a permanent `null` (B26).
-  const workspaceService = new WorkspaceService(configService);
+  const workspaceService = new WorkspaceService();
   const agentModelFactory = new LangChainAgentModelFactoryAdapter(input.modelFactory, {
     beforeCreate: () => configService.reloadSettingsDocument()
   });
@@ -266,7 +266,7 @@ function createDefaultMainKernelPlugins(input: {
     createTaskPlugin({
       agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
     }),
-    createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService, workspaceService }),
+    createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
     createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
       modelsRoot: input.researchModelsRoot,
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
@@ -276,7 +276,6 @@ function createDefaultMainKernelPlugins(input: {
     createRuntimeToolsPlugin({
       confirmShellRequest: input.confirmShellRequest,
       rootDir: input.paths.root,
-      workspaceConfigService: configService,
       // Same instance the shell binds: `shell.execute` without an explicit `cwd` must resolve the
       // bound directory instead of throwing `workspace_not_selected`.
       workspaceService

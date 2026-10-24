@@ -2,7 +2,6 @@ import type {
   AgentCapabilityPreview,
   AgentCapabilityCard,
   McpServerConfig,
-  McpServerSnapshot,
   McpServersConfig
 } from '../../shared/types';
 
@@ -37,20 +36,6 @@ export const mcpRiskLabels: Readonly<Record<McpServerConfig['riskLevel'], string
   low: '低',
   medium: '中',
   high: '高'
-};
-
-/**
- * The runtime snapshot's status.
- *
- * In the current backend `McpService.listServers` always returns `not_connected` (it never
- * connects), so `ready` / `error` are unreachable through the UI — they are kept because the
- * schema allows them, and the panel therefore shows the status **plus** the explanation that a
- * real connection only happens at run start (F24 ③).
- */
-export const mcpStatusLabels: Readonly<Record<McpServerSnapshot['status'], string>> = {
-  not_connected: '未连接（后端不做连接检查）',
-  ready: '已连接',
-  error: '连接错误'
 };
 
 export const mcpApprovalModeLabels: Readonly<Record<McpServersConfig['approvalMode'], string>> = {

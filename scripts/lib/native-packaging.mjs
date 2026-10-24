@@ -15,23 +15,13 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { packageJsonPath, projectRoot } from './electron-version.mjs';
+import { packageJsonPath, projectRoot } from './project-paths.mjs';
 
 export const betterSqlite3ModuleName = 'better-sqlite3';
-export const betterSqlite3ModuleRoot = resolve(projectRoot, 'node_modules', betterSqlite3ModuleName);
-export const betterSqlite3PackagedRelativeRoot = join(
-  'Contents',
-  'Resources',
-  'app.asar.unpacked',
-  'node_modules',
-  betterSqlite3ModuleName
-);
 export const betterSqlite3WorkspaceRequireBase = packageJsonPath;
 
 const probeScriptPath = resolve(projectRoot, 'scripts', 'probe-better-sqlite3.cjs');
 const electronBuilderCache = resolve(projectRoot, '.runtime', 'electron-builder-cache');
-export const langgraphSdkPackageName = '@langchain/langgraph-sdk';
-
 
 export function hasBundledPnpmRelativeImports(source) {
   return typeof source === 'string' && source.includes('node_modules/.pnpm/');
@@ -201,15 +191,11 @@ export function verifyWorkspaceBetterSqlite3(options = {}) {
   });
 }
 
-export function resolvePackagedBetterSqlite3Root(appOutDir) {
-  return resolve(appOutDir, betterSqlite3PackagedRelativeRoot);
-}
-
 export function resolvePackagedBetterSqlite3RequireBase(resourcesDir) {
   return resolve(resourcesDir, 'app.asar', 'package.json');
 }
 
-export function researchToolchainResourcePath(resourcesDir, architecture = process.arch) {
+export function researchToolchainResourcePath(resourcesDir) {
   return resolve(resourcesDir, 'research-toolchain');
 }
 
@@ -489,7 +475,7 @@ export function finalizePackagedResearchToolchain({
   architecture = process.arch,
   projectRoot: targetProjectRoot = projectRoot
 }) {
-  const root = researchToolchainResourcePath(resourcesDir, architecture);
+  const root = researchToolchainResourcePath(resourcesDir);
   const sources = researchRuntimeSourcePath(targetProjectRoot);
   for (const name of ['worker.py', 'figure.py']) {
     const source = resolve(sources, name);
@@ -521,7 +507,7 @@ export function verifyPackagedResearchToolchain({
   architecture = process.arch,
   projectRoot: targetProjectRoot = projectRoot
 }) {
-  const root = researchToolchainResourcePath(resourcesDir, architecture);
+  const root = researchToolchainResourcePath(resourcesDir);
   const sources = researchRuntimeSourcePath(targetProjectRoot);
   const required = [
     'manifest.json',

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Database } from 'better-sqlite3';
-import { researchFigurePublicationSchema, researchFigureRunSchema, type ResearchFigurePublication, type ResearchFigureRun } from '../../../shared/schemas/research-figures';
+import { researchFigurePublicationSchema, type ResearchFigurePublication, type ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema, type ResearchFigureValidation } from '../../../shared/schemas/research-plotting';
 import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
 import { figureRendererPath } from './figure-runner';

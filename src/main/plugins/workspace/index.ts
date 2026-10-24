@@ -40,17 +40,15 @@ import {
 import type {
   FileDeleteResult,
   FileNameSearchRequest,
-  RocSettingsDocument,
   WorkspaceSelectRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
-import { defaultSettings } from '../../services/config/defaults';
 import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
 import { GitService } from '../../services/git-service';
 import { RocPaths } from '../../services/paths';
 import { TerminalSessionService } from '../../services/terminal-session-service';
 import { WorkspaceChangeWatcherService } from '../../services/workspace-change-watcher-service';
-import { WorkspaceService, type WorkspaceConfigService } from '../../services/workspace-service';
+import { WorkspaceService } from '../../services/workspace-service';
 import { registerFileCapabilities } from './file-capabilities';
 import { registerGitCapabilities } from './git-capabilities';
 import {
@@ -109,7 +107,6 @@ const workspaceCapabilityDescriptors = [
  */
 export type WorkspacePluginOptions = {
   rootDir?: string;
-  workspaceConfigService?: WorkspaceConfigService;
   workspaceService?: WorkspaceService;
 };
 
@@ -133,9 +130,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
     initialize: async (context) => {
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
-      const workspaceService =
-        options.workspaceService ??
-        new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
+      const workspaceService = options.workspaceService ?? new WorkspaceService();
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
       workspaceChangeWatcher = new WorkspaceChangeWatcherService({
@@ -213,15 +208,6 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       workspaceChangeWatcher = null;
     },
     healthCheck: async () => ({ status: 'healthy' })
-  };
-}
-
-function createWorkspaceConfigAdapter(context: RocPluginContext): WorkspaceConfigService {
-  return {
-    getSettings: () => context.config.get<RocSettingsDocument['settings']>('settings') ?? defaultSettings,
-    saveSettings: (settings) => {
-      context.config.set('settings', settings);
-    }
   };
 }
 

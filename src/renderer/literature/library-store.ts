@@ -7,13 +7,11 @@ import type {
   ResearchDocumentImportRequest,
   ResearchDocumentParse,
   ResearchDocumentRun,
-  ResearchEmbeddingConfig,
   ResearchEvidence,
   ResearchIndexControlRequest,
   ResearchIndexJob,
   ResearchIndexStatus,
   ResearchIndexedFile,
-  ResearchIndexedSource,
   ResearchKnowledgeDocumentUpsertRequest,
   ResearchKnowledgeSearchResult,
   ResearchLibraryExport,
@@ -21,7 +19,6 @@ import type {
   ResearchLibraryItem,
   ResearchLibraryListRequest,
   ResearchLiterature,
-  ResearchModelsStatus,
   ResearchParseTier
 } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
@@ -34,12 +31,6 @@ import type { RocClient } from '../shared/roc-client';
  * no caching, no derived state, no error swallowing. The contract corrections in
  * `findings.md` F16 are encoded here as types rather than as comments — e.g. the
  * bibliography import format union has no `ris`, because the backend has none.
- *
- * It is deliberately a **map of the whole contract**, so a few wrappers have no
- * caller yet (`getLibraryItem`, `listEmbeddingConfigs`, `getEvidenceIndexSource`).
- * Keep it that way: the alternative is components calling `client.api.research.*`
- * directly, which puts preload names (which differ from capability names) back into
- * views and lets two callers pass different shapes for the same method.
  *
  * Two rules that are easy to get wrong and are therefore called out per function:
  *
@@ -58,10 +49,6 @@ export function listLibrary(
   request: ResearchLibraryListRequest
 ): Promise<IpcLikeResult<ResearchLibraryItem[]>> {
   return client.api.research.listLibrary(request);
-}
-
-export function getLibraryItem(client: RocClient, id: string): Promise<IpcLikeResult<ResearchLibraryItem>> {
-  return client.api.research.getLibraryItem({ id });
 }
 
 export function importLibraryRecord(
@@ -159,10 +146,6 @@ export function listDocuments(
   return client.api.research.listDocuments({ libraryItemId });
 }
 
-export function getDocument(client: RocClient, documentId: string): Promise<IpcLikeResult<ResearchDocument>> {
-  return client.api.research.getDocument({ documentId });
-}
-
 export function parseDocument(
   client: RocClient,
   documentId: string,
@@ -204,40 +187,7 @@ export function getDocumentContent(
   return client.api.research.getDocumentContent(input);
 }
 
-export function getModelsStatus(client: RocClient): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.getModelsStatus();
-}
-
-export function downloadModels(
-  client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source: ResearchModelsStatus['source'] }
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.downloadModels(input);
-}
-
-export function selectModels(
-  client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source?: ResearchModelsStatus['source'] }
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.selectModels(input);
-}
-
-export function importModels(client: RocClient, directory: string): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.importModels({ directory });
-}
-
-export function removeModels(
-  client: RocClient,
-  pack: ResearchModelsStatus['selectedPack']
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.removeModels({ pack });
-}
-
 // ---- index + retrieval (T5.5) ----------------------------------------------
-
-export function getIndexStatus(client: RocClient, projectId: string): Promise<IpcLikeResult<ResearchIndexStatus>> {
-  return client.api.research.getIndexStatus({ projectId });
-}
 
 export function controlIndex(
   client: RocClient,
@@ -260,30 +210,11 @@ export function listIndexJobs(
   return client.api.research.listIndexJobs(input);
 }
 
-/**
- * Resolves an evidence record's indexed source **file**.
- *
- * Note what this does *not* return: a position. For a literature chunk the
- * locator comes from `knowledge.search` and is aligned against the parsed
- * document's `blocks[].locator`; for a workspace file there is no line/anchor
- * concept in the contract, so the only honest jump is "open the source file".
- */
-export function getEvidenceIndexSource(
-  client: RocClient,
-  input: { projectId: string; evidenceId: string }
-): Promise<IpcLikeResult<ResearchIndexedSource | null>> {
-  return client.api.research.getEvidenceIndexSource(input);
-}
-
 export function searchKnowledge(
   client: RocClient,
   input: { query: string; projectId: string | null; limit: number; embeddingConfigId: string | null }
 ): Promise<IpcLikeResult<ResearchKnowledgeSearchResult>> {
   return client.api.research.searchKnowledge(input);
-}
-
-export function listEmbeddingConfigs(client: RocClient): Promise<IpcLikeResult<ResearchEmbeddingConfig[]>> {
-  return client.api.research.listEmbeddingConfigs();
 }
 
 // ---- evidence + claims (T5.4 / T5.6) ---------------------------------------

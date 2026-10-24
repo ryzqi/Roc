@@ -10,7 +10,7 @@ import type {
   WorkflowHint
 } from '../../../shared/types';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
-import { ManifestBuilder } from './manifest-builder';
+import { compileRunCapabilityManifest } from './run-capability-manifest';
 
 export function buildAgentCapabilityPreview(input: {
   deleteFileApprovalMode: ApprovalMode;
@@ -31,18 +31,7 @@ export function buildAgentCapabilityPreview(input: {
     throw new Error('default_model_missing');
   }
 
-  const compiled = ManifestBuilder
-    .forMode(input.mode)
-    .withMcp(input.mcpServers, input.mcpApprovalMode)
-    .withSkills(input.skills)
-    .withExplicitSkills(input.explicitSkillIds ?? [])
-    .withDeleteFileApproval(input.deleteFileApprovalMode)
-    .withShellCommands(input.shellAllowedCommands)
-    .withSelfConfig(input.selfConfigAvailable ?? false)
-    .withWorkflowHint(input.workflowHint)
-    .withRequestedCapabilities(input.requestedCapabilities)
-    .withResearchProject(input.researchProjectId ?? null)
-    .build();
+  const compiled = compileRunCapabilityManifest(input);
 
   return {
     runnable: false,
@@ -67,13 +56,15 @@ export function buildDeepAgentConfigPreview(input: {
     throw new Error('default_model_missing');
   }
 
-  const compiled = ManifestBuilder
-    .forMode(input.mode)
-    .withDeleteFileApproval(input.deleteFileApprovalMode)
-    .withSelfConfig(false)
-    .withRequestedCapabilities({ mcpServers: [], skills: [] })
-    .withResearchProject(null)
-    .build();
+  const compiled = compileRunCapabilityManifest({
+    mode: input.mode,
+    deleteFileApprovalMode: input.deleteFileApprovalMode,
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: [],
+    skills: [],
+    workflowHint: null,
+    requestedCapabilities: { mcpServers: [], skills: [] }
+  });
 
   return {
     runnable: false,

@@ -576,7 +576,6 @@ async function verifyCostManifest(directory: string): Promise<Record<string, unk
   call({ stage: 'compose', callId: 'reflection-1', kind: 'reflection', tokens: 10, inputHash: contentHash('reflection'), actualTokens: 10 });
   call({ stage: 'adopt', callId: 'judge-1', kind: 'judge', tokens: 10, inputHash: contentHash('judge'), actualTokens: 10 });
   const beforeResume = ledger.totals(experimentId);
-  const beforeHash = ledger.reportHash(experimentId);
 
   // Repeated reservation of a settled call must reuse the row rather than charge again.
   const reused = ledger.reserve({ experimentId, stage: 'probe-base', callId: 'model-1', kind: 'model', tokens: 120,

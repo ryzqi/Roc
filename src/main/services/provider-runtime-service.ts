@@ -10,7 +10,6 @@ import type { MetricsService } from './metrics-service';
 import {
   executeWithProviderRequestRetry,
   isRetryableProviderHttpStatus,
-  providerRequestTimeoutMessage,
   providerRequestTimeoutMs
 } from './provider-request-retry';
 

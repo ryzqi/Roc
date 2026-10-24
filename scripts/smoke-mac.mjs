@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { _electron as electron, expect } from '@playwright/test';
-import { projectRoot } from './lib/electron-version.mjs';
+import { projectRoot } from './lib/project-paths.mjs';
 
 if (process.platform !== 'darwin') {
   throw new Error('smoke:mac requires macOS.');

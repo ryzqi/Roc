@@ -4,7 +4,6 @@ import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
 import { formatBeijingDateTime } from '../../shared/format';
 import { getTaskActionAvailability, taskStatusLabels } from '../../tasks/task-model';
-import type { ManagementScope } from '../management-scope';
 import {
   scheduledRunLine,
   schedulerStatusWord,

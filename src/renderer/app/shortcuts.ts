@@ -80,18 +80,3 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 }
-
-/**
- * Documented shortcut table, surfaced in the search palette footer and used by
- * tests. Native rows are listed so the UI can advertise them without the
- * renderer binding them.
- */
-export const SHORTCUT_REFERENCE: ReadonlyArray<{ keys: string; label: string; owner: 'native' | 'renderer' }> = [
-  { keys: '⌘,', label: '设置', owner: 'native' },
-  { keys: '⌘N', label: '新建研究项目', owner: 'native' },
-  { keys: '⌘B', label: '折叠/展开左栏', owner: 'renderer' },
-  { keys: '⌘J', label: '折叠/展开助手', owner: 'renderer' },
-  { keys: '⌘K', label: '搜索', owner: 'renderer' },
-  { keys: '⌘D', label: '切换主题', owner: 'renderer' },
-  { keys: 'Esc', label: '关闭当前层', owner: 'renderer' }
-];

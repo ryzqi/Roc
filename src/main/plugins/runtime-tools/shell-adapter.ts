@@ -1,9 +1,7 @@
 import type { ShellExecutionResult } from '../../../shared/types';
 import type { RtkService } from '../../services/rtk-service';
-import { defaultSettings } from '../../services/config/defaults';
-import { RocPaths } from '../../services/paths';
 import { ShellExecutionService, type ShellTaskEventRecorder } from '../../services/shell-execution-service';
-import { WorkspaceService, type WorkspaceConfigService } from '../../services/workspace-service';
+import { WorkspaceService } from '../../services/workspace-service';
 
 export type ShellCommandExecutor = (
   file: string,
@@ -18,9 +16,7 @@ export type ShellCommandExecutor = (
 };
 
 export type ShellAdapterOptions = {
-  rootDir?: string;
   workspacePath?: string;
-  workspaceConfigService?: WorkspaceConfigService;
   /** A shared binding: when present this adapter reads it instead of creating its own. */
   workspaceService?: WorkspaceService;
   rtkService: RtkService;
@@ -29,10 +25,7 @@ export type ShellAdapterOptions = {
 };
 
 export function createShellExecutionService(options: ShellAdapterOptions): ShellExecutionService {
-  const paths = new RocPaths(options.rootDir);
-  paths.ensureTree();
-  const workspaceService =
-    options.workspaceService ?? new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig());
+  const workspaceService = options.workspaceService ?? new WorkspaceService();
   if (options.workspacePath !== undefined) {
     workspaceService.selectWorkspace(options.workspacePath);
   }
@@ -76,13 +69,6 @@ class InjectableShellExecutionService extends ShellExecutionService {
   ): Promise<Omit<ShellExecutionResult, 'command' | 'normalizedCommand' | 'cwd' | 'durationMs' | 'usedRtk' | 'bypassReason'>> {
     return this.commandExecutor(file, args, cwd, extraEnv, signal);
   }
-}
-
-function createWorkspaceConfig(): WorkspaceConfigService {
-  return {
-    getSettings: () => defaultSettings,
-    saveSettings: () => {}
-  };
 }
 
 function createNoopTaskRecorder(): ShellTaskEventRecorder {

@@ -20,15 +20,12 @@ import type {
   SkippedCapability
 } from '../../../shared/types';
 import type { WorkflowHint } from '../../../shared/types';
-import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
-import type { ToolSelectionPolicy } from './tool-selection-policy';
-import { DefaultToolSelectionPolicy } from './tool-selection-policy';
+import { selectToolCards } from './tool-selection-policy';
 import { RESEARCH_TOOL_DESCRIPTORS } from './research-tools';
 
 const deleteFileAllowedDecisions: InterruptDecisionType[] = ['approve', 'edit', 'reject'];
 const selfConfigCardId = 'builtin:roc_self_config';
 const mcpAllowedDecisions: InterruptDecisionType[] = ['approve', 'reject'];
-// 保留名守卫的唯一实现在 tool-selection-policy.ts；这里不再重复一份死名单。
 export type CompiledRunCapabilityManifest = {
   manifest: RunCapabilityManifestV1;
   toolCards: AgentCapabilityCard[];
@@ -37,24 +34,18 @@ export type CompiledRunCapabilityManifest = {
   interruptOn: AgentInterruptPolicy;
 };
 
-/**
- * 新接口：使用策略对象构建 manifest
- *
- * 这是深化后的入口，策略对象封装了工具选择逻辑
- */
-export function buildManifestFromPolicy(input: {
+export function compileRunCapabilityManifest(input: {
   mode: ChatRunMode;
   deleteFileApprovalMode: ApprovalMode;
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
   explicitSkillIds?: readonly string[];
-  selfConfigAvailable: boolean;
+  selfConfigAvailable?: boolean;
   shellAllowedCommands?: readonly string[];
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
-  toolSelectionPolicy: ToolSelectionPolicy;
-  researchProjectId: string | null;
+  researchProjectId?: string | null;
 }): CompiledRunCapabilityManifest {
   const requestedCapabilities = normalizeRequestedCapabilities(input.requestedCapabilities);
   const skippedCapabilities: SkippedCapability[] = [];
@@ -116,13 +107,12 @@ export function buildManifestFromPolicy(input: {
     manifestSkills.push(skill);
   }
 
-  // 使用策略对象选择工具
-  const toolCards = input.toolSelectionPolicy.selectToolCards({
+  const toolCards = selectToolCards({
     mode: input.mode,
     deleteFileApprovalMode: input.deleteFileApprovalMode,
     mcpApprovalMode: input.mcpApprovalMode,
-    mcpServers: input.mcpServers.filter((s) => s.enabled),
-    selfConfigAvailable: input.selfConfigAvailable,
+    mcpServers: input.mcpServers,
+    selfConfigAvailable: input.selfConfigAvailable ?? false,
     shellAllowedCommands: input.shellAllowedCommands
   });
 
@@ -149,7 +139,7 @@ export function buildManifestFromPolicy(input: {
       }),
       ...createResearchManifestTools({
         mode: input.mode,
-        researchProjectId: input.researchProjectId
+        researchProjectId: input.researchProjectId ?? null
       })
     ],
     skills: compileManifestSkills(manifestSkills),
@@ -171,35 +161,6 @@ export function buildManifestFromPolicy(input: {
     subagents: createSubagents(manifest),
     interruptOn
   };
-}
-
-export function compileRunCapabilityManifest(input: {
-  deleteFileApprovalMode: ApprovalMode;
-  explicitSkillIds?: readonly string[];
-  mcpApprovalMode: ApprovalMode;
-  mcpServers: McpServerSnapshot[];
-  mode: ChatRunMode;
-  selfConfigAvailable?: boolean;
-  shellAllowedCommands?: readonly string[];
-  workflowHint: WorkflowHint;
-  requestedCapabilities: EnabledCapabilities;
-  skills: SkillSnapshot[];
-  researchProjectId?: string | null;
-}): CompiledRunCapabilityManifest {
-  return buildManifestFromPolicy({
-    mode: input.mode,
-    deleteFileApprovalMode: input.deleteFileApprovalMode,
-    mcpApprovalMode: input.mcpApprovalMode,
-    mcpServers: input.mcpServers,
-    skills: input.skills,
-    explicitSkillIds: input.explicitSkillIds,
-    selfConfigAvailable: input.selfConfigAvailable ?? false,
-    shellAllowedCommands: input.shellAllowedCommands,
-    workflowHint: input.workflowHint,
-    requestedCapabilities: input.requestedCapabilities,
-    toolSelectionPolicy: new DefaultToolSelectionPolicy(),
-    researchProjectId: input.researchProjectId ?? null
-  });
 }
 
 export function isRunCapabilityManifestIntegrityValid(manifest: RunCapabilityManifestV1): boolean {

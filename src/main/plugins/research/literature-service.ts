@@ -8,7 +8,6 @@ import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
-import type { ResearchRepository } from './repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -274,13 +273,6 @@ type CrossrefPayload = { message?: { items?: Array<{ DOI?: string; URL?: string;
 type SemanticScholarPayload = { data?: Array<{ paperId: string; title?: string; authors?: Array<{ name: string }>; abstract?: string | null; year?: number | null; citationCount?: number | null; externalIds?: { DOI?: string }; openAccessPdf?: { url?: string | null }; url?: string | null }> };
 type ArxivEntry = { id?: string; title?: string; summary?: string; published?: string; author?: { name?: string } | Array<{ name?: string }> };
 type EuropePmcPayload = { resultList?: { result?: Array<{ id?: string; pmid?: string; doi?: string; title?: string; authorString?: string; abstractText?: string; pubYear?: string; citedByCount?: number; isOpenAccess?: string; source?: string }> } };
-
-export function ingestLiteratureRecord(repository: ResearchRepository, record: ResearchLiterature): void {
-  // 只做身份校验（没有 DOI 又没有来源标识时这里就抛），键不再由它推导。
-  literatureIdentity(record);
-  const bibliography = bibliographyFromRecord(record, repository.library.usedCitationKeys());
-  repository.library.import([{ metadata: record, bibliography }], null);
-}
 
 /**
  * **引用键不再是身份哈希**。

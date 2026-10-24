@@ -48,9 +48,6 @@ export function settled<T>(result: IpcLikeResult<T>): { ok: true; data: T } | { 
 }
 
 export function errorMessage(error: unknown): string {
-  if (error instanceof IpcCallError) {
-    return error.message;
-  }
   if (error instanceof Error) {
     return error.message;
   }
@@ -59,14 +56,3 @@ export function errorMessage(error: unknown): string {
   }
   return '未知错误';
 }
-
-/**
- * Lazy resource state. Long-running resources (memory, diagnostics, workspace)
- * stay idle until their view is opened, and are keyed so a scope change (new
- * project, new workspace) resets them instead of showing stale data.
- */
-export type LazyLoadState = {
-  status: 'idle' | 'loading' | 'ready' | 'error';
-  error: string | null;
-  key: string | null;
-};

@@ -1,4 +1,3 @@
-import type { TaskAcceptance } from '../../../shared/types';
 import { ClipboardCheck, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import type { ChatTranscriptActivityBlock } from '../transcript';

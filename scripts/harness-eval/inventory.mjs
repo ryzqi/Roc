@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -10,7 +10,7 @@ export function createInventory({ readComponent = readFileSync, sourceInputs = [
     'src/main/services/deep-agent', 'src/main/services/forge-guardrails',
     'src/main/plugins/agent', 'src/main/services/agent',
     'src/shared/schemas/agent.ts', 'resources', 'skills', 'package.json', 'pnpm-lock.yaml'
-  ], { encoding: 'utf8' }).split('\0').filter(Boolean).sort();
+  ], { encoding: 'utf8' }).split('\0').filter((path) => path !== '' && existsSync(path)).sort();
   const fixturePaths = ['scripts/harness-eval/inventory.mjs', 'scripts/harness-eval/scenarios.mjs',
     'scripts/harness-eval/runtime.ts', 'scripts/harness-eval/run.mjs'];
   const components = [...new Set([...paths, ...fixturePaths, ...sourceInputs])].sort()

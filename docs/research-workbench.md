@@ -136,7 +136,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 | Esc | 关闭当前层 | `useOverlayBehavior`（不在快捷键表里） |
 
 原生菜单注册 ⌘, 与 ⌘N，Electron 先消费，所以渲染层不重复实现。浮层打开时面板与导航键被抑制，⌘K 保持可用。
-表格的代码真身是 `src/renderer/app/shortcuts.ts` 的 `SHORTCUT_REFERENCE`，它同时供搜索浮层的页脚与单测读取。
+渲染层快捷键由 `src/renderer/app/shortcuts.ts` 注册；浮层的 Esc 行为由 `useOverlayBehavior` 管理。
 
 ## 相关文档
 

@@ -11,8 +11,7 @@ import {
   builtinSkillsCatalogSchemaVersion,
   defaultBuiltinSkillSources,
   writeBuiltinSkillsCatalog,
-  type BuiltinSkillSourceSpec,
-  type BuiltinSkillsCatalog
+  type BuiltinSkillSourceSpec
 } from '../../src/main/services/builtin-skills/catalog';
 import { discoverSkillIds, materializeSnapshot } from '../../src/main/services/builtin-skills/snapshot';
 

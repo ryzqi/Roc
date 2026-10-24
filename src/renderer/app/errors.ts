@@ -15,8 +15,6 @@
  * surface can only be handed the levels it knows how to draw.
  */
 
-export type AppErrorLevel = 'startup' | 'page' | 'field' | 'run' | 'blocked';
-
 type AppErrorFields = {
   message: string;
   /** Backend error code, when the IPC layer provided one. */

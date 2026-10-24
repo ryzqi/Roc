@@ -2,7 +2,6 @@ import {
   CompositeBackend,
   FilesystemBackend,
   StoreBackend,
-  applyGrepMaxCount,
   type AnyBackendProtocol,
   type EditResult,
   type FileDownloadResponse,

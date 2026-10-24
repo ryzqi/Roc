@@ -5,18 +5,10 @@ import { promisify } from 'node:util';
 const realpathNative = promisify(realpath.native);
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Workspace } from '../../shared/types';
-import type { RocSettings } from './config-service';
 import { RocDomainError } from './errors';
-
-export type WorkspaceConfigService = {
-  getSettings(): RocSettings;
-  saveSettings(settings: RocSettings): void;
-};
 
 export class WorkspaceService {
   private currentWorkspace: Workspace | null = null;
-
-  constructor(private readonly configService: WorkspaceConfigService) {}
 
   selectWorkspace(path: string): Workspace {
     const resolvedPath = resolve(path);

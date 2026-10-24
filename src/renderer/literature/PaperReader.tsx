@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, RotateCcw, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
+import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun, ResearchParseTier } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -9,7 +9,7 @@ import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { countParsedBlocks, parseDocumentBlocks, type ParsedBlockKind } from './parse-blocks';
 import { deriveCitationKey, formatDoi, isCitationKeyValid } from './format';
-import { downloadModels, getModelsStatus } from './library-store';
+import { downloadModels, getModelsStatus } from '../shared/research-models-store';
 import type { LiteratureStore } from './use-literature-store';
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [

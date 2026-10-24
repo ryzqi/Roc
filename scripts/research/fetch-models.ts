@@ -331,23 +331,6 @@ export async function downloadedBytesFor(root: string, lock: ModelsLock, pack: M
   return await downloadedBytes(root, readSources(lock).filter((source) => wanted.has(source.name)));
 }
 
-/** 清理清单外的模型目录（卸载/切换配置后调用）。只删除清单内登记过的名字。 */
-export async function pruneModels(lock: unknown, outputPath: string, keep: readonly string[]): Promise<string[]> {
-  const output = resolve(outputPath);
-  if ((await pathInfo(output))?.isSymbolicLink()) fail('research_model_output_symlink');
-  const known = readSources(lock).map((source) => source.name);
-  const kept = new Set(keep);
-  const removed: string[] = [];
-  for (const name of known) {
-    if (kept.has(name)) continue;
-    const directory = join(output, name);
-    if ((await pathInfo(directory)) === null) continue;
-    await rm(directory, { recursive: true, force: true });
-    removed.push(name);
-  }
-  return removed;
-}
-
 export async function totalBytes(path: string): Promise<number> {
   const info = await pathInfo(path);
   if (info === null) return 0;

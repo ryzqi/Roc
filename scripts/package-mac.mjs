@@ -2,7 +2,7 @@
 
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { projectRoot, packageJsonPath } from './lib/electron-version.mjs';
+import { projectRoot, packageJsonPath } from './lib/project-paths.mjs';
 import { assertLiveResearchToolchainForPackaging, createPackagingEnvironment, runCommand } from './lib/native-packaging.mjs';
 
 // 只发 Apple Silicon：MinerU 的 MPS/llama.cpp 后端与随包 Python 都只有 arm64。

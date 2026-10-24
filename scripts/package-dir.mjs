@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { projectRoot } from './lib/electron-version.mjs';
+import { projectRoot } from './lib/project-paths.mjs';
 import {
   assertLiveResearchToolchainForPackaging,
   createPackagingEnvironment,

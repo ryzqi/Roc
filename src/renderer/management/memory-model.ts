@@ -6,8 +6,7 @@ import type {
   MemoryFileMeta,
   MemoryFileWriteOutcome,
   MemoryKind,
-  MemoryScope,
-  MemoryStatus
+  MemoryScope
 } from '../../shared/types';
 
 /**

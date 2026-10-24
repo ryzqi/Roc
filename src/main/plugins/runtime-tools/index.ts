@@ -13,15 +13,15 @@ import type {
 } from '../../../shared/types';
 import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
-import type { WorkspaceConfigService, WorkspaceService } from '../../services/workspace-service';
-import type { WebReadExecutionRequest, WebReadResult } from '../../services/web-read-service';
+import type { WorkspaceService } from '../../services/workspace-service';
+import { WebReadService, type WebReadExecutionRequest, type WebReadResult } from '../../services/web-read-service';
+import { RocPaths } from '../../services/paths';
+import { RtkService } from '../../services/rtk-service';
 import { webReadExecutionRequestSchema } from '../../services/web-read-request-schema';
-import { createRtkService } from './rtk-adapter';
 import {
   createShellExecutionService,
   type ShellCommandExecutor
 } from './shell-adapter';
-import { createWebReadService, type WebReadAdapterOptions } from './web-read-adapter';
 
 const pluginId = '@roc/plugin-runtime-tools';
 const capabilityVersion = '1.0.0';
@@ -55,7 +55,6 @@ const runtimeToolsCapabilityDescriptors = [
 export type RuntimeToolsPluginOptions = {
   rootDir?: string;
   workspacePath?: string;
-  workspaceConfigService?: WorkspaceConfigService;
   /**
    * The shell's working-directory binding. When the shell hands over the instance it owns,
    * `shell.execute` without an explicit `cwd` resolves the bound directory; a private instance
@@ -65,7 +64,7 @@ export type RuntimeToolsPluginOptions = {
   binaryManager?: RTKBinaryManager;
   commandExecutor?: ShellCommandExecutor;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
-  fetchImpl?: WebReadAdapterOptions['fetchImpl'];
+  fetchImpl?: ConstructorParameters<typeof WebReadService>[0];
 };
 
 export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}): RocPlugin {
@@ -82,19 +81,16 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
       capabilities: runtimeToolsCapabilityDescriptors
     },
     initialize: async (context) => {
-      const rtkService = createRtkService({
-        rootDir: options.rootDir,
-        binaryManager: options.binaryManager
-      });
+      const paths = new RocPaths(options.rootDir);
+      paths.ensureTree();
+      const rtkService = new RtkService(paths, options.binaryManager);
       const shellService = createShellExecutionService({
-        rootDir: options.rootDir,
         workspacePath: options.workspacePath,
-        workspaceConfigService: options.workspaceConfigService,
         workspaceService: options.workspaceService,
         rtkService,
         commandExecutor: options.commandExecutor
       });
-      const webReadService = createWebReadService({ fetchImpl: options.fetchImpl });
+      const webReadService = new WebReadService(options.fetchImpl);
       context.capabilities.register(pluginId, runtimeToolsCapabilityDescriptors[0], async () => rtkService.getStatus());
       context.capabilities.register(pluginId, runtimeToolsCapabilityDescriptors[1], async (input) =>
         shellService.executeAsync(input as ShellExecutionRequest)

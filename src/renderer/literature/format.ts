@@ -165,11 +165,6 @@ export function deriveCitationKey(input: { title: string; authors: readonly stri
   return candidate;
 }
 
-/** The `record` half of `importLibraryRecord`, built from a search hit. */
-export function literatureRecordFromSearchHit(hit: ResearchLiterature): ResearchLiterature {
-  return { ...hit };
-}
-
 /**
  * The prompt behind the reader's 「问助手」 action (P5/T5.4).
  *

@@ -4,8 +4,9 @@ import type { ResearchModelsStatus } from '../../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { SettingsStore } from '../settings-scope';
 import {
-  downloadModels, cancelModels, getModelsStatus, getRtkStatus, getToolchainStatus, importModels, removeModels, selectModels
-} from '../settings-store';
+  downloadModels, cancelModels, getModelsStatus, importModels, removeModels, selectModels
+} from '../../shared/research-models-store';
+import { getRtkStatus, getToolchainStatus } from '../settings-store';
 import { KeyValueRow, FormNote, FormSection, SelectField, TextField, formSecondaryButtonClass } from '../../shared/form-ui';
 import { formatBytes } from '../../shared/format';
 

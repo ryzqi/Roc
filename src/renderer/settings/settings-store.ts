@@ -7,7 +7,6 @@ import type {
   ResearchEmbeddingConfigSaveRequest,
   ResearchIndexSettingsSaveRequest,
   ResearchIndexStatus,
-  ResearchModelsStatus,
   ResearchToolchainStatus,
   RocHookConfigSnapshot,
   RocHookTrustRequest,
@@ -172,40 +171,6 @@ export function saveIndexSettings(
 
 export function getToolchainStatus(client: RocClient): Promise<IpcLikeResult<ResearchToolchainStatus>> {
   return client.api.research.getToolchainStatus();
-}
-
-export function getModelsStatus(client: RocClient): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.getModelsStatus();
-}
-
-export function downloadModels(
-  client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source: ResearchModelsStatus['source'] }
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.downloadModels(input);
-}
-
-export function selectModels(
-  client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source?: ResearchModelsStatus['source'] }
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.selectModels(input);
-}
-
-export function importModels(client: RocClient, directory: string): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.importModels({ directory });
-}
-
-export function removeModels(
-  client: RocClient,
-  pack: ResearchModelsStatus['selectedPack']
-): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.removeModels({ pack });
-}
-
-/** 取消下载：已下载的文件保留供续传。 */
-export function cancelModels(client: RocClient): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.cancelModelsDownload();
 }
 
 export function getRtkStatus(client: RocClient): Promise<IpcLikeResult<RtkStatus>> {

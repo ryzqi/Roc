@@ -88,7 +88,6 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastCommit, setLastCommit] = useState<GitCommitResult | null>(null);
   const [lastPush, setLastPush] = useState<GitPushResult | null>(null);
-  const [nonce, setNonce] = useState(0);
 
   // Bumped on every workspace change and on every full reload: results that
   // belong to an older scope are dropped instead of overwriting the new one.
@@ -166,7 +165,7 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
     setLastCommit(null);
     setLastPush(null);
     void load();
-  }, [load, nonce]);
+  }, [load]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setPending('refresh');
