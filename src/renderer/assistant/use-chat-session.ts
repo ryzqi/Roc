@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ChatImageAttachment, ChatResumeDecision, ChatRunMode } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
-import { projectChatTranscript, readChatTranscriptMemoKey, type ChatTranscriptMessage } from './transcript';
+import { createChatTranscriptProjector, type ChatTranscriptMessage } from './transcript';
 import { useChatRun } from './use-chat-run';
 import { usePersistedThreadHistory, type PersistedThreadHistory } from './use-persisted-thread-history';
 import type { ChatRunState } from './run-state';
@@ -74,14 +74,8 @@ export function useChatSession(input: {
   });
 
   const liveRun = run.state.status === 'idle' ? null : run.state;
-  const transcriptInput = useMemo(
-    () => ({ events: history.events, liveRun, pendingUserInput, threadId }),
-    // The memo key comes from the projector itself so a new state field cannot be silently
-    // forgotten here (see `readChatTranscriptMemoKey`).
-    [history.events, liveRun, pendingUserInput, threadId]
-  );
-  const memoKey = readChatTranscriptMemoKey(transcriptInput);
-  const messages = useMemo(() => projectChatTranscript(transcriptInput), [memoKey]);
+  const projectTranscript = useMemo(createChatTranscriptProjector, []);
+  const messages = projectTranscript({ events: history.events, liveRun, pendingUserInput, threadId });
 
   const send = useCallback(
     async (sendInput: SendChatInput): Promise<boolean> => {

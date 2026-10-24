@@ -747,13 +747,19 @@ function assertUniqueTranscriptKeys(messages: readonly ChatTranscriptMessage[]):
   }
 }
 
-export function projectChatTranscript(input: {
+type ChatTranscriptInput = {
   events: TaskEvent[];
   liveRun: ChatRunState | null;
   pendingUserInput: string | null;
   threadId: string | null;
-}): ChatTranscriptMessage[] {
-  const activeThreadId = input.threadId ?? input.liveRun?.threadId ?? null;
+};
+
+function activeTranscriptThread(input: ChatTranscriptInput): string | null {
+  return input.threadId ?? input.liveRun?.threadId ?? null;
+}
+
+function projectTranscript(input: ChatTranscriptInput, persistedMessages: ChatTranscriptMessage[]): ChatTranscriptMessage[] {
+  const activeThreadId = activeTranscriptThread(input);
   if (activeThreadId === null) {
     const messages = input.pendingUserInput === null
       ? []
@@ -762,7 +768,6 @@ export function projectChatTranscript(input: {
     return messages;
   }
 
-  const persistedMessages = buildPersistedTranscriptMessages(input.events, activeThreadId);
   if (input.liveRun === null) {
     return persistedMessages;
   }
@@ -774,6 +779,36 @@ export function projectChatTranscript(input: {
     persistedMessages,
     selectedThreadId: input.threadId
   });
+}
+
+export function projectChatTranscript(input: ChatTranscriptInput): ChatTranscriptMessage[] {
+  const threadId = activeTranscriptThread(input);
+  return projectTranscript(input, threadId === null ? [] : buildPersistedTranscriptMessages(input.events, threadId));
+}
+
+/** One bounded cache per session. Live deltas never re-parse the persisted history. */
+export function createChatTranscriptProjector(): (input: ChatTranscriptInput) => ChatTranscriptMessage[] {
+  let events: TaskEvent[] | undefined;
+  let threadId: string | null | undefined;
+  let persisted: ChatTranscriptMessage[] = [];
+  let previousKey: readonly unknown[] | undefined;
+  let previousMessages: ChatTranscriptMessage[] = [];
+  return (input) => {
+    const key = readChatTranscriptMemoKey(input);
+    if (previousKey !== undefined && key.every((value, index) => Object.is(value, previousKey?.[index]))) {
+      return previousMessages;
+    }
+    const activeThreadId = activeTranscriptThread(input);
+    if (events !== input.events || threadId !== activeThreadId) {
+      persisted = activeThreadId === null ? [] : buildPersistedTranscriptMessages(input.events, activeThreadId);
+      events = input.events;
+      threadId = activeThreadId;
+    }
+    const messages = projectTranscript(input, persisted);
+    previousKey = key;
+    previousMessages = messages;
+    return messages;
+  };
 }
 
 /**
