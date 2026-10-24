@@ -24,14 +24,12 @@ import {
 import type { ManagementScope } from '../management-scope';
 import {
   builtInTools,
-  draftFromServer,
   manifestToolsForServer,
   mcpApprovalModeLabels,
   mcpRiskLabels,
   mcpTransportLabels,
   previewSummary,
-  skippedCapabilities,
-  validateMcpDraft
+  skippedCapabilities
 } from '../mcp-model';
 import type { McpStore } from '../use-mcp';
 import { McpEditor } from './McpEditor';
@@ -102,32 +100,10 @@ export function McpSection({
     setAdding(false);
     setSelectedId(null);
   };
-  const issueForServer = (server: McpServerConfig): string | null => {
-    const configIssue = validateMcpDraft(draftFromServer(server))[0]?.message;
-    if (configIssue) return configIssue;
-    const result = mcp.test.results[server.id];
-    if (result?.status === 'invalid') return result.error ?? '配置有问题';
-    const snapshot = mcp.rows.find(
-      (row) => row.server.id === server.id
-    )?.snapshot;
-    if (snapshot?.lastError) return snapshot.lastError;
-    if (snapshot?.status === 'error') return '连接错误';
-    const skipped =
-      mcp.previewStatus === 'ready' && mcp.serverEnabled(server)
-        ? skippedCapabilities(mcp.preview).find(
-            (entry) => entry.type === 'MCP 服务' && entry.id === server.id
-          )
-        : undefined;
-    return skipped ? `工具预览未包含此服务：${skipped.reason}` : null;
-  };
-  const toolSummary = (server: McpServerConfig): string => {
-    if (!mcp.serverEnabled(server)) return '已停用';
-    if (mcp.previewStatus === 'loading' || mcp.toggle.pending)
-      return '正在更新工具预览…';
-    if (mcp.previewStatus === 'error' || mcp.preview === null)
-      return '工具预览不可用';
-    return `下次对话提供 ${manifestToolsForServer(mcp.preview, server.id).length} 个工具`;
-  };
+  const issueForServer = (server: McpServerConfig): string | null =>
+    mcp.rows.find((row) => row.server.id === server.id)?.issue ?? null;
+  const toolSummary = (server: McpServerConfig): string =>
+    mcp.rows.find((row) => row.server.id === server.id)?.toolSummary ?? '工具预览不可用';
   const enabledCount = mcp.rows.filter(({ server }) =>
     mcp.serverEnabled(server)
   ).length;
@@ -468,6 +444,11 @@ export function McpSection({
       {mcp.status !== 'error' ? null : (
         <FormNote tone="warn" testId="mgmt-mcp-error">
           刷新失败：{mcp.error}
+        </FormNote>
+      )}
+      {mcp.runtimeError === null ? null : (
+        <FormNote tone="warn" testId="mgmt-mcp-runtime-error">
+          运行状态不可用：{mcp.runtimeError}。仍可编辑配置。
         </FormNote>
       )}
       {mcp.save.error === null ? null : (

@@ -148,27 +148,6 @@ export function AssistantPanel({
     onThreadId: handleSessionThreadId
   });
 
-  /**
-   * Restores a suspended run once per thread, not once per render.
-   *
-   * `session.restoreActiveRun` is a fresh closure on every render (it depends on the run
-   * controller, which is itself a new object each time), so putting it in the dependency list
-   * would fire `chat.getActiveRun` every frame — and, worse, re-apply a replay on top of live
-   * events that were buffered while the window was hidden. The ref keys the attempt to the
-   * thread it belongs to.
-   */
-  const restoredThreadRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (restoredThreadRef.current === threadId) {
-      return;
-    }
-    restoredThreadRef.current = threadId;
-    // A different thread means a different run: without this, a suspended run's
-    // `waiting_user` status would keep the next thread's input disabled.
-    session.resetRun();
-    void session.restoreActiveRun();
-  }, [session, threadId]);
-
   const snapshot = settings.data ?? writtenSnapshot;
   // `useAsyncAction` 的 action 是 `(...args) => client...`：第一个参数才是 client，
   // hook 会把 `run(...args)` 原样传下去，所以这里先锁住 client。
@@ -361,7 +340,7 @@ export function AssistantPanel({
 
       {errorMessages.length === 0 ? null : (
         <div className="shrink-0 px-2 pt-2" data-testid="assistant-errors">
-          <ErrorBar error={{ level: 'page', message: errorMessages[0] ?? '', retry: () => void session.restoreActiveRun() }} />
+          <ErrorBar error={{ level: 'page', message: errorMessages[0] ?? '', retry: session.retryRecovery }} />
         </div>
       )}
 

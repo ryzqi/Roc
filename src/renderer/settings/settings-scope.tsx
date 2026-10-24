@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SettingsSaveRequest, SettingsSnapshot } from '../../shared/types/settings';
-import type { ResearchIndexSettings, ResearchIndexStatus } from '../../shared/types/research';
+import type { SettingsSnapshot } from '../../shared/types/settings';
+import type { ResearchIndexStatus } from '../../shared/types/research';
 import type { AsyncResource } from '../app/use-async-resource';
 import { useAsyncResource } from '../app/use-async-resource';
 import type { RocClient } from '../shared/roc-client';
-import { getIndexStatus, getSettingsSnapshot, saveHookConfig, saveIndexSettings, saveSettings } from './settings-store';
+import { getIndexStatus, getSettingsSnapshot } from './settings-store';
+import { applySettingsCommit, saveSettingsDraft, type SettingsSaveOutcome } from './settings-edit-session';
 import { notifySettingsChanged, useSettingsRevision } from '../shared/settings-events';
 import {
   cloneDraft,
   diffDraft,
   draftFromSnapshot,
-  sectionForDraftPath,
   validateDraft,
   type DraftDiff,
   type DraftIssue,
@@ -40,9 +40,8 @@ import {
  *
  *  1. the first load for a project (and a project switch, which drops the draft together with
  *     the scope it belonged to);
- *  2. a completed save — the backend **normalises** the document (the three fixed providers are
- *     rewritten, a default model whose provider is disabled becomes null), so the returned
- *     snapshot becomes the baseline and the draft shows the normalised result.
+ *  2. each successful independent write — its returned, normalized values advance only
+ *     that part of the baseline. Failed and unattempted parts remain dirty.
  *
  * In particular `reload()` (used after `settings.setProviderSecret`, `clearProviderSecret` and
  * `settings.hooks.trust`) only refreshes the *snapshot* the read-only surfaces render from.
@@ -50,7 +49,7 @@ import {
  * data-loss bug, not a refresh. The first version of this hook did exactly that and the P8 gate
  * caught it (progress.md 本轮错误表).
  *
- * ## Two writers, one surface
+ * ## Independent writers, one surface
  *
  * The draft carries `hooks` and `index` as well, because they are edited here, but
  * they are saved by their own capabilities after the core document. A partial failure
@@ -75,7 +74,7 @@ export type SettingsStore = {
   /** Applies an in-place mutation to a fresh copy of the draft. */
   update: (mutator: (draft: SettingsDraft) => void) => void;
   discard: () => void;
-  save: { pending: boolean; error: string | null; run: () => Promise<boolean> };
+  save: { pending: boolean; error: string | null; outcome: SettingsSaveOutcome | null; run: () => Promise<boolean> };
   /** Set after a successful save; drives the "已保存" line. */
   savedAt: string | null;
   projectId: string | null;
@@ -108,6 +107,21 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
   const [pending, setPending] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saveOutcome, setSaveOutcome] = useState<SettingsSaveOutcome | null>(null);
+  const savingRef = useRef(false);
+  const saveScopeRef = useRef({ projectId, client, active: true });
+  if (saveScopeRef.current.projectId !== projectId || saveScopeRef.current.client !== client) {
+    saveScopeRef.current = { projectId, client, active: true };
+  }
+  useEffect(() => {
+    const scope = saveScopeRef.current;
+    scope.active = true;
+    setPending(false);
+    setSavedAt(null);
+    setSaveError(null);
+    setSaveOutcome(null);
+    return () => { scope.active = false; };
+  }, [client, projectId]);
 
   /**
    * The draft is initialised once per project, not on every load.
@@ -120,7 +134,7 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
   const scopeRef = useRef<string | null>(null);
   const baselineSnapshotRef = useRef<SettingsSnapshot | null>(null);
 
-  const indexPending = projectId !== null && indexResource.status === 'loading';
+  const indexPending = projectId !== null && indexResource.status !== 'error' && indexResource.data === null;
 
   useEffect(() => {
     const scope = projectId ?? 'none';
@@ -206,93 +220,37 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
   const reloadSnapshot = snapshotResource.reload;
   const reloadIndex = indexResource.reload;
 
-  /**
-   * Makes a freshly returned document the new baseline and draft.
-   *
-   * Used only after a save: the backend normalises what it stores, so showing the *returned*
-   * document is the honest result and the diff bar must go to zero.
-   */
-  const commitBaseline = useCallback((snapshot: SettingsSnapshot, index: ResearchIndexSettings | null) => {
-    baselineSnapshotRef.current = snapshot;
-    const base = draftFromSnapshot(snapshot, index);
-    setState({ base, draft: cloneDraft(base) });
-  }, []);
-
   const run = useCallback(async (): Promise<boolean> => {
-    const current = state;
-    if (current === null) {
-      return false;
-    }
-    const { base, draft } = current;
+    if (state === null || savingRef.current || validateDraft(state.draft).length > 0) return false;
+    const scope = saveScopeRef.current;
+    const isCurrent = (): boolean => saveScopeRef.current === scope && scope.active;
+    savingRef.current = true;
     setPending(true);
     setSaveError(null);
+    setSaveOutcome(null);
     try {
-      const request: SettingsSaveRequest = {
-        settings: draft.settings,
-        providers: draft.providers,
-        defaultModelId: draft.defaultModelId,
-        permissions: draft.permissions
-      };
-      const core = await saveSettings(client, request);
-      if (!core.ok) {
-        setSaveError(core.error.message);
-        return false;
-      }
-
-      // The committed hooks config is the one `settings.hooks.save` returns, not the one inside
-      // `core.data`: the core snapshot is built while the hooks file is still the old one, so
-      // using it would rewrite the draft back to the pre-save hooks (P8 review P1-2).
-      let nextHooksConfig = core.data.hooks.config;
-      const hooksChanged = diff.paths.some((path) => sectionForDraftPath(path) === 'hooks');
-      if (hooksChanged) {
-        const hooks = await saveHookConfig(client, draft.hooks);
-        if (!hooks.ok) {
-          setSaveError(`模型与偏好已保存；Hooks 未保存：${hooks.error.message}`);
-          return false;
+      const outcome = await saveSettingsDraft(client, state, (part, base, snapshot) => {
+        // Other mounted readers must hear about successful writes even after this scope closed.
+        if (isCurrent()) {
+          if (snapshot !== null) baselineSnapshotRef.current = snapshot;
+          setState((current) => current === null ? current : applySettingsCommit(current, state.draft, base, part));
         }
-        nextHooksConfig = hooks.data.config;
+        notifySettingsChanged();
+      }, isCurrent);
+      if (!isCurrent()) return false;
+      setSaveOutcome(outcome);
+      setSaveError(outcome.error);
+      if (outcome.ok) setSavedAt(new Date().toISOString());
+      if (outcome.committed.length > 0) {
+        reloadSnapshot();
+        reloadIndex();
       }
-
-      let nextIndexSettings: ResearchIndexSettings | null = base.index;
-      const indexChanged = diff.paths.some((path) => sectionForDraftPath(path) === 'rag');
-      if (indexChanged) {
-        if (draft.index === null || base.index === null) {
-          setSaveError('索引配置未保存：当前没有绑定工作目录的项目。');
-          return false;
-        }
-        const index = await saveIndexSettings(client, {
-          projectId: draft.index.projectId,
-          expectedRevision: base.index.revision,
-          kinds: draft.index.kinds,
-          include: draft.index.include,
-          exclude: draft.index.exclude,
-          watch: draft.index.watch,
-          paused: draft.index.paused,
-          embeddingConfigId: draft.index.embeddingConfigId
-        });
-        if (!index.ok) {
-          // Revision conflict is the expected failure here and the backend's message is
-          // the only accurate description of it — pass it through with the context the
-          // user needs to understand that the rest was written.
-          setSaveError(`设置已保存；索引配置未保存：${index.error.message}`);
-          return false;
-        }
-        // The returned status carries the new revision; the next index save must use it or the
-        // optimistic-concurrency check would fail against our own write.
-        nextIndexSettings = index.data.settings;
-      }
-
-      // A completed save is the second event that moves the baseline (see the hook's comment).
-      commitBaseline({ ...core.data, hooks: { ...core.data.hooks, config: nextHooksConfig } }, nextIndexSettings);
-      notifySettingsChanged();
-      setSavedAt(new Date().toISOString());
-      reloadSnapshot();
-      reloadIndex();
-      return true;
+      return outcome.ok;
     } finally {
-      setPending(false);
+      savingRef.current = false;
+      if (isCurrent()) setPending(false);
     }
-  }, [client, state, diff.paths, commitBaseline, reloadIndex, reloadSnapshot]);
+  }, [client, state, reloadIndex, reloadSnapshot]);
 
   return {
     status: snapshotResource.status,
@@ -308,7 +266,7 @@ export function useSettingsStore(client: RocClient, projectId: string | null): S
     dirtySections: diff.sections,
     update,
     discard,
-    save: { pending, error: saveError, run },
+    save: { pending, error: saveError, outcome: saveOutcome, run },
     savedAt,
     projectId,
     client

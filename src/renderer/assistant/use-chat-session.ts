@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { errorMessage } from '../app/loaded-state';
 import type { ChatImageAttachment, ChatResumeDecision, ChatRunMode } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
 import { createChatTranscriptProjector, type ChatTranscriptMessage } from './transcript';
@@ -16,10 +17,9 @@ import { cancelRun, getActiveRun, getRunEvents, resumeApproval, resumeCheckpoint
  *
  *   - **`send`** builds the real `chat.startRun` payload and keeps the typed text on
  *     failure, because a failed send that also clears the box loses the user's prompt.
- *   - **`restoreActiveRun`** is what makes gate 5 pass: a run that started while the panel
- *     was closed is fetched with `chat.getActiveRun` and its events replayed from sequence
- *     0 through `run.applyReplay`, which de-duplicates against anything the live stream
- *     already delivered.
+ *   - Recovery belongs to this module: `chat.getActiveRun` and replay from sequence 0
+ *     restore a run started while the panel was closed, while scope changes discard old
+ *     responses. `run.applyReplay` de-duplicates anything the live stream already delivered.
  *   - **`liveRun` is fed to the projector only when the run is not idle.** Passing a stale
  *     terminal run state would render its blocks a second time on top of the persisted
  *     history of the same run.
@@ -48,9 +48,7 @@ export type ChatSession = {
   resumeApproval: (interruptId: string, decisions: ChatResumeDecision[]) => Promise<boolean>;
   resumeQuestion: (interruptId: string, answer: string) => Promise<boolean>;
   resumeCheckpoint: (runId: string) => Promise<boolean>;
-  restoreActiveRun: () => Promise<void>;
-  /** Drops the live run state — used when switching to a different conversation. */
-  resetRun: () => void;
+  retryRecovery: () => void;
 };
 
 export function useChatSession(input: {
@@ -62,9 +60,16 @@ export function useChatSession(input: {
   onThreadId: (threadId: string) => void;
 }): ChatSession {
   const { client, threadId, projectId, workspacePath, onThreadId } = input;
-  const run = useChatRun(client);
   const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
+  const retryRecovery = useCallback(() => setRecoveryAttempt((current) => current + 1), []);
+  const scopeRef = useRef({ client, threadId, projectId, workspacePath, active: true });
+  const previous = scopeRef.current;
+  if (previous.client !== client || previous.threadId !== threadId || previous.projectId !== projectId || previous.workspacePath !== workspacePath) {
+    scopeRef.current = { client, threadId, projectId, workspacePath, active: true };
+  }
+  const run = useChatRun(client, { threadId, acceptUnboundEvents: sending });
   const history = usePersistedThreadHistory({
     client,
     threadId,
@@ -83,30 +88,38 @@ export function useChatSession(input: {
       if (text.length === 0) {
         return false;
       }
+      const scope = scopeRef.current;
       setSending(true);
       setPendingUserInput(text);
       run.setError(null);
-      const result = await startRun(client, {
-        input: text,
-        mode: sendInput.mode,
-        threadId,
-        enabledCapabilities: { mcpServers: [], skills: sendInput.skillIds },
-        ...(workspacePath === null ? {} : { workspacePath }),
-        ...(projectId === null ? {} : { researchProjectId: projectId }),
-        ...(sendInput.attachments.length === 0 ? {} : { attachments: sendInput.attachments }),
-        ...(sendInput.skillIds.length === 0 ? {} : { explicitSkillIds: sendInput.skillIds })
-      });
-      setSending(false);
-      if (!result.ok) {
-        // Keep the text: a failed send must not also discard the prompt.
-        run.setError(result.error.message);
+      try {
+        const result = await startRun(client, {
+          input: text,
+          mode: sendInput.mode,
+          threadId,
+          enabledCapabilities: { mcpServers: [], skills: sendInput.skillIds },
+          ...(workspacePath === null ? {} : { workspacePath }),
+          ...(projectId === null ? {} : { researchProjectId: projectId }),
+          ...(sendInput.attachments.length === 0 ? {} : { attachments: sendInput.attachments }),
+          ...(sendInput.skillIds.length === 0 ? {} : { explicitSkillIds: sendInput.skillIds })
+        });
+        if (scopeRef.current !== scope || !scope.active) return false;
+        if (!result.ok) {
+          // Keep the text: a failed send must not also discard the prompt.
+          run.setError(result.error.message);
+          return false;
+        }
+        setPendingUserInput(null);
+        if (result.data.threadId !== null) {
+          onThreadId(result.data.threadId);
+        }
+        return true;
+      } catch (caught) {
+        if (scopeRef.current === scope && scope.active) run.setError(errorMessage(caught));
         return false;
+      } finally {
+        if (scopeRef.current === scope && scope.active) setSending(false);
       }
-      setPendingUserInput(null);
-      if (result.data.threadId !== null) {
-        onThreadId(result.data.threadId);
-      }
-      return true;
     },
     [client, onThreadId, projectId, run, threadId, workspacePath]
   );
@@ -116,7 +129,9 @@ export function useChatSession(input: {
     if (runId === null) {
       return;
     }
+    const scope = scopeRef.current;
     const result = await cancelRun(client, runId);
+    if (scopeRef.current !== scope || !scope.active) return;
     if (!result.ok) {
       run.setError(result.error.message);
     }
@@ -129,7 +144,9 @@ export function useChatSession(input: {
       if (runId === null || activeThreadId === null) {
         return false;
       }
+      const scope = scopeRef.current;
       const result = await resumeApproval(client, { runId, threadId: activeThreadId, interruptId, decisions });
+      if (scopeRef.current !== scope || !scope.active) return false;
       if (!result.ok) {
         run.setError(result.error.message);
         return false;
@@ -146,7 +163,9 @@ export function useChatSession(input: {
       if (runId === null || activeThreadId === null || answer.trim().length === 0) {
         return false;
       }
+      const scope = scopeRef.current;
       const result = await resumeQuestion(client, { runId, threadId: activeThreadId, interruptId, answer });
+      if (scopeRef.current !== scope || !scope.active) return false;
       if (!result.ok) {
         run.setError(result.error.message);
         return false;
@@ -160,12 +179,16 @@ export function useChatSession(input: {
   const resumeFromCheckpoint = useCallback(async (runId: string): Promise<boolean> => {
     const activeThreadId = run.state.threadId ?? threadId;
     if (activeThreadId === null) return false;
+    const scope = scopeRef.current;
+    const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
     const result = await resumeCheckpointRequest(client, { runId, threadId: activeThreadId });
+    if (!isCurrent()) return false;
     if (!result.ok) {
       run.setError(result.error.message);
       return false;
     }
     const replayed = await getRunEvents(client, { runId, afterSequence: 0 });
+    if (!isCurrent()) return false;
     if (!replayed.ok) {
       run.setError(replayed.error.message);
       return false;
@@ -174,30 +197,38 @@ export function useChatSession(input: {
     return true;
   }, [client, run, threadId]);
 
-  const resetRun = useCallback((): void => {
-    run.reset();
+  const { reset, setError, applyReplay } = run;
+  useEffect(() => {
+    const scope = scopeRef.current;
+    scope.active = true;
+    reset();
     setPendingUserInput(null);
-  }, [run]);
+    setSending(false);
+    return () => { scope.active = false; };
+  }, [client, threadId, projectId, workspacePath, reset]);
 
-  const restoreActiveRun = useCallback(async (): Promise<void> => {
-    if (threadId === null) {
-      return;
+  useEffect(() => {
+    const scope = scopeRef.current;
+    let cancelled = false;
+    const isCurrent = (): boolean => !cancelled && scopeRef.current === scope;
+    if (threadId !== null) {
+      void (async () => {
+        try {
+          const active = await getActiveRun(client, threadId);
+          if (!isCurrent()) return;
+          if (!active.ok) { setError(active.error.message); return; }
+          if (active.data === null) return;
+          const replayed = await getRunEvents(client, { runId: active.data.runId, afterSequence: 0 });
+          if (!isCurrent()) return;
+          if (!replayed.ok) { setError(replayed.error.message); return; }
+          applyReplay(replayed.data.events);
+        } catch (caught) {
+          if (isCurrent()) setError(errorMessage(caught));
+        }
+      })();
     }
-    const active = await getActiveRun(client, threadId);
-    if (!active.ok) {
-      run.setError(active.error.message);
-      return;
-    }
-    if (active.data === null) {
-      return;
-    }
-    const replayed = await getRunEvents(client, { runId: active.data.runId, afterSequence: 0 });
-    if (!replayed.ok) {
-      run.setError(replayed.error.message);
-      return;
-    }
-    run.applyReplay(replayed.data.events);
-  }, [client, run, threadId]);
+    return () => { cancelled = true; };
+  }, [client, threadId, projectId, workspacePath, setError, applyReplay, recoveryAttempt]);
 
   return {
     messages,
@@ -211,7 +242,6 @@ export function useChatSession(input: {
     resumeApproval: resumeWithApproval,
     resumeQuestion: resumeWithQuestion,
     resumeCheckpoint: resumeFromCheckpoint,
-    restoreActiveRun,
-    resetRun
+    retryRecovery
   };
 }

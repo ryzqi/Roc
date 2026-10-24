@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import {
   applyChatRunEvent,
   createEmptyChatRunState,
@@ -181,7 +181,24 @@ export type ChatRunController = {
   applyReplay: (events: readonly SequencedChatRunEvent[]) => void;
 };
 
-export function useChatRun(client: RocClient): ChatRunController {
+export function useChatRun(client: RocClient, scope: {
+  threadId: string | null;
+  acceptUnboundEvents: boolean;
+}): ChatRunController {
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const acceptedRunIds = useRef(new Set<string>());
+  const accepts = (event: ChatRunEvent): boolean => {
+    if ('threadId' in event) {
+      const current = scopeRef.current;
+      if (current.threadId !== null ? event.threadId !== current.threadId
+        : !current.acceptUnboundEvents && !acceptedRunIds.current.has(event.runId)) return false;
+      acceptedRunIds.current.add(event.runId);
+    }
+    return acceptedRunIds.current.has(event.runId);
+  };
+  const acceptsRef = useRef(accepts);
+  acceptsRef.current = accepts;
   const [state, setState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const pendingEventsRef = useRef<ChatRunEvent[]>([]);
@@ -222,6 +239,7 @@ export function useChatRun(client: RocClient): ChatRunController {
     });
 
     const unsubscribe = client.api.chat.onRunEvent((rawEvent) => {
+      if (!acceptsRef.current(normalizeSequencedChatRunEvent(rawEvent))) return;
       if (isSequencedChatRunEvent(rawEvent)) {
         if (!shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, rawEvent)) {
           return;
@@ -255,20 +273,25 @@ export function useChatRun(client: RocClient): ChatRunController {
     };
   }, [client]);
 
-  const reset = (): void => {
+  const reset = useCallback((): void => {
+    acceptedRunIds.current.clear();
     clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     seenSequenceByRunIdRef.current.clear();
     setState(createEmptyChatRunState());
     setErrorMessage(null);
-  };
+  }, []);
 
-  const setError = (message: string | null): void => {
+  const setError = useCallback((message: string | null): void => {
     setErrorMessage(message);
-  };
+  }, []);
 
-  const applyReplay = (events: readonly SequencedChatRunEvent[]): void => {
-    const accepted: ChatRunEvent[] = [];
+  const applyReplay = useCallback((events: readonly SequencedChatRunEvent[]): void => {
+    // Live events may already be deduplicated but still wait for an animation frame.
+    // Apply them before the replay tail so a buffered run_started cannot erase that tail.
+    const accepted = coalesceChatRunEvents(pendingEventsRef.current);
+    clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     for (const event of events) {
+      if (!acceptsRef.current(event.event)) continue;
       if (shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, event)) {
         accepted.push(normalizeSequencedChatRunEvent(event));
       }
@@ -287,7 +310,7 @@ export function useChatRun(client: RocClient): ChatRunController {
     startTransition(() => {
       setState((current) => applyChatRunEventBatch(current, accepted));
     });
-  };
+  }, []);
 
   return {
     state,

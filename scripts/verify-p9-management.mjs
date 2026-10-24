@@ -165,10 +165,6 @@ async function readInput(testId) {
   return await page.locator(`[data-testid="${testId}"]`).inputValue();
 }
 
-async function isChecked(testId) {
-  return await page.locator(`[data-testid="${testId}"]`).isChecked();
-}
-
 /**
  * Waits until an element's text contains a needle.
  *
@@ -259,6 +255,20 @@ try {
   }, workspaceA);
   assertCheck('0 准备', '工作目录绑定与项目创建成功', typeof preflight.projectId === 'string', preflight.projectError ?? '');
   const projectId = preflight.projectId;
+
+  // Keep capability assembly local to this gate: bundled skills may contain unrelated large assets.
+  // The imported smoke skill below still exercises discovery, enable/disable and preview behavior.
+  const isolatedSkills = await page.evaluate(async () => {
+    const listed = await window.roc.skills.list();
+    if (!listed.ok) return false;
+    for (const skill of listed.data) {
+      if (!skill.enabled) continue;
+      const result = await window.roc.skills.setEnabled({id: skill.id, enabled: false});
+      if (!result.ok) return false;
+    }
+    return true;
+  });
+  assertCheck('0 准备', '能力预览仅装配本闸门的技能夹具', isolatedSkills);
 
   // MCP 夹具服务在**打开抽屉之前**建好：管理面板的 store 在抽屉第一次挂载时读配置，
   // 之后再改就得手动刷新（而刷新的语义是「面板刷新」，不是测试的搬运工）。
@@ -672,6 +682,8 @@ try {
   await page.waitForSelector('[data-testid="mgmt-skill-preview-markdown"]', { timeout: 30_000 });
   const previewBody = await text('mgmt-skill-preview-markdown');
   assertCheck('2 技能', '技能文件按 markdown 只读预览', previewBody.includes('Smoke Skill'), previewBody.slice(0, 80));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="mgmt-skill-files"]', { state: 'detached' });
 
   // 启停 → 影响助手 composer 的候选
   await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
@@ -784,7 +796,8 @@ try {
   await page.click('[data-testid="mgmt-mcp-detail-p9-stdio"]');
   await waitForTextContains('mgmt-mcp-tools-p9-stdio', fixtureToolName, 20_000).catch(() => {});
   const toolLine = await text('mgmt-mcp-tools-p9-stdio');
-  assertCheck('3 MCP', '面板显示逐服务的工具名与审批要求', toolLine.includes(fixtureToolName), toolLine.slice(0, 120));
+  const previewError = await page.locator('[data-testid="mgmt-mcp-preview-error"]').allTextContents();
+  assertCheck('3 MCP', '面板显示逐服务的工具名与审批要求', toolLine.includes(fixtureToolName), [toolLine, ...previewError].join(' | '));
   const mcpPanelText = ((await page.locator('[data-testid="mgmt-mcp"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   assertCheck(
     '3 MCP',
