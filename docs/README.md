@@ -12,6 +12,7 @@
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [awesome-scientific-writing-evaluation.md](awesome-scientific-writing-evaluation.md) | 外部开源清单对 Roc 的适用性评估（评估结论，非待办） |
+| [轻量依赖调研](reports/2026-10-25-lightweight-dependency-review.md) | 当前依赖成本、GitHub 替代方案、迁移边界与验证顺序（评估结论，非待办） |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
 与 [`src/renderer/shared/motion.ts`](../src/renderer/shared/motion.ts)，取舍理由见

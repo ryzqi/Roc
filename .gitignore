@@ -12,6 +12,9 @@ __pycache__/
 *.log
 docs/*
 !docs/README.md
+!docs/reports/
+docs/reports/*
+!docs/reports/2026-10-25-lightweight-dependency-review.md
 !docs/research-workbench.md
 !docs/research-experiments.md
 !docs/research-figures.md
