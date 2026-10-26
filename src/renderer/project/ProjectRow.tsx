@@ -1,9 +1,11 @@
 import { Archive, ArchiveRestore, Folder, Pencil, Pin, Trash2 } from 'lucide-react';
+import { formatBeijingDateTime } from '../shared/format';
 import type { ResearchProject } from '../../shared/types';
 import { projectStageLabel, projectStatusLabel } from './project-store';
 
 export type ProjectRowProps = {
   project: ResearchProject;
+  variant?: 'cards' | 'list';
   pinned: boolean;
   archived: boolean;
   focused: boolean;
@@ -21,6 +23,7 @@ const ROW_ACTION =
 
 export function ProjectRow({
   project,
+  variant = 'list',
   pinned,
   archived,
   focused,
@@ -47,7 +50,7 @@ export function ProjectRow({
     <div
       data-testid={`portal-card-${project.id}`}
       data-archived={archived}
-      className={`flex min-w-0 items-center gap-2 border-b border-line-soft px-1 py-2 ${archived ? 'opacity-80' : ''}`}
+      className={`${variant === 'cards' ? 'flex h-full min-w-0 flex-col items-stretch gap-2 rounded-card border-[0.5px] border-line p-3' : 'flex min-w-0 items-center gap-2 border-b-[0.5px] border-line-soft px-1 py-2'} ${archived ? 'opacity-70' : ''}`}
     >
       <button
         type="button"
@@ -64,26 +67,21 @@ export function ProjectRow({
             {pinned ? (
               <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-accent" data-testid="portal-card-pinned" />
             ) : null}
-            <span className="truncate text-[var(--font-read-size)] font-medium leading-snug text-ink" title={project.title}>
+            <span className="truncate text-[var(--font-ui-size)] font-medium leading-snug text-ink" title={project.title}>
               {project.title}
             </span>
           </span>
-          <span className="line-clamp-1 text-muted text-[var(--font-meta-size)]" title={project.description}>
-            {project.description}
-          </span>
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-[var(--font-micro-size)]">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-[var(--font-meta-size)]">
             <span className="text-muted" data-testid="portal-card-stage">
               {projectStageLabel(project.currentStage)}
             </span>
             {showStatus ? (
-              <>
-                <span aria-hidden="true" className="text-subtle">·</span>
-                <span className={statusTone} data-testid="portal-card-status">
-                  {projectStatusLabel(project.status)}
-                </span>
-              </>
+              <span className={statusTone} data-testid="portal-card-status">
+                {projectStatusLabel(project.status)}
+              </span>
             ) : null}
-            <span aria-hidden="true" className="text-subtle">·</span>
+
+            {variant === 'list' ? (
             <span
               className={`inline-flex min-w-0 items-center gap-1 ${workspaceName === null ? 'text-[var(--st-warn)]' : 'text-subtle'}`}
               title={project.workspacePath ?? '未绑定工作目录'}
@@ -93,11 +91,13 @@ export function ProjectRow({
                 {workspaceName ?? '未绑定目录'}
               </span>
             </span>
+            ) : null}
           </span>
+          <time dateTime={project.updatedAt} className="text-subtle text-[var(--font-meta-size)]">更新于 {formatBeijingDateTime(project.updatedAt)}</time>
         </span>
       </button>
 
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center justify-end gap-0.5">
         <button
           type="button"
           onClick={onTogglePin}

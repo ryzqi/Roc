@@ -1,5 +1,6 @@
 import { _electron as electron, expect } from '@playwright/test';
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
@@ -137,6 +138,26 @@ try {
     await modal.getByRole('button', { name: '放弃修改', exact: true }).click();
     await expect(page.getByTestId('portal-column')).toBeVisible();
   });
+  if (process.env.ROC_UI_PHASE === 'portal') {
+    await check('Portal shows heading, genuine recents and card/list controls', async () => {
+      await expect(page.getByRole('heading', { name: '研究工作台' })).toBeVisible();
+      await expect(page.getByTestId('portal-recent')).toContainText('UI acceptance');
+      await expect(page.getByTestId('portal-grid')).toHaveAttribute('data-project-view', 'cards');
+      await page.screenshot({ path: join(artifact, 'cards.png') });
+      await page.getByTestId('portal-view-list').click();
+      await expect(page.getByTestId('portal-grid')).toHaveAttribute('data-project-view', 'list');
+      await page.reload(); await page.getByTestId('portal-grid').waitFor();
+      await expect(page.getByTestId('portal-grid')).toHaveAttribute('data-project-view', 'list');
+    });
+    await check('Portal search empty state and pinned keyboard rows stay usable', async () => {
+      await page.getByTestId('portal-search').fill('no such project');
+      await expect(page.getByTestId('portal-no-match')).toBeVisible();
+      await page.getByTestId('portal-search').fill('');
+      await page.getByTestId('portal-view-cards').click();
+      await expect(page.getByTestId(`portal-card-open-${project.data.id}`)).toHaveAttribute('tabindex', '0');
+      await expect(page.getByTestId(`portal-card-${project.data.id}`)).toContainText('更新于');
+    });
+  }
   expect(errors).toEqual([]);
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {

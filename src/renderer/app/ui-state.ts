@@ -18,6 +18,8 @@ export const uiStateKeys = {
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
   themeOverride: `${UI_STATE_PREFIX}theme.override`,
   /** Local-only pinning. Not product data; the backend has no star field (B1). */
+  projectView: `${UI_STATE_PREFIX}project.view`,
+  recentProjectIds: `${UI_STATE_PREFIX}project.recent`,
   starredProjectIds: `${UI_STATE_PREFIX}project.starred`,
   /** Per-project file-tree expansion, bucketed by project id. */
   fileTreeExpanded: `${UI_STATE_PREFIX}files.expanded`,
@@ -326,4 +328,19 @@ export function purgeLegacyStorage(): string[] {
     return removed;
   }
   return removed;
+}
+
+/** Presentation preferences only; recent ids record real successful project visits. */
+export type ProjectView = 'cards' | 'list';
+export function readProjectView(): ProjectView {
+  return readRaw(uiStateKeys.projectView) === 'list' ? 'list' : 'cards';
+}
+export function writeProjectView(view: ProjectView): void {
+  writeRaw(uiStateKeys.projectView, view);
+}
+export function readRecentProjectIds(): string[] {
+  return readStringList(uiStateKeys.recentProjectIds).slice(0, 12);
+}
+export function recordProjectVisit(id: string): void {
+  writeRaw(uiStateKeys.recentProjectIds, JSON.stringify([id, ...readRecentProjectIds().filter(value => value !== id)].slice(0, 12)));
 }

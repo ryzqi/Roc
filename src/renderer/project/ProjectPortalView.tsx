@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { Loader2, Plus, Search } from 'lucide-react';
+import { LayoutGrid, List, Loader2, Plus, Search } from 'lucide-react';
 import type { ResearchProject } from '../../shared/types';
+import { readProjectView, writeProjectView, readRecentProjectIds, type ProjectView } from '../app/ui-state';
+import { projectStageLabel } from './project-store';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
@@ -52,6 +54,8 @@ export function ProjectPortalView({
   onOpenProject
 }: ProjectPortalViewProps): React.JSX.Element {
   const projects = useProjects(client);
+  const [projectView, setProjectView] = useState<ProjectView>(readProjectView);
+  const [recentIds] = useState(readRecentProjectIds);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ProjectStatusFilter>('active');
   const [createOpen, setCreateOpen] = useState(createFormRequested);
@@ -67,6 +71,10 @@ export function ProjectPortalView({
   }
 
   const all = projects.list.data ?? [];
+  const recent = recentIds.flatMap(id => {
+    const project = all.find(item => item.id === id && !isProjectArchived(item));
+    return project === undefined ? [] : [project];
+  }).slice(0, 3);
   const shown = useMemo(
     () => visibleProjects(all, { query, filter, pinnedIds: projects.pinnedIds }),
     [all, query, filter, projects.pinnedIds]
@@ -98,7 +106,10 @@ export function ProjectPortalView({
     if (!(target instanceof HTMLElement) || target.closest('[data-project-body]') === null) {
       return;
     }
-    const delta = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+    const columns = projectView === 'cards' && listRef.current !== null
+      ? getComputedStyle(listRef.current).gridTemplateColumns.split(' ').length : 1;
+    const delta = event.key === 'ArrowDown' ? columns : event.key === 'ArrowUp' ? -columns
+      : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
     if (delta === 0) {
       return;
     }
@@ -156,7 +167,29 @@ export function ProjectPortalView({
   return (
     <div className="h-full overflow-y-auto" data-testid="portal">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="sr-only">研究项目</h1>
+        <header className="flex items-center justify-between gap-3 border-b-[0.5px] border-line pb-4">
+          <h1 className="text-[var(--font-h2-size)] font-semibold">研究工作台</h1>
+          <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
+            className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] hover:bg-[var(--accent-deep)] active:opacity-90">
+            <Plus size={14} aria-hidden="true" />新建项目
+          </button>
+        </header>
+        {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
+          <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
+            <h2 id="portal-recent-heading" className="mb-2 text-[var(--font-ui-size)] font-medium">最近使用</h2>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              {recent.map(project => (
+                <button key={project.id} type="button" onClick={() => onOpenProject(project.id)}
+                  className="min-w-0 rounded-control border-[0.5px] border-line p-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
+                  <span className="block truncate font-medium">{project.title}</span>
+                  <span className="text-muted text-[var(--font-meta-size)]">{projectStageLabel(project.currentStage)}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+        <section aria-labelledby="portal-all-heading" className="flex flex-col gap-3">
+        <h2 id="portal-all-heading" className="text-[var(--font-ui-size)] font-medium">全部项目</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-[var(--control-height)] min-w-[220px] flex-1 items-center gap-2 rounded-control border border-line bg-surface px-2.5">
             <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -205,16 +238,15 @@ export function ProjectPortalView({
               );
             })}
           </div>
-          <button
-            type="button"
-            data-testid="portal-new-project"
-            aria-label="新建研究项目"
-            onClick={() => setCreateOpen(true)}
-            className="ml-auto flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-          >
-            <Plus size={14} aria-hidden="true" />
-            新建项目
-          </button>
+          <div role="group" aria-label="项目显示方式" className="flex items-center gap-0.5">
+            {([['cards', '卡片视图', LayoutGrid], ['list', '紧凑列表', List]] as const).map(([id, label, Icon]) => (
+              <button key={id} type="button" aria-label={label} title={label} aria-pressed={projectView === id}
+                data-testid={`portal-view-${id}`} onClick={() => { setProjectView(id); writeProjectView(id); }}
+                className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
+                <Icon size={14} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
         </div>
 
         {projects.list.status === 'error' ? (
@@ -264,16 +296,18 @@ export function ProjectPortalView({
             aria-label="研究项目"
             onKeyDown={onListKeyDown}
             data-testid="portal-grid"
-            className="flex flex-col"
+            data-project-view={projectView}
+            className={projectView === 'cards' ? 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3' : 'flex flex-col'}
           >
             {shown.map((project, index) => (
               <div role="listitem" key={project.id} data-project-index={index}>
                 <ProjectRow
                   project={project}
+                  variant={projectView}
                   pinned={projects.pinnedIds.includes(project.id)}
                   archived={isProjectArchived(project)}
                   focused={index === safeFocusedIndex}
-                  showStatus={filter === 'all' || (project.status !== 'active' && project.status !== 'archived')}
+                  showStatus
                   onFocus={() => setFocusedIndex(index)}
                   onOpen={() => onOpenProject(project.id)}
                   onTogglePin={() => projects.togglePin(project.id)}
@@ -294,6 +328,7 @@ export function ProjectPortalView({
             ))}
           </div>
         )}
+        </section>
       </div>
 
       <ProjectFormDialog

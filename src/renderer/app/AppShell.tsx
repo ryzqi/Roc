@@ -6,7 +6,7 @@ import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
-import { clearUiState, purgeLegacyStorage } from './ui-state';
+import { clearUiState, purgeLegacyStorage, recordProjectVisit } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
@@ -183,6 +183,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const inProject = route.projectId !== null;
   const settingsOpen = route.page === 'settings';
   const project = currentProject.data;
+  useEffect(() => {
+    if (project !== null && project.id === route.projectId) recordProjectVisit(project.id);
+  }, [project?.id, route.projectId]);
   const projectName = project?.title ?? null;
   const projectWritable = isProjectWritable(project);
   /**

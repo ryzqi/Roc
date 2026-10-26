@@ -18,3 +18,7 @@ P0–P9 期间新旧两套前端并行存在：旧壳在 `src/renderer/`，新�
 
 - 切换后 `pnpm typecheck` 会暴露所有对已删文件的残留引用——这是设计意图，不是意外。
 - 旧壳的 smoke 断言（约 200KB）不能复用：新壳的验收改由阶段闸门（`pnpm verify:p3…p9`）与重写的 `pnpm test` / `pnpm smoke:electron` 承担。
+
+## 项目门户界面偏好补充
+
+`roc.ui.project.view` 保存卡片/紧凑列表显示方式，`roc.ui.project.recent` 仅保存最近成功打开的项目 ID 顺序（最多 12 个），通过 `ui-state.ts` 读写。门户以当前后端项目列表解析 ID，删除及归档项目不进入最近使用区域。不缓存项目内容，不用更新时间冒充打开时间。项目卡片的“更新于”使用后端 `updatedAt`。
