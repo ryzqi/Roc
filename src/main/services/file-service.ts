@@ -22,6 +22,10 @@ import type {
   RecoveryPoint
 } from '../../shared/types';
 import { RocDomainError } from './errors';
+import {
+  ignoredFileNameSearchDirectories,
+  isIgnoredFileNameSearchDirectory
+} from './file-name-search-path-policy';
 import type { RocPaths } from './paths';
 import { RipgrepService } from './ripgrep-service';
 import type { WorkspaceService } from './workspace-service';
@@ -35,6 +39,8 @@ const defaultSearchMaxVisitedFiles = 2000;
 const defaultSearchMaxBytes = 4 * 1024 * 1024;
 const defaultNameSearchLimit = 20;
 const defaultNameSearchMaxVisitedFiles = 20000;
+const defaultNameSearchSnapshotReconcileMs = 60_000;
+const maxCachedNameSearchSnapshots = 4;
 const imageMediaTypes = new Map<string, string>([
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],
@@ -44,30 +50,54 @@ const imageMediaTypes = new Map<string, string>([
   ['.bmp', 'image/bmp'],
   ['.svg', 'image/svg+xml']
 ]);
-const ignoredDirectoryNames = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'out',
-  'release',
-  'coverage',
-  '.cache',
-  '.tmp',
-  '.runtime',
-  '.artifacts'
-]);
-
 export type FileRecoveryPointDatabase = {
   readonly db: DatabaseConnection;
 };
 
+export type FileServiceOptions = {
+  /** Reconcile cached paths after this many milliseconds, even without watcher events. */
+  pathSnapshotReconcileMs?: number;
+};
+
+type FileNamePathSnapshotEntry = {
+  name: string;
+  relativePath: string;
+  normalizedName: string;
+  normalizedPath: string;
+};
+
+type FileNamePathSnapshot = {
+  entries: FileNamePathSnapshotEntry[];
+  truncated: boolean;
+};
+
+type CachedFileNamePathSnapshot = {
+  snapshot: FileNamePathSnapshot;
+  builtAt: number;
+};
+
+type FileNamePathSnapshotState = {
+  generation: number;
+  snapshot: CachedFileNamePathSnapshot | null;
+  buildPromise: Promise<FileNamePathSnapshot> | null;
+};
+
 export class FileService {
+  private readonly pathSnapshotReconcileMs: number;
+  private readonly fileNamePathSnapshots = new Map<string, FileNamePathSnapshotState>();
+
   constructor(
     private readonly paths: RocPaths,
     private readonly database: FileRecoveryPointDatabase,
     private readonly workspaceService: WorkspaceService,
-    private readonly ripgrep = new RipgrepService()
-  ) {}
+    private readonly ripgrep = new RipgrepService(),
+    options: FileServiceOptions = {}
+  ) {
+    this.pathSnapshotReconcileMs = options.pathSnapshotReconcileMs ?? defaultNameSearchSnapshotReconcileMs;
+    if (!Number.isSafeInteger(this.pathSnapshotReconcileMs) || this.pathSnapshotReconcileMs <= 0) {
+      throw new RangeError('file_name_snapshot_reconcile_interval_invalid');
+    }
+  }
 
   async listTree(request: FileTreeRequest): Promise<FileTreeResult> {
     const workspace = this.workspaceService.requireWorkspace();
@@ -86,7 +116,7 @@ export class FileService {
 
     const limit = this.positiveLimit(request.limit, defaultListLimit);
     const children = (await readdir(target, { withFileTypes: true }))
-      .filter((entry) => !ignoredDirectoryNames.has(entry.name))
+      .filter((entry) => !isIgnoredFileNameSearchDirectory(entry.name))
       .sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
     const visibleChildren = children.slice(0, limit);
     const entries = await Promise.all(visibleChildren.map(async (entry) => {
@@ -202,10 +232,11 @@ export class FileService {
         query,
         maxResults,
         // 与旧扫描对齐：点文件也算（`.env` 里的关键词要能搜到），且不读 `.gitignore` /
-        // `.ignore` / 全局 gitignore——目录过滤只认 `ignoredDirectoryNames`，两条路径同一份。
+        // `.ignore` / 全局 gitignore——目录过滤只认 file-name-search-path-policy，
+        // 文件名快照和 ripgrep 都使用同一份目录列表。
         includeHidden: true,
         disableIgnoreRules: true,
-        excludeDirectories: [...ignoredDirectoryNames],
+        excludeDirectories: [...ignoredFileNameSearchDirectories],
         maxFileSizeBytes: defaultSearchMaxBytes
       });
       return {
@@ -228,49 +259,148 @@ export class FileService {
     const workspace = this.workspaceService.requireWorkspace();
     const maxResults = this.positiveLimit(request.maxResults, defaultNameSearchLimit);
     const normalizedQuery = query.toLowerCase();
+    const snapshot = await this.getFileNamePathSnapshot(workspace.path, workspace.id);
+    if (normalizedQuery.length === 0) {
+      return {
+        query,
+        matches: snapshot.entries.slice(0, maxResults).map(({ name, relativePath }) => ({ name, relativePath })),
+        truncated: snapshot.truncated || snapshot.entries.length > maxResults
+      };
+    }
+
     const candidates: FileNameSearchCandidate[] = [];
+    for (const entry of snapshot.entries) {
+      const basenameHit = this.isSubsequenceMatch(normalizedQuery, entry.normalizedName);
+      if (!basenameHit && !this.isSubsequenceMatch(normalizedQuery, entry.normalizedPath)) {
+        continue;
+      }
+      candidates.push({ name: entry.name, relativePath: entry.relativePath, basenameHit });
+    }
+    candidates.sort(compareFileNameSearchCandidates);
+
+    return {
+      query,
+      matches: candidates.slice(0, maxResults).map(({ name, relativePath }) => ({ name, relativePath })),
+      truncated: snapshot.truncated || candidates.length > maxResults
+    };
+  }
+
+  /** Invalidate one workspace's path list after a watcher event or watcher failure. */
+  invalidateFileNameSnapshot(workspacePath: string): void {
+    const state = this.fileNamePathSnapshots.get(workspacePath);
+    if (state === undefined) return;
+    state.generation += 1;
+    state.snapshot = null;
+    state.buildPromise = null;
+  }
+
+  /** Drop all cached paths when the selected workspace changes. */
+  invalidateAllFileNameSnapshots(): void {
+    for (const state of this.fileNamePathSnapshots.values()) {
+      state.generation += 1;
+      state.snapshot = null;
+      state.buildPromise = null;
+    }
+  }
+
+  private async getFileNamePathSnapshot(workspacePath: string, workspaceId: string): Promise<FileNamePathSnapshot> {
+    while (true) {
+      this.ensureWorkspaceSelection(workspaceId);
+      const state = this.fileNamePathSnapshots.get(workspacePath) ?? this.createFileNamePathSnapshotState(workspacePath);
+      const now = Date.now();
+      const cached = state.snapshot;
+      if (cached !== null && now - cached.builtAt < this.pathSnapshotReconcileMs) {
+        this.touchFileNamePathSnapshot(workspacePath, state);
+        return cached.snapshot;
+      }
+
+      const generation = state.generation;
+      let buildPromise = state.buildPromise;
+      if (buildPromise === null) {
+        buildPromise = this.buildFileNamePathSnapshot(workspacePath);
+        state.buildPromise = buildPromise;
+      }
+
+      let snapshot: FileNamePathSnapshot;
+      try {
+        snapshot = await buildPromise;
+      } catch (error) {
+        if (state.generation !== generation || state.buildPromise !== buildPromise || this.fileNamePathSnapshots.get(workspacePath) !== state) {
+          continue;
+        }
+        state.buildPromise = null;
+        throw error;
+      }
+
+      if (
+        state.generation !== generation ||
+        state.buildPromise !== buildPromise ||
+        this.fileNamePathSnapshots.get(workspacePath) !== state
+      ) {
+        continue;
+      }
+      this.ensureWorkspaceSelection(workspaceId);
+      state.snapshot = { snapshot, builtAt: Date.now() };
+      state.buildPromise = null;
+      this.touchFileNamePathSnapshot(workspacePath, state);
+      return snapshot;
+    }
+  }
+
+  private ensureWorkspaceSelection(workspaceId: string): void {
+    if (this.workspaceService.getCurrentWorkspace()?.id === workspaceId) return;
+    throw new RocDomainError({
+      code: 'file_name_search_workspace_changed',
+      message: '工作区已切换，文件名搜索已取消。',
+      category: 'conflict',
+      retryable: true,
+      userAction: '请在当前工作区重新搜索。'
+    });
+  }
+
+  private createFileNamePathSnapshotState(workspacePath: string): FileNamePathSnapshotState {
+    const state: FileNamePathSnapshotState = { generation: 0, snapshot: null, buildPromise: null };
+    this.fileNamePathSnapshots.set(workspacePath, state);
+    this.trimFileNamePathSnapshots(workspacePath);
+    return state;
+  }
+
+  private touchFileNamePathSnapshot(workspacePath: string, state: FileNamePathSnapshotState): void {
+    if (this.fileNamePathSnapshots.get(workspacePath) !== state) return;
+    this.fileNamePathSnapshots.delete(workspacePath);
+    this.fileNamePathSnapshots.set(workspacePath, state);
+    this.trimFileNamePathSnapshots(workspacePath);
+  }
+
+  private trimFileNamePathSnapshots(currentWorkspacePath: string): void {
+    for (const [workspacePath, state] of this.fileNamePathSnapshots) {
+      if (this.fileNamePathSnapshots.size <= maxCachedNameSearchSnapshots) return;
+      if (workspacePath === currentWorkspacePath || state.buildPromise !== null) continue;
+      this.fileNamePathSnapshots.delete(workspacePath);
+    }
+  }
+
+  private async buildFileNamePathSnapshot(workspacePath: string): Promise<FileNamePathSnapshot> {
+    const entries: FileNamePathSnapshotEntry[] = [];
     let truncated = false;
     let visitedFiles = 0;
-    await this.visitFiles(workspace.path, (absolutePath) => {
+    await this.visitFiles(workspacePath, (absolutePath) => {
       if (visitedFiles >= defaultNameSearchMaxVisitedFiles) {
         truncated = true;
         return true;
       }
       visitedFiles += 1;
-      const relativePath = this.toWorkspaceRelativePath(workspace.path, absolutePath);
+      const relativePath = this.toWorkspaceRelativePath(workspacePath, absolutePath);
       const name = this.fileNameFromRelativePath(relativePath);
-      // 与 search 的有意差异：query 为空时不报错，按遍历序给出候选，供刚敲下 @ 的输入框使用。
-      if (normalizedQuery.length === 0) {
-        if (candidates.length >= maxResults) {
-          truncated = true;
-          return true;
-        }
-        candidates.push({ name, relativePath, basenameHit: true });
-        return false;
-      }
-      const basenameHit = this.isSubsequenceMatch(normalizedQuery, name.toLowerCase());
-      if (!basenameHit && !this.isSubsequenceMatch(normalizedQuery, relativePath.toLowerCase())) {
-        return false;
-      }
-      candidates.push({ name, relativePath, basenameHit });
+      entries.push({
+        name,
+        relativePath,
+        normalizedName: name.toLowerCase(),
+        normalizedPath: relativePath.toLowerCase()
+      });
       return false;
     });
-
-    if (normalizedQuery.length > 0) {
-      candidates.sort(compareFileNameSearchCandidates);
-    }
-    if (candidates.length > maxResults) {
-      truncated = true;
-    }
-
-    return {
-      query,
-      matches: candidates.slice(0, maxResults).map((candidate) => ({
-        name: candidate.name,
-        relativePath: candidate.relativePath
-      })),
-      truncated
-    };
+    return { entries, truncated };
   }
 
   async readPreview(request: FilePreviewRequest): Promise<FilePreviewResult> {
@@ -507,7 +637,7 @@ export class FileService {
     }
 
     for (const entry of entries) {
-      if (entry.isDirectory() && ignoredDirectoryNames.has(entry.name)) {
+      if (entry.isDirectory() && isIgnoredFileNameSearchDirectory(entry.name)) {
         continue;
       }
 

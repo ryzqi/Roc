@@ -1,6 +1,7 @@
 import { watch as watchWorkspace } from 'node:fs';
 
 import type { WorkspaceChangedEvent } from '../../shared/types';
+import { hasIgnoredFileNameSearchParentDirectory } from './file-name-search-path-policy';
 
 type WorkspaceWatchHandle = {
   close(): void;
@@ -20,6 +21,8 @@ type WorkspaceChangeWatcherLogger = {
 type WorkspaceChangeWatcherOptions = {
   debounceMs?: number;
   logger: WorkspaceChangeWatcherLogger;
+  /** Called synchronously for file changes and watcher failures so caches cannot outlive the debounce. */
+  onInvalidate?: (workspacePath: string) => void;
   onChange: (event: WorkspaceChangedEvent) => Promise<void> | void;
   watch?: WorkspaceWatchFactory;
 };
@@ -41,6 +44,7 @@ export class WorkspaceChangeWatcherService {
   private readonly debounceMs: number;
   private readonly watch: WorkspaceWatchFactory;
   private watcher: WorkspaceWatchHandle | null = null;
+  private watcherGeneration = 0;
   private workspacePath: string | null = null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingEvent: WorkspaceChangedEvent | null = null;
@@ -59,29 +63,33 @@ export class WorkspaceChangeWatcherService {
     if (workspacePath === null) {
       return;
     }
+    const generation = this.watcherGeneration;
     try {
       this.watcher = this.watch(workspacePath, { recursive: true }, (eventType, filename) => {
-        this.handleFileSystemChange(eventType, filename);
+        this.handleFileSystemChange(workspacePath, generation, eventType, filename);
       });
       this.watcher.on('error', (error) => {
-        this.handleWatcherError(error);
+        this.handleWatcherError(workspacePath, generation, error);
       });
     } catch (error) {
       this.options.logger.warn('Workspace change watcher failed to start.', {
         workspacePath,
         error: error instanceof Error ? error.message : String(error)
       });
+      this.invalidateSnapshot(workspacePath);
+      this.closeWatcher();
       this.workspacePath = null;
     }
   }
 
-  private handleWatcherError(error: Error): void {
-    const workspacePath = this.workspacePath;
+  private handleWatcherError(workspacePath: string, generation: number, error: Error): void {
+    if (this.workspacePath !== workspacePath || this.watcherGeneration !== generation) return;
     this.options.logger.warn('Workspace change watcher failed after start.', {
       workspacePath,
       error: error.message
     });
     this.closeWatcher();
+    this.invalidateSnapshot(workspacePath);
     this.workspacePath = null;
   }
 
@@ -91,6 +99,7 @@ export class WorkspaceChangeWatcherService {
   }
 
   private closeWatcher(): void {
+    this.watcherGeneration += 1;
     if (this.refreshTimer !== null) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
@@ -102,20 +111,39 @@ export class WorkspaceChangeWatcherService {
     }
   }
 
-  private handleFileSystemChange(eventType: string, filename: string | Buffer | null): void {
-    if (this.workspacePath === null) {
+  private handleFileSystemChange(
+    workspacePath: string,
+    generation: number,
+    eventType: string,
+    filename: string | Buffer | null
+  ): void {
+    if (this.workspacePath !== workspacePath || this.watcherGeneration !== generation) {
       return;
     }
     const relativePath = normalizeWatchFilename(filename);
+    if (relativePath === null || !hasIgnoredFileNameSearchParentDirectory(relativePath)) {
+      this.invalidateSnapshot(workspacePath);
+    }
     if (relativePath !== null && shouldIgnoreRelativePath(relativePath)) {
       return;
     }
     this.pendingEvent = {
-      workspacePath: this.workspacePath,
+      workspacePath,
       relativePath,
       eventType: eventType === 'rename' ? 'rename' : 'change'
     };
     this.schedulePublish();
+  }
+
+  private invalidateSnapshot(workspacePath: string): void {
+    try {
+      this.options.onInvalidate?.(workspacePath);
+    } catch (error) {
+      this.options.logger.warn('Workspace path snapshot invalidation failed.', {
+        workspacePath,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   private schedulePublish(): void {
@@ -151,8 +179,9 @@ function normalizeWatchFilename(filename: string | Buffer | null): string | null
     return null;
   }
   const raw = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
-  const normalized = raw.trim();
-  return normalized.length === 0 ? null : normalized;
+  // Leading/trailing spaces are valid filename characters. Trimming could turn a
+  // real root entry such as " node_modules" into an ignored directory name.
+  return raw.length === 0 ? null : raw;
 }
 
 function shouldIgnoreRelativePath(relativePath: string): boolean {

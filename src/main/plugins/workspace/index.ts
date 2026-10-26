@@ -138,6 +138,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       const gitService = new GitService(workspaceService);
       workspaceChangeWatcher = new WorkspaceChangeWatcherService({
         logger: context.logger,
+        onInvalidate: (workspacePath) => fileService.invalidateFileNameSnapshot(workspacePath),
         onChange: (event) =>
           context.eventBus.publish({
             type: workspaceChangedEventType,
@@ -179,6 +180,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       );
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[1], async (input) => {
         const workspace = workspaceService.selectWorkspace((input as WorkspaceSelectRequest).path);
+        fileService.invalidateAllFileNameSnapshots();
         workspaceChangeWatcher?.setWorkspace(workspace.path);
         return workspace;
       });
