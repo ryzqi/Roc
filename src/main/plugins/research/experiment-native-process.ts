@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import bridge from '../../../../resources/research-runtime/r-process.lock.json';
 import bridgeSource from '../../../../resources/research-runtime/r-process.c?raw';
 import { researchContentHash } from './research-files';
+import { experimentDirectoryEntryLimit, experimentFileCountLimit, experimentFileLimit, experimentOutputTotalLimit } from './experiment-files';
 import type { ResearchProcessRequest, ResearchProcessResult } from './process-runner';
 
 export async function runRExperimentProcess(request: ResearchProcessRequest,
@@ -22,6 +23,8 @@ export async function runRExperimentProcess(request: ResearchProcessRequest,
     const helpers = ['/bin/sh', '/bin/bash', '/usr/bin/uname', '/usr/bin/which', '/bin/rm'];
     return await run({ ...request, args: [`DYLD_INSERT_LIBRARIES=${library}`, ...request.args], readablePaths: [...request.readablePaths, ...helpers, library],
       additionalExecutables: [...(request.additionalExecutables ?? []), ...helpers], writablePaths: [...request.writablePaths, temporary],
+      writeLimits: [...(request.writeLimits ?? []), { path: temporary, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
+        maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
       environment: { ...request.environment, TMPDIR: temporary, TMP: temporary, TEMP: temporary } });
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }

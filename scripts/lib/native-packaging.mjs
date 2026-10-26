@@ -376,6 +376,7 @@ export function assertLiveResearchToolchainForPackaging({
     'bin/tectonic',
     'bin/uv',
     'bin/vale',
+    'typescript-experiment-runner.mts',
     'python/bin/python3',
     'tex/bundle.zip',
     'licenses/python-packages.json'
@@ -393,6 +394,7 @@ export function assertLiveResearchToolchainForPackaging({
   // 然后在运行时被 `research_toolchain_version_mismatch` 拒掉——整个科研插件不可用，
   // 而且要等用户装上才发现。这里按 lock 里该架构声明的工具集逐项比。
   const manifest = readJsonFile(resolve(root, 'manifest.json'), 'research_toolchain_manifest_invalid');
+  const sources = researchRuntimeSourcePath(targetProjectRoot);
   const lock = readJsonFile(resolve(sources, 'tools.lock.json'), 'research_toolchain_lock_invalid');
   const declaredTools = lock?.architectures?.[String(architecture)];
   if (typeof declaredTools !== 'object' || declaredTools === null) {
@@ -514,6 +516,7 @@ export function verifyPackagedResearchToolchain({
     'bin/tectonic',
     'bin/uv',
     'bin/vale',
+    'typescript-experiment-runner.mts',
     'python/bin/python3',
     'tex/bundle.zip',
     // Vale 的配置与规则集与二进制同等重要：少了它们 `lintProse()` 会在运行时报错，

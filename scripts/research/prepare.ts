@@ -233,7 +233,7 @@ export async function portablePython(prefix: string): Promise<void> {
 export async function computeLockHashes(): Promise<Record<string, string>> {
   const lockHashes: Record<string, string> = {};
   for (const name of LOCK_FILES) lockHashes[name] = await fileSha256(join(SOURCES, name));
-  const runtimeFiles = (await readdir(SOURCES)).filter((name) => name.endsWith('.py')).sort();
+  const runtimeFiles = (await readdir(SOURCES)).filter((name) => name.endsWith('.py') || name.endsWith('.mts')).sort();
   for (const name of runtimeFiles) lockHashes[name] = await fileSha256(join(SOURCES, name));
   const licenseRoot = join(SOURCES, 'licenses');
   if (await pathInfo(licenseRoot) !== null) {
@@ -342,7 +342,7 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       if (await fileSha256(cachedZip) !== bundle.zipSha256) fail('research_tex_zip_hash_mismatch');
       await mkdir(join(root, 'tex'));
       await copyPreservingMode(cachedZip, join(root, 'tex/bundle.zip'));
-      for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.py'))) {
+      for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.py') || item.endsWith('.mts'))) {
         await copyPreservingMode(join(SOURCES, name), join(root, name));
       }
       await mkdir(join(root, 'locks'));

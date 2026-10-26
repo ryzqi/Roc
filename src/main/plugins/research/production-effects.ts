@@ -12,6 +12,8 @@ import type { ResearchWorkspaceFileService } from './workspace-files';
 
 type TemplateSave = Parameters<ResearchTemplateService['saveFile']>[0];
 type TemplateRead = Parameters<ResearchTemplateService['readFile']>[0];
+type WithoutExperimentOwner<T> = T extends unknown ? Omit<T, 'projectId' | 'ownerRunId'> : never;
+type ExperimentStartInput = WithoutExperimentOwner<ResearchExperimentStart>;
 
 export class ResearchProductionEffectService {
   constructor(
@@ -61,7 +63,7 @@ export class ResearchProductionEffectService {
     }
   }
 
-  async startExperiment(ownerRunId: string, projectId: string, request: Omit<ResearchExperimentStart, 'projectId' | 'ownerRunId'>): Promise<ResearchExperimentExecution> {
+  async startExperiment(ownerRunId: string, projectId: string, request: ExperimentStartInput): Promise<ResearchExperimentExecution> {
     this.requireOwner(ownerRunId, projectId);
     const started = await this.experiments.start({ ...request, projectId, ownerRunId });
     try { this.requireOwner(ownerRunId, projectId); return started; }

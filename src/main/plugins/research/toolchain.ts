@@ -11,7 +11,7 @@ import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParse
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import type { ResearchModelPack } from '../../../shared/schemas/research-production';
 import { researchFigureRenderJobResultSchema, researchFigureRenderJobSchema, type ResearchFigureRenderJob } from '../../../shared/schemas/research-figures';
-import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
+import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
 import { ResearchModelStore, type ModelPreferences, type ResearchModelFiles, type ResearchModelsStatus } from './model-store';
@@ -33,6 +33,11 @@ const manifestSchema = z.object({
 type Manifest = z.infer<typeof manifestSchema>;
 type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string; jobDir: string; signal?: AbortSignal };
 type FigureWorkerInput = WorkerInput & Pick<ResearchFigureRenderJob, 'inputPaths' | 'label' | 'timeoutMs' | 'figure'>;
+export type ResearchTypeScriptRuntime = {
+  root: string; executable: string; runnerPath: string; runnerHash: string; nodeVersion: string; platform: string; architecture: string;
+  hash: string; packageEntries: Record<'csv-parse' | 'd3-dsv' | 'simple-statistics', string>;
+  packageRoots: string[]; packages: Array<{ name: string; version: string }>; environment: NodeJS.ProcessEnv;
+};
 
 type ResolvedToolchain = { root: string; manifest: Manifest };
 
@@ -82,10 +87,47 @@ export class ResearchToolchain {
     }));
   }
 
-  async experimentRuntime(jobDir: string): Promise<{ root: string; python: string; pythonVersion: string; uv: string; hash: string; environment: NodeJS.ProcessEnv }> {
+  async nativeRuntime(jobDir: string): Promise<{ root: string; hash: string; environment: NodeJS.ProcessEnv }> {
     const { root, manifest } = await this.resolve();
-    return { root, python: join(root, 'python/bin/python3'), pythonVersion: manifest.versions.python, uv: join(root, 'bin/uv'),
-      hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.environment(root, jobDir) };
+    return { root, hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.baseEnvironment(root, jobDir, true) };
+  }
+
+  async typescriptRuntime(jobDir: string): Promise<ResearchTypeScriptRuntime> {
+    const { root } = await this.resolve();
+    const runnerPath = await researchPath(root, 'typescript-experiment-runner.mts');
+    const runnerHash = researchContentHash(await readResearchFile(root, 'typescript-experiment-runner.mts', 1024 * 1024));
+    const specifiers = ['csv-parse', 'd3-dsv', 'simple-statistics'] as const;
+    const packageEntries = {} as ResearchTypeScriptRuntime['packageEntries'];
+    const packageRoots: string[] = [];
+    const packages: Array<{ name: string; version: string }> = [];
+    for (const specifier of specifiers) {
+      const entryUrl = import.meta.resolve(specifier);
+      if (!entryUrl.startsWith('file:')) throw new ResearchProcessError('research_experiment_package_invalid');
+      const entry = await realpath(fileURLToPath(entryUrl));
+      let packageRoot = dirname(entry);
+      while (!existsSync(join(packageRoot, 'package.json')) && dirname(packageRoot) !== packageRoot) packageRoot = dirname(packageRoot);
+      if (!existsSync(join(packageRoot, 'package.json'))) throw new ResearchProcessError('research_experiment_package_missing');
+      const packageJson = parseJson((await readResearchFile(packageRoot, 'package.json', 1024 * 1024)).toString('utf8'));
+      if (packageJson === null || typeof packageJson !== 'object' || !('version' in packageJson) || typeof packageJson.version !== 'string') {
+        throw new ResearchProcessError('research_experiment_package_invalid');
+      }
+      packageEntries[specifier] = entry;
+      packageRoots.push(await realpath(packageRoot));
+      packages.push({ name: specifier, version: packageJson.version });
+    }
+    packages.sort((left, right) => left.name.localeCompare(right.name));
+    const nodeVersion = process.versions.node;
+    const platform = process.platform;
+    const architecture = process.arch;
+    const features = process.features as NodeJS.ProcessFeatures & { typescript?: string };
+    if (features.typescript !== 'strip' || process.versions.electron === undefined) {
+      throw new ResearchProcessError('research_experiment_typescript_runtime_unavailable');
+    }
+    const identity = { engine: 'typescript', sourceVersion: 1, nodeVersion, electronVersion: process.versions.electron,
+      platform, architecture, runnerHash, packages };
+    return { root, executable: process.execPath, runnerPath, runnerHash, nodeVersion, platform, architecture,
+      hash: researchContentHash(JSON.stringify(identity)), packageEntries, packageRoots: [...new Set(packageRoots)], packages,
+      environment: await this.baseEnvironment(root, jobDir, false) };
   }
 
   /** Parse uses available pinned ONNX models; born-digital PDF and HTML still work without model files. */
@@ -200,7 +242,7 @@ export class ResearchToolchain {
 
   async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
     const { root } = await this.resolve();
-    const environment = await this.environment(root, input.jobDir);
+    const environment = await this.baseEnvironment(root, input.jobDir, true);
     // `--keep-intermediates` 是为了拿到 `.bbl`：arXiv 不运行 BibTeX，随包不带 `.bbl` 的提交
     // 在那边会把每一处引用渲染成 `?`（`arxiv-preflight.ts` 的 `missing_bbl` 就是这条）。
     // 中间文件只落在 `outputDir`（即导出的 scratch），不会进交付包——取 `.bbl` 是调用方的事。
@@ -336,6 +378,12 @@ export class ResearchToolchain {
     ];
     const parseOptions = operation.operation === 'parse_document' && operation.options !== null && typeof operation.options === 'object'
       ? operation.options as Partial<ResearchParseOptions> : null;
+    let timeoutMs = 60_000;
+    if (operation.operation === 'parse_document') timeoutMs = 600_000;
+    else if (operation.operation === 'render_figure') {
+      const requestedTimeout = typeof operation.timeoutMs === 'number' ? operation.timeoutMs : 60_000;
+      timeoutMs = Math.max(1, Math.min(3_600_000, requestedTimeout));
+    }
     const result = await runResearchProcess({
       command: process.execPath,
       args: [packagedCli],
@@ -343,8 +391,7 @@ export class ResearchToolchain {
       readablePaths,
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
-      timeoutMs: operation.operation === 'parse_document' ? 600_000 : operation.operation === 'render_figure'
-        ? Math.max(1, Math.min(3_600_000, typeof operation.timeoutMs === 'number' ? operation.timeoutMs : 60_000)) : 60_000,
+      timeoutMs,
       signal: input.signal,
       input: JSON.stringify(request),
       allowGpuAcceleration: parseOptions?.device === 'coreml' && modelPaths.length > 0,
@@ -399,12 +446,12 @@ export class ResearchToolchain {
     throw new ResearchProcessError('research_operation_unknown');
   }
 
-  private async environment(root: string, jobDir: string): Promise<NodeJS.ProcessEnv> {
+  private async baseEnvironment(root: string, jobDir: string, includeRuntimeTools: boolean): Promise<NodeJS.ProcessEnv> {
     const temporary = await createResearchDirectory(jobDir, 'tmp');
     const cache = await createResearchDirectory(jobDir, 'cache');
-    return { PATH: `${join(root, 'python/bin')}:${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
-      TMPDIR: temporary, XDG_CACHE_HOME: cache, MPLCONFIGDIR: join(cache, 'matplotlib'), TECTONIC_CACHE_DIR: join(cache, 'tectonic'),
-      PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1' };
+    const systemPath = '/usr/bin:/bin:/usr/sbin:/sbin';
+    return { PATH: includeRuntimeTools ? `${join(root, 'bin')}:${systemPath}` : systemPath, LANG: 'en_US.UTF-8',
+      TMPDIR: temporary, XDG_CACHE_HOME: cache, TECTONIC_CACHE_DIR: join(cache, 'tectonic') };
   }
 
   private async resolve(): Promise<ResolvedToolchain> {

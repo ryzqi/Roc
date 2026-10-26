@@ -8,7 +8,12 @@ type SnapshotEnvironment = Pick<ResearchExperimentEnvironment, 'hash' | 'lockFil
 type SnapshotRequest = ResearchExperimentStart | ResearchFigureStart;
 
 export const experimentFileLimit = 64 * 1024 * 1024;
-const experimentTotalLimit = 256 * 1024 * 1024;
+export const experimentInputTotalLimit = 256 * 1024 * 1024;
+export const experimentOutputTotalLimit = 128 * 1024 * 1024;
+export const experimentCsvRowLimit = 100_000;
+export const experimentRunnerRequestLimit = 4 * 1024 * 1024;
+export const experimentFileCountLimit = 1000;
+export const experimentDirectoryEntryLimit = 2000;
 
 export async function experimentStorage(path: string | null): Promise<string> {
   if (path === null || !isAbsolute(path)) throw new Error('research_experiment_storage_unavailable');
@@ -20,7 +25,8 @@ export async function experimentStorage(path: string | null): Promise<string> {
 export async function snapshotExperimentInputs(workspace: string, target: string, request: SnapshotRequest,
   environment: SnapshotEnvironment, signal: AbortSignal, generatedInputs: Record<string, string> = {}): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
   const lockFiles = 'lockFiles' in environment ? environment.lockFiles : [];
-  const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...lockFiles.map((file) => file.path)])].sort();
+  const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...lockFiles.map((file) => file.path)])]
+    .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
   if (Object.keys(generatedInputs).some((path) => paths.includes(path))) throw new Error('research_experiment_reserved_input');
   const files: ResearchExperimentFile[] = [];
   let total = 0;
@@ -28,7 +34,7 @@ export async function snapshotExperimentInputs(workspace: string, target: string
     signal.throwIfAborted();
     const bytes = await readResearchFile(workspace, path, experimentFileLimit);
     total += bytes.length;
-    if (total > experimentTotalLimit) throw new Error('research_experiment_input_limit');
+    if (total > experimentInputTotalLimit) throw new Error('research_experiment_input_limit');
     const parent = dirname(path);
     if (parent !== '.') await createResearchDirectory(target, parent);
     await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
@@ -40,23 +46,28 @@ export async function snapshotExperimentInputs(workspace: string, target: string
     const lock = lockFiles.find((entry) => entry.path === file.path);
     if (lock !== undefined && lock.sha256 !== file.sha256) throw new Error('research_experiment_environment_changed');
   }
-  for (const [path, content] of Object.entries(generatedInputs).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [path, content] of Object.entries(generatedInputs).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
     signal.throwIfAborted();
     researchRelativePath(path);
     const bytes = Buffer.from(content, 'utf8');
     total += bytes.length;
-    if (bytes.length > experimentFileLimit || total > experimentTotalLimit) throw new Error('research_experiment_input_limit');
+    if (bytes.length > experimentFileLimit || total > experimentInputTotalLimit) throw new Error('research_experiment_input_limit');
     const parent = dirname(path);
     if (parent !== '.') await createResearchDirectory(target, parent);
     await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
     files.push({ area: 'input', path, size: bytes.length, sha256: researchContentHash(bytes) });
   }
-  const isFigure = 'sourceVersion' in request;
-  const identity = isFigure
-    ? { kind: 'figure' as const, engine: request.engine, sourceVersion: request.sourceVersion, figure: request.figure }
-    : { kind: 'experiment' as const, engine: request.engine, network: request.network };
-  const argumentsList = isFigure ? [] : request.arguments;
-  const parameters = isFigure ? [] : Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right));
+  const identity = (() => {
+    switch (request.engine) {
+      case 'vega-lite': return { kind: 'figure' as const, engine: request.engine, sourceVersion: request.sourceVersion, figure: request.figure };
+      case 'typescript': return { kind: 'experiment' as const, engine: request.engine, sourceVersion: request.sourceVersion, network: request.network };
+      case 'r':
+      case 'julia': return { kind: 'experiment' as const, engine: request.engine, network: request.network };
+      default: throw new Error('research_experiment_engine_unsupported');
+    }
+  })();
+  const argumentsList = 'arguments' in request ? request.arguments : [];
+  const parameters = 'parameters' in request ? Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right)) : [];
   return { files, hash: researchContentHash(JSON.stringify({ ...identity, source: request.sourcePath, files,
     arguments: argumentsList, parameters, environment: environment.hash })) };
 }
@@ -67,14 +78,14 @@ export async function collectExperimentFiles(root: string, area: ResearchExperim
   let entries = 0;
   async function visit(directory: string, prefix: string): Promise<void> {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (++entries > 2000) throw new Error('research_experiment_output_limit');
+      if (++entries > experimentDirectoryEntryLimit) throw new Error('research_experiment_output_limit');
       const path = researchRelativePath(prefix ? `${prefix}/${entry.name}` : entry.name);
       if (entry.isDirectory()) await visit(join(directory, entry.name), path);
       else {
-        if (!entry.isFile() || files.length >= 1000) throw new Error('research_experiment_output_invalid');
+        if (!entry.isFile() || files.length >= experimentFileCountLimit) throw new Error('research_experiment_output_invalid');
         const bytes = await readResearchFile(root, path, experimentFileLimit);
         total += bytes.length;
-        if (total > experimentTotalLimit) throw new Error('research_experiment_output_limit');
+        if (total > (area === 'output' ? experimentOutputTotalLimit : experimentInputTotalLimit)) throw new Error('research_experiment_output_limit');
         files.push({ area, path, size: bytes.length, sha256: researchContentHash(bytes) });
       }
     }

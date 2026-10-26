@@ -97,13 +97,10 @@ function smokeEnvironment(toolchain: string, temporary: string, cache: string): 
     const value = process.env[key];
     if (value !== undefined) environment[key] = value;
   }
-  environment.PATH = `${toolchain}/python/bin:${toolchain}/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
+  environment.PATH = `${toolchain}/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
   environment.TMPDIR = temporary;
   environment.XDG_CACHE_HOME = cache;
-  environment.MPLCONFIGDIR = join(cache, 'matplotlib');
   environment.TECTONIC_CACHE_DIR = join(cache, 'tectonic');
-  environment.PYTHONDONTWRITEBYTECODE = '1';
-  environment.PYTHONNOUSERSITE = '1';
   return environment;
 }
 
@@ -172,7 +169,6 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   const cache = join(output, 'cache');
   const temporary = join(cache, 'tmp');
   await mkdir(temporary, { recursive: true });
-  const python = join(toolchain, 'python/bin/python3');
   const environment = smokeEnvironment(toolchain, temporary, cache);
   const run = (
     label: string,
@@ -199,8 +195,6 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     return response.result;
   };
 
-  await run('network-denied', [python, '-I', '-B', '-c',
-    "import socket\ns=socket.socket()\ntry:\n s.connect(('1.1.1.1',443))\nexcept PermissionError:\n print('network denied')\nelse:\n raise RuntimeError('network was not denied')\nfinally:\n s.close()"]);
   const figureInput = join(output, 'input');
   await mkdir(figureInput, { recursive: true });
   await writeFile(join(figureInput, 'results.csv'), 'Group,Improvement\nControl,10\nTreatment,50\n', 'utf8');
@@ -277,7 +271,6 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   if (!parsedHtml.content.includes('研究方法') || !parsedHtml.content.includes('18')) {
     fail('research_smoke_html_incomplete');
   }
-  await run('relocated-interpreter', [python, '-I', '-B', '-c', "print('relocated')"], { timeoutMs: 30_000 });
   await verifyManifest(toolchain);
   const result: SmokeResult = {
     architecture: manifest.architecture,

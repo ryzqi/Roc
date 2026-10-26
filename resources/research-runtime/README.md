@@ -10,7 +10,7 @@
 
 ## Python 与科研工具
 
-随应用分发的 CPython 3.12.15 目前只服务尚未迁移的 Python 数据实验；Matplotlib 3.11.2 保留为这类实验的环境依赖。科研图稿已使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染，不调用 Python。数据实验完成迁移后会移除 Python 运行时。
+随应用分发的 CPython 3.12.15 暂时保留在工具链中，供后续移除 Python runtime 的打包任务清理；新建实验不再接受 Python，历史 Python 运行只读。Matplotlib 3.11.2 仍留在旧锁定环境中，已经不承担图稿渲染；确认数据任务迁移后会连同 Python runtime 一起移除。新实验使用 Electron 45 内置的 Node 24.22.0 执行版本化 `.mts` 源码，Node 原生剥离 TypeScript 类型，不额外安装转译器。TypeScript 实验通过 `run(context)` 接口读取快照、处理参数并写入受限输出目录，只有 `d3-dsv`、`csv-parse` 和 `simple-statistics` 这组锁定依赖可被运行器加载。科研图稿使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染。
 
 Vale 3.24.0 与仓库内 `vale/` 规则集用于文稿检查（合同见 `docs/research-prose.md`）。Typst 0.15.0 只负责导出附带的 `report.pdf`（`src/main/plugins/research/typst-report.ts`），不进入 LaTeX 主链。`csl/` 保存 APA、IEEE、GB/T 7714 引用格式数据；TeX 离线子集由 `tex-bundle-files.txt` 固定。
 
@@ -24,6 +24,6 @@ pnpm exec tsx scripts/research/manifest.ts --root .runtime/research-toolchain/da
 pnpm exec tsx scripts/research/smoke.ts --toolchain .runtime/research-toolchain/darwin-arm64 --models .runtime/research-models --output .artifacts/research-toolchain-smoke
 ```
 
-`prepare.ts` 按 `tools.lock.json`、`uv.lock` 与 TeX 文件清单组装剩余工具，生成逐文件完整性清单和实际 Python 包许可证索引。生成的解释器、环境与第三方二进制在 `.runtime/`，不提交到源码仓库。输出目录必须不存在；已存在时只做完整性校验，不覆盖。
+`prepare.ts` 按 `tools.lock.json`、`uv.lock` 与 TeX 文件清单组装剩余工具，并把根目录 `.py` 和 `.mts` 运行器一并逐文件哈希，生成完整性清单和实际 Python 包许可证索引。生成的解释器、环境与第三方二进制在 `.runtime/`，不提交到源码仓库。输出目录必须不存在；已存在时只做完整性校验，不覆盖。
 
 `smoke.ts` 保留 LaTeX 编译、主进程 PDF 渲染、原生 OCR/表格/公式/图稿解析以及 Vega-Lite PNG/SVG/PDF 图稿渲染覆盖。解析样例通过同一个 `research-job-cli.ts` 和 v3 结果契约运行。

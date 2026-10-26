@@ -126,7 +126,9 @@ export class ResearchFigureRepository {
 }
 
 export function assertFigureRun(run: ResearchFigureRun, input: ResearchFigureValidation): void {
-  const validation = researchFigureValidationSchema.parse(input);
+  const parsedValidation = researchFigureValidationSchema.safeParse(input);
+  if (!parsedValidation.success) throw new Error('research_figure_validation_invalid');
+  const validation = parsedValidation.data;
   if (run.status !== 'completed' || run.inputHash === null || run.environment === null) {
     throw new Error('research_figure_render_required');
   }

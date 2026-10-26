@@ -1,17 +1,23 @@
 import { lstat, mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
-import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment, type ResearchExperimentRuntime } from '../../../shared/schemas/research-experiments';
-import type { PreparedExperimentEnvironment } from './experiment-environment';
+import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment } from '../../../shared/schemas/research-experiments';
+import type { NativeRuntime, NativeTools, PreparedExperimentEnvironment } from './experiment-environment';
 import { juliaEnvironmentProbe, juliaExperimentFlags, normalizeNativeEnvironmentReport, rEnvironmentProbe, rExperimentCommand } from './experiment-native-probes';
+import { experimentDirectoryEntryLimit, experimentFileCountLimit, experimentFileLimit, experimentOutputTotalLimit } from './experiment-files';
 import { rProcessBridgeHash, runRExperimentProcess } from './experiment-native-process';
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
-import type { ResearchToolchain } from './toolchain';
 
-type NativeRuntime = Extract<ResearchExperimentRuntime, { kind: 'renv' | 'julia' }>;
-type Tools = Awaited<ReturnType<ResearchToolchain['experimentRuntime']>>;
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
+type NativeEnvironmentInspectionInput = {
+  workspace: string;
+  runtime: NativeRuntime;
+  jobDir: string;
+  tools: NativeTools;
+  run: ProcessRun;
+  signal: AbortSignal;
+};
 const reportSchema = z.object({
   version: z.string().min(1), platform: z.string().min(1), architecture: z.string().min(1), prefix: z.string().min(1), basePrefix: z.string().min(1),
   packages: z.array(z.object({ name: z.string().min(1), versions: z.array(z.string().min(1)).max(1) }).strict()).max(10000),
@@ -19,8 +25,7 @@ const reportSchema = z.object({
   controls: z.array(z.object({ path: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/u) }).strict()).max(1000)
 }).strict();
 
-export async function inspectNativeExperimentEnvironment(workspace: string, runtime: NativeRuntime, jobDir: string,
-  tools: Tools, run: ProcessRun, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
+export async function inspectNativeExperimentEnvironment({ workspace, runtime, jobDir, tools, run, signal }: NativeEnvironmentInspectionInput): Promise<PreparedExperimentEnvironment> {
   const root = await realpath(runtime.rootPath);
   const executable = await researchPath(root, runtime.kind === 'renv' ? 'bin/exec/R' : 'bin/julia');
   const beforeExecutable = researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024));
@@ -30,7 +35,8 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
   let prefix: string;
   if (runtime.kind === 'renv') {
     prefix = await researchPath(workspace, runtime.libraryPath);
-    if (!(await lstat(prefix)).isDirectory()) throw new Error('research_experiment_library_required');
+    const prefixInfo = await lstat(prefix);
+    if (!prefixInfo.isDirectory()) throw new Error('research_experiment_library_required');
     readablePaths.push(prefix, ...await rPackageRoots(prefix, signal));
     for (const path of ['renv.lock', 'renv/settings.json']) {
       if (path !== 'renv.lock' && !await exists(join(workspace, path))) continue;
@@ -41,7 +47,8 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
       RENV_CONFIG_CACHE_ENABLED: 'FALSE', RENV_CONFIG_AUTOLOADER_ENABLED: 'FALSE', RENV_CONFIG_AUTO_SNAPSHOT: 'FALSE' });
   } else {
     prefix = await realpath(runtime.depotPath);
-    if (!(await lstat(prefix)).isDirectory()) throw new Error('research_experiment_depot_required');
+    const prefixInfo = await lstat(prefix);
+    if (!prefixInfo.isDirectory()) throw new Error('research_experiment_depot_required');
     for (const path of ['packages', 'artifacts', 'compiled', 'scratchspaces']) if (await exists(join(prefix, path))) readablePaths.push(await researchPath(prefix, path));
     Object.assign(environment, { JULIA_DEPOT_PATH: `${await createResearchDirectory(jobDir, 'julia-depot')}:${prefix}:${join(root, 'share/julia')}`, JULIA_LOAD_PATH: '@:@stdlib',
       JULIA_PKG_OFFLINE: 'true', JULIA_PKG_PRECOMPILE_AUTO: '0', JULIA_HISTORY: join(jobDir, 'julia-history') });
@@ -54,6 +61,8 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
       : { command: executable, args: [...juliaExperimentFlags, `--project=${workspace}`, '-e', juliaEnvironmentProbe] };
     const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, workspace], writablePaths: [jobDir],
       additionalExecutables: [executable], environment: { ...environment, ROC_PROJECT_ROOT: workspace, ROC_R_LIBRARY: prefix, ROC_JULIA_DEPOT: prefix, ROC_ENVIRONMENT_REPORT: reportPath },
+      writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
+        maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
       timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);
@@ -94,7 +103,7 @@ export async function inspectNativeExperimentEnvironment(workspace: string, runt
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
       toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ executable: beforeExecutable, metadata, bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
-    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, python: tools.python };
+    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null };
   } finally { await rm(probe, { recursive: true, force: true }); }
 }
 

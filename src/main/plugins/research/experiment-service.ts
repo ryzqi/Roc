@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
-  type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+  type ResearchExperimentStartRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
-import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
+import { collectExperimentFiles, experimentCsvRowLimit, experimentFileLimit, experimentInputTotalLimit, experimentOutputTotalLimit,
+  experimentRunnerRequestLimit, experimentFileCountLimit, experimentDirectoryEntryLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
 import { runRExperimentProcess } from './experiment-native-process';
 import { indexText } from './index-files';
@@ -16,6 +17,22 @@ import { createResearchDirectory, readResearchFile, researchContentHash, researc
 import type { ResearchRepository } from './repository';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
+type ExecuteProcessInput = {
+  request: ResearchExperimentStart;
+  prepared: PreparedExperimentEnvironment;
+  input: string;
+  output: string;
+  scratch: string;
+  signal: AbortSignal;
+};
+
+function cancelledExecutionStatus(sessionClosed: boolean): 'interrupted' | 'cancelled' {
+  return sessionClosed ? 'interrupted' : 'cancelled';
+}
+
+function cancelledExecutionError(sessionClosed: boolean): string {
+  return sessionClosed ? 'research_experiment_interrupted' : 'research_experiment_cancelled';
+}
 
 export class ResearchExperimentService {
   private readonly session = new ResearchJobSession('research_experiment_closed');
@@ -29,7 +46,7 @@ export class ResearchExperimentService {
 
   recover(): void { this.repository.experiments.recover(); }
 
-  async inspect(projectId: string, runtime: ResearchExperimentRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
+  async inspect(projectId: string, runtime: ResearchExperimentStartRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
     return await this.session.run(async (signal) => {
       const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);
@@ -39,7 +56,7 @@ export class ResearchExperimentService {
     });
   }
 
-  inspectWorkspace(workspace: string, runtime: ResearchExperimentRuntime, scratch: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
+  inspectWorkspace(workspace: string, runtime: ResearchExperimentStartRuntime, scratch: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
     return this.environments.inspect(workspace, runtime, scratch, signal);
   }
 
@@ -159,60 +176,138 @@ export class ResearchExperimentService {
     let failure: unknown;
     let prepared: PreparedExperimentEnvironment | null = null;
     try {
+      const parsedRequest = researchExperimentStartSchema.safeParse(initial.request);
+      if (!parsedRequest.success) throw new ResearchProcessError('research_experiment_legacy_read_only');
+      const request = parsedRequest.data;
       const workspace = await this.verifyProject(initial, signal);
       await mkdir(root, { mode: 0o700 });
       const input = await createResearchDirectory(root, 'input');
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
-      if (initial.request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal);
+      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal);
+      if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
+      const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal);
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
-      output = await this.executeProcess(initial, prepared, input, out, scratch, signal);
+      output = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
-      const current = await this.environments.inspect(workspace, initial.request.runtime, scratch, signal);
+      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal);
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
       failure = error;
       if (error instanceof ResearchProcessError) output = { exitCode: 1, stdout: output.stdout + error.stdout, stderr: output.stderr + error.stderr };
+      if (error instanceof ResearchProcessError && error.code === 'research_process_write_limit') {
+        try {
+          await rm(join(root, 'output'), { recursive: true, force: true });
+          await mkdir(join(root, 'output'), { mode: 0o700 });
+        } catch {
+          failure = new ResearchProcessError('research_experiment_output_cleanup_failed');
+        }
+      }
+    }
+    if (files.some((file) => file.area === 'input')) {
+      try {
+        await this.verifyInputSnapshot(root, files);
+      } catch {
+        failure = new ResearchProcessError('research_experiment_snapshot_changed');
+        output = { exitCode: 1, stdout: output.stdout, stderr: `${output.stderr}research_experiment_snapshot_changed\n` };
+        try {
+          await rm(join(root, 'output'), { recursive: true, force: true });
+          await mkdir(join(root, 'output'), { mode: 0o700 });
+        } catch {
+          failure = new ResearchProcessError('research_experiment_output_cleanup_failed');
+        }
+      }
     }
     try {
       await createResearchDirectory(root, 'log');
       await writeFile(join(root, 'log/stdout.txt'), output.stdout, { flag: 'wx', mode: 0o400 });
       await writeFile(join(root, 'log/stderr.txt'), output.stderr, { flag: 'wx', mode: 0o400 });
       files.push(...await collectExperimentFiles(join(root, 'log'), 'log'));
-      if (prepared !== null) {
-        files.push(...await collectExperimentFiles(join(root, 'output'), 'output'));
+      if (prepared !== null) files.push(...await collectExperimentFiles(join(root, 'output'), 'output'));
+      let status: ResearchExperimentExecution['status'];
+      let error: string | null;
+      if (signal.aborted) {
+        status = cancelledExecutionStatus(this.session.isClosed);
+        error = cancelledExecutionError(this.session.isClosed);
+      } else if (failure === undefined) {
+        status = 'completed';
+        error = null;
+      } else {
+        status = 'failed';
+        error = errorCode(failure);
       }
-      const status = signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : failure === undefined ? 'completed' : 'failed';
-      const error = signal.aborted ? this.session.isClosed ? 'research_experiment_interrupted' : 'research_experiment_cancelled' : failure === undefined ? null : errorCode(failure);
       const documents = status === 'completed' ? await this.indexDocuments(initial, files) : [];
       if (status === 'completed') await this.verifyProject(initial, signal);
       this.repository.experiments.finish(initial.projectId, initial.id, { status, files, exitCode: prepared === null ? null : output.exitCode, error }, documents);
     } catch (error) {
-      this.repository.experiments.finish(initial.projectId, initial.id, { status: signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : 'failed',
-        files, exitCode: output.exitCode, error: errorCode(error) });
+      this.repository.experiments.finish(initial.projectId, initial.id, { status: signal.aborted ? cancelledExecutionStatus(this.session.isClosed) : 'failed',
+        files, exitCode: output.exitCode, error: signal.aborted ? cancelledExecutionError(this.session.isClosed) : errorCode(error) });
     } finally {
       await rm(join(root, 'scratch'), { recursive: true, force: true });
     }
   }
 
-  private async executeProcess(run: ResearchExperimentExecution, prepared: PreparedExperimentEnvironment, input: string, output: string, scratch: string, signal: AbortSignal): Promise<ResearchProcessResult> {
-    const request = run.request;
+  private async verifyInputSnapshot(root: string, files: readonly ResearchExperimentFile[]): Promise<void> {
+    const expected = files.filter((file) => file.area === 'input');
+    const actual = await collectExperimentFiles(join(root, 'input'), 'input');
+    const expectedByPath = new Map(expected.map((file) => [file.path, file]));
+    if (actual.length !== expected.length || actual.some((file) => {
+      const original = expectedByPath.get(file.path);
+      return original === undefined || original.sha256 !== file.sha256 || original.size !== file.size;
+    })) throw new ResearchProcessError('research_experiment_snapshot_changed');
+    for (const file of actual) {
+      const info = await lstat(join(root, 'input', file.path));
+      if (info.nlink !== 1) throw new ResearchProcessError('research_experiment_snapshot_changed');
+    }
+  }
+
+  private async executeProcess({ request, prepared, input, output, scratch, signal }: ExecuteProcessInput): Promise<ResearchProcessResult> {
+    const writeLimits = [output, scratch].map((path) => ({ path, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
+      maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }));
+    if (request.engine === 'typescript') {
+      const runtime = prepared.typescriptRuntime;
+      if (runtime === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
+      const readablePaths = [...new Set([...prepared.readablePaths, input, runtime.executable])];
+      const args = ['--permission', ...readablePaths.map((path) => `--allow-fs-read=${path}`),
+        ...[output, scratch].map((path) => `--allow-fs-write=${path}`), runtime.runnerPath];
+      const runnerInput = JSON.stringify({ contractVersion: request.sourceVersion, sourcePath: request.sourcePath, inputPaths: request.inputPaths,
+        inputDir: input, outputDir: output, parameters: request.parameters, packageEntries: runtime.packageEntries,
+        limits: { inputFileBytes: experimentFileLimit, totalInputBytes: experimentInputTotalLimit, csvRows: experimentCsvRowLimit,
+          outputFileBytes: experimentFileLimit, totalOutputBytes: experimentOutputTotalLimit, outputFiles: experimentFileCountLimit } });
+      if (Buffer.byteLength(runnerInput, 'utf8') > experimentRunnerRequestLimit) throw new ResearchProcessError('research_experiment_request_limit');
+      const processRequest: ResearchProcessRequest = {
+        command: runtime.executable,
+        args,
+        additionalExecutables: [runtime.executable],
+        cwd: input,
+        readablePaths,
+        writablePaths: [output, scratch],
+        environment: { ...prepared.environment, ELECTRON_RUN_AS_NODE: '1' },
+        input: runnerInput,
+        maxOutputBytes: 16 * 1024 * 1024,
+        writeLimits,
+        timeoutMs: request.timeoutMs,
+        signal,
+        allowGpuAcceleration: false,
+        allowPosixSpawn: false,
+        networkAccess: request.network === 'enabled' ? 'full' : 'none'
+      };
+      return await this.run(processRequest);
+    }
     const executable = prepared.snapshot.executable;
-    const environment = { ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
+    const environment = { ...prepared.environment, PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
       ROC_PARAMETERS_JSON: JSON.stringify(request.parameters) };
     const source = join(input, request.sourcePath);
     const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
-      : request.engine === 'julia' ? { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] }
-      : { command: executable, args: ['-B', '-s', source, ...request.arguments] };
+      : { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] };
     const processRequest: ResearchProcessRequest = { ...command,
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
       writablePaths: [output, scratch], environment,
+      writeLimits,
       timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }

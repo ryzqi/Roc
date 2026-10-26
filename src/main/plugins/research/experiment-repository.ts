@@ -9,13 +9,25 @@ import type { ResearchArtifact, ResearchExperimentRun, ResearchExperimentRunReco
 type ExecutionRow = { snapshot_json: string; root_path: string };
 const activeStatuses = new Set<ResearchExperimentExecution['status']>(['preparing', 'running']);
 
+function readExecutionSnapshot(snapshotJson: string): ResearchExperimentExecution {
+  let value: unknown;
+  try {
+    value = JSON.parse(snapshotJson) as unknown;
+  } catch {
+    throw new Error('research_experiment_snapshot_invalid');
+  }
+  const parsed = researchExperimentExecutionSchema.safeParse(value);
+  if (!parsed.success) throw new Error('research_experiment_snapshot_invalid');
+  return parsed.data;
+}
+
 export class ResearchExperimentRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
   existing(projectId: string, requestId: string): ResearchExperimentExecution | null {
     this.research.getProject(projectId);
     const row = this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? AND request_id = ?').get(projectId, requestId) as ExecutionRow | undefined;
-    return row === undefined ? null : researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json));
+    return row === undefined ? null : readExecutionSnapshot(row.snapshot_json);
   }
 
   create(request: ResearchExperimentStart, workspace: string, workspaceRoot: string, storage: string): ResearchExperimentExecution {
@@ -36,9 +48,10 @@ export class ResearchExperimentRepository {
       if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, request.projectId);
       const run = researchExperimentExecutionSchema.parse({ id, projectId: request.projectId, request, ownerRunId, workspacePath: workspace, workspaceRoot,
         status: 'preparing', environment: null, files: [], inputHash: null, exitCode: null, error: null, artifactId: null, createdAt, startedAt: null, endedAt: null });
+      const command = request.engine === 'typescript' ? ['typescript-v1', request.sourcePath] : [request.sourcePath, ...request.arguments];
       this.db.prepare(`INSERT INTO research_experiment_runs
         (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
-        VALUES (?,?,?,?,?,?,'running','[]',?,NULL)`).run(id, run.projectId, request.label, JSON.stringify([request.sourcePath, ...request.arguments]), JSON.stringify(request.parameters), '{}', createdAt);
+        VALUES (?,?,?,?,?,?,'running','[]',?,NULL)`).run(id, run.projectId, request.label, JSON.stringify(command), JSON.stringify(request.parameters), '{}', createdAt);
       this.db.prepare(`INSERT INTO research_experiment_executions (run_id,project_id,request_id,status,snapshot_json,root_path,created_at)
         VALUES (?,?,?,'preparing',?,?,?)`).run(id, run.projectId, request.requestId, JSON.stringify(run), join(storage, id), createdAt);
       this.event(run, 'experiment_queued', '实验已创建，正在校验环境并冻结输入。');
@@ -48,7 +61,7 @@ export class ResearchExperimentRepository {
 
   get(projectId: string, id: string): ResearchExperimentExecution {
     const row = this.row(id);
-    const value = researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json));
+    const value = readExecutionSnapshot(row.snapshot_json);
     if (value.projectId !== projectId) throw new Error('research_experiment_project_mismatch');
     return value;
   }
@@ -88,13 +101,13 @@ export class ResearchExperimentRepository {
   list(projectId: string, limit: number): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? ORDER BY created_at DESC,rowid DESC LIMIT ?')
-      .all(projectId, limit) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+      .all(projectId, limit) as ExecutionRow[]).map((row) => readExecutionSnapshot(row.snapshot_json));
   }
 
   ownedActive(projectId: string, ownerRunId: string): ResearchExperimentExecution[] {
     this.research.getProject(projectId);
     return (this.db.prepare("SELECT snapshot_json FROM research_experiment_executions WHERE project_id = ? AND json_extract(snapshot_json, '$.ownerRunId') = ? AND status IN ('preparing','running')")
-      .all(projectId, ownerRunId) as ExecutionRow[]).map((row) => researchExperimentExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+      .all(projectId, ownerRunId) as ExecutionRow[]).map((row) => readExecutionSnapshot(row.snapshot_json));
   }
 
   start(projectId: string, id: string, environment: ResearchExperimentEnvironment, files: ResearchExperimentFile[], inputHash: string): ResearchExperimentExecution {
@@ -103,9 +116,11 @@ export class ResearchExperimentRepository {
       if (run.status !== 'preparing') throw new Error('research_experiment_already_started');
       const value = { ...run, status: 'running' as const, environment, files, inputHash, startedAt: this.now() };
       this.save(value);
+      const command = run.request.engine === 'typescript'
+        ? [environment.executable, '--permission', run.request.sourcePath]
+        : [environment.executable, run.request.sourcePath, ...run.request.arguments];
       this.db.prepare('UPDATE research_experiment_runs SET command = ?,environment_json = ? WHERE id = ?').run(
-        JSON.stringify([environment.executable, run.request.sourcePath, ...run.request.arguments]),
-        JSON.stringify({ kind: environment.runtime.kind, version: environment.version, hash: environment.hash, toolchainHash: environment.toolchainHash }), id);
+        JSON.stringify(command), JSON.stringify({ kind: environment.runtime.kind, version: environment.version, hash: environment.hash, toolchainHash: environment.toolchainHash }), id);
       for (const file of files) this.research.addProvenance({ projectId, artifactId: null, subjectType: 'experiment', subjectId: id,
         sourceType: 'file', sourceId: file.path, locator: `sha256:${file.sha256}`, excerpt: null });
       this.event(value, 'experiment_started', '环境已校验，实验正在使用冻结的输入运行。');
@@ -136,7 +151,7 @@ export class ResearchExperimentRepository {
       const value = { ...run, ...next, endedAt: this.now() };
       this.save(value);
       this.db.prepare('UPDATE research_experiment_runs SET status = ?,outputs_json = ?,ended_at = ? WHERE id = ?')
-        .run(next.status === 'interrupted' ? 'failed' : next.status, JSON.stringify(next.files.filter((file) => file.area === 'output').map((file) => `${file.area}/${file.path}`)), value.endedAt, id);
+        .run(next.status === 'interrupted' ? 'failed' : next.status, JSON.stringify(next.files.flatMap((file) => file.area === 'output' ? [`${file.area}/${file.path}`] : [])), value.endedAt, id);
       this.event(value, `experiment_${next.status}`, next.status === 'completed' ? '实验完成，输出与日志已保存。' : '实验已结束，详情见运行记录。');
       return value;
     })();

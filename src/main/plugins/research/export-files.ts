@@ -8,7 +8,7 @@ import { createExportZipArchive, exportArchiveLimit, exportFileLimit, exportTota
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchToolchain } from './toolchain';
 
-export type ExportToolchain = Pick<ResearchToolchain, 'status' | 'identity' | 'experimentRuntime' | 'writeBibliography' | 'compile' | 'renderPdf'
+export type ExportToolchain = Pick<ResearchToolchain, 'status' | 'identity' | 'writeBibliography' | 'compile' | 'renderPdf'
   | 'compileTypst' | 'typstStyle'>;
 
 export { archiveSource, exportArchiveLimit, exportFileLimit, exportTotalLimit };
