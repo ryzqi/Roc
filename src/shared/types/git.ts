@@ -4,6 +4,7 @@ import {
   gitBatchFileOperationRequestSchema,
   gitBranchListResultSchema,
   gitBranchMutationResultSchema,
+  gitCancelRequestSchema,
   gitCheckoutBranchRequestSchema,
   gitCommitRequestSchema,
   gitCommitResultSchema,
@@ -12,6 +13,7 @@ import {
   gitFileDiffResultSchema,
   gitFileOperationRequestSchema,
   gitPushResultSchema,
+  gitPushRequestSchema,
   gitStatusResultSchema
 } from '../schemas/ipc-workspace';
 
@@ -22,6 +24,8 @@ export type GitFileDiffResult = z.infer<typeof gitFileDiffResultSchema>;
 export type GitFileOperationRequest = z.infer<typeof gitFileOperationRequestSchema>;
 export type GitBatchFileOperationRequest = z.infer<typeof gitBatchFileOperationRequestSchema>;
 export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
+export type GitPushRequest = z.infer<typeof gitPushRequestSchema>;
+export type GitCancelRequest = z.infer<typeof gitCancelRequestSchema>;
 export type GitBranchListResult = z.infer<typeof gitBranchListResultSchema>;
 export type GitBranchSummary = GitBranchListResult['branches'][number];
 export type GitCreateBranchRequest = z.infer<typeof gitCreateBranchRequestSchema>;

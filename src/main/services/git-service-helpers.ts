@@ -32,7 +32,9 @@ export function parseGitStatusChanges(rawStatus: string): GitStatusChange[] {
 }
 
 export function normalizeGitPath(relativePath: string): string {
-  const normalizedPath = relativePath.trim();
+  // File names may legitimately start or end with whitespace. Keep the path
+  // byte-for-byte as reported by Git instead of treating it like user prose.
+  const normalizedPath = relativePath;
   if (normalizedPath.length === 0 || normalizedPath === '.') {
     throw new RocDomainError({
       code: 'git_file_path_empty',
@@ -40,6 +42,15 @@ export function normalizeGitPath(relativePath: string): string {
       category: 'validation',
       retryable: true,
       userAction: '请选择一个具体文件后再执行 Git 操作。'
+    });
+  }
+  if (normalizedPath.includes('\0')) {
+    throw new RocDomainError({
+      code: 'git_file_path_invalid',
+      message: 'Git 文件路径包含无效字符。',
+      category: 'validation',
+      retryable: false,
+      userAction: '请重新选择工作区内的文件。'
     });
   }
   const pathParts = normalizedPath.split('/');
@@ -103,6 +114,37 @@ export function isGitDiffExitCodeOne(error: unknown): error is { status: number;
 }
 
 export function toGitCommandError(args: string[], error: unknown): RocDomainError {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  if (code === 'ABORT_ERR') {
+    return new RocDomainError({
+      code: 'git_command_cancelled',
+      message: 'Git 操作已取消。',
+      category: 'conflict',
+      retryable: true,
+      userAction: '需要时可以重新执行此 Git 操作。'
+    });
+  }
+  if (code === 'ETIMEDOUT') {
+    return new RocDomainError({
+      code: 'git_command_timeout',
+      message: 'Git 操作超时。',
+      category: 'external',
+      retryable: true,
+      userAction: '请检查网络连接或 Git 认证后重试。'
+    });
+  }
+  if (code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    return new RocDomainError({
+      code: 'git_output_limit_exceeded',
+      message: 'Git 命令输出超过安全上限。',
+      category: 'external',
+      retryable: false,
+      userAction: '请缩小本次 Git 操作涉及的文件范围。'
+    });
+  }
   const stderr =
     typeof error === 'object' &&
     error !== null &&

@@ -307,8 +307,12 @@ export function gitCommit(client: RocClient, message: string): Promise<IpcLikeRe
   return client.api.git.commit({ message });
 }
 
-export function gitPush(client: RocClient): Promise<IpcLikeResult<GitPushResult>> {
-  return client.api.git.push();
+export function gitPush(client: RocClient, operationId: string): Promise<IpcLikeResult<GitPushResult>> {
+  return client.api.git.push({ operationId });
+}
+
+export function gitCancelPush(client: RocClient, operationId: string): Promise<IpcLikeResult<boolean>> {
+  return client.api.git.cancel({ operationId });
 }
 
 export function gitListBranches(client: RocClient): Promise<IpcLikeResult<GitBranchListResult>> {

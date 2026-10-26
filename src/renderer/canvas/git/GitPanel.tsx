@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GitBranch, History, Loader2, RefreshCw, Upload } from 'lucide-react';
+import { GitBranch, History, Loader2, RefreshCw, Upload, X } from 'lucide-react';
 import { BACKEND_ERROR_CODES } from '../../app/loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { ErrorBar } from '../../shell/ErrorBar';
@@ -121,17 +121,31 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
           {currentBranch.length === 0 ? '无分支信息' : currentBranch}
         </span>
       </button>
-      <button
-        type="button"
-        disabled={busy || !writable || workspacePath === null}
-        onClick={() => void git.push()}
-        data-testid="git-push"
-        title={writable ? '推送当前分支' : '项目已归档，无法推送'}
-        className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
-      >
-        <Upload size={12} aria-hidden="true" />
-        <span className="text-[var(--font-micro-size)]">Push</span>
-      </button>
+      {git.pending === 'push' ? (
+        <button
+          type="button"
+          onClick={() => void git.cancelPush()}
+          aria-label="取消 Git 推送"
+          data-testid="git-cancel-push"
+          title="停止当前推送"
+          className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2"
+        >
+          <X size={12} aria-hidden="true" />
+          <span className="text-[var(--font-micro-size)]">取消</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={busy || !writable || workspacePath === null}
+          onClick={() => void git.push()}
+          data-testid="git-push"
+          title={writable ? '推送当前分支' : '项目已归档，无法推送'}
+          className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+        >
+          <Upload size={12} aria-hidden="true" />
+          <span className="text-[var(--font-micro-size)]">Push</span>
+        </button>
+      )}
       <button
         type="button"
         disabled={busy || workspacePath === null}

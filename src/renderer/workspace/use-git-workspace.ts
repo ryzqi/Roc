@@ -10,6 +10,7 @@ import type { RocClient } from '../shared/roc-client';
 import { WATCH_REFRESH_WINDOW_MS } from './watch-refresh';
 import {
   findNextGitSelection,
+  gitCancelPush,
   gitCheckoutBranch,
   gitCommit,
   gitCreateBranch,
@@ -71,6 +72,7 @@ export type GitWorkspace = {
   discard: (relativePath: string) => Promise<void>;
   commit: (message: string) => Promise<boolean>;
   push: () => Promise<boolean>;
+  cancelPush: () => Promise<void>;
   createBranch: (name: string, checkoutAfterCreate: boolean) => Promise<boolean>;
   checkoutBranch: (name: string) => Promise<boolean>;
 };
@@ -88,6 +90,19 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastCommit, setLastCommit] = useState<GitCommitResult | null>(null);
   const [lastPush, setLastPush] = useState<GitPushResult | null>(null);
+  const pushOperationId = useRef<string | null>(null);
+  const pushWorkspacePath = useRef<string | null>(null);
+  const pushWorkspaceGeneration = useRef<number | null>(null);
+  const workspacePathRef = useRef(workspacePath);
+  const previousWorkspacePath = useRef(workspacePath);
+  const workspaceGeneration = useRef(0);
+  workspacePathRef.current = workspacePath;
+
+  const isCurrentWorkspaceScope = useCallback(
+    (operationWorkspacePath: string | null, operationGeneration: number): boolean =>
+      workspacePathRef.current === operationWorkspacePath && workspaceGeneration.current === operationGeneration,
+    []
+  );
 
   // Bumped on every workspace change and on every full reload: results that
   // belong to an older scope are dropped instead of overwriting the new one.
@@ -103,6 +118,8 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
   }, []);
 
   const load = useCallback(async (): Promise<void> => {
+    requestSeq.current += 1;
+    const seq = requestSeq.current;
     if (workspacePath === null) {
       setPhase('idle');
       setSnapshot(null);
@@ -111,8 +128,6 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       setError(null);
       return;
     }
-    requestSeq.current += 1;
-    const seq = requestSeq.current;
     setPhase('loading');
     setError(null);
     setErrorCode(undefined);
@@ -153,6 +168,38 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
   }, [client, workspacePath, applyStatus]);
 
   useEffect(() => {
+    if (previousWorkspacePath.current !== workspacePath) {
+      previousWorkspacePath.current = workspacePath;
+      workspaceGeneration.current += 1;
+    }
+    const activePushId = pushOperationId.current;
+    const activePushWorkspace = pushWorkspacePath.current;
+    const activePushGeneration = pushWorkspaceGeneration.current;
+    if (
+      activePushId !== null &&
+      (activePushWorkspace !== workspacePath || activePushGeneration !== workspaceGeneration.current)
+    ) {
+      pushOperationId.current = null;
+      pushWorkspacePath.current = null;
+      pushWorkspaceGeneration.current = null;
+      setPending((current) => current === 'push' ? null : current);
+      void gitCancelPush(client, activePushId).then((result) => {
+        if (
+          !result.ok &&
+          activePushGeneration !== null &&
+          isCurrentWorkspaceScope(activePushWorkspace, activePushGeneration)
+        ) {
+          setActionError(result.error.message);
+        }
+      }, (error: unknown) => {
+        if (
+          activePushGeneration !== null &&
+          isCurrentWorkspaceScope(activePushWorkspace, activePushGeneration)
+        ) {
+          setActionError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    }
     // Reset before loading so a project switch never shows the previous
     // repository's branch, changes or selection.
     setSnapshot(null);
@@ -164,14 +211,20 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
     setActionError(null);
     setLastCommit(null);
     setLastPush(null);
+    setPending(null);
     void load();
-  }, [load]);
+  }, [client, isCurrentWorkspaceScope, load, workspacePath]);
 
   const refresh = useCallback(async (): Promise<void> => {
+    const operationWorkspacePath = workspacePath;
+    const operationGeneration = workspaceGeneration.current;
     setPending('refresh');
-    await load();
-    setPending(null);
-  }, [load]);
+    try {
+      await load();
+    } finally {
+      if (isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) setPending(null);
+    }
+  }, [isCurrentWorkspaceScope, load, workspacePath]);
 
   /**
    * Re-reads status + diffStat only.
@@ -269,9 +322,12 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       action: GitActionName,
       operation: () => Promise<{ ok: true; data: GitStatusResult } | { ok: false; error: { message: string } }>
     ): Promise<void> => {
+      const operationWorkspacePath = workspacePath;
+      const operationGeneration = workspaceGeneration.current;
       setPending(action);
       setActionError(null);
       const result = await operation();
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return;
       if (!result.ok) {
         setActionError(result.error.message);
         setPending(null);
@@ -282,13 +338,14 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       }
       applyStatus(result.data);
       const statResult = await gitDiffStat(client);
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return;
       if (statResult.ok) {
         setDiffStat(statResult.data.stat);
         setDiffStatError(null);
       }
       setPending(null);
     },
-    [applyStatus, client, load]
+    [applyStatus, client, isCurrentWorkspaceScope, load, workspacePath]
   );
 
   const stage = useCallback(
@@ -322,9 +379,12 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
 
   const commit = useCallback(
     async (message: string): Promise<boolean> => {
+      const operationWorkspacePath = workspacePath;
+      const operationGeneration = workspaceGeneration.current;
       setPending('commit');
       setActionError(null);
       const result = await gitCommit(client, message);
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return false;
       setPending(null);
       if (!result.ok) {
         setActionError(result.error.message);
@@ -333,30 +393,68 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       applyStatus(result.data.status);
       setLastCommit(result.data);
       const statResult = await gitDiffStat(client);
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return false;
       if (statResult.ok) {
         setDiffStat(statResult.data.stat);
         setDiffStatError(null);
       }
       return true;
     },
-    [applyStatus, client]
+    [applyStatus, client, isCurrentWorkspaceScope, workspacePath]
   );
 
   const push = useCallback(async (): Promise<boolean> => {
+    const operationId = globalThis.crypto.randomUUID();
+    const operationWorkspacePath = workspacePath;
+    const operationGeneration = workspaceGeneration.current;
+    pushOperationId.current = operationId;
+    pushWorkspacePath.current = operationWorkspacePath;
+    pushWorkspaceGeneration.current = operationGeneration;
     setPending('push');
     setActionError(null);
-    const result = await gitPush(client);
-    setPending(null);
-    if (!result.ok) {
-      // Push failures (no remote, rejected, auth) must show the backend's own
-      // text: git's message is the actionable part.
-      setActionError(result.error.message);
-      return false;
+    try {
+      const result = await gitPush(client, operationId);
+      if (
+        pushOperationId.current !== operationId ||
+        pushWorkspacePath.current !== operationWorkspacePath ||
+        pushWorkspaceGeneration.current !== operationGeneration ||
+        !isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)
+      ) {
+        return false;
+      }
+      if (!result.ok) {
+        // Push failures (no remote, rejected, auth) must show the backend's own
+        // text: git's message is the actionable part.
+        setActionError(result.error.message);
+        return false;
+      }
+      applyStatus(result.data.status);
+      setLastPush(result.data);
+      return true;
+    } finally {
+      if (pushOperationId.current === operationId) {
+        pushOperationId.current = null;
+        pushWorkspacePath.current = null;
+        pushWorkspaceGeneration.current = null;
+        setPending(null);
+      }
     }
-    applyStatus(result.data.status);
-    setLastPush(result.data);
-    return true;
-  }, [applyStatus, client]);
+  }, [applyStatus, client, isCurrentWorkspaceScope, workspacePath]);
+
+  const cancelPush = useCallback(async (): Promise<void> => {
+    const operationId = pushOperationId.current;
+    const operationWorkspacePath = pushWorkspacePath.current;
+    const operationGeneration = pushWorkspaceGeneration.current;
+    if (operationId === null || operationWorkspacePath === null || operationGeneration === null) return;
+    const result = await gitCancelPush(client, operationId);
+    if (
+      pushOperationId.current === operationId &&
+      isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration) &&
+      !result.ok
+    ) {
+      setActionError(result.error.message);
+    }
+  }, [client, isCurrentWorkspaceScope]);
 
   const applyBranchMutation = useCallback(
     (data: { branchInfo: GitBranchListResult; status: GitStatusResult }): void => {
@@ -368,9 +466,12 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
 
   const createBranch = useCallback(
     async (name: string, checkoutAfterCreate: boolean): Promise<boolean> => {
+      const operationWorkspacePath = workspacePath;
+      const operationGeneration = workspaceGeneration.current;
       setPending('branch');
       setActionError(null);
       const result = await gitCreateBranch(client, name, checkoutAfterCreate);
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return false;
       setPending(null);
       if (!result.ok) {
         setActionError(result.error.message);
@@ -379,14 +480,17 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       applyBranchMutation(result.data);
       return true;
     },
-    [applyBranchMutation, client]
+    [applyBranchMutation, client, isCurrentWorkspaceScope, workspacePath]
   );
 
   const checkoutBranch = useCallback(
     async (name: string): Promise<boolean> => {
+      const operationWorkspacePath = workspacePath;
+      const operationGeneration = workspaceGeneration.current;
       setPending('branch');
       setActionError(null);
       const result = await gitCheckoutBranch(client, name);
+      if (!isCurrentWorkspaceScope(operationWorkspacePath, operationGeneration)) return false;
       setPending(null);
       if (!result.ok) {
         setActionError(result.error.message);
@@ -395,7 +499,7 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       applyBranchMutation(result.data);
       return true;
     },
-    [applyBranchMutation, client]
+    [applyBranchMutation, client, isCurrentWorkspaceScope, workspacePath]
   );
 
   const selectFile = useCallback((relativePath: string | null): void => {
@@ -428,6 +532,7 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       discard,
       commit,
       push,
+      cancelPush,
       createBranch,
       checkoutBranch
     }),
@@ -452,6 +557,7 @@ export function useGitWorkspace(client: RocClient, workspacePath: string | null)
       discard,
       commit,
       push,
+      cancelPush,
       createBranch,
       checkoutBranch
     ]

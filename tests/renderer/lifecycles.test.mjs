@@ -20,6 +20,7 @@ before(async () => {
       import { useSettingsStore } from './src/renderer/settings/settings-scope';
       import { useMcp } from './src/renderer/management/use-mcp';
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
+      import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
       window.validateIndexWrite = request => researchIndexSettingsSaveSchema.parse(request);
       const root = createRoot(document.getElementById('root'));
@@ -27,7 +28,8 @@ before(async () => {
         settings: p => useSettingsStore(p.client, p.projectId ?? null),
         mcp: p => useMcp(p.client, p.skills ?? []),
         mcpPair: p => { window.authorization = useMcp(p.client, null); return useMcp(p.client, p.skills ?? []); },
-        chat: p => useChatSession(p)
+        chat: p => useChatSession(p),
+        git: p => useGitWorkspace(p.client, p.workspacePath)
       };
       let serial = 0;
       window.mount = (kind, props, fresh = false) => {
@@ -286,4 +288,106 @@ test('checkpoint continuation cannot replay into a different conversation', asyn
   await page.waitForFunction(() => latest.history.threadId === 'b');
   assert.equal(await page.evaluate(async () => {checkpoint.resolve(ok({})); return await resuming;}), false);
   assert.equal(await page.evaluate(() => replayCalls.length), 0);
+});
+
+test('switching workspaces cancels an in-flight push and ignores its stale result', async () => {
+  await page.evaluate(() => {
+    window.currentWorkspace = '/old';
+    window.pendingPush = deferred();
+    window.cancelledPushIds = [];
+    window.client = {api: {
+      workspace: {onChanged: () => () => {}},
+      git: {
+        status: async () => ok({workspacePath: currentWorkspace, isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0}),
+        diffStat: async () => ok({workspacePath: currentWorkspace, stat: ''}),
+        listBranches: async () => ok({workspacePath: currentWorkspace, currentBranch: 'main', branches: [{name: 'main', current: true}]}),
+        push: async request => { window.pushRequest = request; return pendingPush.promise; },
+        cancel: async request => { cancelledPushIds.push(request.operationId); return ok(true); }
+      }
+    }};
+    mount('git', {client, workspacePath: currentWorkspace}, true);
+  });
+  await page.waitForFunction(() => latest.phase === 'ready');
+
+  await page.evaluate(() => { window.pushPromise = latest.push(); });
+  await page.waitForFunction(() => latest.pending === 'push' && window.pushRequest !== undefined);
+  const operationId = await page.evaluate(() => pushRequest.operationId);
+  await page.evaluate(() => {
+    window.currentWorkspace = '/new';
+    mount('git', {client, workspacePath: currentWorkspace});
+  });
+  await page.waitForFunction((id) => cancelledPushIds.includes(id), operationId);
+  await page.waitForFunction(() => latest.phase === 'ready' && latest.snapshot?.workspacePath === '/new');
+
+  await page.evaluate(async () => {
+    pendingPush.resolve(ok({
+      workspacePath: '/old', remoteName: 'origin', branch: 'main', output: 'pushed',
+      status: {workspacePath: '/old', isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0}
+    }));
+    await pushPromise;
+  });
+  assert.deepEqual(await page.evaluate(() => ({workspacePath: latest.snapshot.workspacePath, lastPush: latest.lastPush, pending: latest.pending})), {
+    workspacePath: '/new', lastPush: null, pending: null
+  });
+});
+
+test('file actions from an old workspace ignore late success and skip stale error recovery', async () => {
+  await page.evaluate(() => {
+    window.currentWorkspace = '/old';
+    window.firstStage = deferred();
+    window.secondStage = deferred();
+    window.pendingStageResults = [firstStage, secondStage];
+    window.stageCallCount = 0;
+    window.statusCallCount = 0;
+    window.client = {api: {
+      workspace: {onChanged: () => () => {}},
+      git: {
+        status: async () => {
+          statusCallCount += 1;
+          return ok({workspacePath: currentWorkspace, isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0});
+        },
+        diffStat: async () => ok({workspacePath: currentWorkspace, stat: ''}),
+        listBranches: async () => ok({workspacePath: currentWorkspace, currentBranch: 'main', branches: [{name: 'main', current: true}]}),
+        stageFile: async () => { stageCallCount += 1; return pendingStageResults.shift().promise; },
+        cancel: async () => ok(true)
+      }
+    }};
+    mount('git', {client, workspacePath: currentWorkspace}, true);
+  });
+  await page.waitForFunction(() => latest.phase === 'ready');
+
+  await page.evaluate(() => { window.oldFailure = latest.stage(['file.txt']); });
+  await page.waitForFunction(() => stageCallCount === 1);
+  await page.evaluate(() => {
+    window.currentWorkspace = '/new';
+    mount('git', {client, workspacePath: currentWorkspace});
+  });
+  await page.waitForFunction(() => latest.phase === 'ready' && latest.snapshot?.workspacePath === '/new');
+  const statusCallsAfterSwitch = await page.evaluate(() => statusCallCount);
+  await page.evaluate(async () => {
+    firstStage.resolve(fail('old workspace stage failed'));
+    await oldFailure;
+  });
+  assert.deepEqual(await page.evaluate(() => ({workspacePath: latest.snapshot.workspacePath, actionError: latest.actionError, pending: latest.pending})), {
+    workspacePath: '/new', actionError: null, pending: null
+  });
+  assert.equal(await page.evaluate(() => statusCallCount), statusCallsAfterSwitch);
+
+  await page.evaluate(() => { window.oldSuccess = latest.stage(['file.txt']); });
+  await page.waitForFunction(() => stageCallCount === 2);
+  await page.evaluate(() => {
+    window.currentWorkspace = '/third';
+    mount('git', {client, workspacePath: currentWorkspace});
+  });
+  await page.waitForFunction(() => latest.phase === 'ready' && latest.snapshot?.workspacePath === '/third');
+  await page.evaluate(async () => {
+    secondStage.resolve(ok({
+      workspacePath: '/new', isRepository: true, branch: 'main', porcelain: [],
+      changes: [{porcelain: 'A  stale.txt', index: 'A', worktree: ' ', relativePath: 'stale.txt'}], changedFiles: 1
+    }));
+    await oldSuccess;
+  });
+  assert.deepEqual(await page.evaluate(() => ({workspacePath: latest.snapshot.workspacePath, actionError: latest.actionError, pending: latest.pending})), {
+    workspacePath: '/third', actionError: null, pending: null
+  });
 });

@@ -20,6 +20,7 @@ import {
   gitBatchFileOperationRequestSchema,
   gitBranchListResultSchema,
   gitBranchMutationResultSchema,
+  gitCancelRequestSchema,
   gitCheckoutBranchRequestSchema,
   gitCommitRequestSchema,
   gitCommitResultSchema,
@@ -28,6 +29,7 @@ import {
   gitFileDiffResultSchema,
   gitFileOperationRequestSchema,
   gitPushResultSchema,
+  gitPushRequestSchema,
   gitStatusResultSchema,
   terminalSessionCloseRequestSchema,
   terminalSessionCreateRequestSchema,
@@ -84,7 +86,7 @@ const workspaceCapabilityDescriptors = [
   descriptor('git.unstageFile', gitFileOperationRequestSchema, gitStatusResultSchema),
   descriptor('git.discardFile', gitFileOperationRequestSchema, gitStatusResultSchema),
   descriptor('git.commit', gitCommitRequestSchema, gitCommitResultSchema),
-  descriptor('git.push', emptyInputSchema, gitPushResultSchema),
+  descriptor('git.push', gitPushRequestSchema, gitPushResultSchema),
   descriptor('git.listBranches', emptyInputSchema, gitBranchListResultSchema),
   descriptor('git.createBranch', gitCreateBranchRequestSchema, gitBranchMutationResultSchema),
   descriptor('git.checkoutBranch', gitCheckoutBranchRequestSchema, gitBranchMutationResultSchema),
@@ -94,7 +96,8 @@ const workspaceCapabilityDescriptors = [
   descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, closedResultSchema),
   descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>()),
   // 追加到末尾：registerFileCapabilities / git / terminal 都按位置下标切分，插在中间会静默错位。
-  descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema)
+  descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema),
+  descriptor('git.cancel', gitCancelRequestSchema, z.boolean())
 ] as const satisfies readonly CapabilityDescriptor[];
 
 /**
@@ -180,7 +183,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
         return workspace;
       });
       registerFileCapabilities(context, workspaceCapabilityDescriptors.slice(2, 8), fileService);
-      registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService);
+      registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService, workspaceCapabilityDescriptors[26]);
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
         await fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)

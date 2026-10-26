@@ -1,9 +1,11 @@
 import type {
   GitBatchFileOperationRequest,
+  GitCancelRequest,
   GitCheckoutBranchRequest,
   GitCommitRequest,
   GitCreateBranchRequest,
-  GitFileOperationRequest
+  GitFileOperationRequest,
+  GitPushRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { GitService } from '../../services/git-service';
@@ -13,35 +15,41 @@ const pluginId = '@roc/plugin-workspace';
 export function registerGitCapabilities(
   context: RocPluginContext,
   descriptors: readonly CapabilityDescriptor[],
-  gitService: GitService
+  gitService: GitService,
+  cancelDescriptor: CapabilityDescriptor<GitCancelRequest, boolean>
 ): void {
-  context.capabilities.register(pluginId, descriptors[0], async () => gitService.getStatusAsync());
-  context.capabilities.register(pluginId, descriptors[1], async () => gitService.getDiffStatAsync());
+  context.capabilities.register(pluginId, descriptors[0], async () => await gitService.getStatus());
+  context.capabilities.register(pluginId, descriptors[1], async () => await gitService.getDiffStat());
   context.capabilities.register(pluginId, descriptors[2], async (input) =>
-    gitService.getFileDiffAsync((input as GitFileOperationRequest).relativePath)
+    await gitService.getFileDiff((input as GitFileOperationRequest).relativePath)
   );
   context.capabilities.register(pluginId, descriptors[3], async (input) =>
-    gitService.stageFile((input as GitFileOperationRequest).relativePath)
+    await gitService.stageFile((input as GitFileOperationRequest).relativePath)
   );
   context.capabilities.register(pluginId, descriptors[4], async (input) =>
-    gitService.stageFiles((input as GitBatchFileOperationRequest).relativePaths)
+    await gitService.stageFiles((input as GitBatchFileOperationRequest).relativePaths)
   );
   context.capabilities.register(pluginId, descriptors[5], async (input) =>
-    gitService.unstageFile((input as GitFileOperationRequest).relativePath)
+    await gitService.unstageFile((input as GitFileOperationRequest).relativePath)
   );
   context.capabilities.register(pluginId, descriptors[6], async (input) =>
-    gitService.discardFileChanges((input as GitFileOperationRequest).relativePath)
+    await gitService.discardFileChanges((input as GitFileOperationRequest).relativePath)
   );
   context.capabilities.register(pluginId, descriptors[7], async (input) =>
-    gitService.commit((input as GitCommitRequest).message)
+    await gitService.commit((input as GitCommitRequest).message)
   );
-  context.capabilities.register(pluginId, descriptors[8], async () => gitService.push());
-  context.capabilities.register(pluginId, descriptors[9], async () => gitService.listBranchesAsync());
+  context.capabilities.register(pluginId, descriptors[8], async (input) =>
+    await gitService.push({ operationId: (input as GitPushRequest).operationId })
+  );
+  context.capabilities.register(pluginId, descriptors[9], async () => await gitService.listBranches());
   context.capabilities.register(pluginId, descriptors[10], async (input) => {
     const request = input as GitCreateBranchRequest;
-    return gitService.createBranch(request.name, request.checkoutAfterCreate);
+    return await gitService.createBranch(request.name, request.checkoutAfterCreate);
   });
   context.capabilities.register(pluginId, descriptors[11], async (input) =>
-    gitService.checkoutBranch((input as GitCheckoutBranchRequest).name)
+    await gitService.checkoutBranch((input as GitCheckoutBranchRequest).name)
+  );
+  context.capabilities.register(pluginId, cancelDescriptor, async (input) =>
+    gitService.cancelOperation((input as GitCancelRequest).operationId)
   );
 }

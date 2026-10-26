@@ -170,6 +170,8 @@ export const gitFileDiffResultSchema = z
   .strict();
 
 export const gitCommitRequestSchema = z.object({ message: z.string() }).strict();
+export const gitPushRequestSchema = z.object({ operationId: z.string().uuid() }).strict();
+export const gitCancelRequestSchema = z.object({ operationId: z.string().uuid() }).strict();
 
 const gitBranchSummarySchema = z.object({ name: z.string(), current: z.boolean() }).strict();
 

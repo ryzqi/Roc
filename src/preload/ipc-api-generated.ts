@@ -286,6 +286,7 @@ export const rocApi: RocPreloadApi = {
     discardFile: (...args) => ipcRenderer.invoke(ipcChannels.gitDiscardFile, ...args),
     commit: (...args) => ipcRenderer.invoke(ipcChannels.gitCommit, ...args),
     push: (...args) => ipcRenderer.invoke(ipcChannels.gitPush, ...args),
+    cancel: (...args) => ipcRenderer.invoke(ipcChannels.gitCancel, ...args),
     listBranches: (...args) => ipcRenderer.invoke(ipcChannels.gitListBranches, ...args),
     createBranch: (...args) => ipcRenderer.invoke(ipcChannels.gitCreateBranch, ...args),
     checkoutBranch: (...args) => ipcRenderer.invoke(ipcChannels.gitCheckoutBranch, ...args)
