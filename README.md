@@ -4,7 +4,7 @@ Roc 是面向个人研究者的 **macOS 科研工作台**。默认入口是研�
 
 底层是 Electron + React 本地桌面运行时：LangGraph / DeepAgents、插件化 Kernel、类型安全 IPC、SQLite，以及受控工具调用。路径边界清晰，密钥不进仓库。
 
-- 平台：仅 macOS，仅 Apple Silicon（arm64）。解析栈依赖 MinerU 的 MPS / llama.cpp-Metal，Intel Mac 不再支持
+- 平台：仅 macOS，仅 Apple Silicon（arm64）。本地文档解析使用 PaddleOCR.js 与 ONNX Runtime；Intel Mac 不受支持
 - 默认界面：项目门户（`page=research`，未选项目）→ 三栏工作台（选中项目后）
 - Agent：研究助手与阶段角色，不是产品主页
 - 数据面：SQLite + Electron `safeStorage`，默认落 `~/.roc`
@@ -224,8 +224,8 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:mac
 
 - 产物：`release/mac-arm64/Roc.app`（只产出 arm64；构建脚本在非 arm64 宿主上直接失败）
 - 包内只留 arm64 的 SQLite、PTY、RTK、ripgrep 和科研工具链
-- 随包分发 Python / Tectonic / Vale / TeX 子集；MinerU 解析模型不进安装包，打开后下载到 `~/.roc/research-models`
-- 打包前用当前 `worker.py` / `figure.py` 覆盖 live 副本；排除 `bibliography.py`、`PyObjCTest`、pip/debugpy/jedi/IPython、faker/polyfactory、torch 头文件和未使用的 pdfjs 目录。文献交换已在主进程 TypeScript（`bibliography.ts`）
+- 随包分发 Tectonic / Vale / Typst / TeX 子集；PaddleOCR.js 解析模型不进安装包，用户选择下载后存入 `~/.roc/research-models`
+- 打包前按工具锁构建并校验原生科研工具链，解析模型按独立模型锁校验；文献交换已在主进程 TypeScript（`bibliography.ts`）
 - ad-hoc 本地签名（`identity: "-"`），未做 Developer ID / 公证
 - 关窗口保留后台任务；菜单或 `Cmd+Q` 退出
 - 终端走用户登录 Shell 与 zsh；Finder/Dock 启动用 `shell-env` 恢复 PATH
@@ -248,7 +248,7 @@ rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
 ## 外部集成
 
 Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许可证、归口文件**。升级时按下表的「更新方式」
-改对应锁定文件，不要只改 `package.json` 或只改注释——工具链的完整性与许可证采集都读锁定文件。
+改对应锁定文件，不要只改 `package.json` 或只改注释——工具链完整性依据 `tools.lock.json`；工具许可证来源与随包文本登记在 `resources/research-runtime/licenses/sources.json`，npm 生产依赖许可证用 `pnpm licenses list --prod` 核对。
 
 已实测核对过的网址会标 ✓。
 
@@ -259,9 +259,7 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 | 组件 | 版本 | 来源 | 许可证 | 更新方式 |
 | --- | --- | --- | --- | --- |
-| `python`（CPython） | 3.12.15 | astral-sh/python-build-standalone（按架构下载）<br/>`https://github.com/astral-sh/python-build-standalone/releases/tag/20261021` ✓ | PSF | 改 `tools.lock.json` 的 `pythonVersion` + `architectures[*].python` 的 url/sha256 → 重建 |
-| `uv` | 0.13.5 | `https://github.com/astral-sh/uv/releases/tag/0.13.5` ✓ | MIT / Apache-2.0 | 同上（`uvVersion` + `uv`） |
-| `tectonic`（Tectonic） | 0.17.0 | `https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.17.0` ✓ | MIT | 同上（`tectonicVersion` + `tectonic`）；文档 `https://tectonic-typesetting.github.io` ✓ |
+| `tectonic`（Tectonic） | 0.17.0 | `https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.17.0` ✓ | MIT | 改 `tools.lock.json` 的 `tectonicVersion` + `architectures[*].tectonic` → 重建；文档 `https://tectonic-typesetting.github.io` ✓ |
 | TeX 资源（子集） | tlextras-2022.0r0 | `https://data1b.fullyjustified.net/tlextras-2022.0r0.tar`（上游默认 `https://relay.fullyjustified.net/default_bundle_v33.tar`） | 多许可证，随包保留入选文件原有声明 | 改 `tools.lock.json.texBundle` 的 url/sha256/size/zipSha256 + `tex-bundle-files.txt` → 重建 |
 | `vale`（Vale） | 3.24.0 | `https://github.com/vale-cli/vale/releases/tag/v3.24.0` ✓ | MIT | 改 `tools.lock.json` 的 `valeVersion` + `architectures[*].vale` → 重建。见 [docs/research-prose.md](docs/research-prose.md) |
 | `typst`（Typst） | 0.15.0 | `https://github.com/typst/typst/releases/tag/v0.15.0` ✓ | Apache-2.0 | 改 `tools.lock.json` 的 `typstVersion` + `architectures[*].typst` → 重建。**只服务导出附带的报告**（`src/main/plugins/research/typst-report.ts`），不进 LaTeX 主链；取舍见 [docs/adr/0025-typst-report-engine.md](docs/adr/0025-typst-report-engine.md) |
@@ -269,35 +267,27 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 
 **Vale 规则集是 Roc 自己写的**（`resources/research-runtime/vale/styles/`，8+8+1 条），不来自上游 style 包，所以改规则只需重建工具链，不涉及第三方许可。拼写那条（`RocAcademic/Spelling.yml`）是 `extends: spelling` 的包装，把上游 `Vale.Spelling` 的 `error` 档降到 `suggestion`。
 
-### 二、科研 Python 运行时
+### 二、Node.js 数据实验运行时
 
-依赖声明在 [`resources/research-runtime/pyproject.toml`](resources/research-runtime/pyproject.toml) 与 `uv.lock`；许可证在构建时由 `scripts/research/collect-licenses.ts` 从各包 METADATA 采集为 `licenses/python-packages.json`。
+数据实验通过 Electron 内置 Node.js 24.22.0 执行版本化 `.mts` 模块，不需要单独安装或分发 Python/uv。模块使用受限的 `run(context)` 合同和显式输入/输出快照；文件访问、进程环境与产物大小由实验运行器限制，详见 [`docs/research-experiments.md`](docs/research-experiments.md)。
 
-| 包 | 版本 | 来源 | 用途 |
+| 组件 | 版本 | 来源 | 用途 |
 | --- | --- | --- | --- |
-| mineru | 4.0.12 | `https://github.com/opendatalab/MinerU` ✓ | PDF / 图片 / HTML 解析（版面、表格、公式、内置 OCR） |
-| mineru-llama-cpp | 0.2.0 | `https://github.com/opendatalab/MinerU` ✓ | `standard`/`advanced` 档位的本地 VLM 推理（Metal） |
-| pypdfium2 | 5.14.0 | `https://github.com/pypdfium2-team/pypdfium2` ✓ | PDF 光栅化 |
-| matplotlib | 3.11.2 | `https://github.com/matplotlib/matplotlib` ✓ | 图稿渲染 |
-| pandas | >=2.2,<3 | `https://github.com/pandas-dev/pandas` ✓ | 数据分析 |
-| scipy | >=1.13,<2 | `https://github.com/scipy/scipy` ✓ | 数值计算 |
-| torch | 2.14.1 | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
-| torchvision | 0.29.1 | `https://github.com/pytorch/pytorch` ✓ | 模型推理 |
-| transformers | 5.20.2 | `https://github.com/huggingface/transformers` ✓ | 模型推理；`mineru[torch]==4.0.12` 的下限，4.x 已删掉 MinerU 依赖的旧 API |
-| numpy | 2.5.4 | `https://github.com/numpy/numpy` ✓ | 数值计算 |
-| setuptools（构建约束） | 84.2.1 | `https://github.com/pypa/setuptools` | 构建期固定 |
+| Electron 内置 Node.js | 24.22.0（Electron 45.0.0） | Electron runtime | 执行 `.mts` 数据实验 |
+| `d3-dsv` | 3.0.1 | `https://github.com/d3/d3-dsv` | 有界 CSV/TSV 数据处理 |
+| `csv-parse` | 7.0.3 | `https://github.com/adaltas/node-csv` | 流式 CSV/TSV 输入 |
+| `simple-statistics` | 7.12.1 | `https://github.com/simple-statistics/simple-statistics` | 描述性统计 |
 
-### 三、解析模型（不进安装包，按需下载）
+### 三、解析模型（按需下载）
 
-声明在 `resources/research-runtime/models.lock.json`（每个文件带 sha256 与 revision），下载源是 `https://huggingface.co/<repoId>/resolve/<revision>/<path>`；
-运行时 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，所以模型只在用户确认下载时联网。
+模型声明在 [`resources/research-models/models.lock.json`](resources/research-models/models.lock.json)，用户主动下载后存入用户数据目录；安装包不包含 ONNX 权重。锁文件固定不可变来源 revision、文件 URL、大小、SHA-256 与许可证。
 
-| 模型 | 内容 | 许可证 |
-| --- | --- | --- |
-| `opendatalab/MinerU-4_models_torch` | 版面 `PP-DocLayoutV2`、公式 `PP-FormulaNet_plus-M`、表格、内置 OCR | Apache-2.0 |
-| `42ailab/MinerU2.5-Pro-2605-1.2B-GGUF` | `standard`/`advanced` 档位的 1.2B VLM（Q8_0 权重 + mmproj），量化自 `opendatalab/MinerU2.5-Pro-2605-1.2B` | Apache-2.0 |
+| 包 | 内容 | 下载量 |
+| --- | --- | ---: |
+| `compact` | PP-OCRv6-tiny 检测/识别与字典、PP-DocLayout-S、SLANet | 18,967,109 B |
+| `complete` | `compact` 加 PP-FormulaNet-S 与 UniMERNet tokenizer；额外启用公式识别 | 329,850,264 B |
 
-模型仓库由 MinerU 官方下载器写入 `.mineru_complete` 标记，Roc 只校验不伪造；每个文件的大小与 sha256 记在 lock 文件里，解析前全量校验。MinerU 程序本体按 **MinerU Open Source License**（Apache-2.0 附加商用阈值与在线服务署名条款）分发，原文随 `python-packages.json` 保留。
+PaddleOCR.js 推理运行库为 MIT；模型与 tokenizer 按上游声明使用 Apache-2.0。具体来源、revision 和许可说明见 [`resources/research-models/README.md`](resources/research-models/README.md)，摘要以 `models.lock.json` 为准。默认使用 `compact` 包；需要公式识别时由用户另行下载 `complete` 包。
 
 ### 四、ripgrep（随包全文搜索）
 
@@ -421,7 +411,7 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 | 升级 CSL 样式 | 改 `resources/research-runtime/csl/**` → 重建（样式参与 `lockHashes`） |
 | 升级 ripgrep | 改 `ripgrep.lock.json`（版本、url、archive/binary SHA-256）→ `pnpm sync:ripgrep` → `pnpm test:unit`（核对 lock↔二进制 sha256，并真跑一次 `rg`）→ `pnpm verify:native-packaging`（`--arch` 可选，缺省本机架构） |
 | 升级解析模型 | 改 `models.lock.json` 的 revision + 各文件 sha256 → 重下模型缓存 |
-| 升级随包第三方资源 | 同步 `resources/research-runtime/licenses/sources.json` 的 url 与 sha256（`collect-licenses.ts` 与打包校验会读它） |
+| 升级随包第三方资源 | 更新 `resources/research-runtime/licenses/sources.json` 的 url 与 sha256，并同步对应许可证文本；`prepare.ts` 复制并纳入完整性清单，打包校验确认文件随包 |
 | 新增任何外部组件 | 先在本节登记：版本、网址、许可证、归口文件、更新方式 |
 
 ---

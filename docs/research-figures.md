@@ -1,6 +1,6 @@
 # 科研图稿
 
-科研图稿由研究 agent 创建，没有单独的图表编辑器。新图稿使用离线 Vega-Lite v6 JSON spec 和显式声明的本地 CSV/TSV/DSV/JSON 输入。应用不会执行 Python、Matplotlib 或任意 JavaScript 代码；spec 只接受 Vega-Lite 受限表达式语法。Python 图稿记录只允许读取已保存的历史产物，不能重新执行或作为新图稿输入。
+科研图稿由研究 agent 创建，没有单独的图表编辑器。新图稿使用离线 Vega-Lite v6 JSON spec 和显式声明的本地 CSV/TSV/DSV/JSON 输入。图稿不会执行 Python、Matplotlib 或任意 JavaScript；spec 只接受 Vega-Lite 受限表达式语法。独立的数据实验使用受限的 Node.js `.mts` `run(context)` 合同，详见[数据实验说明](research-experiments.md)。Python 图稿记录只允许读取已保存的历史产物，不能重新执行或作为新图稿输入。
 
 ## 创建图稿
 
