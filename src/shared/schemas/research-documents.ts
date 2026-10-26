@@ -32,8 +32,7 @@ export const researchDocumentContentSchema = researchParsedDocumentSchema.omit({
 export const researchDocumentParseSchema = z.object({ run: researchDocumentRunSchema, content: researchDocumentContentSchema }).strict();
 export const researchDocumentParseRequestSchema = researchDocumentIdRequestSchema.extend({ parseId: z.string().min(1) }).strict();
 /**
- * 发起解析。`tier` 为 null 时用按媒体类型推导的默认档位（HTML 固定 flash）。
- * 只允许选档位，不开放 `pageRange`/`device`：它们是本地调试参数，不应成为持久 API。
+ * 发起解析。`tier` 为 null 时使用当前选中的模型档位；HTML 会由原生 DOM 解析器处理，不加载模型。只允许选档位，不开放 `pageRange`/`device`：它们是本地调试参数，不应成为持久 API。
  */
 export const researchDocumentStartParseRequestSchema = researchDocumentIdRequestSchema.extend({
   tier: z.enum(researchParseTiers).nullable()

@@ -7,36 +7,32 @@ import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
 import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
 
 /**
- * P5 验收闸门的自动化实测（真应用 / 真 IPC / 真文档解析 / 真索引 / 真检索）。
+ * P5 验收闸门的自动化实测（真应用 / 真 IPC / PaddleOCR.js 文档解析 / 真索引 / 真检索）。
  *
- * 为什么需要它：P5 的闸门描述的全是**运行时事实** —— 一篇真 PDF 是否真的被
- * MinerU 解析出章节 + 公式 + 表格、索引是否真的扫到工作目录里的文件、
+ * 文档解析由本地 PaddleOCR.js + ONNX Runtime 提供。当前选择的模型包未就绪时，
+ * 本闸门只检查模型状态，不启动 OCR；其它索引/派生路径仍会执行。
  * 检索命中是否真的能跳回原文位置、空项目下 Wiki/图谱是否真的不画示意数据。
  * 静态阅读与单测都不覆盖这些（P3/P4 的实测已经证明：类型正确、单测全绿、
  * 用户看到的仍可能是坏的）。
  *
  * 三条与 P4 不同的口径，都写在这里避免下一轮误判：
  *
- *   1. **前置检查决定闸门 1/2 走哪条路。** `research.models.status` 未就绪时
- *      `research.document.parse` 只会失败（`research_models_unavailable`），所以
- *      harness 先读真实状态，再选「真解析」或「断言真实降级文案 + 用其它路径覆盖
- *      其余断言」；两条路都是断言，不是「跳过」。
+ *   1. **前置检查决定闸门 1/2 走哪条路。** `research.models.status` 未就绪时，
+ *      本闸门不会启动 OCR 任务；模型就绪时才测试真实的取消/解析/章节/表格路径。
  *   2. **文档导入走 IPC，不点文件选择器。** smoke 模式下
  *      `files.selectFromDialog`（src/main/ipc/files-ipc.ts）返回固定的
  *      `<workspace>/assets/smoke-image.png`，因此**无法**用它选中夹具 PDF。
  *      导入这一步用 `research.document.import`；对话框本身按它能做的事断言
  *      （5 个 tab、题名/citationKey 必填、选择器回填、手工录入真写库）。
- *   3. **索引不重复解析 PDF。** 索引的解析分支与闸门 1 的 `document.parse`
- *      是**同一个** `ResearchToolchain.parseDocument` 调用，再跑一遍要多花 ~2 分钟
- *      而没有新覆盖。索引闸门改用真实可索引的 markdown 文件（快、确定），并把它
+ *   3. **索引不重复解析 PDF。** 索引复用闸门 1 的原生 `parse_document` 结果；再跑一遍
+ *      只会重复模型推理而没有新覆盖。索引闸门改用真实可索引的 markdown 文件（快、确定），并把它
  *      真实报告两个坏文件（种子里那对占位 PDF/PNG）当作失败可见性的证据。
  *
  * 运行（必须 `ROC_SMOKE_TARGET=dist`，且先删产物再 build）：
  *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p5-literature.mjs
  *
- * 解析一轮在 CPU 上约 2 分钟，整轮约 5–10 分钟，**必须 detach 跑**（P4 的教训：
- * 前台跑会被工具超时杀掉进程组）。报告与截图写 `.artifacts/p5-gates/`。
+ * 解析作业使用有界超时；总体耗时随模型包与文档页数变化。报告与截图写 `.artifacts/p5-gates/`。
  */
 
 const artifactDir = prepareArtifactDir(resolve('.artifacts/p5-gates'));
@@ -69,7 +65,7 @@ const smokeModelId = 'p5-smoke-model';
 const smokeProviderId = 'p5-smoke-provider';
 const smokeModelKey = `${smokeProviderId}:${smokeModelId}`;
 
-/** MinerU basic 档 CPU 上 15 页 ≈ 2 分钟（实测 123s / 9.7 GB 峰值）；给足余量，但不要无限等。 */
+/** Bound the OCR work of a long document without making unverified performance claims. */
 const parseTimeoutMs = 20 * 60_000;
 
 const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
@@ -216,36 +212,32 @@ try {
   assertCheck('0 启动', '新壳在 smoke 模式下启动', (await page.getAttribute('[data-testid="roc-app"]', 'data-mode')) === 'smoke');
 
   // ---- 闸门 0：前置检查（决定闸门 1/2 的路线） --------------------------------
-  const preflight = await page.evaluate(async () => {
-    const models = await window.roc.research.getModelsStatus();
-    const toolchain = await window.roc.research.getToolchainStatus();
-    return {
-      models: models.ok ? models.data : { error: models.error.message },
-      toolchain: toolchain.ok ? toolchain.data : { error: toolchain.error.message }
-    };
-  });
-  const modelsReady = preflight.models.ready === true;
-  const modelsStatus = preflight.models;
+  const modelStatusResult = await page.evaluate(async () => window.roc.research.getModelsStatus());
+  const modelsStatus = modelStatusResult.ok
+    ? modelStatusResult.data
+    : { error: modelStatusResult.error.message, ready: false, selectedPack: 'compact', packs: [], models: [] };
+  const selectedPack = modelsStatus.selectedPack;
+  const modelsReady = modelsStatus.ready === true;
+  const formulaReady = modelsReady && selectedPack === 'complete';
   record(
     '0 前置检查',
     `research.models.status（${modelsReady ? '就绪' : '未就绪'}）`,
     true,
-    modelsReady
-      ? `models=${modelsStatus.models.map((entry) => `${entry.directory}=${entry.ready}`).join(',')}`
-      : `error=${modelsStatus.error ?? 'unknown'} models=${modelsStatus.models.length}`,
+    `selected=${selectedPack} packs=${modelsStatus.packs.map((pack) => `${pack.pack}=${pack.ready}`).join(',')} assets=${modelsStatus.models.map((asset) => `${asset.id}=${asset.ready}`).join(',')} error=${modelsStatus.error ?? 'null'}`,
     'info'
-  );
-  assertCheck(
-    '0 前置检查',
-    'research.toolchain.status 可用（解析走 Python 工具链）',
-    preflight.toolchain.available === true,
-    `available=${preflight.toolchain.available} versions=${JSON.stringify(preflight.toolchain.versions ?? null)} error=${preflight.toolchain.error ?? 'null'}`
   );
   record(
     '0 前置检查',
-    modelsReady ? '闸门 1 路线：真解析（MinerU）' : '闸门 1 路线：断言真实降级文案 + 其余断言走索引/派生路径',
+    '文档解析使用原生 JS/ONNX Runtime 作业',
     true,
-    modelsReady ? '真 PDF → 真解析 → 阅读器章节/公式/表格' : '解析模型未装：document.parse 只会失败，断言失败态与模型提示',
+    'PaddleOCR.js + onnxruntime-node',
+    'info'
+  );
+  record(
+    '0 前置检查',
+    modelsReady ? '闸门 1 路线：真解析（PaddleOCR.js）' : '闸门 1 路线：检查未安装模型状态，其余索引路径照常执行',
+    true,
+    modelsReady ? `真 PDF → ${selectedPack} → 阅读器章节/表格` : '不启动 OCR 作业；检查真实模型状态与下载入口',
     'info'
   );
 
@@ -632,13 +624,13 @@ try {
     await page.click('[data-testid="reader-start-parse"]');
     await waitForAttribute(page, '[data-testid="reader-document-status"]', 'data-status', 'parsing', 60_000, '1 真解析', '取消后能再次进入 parsing');
   } else {
-    await page.click('[data-testid="reader-start-parse"]');
+    record('1 真解析', '模型包未就绪时不启动 OCR 作业', true, `selected=${selectedPack}`);
   }
 
   const parseStartedAt = Date.now();
 
   // ---- 闸门 3：静态断言（前端没有旧壳的假检索/假流水线） -----------------------
-  const forbidden = ['executeTriPathRRFRetrieval', 'deduplicateAndMergePapers', 'executeMinerUPipeline', 'MINERU_PIPELINE_STAGES'];
+  const forbidden = ['executeTriPathRRFRetrieval', 'deduplicateAndMergePapers'];
   const forbiddenHits = [];
   for (const file of listSourceFiles('src/renderer')) {
     // 先剔注释：这几个名字现在只出现在“已删除 / 契约里没有”的说明里，注释不可能
@@ -656,9 +648,14 @@ try {
     forbiddenHits.length === 0,
     forbiddenHits.join(', ')
   );
-  const legacyFiles = ['src/renderer/literature/ragEngine.ts', 'src/renderer/literature/mineruParser.ts']
-    .filter((path) => existsSync(path));
-  assertCheck('3 无假实现', 'ragEngine.ts / mineruParser.ts 不存在', legacyFiles.length === 0, legacyFiles.join(', '));
+  const legacyFiles = [
+    'resources/research-runtime/worker.py',
+    'resources/research-runtime/models.lock.json',
+    'scripts/research/fetch-models.ts',
+    'src/renderer/literature/ragEngine.ts',
+    'src/renderer/literature/mineruParser.ts'
+  ].filter((path) => existsSync(path));
+  assertCheck('3 无假实现', '旧解析运行时和 renderer stubs 不存在', legacyFiles.length === 0, legacyFiles.join(', '));
   const objectUrlHits = listSourceFiles('src/renderer').filter((file) => /URL\.createObjectURL\s*\(/u.test(stripComments(readFileSync(file, 'utf8'))));
   assertCheck('3 无假实现', 'renderer 里没有 Blob URL（PDF 走 files.preview* 协议）', objectUrlHits.length === 0, objectUrlHits.join(', '));
 
@@ -736,10 +733,10 @@ try {
     page,
     '[data-testid="reader-document-status"]',
     'data-status',
-    modelsReady ? 'ready' : 'failed',
+    modelsReady ? 'ready' : 'imported',
     parseTimeoutMs,
     '1 真解析',
-    modelsReady ? '解析完成（后端 run=ready）' : '解析按真实降级失败'
+    modelsReady ? '解析完成（原生后端 run=ready）' : '模型包未就绪，文档保持 imported',
   );
   const parseSeconds = Math.round((Date.now() - parseStartedAt) / 1000);
   record('1 真解析', `解析结束状态 = ${documentStatus}（用时 ${parseSeconds}s）`, true, '');
@@ -758,8 +755,8 @@ try {
     const formulas = await page.locator('[data-testid="reader-block-formula"]').allTextContents();
     assertCheck(
       '1 真解析',
-      '闸门 1：阅读器显示至少一个公式（CodeFormulaV2 抽出的 LaTeX）',
-      formulas.length >= 1 && formulas.some((text) => text.includes('\\frac') || text.includes('\\sum')),
+      '闸门 1：完整模型包下阅读器显示至少一个公式（LaTeX）',
+      !formulaReady || formulas.length >= 1 && formulas.some((text) => text.includes('\\frac') || text.includes('\\sum')),
       `count=${formulas.length} sample=${formulas[0]?.replace(/\s+/gu, ' ').slice(0, 90) ?? ''}`
     );
     const tables = await page.locator('[data-testid="reader-block-table"]').allTextContents();
@@ -780,19 +777,12 @@ try {
     );
     await page.screenshot({ path: join(artifactDir, '01-reader-blocks.png') });
   } else {
-    const errorText = (await page.textContent('[data-testid="reader-document-error"]')) ?? '';
-    assertCheck(
-      '1 真解析',
-      '模型未就绪时解析失败并显示真实错误码（research_models_unavailable）',
-      errorText.includes('research_models_unavailable'),
-      errorText.trim()
-    );
     const modelsState = (await page.textContent('[data-testid="reader-models-state"]')) ?? '';
     const modelsReadyAttr = await page.getAttribute('[data-testid="reader-models-state"]', 'data-ready');
     assertCheck(
       '1 真解析',
       '阅读器把解析模型状态说清楚（未安装 + 可下载入口）',
-      modelsReadyAttr === 'false' && modelsState.includes('\u6a21\u578b'),
+      modelsReadyAttr === 'false' && modelsState.includes('模型'),
       modelsState.trim()
     );
   }
@@ -1021,8 +1011,8 @@ try {
     extra: {
       preflight: {
         modelsReady,
+        selectedPack,
         modelsStatus,
-        toolchain: preflight.toolchain,
         bibliographyImport,
         bibliographyProbeError
       },

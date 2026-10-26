@@ -409,8 +409,9 @@ export class ResearchIndexService {
   private async parserKey(kind: IndexFileKind): Promise<string> {
     // 解析档位是“可影响索引内容”的配置，所以 fingerprint 必须进入 parserKey；
     // 否则换档位后旧索引会被当成命中，用户看不到新结果。
+    const tier = this.tools.defaultParseOptions(kind === 'html' ? 'text/html' : 'application/pdf').tier;
     return ['pdf', 'image', 'html'].includes(kind)
-      ? `mineru:${this.tools.identity()}:${this.tools.defaultParseOptions(kind === 'html' ? 'text/html' : 'application/pdf').tier}`
+      ? `paddleocr.js:${await this.tools.identity()}:${tier}`
       : 'roc-text-1';
   }
 

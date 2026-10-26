@@ -54,9 +54,8 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
     ...(request.networkAccess === 'full' ? ['(allow network*)'] : request.networkAccess === 'loopback'
       ? ['(allow network-outbound (remote ip "localhost:*"))', '(allow network-inbound (local ip "localhost:*"))', '(allow network-bind (local ip "localhost:*"))'] : []),
-    // Torch/MPS 与 llama.cpp/Metal 需要 GPU 计算客户端：实测只放行 AGX/IOGPU 就够了，
-    // IOSurface 单独放行并不够（`torch.backends.mps.is_available()` 仍为 False）。
-    // 这里只剩 GPU 客户端，ANE 两个类随独立 Vision/ocrmac OCR 链一起删除。
+    // Jobs using the ORT CoreML provider need the Apple GPU/CoreML services. This permission is
+    // opt-in per job; CPU inference and ordinary Python jobs do not receive it.
     ...(request.allowGpuAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient"))'] : [])
   ].join('\n');
 }

@@ -1,13 +1,13 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { isAbsolute, relative } from 'node:path';
 import type { z } from 'zod';
-import { researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
+import { researchDocumentLimits, researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
 import type { StoredDocumentContent } from './document-repository';
 import { readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 
-export const maximumDocumentBytes = 512 * 1024 * 1024;
+export const maximumDocumentBytes = researchDocumentLimits.maxTotalAssetBytes;
 // MiddleJson / Markdown 工件上限：P0 实测 15 页论文约 2 MB，留足两页扫描件余量。
-export const maximumArtifactBytes = 128 * 1024 * 1024;
+export const maximumArtifactBytes = researchDocumentLimits.maxArtifactBytes;
 export const documentMediaTypes: Readonly<Record<string, string>> = {
   '.pdf': 'application/pdf', '.html': 'text/html', '.htm': 'text/html', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp', '.webp': 'image/webp'
@@ -24,7 +24,7 @@ export async function documentStorageRoot(path: string | null): Promise<string> 
 
 export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>): Promise<StoredDocumentContent> {
   const parsed = researchParsedDocumentSchema.parse(input);
-  if (parsed.assets.length > 5000 || new Set(parsed.blocks.map((block) => block.id)).size !== parsed.blocks.length) {
+  if (parsed.assets.length > researchDocumentLimits.maxAssets || new Set(parsed.blocks.map((block) => block.id)).size !== parsed.blocks.length) {
     throw new Error('research_document_structure_invalid');
   }
   if (parsed.content !== parsed.blocks.filter((block) => block.text.trim()).map((block) => block.text).join('\n\n')) {
@@ -37,7 +37,7 @@ export async function collectDocumentContent(root: string, output: string, input
   for (const asset of parsed.assets) {
     const path = researchRelativePath(asset.path);
     if (idsByPath.has(path) || (asset.page !== null && asset.page > parsed.pageCount)) throw new Error('research_document_asset_invalid');
-    const bytes = await readResearchFile(output, path, 64 * 1024 * 1024);
+    const bytes = await readResearchFile(output, path, researchDocumentLimits.maxAssetBytes);
     size += bytes.length;
     if (size > maximumDocumentBytes) throw new Error('research_document_assets_too_large');
     if (!bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) throw new Error('research_document_asset_format_invalid');
@@ -61,8 +61,8 @@ export async function collectDocumentContent(root: string, output: string, input
     files,
     content: {
       contractVersion: parsed.contractVersion, engine: parsed.engine, engineVersion: parsed.engineVersion,
-      adapterVersion: parsed.adapterVersion, parserVersion: parsed.parserVersion, parserFingerprint: parsed.parserFingerprint,
-      modelManifest: parsed.modelManifest, runtime: parsed.runtime, tier: parsed.tier, reportedTier: parsed.reportedTier,
+      parserVersion: parsed.parserVersion, parserFingerprint: parsed.parserFingerprint,
+      modelManifest: parsed.modelManifest, runtime: parsed.runtime, tier: parsed.tier,
       parseMode: parsed.parseMode, device: parsed.device, artifacts: parsed.artifacts,
       sourceHash: parsed.sourceHash, pageCount: parsed.pageCount, content: parsed.content, warnings: parsed.warnings, blocks, assets
     }

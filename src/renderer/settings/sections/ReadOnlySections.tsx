@@ -28,15 +28,14 @@ import { formatBytes } from '../../shared/format';
 const POLL_INTERVAL_MS = 2_000;
 
 const PACK_LABELS: Readonly<Record<ResearchModelsStatus['selectedPack'], { label: string; note: string }>> = {
-  basic: { label: '轻量解析 Basic', note: '扫描件、OCR、表格、公式；不下载 VLM' },
-  standard: { label: '标准解析 Standard', note: '复杂论文版面；推荐档（含 VLM）' },
-  advanced: { label: '精细解析 Advanced', note: '更大计算投入；复用 Standard 权重' },
-  flash: { label: '原生文档 Flash', note: 'HTML 与原生 PDF 文本；不加载推理模型' }
+  compact: { label: '轻量结构解析', note: 'PP-OCRv6 Tiny + 文档布局 + 表格，约 19 MB' },
+  complete: { label: '完整解析', note: '在轻量包上增加公式识别和 tokenizer，约 330 MB' }
 };
 
 const STATE_LABELS: Readonly<Record<ResearchModelsStatus['packs'][number]['state'], string>> = {
   missing: '未下载',
   downloading: '下载中',
+  importing: '导入中',
   verifying: '校验中',
   ready: '已就绪',
   incompatible: '文件不匹配',
@@ -56,18 +55,17 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
   });
   const [importPath, setImportPath] = useState('');
   const download = useAsyncAction(
-    (input: { pack: ResearchModelsStatus['selectedPack']; source: ResearchModelsStatus['source'] }) =>
-      downloadModels(store.client, input),
+    (input: { pack: ResearchModelsStatus['selectedPack'] }) => downloadModels(store.client, input),
     { label: '下载解析模型' }
   );
   const select = useAsyncAction(
-    (input: { pack: ResearchModelsStatus['selectedPack']; source?: ResearchModelsStatus['source'] }) =>
-      selectModels(store.client, input),
+    (input: { pack: ResearchModelsStatus['selectedPack'] }) => selectModels(store.client, input),
     { label: '切换解析模型配置' }
   );
-  const importAction = useAsyncAction((directory: string) => importModels(store.client, directory), {
-    label: '导入解析模型'
-  });
+  const importAction = useAsyncAction((input: { directory: string; pack: ResearchModelsStatus['selectedPack'] }) =>
+    importModels(store.client, input.directory, input.pack), {
+      label: '导入解析模型'
+    });
   const removeAction = useAsyncAction(
     (pack: ResearchModelsStatus['selectedPack']) => removeModels(store.client, pack),
     { label: '卸载解析模型' }
@@ -137,21 +135,6 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
             }}
             testId="settings-models-pack"
           />
-          <SelectField
-            label="下载源"
-            value={status.source}
-            disabled={downloading}
-            options={[
-              { value: 'auto', label: '自动选择（官方入口决定）' },
-              { value: 'huggingface', label: 'Hugging Face' },
-              { value: 'modelscope', label: 'ModelScope' }
-            ]}
-            onChange={(next) => {
-              void select.run({ pack: status.selectedPack, source: next }).then(refresh);
-            }}
-            testId="settings-models-source"
-          />
-
           <ul className="flex flex-col gap-0.5" data-testid="settings-models-list">
             {status.packs.map((pack) => (
               <li key={pack.pack} className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
@@ -192,7 +175,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           disabled={download.pending || downloading || status === null}
           onClick={() => {
             if (status === null) return;
-            void download.run({ pack: status.selectedPack, source: status.source }).then(refresh);
+            void download.run({ pack: status.selectedPack }).then(refresh);
           }}
           className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
         >
@@ -232,7 +215,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
             label="从已有目录导入"
             value={importPath}
             disabled={downloading}
-            placeholder="/path/to/mineru-home"
+            placeholder="/path/to/roc-model-assets"
             onChange={setImportPath}
             testId="settings-models-import-path"
           />
@@ -242,7 +225,8 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           data-testid="settings-models-import"
           disabled={importAction.pending || downloading || importPath.trim() === ''}
           onClick={() => {
-            void importAction.run(importPath.trim()).then((result) => {
+            if (status === null) return;
+            void importAction.run({ directory: importPath.trim(), pack: status.selectedPack }).then((result) => {
               if (result !== null) {
                 setImportPath('');
                 refresh();
@@ -274,7 +258,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         <FormNote tone="warn" testId="settings-models-cancel-error">{cancelAction.error}</FormNote>
       )}
       <FormNote tone="default" testId="settings-models-offline-note">
-        模型就绪后解析全程离线；缺模型时会明确阻断，不会自动联网下载。
+        模型就绪后，扫描件与版面/表格/公式识别全程离线；HTML 和含文本层 PDF 不需要模型。缺少模型时不会自动联网下载。
       </FormNote>
     </FormSection>
   );

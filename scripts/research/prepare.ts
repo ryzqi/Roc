@@ -12,7 +12,7 @@ import { verifyManifest, writeManifest } from './manifest.ts';
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
 const SCRIPTS = fileURLToPath(new URL('.', import.meta.url));
-const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'models.lock.json', 'tex-bundle-files.txt', '.python-version'] as const;
+const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'tex-bundle-files.txt', '.python-version'] as const;
 /**
  * 与脚本一起进 lockHashes 的 **src 文件**。
  *
@@ -24,7 +24,6 @@ const SCRIPT_FILES = [
   'prepare.ts',
   'archive-utils.ts',
   'download-asset.ts',
-  'fetch-models.ts',
   'manifest.ts',
   'smoke.ts',
   'build-r-process.ts',
@@ -71,8 +70,8 @@ async function pathInfo(path: string) {
 }
 
 /**
- * Roc 只发布 Apple Silicon。工具链的下载归档、随包 Python、MinerU 的 MPS/llama.cpp 后端
- * 都只有 arm64 版本，所以这里**只能**返回 arm64，而不是「支持的两个架构之一」。
+ * Roc 只发布 Apple Silicon。随包 Python、TeX 与绘图工具当前只构建 arm64，
+ * 所以这里**只能**返回 arm64，而不是「支持的两个架构之一」。
  */
 function hostArchitecture(): 'arm64' {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') {
@@ -96,9 +95,6 @@ export function buildEnvironment(cache: string): NodeJS.ProcessEnv {
   environment.UV_PYTHON_DOWNLOADS = 'never';
   environment.PYTHONNOUSERSITE = '1';
   environment.PYTHONDONTWRITEBYTECODE = '1';
-  environment.HF_HUB_DISABLE_IMPLICIT_TOKEN = '1';
-  environment.HF_HUB_DISABLE_TELEMETRY = '1';
-  environment.HF_HUB_DISABLE_XET = '1';
   return environment;
 }
 

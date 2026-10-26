@@ -1,332 +1,472 @@
+import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import { cp, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
-import modelsLock from '../../../../resources/research-runtime/models.lock.json';
-import {
-  PACK_REPOS, downloadedBytesFor, inspectInstalledModels, installModels, packBytes, readSources, totalBytes,
-  verifyModelRepository, type ModelPack, type ModelSource, type ModelsLock
-} from '../../../../scripts/research/fetch-models';
 import { ResearchProcessError } from './process-runner';
 import type { researchModelJobSchema, researchModelsStatusSchema } from '../../../shared/schemas/research-production';
 import type { z } from 'zod';
+import type { ResearchModelPack } from '../../../shared/schemas/research-production';
+import { getModelAsset, getModelPackAssets, modelAssetPath, modelPackBytes, modelPackManifest, researchModelAssetIds } from './model-catalog';
+import type { ResearchModelAsset, ResearchModelAssetId } from './model-catalog';
+import { downloadVerified, fileSha256 } from '../../../../scripts/research/download-asset';
 
 export type ResearchModelsStatus = z.infer<typeof researchModelsStatusSchema>;
-export type ResearchModelSource = ResearchModelsStatus['source'];
 type ModelJob = z.infer<typeof researchModelJobSchema>;
 type PackStatus = ResearchModelsStatus['packs'][number];
+export type ModelPreferences = { pack: ResearchModelPack };
 
-/**
- * 清单 JSON 的字面量类型会把 `schemaVersion` 拓宽成 `number`，而 `ModelsLock` 要求字面量 `2`；
- * `readSources` 在解析期会重新校验 `schemaVersion === 2`，这是缓存验证后的唯一依据。
- */
-// SAFETY: `resources/research-runtime/models.lock.json` 由 prepare.ts 按 schemaVersion 2 生成，
-// 且每次读取都经 `readSources` 校验（不是 TS 能静态证明的关系）。
-const LOCK = modelsLock as unknown as ModelsLock;
+export type ResearchModelFiles = {
+  detection: string;
+  recognition: string;
+  dictionary: string;
+  layout: string;
+  table: string;
+  formula?: string;
+  formulaTokenizer?: string;
+};
 
-/** 持久化的用户选择。只存用户显式选过的东西，不存推导出来的状态。 */
-export type ModelPreferences = { pack: ModelPack; source: ResearchModelSource };
+export type ResearchModelLease = {
+  pack: ResearchModelPack;
+  root: string;
+  manifest: string;
+  files: ResearchModelFiles;
+};
 
-const PACKS = ['basic', 'standard', 'advanced', 'flash'] as const;
-const SOURCES: readonly ResearchModelSource[] = ['auto', 'huggingface', 'modelscope'];
+type InspectedAsset = { asset: ResearchModelAsset; path: string; ready: boolean; installedBytes: number; error: string | null; signature: string | null };
 
-/**
- * 官方下载入口（`mineru-kit models download <repo> --source <source>`）。
- *
- * 由 `ResearchToolchain` 提供：只有它知道受控 Python 与沙箱策略。
- * 目标仓库必须落在 `staging/<repo-name>`，标记文件由官方 CLI 生成。
- */
-export type ModelDownloader = (repo: ModelSource, staging: string, source: ResearchModelSource,
-  context: { signal: AbortSignal }) => Promise<void>;
+type PersistPreferences = (next: ModelPreferences) => void;
 
-/**
- * MinerU 模型仓库的本地状态与用户管理（提案 §5）。
- *
- * 两条不同的路径必须区分开：
- * - `requireReady()` 是**解析前的确证**，做全量摘要校验（2 GB 读一遍），失败即阻断解析；
- * - `status()` 只做存在性与大小检查，可以频繁调用（设置页、论文阅读器都在轮询）。
- *
- * 下载永远走官方入口生成的 `.mineru_complete` 标记，然后由 Roc 逐文件核对摘要后才发布；
- * Roc 从不自己写标记伪装 ready。
- */
+/** Pinned PaddleOCR assets, integrity checks, resumable download, and active parse leases. */
 export class ResearchModelStore {
   private job: ModelJob | null = null;
-  /** 正在被解析任务使用的包。取消/卸载不能删掉别人正在读的权重。 */
-  private readonly leases = new Map<ModelPack, number>();
-  private readonly verified = new Set<ModelPack>();
+  private lastError: string | null = null;
+  private readonly leases = new Map<ResearchModelPack, number>();
+  private readonly verifiedAssets = new Map<ResearchModelAssetId, string>();
   private preferences: ModelPreferences;
 
   constructor(
     private readonly rootPath: string | null,
-    private readonly downloader: ModelDownloader | null,
     preferences: Partial<ModelPreferences> = {},
-    private readonly persist: ((next: ModelPreferences) => void) | null = null
+    private readonly persist: PersistPreferences | null = null
   ) {
-    this.preferences = {
-      pack: isModelPack(preferences.pack) ? preferences.pack : 'basic',
-      source: isModelSource(preferences.source) ? preferences.source : 'auto'
-    };
+    this.preferences = { pack: isModelPack(preferences.pack) ? preferences.pack : 'compact' };
   }
 
-  /** 用户选择的配置包；解析的默认档位跟着它走。 */
-  get selectedPack(): ModelPack {
+  get selectedPack(): ResearchModelPack {
     return this.preferences.pack;
   }
 
-  get selectedSource(): ResearchModelSource {
-    return this.preferences.source;
-  }
-
-  selectPack(pack: ModelPack): void {
+  selectPack(pack: ResearchModelPack): void {
     if (this.preferences.pack === pack) return;
-    this.preferences = { ...this.preferences, pack };
-    this.persist?.(this.preferences);
-  }
-
-  selectSource(source: ResearchModelSource): void {
-    if (this.preferences.source === source) return;
-    this.preferences = { ...this.preferences, source };
+    this.preferences = { pack };
     this.persist?.(this.preferences);
   }
 
   async status(): Promise<ResearchModelsStatus> {
-    const snapshot = await this.snapshot();
-    return { ...snapshot, downloading: this.job !== null, job: this.job };
+    if (this.rootPath === null || !isAbsolute(this.rootPath)) return this.unavailableStatus();
+    const root = await this.existingRoot();
+    if (root === null) return this.emptyStatus();
+    const inspected = new Map<ResearchModelAssetId, InspectedAsset>();
+    for (const id of researchModelAssetIds) {
+      const asset = getModelAsset(id);
+      inspected.set(id, await inspectAsset(root, asset, false));
+    }
+    const models = [...inspected.values()].map(({ asset, ready, installedBytes, error }) => ({
+      id: asset.id, name: asset.name, kind: asset.kind, ready, bytes: installedBytes, error
+    }));
+    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => {
+      const packAssets = getModelPackAssets(pack).map((asset) => inspected.get(asset.id));
+      const ready = packAssets.every((asset) => asset?.ready === true);
+      const firstError = packAssets.find((asset) => asset?.error !== null)?.error ?? null;
+      const jobPhase = this.job?.pack === pack ? this.job.phase : null;
+      let state: PackStatus['state'];
+      if (jobPhase !== null) state = jobPhase;
+      else if (ready) state = 'ready';
+      else if (isAssetError(firstError)) state = 'incompatible';
+      else state = 'missing';
+      let error: string | null = null;
+      if (!ready) {
+        error = firstError;
+        if (error === null && jobPhase === null) error = 'research_model_asset_missing';
+      }
+      return {
+        pack,
+        ready,
+        bytes: modelPackBytes(pack),
+        installedBytes: packAssets.reduce((sum, asset) => sum + (asset?.installedBytes ?? 0), 0),
+        state,
+        error,
+        models: getModelPackAssets(pack).map((asset) => asset.id)
+      };
+    });
+    const selected = packs.find((pack) => pack.pack === this.preferences.pack);
+    return {
+      ready: selected?.ready === true,
+      downloading: this.job !== null,
+      error: this.lastError ?? selected?.error ?? null,
+      selectedPack: this.preferences.pack,
+      job: this.job,
+      packs,
+      models
+    };
   }
 
-  /**
-   * 解析前调用。模型目录可能被设为只读，因此这里只读不写；
-   * 缺失或不匹配时抛 `research_models_unavailable` 或具体的 hash 错误码。
-   */
-  async requireReady(pack: ModelPack = this.preferences.pack): Promise<string> {
-    const root = this.requireRoot();
-    if (!this.verified.has(pack)) {
-      const inspected = await inspectInstalledModels(root, LOCK, { verifyHashes: true, packs: [pack] });
-      if (!inspected.ready) throw new ResearchProcessError(inspected.error ?? 'research_models_unavailable');
-      this.verified.add(pack);
+  /** Hash each pinned file before a parse, caching only unchanged inode/size/mtime signatures. */
+  async requireReady(pack: ResearchModelPack = this.preferences.pack): Promise<ResearchModelLease> {
+    const root = await this.requireRoot();
+    for (const asset of getModelPackAssets(pack)) {
+      const state = await inspectAsset(root, asset, false);
+      if (!state.ready || state.signature === null) {
+        throw new ResearchProcessError(state.error ?? 'research_model_asset_missing');
+      }
+      if (this.verifiedAssets.get(asset.id) !== state.signature) {
+        const inspected = await inspectAsset(root, asset, true);
+        if (!inspected.ready || inspected.signature === null) {
+          throw new ResearchProcessError(inspected.error ?? 'research_model_asset_missing');
+        }
+        this.verifiedAssets.set(asset.id, inspected.signature);
+      }
     }
     this.leases.set(pack, (this.leases.get(pack) ?? 0) + 1);
-    return root;
+    return { pack, root, manifest: modelPackManifest(pack), files: this.modelFiles(root, pack) };
   }
 
-  /** 解析结束：释放该包的租约，之后的卸载才允许删文件。 */
-  release(pack: ModelPack): void {
+  /** Use ready models when available; native PDF text/HTML parsing can proceed without weights. */
+  async tryRequireReady(pack: ResearchModelPack = this.preferences.pack): Promise<ResearchModelLease | null> {
+    const root = await this.existingRoot();
+    if (root === null) return null;
+    for (const asset of getModelPackAssets(pack)) {
+      const inspected = await inspectAsset(root, asset, false);
+      if (!inspected.ready) {
+      if (inspected.error !== null && isAssetError(inspected.error)) throw new ResearchProcessError(inspected.error);
+        return null;
+      }
+    }
+    return await this.requireReady(pack);
+  }
+
+  release(pack: ResearchModelPack): void {
     const current = this.leases.get(pack) ?? 0;
     if (current <= 1) this.leases.delete(pack);
     else this.leases.set(pack, current - 1);
   }
 
-  /**
-   * 下载（或校验）一个配置包。
-   *
-   * 同一时刻只允许一个任务：两个包共享 torch 仓库，并发下载没有意义，
-   * 而且官方下载锁只按仓库名分发。`signal` 取消后 staging 保留，下一次重试能续传。
-   */
-  async download(pack: ModelPack, source: ResearchModelSource, signal?: AbortSignal): Promise<ResearchModelsStatus> {
+  async download(pack: ResearchModelPack, signal?: AbortSignal): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
-    const downloader = this.downloader;
-    if (downloader === null) throw new ResearchProcessError('research_model_downloader_unavailable');
-    const root = this.requireRoot();
-    const total = packBytes(LOCK, pack);
-    // 进度来自磁盘：官方下载器不汇报字节，但每落盘一个文件就算出来真实值。
+    const root = await this.requireRoot();
+    this.selectPack(pack);
+    this.lastError = null;
+    const assets = getModelPackAssets(pack);
+    const startedAt = new Date().toISOString();
+    this.job = { pack, phase: 'downloading', bytesDone: 0, bytesTotal: modelPackBytes(pack), startedAt };
+    let reporting = false;
     const report = async (): Promise<void> => {
-      if (this.job === null) return;
-      this.job = { ...this.job, bytesDone: await downloadedBytesFor(root, LOCK, pack) };
+      if (this.job === null || reporting) return;
+      reporting = true;
+      try {
+        const bytesDone = await downloadedBytes(root, assets);
+        if (this.job !== null) this.job = { ...this.job, bytesDone };
+      } finally {
+        reporting = false;
+      }
     };
-    this.job = { pack, source, phase: 'downloading', bytesDone: await downloadedBytesFor(root, LOCK, pack), bytesTotal: total,
-      startedAt: new Date().toISOString() };
-    const controller = new AbortController();
-    const onAbort = (): void => controller.abort();
-    if (signal?.aborted === true) controller.abort();
-    else signal?.addEventListener('abort', onAbort, { once: true });
-    const tick = setInterval(() => { void report(); }, 1_000);
-    tick.unref();
+    const timer = setInterval(() => {
+      void report().catch((error: unknown) => { if (this.job !== null) this.lastError = errorCode(error); });
+    }, 1_000);
+    timer.unref();
     try {
-      await installModels(LOCK, root, { packs: [pack], context: { signal: controller.signal },
-        download: async (repo, staging) => { await downloader(repo, staging, source, { signal: controller.signal }); } });
-      // 下载器已经逐文件核对过；这里再走一遍严格校验，把「官方说好了」变成「Roc 验过了」。
-      this.job = { pack, source, phase: 'verifying', bytesDone: total, bytesTotal: total, startedAt: this.job.startedAt };
-      const inspected = await inspectInstalledModels(root, LOCK, { verifyHashes: true, packs: [pack] });
-      if (!inspected.ready) throw new ResearchProcessError(inspected.error ?? 'research_models_invalid');
-      this.verified.add(pack);
+      for (const asset of assets) {
+        throwIfAborted(signal);
+        const installedPath = modelAssetPath(root, asset.id);
+        const installed = await inspectAsset(root, asset, true);
+        if (installed.ready) {
+          this.verifiedAssets.set(asset.id, installed.signature ?? '');
+          continue;
+        }
+        if (installed.error !== 'research_model_asset_missing') await rm(installedPath, { force: true });
+        const temporaryDirectory = await safeDirectory(root, '.downloads');
+        const temporaryPath = join(temporaryDirectory, `${asset.id}.bin`);
+        try {
+          await downloadVerified(asset.url, asset.sha256, temporaryPath, { expectedSize: asset.bytes, signal });
+        } catch (error) {
+          if (isDownloadIntegrityError(error)) {
+            await rm(temporaryPath, { force: true });
+            await rm(`${temporaryPath}.parts`, { recursive: true, force: true });
+          }
+          throw error;
+        }
+        throwIfAborted(signal);
+        await ensureAssetParent(root, asset);
+        await rename(temporaryPath, installedPath);
+        const verified = await inspectAsset(root, asset, true);
+        if (!verified.ready || verified.signature === null) throw new ResearchProcessError(verified.error ?? 'research_model_asset_invalid');
+        this.verifiedAssets.set(asset.id, verified.signature);
+      }
+      this.job = { pack, phase: 'verifying', bytesDone: modelPackBytes(pack), bytesTotal: modelPackBytes(pack), startedAt };
+      for (const asset of assets) {
+        const verified = await inspectAsset(root, asset, true);
+        if (!verified.ready || verified.signature === null) throw new ResearchProcessError(verified.error ?? 'research_model_asset_invalid');
+        this.verifiedAssets.set(asset.id, verified.signature);
+      }
+      this.lastError = null;
+      this.job = null;
       return await this.status();
+    } catch (error) {
+      const failureCode = errorCode(error);
+      if (failureCode === 'research_download_cancelled') {
+        this.lastError = null;
+        this.job = null;
+        return await this.status();
+      }
+      this.lastError = failureCode;
+      throw error;
     } finally {
-      clearInterval(tick);
-      signal?.removeEventListener('abort', onAbort);
+      clearInterval(timer);
       this.job = null;
     }
   }
 
-  /**
-   * 导入用户已经下载好的目录（提案 §5）。
-   *
-   * 源目录只读：先按清单校验，再把**清单内的文件**复制到 staging，重新校验后才发布。
-   * 不依赖源目录之后还在，也不修改它。
-   */
-  async importDirectory(directory: string): Promise<ResearchModelsStatus> {
+  /** Import only the selected pack's pinned relative paths. */
+  async importDirectory(directory: string, pack: ResearchModelPack): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
+    if ((this.leases.get(pack) ?? 0) > 0) throw new ResearchProcessError('research_model_in_use');
     if (!isAbsolute(directory)) throw new ResearchProcessError('research_model_import_path_invalid');
-    const root = this.requireRoot();
-    const source = await realpathIfDirectory(directory);
-    const stagingRoot = await mkdtemp(join(root, '.import-'));
+    const root = await this.requireRoot();
+    const source = await realpathDirectory(directory);
+    const assets = getModelPackAssets(pack);
+    const staging = await mkdtemp(join(root, '.import-'));
+    this.selectPack(pack);
+    this.lastError = null;
+    this.job = { pack, phase: 'importing', bytesDone: 0, bytesTotal: modelPackBytes(pack), startedAt: new Date().toISOString() };
     try {
-      let matched = 0;
-      for (const repo of readSources(LOCK)) {
-        const candidate = await findRepo(source, repo.name);
-        if (candidate === null) continue;
-        // 导入先做宽松校验（用户目录里可能有 `.cache` 之类），复制后再严格校验发布。
-        await verifyModelRepository(candidate, repo, { strict: false });
-        await copyRepo(candidate, join(stagingRoot, repo.name), repo);
-        await verifyModelRepository(join(stagingRoot, repo.name), repo, { strict: true });
-        matched += 1;
+      for (const asset of assets) {
+        const sourcePath = modelAssetPath(source, asset.id);
+        const inspected = await inspectFile(source, asset, sourcePath, true);
+        if (!inspected.ready) throw new ResearchProcessError(inspected.error ?? 'research_model_import_missing_asset');
+        const stagedPath = modelAssetPath(staging, asset.id);
+        await mkdir(join(stagedPath, '..'), { recursive: true, mode: 0o700 });
+        await copyFile(sourcePath, stagedPath);
+        const staged = await inspectFile(staging, asset, stagedPath, true);
+        if (!staged.ready) throw new ResearchProcessError(staged.error ?? 'research_model_asset_invalid');
+        this.job = { ...this.job, bytesDone: this.job.bytesDone + asset.bytes };
       }
-      if (matched === 0) throw new ResearchProcessError('research_model_import_empty');
-      await mkdir(join(root, '.locks'), { recursive: true });
-      for (const repo of readSources(LOCK)) {
-        const staged = join(stagingRoot, repo.name);
-        const destination = join(root, repo.name);
-        if (!(await exists(staged))) continue;
-        // 已存在的仓库不覆盖：导入不能悄悄替换正在被解析使用的权重。
-        if (await exists(destination)) continue;
-        await rename(staged, destination);
+      for (const asset of assets) {
+        const stagedPath = modelAssetPath(staging, asset.id);
+        const target = modelAssetPath(root, asset.id);
+        await ensureAssetParent(root, asset);
+        await rename(stagedPath, target);
+        const inspected = await inspectAsset(root, asset, true);
+        if (!inspected.ready || inspected.signature === null) throw new ResearchProcessError(inspected.error ?? 'research_model_asset_invalid');
+        this.verifiedAssets.set(asset.id, inspected.signature);
       }
-      this.verified.clear();
+      this.lastError = null;
+      this.job = null;
       return await this.status();
     } finally {
-      await rm(stagingRoot, { recursive: true, force: true });
+      this.job = null;
+      await rm(staging, { recursive: true, force: true });
     }
   }
 
-  /**
-   * 卸载一个配置包独占的仓库。
-   *
-   * 共享仓库（torch 被 basic/standard/flash 共用）只有在没有其它已就绪包或活动租约需要时才删。
-   */
-  async remove(pack: ModelPack): Promise<ResearchModelsStatus> {
+  async remove(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
-    const root = this.requireRoot();
-    const installed = await inspectInstalledModels(root, LOCK, { packs: [pack] });
-    const busy = new Set<string>();
-    for (const other of PACKS) {
-      const leased = (this.leases.get(other) ?? 0) > 0;
-      const status = other === pack ? null : await inspectInstalledModels(root, LOCK, { packs: [other] });
-      if (!leased && status?.ready !== true) continue;
-      for (const name of PACK_REPOS[other]) busy.add(name);
+    if ((this.leases.get(pack) ?? 0) > 0) throw new ResearchProcessError('research_model_in_use');
+    const root = await this.requireRoot();
+    const otherPack = pack === 'compact' ? 'complete' : 'compact';
+    const otherReady = (this.leases.get(otherPack) ?? 0) > 0 || (await this.status()).packs.find((entry) => entry.pack === otherPack)?.ready === true;
+    for (const asset of getModelPackAssets(pack)) {
+      const usedElsewhere = otherReady && getModelPackAssets(otherPack).some((other) => other.id === asset.id);
+      if (usedElsewhere) continue;
+      await rm(modelAssetPath(root, asset.id), { force: true });
+      this.verifiedAssets.delete(asset.id);
     }
-    for (const model of installed.models) {
-      if (!model.ready || busy.has(model.name)) continue;
-      await rm(join(root, model.name), { recursive: true, force: true });
-    }
-    this.verified.delete(pack);
+    this.lastError = null;
     return await this.status();
   }
 
-  /** 实际占用（按清单内文件统计，不数 `.cache`）。 */
-  async installedBytes(): Promise<number> {
-    if (this.rootPath === null) return 0;
-    return await totalBytes(this.rootPath);
-  }
-
-  private requireRoot(): string {
-    if (this.rootPath === null || !isAbsolute(this.rootPath)) throw new ResearchProcessError('research_models_unavailable');
-    return this.rootPath;
-  }
-
-  private async snapshot(): Promise<Omit<ResearchModelsStatus, 'downloading' | 'job'>> {
-    if (this.rootPath === null || !isAbsolute(this.rootPath)) {
-      return { ready: false, error: 'research_models_unavailable', selectedPack: this.preferences.pack,
-        source: this.preferences.source, packs: PACKS.map(emptyPack), models: [] };
-    }
-    const all = await inspectInstalledModels(this.rootPath, LOCK, {});
-    const packs: PackStatus[] = [];
-    for (const pack of PACKS) {
-      const inspected = await inspectInstalledModels(this.rootPath, LOCK, { packs: [pack] });
-      packs.push({
-        pack,
-        ready: inspected.ready,
-        bytes: packBytes(LOCK, pack),
-        installedBytes: inspected.models.filter((model) => model.ready).reduce((sum, model) => sum + model.bytes, 0),
-        state: packState(pack, inspected, this.job),
-        error: inspected.ready ? null : (inspected.error ?? 'research_model_missing'),
-        models: [...PACK_REPOS[pack]]
-      });
-    }
+  private modelFiles(root: string, pack: ResearchModelPack): ResearchModelFiles {
     return {
-      ready: packs.find((entry) => entry.pack === this.preferences.pack)?.ready === true,
-      error: all.error,
-      selectedPack: this.preferences.pack,
-      source: this.preferences.source,
-      packs,
-      models: all.models
+      detection: modelAssetPath(root, 'ocr-det'),
+      recognition: modelAssetPath(root, 'ocr-rec'),
+      dictionary: modelAssetPath(root, 'ocr-dictionary'),
+      layout: modelAssetPath(root, 'layout'),
+      table: modelAssetPath(root, 'table'),
+      ...(pack === 'complete' ? {
+        formula: modelAssetPath(root, 'formula'),
+        formulaTokenizer: modelAssetPath(root, 'formula-tokenizer')
+      } : {})
+    };
+  }
+
+  private async requireRoot(): Promise<string> {
+    if (this.rootPath === null || !isAbsolute(this.rootPath)) throw new ResearchProcessError('research_models_unavailable');
+    const info = await lstatIfExists(this.rootPath);
+    if (info?.isSymbolicLink()) throw new ResearchProcessError('research_model_root_symlink');
+    if (info === null) await mkdir(this.rootPath, { recursive: true, mode: 0o700 });
+    return await realpath(this.rootPath);
+  }
+
+  private async existingRoot(): Promise<string | null> {
+    if (this.rootPath === null || !isAbsolute(this.rootPath)) return null;
+    const info = await lstatIfExists(this.rootPath);
+    if (info === null) return null;
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new ResearchProcessError('research_model_root_invalid');
+    return await realpath(this.rootPath);
+  }
+
+  private unavailableStatus(): ResearchModelsStatus {
+    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => ({
+      pack, ready: false, bytes: modelPackBytes(pack), installedBytes: 0, state: 'missing',
+      error: 'research_models_unavailable', models: getModelPackAssets(pack).map((asset) => asset.id)
+    }));
+    return {
+      ready: false, downloading: false, error: 'research_models_unavailable', selectedPack: this.preferences.pack,
+      job: null, packs, models: []
+    };
+  }
+
+  private emptyStatus(): ResearchModelsStatus {
+    const models = researchModelAssetIds.map((id) => {
+      const asset = getModelAsset(id);
+      return { id, name: asset.name, kind: asset.kind, ready: false, bytes: 0, error: 'research_model_asset_missing' };
+    });
+    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => ({
+      pack, ready: false, bytes: modelPackBytes(pack), installedBytes: 0, state: 'missing',
+      error: 'research_model_asset_missing', models: getModelPackAssets(pack).map((asset) => asset.id)
+    }));
+    return {
+      ready: false, downloading: this.job !== null, error: this.lastError ?? 'research_model_asset_missing', selectedPack: this.preferences.pack,
+      job: this.job, packs, models
     };
   }
 }
 
-function emptyPack(pack: ModelPack): PackStatus {
-  return { pack, ready: false, bytes: packBytes(LOCK, pack), installedBytes: 0, state: 'missing',
-    error: 'research_models_unavailable', models: [...PACK_REPOS[pack]] };
+async function inspectAsset(root: string, asset: ResearchModelAsset, verifyHash: boolean): Promise<InspectedAsset> {
+  return await inspectFile(root, asset, modelAssetPath(root, asset.id), verifyHash);
 }
 
-/** 一个包的可见状态：正在进行的任务优先于落盘检查。 */
-function packState(
-  pack: ModelPack,
-  inspected: { ready: boolean; models: { error: string | null }[] },
-  job: ModelJob | null
-): PackStatus['state'] {
-  if (job !== null && job.pack === pack) return job.phase === 'verifying' ? 'verifying' : 'downloading';
-  if (inspected.ready) return 'ready';
-  const broken = inspected.models.some((model) => model.error !== null && !model.error.startsWith('research_model_missing'));
-  return broken ? 'incompatible' : 'missing';
+async function inspectFile(root: string, asset: ResearchModelAsset, path: string, verifyHash: boolean): Promise<InspectedAsset> {
+  try {
+    const info = await safeFileStat(root, asset.file);
+    if (info === null) return { asset, path, ready: false, installedBytes: 0, error: 'research_model_asset_missing', signature: null };
+    if (!info.isFile()) throw new ResearchProcessError('research_model_asset_invalid');
+    const signature = fileSignature(info);
+    if (info.size !== asset.bytes) return { asset, path, ready: false, installedBytes: Math.min(info.size, asset.bytes), error: 'research_model_asset_size_mismatch', signature };
+    if (verifyHash && await fileSha256(path) !== asset.sha256) {
+      return { asset, path, ready: false, installedBytes: info.size, error: 'research_model_asset_hash_mismatch', signature };
+    }
+    return { asset, path, ready: true, installedBytes: info.size, error: null, signature };
+  } catch (error) {
+    return { asset, path, ready: false, installedBytes: 0, error: errorCode(error), signature: null };
+  }
 }
 
-/**
- * 在用户的目录里找某个仓库。
- *
- * 两种常见布局都接受：`<dir>/<repo>`（直接指向模型根）和 `<dir>/models/<repo>`
- * （直接指向 MinerU 的 `MINERU_HOME`）。
- */
-async function findRepo(source: string, name: string): Promise<string | null> {
-  for (const candidate of [join(source, name), join(source, 'models', name)]) {
-    if (await exists(candidate)) return candidate;
+async function safeFileStat(root: string, relativePath: string) {
+  const segments = relativePath.split('/');
+  let current = root;
+  for (let index = 0; index < segments.length; index += 1) {
+    current = join(current, segments[index]);
+    const info = await lstatIfExists(current);
+    if (info === null) return null;
+    if (info.isSymbolicLink()) throw new ResearchProcessError('research_model_asset_symlink');
+    if (index < segments.length - 1 && !info.isDirectory()) throw new ResearchProcessError('research_model_asset_path_invalid');
+    if (index === segments.length - 1) return info;
   }
   return null;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try { await lstat(path); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
+async function ensureAssetParent(root: string, asset: ResearchModelAsset): Promise<void> {
+  const parts = asset.file.split('/');
+  parts.pop();
+  let current = root;
+  for (const part of parts) {
+    current = join(current, part);
+    const info = await lstatIfExists(current);
+    if (info?.isSymbolicLink()) throw new ResearchProcessError('research_model_asset_symlink');
+    if (info !== null && !info.isDirectory()) throw new ResearchProcessError('research_model_asset_path_invalid');
+    if (info === null) await mkdir(current, { mode: 0o700 });
+  }
 }
 
-async function realpathIfDirectory(directory: string): Promise<string> {
+async function safeDirectory(root: string, relativePath: string): Promise<string> {
+  const target = join(root, relativePath);
+  const info = await lstatIfExists(target);
+  if (info?.isSymbolicLink()) throw new ResearchProcessError('research_model_asset_symlink');
+  if (info !== null && !info.isDirectory()) throw new ResearchProcessError('research_model_asset_path_invalid');
+  if (info === null) await mkdir(target, { mode: 0o700 });
+  return target;
+}
+
+async function downloadedBytes(root: string, assets: readonly ResearchModelAsset[]): Promise<number> {
+  let total = 0;
+  for (const asset of assets) {
+    const installed = await inspectAsset(root, asset, false);
+    if (installed.ready) {
+      total += asset.bytes;
+      continue;
+    }
+    const temporary = join(await safeDirectory(root, '.downloads'), `${asset.id}.bin`);
+    const temporaryInfo = await lstatIfExists(temporary);
+    if (temporaryInfo !== null) {
+      if (temporaryInfo.isSymbolicLink() || !temporaryInfo.isFile()) throw new ResearchProcessError('research_model_asset_path_invalid');
+      total += Math.min(temporaryInfo.size, asset.bytes);
+      continue;
+    }
+    const parts = `${temporary}.parts`;
+    const partsInfo = await lstatIfExists(parts);
+    if (partsInfo === null) continue;
+    if (partsInfo.isSymbolicLink() || !partsInfo.isDirectory()) throw new ResearchProcessError('research_model_asset_path_invalid');
+    let partial = 0;
+    for (const entry of await readdir(parts, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.part')) continue;
+      const partPath = join(parts, entry.name);
+      const partInfo = await lstatIfExists(partPath);
+      if (partInfo?.isSymbolicLink()) throw new ResearchProcessError('research_model_asset_symlink');
+      if (partInfo?.isFile()) partial += partInfo.size;
+    }
+    total += Math.min(asset.bytes, partial);
+  }
+  return Math.min(total, assets.reduce((sum, asset) => sum + asset.bytes, 0));
+}
+
+async function lstatIfExists(path: string) {
+  try { return await lstat(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+}
+
+async function realpathDirectory(path: string): Promise<string> {
   let resolved: string;
-  try { resolved = await realpath(directory); }
+  try { resolved = await realpath(path); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new ResearchProcessError('research_model_import_missing');
     throw error;
   }
-  if (!(await stat(resolved)).isDirectory()) throw new ResearchProcessError('research_model_import_invalid');
+  const info = await lstat(resolved);
+  if (!info.isDirectory()) throw new ResearchProcessError('research_model_import_invalid');
   return resolved;
 }
 
-/** 只复制清单内的文件与目录级就绪标记：源目录里的额外内容不能进入 Roc 的模型根。 */
-async function copyRepo(source: string, destination: string, repo: ModelSource): Promise<void> {
-  const copy = async (relativePath: string): Promise<void> => {
-    const to = join(destination, relativePath);
-    await mkdir(join(to, '..'), { recursive: true });
-    await cp(join(source, relativePath), to);
-  };
-  for (const filename of Object.keys(repo.files)) await copy(filename);
-  // 目录级标记必须一起带过来：MinerU 的本地就绪检查只认这些标记。
-  for (const entry of await readdir(source, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === '.cache') continue;
-    for (const marker of await readdir(join(source, entry.name), { withFileTypes: true })) {
-      if (marker.isFile() && marker.name === '.mineru_complete') await copy(`${entry.name}/${marker.name}`);
-    }
-  }
+function fileSignature(info: { dev: number; ino: number; size: number; mtimeMs: number }): string {
+  return `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}`;
 }
 
-function isModelPack(value: unknown): value is ModelPack {
-  return PACKS.includes(value as ModelPack);
+function isAssetError(error: string | null): boolean {
+  return error !== null && error !== 'research_model_asset_missing';
 }
 
-function isModelSource(value: unknown): value is ResearchModelSource {
-  return SOURCES.includes(value as ResearchModelSource);
+function isDownloadIntegrityError(error: unknown): boolean {
+  const message = errorCode(error);
+  return message.startsWith('research_download_hash_mismatch') || message === 'research_download_size_mismatch';
+}
+
+function errorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const code = message.split(':', 1)[0];
+  return /^research_[a-z_]+$/u.test(code) ? code : 'research_model_operation_failed';
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new ResearchProcessError('research_download_cancelled');
+}
+
+function isModelPack(value: unknown): value is ResearchModelPack {
+  return value === 'compact' || value === 'complete';
 }

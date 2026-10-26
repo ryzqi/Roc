@@ -1044,7 +1044,7 @@ try {
   for (const [needle, label] of [
     ['isConfigOpen', '旧前端的配置抽屉开关 isConfigOpen'],
     ['ragChunkSize', '内联 RAG 分块配置 ragChunkSize'],
-    ['mineruConfig', '内联 MinerU 配置 mineruConfig'],
+    ['researchModelSources', '可选模型源配置 researchModelSources'],
     ['sandboxConfig.', '内联沙箱配置 sandboxConfig'],
     ['plotBackend', '内联绘图后端 plotBackend'],
     ['latexEngine', '内联 LaTeX 引擎 latexEngine']
@@ -1062,7 +1062,7 @@ try {
     return button === null ? null : button.textContent?.trim() ?? '';
   });
   assertCheck('6 无内联配置', 'RAG Studio 以「打开设置中心」代替内联配置', ragOpenSettings !== null, String(ragOpenSettings));
-  // 文献导入弹窗：MinerU 解析模式与公式/表格开关只存在于设置中心，弹窗里不该有这些控件。
+  // 文献导入弹窗不放解析档位和模型下载操作；它们属于现有文献阅读器工具栏。
   //
   // 这里断言的是**控件**而不是文案：2da070b5 删掉了原先那句「…在设置中心，不在这里」的
   // 提示，若继续等那句话，这条闸门会在功能完全正确的时候报红（它就是这么红的——不是回归）。
@@ -1071,15 +1071,15 @@ try {
   const importDialogText = ((await page.locator('[data-testid="literature-import-dialog-panel"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   const importParseControls = await page
     .locator(
-      '[data-testid="literature-import-dialog-panel"] :is(input,select,textarea,button)[name*="mineru" i],' +
-        '[data-testid="literature-import-dialog-panel"] [data-testid*="mineru" i],' +
-        '[data-testid="literature-import-dialog-panel"] [data-testid*="formula" i],' +
-        '[data-testid="literature-import-dialog-panel"] [data-testid*="table-mode" i]'
+      '[data-testid="literature-import-dialog-panel"] [data-testid="reader-parse-tier"],' +
+        '[data-testid="literature-import-dialog-panel"] [data-testid="reader-models-download"],' +
+        '[data-testid="literature-import-dialog-panel"] [data-testid="reader-start-parse"],' +
+        '[data-testid="literature-import-dialog-panel"] :is(input,select,textarea,button)[name*="model" i]'
     )
     .count();
   assertCheck(
     '6 无内联配置',
-    '文献导入弹窗没有 MinerU / 公式 / 表格控件，也没有云服务地址输入',
+    '文献导入弹窗没有模型选择/解析控件，也没有云服务地址输入',
     importParseControls === 0 && !importDialogText.includes('云服务地址'),
     `controls=${importParseControls} · ${importDialogText.slice(0, 120)}`
   );

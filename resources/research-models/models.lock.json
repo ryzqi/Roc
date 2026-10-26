@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "engine": "paddleocr.js",
+  "runtime": {
+    "paddleocr": "1.2.0",
+    "onnxruntimeNode": "1.22.0-rev"
+  },
+  "packs": {
+    "compact": {
+      "assetIds": ["ocr-det", "ocr-rec", "ocr-dictionary", "layout", "table"],
+      "bytes": 18967109
+    },
+    "complete": {
+      "assetIds": ["ocr-det", "ocr-rec", "ocr-dictionary", "layout", "table", "formula", "formula-tokenizer"],
+      "bytes": 329850264
+    }
+  },
+  "assets": [
+    {
+      "id": "ocr-det",
+      "name": "PP-OCRv6-tiny detection",
+      "kind": "onnx",
+      "file": "ocr/PP-OCRv6_tiny_det.onnx",
+      "bytes": 1780590,
+      "sha256": "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
+      "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx/resolve/529682ea7926e803ad2bf951365914ceddf68863/inference.onnx",
+      "license": "Apache-2.0",
+      "sourceRevision": "529682ea7926e803ad2bf951365914ceddf68863"
+    },
+    {
+      "id": "ocr-rec",
+      "name": "PP-OCRv6-tiny recognition",
+      "kind": "onnx",
+      "file": "ocr/PP-OCRv6_tiny_rec.onnx",
+      "bytes": 4462639,
+      "sha256": "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
+      "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx/resolve/bed9ff4d0a2b898a481aca58e456a8e52f64f346/inference.onnx",
+      "license": "Apache-2.0",
+      "sourceRevision": "bed9ff4d0a2b898a481aca58e456a8e52f64f346"
+    },
+    {
+      "id": "ocr-dictionary",
+      "name": "PP-OCRv6-tiny dictionary",
+      "kind": "dictionary",
+      "file": "ocr/ppocrv6_tiny_dict.txt",
+      "bytes": 27156,
+      "sha256": "c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd",
+      "url": "https://huggingface.co/x3zvawq/paddleocr-js-onnx/resolve/51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a/ppocr_v6_tiny/ppocrv6_tiny_dict.txt",
+      "license": "Apache-2.0",
+      "sourceRevision": "51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a"
+    },
+    {
+      "id": "layout",
+      "name": "PP-DocLayout-S",
+      "kind": "onnx",
+      "file": "layout/PP-DocLayout-S.onnx",
+      "bytes": 4914586,
+      "sha256": "bcd972f88de67d43a91de50e9cd2335a10b27e9d1dc56fe63a283a793b71c3a9",
+      "url": "https://huggingface.co/x3zvawq/paddleocr-js-onnx/resolve/51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a/pp_doclayout_s/PP-DocLayout-S_infer.onnx",
+      "license": "Apache-2.0",
+      "sourceRevision": "51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a"
+    },
+    {
+      "id": "table",
+      "name": "SLANet",
+      "kind": "onnx",
+      "file": "table/SLANet.onnx",
+      "bytes": 7782138,
+      "sha256": "5947d77711173bb782817fcc77fcb88f445f483a8bbcbbfd1924cf799d39ef70",
+      "url": "https://huggingface.co/PaddlePaddle/SLANet_onnx/resolve/94c4873d01ee3409d47801c8eef299aee9831b71/inference.onnx",
+      "license": "Apache-2.0",
+      "sourceRevision": "94c4873d01ee3409d47801c8eef299aee9831b71"
+    },
+    {
+      "id": "formula",
+      "name": "PP-FormulaNet-S",
+      "kind": "onnx",
+      "file": "formula/PP-FormulaNet-S.onnx",
+      "bytes": 308743141,
+      "sha256": "4362211b5bfdf7aa9749b28f8cd5240cb22d90eb5d79045facec8fcb317a2659",
+      "url": "https://huggingface.co/x3zvawq/paddleocr-js-onnx/resolve/51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a/PP_FormulaNet_S/PP-FormulaNet-S_infer.onnx",
+      "license": "Apache-2.0",
+      "sourceRevision": "51c2133b5a7ea27b795fa8c400fdbfbd5337dd6a"
+    },
+    {
+      "id": "formula-tokenizer",
+      "name": "UniMERNet formula tokenizer",
+      "kind": "tokenizer",
+      "file": "formula/tokenizer.json",
+      "bytes": 2140014,
+      "sha256": "2811d82701ec97c192fa256aa2b4516929373870ae660326cc5b1dc879b95ff2",
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf/ppocr/utils/dict/unimernet_tokenizer/tokenizer.json",
+      "license": "Apache-2.0",
+      "sourceRevision": "dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf"
+    }
+  ]
+}

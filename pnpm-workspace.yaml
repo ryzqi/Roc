@@ -53,6 +53,7 @@ allowBuilds:
   electron: true
   esbuild: true
   node-pty: true
+  onnxruntime-node: false
 
 # pnpm 11+ 只从 workspace/config.yaml 读非鉴权设置。仓库 store 仍放 .runtime。
 storeDir: .runtime/pnpm-store

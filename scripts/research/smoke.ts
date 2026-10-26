@@ -1,19 +1,33 @@
 import { spawn } from 'node:child_process';
-import { cp, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { ResearchModelStore, type ResearchModelLease } from '../../src/main/plugins/research/model-store.ts';
 import { pdfjsAssetDirectory } from '../../src/main/plugins/research/pdfjs-assets.ts';
 import { verifyManifest, type Manifest } from './manifest.ts';
 import { decodeJson } from '../lib/decode-json.ts';
 
+const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const require = createRequire(import.meta.url);
+const TSX_CLI = require.resolve('tsx/cli');
+const PARSER_CLI = join(PROJECT_ROOT, 'src/main/plugins/research/research-job-cli.ts');
+
 export const OFFLINE_PROFILE = '(version 1)(allow default)(deny network*)';
 
-/** 冻结的解析配置：smoke 与主进程共用同一组字段，不各自编默认值。 */
-const smokeOptions = (tier: 'basic' | 'flash', pageRange = '') => ({
-  tier, smallBackend: 'torch', vlmEngine: tier === 'basic' ? 'auto' : 'auto', device: 'cpu', pageRange, ocrMode: 'auto'
+type SmokeParseOptions = { tier: 'compact' | 'complete'; pageRange: string; device: 'coreml' | 'cpu' };
+type SmokeParseResult = {
+  content: string;
+  pageCount: number;
+  blocks: Array<{ kind: string; text?: string }>;
+  warnings: unknown;
+};
+
+const smokeOptions = (tier: SmokeParseOptions['tier'], pageRange = ''): SmokeParseOptions => ({
+  tier, pageRange, device: 'coreml'
 });
 export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
 export const PLOT = "import matplotlib\nmatplotlib.use('Agg')\nfrom matplotlib import pyplot as plt\nfig, ax = plt.subplots(figsize=(5, 2.5), layout='constrained')\nax.bar(['Control', 'Treatment'], [10, 50], color=['#66788a', '#20736b'])\nax.set_ylabel('Improvement (percent)')\nfor extension in ['png', 'svg', 'pdf']:\n    fig.savefig(f'figure.{extension}', dpi=180)\nplt.close(fig)\n";
@@ -89,11 +103,6 @@ function smokeEnvironment(toolchain: string, temporary: string, cache: string): 
   environment.XDG_CACHE_HOME = cache;
   environment.MPLCONFIGDIR = join(cache, 'matplotlib');
   environment.TECTONIC_CACHE_DIR = join(cache, 'tectonic');
-  environment.HF_HOME = join(cache, 'huggingface');
-  environment.HF_HUB_OFFLINE = '1';
-  environment.TRANSFORMERS_OFFLINE = '1';
-  environment.HF_HUB_DISABLE_IMPLICIT_TOKEN = '1';
-  environment.HF_HUB_DISABLE_TELEMETRY = '1';
   environment.PYTHONDONTWRITEBYTECODE = '1';
   environment.PYTHONNOUSERSITE = '1';
   return environment;
@@ -150,7 +159,7 @@ async function runLabeled(
 }
 
 export async function smoke(toolchainPath: string, outputPath: string): Promise<SmokeResult> {
-  return await smokeWithModels(toolchainPath, outputPath, join(toolchainPath, 'models'));
+  return await smokeWithModels(toolchainPath, outputPath, resolve(PROJECT_ROOT, '.runtime/research-models'));
 }
 
 export async function smokeWithModels(toolchainPath: string, outputPath: string, modelsPath: string): Promise<SmokeResult> {
@@ -159,8 +168,8 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   if (await pathInfo(outputPath) !== null) fail('research_smoke_output_exists');
   await mkdir(outputPath, { recursive: true });
   const output = await realpath(outputPath);
-  const models = join(output, 'models');
-  await cp(await realpath(modelsPath), models, { recursive: true, preserveTimestamps: true });
+  const modelStore = new ResearchModelStore(await realpath(modelsPath));
+  const modelSet = await modelStore.requireReady('complete');
   const cache = join(output, 'cache');
   const temporary = join(cache, 'tmp');
   await mkdir(temporary, { recursive: true });
@@ -171,6 +180,25 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     command: string[],
     options?: { request?: unknown; timeoutMs?: number }
   ): Promise<string> => runLabeled(output, environment, label, command, options);
+  const parseDocument = async (
+    label: string,
+    sourcePath: string,
+    outputDir: string,
+    options: SmokeParseOptions,
+    models: ResearchModelLease | null
+  ): Promise<SmokeParseResult> => {
+    const response = decodeJson<{ ok: boolean; result: SmokeParseResult }>(
+      await run(label, [process.execPath, TSX_CLI, PARSER_CLI], {
+        request: {
+          operation: 'parse_document', projectRoot: output, sourcePath, outputDir, options,
+          modelFiles: models?.files ?? null, modelManifest: models?.manifest ?? ''
+        }
+      }),
+      'research_smoke_parser_output_corrupt'
+    );
+    if (!response.ok) fail('research_smoke_parse_failed');
+    return response.result;
+  };
 
   await run('network-denied', [python, '-I', '-B', '-c',
     "import socket\ns=socket.socket()\ntry:\n s.connect(('1.1.1.1',443))\nexcept PermissionError:\n print('network denied')\nelse:\n raise RuntimeError('network was not denied')\nfinally:\n s.close()"]);
@@ -193,55 +221,33 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   await writeFile(join(output, 'render.stdout.log'), `${JSON.stringify({ path: rendered.path, text: rendered.text, pageCount: rendered.pageCount })}\n`, 'utf8');
   console.log('通过：render');
   if (!rendered.text.includes('研究数据与方法')) fail('research_smoke_pdf_text_missing');
-  const parsed = decodeJson<{ ok: boolean; result: { content: string; blocks: Array<{ kind: string; text?: string }>; warnings: unknown } }>(
-    await run('ocr-table-formula', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-      request: {
-        operation: 'parse_document', projectRoot: output, sourcePath: rendered.path,
-        outputDir: join(output, 'parsed'), modelsPath: models, options: smokeOptions('basic')
-      }
-    }),
-    'research_smoke_worker_output_corrupt'
+  const parsed = await parseDocument(
+    'ocr-table-formula', rendered.path, join(output, 'parsed'), smokeOptions('complete'), modelSet
   );
-  if (!parsed.ok) fail('research_smoke_parse_failed');
-  const content = parsed.result.content;
-  const kinds = new Set(parsed.result.blocks.map((block) => block.kind));
-  // 这一页是先把 PDF 渲染成 PNG 再解析的，走的是 MinerU 自带的 OCR（`ocrMode: auto`）。
-  // 断言只看 **table 块自己的文本**：Control/Patients/18 都在表格里，而 Control 也是图里的轴标签，
-  // 拿整篇 content 去 includes 会把图上的字当成表格内容。
-  const tableText = parsed.result.blocks.find((block) => block.kind === 'table')?.text ?? '';
+  const content = parsed.content;
+  const kinds = new Set(parsed.blocks.map((block) => block.kind));
+  // The rendered PDF page is sent through the native PaddleOCR + ONNX pipeline. Assert table cells from the table block itself because Control is also a chart label.
+  const tableText = parsed.blocks.find((block) => block.kind === 'table')?.text ?? '';
   const tableCellsKept = ['Control', 'Patients', '18', 'Improvement'].every((token) => tableText.includes(token));
   if (!content.includes('研究数据与方法') || !tableCellsKept
       || !['table', 'formula', 'figure'].every((kind) => kinds.has(kind))) {
     fail(`research_smoke_parse_content_incomplete:${[...kinds].sort().join(',')}`);
   }
-  await writeFile(join(output, 'parse-result.json'), `${JSON.stringify(parsed.result, null, 2)}\n`, 'utf8');
-  const native = decodeJson<{ ok: boolean; result: { content: string; pageCount: number; blocks: unknown[] } }>(
-    await run('native-pdf', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-      request: {
-        operation: 'parse_document', projectRoot: output, sourcePath: pdf,
-        outputDir: join(output, 'parsed-pdf'), modelsPath: models, options: smokeOptions('basic')
-      }
-    }),
-    'research_smoke_worker_output_corrupt'
+  await writeFile(join(output, 'parse-result.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  const native = await parseDocument(
+    'native-pdf', pdf, join(output, 'parsed-pdf'), smokeOptions('complete'), modelSet
   );
-  if (!native.ok || !native.result.content.includes('Treatment') || native.result.pageCount !== 1) {
+  if (!native.content.includes('Treatment') || native.pageCount !== 1) {
     fail('research_smoke_native_pdf_incomplete');
   }
   const html = join(output, 'paper.html');
   await writeFile(html, '<html><body><h1>研究方法</h1><p>Local HTML evidence.</p>'
     + '<table><tr><th>Group</th><th>Patients</th></tr><tr><td>Treatment</td><td>18</td></tr></table>'
     + '</body></html>', 'utf8');
-  const parsedHtml = decodeJson<{ ok: boolean; result: { content: string; blocks: unknown[] } }>(
-    await run('html', [python, '-I', '-B', join(toolchain, 'worker.py')], {
-      request: {
-        operation: 'parse_document', projectRoot: output, sourcePath: html,
-        // HTML 固定 flash（提案 §6）：不加载模型，也不建虚构页码。
-        outputDir: join(output, 'parsed-html'), modelsPath: null, options: smokeOptions('flash')
-      }
-    }),
-    'research_smoke_worker_output_corrupt'
+  const parsedHtml = await parseDocument(
+    'html', html, join(output, 'parsed-html'), smokeOptions('compact'), null
   );
-  if (!parsedHtml.ok || !parsedHtml.result.content.includes('研究方法') || !parsedHtml.result.content.includes('18')) {
+  if (!parsedHtml.content.includes('研究方法') || !parsedHtml.content.includes('18')) {
     fail('research_smoke_html_incomplete');
   }
   await run('relocated-interpreter', [python, '-I', '-B', '-c', "print('relocated')"], { timeoutMs: 30_000 });
@@ -252,10 +258,10 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
     network: 'denied',
     pageCount: rendered.pageCount,
     blockKinds: [...kinds].sort(),
-    blockCount: parsed.result.blocks.length,
-    warnings: parsed.result.warnings,
-    nativePdfBlocks: native.result.blocks.length,
-    htmlBlocks: parsedHtml.result.blocks.length,
+    blockCount: parsed.blocks.length,
+    warnings: parsed.warnings,
+    nativePdfBlocks: native.blocks.length,
+    htmlBlocks: parsedHtml.blocks.length,
     figures: ['png', 'svg', 'pdf'],
     integrity: 'passed'
   };
@@ -272,7 +278,8 @@ async function main(): Promise<void> {
   if (values.toolchain === undefined || values.toolchain === '' || values.output === undefined || values.output === '') {
     fail('research_smoke_arguments_required');
   }
-  const models = values.models === undefined || values.models === '' ? join(values.toolchain, 'models') : values.models;
+  const models = values.models === undefined || values.models === ''
+    ? resolve(PROJECT_ROOT, '.runtime/research-models') : values.models;
   await smokeWithModels(values.toolchain, values.output, models);
 }
 

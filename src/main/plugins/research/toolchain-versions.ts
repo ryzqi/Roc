@@ -5,9 +5,8 @@
  *
  * 这份逻辑只回答一个问题：**lock 声明的工具集，和 manifest 记录的工具集，是不是同一个**。
  * 它被 `toolchain.ts` 的 `verify()` 用来决定要不要拒绝整个工具链，但 `toolchain.ts` 自己
- * 加载不了单测——它 `?raw` 内联 `worker.py`、直读 `tools.lock.json`、并依赖 `pdfjs-dist` 与
- * `@napi-rs/canvas` 的原生绑定（`tests/unit` 的 `bundle-ts.mjs` 是 `platform:'neutral'` 且
- * 没有文件系统基址）。所以推导与比对留在这里，只接收已解析的值，不读文件、不抛领域错误。
+ * 加载不了单测——它直读 `tools.lock.json`，并依赖 `pdfjs-dist` 与 `@napi-rs/canvas` 的原生绑定
+ *（`tests/unit` 的 `bundle-ts.mjs` 是 `platform:'neutral'` 且没有文件系统基址）。
  *
  * ## 为什么键集来自 lock 而不是写死的三个名字
  *

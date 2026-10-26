@@ -20,11 +20,6 @@
     "sha256": "29a16197c8d01cafcacbd9c1774b66b28d7c0f15a6aceed88e4e8068ea398470"
   },
   {
-    "file": "CDLA-Permissive-2.0.txt",
-    "source": "https://raw.githubusercontent.com/spdx/license-list-data/v3.25.0/text/CDLA-Permissive-2.0.txt",
-    "sha256": "4531a67d443284d93ffed0803df5b10634aff21c3d77e381f2d48af01d875868"
-  },
-  {
     "file": "typst-APACHE.txt",
     "source": "https://raw.githubusercontent.com/typst/typst/v0.15.0/LICENSE",
     "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"

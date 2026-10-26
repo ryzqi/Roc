@@ -250,6 +250,44 @@ export function assertRipgrepBinaryForPackaging({
   }
 }
 
+export function assertOnnxRuntimeNodeForPackaging({
+  architecture = process.arch,
+  projectRoot: targetProjectRoot = projectRoot
+} = {}) {
+  if (architecture !== 'arm64') {
+    throw new Error(`ONNX Runtime packaging is configured only for darwin/arm64, got ${architecture}.`);
+  }
+  const packagePath = resolve(targetProjectRoot, 'node_modules', 'onnxruntime-node', 'package.json');
+  let metadata;
+  try {
+    metadata = JSON.parse(readFileSync(packagePath, 'utf8'));
+  } catch (error) {
+    throw new Error(`Missing or unreadable onnxruntime-node package: ${packagePath} (${error instanceof Error ? error.message : String(error)})`);
+  }
+  if (metadata.version !== '1.22.0-rev') {
+    throw new Error(`Expected onnxruntime-node@1.22.0-rev, found ${String(metadata.version)} at ${packagePath}.`);
+  }
+  const nativeRoot = resolve(targetProjectRoot, 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'darwin', architecture);
+  const nativePaths = [
+    resolve(nativeRoot, 'libonnxruntime.1.22.0.dylib'),
+    resolve(nativeRoot, 'onnxruntime_binding.node')
+  ];
+  for (const nativePath of nativePaths) {
+    if (!existsSync(nativePath) || !statSync(nativePath).isFile() || statSync(nativePath).size === 0) {
+      throw new Error(`Missing ONNX Runtime native file for darwin/${architecture}: ${nativePath}`);
+    }
+    const result = spawnSync('/usr/bin/lipo', ['-archs', nativePath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    if (result.error || result.status !== 0) {
+      throw new Error(`Could not inspect ONNX Runtime architecture for ${nativePath}: ${result.error?.message ?? result.stderr}`);
+    }
+    const architectures = result.stdout.trim().split(/\s+/u);
+    if (architectures.length !== 1 || architectures[0] !== architecture) {
+      throw new Error(`ONNX Runtime native file must contain only ${architecture}: ${nativePath} (${result.stdout.trim()})`);
+    }
+  }
+  return { version: metadata.version, architecture, nativeFiles: nativePaths };
+}
+
 function packagedToolchainSha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
@@ -286,13 +324,7 @@ const packagedResearchLeftoverNames = new Set([
   'fastjsonschema',
   'nest_asyncio2.py',
   'faker',
-  'polyfactory',
-  'rapidocr'
-  // `wcwidth` 曾经在这里：它看起来只被 prompt_toolkit 用，但 mineru 的 docvortex 会经 ftfy
-  // （`ftfy/formatting.py:11 from wcwidth import wcswidth, wcwidth`）在**导入期**拿到它。
-  // 这类「间接导入期依赖」不能靠读 requirements 判断，只能实测导出模块闭包。
-  // `torchgen` 曾经在这里：torch 2.14 的 `torch/utils/_python_dispatch.py:13` 在**导入期**就
-  // `import torchgen`，所以剔掉它等于剔掉 `import torch` 本身（省 2.3 MB，换来解析全挂）。
+  'polyfactory'
 ]);
 
 function isPackagedResearchLeftoverPart(part) {
@@ -312,19 +344,8 @@ function isPackagedResearchLeftoverPart(part) {
 
 export function isExcludedPackagedResearchPath(relativePath) {
   if (relativePath === 'models' || relativePath.startsWith('models/')) return true;
-  if (relativePath === 'bibliography.py') return true;
   if (relativePath.endsWith('.pyc')) return true;
   if (relativePath === 'python/include' || relativePath.startsWith('python/include/')) return true;
-  // 这些剔除项**必须逐个实测**，不能按名字猜：
-  //   - `torch/include`（62 MB C 头文件）：纯编译期资料，`import torch` 不读它，可以剔。
-  //   - `torch/testing`：**不能剔**。裸 `import torch` 就会把它载入 `sys.modules`
-  //     （经 `torch/_dynamo/test_case.py`），剔掉后 `from torch.nn.modules import *` 抛
-  //     `ModuleNotFoundError: No module named 'torch.testing'`。
-  //   - `torch/bin`：**不能整目录剔**。`_C._initExtension()` 硬找
-  //     `torch/bin/torch_shm_manager`，缺了就是启动即 `RuntimeError`。目录里真正该剔的
-  //     只有两个 3.8 MB 的 protoc 代码生成器。
-  if (/(?:^|\/)torch\/include(?:\/|$)/.test(relativePath)) return true;
-  if (/(?:^|\/)torch\/bin\/protoc(?:-|$|\.)/.test(relativePath)) return true;
   return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
 }
 
@@ -370,7 +391,7 @@ export function assertLiveResearchToolchainForPackaging({
     }
   }
   const sources = researchRuntimeSourcePath(targetProjectRoot);
-  for (const name of ['worker.py', 'figure.py']) {
+  for (const name of ['figure.py']) {
     const fullPath = resolve(sources, name);
     if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
       throw new Error(`Missing research runtime source for packaging: ${name}`);
@@ -450,7 +471,6 @@ function collectPackagedResearchEntries(root, previousEntries) {
         previousEntry?.type === 'file' &&
         previousEntry.size === info.size &&
         previousEntry.executable === executable &&
-        relativePath !== 'worker.py' &&
         relativePath !== 'figure.py';
       entries.push(
         reuse
@@ -477,7 +497,7 @@ export function finalizePackagedResearchToolchain({
 }) {
   const root = researchToolchainResourcePath(resourcesDir);
   const sources = researchRuntimeSourcePath(targetProjectRoot);
-  for (const name of ['worker.py', 'figure.py']) {
+  for (const name of ['figure.py']) {
     const source = resolve(sources, name);
     if (!existsSync(source) || !statSync(source).isFile()) {
       throw new Error(`Missing research runtime source for packaging: ${name}`);
@@ -491,7 +511,6 @@ export function finalizePackagedResearchToolchain({
     throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
   }
   const lockHashes = { ...manifest.lockHashes };
-  lockHashes['worker.py'] = packagedToolchainSha256(resolve(root, 'worker.py'));
   lockHashes['figure.py'] = packagedToolchainSha256(resolve(root, 'figure.py'));
   delete lockHashes['bibliography.py'];
   const next = {
@@ -511,7 +530,6 @@ export function verifyPackagedResearchToolchain({
   const sources = researchRuntimeSourcePath(targetProjectRoot);
   const required = [
     'manifest.json',
-    'worker.py',
     'figure.py',
     'bin/tectonic',
     'bin/uv',
@@ -531,17 +549,6 @@ export function verifyPackagedResearchToolchain({
     'licenses/uv-MIT.txt',
     'licenses/uv-APACHE.txt',
     'licenses/vale-MIT.txt',
-    'licenses/CDLA-Permissive-2.0.txt',
-    // 运行时**导入期**真正需要的、曾经被剔除清单误删的文件。
-    // 它们都不是「某个可选特性才用」的东西：缺任何一项，`parse_document` 一启动就抛异常。
-    //   - torch/bin/torch_shm_manager：`import torch` → `_C._initExtension()` 硬找它。
-    //   - torchgen/：torch 2.14 的 `torch/utils/_python_dispatch.py:13` 导入期 import。
-    //   - torch/testing/：裸 `import torch` 会载入 `torch.testing`。
-    //   - wcwidth/：docvortex → ftfy 在导入期 import。
-    'python/lib/python3.12/site-packages/torch/bin/torch_shm_manager',
-    'python/lib/python3.12/site-packages/torchgen/__init__.py',
-    'python/lib/python3.12/site-packages/torch/testing/__init__.py',
-    'python/lib/python3.12/site-packages/wcwidth/__init__.py'
   ];
   for (const relativePath of required) {
     const fullPath = resolve(root, relativePath);
@@ -560,14 +567,11 @@ export function verifyPackagedResearchToolchain({
   if (existsSync(resolve(root, 'models'))) {
     throw new Error('Packaged research toolchain must not include models.');
   }
-  if (existsSync(resolve(root, 'bibliography.py'))) {
-    throw new Error('Packaged research toolchain must not include bibliography.py.');
-  }
   const leftover = packagedResearchLeftover(root);
   if (leftover !== null) {
     throw new Error(`Packaged research toolchain must not include ${leftover}.`);
   }
-  for (const name of ['worker.py', 'figure.py']) {
+  for (const name of ['figure.py']) {
     const source = resolve(sources, name);
     const packaged = resolve(root, name);
     if (packagedToolchainSha256(packaged) !== packagedToolchainSha256(source)) {

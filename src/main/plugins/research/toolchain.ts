@@ -1,20 +1,20 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { lstat, mkdir, readFile, readdir, readlink, realpath, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, readlink, realpath, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
-import workerSource from '../../../../resources/research-runtime/worker.py?raw';
-import { researchParseOptionsSchema, researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema,
-  type ResearchParseOptions, type ResearchParseTier } from '../../../shared/schemas/research-production';
+import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParseContractVersion, researchParserVersion, researchRenderedPdfSchema, researchToolchainStatusSchema,
+  type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
+import type { ResearchModelPack } from '../../../shared/schemas/research-production';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
-import { ResearchModelStore, type ModelDownloader, type ModelPreferences, type ResearchModelSource, type ResearchModelsStatus } from './model-store';
-import type { ModelPack } from '../../../../scripts/research/fetch-models';
+import { ResearchModelStore, type ModelPreferences, type ResearchModelFiles, type ResearchModelsStatus } from './model-store';
+import { modelPackManifest } from './model-catalog';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const manifestSchema = z.object({
@@ -32,11 +32,6 @@ const manifestSchema = z.object({
 type Manifest = z.infer<typeof manifestSchema>;
 type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string; jobDir: string; signal?: AbortSignal };
 
-function parseOperationTier(operation: Record<string, unknown>): ResearchParseTier | null {
-  const options = operation.options;
-  if (operation.operation !== 'parse_document' || options === null || typeof options !== 'object') return null;
-  return (options as { tier?: ResearchParseTier }).tier ?? null;
-}
 type ResolvedToolchain = { root: string; manifest: Manifest };
 
 /** 用户模型选择在 `plugin_config` 里的键（包的持久化位置见 `ConfigStore`）。 */
@@ -51,7 +46,7 @@ export class ResearchToolchain {
 
   constructor(private readonly rootPath: string | null, modelsRoot: string | null = null) {
     this.modelsRoot = modelsRoot;
-    this.models = new ResearchModelStore(modelsRoot, this.modelDownloader);
+    this.models = new ResearchModelStore(modelsRoot);
   }
 
   /**
@@ -62,7 +57,7 @@ export class ResearchToolchain {
    */
   attachModelConfig(config: { get<T>(key: string): T | null; set<T>(key: string, value: T): void }): void {
     const saved = config.get<Partial<ModelPreferences>>(MODEL_PREFERENCES_KEY);
-    this.models = new ResearchModelStore(this.modelsRoot, this.modelDownloader, saved ?? {}, (next) => {
+    this.models = new ResearchModelStore(this.modelsRoot, saved ?? {}, (next) => {
       config.set(MODEL_PREFERENCES_KEY, next);
     });
   }
@@ -77,8 +72,12 @@ export class ResearchToolchain {
   }
 
   async identity(): Promise<string> {
-    const { manifest } = await this.resolve();
-    return researchContentHash(JSON.stringify(manifest.lockHashes));
+    return researchContentHash(JSON.stringify({
+      engine: 'paddleocr.js',
+      contractVersion: researchParseContractVersion,
+      parserVersion: researchParserVersion,
+      modelManifest: modelPackManifest(this.models.selectedPack)
+    }));
   }
 
   async experimentRuntime(jobDir: string): Promise<{ root: string; python: string; pythonVersion: string; uv: string; hash: string; environment: NodeJS.ProcessEnv }> {
@@ -87,23 +86,23 @@ export class ResearchToolchain {
       hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.environment(root, jobDir) };
   }
 
-  /**
-   * 冻结的解析配置。档位选择属于请求，不属于 worker 默认值：worker 不猜。
-   * HTML 强制 flash（提案 §6）：它没有需要版面模型的页，也不建虚构页码。
-   */
+  /** Parse uses available pinned ONNX models; born-digital PDF and HTML still work without model files. */
   async parseDocument(input: WorkerInput & { options: ResearchParseOptions }): Promise<z.infer<typeof researchParsedDocumentSchema>> {
-    return await this.worker(input, { operation: 'parse_document', options: input.options }, researchParsedDocumentSchema, 600_000);
+    const isHtml = ['.html', '.htm'].includes(extname(input.sourcePath).toLowerCase());
+    const models = isHtml ? null : await this.models.tryRequireReady(input.options.tier);
+    try {
+      return await this.job(input, {
+        operation: 'parse_document', options: input.options,
+        modelFiles: models?.files ?? null, modelManifest: models?.manifest ?? ''
+      }, researchParsedDocumentSchema);
+    } finally {
+      if (models !== null) this.models.release(models.pack);
+    }
   }
 
-  /** 当前默认解析配置：按用户选择的模型包推导，缺包时由调用方显式报错。 */
-  defaultParseOptions(mediaType: string): ResearchParseOptions {
-    // HTML 固定 flash（提案 §6）：不加载推理模型，也不虚构 PDF 页码。
-    const pack = this.models.selectedPack;
-    const tier: ResearchParseTier = mediaType === 'text/html' ? 'flash' : pack;
-    return researchParseOptionsSchema.parse({
-      tier, smallBackend: 'torch', vlmEngine: tier === 'standard' || tier === 'advanced' ? 'llama-cpp' : 'auto',
-      device: 'mps', pageRange: '', ocrMode: 'auto'
-    });
+  /** Freeze the user-selected model tier; actual inference device is recorded by the parser. */
+  defaultParseOptions(_mediaType: string): ResearchParseOptions {
+    return researchParseOptionsSchema.parse({ tier: this.models.selectedPack, device: 'coreml', pageRange: '' });
   }
 
   async renderPdf(input: WorkerInput & { page: number; scale: number }): Promise<z.infer<typeof researchRenderedPdfSchema>> {
@@ -245,79 +244,36 @@ export class ResearchToolchain {
     return await this.models.status();
   }
 
-  async selectModels(pack: ModelPack, source: ResearchModelSource | undefined): Promise<ResearchModelsStatus> {
+  async selectModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
     this.models.selectPack(pack);
-    if (source !== undefined) this.models.selectSource(source);
     return await this.models.status();
   }
 
-  /**
-   * 下载一个包。
-   *
-   * `pack`/`source` 同时是**选择的写入**：用户在设置页点「下载」就是在选它，
-   * 不应再要求一次额外的「选中」操作。
-   */
-  async downloadModels(pack: ModelPack, source: ResearchModelSource): Promise<ResearchModelsStatus> {
+  /** Download a pinned pack; the selected pack changes with the download action. */
+  async downloadModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
     if (this.downloadController !== null) throw new ResearchProcessError('research_model_download_locked');
     this.models.selectPack(pack);
-    this.models.selectSource(source);
     const controller = new AbortController();
     this.downloadController = controller;
     try {
-      return await this.models.download(pack, source, controller.signal);
+      return await this.models.download(pack, controller.signal);
     } finally {
       if (this.downloadController === controller) this.downloadController = null;
     }
   }
 
-  /** 取消当前下载：中止官方 CLI，staging 保留供续传；返回取消后的真实状态。 */
   async cancelModelsDownload(): Promise<ResearchModelsStatus> {
     this.downloadController?.abort();
     return await this.models.status();
   }
-  async importModels(directory: string): Promise<ResearchModelsStatus> {
-    return await this.models.importDirectory(directory);
+
+  async importModels(directory: string, pack: ResearchModelPack): Promise<ResearchModelsStatus> {
+    return await this.models.importDirectory(directory, pack);
   }
 
-  async removeModels(pack: ModelPack): Promise<ResearchModelsStatus> {
+  async removeModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
     return await this.models.remove(pack);
   }
-
-  /**
-   * 官方下载入口：`python -m mineru.kit.main models download <repo> --source <source>`。
-   *
-   * 用 `-I -B` 与受控环境变量启动，并把 `MINERU_HOME` 指向 staging：官方 CLI 在
-   * `$MINERU_HOME/models` 下落盘，并在仓库子目录里生成 `.mineru_complete`。
-   * 网络策略是 `full`（此处唯一的联网点，见提案 §5），GPU 不参与。
-   */
-  private readonly modelDownloader: ModelDownloader = async (repo, staging, source, context) => {
-    const { root } = await this.resolve();
-    // `MINERU_HOME` 直接指向 staging：官方 CLI 在 `$MINERU_HOME/models/<repo>` 下落盘。
-    // `fetchModel` 随后按 `<staging>/<repo>` 校验，所以下完后把仓库目录上提一层。
-    await runResearchProcess({
-      command: join(root, 'python/bin/python3'),
-      args: ['-I', '-B', '-m', 'mineru.kit.main', 'models', 'download', repo.name, '--source', source],
-      cwd: staging,
-      // 沙箱必须能读到工具链自带的 site-packages，并写入 staging。
-      readablePaths: [root],
-      writablePaths: [staging],
-      environment: {
-        PATH: `${join(root, 'python/bin')}:${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`,
-        LANG: 'en_US.UTF-8',
-        HOME: staging, TMPDIR: staging, XDG_CACHE_HOME: join(staging, 'cache'),
-        MINERU_HOME: staging,
-        HF_HUB_DISABLE_TELEMETRY: '1', PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1'
-      },
-      timeoutMs: 3_600_000,
-      allowGpuAcceleration: false,
-      networkAccess: 'full',
-      allowPosixSpawn: false,
-      signal: context.signal
-    });
-    const downloaded = join(staging, 'models', repo.name);
-    const published = join(staging, repo.name);
-    await rename(downloaded, published);
-  };
 
   private async job<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
     const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir };
@@ -331,9 +287,18 @@ export class ResearchToolchain {
       try { return [dirname(canvasRequire.resolve(`${specifier}/package.json`))]; }
       catch { return []; }
     };
+    const packageRoot = (specifier: string): string[] => {
+      try {
+        let current = dirname(require.resolve(specifier));
+        while (!existsSync(join(current, 'package.json')) && dirname(current) !== current) current = dirname(current);
+        return existsSync(join(current, 'package.json')) ? [current] : [];
+      } catch { return []; }
+    };
+    const modelFiles = operation.operation === 'parse_document' && operation.modelFiles !== null && typeof operation.modelFiles === 'object'
+      ? operation.modelFiles as Partial<ResearchModelFiles> : null;
+    const modelPaths = modelFiles === null ? [] : Object.values(modelFiles).filter((path): path is string => typeof path === 'string');
     // Unpacked dist/dev output lives below the repository package scope. Node
-    // reads that package.json to load ESM, and Zod remains an external dependency.
-    // Grant these exact paths rather than exposing the repository or node_modules.
+    // reads that package.json to load ESM, and dependencies remain external for native modules.
     let packageScope = dirname(packagedCli);
     while (!existsSync(join(packageScope, 'package.json')) && dirname(packageScope) !== packageScope) {
       packageScope = dirname(packageScope);
@@ -345,13 +310,20 @@ export class ResearchToolchain {
       dirname(require.resolve('zod/package.json')),
       dirname(require.resolve('pdfjs-dist/package.json')),
       dirname(require.resolve('@napi-rs/canvas/package.json')),
-      // 只可能有 arm64 的原生 canvas：x64 那份不再进包，解析它只会得到一条无用的放行路径。
+      ...packageRoot('paddleocr'),
+      ...packageRoot('onnxruntime-node'),
+      ...packageRoot('htmlparser2'),
+      ...packageRoot('utif'),
+      // Only the arm64 native canvas package is shipped in the macOS release.
       ...optionalNative('@napi-rs/canvas-darwin-arm64'),
       process.execPath,
       join(dirname(process.execPath), '..'),
       input.sourcePath,
-      input.projectRoot
+      input.projectRoot,
+      ...modelPaths
     ];
+    const parseOptions = operation.operation === 'parse_document' && operation.options !== null && typeof operation.options === 'object'
+      ? operation.options as Partial<ResearchParseOptions> : null;
     const result = await runResearchProcess({
       command: process.execPath,
       args: [packagedCli],
@@ -359,10 +331,10 @@ export class ResearchToolchain {
       readablePaths,
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
-      timeoutMs: 60_000,
+      timeoutMs: operation.operation === 'parse_document' ? 600_000 : 60_000,
       signal: input.signal,
       input: JSON.stringify(request),
-      allowGpuAcceleration: false,
+      allowGpuAcceleration: parseOptions?.device === 'coreml' && modelPaths.length > 0,
       networkAccess: 'none',
       allowPosixSpawn: false
     });
@@ -382,6 +354,16 @@ export class ResearchToolchain {
     const { renderResearchPdf } = await import('./pdf-render');
     const base = { projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir, signal: input.signal, timeoutMs: 60_000 };
     const name = operation.operation;
+    if (name === 'parse_document') {
+      const { parseResearchDocument } = await import('./document-parser');
+      return schema.parse(await parseResearchDocument({
+        projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
+        signal: input.signal, timeoutMs: 600_000,
+        options: researchParseOptionsSchema.parse(operation.options),
+        modelFiles: operation.modelFiles as ResearchModelFiles | null,
+        modelManifest: typeof operation.modelManifest === 'string' ? operation.modelManifest : ''
+      }));
+    }
     if (name === 'extract_template') return schema.parse(await extractResearchTemplate(base));
     if (name === 'render_pdf') {
       return schema.parse(await renderResearchPdf({ ...base, page: Number(operation.page), scale: Number(operation.scale) }));
@@ -396,47 +378,12 @@ export class ResearchToolchain {
     throw new ResearchProcessError('research_operation_unknown');
   }
 
-  private async worker<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>, timeoutMs: number): Promise<T> {
-    const { root } = await this.resolve();
-    const tier = parseOperationTier(operation);
-    // Flash 不加载模型：不去碰模型目录，也不把“目录存在”当成成功的前提。
-    // 租约按**解析档位**登记：`requireReady(pack)` 校验的也必须就是这个包，
-    // 否则会校验用户选中的包、却释放解析实际用到的包的租约。
-    const modelsPath = tier === null || tier === 'flash' ? null : await this.models.requireReady(tier);
-    if (tier === null || tier === 'flash') return await this.runWorker(input, operation, schema, timeoutMs, root, null);
-    // 租约覆盖整个解析：其间用户卸载模型不能把这批权重删掉。
-    try {
-      return await this.runWorker(input, operation, schema, timeoutMs, root, modelsPath);
-    } finally {
-      this.models.release(tier);
-    }
-  }
-
-  private async runWorker<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>,
-    timeoutMs: number, root: string, modelsPath: string | null): Promise<T> {
-    const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
-      ...(modelsPath === null ? {} : { modelsPath }) };
-    const result = await runResearchProcess({ command: join(root, 'python/bin/python3'), args: ['-I', '-B', join(root, 'worker.py')],
-      cwd: input.jobDir, readablePaths: [root, input.sourcePath, ...(modelsPath === null ? [] : [modelsPath])], writablePaths: [input.jobDir],
-      environment: await this.environment(root, input.jobDir), input: JSON.stringify(request), timeoutMs, signal: input.signal,
-      allowGpuAcceleration: operation.operation === 'parse_document', networkAccess: 'none', allowPosixSpawn: false });
-    const envelope = z.discriminatedUnion('ok', [
-      z.object({ ok: z.literal(true), result: schema }).strict(),
-      z.object({ ok: z.literal(false), error: z.object({ code: z.string(), type: z.string() }).strict() }).strict()
-    ]).safeParse(parseJson(result.stdout));
-    if (!envelope.success) throw new ResearchProcessError('research_worker_response_invalid', '', result.stderr);
-    if (!envelope.data.ok) throw new ResearchProcessError(envelope.data.error.code, '', result.stderr);
-    if (result.exitCode !== 0) throw new ResearchProcessError('research_worker_failed', '', result.stderr);
-    return envelope.data.result;
-  }
-
   private async environment(root: string, jobDir: string): Promise<NodeJS.ProcessEnv> {
     const temporary = await createResearchDirectory(jobDir, 'tmp');
     const cache = await createResearchDirectory(jobDir, 'cache');
     return { PATH: `${join(root, 'python/bin')}:${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
       TMPDIR: temporary, XDG_CACHE_HOME: cache, MPLCONFIGDIR: join(cache, 'matplotlib'), TECTONIC_CACHE_DIR: join(cache, 'tectonic'),
-      HF_HOME: join(cache, 'huggingface'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1',
-      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1', HF_HUB_DISABLE_TELEMETRY: '1', PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1' };
+      PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1' };
   }
 
   private async resolve(): Promise<ResolvedToolchain> {
@@ -466,7 +413,6 @@ export class ResearchToolchain {
       const entry = entries.get(path);
       if (entry?.type !== 'file' || entry.sha256 !== hash) throw new ResearchProcessError('research_toolchain_source_mismatch');
     };
-    requireHash('worker.py', researchContentHash(workerSource));
     requireHash('tex/bundle.zip', toolsLock.texBundle.zipSha256);
     const actual: string[] = [];
     const visit = async (directory: string): Promise<void> => {

@@ -4,14 +4,7 @@ version = "0.1.0"
 description = "Roc 科研工具运行时"
 requires-python = ">=3.12.15,<3.13"
 dependencies = [
-  # 唯一文档解析引擎。`[torch]` 是必需 extras：默认档位的小模型走 Torch/MPS，
-  # 不带它 MinerU 只会装纯 Python 骨架（P0 实测）。
-  "mineru[torch]==4.0.12",
-  # MinerU 的 Torch 扩展要求 >=5.10.1,<6；钉到实测通过的 5.20.2。
-  # 不能沿用旧栈的 `<4.52`：那是 Docling 的性能回退约束，与 MinerU 无冲突关系。
-  "transformers==5.20.2",
-  # 预检与 PDF 单页渲染（展示用途，不构成第二条解析链）。
-  "pypdfium2==5.14.0",
+  # Python here remains for plotting/data work; document parsing runs in the native JS/ONNX worker.
   "matplotlib==3.11.2",
   "pandas>=2.2,<3",
   "scipy>=1.13,<2",

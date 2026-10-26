@@ -87,30 +87,67 @@ async function writeAll(file: FileHandle, data: Buffer): Promise<void> {
   }
 }
 
+function downloadAbortError(): Error {
+  return Object.assign(new Error('research_download_cancelled'), { code: 'research_download_cancelled' });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw downloadAbortError();
+}
+
 function isRetryable(error: unknown): boolean {
   if (!(error instanceof Error)) return true;
-  return !error.message.startsWith('research_download_source_changed')
+  return !error.message.startsWith('research_download_cancelled')
+    && !error.message.startsWith('research_download_source_changed')
     && !error.message.startsWith('research_download_chunk_size_invalid')
     && !error.message.startsWith('research_download_cache_symlink')
     && !error.message.startsWith('research_download_options_invalid');
 }
 
-async function delayAttempt(attempt: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, Math.min(2 ** attempt, 10) * 1000));
+async function delayAttempt(attempt: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(finish, Math.min(2 ** attempt, 10) * 1000);
+    const cleanup = () => signal?.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(downloadAbortError());
+    };
+    function finish(): void {
+      cleanup();
+      resolve();
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 
-function send(lib: typeof http | typeof https, options: http.RequestOptions): Promise<IncomingMessage> {
+function send(lib: typeof http | typeof https, options: http.RequestOptions, signal?: AbortSignal): Promise<IncomingMessage> {
+  throwIfAborted(signal);
   return new Promise((resolve, reject) => {
-    const request = lib.request(options, resolve);
+    const request = lib.request(options);
+    const cleanup = () => signal?.removeEventListener('abort', onSignalAbort);
+    const onSignalAbort = () => request.destroy(downloadAbortError());
+    request.once('response', (response) => {
+      cleanup();
+      resolve(response);
+    });
     request.setTimeout(TIMEOUT_MS, () => {
       request.destroy(Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' }));
     });
-    request.on('error', reject);
+    request.once('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+    signal?.addEventListener('abort', onSignalAbort, { once: true });
+    if (signal?.aborted) onSignalAbort();
     request.end();
   });
 }
 
-async function rangeRequest(url: string, extra: Record<string, string>, hops = 0): Promise<IncomingMessage> {
+async function rangeRequest(url: string, extra: Record<string, string>, hops = 0, signal?: AbortSignal): Promise<IncomingMessage> {
+  throwIfAborted(signal);
   applyProxy();
   if (hops > 10) throw Object.assign(new Error('research_download_incomplete'), { code: 'research_download_redirect_limit' });
   let target: URL;
@@ -127,7 +164,7 @@ async function rangeRequest(url: string, extra: Record<string, string>, hops = 0
     path: `${target.pathname}${target.search}`,
     method: 'GET',
     headers: { ...HEADERS, ...extra }
-  });
+  }, signal);
   const status = response.statusCode ?? 0;
   if (REDIRECT_STATUSES.has(status)) {
     const location = headerValue(response.headers, 'location');
@@ -135,12 +172,12 @@ async function rangeRequest(url: string, extra: Record<string, string>, hops = 0
     if (location === undefined || location === '') {
       throw Object.assign(new Error('research_download_incomplete'), { code: 'research_download_redirect_invalid' });
     }
-    return rangeRequest(new URL(location, target).toString(), extra, hops + 1);
+    return rangeRequest(new URL(location, target).toString(), extra, hops + 1, signal);
   }
   return response;
 }
 
-async function readBody(response: IncomingMessage, maxBytes: number): Promise<Buffer> {
+async function readBody(response: IncomingMessage, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   return await new Promise((resolve, reject) => {
@@ -150,10 +187,14 @@ async function readBody(response: IncomingMessage, maxBytes: number): Promise<Bu
       settled = true;
       cleanup();
       const body = Buffer.concat(chunks, size);
-      if (body.length === 0 && error !== undefined) reject(error);
+      if (signal?.aborted || error?.message.startsWith('research_download_cancelled') || (body.length === 0 && error !== undefined)) reject(error ?? downloadAbortError());
       else resolve(body);
     };
     const onTimeout = () => finish(Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' }));
+    const onSignalAbort = () => {
+      response.destroy();
+      finish(downloadAbortError());
+    };
     const cleanup = () => {
       response.off('data', onData);
       response.off('end', onEnd);
@@ -161,6 +202,7 @@ async function readBody(response: IncomingMessage, maxBytes: number): Promise<Bu
       response.off('aborted', onAbort);
       response.off('close', onClose);
       response.off('timeout', onTimeout);
+      signal?.removeEventListener('abort', onSignalAbort);
     };
     const onData = (chunk: Buffer | string) => {
       if (size >= maxBytes) return;
@@ -183,12 +225,14 @@ async function readBody(response: IncomingMessage, maxBytes: number): Promise<Bu
     response.on('error', onError);
     response.on('aborted', onAbort);
     response.on('close', onClose);
+    signal?.addEventListener('abort', onSignalAbort, { once: true });
+    if (signal?.aborted) onSignalAbort();
   });
 }
 
-async function readAtMost(response: IncomingMessage, maxBytes: number): Promise<Buffer> {
+async function readAtMost(response: IncomingMessage, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   try {
-    return await readBody(response, maxBytes);
+    return await readBody(response, maxBytes, signal);
   } finally {
     response.resume();
     response.destroy();
@@ -201,13 +245,14 @@ export async function fileSha256(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-export async function probe(url: string): Promise<RemoteFile> {
-  const response = await rangeRequest(url, { Range: 'bytes=0-0' });
+export async function probe(url: string, signal?: AbortSignal): Promise<RemoteFile> {
+  throwIfAborted(signal);
+  const response = await rangeRequest(url, { Range: 'bytes=0-0' }, 0, signal);
   const contentRange = headerValue(response.headers, 'content-range') ?? '';
   const match = /^bytes 0-0\/(\d+)$/u.exec(contentRange);
   if (response.statusCode !== 206 || match === null) fail('research_download_range_required');
   const size = Number(match[1]);
-  const body = await readAtMost(response, 2);
+  const body = await readAtMost(response, 2, signal);
   if (!Number.isInteger(size) || size < 1 || body.length !== 1) fail('research_download_size_invalid');
   const etag = headerValue(response.headers, 'etag');
   return { url, size, etag: etag === undefined ? null : etag };
@@ -237,8 +282,10 @@ async function fetchChunk(
   index: number,
   chunkSize: number,
   attempts: number,
-  delay: (attempt: number) => Promise<void>
+  delay: (attempt: number) => Promise<void>,
+  signal?: AbortSignal
 ): Promise<void> {
+  throwIfAborted(signal);
   const info = await pathInfo(part);
   if (info?.isSymbolicLink()) fail('research_download_cache_symlink');
   const length = Math.min(chunkSize, remote.size - index * chunkSize);
@@ -253,7 +300,7 @@ async function fetchChunk(
     if (remote.etag !== null) headers['If-Range'] = remote.etag;
     let response: IncomingMessage | undefined;
     try {
-      response = await rangeRequest(remote.url, headers);
+      response = await rangeRequest(remote.url, headers, 0, signal);
       const expectedRange = `bytes ${start}-${end}/${remote.size}`;
       const encoding = headerValue(response.headers, 'content-encoding') ?? 'identity';
       if (response.statusCode !== 206
@@ -263,7 +310,7 @@ async function fetchChunk(
         fail('research_download_source_changed');
       }
       const remaining = length - offset;
-      const body = await readBody(response, remaining);
+      const body = await readBody(response, remaining, signal);
       if (body.length === 0) {
         throw Object.assign(new Error('research_download_incomplete'), { code: 'research_download_incomplete' });
       }
@@ -324,12 +371,16 @@ export async function downloadRanges(
     workers?: number;
     attempts?: number;
     delay?: (attempt: number) => Promise<void>;
+    signal?: AbortSignal;
   } = {}
 ): Promise<void> {
+  throwIfAborted(options.signal);
+  const controller = new AbortController();
+  const signal = options.signal === undefined ? controller.signal : AbortSignal.any([options.signal, controller.signal]);
   const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const workers = options.workers ?? DEFAULT_WORKERS;
   const attempts = options.attempts ?? DEFAULT_ATTEMPTS;
-  const delay = options.delay ?? delayAttempt;
+  const delay = options.delay ?? ((attempt) => delayAttempt(attempt, signal));
   if (remote.size < 1 || chunkSize < 1 || workers < 1 || attempts < 1) fail('research_download_options_invalid');
   const targetInfo = await pathInfo(target);
   if (targetInfo !== null) fail('research_download_target_exists');
@@ -346,7 +397,12 @@ export async function downloadRanges(
       const index = next;
       next += 1;
       if (index >= count) return;
-      await fetchChunk(remote, join(partsDir, `${String(index).padStart(6, '0')}.part`), index, chunkSize, attempts, delay);
+      try {
+        await fetchChunk(remote, join(partsDir, `${String(index).padStart(6, '0')}.part`), index, chunkSize, attempts, delay, signal);
+      } catch (error) {
+        controller.abort(error);
+        throw error;
+      }
       completed += 1;
       if (completed % 32 === 0 || completed === count) {
         console.log(`资源分块 ${completed}/${count}`);
@@ -361,17 +417,18 @@ export async function downloadVerified(
   url: string,
   expectedSha256: string,
   target: string,
-  options: { expectedSize?: number } = {}
+  options: { expectedSize?: number; signal?: AbortSignal } = {}
 ): Promise<string> {
+  throwIfAborted(options.signal);
   if (!/^[0-9a-f]{64}$/u.test(expectedSha256)) fail('research_download_digest_invalid');
   const info = await pathInfo(target);
   if (info?.isSymbolicLink()) fail('research_download_target_symlink');
   if (info === null) {
-    const remote = await probe(url);
+    const remote = await probe(url, options.signal);
     if (options.expectedSize !== undefined && remote.size !== options.expectedSize) {
       fail('research_download_size_mismatch');
     }
-    await downloadRanges(remote, target);
+    await downloadRanges(remote, target, { signal: options.signal });
   }
   const after = await lstat(target);
   const digest = await fileSha256(target);

@@ -8,20 +8,20 @@ export function getModelsStatus(client: RocClient): Promise<IpcLikeResult<Resear
 
 export function downloadModels(
   client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source: ResearchModelsStatus['source'] }
+  input: { pack: ResearchModelsStatus['selectedPack'] }
 ): Promise<IpcLikeResult<ResearchModelsStatus>> {
   return client.api.research.downloadModels(input);
 }
 
 export function selectModels(
   client: RocClient,
-  input: { pack: ResearchModelsStatus['selectedPack']; source?: ResearchModelsStatus['source'] }
+  input: { pack: ResearchModelsStatus['selectedPack'] }
 ): Promise<IpcLikeResult<ResearchModelsStatus>> {
   return client.api.research.selectModels(input);
 }
 
-export function importModels(client: RocClient, directory: string): Promise<IpcLikeResult<ResearchModelsStatus>> {
-  return client.api.research.importModels({ directory });
+export function importModels(client: RocClient, directory: string, pack: ResearchModelsStatus['selectedPack']): Promise<IpcLikeResult<ResearchModelsStatus>> {
+  return client.api.research.importModels({ directory, pack });
 }
 
 export function removeModels(

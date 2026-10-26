@@ -13,10 +13,8 @@ import { downloadModels, getModelsStatus } from '../shared/research-models-store
 import type { LiteratureStore } from './use-literature-store';
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
-  { value: 'basic', label: 'Basic', title: '本地小模型：版面/表格/公式，速度快，不需要 VLM 权重' },
-  { value: 'standard', label: 'Standard', title: 'Basic + llama.cpp VLM 逐块理解，需要额外下载 VLM 权重' },
-  { value: 'advanced', label: 'Advanced', title: '复用 Standard 权重，更高的 VLM 预算' },
-  { value: 'flash', label: 'Flash', title: '只跑 HTML 快速路径；扫描件仍需要小模型' }
+  { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
+  { value: 'complete', label: '完整', title: '轻量解析加公式识别，约 330 MB' }
 ];
 
 /** The paper reader (P5/T5.4).
@@ -114,7 +112,7 @@ export function PaperReader({
    * 选 `standard`/`advanced` 但没有 GGUF 权重时，worker 会明确失败而不是自动降档——
    * 这正是验收要求的「不自动切换档位」，所以这里也不做任何静默回退。
    */
-  const [parseTier, setParseTier] = useState<ResearchParseTier>('basic');
+  const [parseTier, setParseTier] = useState<ResearchParseTier>('compact');
   /** 批量重解析的进行中状态：null = 没在跑；否则是这一批结束后的成/败计数。 */
   const [reparsePending, setReparsePending] = useState<{ ok: number; failed: number } | null>(null);
   const jumpHandledFor = useRef<string | null>(null);
@@ -343,7 +341,7 @@ export function PaperReader({
   const startModelDownload = (): void => {
     setDownloadError(null);
     setDownloadPending(true);
-    void downloadModels(literature.client, { pack: models.data?.selectedPack ?? 'basic', source: models.data?.source ?? 'auto' })
+    void downloadModels(literature.client, { pack: models.data?.selectedPack ?? 'compact' })
       .then((result) => {
         if (!result.ok) {
           setDownloadError(result.error.message);

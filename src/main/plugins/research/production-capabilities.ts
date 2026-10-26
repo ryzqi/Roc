@@ -47,9 +47,9 @@ export function registerResearchProductionCapabilities(context: RocPluginContext
   }
   register(capabilities.status, () => tools.status());
   registerModels(capabilities.modelsStatus, () => tools.modelsStatus());
-  registerModels(capabilities.modelsSelect, (input) => tools.selectModels(input.pack, input.source));
-  registerModels(capabilities.modelsDownload, (input) => tools.downloadModels(input.pack, input.source));
-  registerModels(capabilities.modelsImport, (input) => tools.importModels(input.directory));
+  registerModels(capabilities.modelsSelect, (input) => tools.selectModels(input.pack));
+  registerModels(capabilities.modelsDownload, (input) => tools.downloadModels(input.pack));
+  registerModels(capabilities.modelsImport, (input) => tools.importModels(input.directory, input.pack));
   registerModels(capabilities.modelsRemove, (input) => tools.removeModels(input.pack));
   registerModels(capabilities.modelsCancel, () => tools.cancelModelsDownload());
   register(capabilities.import, (input) => templates.importTemplate(input));
@@ -77,7 +77,7 @@ const MODEL_ERROR_MESSAGES: Readonly<Record<string, { message: string; category:
   research_model_downloader_unavailable: { message: '模型下载入口不可用：工具链尚未就绪。', category: 'degraded', retryable: false },
   research_model_import_missing: { message: '指定目录不存在。', category: 'validation', retryable: false },
   research_model_import_invalid: { message: '指定路径不是目录。', category: 'validation', retryable: false },
-  research_model_import_empty: { message: '该目录里没有可识别的 MinerU 模型仓库。', category: 'validation', retryable: false },
+  research_model_import_empty: { message: '所选模型包所需的文件不完整或校验未通过。', category: 'validation', retryable: false },
   research_model_import_path_invalid: { message: '请选择绝对路径。', category: 'validation', retryable: false },
   // 取消是用户意图，不能当失败报：UI 上它是终态，不是错误。
   research_process_cancelled: { message: '模型下载已取消，已下载的文件保留，可重新发起续传。', category: 'conflict', retryable: false }
