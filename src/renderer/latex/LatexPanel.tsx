@@ -10,7 +10,8 @@ import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime, formatBytes } from '../shared/format';
 import { fileName } from '../workspace/paths';
 import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
-import { InlineHint, PanelSection, primaryButtonClass } from './panel-shell';
+import { SourceEditor } from './SourceEditor';
+import { InlineHint, primaryButtonClass } from './panel-shell';
 
 /**
  * 文稿 (P7/T7.5) — the workspace LaTeX/BibTeX editor behind the route's `latex` view.
@@ -260,10 +261,10 @@ export function LatexPanel(): React.JSX.Element {
       </label>
       <nav
         aria-label="文稿文件"
-        className="production-latex-file-list flex w-[260px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-2"
+        className="production-latex-file-list flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-2"
         data-testid="production-latex-files"
       >
-        <span className="text-subtle text-[var(--font-micro-size)]">
+        <span className="text-subtle text-[var(--font-meta-size)]">
           文稿文件（{files.data?.length ?? 0}）
         </span>
         {files.status === 'error' ? (
@@ -291,7 +292,7 @@ export function LatexPanel(): React.JSX.Element {
                   <span className="w-full truncate font-mono text-[var(--font-meta-size)]" title={file.path}>
                     {file.path}
                   </span>
-                  <span className="text-subtle text-[var(--font-micro-size)]">
+                  <span className="text-subtle text-[var(--font-meta-size)]">
                     {formatBytes(file.sizeBytes)}　{formatBeijingDateTime(file.updatedAt)}
                   </span>
                 </button>
@@ -301,7 +302,7 @@ export function LatexPanel(): React.JSX.Element {
         )}
       </nav>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {selectedPath === null ? (
           <EmptyState
             icon={FileText}
@@ -309,21 +310,25 @@ export function LatexPanel(): React.JSX.Element {
             testId="production-latex-no-file"
           />
         ) : (
-          <PanelSection
-            title={fileName(selectedPath)}
-            testId="production-latex-editor"
-            action={{
-              label: dirty ? '放弃修改' : '重新读取',
-              onClick: () => requestLeave(() => {
-                loadedPathRef.current = null;
-                setDraft(baseline);
-                dirtyRef.current = false;
-                preview.reload();
-              }),
-              disabled: save.pending,
-              testId: 'production-latex-reload'
-            }}
-          >
+          <section className="flex min-h-0 flex-1 flex-col" data-testid="production-latex-editor">
+            <header className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+              <h2 className="min-w-0 flex-1 truncate text-[var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
+              <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[var(--font-meta-size)]">{dirty ? '未保存' : canEdit ? '已保存' : '只读'}</span>
+              <button type="button" disabled={save.pending} data-testid="production-latex-reload"
+                onClick={() => requestLeave(() => {
+                  loadedPathRef.current = null;
+                  setDraft(baseline);
+                  dirtyRef.current = false;
+                  preview.reload();
+                })}
+                className="rounded-control px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-50">
+                重新读取
+              </button>
+              <button type="button" data-testid="production-latex-save" disabled={!canEdit || save.pending || !dirty}
+                onClick={() => void saveDraft()} className={primaryButtonClass} title="保存 (⌘S)">
+                <Save size={14} aria-hidden="true" className="mr-1 inline" />{save.pending ? '保存中…' : '保存'}
+              </button>
+            </header>
             {preview.status === 'loading' ? <InlineHint text="正在读取文件…" /> : null}
             {preview.status === 'error' ? (
               <ErrorBar error={{ level: 'page', message: preview.error ?? '读取文件失败', retry: preview.reload }} />
@@ -341,49 +346,31 @@ export function LatexPanel(): React.JSX.Element {
             ) : null}
             {isText ? (
               <>
-                <textarea
-                  data-testid="production-latex-content"
-                  value={draft ?? previewData.content}
-                  rows={20}
-                  spellCheck={false}
-                  disabled={!canEdit || save.pending}
-                  onChange={(event) => setDraft(event.target.value)}
-                  className="w-full resize-y rounded-control border border-line bg-bg px-2 py-1 font-mono text-ink text-[var(--font-code-size)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="production-latex-save"
-                    disabled={!canEdit || save.pending || !dirty || draft === null}
-                    onClick={() => void saveDraft()}
-                    className={primaryButtonClass}
-                  >
-                    <Save size={12} aria-hidden="true" className="mr-1 inline" />
-                    保存
-                  </button>
-                  <span className="text-subtle text-[var(--font-micro-size)]" role="status" data-testid="production-latex-state">
+                <SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} />
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
+                  <span className="text-subtle text-[var(--font-meta-size)]" role="status" data-testid="production-latex-state">
                     {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
                   </span>
                   {canWrite ? null : (
-                    <span className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="production-latex-readonly">
+                    <span className="text-[var(--st-warn)] text-[var(--font-meta-size)]" data-testid="production-latex-readonly">
                       项目已归档：文件只读。
                     </span>
                   )}
                 </div>
                 {note === null ? null : (
-                  <p className="text-muted text-[var(--font-meta-size)]" data-testid="production-latex-save-note">
+                  <p role="status" className="shrink-0 px-3 text-muted text-[var(--font-meta-size)]" data-testid="production-latex-save-note">
                     {note}
                   </p>
                 )}
                 {recovery === null ? null : (
-                  <p className="font-mono text-subtle text-[var(--font-micro-size)]" data-testid="production-latex-recovery">
+                  <p className="shrink-0 px-3 text-subtle text-[var(--font-meta-size)]" data-testid="production-latex-recovery">
                     {recovery}
                   </p>
                 )}
                 {save.error === null ? null : <InlineHint text={save.error} testId="production-latex-save-error" />}
               </>
             ) : null}
-          </PanelSection>
+          </section>
         )}
 
       </div>

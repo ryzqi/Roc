@@ -41,6 +41,12 @@ export const REGION_PATTERN = /\/\/#region[ \t]+node_modules\/\.pnpm\/([^\n]+)/g
  */
 export const EAGER_FORBIDDEN_PACKAGES = [
   'react-diff-view',
+  '@codemirror/state',
+  '@codemirror/view',
+  '@codemirror/commands',
+  '@codemirror/search',
+  '@codemirror/language',
+  '@codemirror/legacy-modes',
   '@xterm/xterm',
   '@xterm/addon-fit',
   'highlight.js',

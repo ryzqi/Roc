@@ -15,6 +15,7 @@ writeFileSync(main, '\\documentclass{article}\n\\begin{document}\nOriginal\n\\en
 writeFileSync(join(paths.workspaceRoot, 'refs.bib'), '@article{example, title={Example}}\n');
 const results = [];
 const errors = [];
+const audits = [];
 const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
 let app;
 async function check(name, action) { await action(); results.push(name); console.log(`PASS ${name}`); }
@@ -29,26 +30,32 @@ try {
   console.log('fixture', paths.dataRoot);
   if (!project.ok) throw new Error(project.error.message);
   await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+  async function audit(state) {
+    if (!process.env.ROC_CLIP_AUDIT) return;
+    const source = readFileSync(process.env.ROC_CLIP_AUDIT, 'utf8');
+    const result = await page.evaluate(`(${source})({ root: '[data-testid="production-latex"]', viewport: true })`);
+    audits.push({ state, result }); expect(result.cut).toBe(0);
+  }
   const editor = page.getByTestId('production-latex-content');
   const modal = page.getByTestId('latex-unsaved');
   const file = name => page.getByTestId(`production-latex-file-${name}`);
   await file('main.tex').click();
-  await expect(editor).toHaveValue(/Original/);
+  await expect(editor).toHaveText(/Original/);
   await check('Cancel file switch keeps draft and focus', async () => {
     await editor.fill('unsaved draft'); await file('refs.bib').click();
     await expect(modal).toBeVisible(); await modal.getByRole('button', { name: '取消', exact: true }).click();
-    await expect(modal).toHaveCount(0); await expect(editor).toHaveValue('unsaved draft');
+    await expect(modal).toHaveCount(0); await expect(editor).toHaveText('unsaved draft');
     await expect(file('refs.bib')).toBeFocused();
   });
   await check('Save and continue writes exact content before switching', async () => {
     await file('refs.bib').click(); await modal.getByRole('button', { name: '保存并继续' }).click();
-    await expect(editor).toHaveValue(/@article/);
+    await expect(editor).toHaveText(/@article/);
     expect(readFileSync(main, 'utf8')).toBe('unsaved draft');
   });
   await check('Discard switches without writing', async () => {
     await editor.fill('discard me'); await file('main.tex').click();
     await modal.getByRole('button', { name: '放弃修改', exact: true }).click();
-    await expect(editor).toHaveValue('unsaved draft');
+    await expect(editor).toHaveText('unsaved draft');
     expect(readFileSync(join(paths.workspaceRoot, 'refs.bib'), 'utf8')).toContain('@article');
   });
   await check('Command-S saves and clears dirty state', async () => {
@@ -56,24 +63,44 @@ try {
     await expect(page.getByTestId('production-latex-state')).toContainText('与磁盘一致');
     expect(readFileSync(main, 'utf8')).toBe('keyboard save');
   });
+  if (process.env.ROC_UI_PHASE === 'editor') {
+    await check('Editor fills available height with line numbers and syntax', async () => {
+      await editor.fill('\\section{Introduction}\nSome text');
+      await expect(page.locator('.cm-gutterElement').filter({ hasText: '2' }).first()).toBeVisible();
+      expect(await page.locator('.cm-content span').count()).toBeGreaterThan(0);
+      const bounds = await page.getByTestId('latex-source-editor').boundingBox();
+      expect(bounds.height).toBeGreaterThan(300);
+      await audit('default'); await page.getByTestId('production-latex-save').hover(); await audit('hover');
+    });
+    await check('Native editor search and replace opens through keyboard', async () => {
+      await editor.click(); await page.keyboard.press('Meta+f');
+      await expect(page.locator('.cm-search')).toBeVisible(); await audit('search expanded');
+      await page.locator('.cm-search input[name=search]').fill('Some');
+      await page.locator('.cm-search input[name=replace]').fill('Replaced');
+      await page.locator('.cm-search button[name=replaceAll]').click();
+      await expect(editor).toContainText('Replaced text');
+      await page.keyboard.press('Escape'); await audit('final');
+      await page.screenshot({ path: join(artifact, 'editor.png') });
+    });
+  }
   await check('Failed save retains draft and blocks navigation', async () => {
     await editor.fill('must survive failed write');
     renameSync(main, `${main}.bak`); mkdirSync(main);
     await file('refs.bib').click(); await modal.getByRole('button', { name: '保存并继续' }).click();
-    await expect(modal.getByRole('alert')).toBeVisible(); await expect(editor).toHaveValue('must survive failed write');
+    await expect(modal.getByRole('alert')).toBeVisible(); await expect(editor).toHaveText('must survive failed write');
     await page.screenshot({ path: join(artifact, 'save-error.png') });
     await modal.getByRole('button', { name: '取消', exact: true }).click();
   });
   await check('Canvas navigation cancelled keeps route and draft', async () => {
     await navigate(page, `page=research&project=${project.data.id}&view=literature`);
     await expect(modal).toBeVisible(); await modal.getByRole('button', { name: '取消', exact: true }).click();
-    await expect(editor).toHaveValue('must survive failed write'); expect(page.url()).toContain('view=latex');
+    await expect(editor).toHaveText('must survive failed write'); expect(page.url()).toContain('view=latex');
   });
   await check('Window unload is blocked until decision', async () => {
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].webContents.reload(); });
     await expect(modal).toBeVisible();
     await modal.getByRole('button', { name: '取消', exact: true }).click();
-    await expect(editor).toHaveValue('must survive failed write');
+    await expect(editor).toHaveText('must survive failed write');
   });
   await check('Project leave requires explicit discard', async () => {
     await navigate(page, 'page=research'); await expect(modal).toBeVisible();
@@ -81,7 +108,7 @@ try {
     await expect(page.getByTestId('portal-column')).toBeVisible();
   });
   expect(errors).toEqual([]);
-  writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
+  writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: false, results, errors, error: String(error) }, null, 2));
   throw error;
