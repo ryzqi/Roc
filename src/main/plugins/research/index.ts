@@ -190,7 +190,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
-      const researchFigures = new ResearchFigureService(researchRepository, researchExperiments, options.experimentRoot ?? null, context.logger);
+      const researchFigures = new ResearchFigureService(researchRepository, toolchain, options.experimentRoot ?? null, context.logger);
       figures = researchFigures;
       registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);
       researchRepository.runs.recoverInterrupted();

@@ -10,6 +10,7 @@ import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParse
   type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import type { ResearchModelPack } from '../../../shared/schemas/research-production';
+import { researchFigureRenderJobResultSchema, researchFigureRenderJobSchema, type ResearchFigureRenderJob } from '../../../shared/schemas/research-figures';
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
@@ -31,6 +32,7 @@ const manifestSchema = z.object({
 
 type Manifest = z.infer<typeof manifestSchema>;
 type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string; jobDir: string; signal?: AbortSignal };
+type FigureWorkerInput = WorkerInput & Pick<ResearchFigureRenderJob, 'inputPaths' | 'label' | 'timeoutMs' | 'figure'>;
 
 type ResolvedToolchain = { root: string; manifest: Manifest };
 
@@ -103,6 +105,14 @@ export class ResearchToolchain {
   /** Freeze the user-selected model tier; actual inference device is recorded by the parser. */
   defaultParseOptions(_mediaType: string): ResearchParseOptions {
     return researchParseOptionsSchema.parse({ tier: this.models.selectedPack, device: 'coreml', pageRange: '' });
+  }
+
+  async renderFigure(input: FigureWorkerInput): Promise<z.infer<typeof researchFigureRenderJobResultSchema>> {
+    const operation = researchFigureRenderJobSchema.parse({
+      operation: 'render_figure', projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
+      inputPaths: input.inputPaths, label: input.label, timeoutMs: input.timeoutMs, figure: input.figure
+    });
+    return await this.job(input, operation, researchFigureRenderJobResultSchema);
   }
 
   async renderPdf(input: WorkerInput & { page: number; scale: number }): Promise<z.infer<typeof researchRenderedPdfSchema>> {
@@ -310,6 +320,8 @@ export class ResearchToolchain {
       dirname(require.resolve('zod/package.json')),
       dirname(require.resolve('pdfjs-dist/package.json')),
       dirname(require.resolve('@napi-rs/canvas/package.json')),
+      ...packageRoot('vega'),
+      ...packageRoot('vega-lite'),
       ...packageRoot('paddleocr'),
       ...packageRoot('onnxruntime-node'),
       ...packageRoot('htmlparser2'),
@@ -331,7 +343,8 @@ export class ResearchToolchain {
       readablePaths,
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
-      timeoutMs: operation.operation === 'parse_document' ? 600_000 : 60_000,
+      timeoutMs: operation.operation === 'parse_document' ? 600_000 : operation.operation === 'render_figure'
+        ? Math.max(1, Math.min(3_600_000, typeof operation.timeoutMs === 'number' ? operation.timeoutMs : 60_000)) : 60_000,
       signal: input.signal,
       input: JSON.stringify(request),
       allowGpuAcceleration: parseOptions?.device === 'coreml' && modelPaths.length > 0,
@@ -363,6 +376,14 @@ export class ResearchToolchain {
         modelFiles: operation.modelFiles as ResearchModelFiles | null,
         modelManifest: typeof operation.modelManifest === 'string' ? operation.modelManifest : ''
       }));
+    }
+    if (name === 'render_figure') {
+      const { renderResearchFigure } = await import('./figure-renderer');
+      const request = researchFigureRenderJobSchema.parse({
+        operation: 'render_figure', projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
+        inputPaths: operation.inputPaths, label: operation.label, timeoutMs: operation.timeoutMs, figure: operation.figure
+      });
+      return schema.parse(await renderResearchFigure(request, input.signal));
     }
     if (name === 'extract_template') return schema.parse(await extractResearchTemplate(base));
     if (name === 'render_pdf') {

@@ -4,9 +4,10 @@ import type { Database } from 'better-sqlite3';
 import { researchFigurePublicationSchema, type ResearchFigurePublication, type ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema, type ResearchFigureValidation } from '../../../shared/schemas/research-plotting';
 import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
-import { figureRendererPath } from './figure-runner';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
+
+const historicalPythonSourcePath = '.roc/figure.py';
 
 type Row = { snapshot_json: string };
 export const figureManifestPath = 'figure-manifest.json';
@@ -130,7 +131,12 @@ export function assertFigureRun(run: ResearchFigureRun, input: ResearchFigureVal
     throw new Error('research_figure_render_required');
   }
   if (JSON.stringify(run.request.figure) !== JSON.stringify(validation.options)) throw new Error('research_figure_options_changed');
-  if (!run.files.some((file) => file.area === 'input' && file.path === figureRendererPath && file.sha256 === validation.rendererHash)) throw new Error('research_figure_renderer_changed');
+  const isVegaRun = 'engine' in run.request && run.request.engine === 'vega-lite';
+  const environment = run.environment;
+  const rendererMatches = environment !== null && (isVegaRun
+    ? 'engine' in environment && environment.engine === 'vega-lite' && environment.hash === validation.rendererHash
+    : run.files.some((file) => file.area === 'input' && file.path === historicalPythonSourcePath && file.sha256 === validation.rendererHash));
+  if (!rendererMatches) throw new Error('research_figure_renderer_changed');
   for (const expected of validation.files) {
     if (!run.files.some((file) => file.area === 'output' && file.path === expected.path && file.sha256 === expected.sha256 && file.size === expected.size)) {
       throw new Error('research_figure_output_changed');

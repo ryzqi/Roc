@@ -7,6 +7,7 @@ import { renderResearchPdf } from './pdf-render';
 import { ResearchProcessError } from './process-runner';
 import type { ResearchModelFiles } from './model-store';
 import { researchParseOptionsSchema } from '../../../shared/schemas/research-production';
+import { researchFigureRenderJobSchema } from '../../../shared/schemas/research-figures';
 
 const absolutePath = z.string().min(1).max(4096).refine(isAbsolute);
 const baseRequest = z.object({
@@ -35,7 +36,8 @@ const jobRequestSchema = z.discriminatedUnion('operation', [
     options: researchParseOptionsSchema,
     modelFiles: modelFilesSchema.nullable(),
     modelManifest: z.union([z.string().regex(/^[a-f0-9]{64}$/u), z.literal('')])
-  }).strict()
+  }).strict(),
+  researchFigureRenderJobSchema
 ]);
 type JobRequest = z.infer<typeof jobRequestSchema>;
 
@@ -83,6 +85,10 @@ async function execute(request: JobRequest, signal: AbortSignal): Promise<unknow
         timeoutMs: number;
       } = { ...request, signal, timeoutMs: 600_000 };
       return await parseResearchDocument(parserInput);
+    }
+    case 'render_figure': {
+      const { renderResearchFigure } = await import('./figure-renderer');
+      return await renderResearchFigure(request, signal);
     }
     default:
       throw new ResearchProcessError('research_operation_unsupported');

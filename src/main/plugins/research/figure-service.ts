@@ -1,21 +1,23 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { z } from 'zod';
 import { researchExperimentFileRequestSchema, type ResearchExperimentFile } from '../../../shared/schemas/research-experiments';
-import { researchFigureStartSchema, type ResearchFigurePublication, type ResearchFigureRun, type ResearchFigureStart, researchFigureSourceRequestSchema } from '../../../shared/schemas/research-figures';
+import { researchFigureStartSchema, type ResearchFigurePublication, type ResearchFigureRun, type ResearchFigureStart, type ResearchFigureRendererEnvironment, researchFigureSourceRequestSchema } from '../../../shared/schemas/research-figures';
 import { researchFigureValidationSchema } from '../../../shared/schemas/research-plotting';
 import { collectExperimentFiles, experimentFileLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
-import type { ResearchExperimentService } from './experiment-service';
 import { assertFigureRun, figureManifest, figureManifestPath } from './figure-repository';
-import { assertFigureEnvironment, figureGeneratedInputs, figureProcessCommand, figureValidationPath, finishFigureOutput } from './figure-runner';
+import { figureValidationPath, finishFigureOutput } from './figure-runner';
 import { ResearchProcessError } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
+import { getResearchFigureRendererEnvironment } from './figure-renderer-environment';
+import type { ResearchToolchain } from './toolchain';
 import type { ResearchRepository } from './repository';
 import type { RocPluginContext } from '../../kernel/types';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
+type FigureRenderer = Pick<ResearchToolchain, 'renderFigure'>;
 
 export class ResearchFigureService {
   private readonly session = new ResearchJobSession('research_figure_service_closed');
@@ -25,15 +27,18 @@ export class ResearchFigureService {
 
   constructor(
     private readonly repository: ResearchRepository,
-    private readonly experiments: ResearchExperimentService,
+    private readonly renderer: FigureRenderer,
     private readonly rootPath: string | null,
     private readonly logger: RocPluginContext['logger']
   ) {}
 
   recover(): void { this.repository.figureRuns.recover(); }
 
-  async inspect(projectId: string, runtime: ResearchFigureStart['runtime']) {
-    return this.experiments.inspect(projectId, runtime);
+  async inspect(projectId: string): Promise<ResearchFigureRendererEnvironment> {
+    this.session.requireOpen();
+    const project = this.repository.getProject(projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    return getResearchFigureRendererEnvironment();
   }
 
   async start(input: ResearchFigureStart): Promise<ResearchFigureRun> {
@@ -41,6 +46,10 @@ export class ResearchFigureService {
     return await this.session.run(async (signal) => {
       const project = this.repository.getProject(request.projectId);
       if (project.status === 'archived') throw new Error('research_project_archived');
+      const rendererEnvironment = getResearchFigureRendererEnvironment();
+      if (request.expectedEnvironmentHash !== undefined && request.expectedEnvironmentHash !== rendererEnvironment.hash) {
+        throw new Error('research_figure_environment_changed');
+      }
       const workspace = await researchWorkspace(project.workspacePath);
       const storage = await experimentStorage(this.rootPath);
       signal.throwIfAborted();
@@ -187,58 +196,65 @@ export class ResearchFigureService {
 
   private async execute(initial: ResearchFigureRun, signal: AbortSignal): Promise<void> {
     const root = this.repository.figureRuns.root(initial.projectId, initial.id);
+    const out = join(root, 'output');
     let files: ResearchExperimentFile[] = [];
     let output = { exitCode: 1, stdout: '', stderr: '' };
     let failure: unknown;
-    let prepared: Awaited<ReturnType<ResearchExperimentService['inspectWorkspace']>> | null = null;
+    let started = false;
+    let outputCreated = false;
     try {
+      const request = researchFigureStartSchema.parse(initial.request);
       const workspace = await this.verifyRun(initial, signal);
       await mkdir(root, { mode: 0o700 });
       const input = await createResearchDirectory(root, 'input');
-      const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.experiments.inspectWorkspace(workspace, initial.request.runtime, scratch, signal);
-      if (initial.request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== initial.request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      assertFigureEnvironment(prepared.snapshot.packages);
-      const snapshot = await snapshotExperimentInputs(workspace, input, initial.request, prepared.snapshot, signal, figureGeneratedInputs());
+      const rendererEnvironment = getResearchFigureRendererEnvironment();
+      const snapshot = await snapshotExperimentInputs(workspace, input, request, rendererEnvironment, signal);
       files = snapshot.files;
       await this.verifyRun(initial, signal);
-      this.repository.figureRuns.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
-      const command = figureProcessCommand(initial, prepared, input, out);
-      const executable = prepared.snapshot.executable;
-      output = await this.experiments.runProcess({
-        command: command.command, args: command.args, additionalExecutables: [executable], cwd: input,
-        readablePaths: [...prepared.readablePaths, input], writablePaths: [out, scratch],
-        environment: {
-          ...prepared.environment, PYTHONUNBUFFERED: '1', PATH: `${dirname(executable)}:${prepared.environment.PATH}`,
-          ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: out, ROC_PARAMETERS_JSON: JSON.stringify(initial.request.parameters),
-          ...command.environment
-        },
-        timeoutMs: initial.request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: 'none'
+      this.repository.figureRuns.start(initial.projectId, initial.id, rendererEnvironment, files, snapshot.hash);
+      started = true;
+      const renderOutput = join(scratch, 'render-output');
+      const rendered = await this.renderer.renderFigure({
+        projectRoot: root,
+        sourcePath: `input/${request.sourcePath}`,
+        outputDir: renderOutput,
+        jobDir: scratch,
+        inputPaths: request.inputPaths,
+        label: request.label,
+        timeoutMs: request.timeoutMs,
+        figure: request.figure,
+        signal
       });
-      if (output.exitCode !== 0) throw new Error('research_figure_process_failed');
-      await finishFigureOutput(initial, out, signal);
+      output = { exitCode: 0, stdout: JSON.stringify(rendered), stderr: '' };
+      const source = files.find((file) => file.area === 'input' && file.path === request.sourcePath);
+      if (source === undefined || source.sha256 !== rendered.sourceHash) throw new Error('research_figure_source_changed');
+      if (rendered.rendererHash !== rendererEnvironment.hash || getResearchFigureRendererEnvironment().hash !== rendererEnvironment.hash) {
+        throw new Error('research_figure_renderer_changed');
+      }
       await this.verifyRun(initial, signal);
-      const current = await this.experiments.inspectWorkspace(workspace, initial.request.runtime, scratch, signal);
-      if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
+      await rename(renderOutput, out);
+      outputCreated = true;
+      await finishFigureOutput(out, request.figure, rendererEnvironment.hash, signal);
     } catch (error) {
       failure = error;
       if (error instanceof ResearchProcessError) output = { exitCode: 1, stdout: output.stdout + error.stdout, stderr: output.stderr + error.stderr };
+      else if (error instanceof Error) output = { ...output, stderr: `${output.stderr}${error.message}\n` };
     }
     try {
       await createResearchDirectory(root, 'log');
       await writeFile(join(root, 'log/stdout.txt'), output.stdout, { flag: 'wx', mode: 0o400 });
       await writeFile(join(root, 'log/stderr.txt'), output.stderr, { flag: 'wx', mode: 0o400 });
       files.push(...await collectExperimentFiles(join(root, 'log'), 'log'));
-      if (prepared !== null) files.push(...await collectExperimentFiles(join(root, 'output'), 'output'));
+      if (outputCreated) files.push(...await collectExperimentFiles(out, 'output'));
       const status = signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : failure === undefined ? 'completed' : 'failed';
       const error = signal.aborted ? this.session.isClosed ? 'research_figure_interrupted' : 'research_figure_cancelled' : failure === undefined ? null : errorCode(failure);
-      this.repository.figureRuns.finish(initial.projectId, initial.id, { status, files, exitCode: prepared === null ? null : output.exitCode, error });
+      this.repository.figureRuns.finish(initial.projectId, initial.id, { status, files, exitCode: started ? output.exitCode : null, error });
     } catch (error) {
       this.repository.figureRuns.finish(initial.projectId, initial.id, {
         status: signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : 'failed',
-        files, exitCode: output.exitCode, error: errorCode(error)
+        files, exitCode: started ? output.exitCode : null, error: errorCode(error)
       });
     } finally {
       await rm(join(root, 'scratch'), { recursive: true, force: true });
@@ -257,7 +273,11 @@ export class ResearchFigureService {
 
   private async validation(projectId: string, runId: string) {
     const loaded = await this.readRunFile({ projectId, runId, area: 'output', path: figureValidationPath });
-    return researchFigureValidationSchema.parse(JSON.parse(loaded.bytes.toString('utf8')));
+    try {
+      return researchFigureValidationSchema.parse(JSON.parse(loaded.bytes.toString('utf8')));
+    } catch {
+      throw new Error('research_figure_validation_invalid');
+    }
   }
 }
 

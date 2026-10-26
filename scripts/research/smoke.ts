@@ -30,7 +30,6 @@ const smokeOptions = (tier: SmokeParseOptions['tier'], pageRange = ''): SmokePar
   tier, pageRange, device: 'coreml'
 });
 export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
-export const PLOT = "import matplotlib\nmatplotlib.use('Agg')\nfrom matplotlib import pyplot as plt\nfig, ax = plt.subplots(figsize=(5, 2.5), layout='constrained')\nax.bar(['Control', 'Treatment'], [10, 50], color=['#66788a', '#20736b'])\nax.set_ylabel('Improvement (percent)')\nfor extension in ['png', 'svg', 'pdf']:\n    fig.savefig(f'figure.{extension}', dpi=180)\nplt.close(fig)\n";
 
 type SmokeResult = {
   architecture: string;
@@ -202,12 +201,40 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
 
   await run('network-denied', [python, '-I', '-B', '-c',
     "import socket\ns=socket.socket()\ntry:\n s.connect(('1.1.1.1',443))\nexcept PermissionError:\n print('network denied')\nelse:\n raise RuntimeError('network was not denied')\nfinally:\n s.close()"]);
-  await writeFile(join(output, 'plot.py'), PLOT, 'utf8');
-  await run('matplotlib', [python, '-I', '-B', join(output, 'plot.py')]);
-  for (const [extension, signature] of [['png', Buffer.from([0x89, 0x50, 0x4e, 0x47])], ['pdf', Buffer.from('%PDF')], ['svg', Buffer.from('<?xml')]] as const) {
-    const bytes = await readFile(join(output, `figure.${extension}`));
+  const figureInput = join(output, 'input');
+  await mkdir(figureInput, { recursive: true });
+  await writeFile(join(figureInput, 'results.csv'), 'Group,Improvement\nControl,10\nTreatment,50\n', 'utf8');
+  const figureSpec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: { url: 'results.csv' },
+    mark: { type: 'bar', color: '#20736b' },
+    encoding: {
+      x: { field: 'Group', type: 'nominal' },
+      y: { field: 'Improvement', type: 'quantitative', title: 'Improvement (percent)' },
+      tooltip: [{ field: 'Group', type: 'nominal' }, { field: 'Improvement', type: 'quantitative' }]
+    }
+  };
+  await writeFile(join(figureInput, 'figure.vl.json'), `${JSON.stringify(figureSpec, null, 2)}\n`, 'utf8');
+  const figureOutput = join(output, 'vega-render');
+  const figureReply = decodeJson<{ ok: boolean; result: { outputs: Array<{ path: string }> } }>(
+    await run('vega-figure', [process.execPath, TSX_CLI, PARSER_CLI], {
+      request: {
+        operation: 'render_figure', projectRoot: output, sourcePath: 'input/figure.vl.json', outputDir: figureOutput,
+        inputPaths: ['results.csv'], label: 'Measured improvement by study group.', timeoutMs: 120_000,
+        figure: { widthInches: 5, heightInches: 2.5, dpi: 180, seed: 7 }
+      }
+    }),
+    'research_smoke_figure_output_corrupt'
+  );
+  if (!figureReply.ok || figureReply.result.outputs.length !== 3) fail('research_smoke_figure_failed');
+  for (const [extension, signature] of [['png', Buffer.from([0x89, 0x50, 0x4e, 0x47])], ['pdf', Buffer.from('%PDF')]] as const) {
+    const bytes = await readFile(join(figureOutput, `figure.${extension}`));
     if (!bytes.subarray(0, signature.length).equals(signature)) fail(`research_smoke_figure_invalid:${extension}`);
+    await writeFile(join(output, `figure.${extension}`), bytes);
   }
+  const svgBytes = await readFile(join(figureOutput, 'figure.svg'));
+  if (!svgBytes.toString('utf8', 0, 512).includes('<svg')) fail('research_smoke_figure_invalid:svg');
+  await writeFile(join(output, 'figure.svg'), svgBytes);
   await writeFile(join(output, 'paper.tex'), LATEX, 'utf8');
   const compiled = join(output, 'compiled');
   await mkdir(compiled);

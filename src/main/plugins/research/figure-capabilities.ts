@@ -1,15 +1,16 @@
 import { basename, extname } from 'node:path';
 import { z } from 'zod';
-import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentFileContentSchema,
-  researchExperimentFileRequestSchema, researchExperimentIdRequestSchema, researchExperimentSourceRequestSchema } from '../../../shared/schemas/research-experiments';
-import { researchFigureIdRequestSchema, researchFigureListRequestSchema, researchFigurePublicationSchema,
-  researchFigurePublishRequestSchema, researchFigureRunSchema, researchFigureSourceRequestSchema, researchFigureStartSchema } from '../../../shared/schemas/research-figures';
+import { researchExperimentFileContentSchema, researchExperimentFileRequestSchema, researchExperimentIdRequestSchema,
+  researchExperimentSourceRequestSchema } from '../../../shared/schemas/research-experiments';
+import { researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema, researchFigureIdRequestSchema,
+  researchFigureListRequestSchema, researchFigurePublicationSchema, researchFigurePublishRequestSchema, researchFigureRunSchema,
+  researchFigureSourceRequestSchema, researchFigureStartSchema } from '../../../shared/schemas/research-figures';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchFigureRepository } from './figure-repository';
 import type { ResearchFigureService } from './figure-service';
 
 const capabilities = {
-  environment: descriptor('research.figure.environment', researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema),
+  environment: descriptor('research.figure.environment', researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema),
   start: descriptor('research.figure.start', researchFigureStartSchema, researchFigureRunSchema),
   getRun: descriptor('research.figure.getRun', researchExperimentIdRequestSchema, researchFigureRunSchema),
   listRuns: descriptor('research.figure.listRuns', researchFigureListRequestSchema, researchFigureRunSchema.array()),
@@ -27,7 +28,7 @@ export function registerResearchFigureCapabilities(context: RocPluginContext, re
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (input: TInput) => TOutput | Promise<TOutput>): void {
     context.capabilities.register(context.pluginId, capability, async (input) => await run(capability.inputSchema.parse(input)));
   }
-  register(capabilities.environment, (input) => service.inspect(input.projectId, input.runtime));
+  register(capabilities.environment, (input) => service.inspect(input.projectId));
   register(capabilities.start, (input) => service.start(input));
   register(capabilities.getRun, (input) => service.getRun(input.projectId, input.runId));
   register(capabilities.listRuns, (input) => service.list(input.projectId, input.limit));

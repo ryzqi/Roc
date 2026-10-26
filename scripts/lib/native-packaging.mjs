@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -390,13 +389,6 @@ export function assertLiveResearchToolchainForPackaging({
       );
     }
   }
-  const sources = researchRuntimeSourcePath(targetProjectRoot);
-  for (const name of ['figure.py']) {
-    const fullPath = resolve(sources, name);
-    if (!existsSync(fullPath) || !statSync(fullPath).isFile()) {
-      throw new Error(`Missing research runtime source for packaging: ${name}`);
-    }
-  }
   // 版本也要对一遍。只看文件在不在的话，一套旧的 3.12.14/0.12.10 工具链能一路打包成功，
   // 然后在运行时被 `research_toolchain_version_mismatch` 拒掉——整个科研插件不可用，
   // 而且要等用户装上才发现。这里按 lock 里该架构声明的工具集逐项比。
@@ -470,8 +462,7 @@ function collectPackagedResearchEntries(root, previousEntries) {
       const reuse =
         previousEntry?.type === 'file' &&
         previousEntry.size === info.size &&
-        previousEntry.executable === executable &&
-        relativePath !== 'figure.py';
+        previousEntry.executable === executable;
       entries.push(
         reuse
           ? previousEntry
@@ -492,18 +483,10 @@ function collectPackagedResearchEntries(root, previousEntries) {
 
 export function finalizePackagedResearchToolchain({
   resourcesDir,
-  architecture = process.arch,
-  projectRoot: targetProjectRoot = projectRoot
+  architecture = process.arch
 }) {
   const root = researchToolchainResourcePath(resourcesDir);
-  const sources = researchRuntimeSourcePath(targetProjectRoot);
-  for (const name of ['figure.py']) {
-    const source = resolve(sources, name);
-    if (!existsSync(source) || !statSync(source).isFile()) {
-      throw new Error(`Missing research runtime source for packaging: ${name}`);
-    }
-    copyFileSync(source, resolve(root, name));
-  }
+  rmSync(resolve(root, 'figure.py'), { force: true });
   removeExcludedPackagedResearchPaths(root);
   const manifestPath = resolve(root, 'manifest.json');
   const manifest = readJsonFile(manifestPath, 'packaged_toolchain_manifest_invalid');
@@ -511,7 +494,7 @@ export function finalizePackagedResearchToolchain({
     throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
   }
   const lockHashes = { ...manifest.lockHashes };
-  lockHashes['figure.py'] = packagedToolchainSha256(resolve(root, 'figure.py'));
+  delete lockHashes['figure.py'];
   delete lockHashes['bibliography.py'];
   const next = {
     ...manifest,
@@ -523,14 +506,11 @@ export function finalizePackagedResearchToolchain({
 
 export function verifyPackagedResearchToolchain({
   resourcesDir,
-  architecture = process.arch,
-  projectRoot: targetProjectRoot = projectRoot
+  architecture = process.arch
 }) {
   const root = researchToolchainResourcePath(resourcesDir);
-  const sources = researchRuntimeSourcePath(targetProjectRoot);
   const required = [
     'manifest.json',
-    'figure.py',
     'bin/tectonic',
     'bin/uv',
     'bin/vale',
@@ -571,12 +551,8 @@ export function verifyPackagedResearchToolchain({
   if (leftover !== null) {
     throw new Error(`Packaged research toolchain must not include ${leftover}.`);
   }
-  for (const name of ['figure.py']) {
-    const source = resolve(sources, name);
-    const packaged = resolve(root, name);
-    if (packagedToolchainSha256(packaged) !== packagedToolchainSha256(source)) {
-      throw new Error(`Packaged research toolchain ${name} does not match current source.`);
-    }
+  if (existsSync(resolve(root, 'figure.py'))) {
+    throw new Error('Legacy figure renderer must not be packaged.');
   }
 }
 

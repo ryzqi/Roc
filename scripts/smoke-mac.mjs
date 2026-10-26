@@ -177,7 +177,7 @@ try {
     const target = `darwin-${process.arch}`;
     const rtk = spawnSync(join(rtkRoot, target, 'rtk'), ['--version'], { encoding: 'utf8', timeout: 10000 });
     const toolchainRoot = join(process.resourcesPath, 'research-toolchain');
-    const toolchainFiles = ['manifest.json', 'figure.py', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
+    const toolchainFiles = ['manifest.json', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
     const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules');
     const ortNativeRoot = join(unpacked, 'onnxruntime-node', 'bin', 'napi-v6', 'darwin', process.arch);
     const ortNativeFiles = fs.readdirSync(ortNativeRoot).sort();
@@ -194,7 +194,8 @@ try {
         missing: toolchainFiles.filter((file) => !fs.existsSync(join(toolchainRoot, file))),
         architecture: JSON.parse(fs.readFileSync(join(toolchainRoot, 'manifest.json'), 'utf8')).architecture,
         modelWeightsBundled: fs.existsSync(join(toolchainRoot, 'models')),
-        legacyParserBundled: fs.existsSync(join(toolchainRoot, 'worker.py'))
+        legacyParserBundled: fs.existsSync(join(toolchainRoot, 'worker.py')),
+        legacyFigureBundled: fs.existsSync(join(toolchainRoot, 'figure.py'))
       },
       sqlitePrebuilds: fs.readdirSync(join(unpacked, 'better-sqlite3', 'prebuilds')),
       ptyPrebuilds: fs.readdirSync(join(unpacked, 'node-pty', 'prebuilds')),
@@ -216,6 +217,7 @@ try {
   assert.equal(native.researchToolchain.architecture, native.arch);
   assert.equal(native.researchToolchain.modelWeightsBundled, false);
   assert.equal(native.researchToolchain.legacyParserBundled, false);
+  assert.equal(native.researchToolchain.legacyFigureBundled, false);
   assert.deepEqual(native.sqlitePrebuilds, [`darwin-${native.arch}.node`]);
   assert.deepEqual(native.ptyPrebuilds, [`darwin-${native.arch}`]);
   assert.deepEqual(native.ortNativeFiles, ['libonnxruntime.1.22.0.dylib', 'onnxruntime_binding.node']);

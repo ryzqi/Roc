@@ -10,7 +10,7 @@
 
 ## Python 与科研工具
 
-随应用分发的 CPython 3.12.15 目前仅服务绘图和数据实验：Matplotlib 3.11.2 负责图稿，pandas 与 SciPy 提供实验数据运算。相关功能将在后续迁移阶段改为原生 JavaScript，再删除 Python 运行时。`figure.py` 是当前绘图入口。
+随应用分发的 CPython 3.12.15 目前只服务尚未迁移的 Python 数据实验；Matplotlib 3.11.2 保留为这类实验的环境依赖。科研图稿已使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染，不调用 Python。数据实验完成迁移后会移除 Python 运行时。
 
 Vale 3.24.0 与仓库内 `vale/` 规则集用于文稿检查（合同见 `docs/research-prose.md`）。Typst 0.15.0 只负责导出附带的 `report.pdf`（`src/main/plugins/research/typst-report.ts`），不进入 LaTeX 主链。`csl/` 保存 APA、IEEE、GB/T 7714 引用格式数据；TeX 离线子集由 `tex-bundle-files.txt` 固定。
 
@@ -26,4 +26,4 @@ pnpm exec tsx scripts/research/smoke.ts --toolchain .runtime/research-toolchain/
 
 `prepare.ts` 按 `tools.lock.json`、`uv.lock` 与 TeX 文件清单组装剩余工具，生成逐文件完整性清单和实际 Python 包许可证索引。生成的解释器、环境与第三方二进制在 `.runtime/`，不提交到源码仓库。输出目录必须不存在；已存在时只做完整性校验，不覆盖。
 
-`smoke.ts` 保留 LaTeX 编译、主进程 PDF 渲染、原生 OCR/表格/公式/图稿解析以及 Matplotlib PNG/SVG/PDF 渲染覆盖。解析样例通过同一个 `research-job-cli.ts` 和 v3 结果契约运行。
+`smoke.ts` 保留 LaTeX 编译、主进程 PDF 渲染、原生 OCR/表格/公式/图稿解析以及 Vega-Lite PNG/SVG/PDF 图稿渲染覆盖。解析样例通过同一个 `research-job-cli.ts` 和 v3 结果契约运行。

@@ -169,8 +169,9 @@ import {
 import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentEvidenceRequestSchema,
   researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema, researchExperimentIdRequestSchema,
   researchExperimentListRequestSchema, researchExperimentStartSchema } from './schemas/research-experiments';
-import { researchFigureIdRequestSchema, researchFigureListRequestSchema, researchFigurePublicationSchema,
-  researchFigurePublishRequestSchema, researchFigureRunSchema, researchFigureStartSchema } from './schemas/research-figures';
+import { researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema, researchFigureIdRequestSchema,
+  researchFigureListRequestSchema, researchFigurePublicationSchema, researchFigurePublishRequestSchema,
+  researchFigureRunSchema, researchFigureStartSchema } from './schemas/research-figures';
 import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
   researchExportListRequestSchema, researchExportPrepareSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
   researchExportWriteRequestSchema } from './schemas/research-exports';
@@ -452,7 +453,7 @@ export const ipcRegistry = {
     request({ key: 'researchExperimentRead', channel: 'roc:research:experiment-read', domain: 'research', method: 'readExperimentFile', kind: 'plugin', capabilityName: 'research.experiment.read', inputTransform: first, contract: methodContract(oneArg(researchExperimentFileRequestSchema), researchExperimentFileContentSchema) }),
     request({ key: 'researchExperimentPublish', channel: 'roc:research:experiment-publish', domain: 'research', method: 'publishExperiment', kind: 'plugin', capabilityName: 'research.experiment.publish', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchExperimentExecutionSchema) }),
     request({ key: 'researchExperimentEvidence', channel: 'roc:research:experiment-evidence', domain: 'research', method: 'getEvidenceExperimentSource', kind: 'plugin', capabilityName: 'research.experiment.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchExperimentEvidenceRequestSchema), researchExperimentFileRequestSchema.nullable()) }),
-    request({ key: 'researchFigureEnvironment', channel: 'roc:research:figure-environment', domain: 'research', method: 'inspectFigureEnvironment', kind: 'plugin', capabilityName: 'research.figure.environment', inputTransform: first, contract: methodContract(oneArg(researchExperimentEnvironmentRequestSchema), researchExperimentEnvironmentSchema) }),
+    request({ key: 'researchFigureEnvironment', channel: 'roc:research:figure-environment', domain: 'research', method: 'inspectFigureEnvironment', kind: 'plugin', capabilityName: 'research.figure.environment', inputTransform: first, contract: methodContract(oneArg(researchFigureEnvironmentRequestSchema), researchFigureRendererEnvironmentSchema) }),
     request({ key: 'researchFigureStart', channel: 'roc:research:figure-start', domain: 'research', method: 'startFigure', kind: 'plugin', capabilityName: 'research.figure.start', inputTransform: first, contract: methodContract(oneArg(researchFigureStartSchema), researchFigureRunSchema) }),
     request({ key: 'researchFigureGetRun', channel: 'roc:research:figure-get-run', domain: 'research', method: 'getFigureRun', kind: 'plugin', capabilityName: 'research.figure.getRun', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchFigureRunSchema) }),
     request({ key: 'researchFigureListRuns', channel: 'roc:research:figure-list-runs', domain: 'research', method: 'listFigureRuns', kind: 'plugin', capabilityName: 'research.figure.listRuns', inputTransform: first, contract: methodContract(oneArg(researchFigureListRequestSchema), researchFigureRunSchema.array()) }),

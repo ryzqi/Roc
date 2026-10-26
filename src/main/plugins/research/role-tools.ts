@@ -190,7 +190,9 @@ function summarizeExport(record: { id: string; request: { requestId: string }; o
     artifactId: record.artifactId, approval: record.approval };
 }
 
-function productionSection(input: ResearchProductionInput, section: 'summary' | 'files' | 'environment'): unknown {
+type ResearchProductionSection = Record<string, unknown> | unknown[] | null;
+
+function productionSection(input: ResearchProductionInput, section: 'summary' | 'files' | 'environment'): ResearchProductionSection {
   if (section === 'files') return input.files;
   const source = input.source;
   if (source.kind === 'export') {

@@ -1,7 +1,11 @@
 import { lstat, mkdir, readdir, realpath, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import type { ResearchExperimentEnvironment, ResearchExperimentFile, ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+import type { ResearchFigureRendererEnvironment, ResearchFigureStart } from '../../../shared/schemas/research-figures';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
+
+type SnapshotEnvironment = Pick<ResearchExperimentEnvironment, 'hash' | 'lockFiles'> | ResearchFigureRendererEnvironment;
+type SnapshotRequest = ResearchExperimentStart | ResearchFigureStart;
 
 export const experimentFileLimit = 64 * 1024 * 1024;
 const experimentTotalLimit = 256 * 1024 * 1024;
@@ -13,9 +17,10 @@ export async function experimentStorage(path: string | null): Promise<string> {
   return await realpath(path);
 }
 
-export async function snapshotExperimentInputs(workspace: string, target: string, request: ResearchExperimentStart | { sourcePath: string; inputPaths: string[]; arguments: string[]; parameters: Record<string, string>; figure: unknown },
-  environment: ResearchExperimentEnvironment, signal: AbortSignal, generatedInputs: Record<string, string> = {}): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
-  const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...environment.lockFiles.map((file) => file.path)])].sort();
+export async function snapshotExperimentInputs(workspace: string, target: string, request: SnapshotRequest,
+  environment: SnapshotEnvironment, signal: AbortSignal, generatedInputs: Record<string, string> = {}): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
+  const lockFiles = 'lockFiles' in environment ? environment.lockFiles : [];
+  const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...lockFiles.map((file) => file.path)])].sort();
   if (Object.keys(generatedInputs).some((path) => paths.includes(path))) throw new Error('research_experiment_reserved_input');
   const files: ResearchExperimentFile[] = [];
   let total = 0;
@@ -32,7 +37,7 @@ export async function snapshotExperimentInputs(workspace: string, target: string
   for (const file of files) {
     signal.throwIfAborted();
     if (researchContentHash(await readResearchFile(workspace, file.path, experimentFileLimit)) !== file.sha256) throw new Error('research_experiment_input_changed');
-    const lock = environment.lockFiles.find((entry) => entry.path === file.path);
+    const lock = lockFiles.find((entry) => entry.path === file.path);
     if (lock !== undefined && lock.sha256 !== file.sha256) throw new Error('research_experiment_environment_changed');
   }
   for (const [path, content] of Object.entries(generatedInputs).sort(([left], [right]) => left.localeCompare(right))) {
@@ -46,11 +51,14 @@ export async function snapshotExperimentInputs(workspace: string, target: string
     await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
     files.push({ area: 'input', path, size: bytes.length, sha256: researchContentHash(bytes) });
   }
-  const identity = 'engine' in request
-    ? { engine: request.engine, network: request.network }
-    : { kind: 'figure' as const, figure: request.figure };
+  const isFigure = 'sourceVersion' in request;
+  const identity = isFigure
+    ? { kind: 'figure' as const, engine: request.engine, sourceVersion: request.sourceVersion, figure: request.figure }
+    : { kind: 'experiment' as const, engine: request.engine, network: request.network };
+  const argumentsList = isFigure ? [] : request.arguments;
+  const parameters = isFigure ? [] : Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right));
   return { files, hash: researchContentHash(JSON.stringify({ ...identity, source: request.sourcePath, files,
-    arguments: request.arguments, parameters: Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right)), environment: environment.hash })) };
+    arguments: argumentsList, parameters, environment: environment.hash })) };
 }
 
 export async function collectExperimentFiles(root: string, area: ResearchExperimentFile['area']): Promise<ResearchExperimentFile[]> {
