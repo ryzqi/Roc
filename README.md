@@ -274,8 +274,9 @@ Roc 依赖的外部组件全部登记在这里：**版本、来源网址、许�
 | 组件 | 版本 | 来源 | 用途 |
 | --- | --- | --- | --- |
 | Electron 内置 Node.js | 24.22.0（Electron 45.0.0） | Electron runtime | 执行 `.mts` 数据实验 |
-| `d3-dsv` | 3.0.1 | `https://github.com/d3/d3-dsv` | 有界 CSV/TSV 数据处理 |
 | `csv-parse` | 7.0.3 | `https://github.com/adaltas/node-csv` | 流式 CSV/TSV 输入 |
+| `csv-stringify` | 6.9.0 | `https://github.com/adaltas/node-csv` | 流式 CSV 输出 |
+| `d3-dsv` | 3.0.1 | `https://github.com/d3/d3-dsv` | 实验中的 CSV/TSV 转换 |
 | `simple-statistics` | 7.12.1 | `https://github.com/simple-statistics/simple-statistics` | 描述性统计 |
 
 ### 三、解析模型（按需下载）

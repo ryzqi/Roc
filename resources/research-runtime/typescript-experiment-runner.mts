@@ -1,6 +1,7 @@
-import { createReadStream } from 'node:fs';
-import { mkdir, lstat, open, readFile, realpath } from 'node:fs/promises';
-import { Transform } from 'node:stream';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, lstat, open, readFile, realpath, unlink } from 'node:fs/promises';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -45,7 +46,7 @@ type CsvParseOptions = {
   relax_column_count: false;
 };
 type CsvParseFunction = (options: CsvParseOptions) => Transform & AsyncIterable<Record<string, string>>;
-type CsvFormatFunction = (rows: CsvRecord[], columns: string[]) => string;
+type CsvStringifyFunction = typeof import('csv-stringify')['stringify'];
 type ResearchStatistics = Pick<typeof import('simple-statistics'), 'mean' | 'median' | 'quantile' | 'variance' | 'standardDeviation' | 'sampleCorrelation' | 'linearRegression'>;
 type ResearchExperimentContext = {
   contractVersion: 1;
@@ -82,7 +83,7 @@ function parseRequest(value: unknown): RunnerRequest {
     throw new Error('research_experiment_limits_invalid');
   }
   const packageEntries: Record<string, string> = {};
-  for (const name of ['csv-parse', 'd3-dsv', 'simple-statistics']) {
+  for (const name of ['csv-parse', 'csv-stringify', 'd3-dsv', 'simple-statistics']) {
     const entry = value.packageEntries[name];
     if (typeof entry !== 'string' || !isAbsolute(entry)) throw new Error('research_experiment_package_invalid');
     packageEntries[name] = entry;
@@ -154,13 +155,14 @@ async function main(): Promise<void> {
   const outputRoot = await realpath(request.outputDir);
   const allowedInputs = new Set([assertRelative(request.sourcePath), ...request.inputPaths.map(assertRelative)]);
   const csvModule = await loadModule(request.packageEntries['csv-parse']);
-  const dsvModule = await loadModule(request.packageEntries['d3-dsv']);
+  const stringifyModule = await loadModule(request.packageEntries['csv-stringify']);
   const statisticsModule = await loadModule(request.packageEntries['simple-statistics']);
-  if (typeof csvModule.parse !== 'function' || typeof dsvModule.csvFormat !== 'function') throw new Error('research_experiment_package_invalid');
+  if (typeof csvModule.parse !== 'function' || typeof stringifyModule.stringify !== 'function') throw new Error('research_experiment_package_invalid');
   const parseCsv = csvModule.parse as CsvParseFunction;
-  const csvFormat = dsvModule.csvFormat as CsvFormatFunction;
+  const csvStringify = stringifyModule.stringify as CsvStringifyFunction;
   const inputUsage = { bytes: 0 };
   const outputUsage = { bytes: 0, files: 0 };
+  const outputReservations = { bytes: 0, files: 0 };
 
   async function readInput(path: string, limit: number): Promise<Buffer> {
     const file = await safeInput(inputRoot, path, allowedInputs, request.limits.inputFileBytes);
@@ -206,37 +208,123 @@ async function main(): Promise<void> {
     return target;
   }
 
+  async function cleanupOutput(target: string, originalError: unknown): Promise<unknown> {
+    try {
+      await unlink(target);
+    } catch (cleanupError) {
+      if (!(cleanupError instanceof Error) || !('code' in cleanupError) || cleanupError.code !== 'ENOENT') {
+        return new AggregateError([originalError, cleanupError], 'research_experiment_output_cleanup_failed');
+      }
+    }
+    return originalError;
+  }
+
   async function writeText(path: string, content: string): Promise<void> {
     if (typeof content !== 'string') throw new Error('research_experiment_output_invalid');
     const bytes = Buffer.from(content, 'utf8');
-    if (bytes.length > request.limits.outputFileBytes || outputUsage.files >= request.limits.outputFiles ||
-        outputUsage.bytes + bytes.length > request.limits.totalOutputBytes) throw new Error('research_experiment_output_limit');
-    const target = await outputPath(path);
-    const file = await open(target, 'wx', 0o600);
-    try { await file.writeFile(bytes); }
-    finally { await file.close(); }
+    if (bytes.length > request.limits.outputFileBytes || outputUsage.files + outputReservations.files >= request.limits.outputFiles ||
+        outputUsage.bytes + outputReservations.bytes + bytes.length > request.limits.totalOutputBytes) {
+      throw new Error('research_experiment_output_limit');
+    }
+    outputReservations.bytes += bytes.length;
+    outputReservations.files += 1;
+    let target: string | null = null;
+    let created = false;
+    try {
+      target = await outputPath(path);
+      const file = await open(target, 'wx', 0o600);
+      created = true;
+      let failed = false;
+      let failure: unknown;
+      try { await file.writeFile(bytes); }
+      catch (error) { failed = true; failure = error; }
+      try { await file.close(); }
+      catch (error) {
+        failure = failed ? new AggregateError([failure, error], 'research_experiment_output_write_failed') : error;
+        failed = true;
+      }
+      if (failed) throw failure;
+    } catch (error) {
+      outputReservations.bytes -= bytes.length;
+      outputReservations.files -= 1;
+      throw created && target !== null ? await cleanupOutput(target, error) : error;
+    }
+    outputReservations.bytes -= bytes.length;
+    outputReservations.files -= 1;
     outputUsage.bytes += bytes.length;
     outputUsage.files += 1;
   }
 
   async function writeCsv(path: string, rows: unknown, options: { columns?: string[] } = {}): Promise<void> {
     if (!Array.isArray(rows) || rows.length > request.limits.csvRows) throw new Error('research_experiment_row_limit');
-    const columns = options.columns ?? (rows.length > 0 && isRecord(rows[0]) ? Object.keys(rows[0]) : []);
+    const columns = [...(options.columns ?? (rows.length > 0 && isRecord(rows[0]) ? Object.keys(rows[0]) : []))];
     if (columns.length === 0 || columns.length > 1000 ||
         columns.some((column) => typeof column !== 'string' || column.length === 0) || new Set(columns).size !== columns.length) {
       throw new Error('research_experiment_csv_columns_invalid');
     }
     const records: CsvRecord[] = rows.map((row) => {
       if (!isRecord(row)) throw new Error('research_experiment_csv_row_invalid');
+      const record: CsvRecord = Object.create(null) as CsvRecord;
       for (const column of columns) {
         const value = row[column];
         if (value !== null && value !== undefined && !['string', 'number', 'boolean'].includes(typeof value)) {
           throw new Error('research_experiment_csv_row_invalid');
         }
+        record[column] = value as CsvValue;
       }
-      return row as CsvRecord;
+      return record;
     });
-    await writeText(path, csvFormat(records, columns));
+    if (outputUsage.files + outputReservations.files >= request.limits.outputFiles) {
+      throw new Error('research_experiment_output_limit');
+    }
+    outputReservations.files += 1;
+    let reservedBytes = 0;
+    let target: string | null = null;
+    let created = false;
+    try {
+      target = await outputPath(path);
+      const byteLimiter = new Transform({
+        transform(chunk, _encoding, callback) {
+          const bytes = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
+          if (reservedBytes + bytes > request.limits.outputFileBytes ||
+              outputUsage.bytes + outputReservations.bytes + bytes > request.limits.totalOutputBytes) {
+            callback(new Error('research_experiment_output_limit'));
+            return;
+          }
+          reservedBytes += bytes;
+          outputReservations.bytes += bytes;
+          callback(null, chunk);
+        }
+      });
+      const destination = createWriteStream(target, { flags: 'wx', mode: 0o600 });
+      destination.once('open', () => { created = true; });
+      await pipeline(
+        Readable.from(records),
+        csvStringify({
+          columns,
+          header: true,
+          eof: false,
+          record_delimiter: '\n',
+          quote_record_delimiter: true,
+          escape_formulas: false,
+          cast: { boolean: (value) => String(value) }
+        }),
+        byteLimiter,
+        destination,
+        { signal: controller.signal }
+      );
+    } catch (error) {
+      outputReservations.bytes -= reservedBytes;
+      outputReservations.files -= 1;
+      if (created && target !== null) {
+        error = await cleanupOutput(target, error);
+      }
+      throw error;
+    }
+    outputReservations.bytes -= reservedBytes;
+    outputReservations.files -= 1;
+    outputUsage.bytes += reservedBytes;
+    outputUsage.files += 1;
   }
 
   const statisticNames = ['mean', 'median', 'quantile', 'variance', 'standardDeviation', 'sampleCorrelation', 'linearRegression'] as const;
@@ -270,7 +358,10 @@ async function main(): Promise<void> {
     if (typeof module.run !== 'function') throw new Error('research_experiment_run_export_required');
     const result = await module.run(context);
     if (result !== undefined) throw new Error('research_experiment_return_value_unsupported');
-    if (outputUsage.bytes > request.limits.totalOutputBytes || outputUsage.files > request.limits.outputFiles) throw new Error('research_experiment_output_limit');
+    if (outputReservations.bytes !== 0 || outputReservations.files !== 0 ||
+        outputUsage.bytes > request.limits.totalOutputBytes || outputUsage.files > request.limits.outputFiles) {
+      throw new Error('research_experiment_output_limit');
+    }
   } finally {
     process.removeListener('SIGTERM', onSignal);
     process.removeListener('SIGINT', onSignal);

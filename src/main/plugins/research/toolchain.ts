@@ -35,7 +35,7 @@ type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string;
 type FigureWorkerInput = WorkerInput & Pick<ResearchFigureRenderJob, 'inputPaths' | 'label' | 'timeoutMs' | 'figure'>;
 export type ResearchTypeScriptRuntime = {
   root: string; executable: string; runnerPath: string; runnerHash: string; nodeVersion: string; platform: string; architecture: string;
-  hash: string; packageEntries: Record<'csv-parse' | 'd3-dsv' | 'simple-statistics', string>;
+  hash: string; packageEntries: Record<'csv-parse' | 'csv-stringify' | 'd3-dsv' | 'simple-statistics', string>;
   packageRoots: string[]; packages: Array<{ name: string; version: string }>; environment: NodeJS.ProcessEnv;
 };
 
@@ -96,7 +96,7 @@ export class ResearchToolchain {
     const { root } = await this.resolve();
     const runnerPath = await researchPath(root, 'typescript-experiment-runner.mts');
     const runnerHash = researchContentHash(await readResearchFile(root, 'typescript-experiment-runner.mts', 1024 * 1024));
-    const specifiers = ['csv-parse', 'd3-dsv', 'simple-statistics'] as const;
+    const specifiers = ['csv-parse', 'csv-stringify', 'd3-dsv', 'simple-statistics'] as const;
     const packageEntries = {} as ResearchTypeScriptRuntime['packageEntries'];
     const packageRoots: string[] = [];
     const packages: Array<{ name: string; version: string }> = [];

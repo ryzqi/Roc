@@ -57,6 +57,7 @@
     "@retorquere/bibtex-parser": "12.1.13",
     "better-sqlite3": "13.0.3",
     "csv-parse": "7.0.3",
+    "csv-stringify": "6.9.0",
     "d3-dsv": "3.0.1",
     "deepagents": "1.15.1",
     "fast-xml-parser": "5.11.2",

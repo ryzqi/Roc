@@ -1,5 +1,5 @@
 import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { dirname, extname, join } from 'node:path';
+import { dirname, extname, join, sep } from 'node:path';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
   type ResearchExperimentStartRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
@@ -13,7 +13,7 @@ import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { writeFrozenManifest } from './research-frozen-manifest';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
-import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
+import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
@@ -271,9 +271,11 @@ export class ResearchExperimentService {
     if (request.engine === 'typescript') {
       const runtime = prepared.typescriptRuntime;
       if (runtime === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
-      const readablePaths = [...new Set([...prepared.readablePaths, input, runtime.executable])];
-      const args = ['--permission', ...readablePaths.map((path) => `--allow-fs-read=${path}`),
-        ...[output, scratch].map((path) => `--allow-fs-write=${path}`), runtime.runnerPath];
+      const declaredInputPaths = [request.sourcePath, ...request.inputPaths].map((path) => join(input, researchRelativePath(path)));
+      const readablePaths = [...new Set([...prepared.readablePaths, input, ...declaredInputPaths, output, `${output}${sep}`, runtime.executable])];
+      const permissionReadPaths = [...new Set([...readablePaths, ...runtime.packageRoots.map((path) => `${path}${sep}`)])];
+      const args = ['--permission', ...permissionReadPaths.map((path) => `--allow-fs-read=${path}`),
+        ...[output, scratch].flatMap((path) => [`--allow-fs-write=${path}`, `--allow-fs-write=${path}${sep}`]), runtime.runnerPath];
       const runnerInput = JSON.stringify({ contractVersion: request.sourceVersion, sourcePath: request.sourcePath, inputPaths: request.inputPaths,
         inputDir: input, outputDir: output, parameters: request.parameters, packageEntries: runtime.packageEntries,
         limits: { inputFileBytes: experimentFileLimit, totalInputBytes: experimentInputTotalLimit, csvRows: experimentCsvRowLimit,
