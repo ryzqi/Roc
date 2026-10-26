@@ -1,9 +1,9 @@
+import pRetry from 'p-retry';
 import { RocDomainError } from './errors';
 import type { MetricsService } from './metrics-service';
 
 // 增加到 10 分钟以支持长推理模型（如 DeepSeek extended thinking）
 export const providerRequestTimeoutMs = 600_000;
-const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
 export const providerRequestTimeoutMessage = 'Provider 流在限定时间内没有返回新数据。这通常发生在模型进行长时间推理时（如复杂任务的思考阶段）。建议：1) 重试任务 2) 简化提示词 3) 分解为多个小任务。';
 
 export class ProviderStreamIdleError extends Error {
@@ -64,34 +64,66 @@ export async function executeWithProviderRequestRetry<T>(
 ): Promise<T> {
   const shouldRetry = options.shouldRetry ?? isRetryableProviderRequestFailure;
   const startedAtMs = Date.now();
+  throwIfAborted(options.signal);
 
-  for (let attemptIndex = 0; ; attemptIndex += 1) {
-    throwIfAborted(options.signal);
-    const attempt = String(attemptIndex + 1);
-    options.metricsService?.incrementCounter('provider.request.total', {
-      ...options.labels,
-      attempt
-    });
-
-    try {
-      const result = await operation();
-      options.metricsService?.recordHistogram('provider.request.duration_ms', Date.now() - startedAtMs, {
-        ...options.labels,
-        attempt
-      });
-      return result;
-    } catch (error) {
-      const classification = classifyProviderRequestFailure(error);
-      options.metricsService?.incrementCounter('provider.request.errors', {
-        ...options.labels,
-        attempt,
-        kind: classification.kind
-      });
-      if (attemptIndex >= providerRequestRetryBackoffMs.length || !shouldRetry(error)) {
-        throw error;
-      }
-      await delayWithAbort(providerRequestRetryBackoffMs[attemptIndex], options.signal);
+  const originalErrors = new WeakMap<Error, unknown>();
+  let successfulAttempt = 0;
+  const originalError = (error: unknown): unknown => {
+    if (error instanceof Error && originalErrors.has(error)) {
+      return originalErrors.get(error);
     }
+    return error;
+  };
+
+  try {
+    const result = await pRetry(
+      async (attemptNumber) => {
+        successfulAttempt = attemptNumber;
+        options.metricsService?.incrementCounter('provider.request.total', {
+          ...options.labels,
+          attempt: String(attemptNumber)
+        });
+
+        try {
+          return await operation();
+        } catch (error) {
+          const wrappedError = new Error(
+            error instanceof Error ? error.message : 'Provider request failed with a non-Error rejection.',
+            { cause: error }
+          );
+          originalErrors.set(wrappedError, error);
+          throw wrappedError;
+        }
+      },
+      {
+        retries: 3,
+        factor: 2,
+        minTimeout: 1_000,
+        maxTimeout: 4_000,
+        randomize: false,
+        signal: options.signal,
+        onFailedAttempt: ({ error, attemptNumber }) => {
+          const classification = classifyProviderRequestFailure(originalError(error));
+          options.metricsService?.incrementCounter('provider.request.errors', {
+            ...options.labels,
+            attempt: String(attemptNumber),
+            kind: classification.kind
+          });
+        },
+        shouldRetry: ({ error }) => shouldRetry(originalError(error))
+      }
+    );
+
+    options.metricsService?.recordHistogram('provider.request.duration_ms', Date.now() - startedAtMs, {
+      ...options.labels,
+      attempt: String(successfulAttempt)
+    });
+    return result;
+  } catch (error) {
+    if (options.signal?.aborted === true) {
+      throw createAbortError();
+    }
+    throw originalError(error);
   }
 }
 
@@ -257,36 +289,6 @@ function createAbortError(): Error {
   error.name = 'AbortError';
   error.code = 'ABORT_ERR';
   return error;
-}
-
-function delayWithAbort(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
-  if (delayMs <= 0) {
-    return Promise.resolve();
-  }
-  if (signal?.aborted === true) {
-    return Promise.reject(createAbortError());
-  }
-
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, delayMs);
-
-    const onAbort = () => {
-      clearTimeout(timeoutId);
-      cleanup();
-      reject(createAbortError());
-    };
-
-    const cleanup = () => {
-      signal?.removeEventListener('abort', onAbort);
-    };
-
-    if (signal !== undefined) {
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

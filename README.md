@@ -349,6 +349,7 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 | `@napi-rs/canvas` | 1.0.13 | `https://github.com/Brooooooklyn/canvas` ✓ | MIT | PDF 页渲染、图像处理（原生，需 `asarUnpack`） |
 | `pdfjs-dist` | 6.4.299 | `https://github.com/mozilla/pdf.js` ✓ | Apache-2.0 | PDF 解析预览 |
 | `pino` | 10.4.0 | `https://github.com/pinojs/pino` ✓ | MIT | 主进程 JSONL 日志 |
+| `p-retry` | 7.1.1 | `https://github.com/sindresorhus/p-retry` ✓ | MIT | Provider 请求退避重试 |
 | `node-pty` | 1.1.0 | `https://github.com/microsoft/node-pty` ✓ | MIT | 终端（原生，需 `asarUnpack`） |
 | `shell-env` | 4.0.3 | `https://github.com/sindresorhus/shell-env` ✓ | MIT | Finder/Dock 启动时恢复登录 shell 的 PATH |
 | `fast-xml-parser` | 5.11.2 | `https://github.com/NaturalIntelligence/fast-xml-parser` ✓ | MIT | arXiv Atom 解析 |

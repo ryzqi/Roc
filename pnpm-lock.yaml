@@ -228,6 +228,9 @@ importers:
       onnxruntime-node:
         specifier: 1.22.0-rev
         version: 1.22.0-rev
+      p-retry:
+        specifier: 7.1.1
+        version: 7.1.1
       paddleocr:
         specifier: 1.2.0
         version: 1.2.0
