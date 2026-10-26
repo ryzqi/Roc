@@ -1,232 +1,354 @@
-import { crc32, inflateRawSync } from 'node:zlib';
-import { mkdir, open, readFile } from 'node:fs/promises';
-import { dirname, join, posix as posixPath } from 'node:path';
-import { researchJobError, runResearchJob, type ResearchJobPaths } from './research-job';
+import { close as closeFdCallback, constants, open as openFdCallback } from 'node:fs';
+import type { EventEmitter } from 'node:events';
+import { mkdir, open, lstat, type FileHandle } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { crc32 } from 'node:zlib';
+import { Readable, Writable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import * as yauzl from 'yauzl';
+import { ArchivePolicy, ArchivePolicyError } from './archive-policy';
+import { ResearchProcessError } from './process-runner';
+import { runResearchJob, type ResearchJobPaths } from './research-job';
 
 const MAX_MEMBERS = 5000;
 const MAX_UNCOMPRESSED = 256 * 1024 * 1024;
 const MAX_FILE = 64 * 1024 * 1024;
 const SKIP_PARTS = new Set(['__MACOSX', '.git', '.DS_Store', '.roc-research', '.roc-build']);
-const LOCAL_SIGNATURE = 0x04034b50;
-const CENTRAL_SIGNATURE = 0x02014b50;
-const EOCD_SIGNATURE = 0x06054b50;
 const STORED = 0;
 const DEFLATE = 8;
+const ENCRYPTION_FLAGS = 0x0001 | 0x0020 | 0x0040 | 0x2000;
 
-type ZipMember = {
-  name: string;
-  directory: boolean;
-  compression: number;
-  localOffset: number;
-  crc: number;
-  compressedSize: number;
-  uncompressedSize: number;
-  flags: number;
-  externalAttributes: number;
-};
+type PreparedEntry = { entry: yauzl.Entry; path: string; directory: boolean };
+type ZipFileWithReader = yauzl.ZipFile & { reader: EventEmitter };
 
-function readU16(buffer: Buffer, offset: number): number {
-  return buffer.readUInt16LE(offset);
-}
-
-function readU32(buffer: Buffer, offset: number): number {
-  return buffer.readUInt32LE(offset);
-}
-
-function findEocd(buffer: Buffer): number {
-  const minimum = 22;
-  if (buffer.length < minimum) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  const start = Math.max(0, buffer.length - 22 - 65535);
-  for (let offset = buffer.length - minimum; offset >= start; offset -= 1) {
-    if (readU32(buffer, offset) === EOCD_SIGNATURE) {
-      return offset;
-    }
-  }
-  researchJobError('research_template_archive_entry_invalid');
-}
-
-function decodeName(bytes: Buffer, utf8: boolean): string {
-  return bytes.toString(utf8 ? 'utf8' : 'latin1');
-}
-
-function parseCentralDirectory(buffer: Buffer): ZipMember[] {
-  const eocd = findEocd(buffer);
-  if (readU16(buffer, eocd + 4) !== 0 || readU16(buffer, eocd + 6) !== 0) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  const entries = readU16(buffer, eocd + 10);
-  const size = readU32(buffer, eocd + 12);
-  const offset = readU32(buffer, eocd + 16);
-  if (entries > MAX_MEMBERS || offset + size > buffer.length) {
-    researchJobError('research_template_archive_too_large');
-  }
-  const members: ZipMember[] = [];
-  let cursor = offset;
-  for (let index = 0; index < entries; index += 1) {
-    if (cursor + 46 > buffer.length || readU32(buffer, cursor) !== CENTRAL_SIGNATURE) {
-      researchJobError('research_template_archive_entry_invalid');
-    }
-    const flags = readU16(buffer, cursor + 8);
-    const compression = readU16(buffer, cursor + 10);
-    const compressedSize = readU32(buffer, cursor + 20);
-    const uncompressedSize = readU32(buffer, cursor + 24);
-    const nameLength = readU16(buffer, cursor + 28);
-    const extraLength = readU16(buffer, cursor + 30);
-    const commentLength = readU16(buffer, cursor + 32);
-    const externalAttributes = readU32(buffer, cursor + 38);
-    const localOffset = readU32(buffer, cursor + 42);
-    const nameStart = cursor + 46;
-    const nameEnd = nameStart + nameLength;
-    if (nameEnd + extraLength + commentLength > buffer.length) {
-      researchJobError('research_template_archive_entry_invalid');
-    }
-    members.push({
-      name: decodeName(buffer.subarray(nameStart, nameEnd), (flags & 0x800) !== 0),
-      directory: nameEndsWithSlash(buffer, nameStart, nameEnd),
-      compression,
-      crc: readU32(buffer, cursor + 16),
-      localOffset,
-      compressedSize,
-      uncompressedSize,
-      flags,
-      externalAttributes
+function openArchiveDescriptor(path: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    openFdCallback(path, constants.O_RDONLY | constants.O_NOFOLLOW, (error, fd) => {
+      if (error !== null) reject(error);
+      else resolve(fd);
     });
-    cursor = nameEnd + extraLength + commentLength;
-  }
-  return members;
+  });
 }
 
-function nameEndsWithSlash(buffer: Buffer, start: number, end: number): boolean {
-  return end > start && (buffer[end - 1] === 0x2f || buffer[end - 1] === 0x5c);
+function closeArchiveDescriptor(fd: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    closeFdCallback(fd, (error) => {
+      if (error === null || (error as NodeJS.ErrnoException).code === 'EBADF') resolve();
+      else reject(error);
+    });
+  });
 }
 
-function zipMemberPath(name: string): { path: string; directory: boolean } {
-  if (name.includes('\\') || [...name].some((char) => char.charCodeAt(0) < 32)) {
-    researchJobError('research_template_archive_entry_invalid');
+function archivePolicyError(error: unknown): never {
+  if (!(error instanceof ArchivePolicyError)) throw error;
+  if (error.failure === 'path_invalid') throw new ResearchProcessError('research_template_archive_entry_invalid');
+  if (error.failure === 'path_collision') throw new ResearchProcessError('research_template_archive_path_collision');
+  if (error.failure === 'file_limit' || error.failure === 'total_limit' || error.failure === 'member_limit') {
+    throw new ResearchProcessError('research_template_archive_too_large');
   }
-  const directory = name.endsWith('/');
-  const parts = name.split('/').filter((part) => part.length > 0);
-  if (posixPath.isAbsolute(name) || parts.length === 0 || parts.some((part) => part === '.' || part === '..')) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  return { path: parts.join('/'), directory };
+  throw new ResearchProcessError('research_template_archive_entry_invalid');
 }
 
-function validateMember(member: ZipMember, names: Map<string, string>, files: Set<string>): string {
-  const { path, directory } = zipMemberPath(member.name);
-  const mode = (member.externalAttributes >>> 16) & 0xffff;
-  const kind = mode & 0o170000;
-  if (
-    kind === 0o120000 ||
-    (kind !== 0 && kind !== 0o040000 && kind !== 0o100000) ||
-    (member.flags & 0x0009) !== 0 ||
-    member.compressedSize === 0xffffffff ||
-    member.uncompressedSize === 0xffffffff ||
-    member.localOffset === 0xffffffff ||
-    (member.compression !== STORED && member.compression !== DEFLATE)
-  ) {
-    researchJobError('research_template_archive_entry_invalid');
+function throwIfCancelled(signal: AbortSignal): void {
+  if (signal.aborted) throw new ResearchProcessError('research_process_cancelled');
+}
+
+function hasValidUtf8Name(entry: yauzl.Entry): boolean {
+  if ((entry.generalPurposeBitFlag & 0x0800) === 0) return true;
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(entry.fileNameRaw) === entry.fileName;
+  } catch {
+    return false;
   }
-  if (member.uncompressedSize > MAX_FILE) {
-    researchJobError('research_template_archive_too_large');
+}
+
+function hasZip64ExtraField(extraField: Buffer): boolean {
+  let offset = 0;
+  while (offset < extraField.length) {
+    if (extraField.length - offset < 4) return true;
+    const id = extraField.readUInt16LE(offset);
+    const size = extraField.readUInt16LE(offset + 2);
+    const end = offset + 4 + size;
+    if (end > extraField.length || id === 0x0001) return true;
+    offset = end;
   }
-  const parts = path.split('/');
-  for (let index = 1; index <= parts.length; index += 1) {
-    const part = parts.slice(0, index).join('/');
-    const folded = part.normalize('NFC').toLowerCase();
-    const existing = names.get(folded);
-    if (existing !== undefined && existing !== part) {
-      researchJobError('research_template_archive_path_collision');
+  return false;
+}
+
+function closeArchiveReader(zip: yauzl.ZipFile): Promise<void> {
+  if (!zip.isOpen) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    // Yauzl suppresses ZipFile errors after the first one; listen to its reader too.
+    const reader = (zip as ZipFileWithReader).reader;
+    let settled = false;
+    const cleanup = (): void => {
+      zip.off('error', onError);
+      zip.off('close', onClose);
+      reader.off('error', onError);
+    };
+    const onError = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onClose = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    zip.on('error', onError);
+    zip.once('close', onClose);
+    reader.on('error', onError);
+    try {
+      zip.close();
+    } catch (error) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
     }
-    names.set(folded, part);
-  }
-  if (!directory) {
-    if (files.has(path)) {
-      researchJobError('research_template_archive_path_collision');
+  });
+}
+
+function preserveArchiveCloseError(primaryError: unknown, closeError: unknown): unknown {
+  if (primaryError instanceof Error) {
+    try {
+      const previous = (primaryError as Error & { cleanupErrors?: unknown[] }).cleanupErrors ?? [];
+      Object.defineProperty(primaryError, 'cleanupErrors', {
+        value: [...previous, closeError], enumerable: true, configurable: true
+      });
+      return primaryError;
+    } catch {
+      // Fall through to an aggregate when the primary error cannot carry cleanup details.
     }
-    files.add(path);
   }
-  return directory ? `${path}/` : path;
+  const aggregate = new AggregateError([primaryError, closeError], 'research_template_archive_cleanup_failed', { cause: primaryError });
+  if (primaryError instanceof Error && 'code' in primaryError && typeof primaryError.code === 'string') {
+    Object.defineProperty(aggregate, 'code', { value: primaryError.code, enumerable: true });
+  }
+  Object.defineProperty(aggregate, 'cleanupErrors', { value: [closeError], enumerable: true, configurable: true });
+  return aggregate;
+}
+
+async function collectAndValidateEntries(zip: yauzl.ZipFile, signal: AbortSignal): Promise<PreparedEntry[]> {
+  if (zip.entryCount > MAX_MEMBERS) throw new ResearchProcessError('research_template_archive_too_large');
+  const policy = new ArchivePolicy({ members: MAX_MEMBERS, fileBytes: MAX_FILE, totalBytes: MAX_UNCOMPRESSED });
+  const entries: PreparedEntry[] = [];
+  try {
+    for await (const entry of zip.eachEntry()) {
+      throwIfCancelled(signal);
+      if (entries.length >= MAX_MEMBERS) throw new ResearchProcessError('research_template_archive_too_large');
+      const localHeader = await zip.readLocalFileHeaderPromise(entry);
+      throwIfCancelled(signal);
+      const directory = entry.fileName.endsWith('/');
+      const unixMode = (entry.externalFileAttributes >>> 16) & 0xffff;
+      const dosAttributes = entry.externalFileAttributes & 0xffff;
+      if ((entry.generalPurposeBitFlag & ENCRYPTION_FLAGS) !== 0
+          || (entry.compressionMethod !== STORED && entry.compressionMethod !== DEFLATE)
+          || !entry.canDecodeFileData()
+          || !hasValidUtf8Name(entry)
+          || entry.extraFields.some((field) => field.id === 0x0001)
+          || hasZip64ExtraField(localHeader.extraField)
+          || !Number.isSafeInteger(entry.compressedSize) || entry.compressedSize < 0
+          || !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0
+          || !Number.isSafeInteger(entry.relativeOffsetOfLocalHeader) || entry.relativeOffsetOfLocalHeader < 0
+          || (dosAttributes & 0x0400) !== 0
+          || ((dosAttributes & 0x0010) !== 0 && !directory)) {
+        throw new ResearchProcessError('research_template_archive_entry_invalid');
+      }
+      let normalized: { path: string; directory: boolean };
+      try {
+        normalized = policy.add({ name: entry.fileName, uncompressedSize: entry.uncompressedSize, directory, unixMode });
+      } catch (error) {
+        archivePolicyError(error);
+      }
+      entries.push({ entry, path: normalized.path, directory: normalized.directory });
+    }
+  } catch (error) {
+    if (error instanceof ResearchProcessError) throw error;
+    if (signal.aborted) throw new ResearchProcessError('research_process_cancelled');
+    throw new ResearchProcessError('research_template_archive_entry_invalid');
+  }
+  if (entries.length !== zip.entryCount) throw new ResearchProcessError('research_template_archive_entry_invalid');
+  return entries;
 }
 
 function skipMember(path: string): boolean {
   return path.split('/').some((part) => SKIP_PARTS.has(part));
 }
 
-function inflateMember(buffer: Buffer, member: ZipMember): Buffer {
-  if (member.localOffset + 30 > buffer.length || readU32(buffer, member.localOffset) !== LOCAL_SIGNATURE) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  if (readU32(buffer, member.localOffset + 14) !== member.crc) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  const nameLength = readU16(buffer, member.localOffset + 26);
-  const extraLength = readU16(buffer, member.localOffset + 28);
-  const dataStart = member.localOffset + 30 + nameLength + extraLength;
-  const dataEnd = dataStart + member.compressedSize;
-  if (dataEnd > buffer.length) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  const payload = buffer.subarray(dataStart, dataEnd);
-  let inflated: Buffer;
-  if (member.compression === STORED) {
-    if (payload.length !== member.uncompressedSize) {
-      researchJobError('research_template_archive_entry_invalid');
-    }
-    inflated = Buffer.from(payload);
-  } else {
+async function ensureOutputDirectory(outputRoot: string, relativeDirectory: string): Promise<void> {
+  let current = outputRoot;
+  for (const part of relativeDirectory.split('/').filter(Boolean)) {
+    current = join(current, part);
     try {
-      inflated = inflateRawSync(payload, { maxOutputLength: Math.max(1, member.uncompressedSize) });
-    } catch {
-      researchJobError('research_template_archive_entry_invalid');
+      await mkdir(current, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
+    const info = await lstat(current);
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new ResearchProcessError('research_template_archive_entry_invalid');
   }
-  if (inflated.length !== member.uncompressedSize) {
-    researchJobError('research_template_archive_entry_invalid');
-  }
-  if ((crc32(inflated) >>> 0) !== member.crc) {
-    researchJobError('research_template_archive_crc_mismatch');
-  }
-  return inflated;
 }
 
-async function writeFileExclusive(path: string, bytes: Buffer): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const handle = await open(path, 'wx', 0o600);
+async function writeEntryStream(
+  zip: yauzl.ZipFile,
+  prepared: PreparedEntry,
+  outputPath: string | null,
+  policy: ArchivePolicy,
+  signal: AbortSignal
+): Promise<void> {
+  let source: Readable | undefined;
+  let handle: FileHandle | undefined;
+  let archiveStreamError: unknown;
   try {
-    await handle.writeFile(bytes);
+    throwIfCancelled(signal);
+    try {
+      source = await zip.openReadStreamPromise(prepared.entry);
+    } catch {
+      throw new ResearchProcessError('research_template_archive_entry_invalid');
+    }
+    source.on('error', (error) => { archiveStreamError ??= error; });
+    let destination: NodeJS.WritableStream;
+    let outputError: unknown;
+    if (outputPath !== null) {
+      handle = await open(outputPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      destination = new Writable({
+        write(chunk, _encoding, callback) {
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          writeAll(handle!, data).then(() => callback(), callback);
+        }
+      });
+      destination.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.syscall === 'write') outputError = error;
+      });
+    } else {
+      destination = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+    }
+
+    let uncompressedBytes = 0;
+    let checksum = 0;
+    const validate = new Transform({
+      transform(chunk, _encoding, callback) {
+        try {
+          throwIfCancelled(signal);
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          uncompressedBytes += data.length;
+          if (uncompressedBytes > MAX_FILE) throw new ResearchProcessError('research_template_archive_too_large');
+          if (uncompressedBytes > prepared.entry.uncompressedSize) throw new ResearchProcessError('research_template_archive_entry_invalid');
+          try {
+            policy.addOutputBytes(data.length);
+          } catch (error) {
+            archivePolicyError(error);
+          }
+          checksum = crc32(data, checksum) >>> 0;
+          callback(null, data);
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      flush(callback) {
+        if (uncompressedBytes !== prepared.entry.uncompressedSize) {
+          callback(new ResearchProcessError('research_template_archive_entry_invalid'));
+        } else if (checksum !== prepared.entry.crc32) {
+          callback(new ResearchProcessError('research_template_archive_crc_mismatch'));
+        } else {
+          callback();
+        }
+      }
+    });
+
+    try {
+      await pipeline(source, validate, destination, { signal });
+      if (archiveStreamError !== undefined) throw new ResearchProcessError('research_template_archive_entry_invalid');
+    } catch (error) {
+      if (signal.aborted) throw new ResearchProcessError('research_process_cancelled');
+      if (error instanceof ResearchProcessError) throw error;
+      if (outputError !== undefined) throw outputError;
+      if (archiveStreamError !== undefined) throw new ResearchProcessError('research_template_archive_entry_invalid');
+      throw new ResearchProcessError('research_template_archive_entry_invalid');
+    }
   } finally {
-    await handle.close();
+    source?.destroy();
+    if (handle !== undefined) await handle.close();
   }
 }
 
-async function extractArchive(job: ResearchJobPaths): Promise<{ fileCount: number }> {
-  const buffer = await readFile(job.source);
-  const members = parseCentralDirectory(buffer);
-  const names = new Map<string, string>();
-  const files = new Set<string>();
-  let uncompressed = 0;
-  let extracted = 0;
-  for (const member of members) {
-    uncompressed += member.uncompressedSize;
-    if (members.length > MAX_MEMBERS || uncompressed > MAX_UNCOMPRESSED) {
-      researchJobError('research_template_archive_too_large');
-    }
-    const path = validateMember(member, names, files);
-    if (skipMember(path)) {
-      continue;
-    }
-    const destination = join(job.output, ...path.replace(/\/$/u, '').split('/'));
-    if (path.endsWith('/')) {
-      await mkdir(destination, { recursive: true, mode: 0o700 });
-      continue;
-    }
-    await writeFileExclusive(destination, inflateMember(buffer, member));
-    extracted += 1;
+async function writeAll(handle: FileHandle, data: Buffer): Promise<void> {
+  let offset = 0;
+  while (offset < data.length) {
+    const { bytesWritten } = await handle.write(data, offset, data.length - offset, null);
+    if (bytesWritten === 0) throw new Error('research_template_archive_write_failed');
+    offset += bytesWritten;
   }
-  return { fileCount: extracted };
+}
+
+async function extractArchive(job: ResearchJobPaths, signal: AbortSignal): Promise<{ fileCount: number }> {
+  let sourceFd: number | undefined;
+  let zip: yauzl.ZipFile | undefined;
+  let extracted = 0;
+  let operationFailed = false;
+  let operationError: unknown;
+  let result: { fileCount: number } | undefined;
+  try {
+    throwIfCancelled(signal);
+    sourceFd = await openArchiveDescriptor(job.source);
+    zip = await yauzl.fromFdPromise(sourceFd, {
+      autoClose: false,
+      lazyEntries: true,
+      decodeStrings: true,
+      validateEntrySizes: false,
+      strictFileNames: true
+    });
+    const entries = await collectAndValidateEntries(zip, signal);
+    const policy = new ArchivePolicy({ members: MAX_MEMBERS, fileBytes: MAX_FILE, totalBytes: MAX_UNCOMPRESSED });
+    for (const item of entries) {
+      throwIfCancelled(signal);
+      if (item.directory) {
+        if (!skipMember(item.path)) await ensureOutputDirectory(job.output, item.path);
+        await writeEntryStream(zip, item, null, policy, signal);
+        continue;
+      }
+      const skipped = skipMember(item.path);
+      const path = join(job.output, ...item.path.split('/'));
+      if (!skipped) await ensureOutputDirectory(job.output, dirname(item.path) === '.' ? '' : dirname(item.path));
+      await writeEntryStream(zip, item, skipped ? null : path, policy, signal);
+      if (!skipped) extracted += 1;
+    }
+    throwIfCancelled(signal);
+    result = { fileCount: extracted };
+  } catch (error) {
+    operationFailed = true;
+    operationError = error instanceof ResearchProcessError
+      ? error
+      : signal.aborted
+        ? new ResearchProcessError('research_process_cancelled')
+        : zip === undefined
+          ? new ResearchProcessError('research_template_archive_entry_invalid')
+          : error;
+  }
+
+  let closeFailed = false;
+  let closeError: unknown;
+  try {
+    if (zip !== undefined) await closeArchiveReader(zip);
+    else if (sourceFd !== undefined) await closeArchiveDescriptor(sourceFd);
+  } catch (error) {
+    closeFailed = true;
+    closeError = error;
+  }
+  if (!operationFailed && signal.aborted) {
+    operationFailed = true;
+    operationError = new ResearchProcessError('research_process_cancelled');
+  }
+  if (operationFailed) {
+    if (closeFailed) operationError = preserveArchiveCloseError(operationError, closeError);
+    throw operationError;
+  }
+  if (closeFailed) throw closeError;
+  return result as { fileCount: number };
 }
 
 export async function extractResearchTemplate(input: {
@@ -237,7 +359,8 @@ export async function extractResearchTemplate(input: {
   timeoutMs?: number;
 }): Promise<{ fileCount: number; sourceHash: string }> {
   return await runResearchJob(
-    { ...input, maxSourceBytes: MAX_UNCOMPRESSED, sourceExtensions: ['.zip'], sourceExtensionError: 'research_template_zip_required', timeoutMs: input.timeoutMs ?? 60_000 },
+    { ...input, maxSourceBytes: MAX_UNCOMPRESSED, sourceExtensions: ['.zip'], sourceExtensionError: 'research_template_zip_required',
+      timeoutMs: input.timeoutMs ?? 60_000, awaitOperationCleanupOnAbort: true },
     extractArchive
   );
 }

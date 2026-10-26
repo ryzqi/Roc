@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative } from 'node:path';
 import type { ResearchExportExecution, ResearchExportSources } from '../../../shared/schemas/research-exports';
-import { archiveSource, exportFileLimit, ResearchExportFiles, type ExportToolchain } from './export-files';
+import { exportFileLimit, ResearchExportFiles, type ExportToolchain } from './export-files';
 import { unknownCitationKeysIn } from './citation-integrity';
 import { latexReachability, prunableTexFiles, runArxivPreflight } from './arxiv-preflight';
 import { defaultExportEntry, renderExportBody } from './export-sources';
@@ -71,7 +71,6 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   await writer.write(join('source', entryDirectory, 'roc-manuscript.tex'), body);
   await writer.write('provenance/approved-manuscript.tex', sources.manuscript.latex);
   await writer.write('provenance/sources.json', JSON.stringify(sources, null, 2));
-  await writer.write('provenance/export-archive.ts', archiveSource);
   const bibliography = join(scratch, 'bibliography.json');
   await writeFile(bibliography, JSON.stringify(sources.bibliography), { flag: 'wx', mode: 0o400 });
   const references = await tools.writeBibliography({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: bibliography,

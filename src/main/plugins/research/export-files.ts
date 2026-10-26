@@ -2,16 +2,15 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, realpath, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import archiveSource from './export-archive.ts?raw';
 import type { ResearchExportFile } from '../../../shared/schemas/research-exports';
-import { createExportZipArchive, exportArchiveLimit, exportFileLimit, exportTotalLimit } from './export-archive';
+import { archiveBuilderProvenance, createExportZipArchive, exportArchiveLimit, exportFileLimit, exportTotalLimit } from './export-archive';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchToolchain } from './toolchain';
 
 export type ExportToolchain = Pick<ResearchToolchain, 'status' | 'identity' | 'writeBibliography' | 'compile' | 'renderPdf'
   | 'compileTypst' | 'typstStyle'>;
 
-export { archiveSource, exportArchiveLimit, exportFileLimit, exportTotalLimit };
+export { archiveBuilderProvenance, exportArchiveLimit, exportFileLimit, exportTotalLimit };
 
 export async function exportStorage(path: string | null): Promise<string> {
   if (path === null || !isAbsolute(path)) throw new Error('research_export_storage_unavailable');
@@ -26,7 +25,9 @@ export class ResearchExportFiles {
   private total = 0;
   constructor(readonly root: string) {}
 
-  list(): ResearchExportFile[] { return this.records.map((file) => ({ ...file })).sort((left, right) => left.path.localeCompare(right.path)); }
+  list(): ResearchExportFile[] {
+    return this.records.map((file) => ({ ...file })).sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  }
 
   async write(path: string, content: Buffer | string): Promise<ResearchExportFile> {
     researchRelativePath(path);

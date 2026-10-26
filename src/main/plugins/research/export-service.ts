@@ -6,7 +6,7 @@ import { researchExportPrepareSchema, researchExportWriteRequestSchema, type Res
   type ResearchExportFile, type researchExportFileContentSchema, type ResearchExportPrepare, type ResearchExportSources } from '../../../shared/schemas/research-exports';
 import type { RocPluginContext } from '../../kernel/types';
 import { buildExportFiles } from './export-builder';
-import { archiveSource, createExportArchive, exportFileLimit, exportStorage, hashExportArchive, ResearchExportFiles, type ExportToolchain } from './export-files';
+import { archiveBuilderProvenance, createExportArchive, exportFileLimit, exportStorage, hashExportArchive, ResearchExportFiles, type ExportToolchain } from './export-files';
 import { exportSourceHash, type ResearchExportSourceService } from './export-sources';
 import { ResearchProcessError } from './process-runner';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
@@ -162,7 +162,7 @@ export class ResearchExportService {
       if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
       await buildExportFiles({ record, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
       await writer.write('manifest.json', JSON.stringify({ version: 1, exportId: record.id, request: record.request, sourceHash, toolchainHash,
-        toolchainVersions: toolchain.versions, archiveBuilderHash: researchContentHash(archiveSource), files: writer.list() }, null, 2));
+        toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list() }, null, 2));
       archive = await this.archive({ root, bundle: writer, scratch, tools: this.tools, signal });
       const current = await this.sources.capture(record.request, signal);
       if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');

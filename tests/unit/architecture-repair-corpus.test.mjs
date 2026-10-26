@@ -26,6 +26,7 @@ const { persistedTaskEventSchema } = await importTypeScriptModule('src/shared/sc
 });
 const { extractResearchTemplate } = await importTypeScriptModule('src/main/plugins/research/template-archive.ts', {
   platform: 'node',
+  external: ['yauzl'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
 const { modelPackManifest } = await importTypeScriptModule('src/main/plugins/research/model-catalog.ts', {
