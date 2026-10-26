@@ -1,11 +1,12 @@
-import { createReadStream, createWriteStream, existsSync, statSync, writeFileSync, type WriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statSync, writeFileSync } from 'node:fs';
 import { readdir, rename, unlink } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import type { RocPaths } from './paths';
+import { PinoJsonlBackend, type PinoLogLevel } from '../infrastructure/pino-backend';
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+type LogLevel = PinoLogLevel;
 
 type LogEventError = {
   code: string;
@@ -36,6 +37,11 @@ export type LogRotationConfig = {
   compress: boolean;
 };
 
+type QueuedLogEvent = {
+  event: LogEvent & { createdAt: string; timestamp: string };
+  bytes: number;
+};
+
 type LogArchiveFile = {
   fileName: string;
   sequence: number;
@@ -47,18 +53,57 @@ const defaultRotationConfig: LogRotationConfig = {
   maxFiles: 10,
   compress: false
 };
+const maxQueueSize = 1000;
+const maxQueueBytes = 4 * 1024 * 1024;
+const batchSize = 100;
+
+function estimateQueuedBytes(value: unknown, limit: number): number {
+  let bytes = 64;
+  const seen = new WeakSet<object>();
+  const visit = (entry: unknown): void => {
+    if (bytes > limit) return;
+    if (typeof entry === 'string') {
+      bytes += entry.length * 2 + 16;
+      return;
+    }
+    if (entry === null || typeof entry !== 'object') {
+      bytes += 16;
+      return;
+    }
+    if (seen.has(entry)) return;
+    seen.add(entry);
+    if (Array.isArray(entry)) {
+      bytes += 32;
+      for (const item of entry) {
+        bytes += 8;
+        visit(item);
+        if (bytes > limit) return;
+      }
+      return;
+    }
+    bytes += 32;
+    for (const key in entry) {
+      if (!Object.hasOwn(entry, key)) continue;
+      bytes += key.length * 2 + 16;
+      visit((entry as Record<string, unknown>)[key]);
+      if (bytes > limit) return;
+    }
+  };
+  visit(value);
+  return bytes;
+}
 
 export class LogService {
   private readonly appLogPath: string;
   private readonly rotationConfig: LogRotationConfig;
-  private writeStream: WriteStream | null = null;
-  private writeQueue: string[] = [];
+  private backend: PinoJsonlBackend | null = null;
+  private writeQueue: QueuedLogEvent[] = [];
+  private writeQueueBytes = 0;
   private flushPromise: Promise<void> | null = null;
+  private rotationPromise: Promise<void> | null = null;
   private flushScheduled = false;
   private closed = false;
   private currentSizeBytes = 0;
-  private readonly maxQueueSize = 1000;
-  private readonly batchSize = 100;
 
   constructor(paths: RocPaths, rotationConfig: Partial<LogRotationConfig> = {}) {
     this.appLogPath = join(paths.logsDir, 'app.jsonl');
@@ -73,8 +118,12 @@ export class LogService {
       writeFileSync(this.appLogPath, '', 'utf8');
     }
     this.currentSizeBytes = statSync(this.appLogPath).size;
-    if (this.writeStream === null) {
-      this.openWriteStream();
+    if (this.backend === null && !this.closed) {
+      this.backend = new PinoJsonlBackend(this.appLogPath, {
+        onWrite: (line) => {
+          this.currentSizeBytes += Buffer.byteLength(line, 'utf8');
+        }
+      });
     }
     if (this.writeQueue.length > 0) {
       this.scheduleFlush();
@@ -88,10 +137,24 @@ export class LogService {
     }
 
     const timestamp = new Date().toISOString();
-    this.writeQueue.push(`${JSON.stringify({ ...event, createdAt: timestamp, timestamp })}\n`);
-    if (this.writeQueue.length > this.maxQueueSize) {
-      const droppedCount = this.writeQueue.length - this.maxQueueSize;
-      this.writeQueue = this.writeQueue.slice(-this.maxQueueSize);
+    const queuedEvent = { ...event, createdAt: timestamp, timestamp };
+    const bytes = estimateQueuedBytes(queuedEvent, maxQueueBytes);
+    if (bytes > maxQueueBytes) {
+      console.warn(`[LogService] Queue overflow, dropping 1 logs (record exceeds ${maxQueueBytes} bytes)`);
+      return;
+    }
+
+    this.writeQueue.push({ event: queuedEvent, bytes });
+    this.writeQueueBytes += bytes;
+    let droppedCount = 0;
+    while (this.writeQueue.length > maxQueueSize || this.writeQueueBytes > maxQueueBytes) {
+      const dropped = this.writeQueue.shift();
+      if (dropped !== undefined) {
+        this.writeQueueBytes -= dropped.bytes;
+        droppedCount += 1;
+      }
+    }
+    if (droppedCount > 0) {
       console.warn(`[LogService] Queue overflow, dropping ${droppedCount} logs`);
     }
     this.scheduleFlush();
@@ -137,16 +200,11 @@ export class LogService {
 
   async flush(): Promise<void> {
     if (this.flushPromise !== null) {
-      try {
-        await this.flushPromise;
-      } catch (error) {
-        this.reportWriteFailure(error);
-      }
+      await this.flushPromise;
+      if (this.writeQueue.length > 0) await this.flush();
       return;
     }
-    if (this.writeStream === null || this.writeQueue.length === 0) {
-      return;
-    }
+    if (this.backend === null) return;
 
     this.flushPromise = this.flushQueued();
     try {
@@ -156,6 +214,7 @@ export class LogService {
     } finally {
       this.flushPromise = null;
     }
+    if (this.writeQueue.length > 0 && !this.closed) await this.flush();
   }
 
   async checkAndRotate(): Promise<void> {
@@ -166,26 +225,15 @@ export class LogService {
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
     this.closed = true;
     await this.flush();
-    if (this.writeStream !== null) {
-      const stream = this.writeStream;
-      await new Promise<void>((resolve) => {
-        stream.end(() => resolve());
-      });
-      this.writeStream = null;
-    }
-  }
-
-  private openWriteStream(): void {
-    this.writeStream = createWriteStream(this.appLogPath, { flags: 'a', encoding: 'utf8' });
-    this.writeStream.on('error', (error) => {
-      this.reportWriteFailure(error);
-    });
+    await this.backend?.close();
+    this.backend = null;
   }
 
   private scheduleFlush(): void {
-    if (this.flushScheduled || this.writeStream === null) {
+    if (this.flushScheduled || this.backend === null) {
       return;
     }
     this.flushScheduled = true;
@@ -196,27 +244,29 @@ export class LogService {
   }
 
   private async flushQueued(): Promise<void> {
-    if (this.writeStream === null) {
-      return;
-    }
+    const backend = this.backend;
+    if (backend === null) return;
+    let batchCount = 0;
     while (this.writeQueue.length > 0) {
-      const batch = this.writeQueue.splice(0, this.batchSize);
-      for (const line of batch) {
-        await new Promise<void>((resolve, reject) => {
-          this.writeStream!.write(line, (error) => {
-            if (error !== null && error !== undefined) {
-              reject(error);
-              return;
-            }
-            resolve();
-          });
-        });
-        this.currentSizeBytes += Buffer.byteLength(line, 'utf8');
-        if (this.shouldRotate()) {
-          await this.rotateCurrentFile();
-        }
+      if (this.rotationPromise !== null) {
+        await this.rotationPromise;
+      }
+      const queued = this.writeQueue.shift();
+      if (queued === undefined) continue;
+      this.writeQueueBytes -= queued.bytes;
+      const { level, message, ...fields } = queued.event;
+      backend.write(level, fields, message);
+      batchCount += 1;
+
+      if (this.shouldRotate()) {
+        await this.rotateCurrentFile();
+        batchCount = 0;
+      } else if (batchCount >= batchSize) {
+        await backend.flush();
+        batchCount = 0;
       }
     }
+    await backend.flush();
   }
 
   private shouldRotate(): boolean {
@@ -224,24 +274,33 @@ export class LogService {
   }
 
   private async rotateCurrentFile(): Promise<void> {
-    if (this.writeStream === null) {
+    if (this.backend === null) return;
+    if (this.rotationPromise !== null) {
+      await this.rotationPromise;
       return;
     }
 
-    const stream = this.writeStream;
-    await new Promise<void>((resolve) => {
-      stream.end(() => resolve());
-    });
-    this.writeStream = null;
+    const rotation = this.performRotation();
+    this.rotationPromise = rotation;
+    try {
+      await rotation;
+    } finally {
+      if (this.rotationPromise === rotation) this.rotationPromise = null;
+    }
+  }
 
+  private async performRotation(): Promise<void> {
+    const backend = this.backend;
+    if (backend === null) return;
+
+    await backend.flush();
     const archivePath = this.createArchivePath();
     await rename(this.appLogPath, archivePath);
+    await backend.reopen();
+    this.currentSizeBytes = 0;
     if (this.rotationConfig.compress) {
       await this.compressFile(archivePath);
     }
-    writeFileSync(this.appLogPath, '', 'utf8');
-    this.currentSizeBytes = 0;
-    this.openWriteStream();
     await this.cleanupOldLogs();
   }
 

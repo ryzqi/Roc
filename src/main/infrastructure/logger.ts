@@ -1,9 +1,10 @@
-import { createWriteStream, mkdirSync, writeFileSync, type WriteStream } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { assertPluginId } from './database-pool';
+import { PinoJsonlBackend, type PinoLogLevel } from './pino-backend';
 
-type PluginLogLevel = 'info' | 'warn' | 'error';
+type PluginLogLevel = Extract<PinoLogLevel, 'info' | 'warn' | 'error'>;
 
 type PluginLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -12,19 +13,14 @@ type PluginLogger = {
 };
 
 export class InfrastructureLogger {
-  private readonly appLogPath: string;
-  private readonly writeStream: WriteStream;
-  private writeChain: Promise<void> = Promise.resolve();
+  private readonly backend: PinoJsonlBackend;
   private closed = false;
 
   constructor(logsDir: string) {
     mkdirSync(logsDir, { recursive: true });
-    this.appLogPath = join(logsDir, 'app.jsonl');
-    writeFileSync(this.appLogPath, '', { flag: 'a', encoding: 'utf8' });
-    this.writeStream = createWriteStream(this.appLogPath, { flags: 'a', encoding: 'utf8' });
-    this.writeStream.on('error', (error) => {
-      this.reportWriteFailure(error);
-    });
+    const appLogPath = join(logsDir, 'app.jsonl');
+    writeFileSync(appLogPath, '', { flag: 'a', encoding: 'utf8' });
+    this.backend = new PinoJsonlBackend(appLogPath);
   }
 
   createPluginLogger(pluginId: string): PluginLogger {
@@ -42,6 +38,12 @@ export class InfrastructureLogger {
     };
   }
 
+  async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    await this.backend.close();
+  }
+
   private append(pluginId: string, level: PluginLogLevel, message: string, metadata?: Record<string, unknown>): void {
     if (this.closed) {
       console.warn('[InfrastructureLogger] Attempted to log after close:', message);
@@ -49,46 +51,15 @@ export class InfrastructureLogger {
     }
 
     const timestamp = new Date().toISOString();
-    const event = {
+    this.backend.write(
       level,
-      pluginId,
-      message,
-      metadata,
-      createdAt: timestamp,
-      timestamp
-    };
-    const line = `${JSON.stringify(event)}\n`;
-    this.writeChain = this.writeChain
-      .then(() => this.writeLine(line))
-      .catch((error: unknown) => {
-        this.reportWriteFailure(error);
-      });
-  }
-
-  async close(): Promise<void> {
-    if (this.closed) {
-      return;
-    }
-    this.closed = true;
-    await this.writeChain;
-    await new Promise<void>((resolve) => {
-      this.writeStream.end(() => resolve());
-    });
-  }
-
-  private async writeLine(line: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      this.writeStream.write(line, (error) => {
-        if (error !== null && error !== undefined) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-  }
-
-  private reportWriteFailure(error: unknown): void {
-    console.error('[InfrastructureLogger] Write failed:', error);
+      {
+        pluginId,
+        metadata,
+        createdAt: timestamp,
+        timestamp
+      },
+      message
+    );
   }
 }
