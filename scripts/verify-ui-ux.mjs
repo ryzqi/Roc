@@ -181,6 +181,31 @@ try {
       await page.screenshot({ path: join(artifact, 'drawers-closed.png') });
     });
   }
+  if (process.env.ROC_UI_PHASE === 'literature') {
+    await navigate(page, `page=research&project=${project.data.id}&view=literature`);
+    await check('Literature tabs activate, wrap and move focus with arrows/Home/End', async () => {
+      const reader = page.getByTestId('literature-subview-reader');
+      await reader.click(); await reader.press('ArrowRight');
+      await expect(page.getByTestId('literature-subview-rag')).toBeFocused();
+      await expect(page.getByTestId('literature-subview-rag')).toHaveAttribute('aria-selected', 'true');
+      await page.keyboard.press('End'); await expect(page.getByTestId('literature-subview-graph')).toBeFocused();
+      await page.keyboard.press('ArrowRight'); await expect(reader).toBeFocused();
+      await page.keyboard.press('ArrowLeft'); await expect(page.getByTestId('literature-subview-graph')).toBeFocused();
+      await page.keyboard.press('Home'); await expect(reader).toBeFocused();
+    });
+    await check('Search query survives reading and navigation list toggles at narrow widths', async () => {
+      await page.getByTestId('literature-subview-rag').click();
+      await page.getByTestId('rag-query').fill('persistent research query');
+      await page.getByTestId('literature-subview-reader').click();
+      await page.getByTestId('literature-subview-rag').click();
+      await expect(page.getByTestId('rag-query')).toHaveValue('persistent research query');
+      const toggle = page.getByTestId('literature-toggle-navigation');
+      if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
+      await expect(page.locator('#literature-navigation')).toBeHidden();
+      await toggle.click(); await expect(page.locator('#literature-navigation')).toBeVisible();
+      await page.screenshot({ path: join(artifact, 'navigation.png') });
+    });
+  }
   expect(errors).toEqual([]);
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {

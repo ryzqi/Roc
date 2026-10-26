@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Database, Layers, Loader2, Plus, Share2 } from 'lucide-react';
+import { AlertCircle, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -64,6 +64,25 @@ export function LiteratureHubView(): React.JSX.Element {
   const store = useLiterature();
   const scope = useWorkspaceScope();
   const [subView, setSubView] = useState<SubViewId>('reader');
+  const [visited, setVisited] = useState<ReadonlySet<SubViewId>>(() => new Set(['reader']));
+  const [returnToSearch, setReturnToSearch] = useState(false);
+  const [navigationOverride, setNavigationOverride] = useState<boolean | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  const hubRef = useRef<HTMLDivElement>(null);
+  const navigationOpen = navigationOverride ?? !narrow;
+  const selectSubView = (id: SubViewId): void => {
+    setVisited(current => current.has(id) ? current : new Set([...current, id]));
+    setSubView(id);
+  };
+  useEffect(() => {
+    const element = hubRef.current;
+    if (element === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setNarrow(entry.contentRect.width < 1024);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const [importOpen, setImportOpen] = useState(false);
   const [importTab, setImportTab] = useState<ImportTabRequest>('document');
   const [focus, setFocus] = useState<{ parseId: string | null; locator: string | null }>({
@@ -107,11 +126,28 @@ export function LiteratureHubView(): React.JSX.Element {
     );
 
   return (
-    <div className="literature-hub-container flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
+    <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
       <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-line px-3">
+        <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
+          aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
+          aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)]">
+          <PanelLeft size={14} aria-hidden="true" />
+        </button>
         <div
           role="tablist"
           aria-label="文献工作区"
+          onKeyDown={(event) => {
+            const index = SUB_VIEWS.findIndex(entry => entry.id === subView);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? SUB_VIEWS.length - 1
+              : event.key === 'ArrowRight' ? (index + 1) % SUB_VIEWS.length
+              : event.key === 'ArrowLeft' ? (index + SUB_VIEWS.length - 1) % SUB_VIEWS.length : null;
+            if (next === null) return;
+            event.preventDefault();
+            const id = SUB_VIEWS[next]!.id;
+            selectSubView(id);
+            event.currentTarget.querySelector<HTMLButtonElement>(`[data-testid="literature-subview-${id}"]`)?.focus();
+          }}
           className="flex shrink-0 items-center gap-1 rounded-control border border-line bg-surface p-0.5"
         >
           {SUB_VIEWS.map((entry) => {
@@ -122,9 +158,11 @@ export function LiteratureHubView(): React.JSX.Element {
                 key={entry.id}
                 type="button"
                 role="tab"
+                id={`literature-tab-${entry.id}`}
+                aria-controls="literature-active-panel"
                 aria-selected={selected}
                 tabIndex={selected ? 0 : -1}
-                onClick={() => setSubView(entry.id)}
+                onClick={() => selectSubView(entry.id)}
                 data-testid={`literature-subview-${entry.id}`}
                 className={
                   selected
@@ -139,7 +177,11 @@ export function LiteratureHubView(): React.JSX.Element {
           })}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {subView === 'reader' && returnToSearch ? (
+            <button type="button" data-testid="literature-return-search" onClick={() => { selectSubView('rag'); setReturnToSearch(false); }}
+              className="h-7 rounded-control px-2 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">返回检索结果</button>
+          ) : null}
           <button
             type="button"
             onClick={() => openImport('document')}
@@ -154,12 +196,12 @@ export function LiteratureHubView(): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         {/* At narrow canvas widths, the selector above replaces this list. */}
-        <aside className="literature-library-column hidden w-72 shrink-0 border-r border-line lg:flex" aria-label="文献列表">
+        <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none' }} className="literature-library-column min-h-0 w-[min(240px,40cqw)] shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
           <LibraryList onRequestImport={() => openImport('document')} />
         </aside>
 
-        <div className="flex min-h-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
-          <label className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+        <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${subView}`} tabIndex={0} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
+          <label style={navigationOpen ? { display: 'none' } : undefined} className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
             <span className="shrink-0 text-muted text-[var(--font-meta-size)]">当前文献</span>
             <select
               aria-label="选择当前文献"
@@ -170,7 +212,7 @@ export function LiteratureHubView(): React.JSX.Element {
                 store.select(id);
                 if (id !== null) {
                   setFocus({ parseId: null, locator: null });
-                  setSubView('reader');
+                  selectSubView('reader');
                 }
               }}
               className="h-8 min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
@@ -181,7 +223,9 @@ export function LiteratureHubView(): React.JSX.Element {
               ))}
             </select>
           </label>
-          {subView === 'reader' ? (
+          {visited.has('reader') ? (
+            <div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
+            <div className="flex min-h-0 flex-1 flex-col">
             <PaperReader
               literature={store}
               loadDocumentContent={store.loadDocumentContent}
@@ -189,24 +233,33 @@ export function LiteratureHubView(): React.JSX.Element {
               focusParseId={focus.parseId}
               focusLocator={focus.locator}
             />
+            </div>
+            </div>
           ) : null}
 
-          {subView === 'rag' ? (
+          {visited.has('rag') ? (
+            <div style={{ display: subView === 'rag' ? 'contents' : 'none' }}>
+            <div className="flex min-h-0 flex-1 flex-col">
             <RagStudio
               literature={store}
               openInFilesView={scope.openFileInCanvas}
               onOpenInReader={(target) => {
+                setReturnToSearch(true);
                 setFocus({ parseId: target.parseId, locator: target.locator });
                 if (target.libraryItemId !== null) {
                   store.select(target.libraryItemId);
                 }
-                setSubView('reader');
+                selectSubView('reader');
               }}
             />
+            </div>
+            </div>
           ) : null}
 
-          {subView === 'wiki' ? (
-            derivedReady ? (
+          {visited.has('wiki') ? (
+            <div style={{ display: subView === 'wiki' ? 'contents' : 'none' }}>
+            <div className="flex min-h-0 flex-1 flex-col">
+            {derivedReady ? (
               <WikiView
                 claims={claims}
                 evidence={evidence}
@@ -214,24 +267,28 @@ export function LiteratureHubView(): React.JSX.Element {
                 onOpenClaim={(claimId) => {
                   setGraphClaimFocusId(claimId);
                   setFocus({ parseId: null, locator: null });
-                  setSubView('graph');
+                  selectSubView('graph');
                 }}
                 onOpenPaper={(libraryItemId) => {
                   // Select the item, then land in the reader: selecting first is what makes the
                   // reader show *this* paper.
                   store.select(libraryItemId);
                   setFocus({ parseId: null, locator: null });
-                  setSubView('reader');
+                  selectSubView('reader');
                 }}
                 onAskAssistant={(prompt) => void store.askAssistant(prompt)}
               />
             ) : (
               derivedPanel
-            )
+            )}
+            </div>
+            </div>
           ) : null}
 
-          {subView === 'graph' ? (
-            derivedReady ? (
+          {visited.has('graph') ? (
+            <div style={{ display: subView === 'graph' ? 'contents' : 'none' }}>
+            <div className="flex min-h-0 flex-1 flex-col">
+            {derivedReady ? (
               <KnowledgeGraphView
                 claims={claims}
                 evidence={evidence}
@@ -243,7 +300,9 @@ export function LiteratureHubView(): React.JSX.Element {
               />
             ) : (
               derivedPanel
-            )
+            )}
+            </div>
+            </div>
           ) : null}
         </div>
       </div>
@@ -252,7 +311,7 @@ export function LiteratureHubView(): React.JSX.Element {
         <p
           role="alert"
           data-testid="literature-action-error"
-          className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-[var(--st-bad)] text-[var(--font-micro-size)]"
+          className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-[var(--st-bad)] text-[var(--font-meta-size)]"
         >
           <AlertCircle size={11} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate">{store.action.error}</span>
@@ -282,7 +341,7 @@ export function LiteratureHubView(): React.JSX.Element {
         addDocumentToItem={store.addPdfToItem}
       />
       {actions.pickError === null ? null : (
-        <p role="alert" className="px-3 pb-1 text-[var(--st-bad)] text-[var(--font-micro-size)]">
+        <p role="alert" className="px-3 pb-1 text-[var(--st-bad)] text-[var(--font-meta-size)]">
           选择文件失败：{actions.pickError}
         </p>
       )}

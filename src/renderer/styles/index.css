@@ -15,10 +15,6 @@
 }
 
 @container workspace-canvas (max-width: 1023px) {
-  .literature-library-column {
-    display: none;
-  }
-
   .literature-paper-picker {
     display: flex;
   }
