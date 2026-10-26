@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "bibliography": {
+    "path": "tests/fixtures/architecture-repair/bibliography-semantics.bib",
+    "entries": [
+      "roc-workshop-2025",
+      "unicode-names-2025",
+      "biblatex-extensions-2024",
+      "postfix-and-particles"
+    ],
+    "features": [
+      "utf8 accents and CJK",
+      "corporate author",
+      "von/de particles and suffix",
+      "nested and escaped braces",
+      "@string concatenation",
+      "crossref",
+      "unknown fields",
+      "LaTeX-wrapped title text",
+      "preamble",
+      "BibLaTeX fields"
+    ]
+  },
+  "archives": {
+    "validMembers": [
+      { "path": "main.tex", "content": "\\documentclass{article}\n\\begin{document}Roc\\end{document}\n", "kind": "regular" },
+      { "path": "references/文献.bib", "content": "@article{roc2025,title={Roc}}\n", "kind": "regular" },
+      { "path": "figures/plot.svg", "content": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n", "kind": "regular" }
+    ],
+    "rejectionCases": [
+      { "id": "parent-traversal", "path": "../outside.txt", "reason": "path traversal" },
+      { "id": "absolute-path", "path": "/outside.txt", "reason": "absolute path" },
+      { "id": "backslash-traversal", "path": "..\\outside.txt", "reason": "path traversal" },
+      { "id": "case-collision", "paths": ["Figures/Plot.svg", "figures/plot.svg"], "reason": "case-normalized collision" },
+      { "id": "unicode-normalization-collision", "paths": ["café.txt", "café.txt"], "reason": "Unicode-normalized collision" },
+      { "id": "symlink-member", "path": "link/outside", "kind": "symlink", "reason": "special file" },
+      { "id": "corrupt-crc", "path": "main.tex", "reason": "CRC mismatch" },
+      { "id": "truncated-member", "path": "main.tex", "reason": "truncated compressed data" }
+    ],
+    "limitCases": [
+      { "target": "template-import", "id": "too-many-members", "entryCount": 5001 },
+      { "target": "template-import", "id": "oversized-member", "uncompressedBytes": 67108865 },
+      { "target": "template-import", "id": "oversized-total", "uncompressedBytes": 268435457 },
+      { "target": "export-writer", "id": "too-many-files", "entryCount": 10001 },
+      { "target": "export-writer", "id": "oversized-total", "uncompressedBytes": 536870913 },
+      { "target": "template-import", "id": "compression-bomb-over-file-limit", "uncompressedBytes": 67108865 }
+    ]
+  },
+  "documents": {
+    "pdf": {
+      "path": "tests/smoke/lib/assets/p5-paper.pdf",
+      "sha256": "ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5",
+      "role": "existing reproducible research PDF and native-text/rendering fixture"
+    },
+    "tiff": [
+      {
+        "id": "small-rgb-page",
+        "pages": [{ "width": 2, "height": 1, "rgba": [255, 0, 0, 255, 0, 128, 255, 255] }]
+      },
+      {
+        "id": "multipage-rgb",
+        "pages": [
+          { "width": 1, "height": 1, "rgba": [0, 0, 0, 255] },
+          { "width": 1, "height": 1, "rgba": [255, 255, 255, 255] }
+        ]
+      },
+      {
+        "id": "oversized-ifd",
+        "pages": [{ "width": 5001, "height": 5000, "pixelsMaterialized": false }],
+        "expected": "reject before pixel decode"
+      },
+      {
+        "id": "malformed-ifd",
+        "mutation": "truncate the IFD before its dimension entries"
+      }
+    ]
+  },
+  "longSession": {
+    "eventCount": 420,
+    "retainedWindow": 400,
+    "sequenceStart": 1,
+    "eventPattern": ["message", "tool_call"],
+    "toolCallEvery": 10,
+    "cases": ["replay duplicate", "sequence gap", "prepend older page", "trim to retention window", "preserve scroll anchor"]
+  },
+  "fileTree": {
+    "seedPaths": [
+      "README.md",
+      "data/论文/结果.csv",
+      "data/café/summary.txt",
+      "nested/needle-match.md",
+      ".git/config",
+      "node_modules/pkg/index.js"
+    ],
+    "generatedFileCounts": [1000, 10000, 50000],
+    "pathTemplate": "file-tree/generated-{count}/file-{index:06}.txt",
+    "queries": ["needle", "论文", "café", "missing"],
+    "cases": ["ignored directories", "Unicode paths", "workspace switch", "create/delete/atomic save", "watcher error and reconciliation", "top-20 truncation"]
+  }
+}
