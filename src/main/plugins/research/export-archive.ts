@@ -1,7 +1,9 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { open } from 'node:fs/promises';
-import { crc32, deflateRawSync } from 'node:zlib';
+import { lstat, open, unlink, type FileHandle } from 'node:fs/promises';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { crc32, createDeflateRaw } from 'node:zlib';
 import type { ResearchExportFile } from '../../../shared/schemas/research-exports';
 import { researchPath, researchRelativePath } from './research-files';
 
@@ -12,20 +14,29 @@ export const exportArchiveLimit = 600 * 1024 * 1024;
 const LOCAL_SIGNATURE = 0x04034b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const EOCD_SIGNATURE = 0x06054b50;
+const DATA_DESCRIPTOR_SIGNATURE = 0x08074b50;
 const DOS_TIME = 0;
 const DOS_DATE = 0x0021;
 const VERSION = 20;
 const CREATE_SYSTEM = 3;
 const EXTERNAL_ATTR = (0o100444 << 16) >>> 0;
 const DEFLATE = 8;
+const DATA_DESCRIPTOR_FLAG = 0x0008;
+const UTF8_FLAG = 0x0800;
 
 type ZipMember = {
   name: Buffer;
   flags: number;
   crc: number;
-  compressed: Buffer;
+  compressedSize: number;
   uncompressedSize: number;
   localOffset: number;
+};
+
+type ArchiveWriter = {
+  handle: FileHandle;
+  hash: ReturnType<typeof createHash>;
+  size: number;
 };
 
 function isAscii(value: string): boolean {
@@ -52,9 +63,9 @@ function localHeader(member: ZipMember): Buffer {
   writeU16(header, 8, DEFLATE);
   writeU16(header, 10, DOS_TIME);
   writeU16(header, 12, DOS_DATE);
-  writeU32(header, 14, member.crc);
-  writeU32(header, 18, member.compressed.length);
-  writeU32(header, 22, member.uncompressedSize);
+  writeU32(header, 14, 0);
+  writeU32(header, 18, 0);
+  writeU32(header, 22, 0);
   writeU16(header, 26, member.name.length);
   writeU16(header, 28, 0);
   member.name.copy(header, 30);
@@ -73,7 +84,7 @@ function centralHeader(member: ZipMember): Buffer {
   writeU16(header, 12, DOS_TIME);
   writeU16(header, 14, DOS_DATE);
   writeU32(header, 16, member.crc);
-  writeU32(header, 20, member.compressed.length);
+  writeU32(header, 20, member.compressedSize);
   writeU32(header, 24, member.uncompressedSize);
   writeU16(header, 28, member.name.length);
   writeU16(header, 30, 0);
@@ -84,6 +95,15 @@ function centralHeader(member: ZipMember): Buffer {
   writeU32(header, 42, member.localOffset);
   member.name.copy(header, 46);
   return header;
+}
+
+function dataDescriptor(member: ZipMember): Buffer {
+  const descriptor = Buffer.alloc(16);
+  writeU32(descriptor, 0, DATA_DESCRIPTOR_SIGNATURE);
+  writeU32(descriptor, 4, member.crc);
+  writeU32(descriptor, 8, member.compressedSize);
+  writeU32(descriptor, 12, member.uncompressedSize);
+  return descriptor;
 }
 
 function endOfCentralDirectory(count: number, size: number, offset: number): Buffer {
@@ -99,7 +119,31 @@ function endOfCentralDirectory(count: number, size: number, offset: number): Buf
   return header;
 }
 
-async function readBundleFile(root: string, entry: ResearchExportFile): Promise<Buffer> {
+async function writeAll(handle: FileHandle, data: Buffer): Promise<void> {
+  let offset = 0;
+  while (offset < data.length) {
+    const { bytesWritten } = await handle.write(data, offset, data.length - offset, null);
+    if (bytesWritten === 0) throw new Error('research_export_archive_write_failed');
+    offset += bytesWritten;
+  }
+}
+
+async function writeArchiveChunk(writer: ArchiveWriter, data: Buffer, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  if (writer.size + data.length > exportArchiveLimit) throw new Error('research_export_file_limit');
+  if (data.length === 0) return;
+  await writeAll(writer.handle, data);
+  writer.hash.update(data);
+  writer.size += data.length;
+}
+
+async function writeBundleMember(
+  writer: ArchiveWriter,
+  root: string,
+  entry: ResearchExportFile,
+  member: ZipMember,
+  signal: AbortSignal
+): Promise<void> {
   const path = await researchPath(root, entry.path);
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
@@ -107,52 +151,63 @@ async function readBundleFile(root: string, entry: ResearchExportFile): Promise<
     if (!before.isFile() || before.size > exportFileLimit || before.size !== entry.size) {
       throw new Error('research_export_snapshot_changed');
     }
-    const bytes = Buffer.alloc(before.size + 1);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
+
+    const sourceHash = createHash('sha256');
+    let crc = 0;
+    let uncompressedSize = 0;
+    const validator = new Transform({
+      transform(chunk, _encoding, callback) {
+        try {
+          signal.throwIfAborted();
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          uncompressedSize += data.length;
+          if (uncompressedSize > before.size || uncompressedSize > exportFileLimit) {
+            callback(new Error('research_export_snapshot_changed'));
+            return;
+          }
+          sourceHash.update(data);
+          crc = crc32(data, crc);
+          callback(null, data);
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    });
+    const compressor = createDeflateRaw({ level: 6 });
+    const input = file.createReadStream({ autoClose: false });
+    let pipelineFailed = false;
+    let pipelineError: unknown;
+    const pipelineCompletion = pipeline(input, validator, compressor, { signal }).catch((error: unknown) => {
+      pipelineFailed = true;
+      pipelineError = error;
+    });
+    let outputError: unknown;
+    try {
+      for await (const chunk of compressor) {
+        signal.throwIfAborted();
+        const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        member.compressedSize += data.length;
+        await writeArchiveChunk(writer, data, signal);
+      }
+    } catch (error) {
+      outputError = error;
+      compressor.destroy();
     }
+    await pipelineCompletion;
+    if (outputError !== undefined) throw outputError;
+    if (pipelineFailed) throw pipelineError;
+
+    signal.throwIfAborted();
     const after = await file.stat();
-    const data = bytes.subarray(0, offset);
-    if (offset !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs
-        || data.length !== entry.size || createHash('sha256').update(data).digest('hex') !== entry.sha256) {
+    if (uncompressedSize !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs
+        || uncompressedSize !== entry.size || sourceHash.digest('hex') !== entry.sha256) {
       throw new Error('research_export_snapshot_changed');
     }
-    return data;
+    member.crc = crc >>> 0;
+    member.uncompressedSize = uncompressedSize;
   } finally {
     await file.close();
   }
-}
-
-export function buildExportZip(entries: Array<{ path: string; data: Buffer }>): Buffer {
-  const members: ZipMember[] = [];
-  const chunks: Buffer[] = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const utf8 = !isAscii(entry.path);
-    const member: ZipMember = {
-      name: Buffer.from(entry.path, 'utf8'),
-      flags: utf8 ? 0x800 : 0,
-      crc: crc32(entry.data),
-      compressed: deflateRawSync(entry.data, { level: 6 }),
-      uncompressedSize: entry.data.length,
-      localOffset: offset
-    };
-    const header = localHeader(member);
-    chunks.push(header, member.compressed);
-    offset += header.length + member.compressed.length;
-    members.push(member);
-  }
-  const centralStart = offset;
-  for (const member of members) {
-    const header = centralHeader(member);
-    chunks.push(header);
-    offset += header.length;
-  }
-  chunks.push(endOfCentralDirectory(members.length, offset - centralStart, centralStart));
-  return Buffer.concat(chunks);
 }
 
 export async function createExportZipArchive(
@@ -163,27 +218,68 @@ export async function createExportZipArchive(
 ): Promise<{ sha256: string; size: number }> {
   if (entries.length === 0 || entries.length > 10000) throw new Error('research_export_file_limit');
   const seen = new Set<string>();
-  const files: Array<{ path: string; data: Buffer }> = [];
+  const files: ResearchExportFile[] = [];
   let total = 0;
   for (const entry of entries) {
     signal.throwIfAborted();
     const path = researchRelativePath(entry.path);
     if (seen.has(path)) throw new Error('research_export_path_invalid');
     seen.add(path);
-    const data = await readBundleFile(root, { ...entry, path });
-    total += data.length;
+    if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > exportFileLimit) {
+      throw new Error('research_export_snapshot_changed');
+    }
+    total += entry.size;
     if (total > exportTotalLimit) throw new Error('research_export_file_limit');
-    files.push({ path, data });
+    files.push({ ...entry, path });
   }
-  const zip = buildExportZip(files);
-  if (zip.length > exportArchiveLimit) throw new Error('research_export_file_limit');
+
   const handle = await open(destination, 'wx', 0o400);
+  let createdIdentity: { dev: number; ino: number } | null = null;
   try {
-    await handle.writeFile(zip);
+    const createdStat = await handle.stat();
+    createdIdentity = { dev: createdStat.dev, ino: createdStat.ino };
+    const writer: ArchiveWriter = { handle, hash: createHash('sha256'), size: 0 };
+    const members: ZipMember[] = [];
+
+    for (const entry of files) {
+      signal.throwIfAborted();
+      const utf8 = !isAscii(entry.path);
+      const member: ZipMember = {
+        name: Buffer.from(entry.path, 'utf8'),
+        flags: (utf8 ? UTF8_FLAG : 0) | DATA_DESCRIPTOR_FLAG,
+        crc: 0,
+        compressedSize: 0,
+        uncompressedSize: 0,
+        localOffset: writer.size
+      };
+      await writeArchiveChunk(writer, localHeader(member), signal);
+      await writeBundleMember(writer, root, entry, member, signal);
+      await writeArchiveChunk(writer, dataDescriptor(member), signal);
+      members.push(member);
+    }
+
+    const centralStart = writer.size;
+    for (const member of members) await writeArchiveChunk(writer, centralHeader(member), signal);
+    await writeArchiveChunk(writer, endOfCentralDirectory(members.length, writer.size - centralStart, centralStart), signal);
+    const result = { sha256: writer.hash.digest('hex'), size: writer.size };
+    await handle.close();
+    return result;
   } catch (error) {
-    await handle.close().catch(() => undefined);
+    const cleanupErrors: unknown[] = [];
+    await handle.close().catch((closeError: unknown) => cleanupErrors.push(closeError));
+    if (createdIdentity === null) {
+      cleanupErrors.push(new Error('research_export_archive_cleanup_identity_unavailable'));
+    } else {
+      try {
+        const current = await lstat(destination);
+        if (current.dev === createdIdentity.dev && current.ino === createdIdentity.ino) await unlink(destination);
+      } catch (cleanupError) {
+        if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') cleanupErrors.push(cleanupError);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([error, ...cleanupErrors], 'research_export_archive_cleanup_failed', { cause: error });
+    }
     throw error;
   }
-  await handle.close();
-  return { sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length };
 }

@@ -74,7 +74,5 @@ export async function createExportArchive(input: { root: string; bundle: Researc
   await createResearchDirectory(input.root, 'archive');
   const path = 'archive/export.zip';
   const metadata = await createExportZipArchive(input.bundle.root, join(input.root, path), input.bundle.list(), input.signal);
-  const file = { path, ...metadata };
-  await hashExportArchive(input.root, file, input.signal);
-  return file;
+  return { path, ...metadata };
 }
