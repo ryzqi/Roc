@@ -24,8 +24,9 @@
   "archives": {
     "validMembers": [
       { "path": "main.tex", "content": "\\documentclass{article}\n\\begin{document}Roc\\end{document}\n", "kind": "regular" },
-      { "path": "references/文献.bib", "content": "@article{roc2025,title={Roc}}\n", "kind": "regular" },
-      { "path": "figures/plot.svg", "content": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n", "kind": "regular" }
+      { "path": "references/文献.bib", "content": "@article{roc2025,title={Roc}}\n", "kind": "regular", "method": 0 },
+      { "path": "figures/plot.svg", "content": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n", "kind": "regular" },
+      { "path": "empty.txt", "content": "", "kind": "regular", "method": 8 }
     ],
     "rejectionCases": [
       { "id": "parent-traversal", "path": "../outside.txt", "reason": "path traversal" },

@@ -1,4 +1,4 @@
-import { inflateRawSync } from 'node:zlib';
+import { crc32, inflateRawSync } from 'node:zlib';
 import { mkdir, open, readFile } from 'node:fs/promises';
 import { dirname, join, posix as posixPath } from 'node:path';
 import { researchJobError, runResearchJob, type ResearchJobPaths } from './research-job';
@@ -18,6 +18,7 @@ type ZipMember = {
   directory: boolean;
   compression: number;
   localOffset: number;
+  crc: number;
   compressedSize: number;
   uncompressedSize: number;
   flags: number;
@@ -85,6 +86,7 @@ function parseCentralDirectory(buffer: Buffer): ZipMember[] {
       name: decodeName(buffer.subarray(nameStart, nameEnd), (flags & 0x800) !== 0),
       directory: nameEndsWithSlash(buffer, nameStart, nameEnd),
       compression,
+      crc: readU32(buffer, cursor + 16),
       localOffset,
       compressedSize,
       uncompressedSize,
@@ -157,6 +159,9 @@ function inflateMember(buffer: Buffer, member: ZipMember): Buffer {
   if (member.localOffset + 30 > buffer.length || readU32(buffer, member.localOffset) !== LOCAL_SIGNATURE) {
     researchJobError('research_template_archive_entry_invalid');
   }
+  if (readU32(buffer, member.localOffset + 14) !== member.crc) {
+    researchJobError('research_template_archive_entry_invalid');
+  }
   const nameLength = readU16(buffer, member.localOffset + 26);
   const extraLength = readU16(buffer, member.localOffset + 28);
   const dataStart = member.localOffset + 30 + nameLength + extraLength;
@@ -165,15 +170,24 @@ function inflateMember(buffer: Buffer, member: ZipMember): Buffer {
     researchJobError('research_template_archive_entry_invalid');
   }
   const payload = buffer.subarray(dataStart, dataEnd);
+  let inflated: Buffer;
   if (member.compression === STORED) {
     if (payload.length !== member.uncompressedSize) {
       researchJobError('research_template_archive_entry_invalid');
     }
-    return Buffer.from(payload);
+    inflated = Buffer.from(payload);
+  } else {
+    try {
+      inflated = inflateRawSync(payload, { maxOutputLength: Math.max(1, member.uncompressedSize) });
+    } catch {
+      researchJobError('research_template_archive_entry_invalid');
+    }
   }
-  const inflated = inflateRawSync(payload, { maxOutputLength: member.uncompressedSize });
   if (inflated.length !== member.uncompressedSize) {
     researchJobError('research_template_archive_entry_invalid');
+  }
+  if ((crc32(inflated) >>> 0) !== member.crc) {
+    researchJobError('research_template_archive_crc_mismatch');
   }
   return inflated;
 }

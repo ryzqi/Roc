@@ -24,6 +24,10 @@ const { persistedTaskEventSchema } = await importTypeScriptModule('src/shared/sc
   platform: 'node',
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
+const { extractResearchTemplate } = await importTypeScriptModule('src/main/plugins/research/template-archive.ts', {
+  platform: 'node',
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
 
 function zipEntries(archive) {
   const entries = [];
@@ -83,6 +87,7 @@ test('architecture repair corpus materializes reusable ZIP, TIFF, history, and f
     const validArchive = await readFile(materialized.archives['valid-members.zip']);
     const validEntries = zipEntries(validArchive);
     assert.deepEqual(validEntries.map((entry) => entry.name), corpus.archives.validMembers.map((entry) => entry.path));
+    assert.deepEqual(validEntries.map((entry) => entry.method), [8, 0, 8, 8]);
     const sourceEntry = validEntries[0];
     const sourceBytes = readZipMember(validArchive, sourceEntry);
     assert.equal((crc32(sourceBytes) >>> 0), sourceEntry.crc);
@@ -134,6 +139,45 @@ test('architecture repair corpus materializes reusable ZIP, TIFF, history, and f
     const cliResult = spawnSync(process.execPath, [join(fixtureRoot, 'materialize.mjs'), cliOutputRoot, '--file-counts=0'], { encoding: 'utf8' });
     assert.equal(cliResult.status, 0, cliResult.stderr);
     assert.deepEqual(JSON.parse(cliResult.stdout), { output: await realpath(cliOutputRoot), archiveCount: 15, fileCounts: [0] });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('template import verifies CRC and normalizes truncated archive failures with output cleanup', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-template-archive-'));
+  try {
+    const corpusRoot = join(temporaryRoot, 'corpus');
+    await mkdir(corpusRoot);
+    const materialized = await materializeArchitectureCorpus(corpusRoot, { fileCounts: [] });
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+
+    const validSource = join(projectRoot, 'valid-members.zip');
+    await writeFile(validSource, await readFile(materialized.archives['valid-members.zip']));
+    const validOutput = join(projectRoot, 'valid-output');
+    const validResult = await extractResearchTemplate({ projectRoot, sourcePath: validSource, outputDir: validOutput });
+    assert.equal(validResult.fileCount, 4);
+    assert.equal(await readFile(join(validOutput, 'main.tex'), 'utf8'), corpus.archives.validMembers[0].content);
+    assert.equal(await readFile(join(validOutput, 'empty.txt'), 'utf8'), '');
+
+    const corruptSource = join(projectRoot, 'corrupt-crc.zip');
+    await writeFile(corruptSource, await readFile(materialized.archives['corrupt-crc.zip']));
+    const corruptOutput = join(projectRoot, 'corrupt-output');
+    await assert.rejects(
+      extractResearchTemplate({ projectRoot, sourcePath: corruptSource, outputDir: corruptOutput }),
+      (error) => error.code === 'research_template_archive_crc_mismatch'
+    );
+    await assert.rejects(access(corruptOutput), { code: 'ENOENT' });
+
+    const truncatedSource = join(projectRoot, 'truncated-member.zip');
+    await writeFile(truncatedSource, await readFile(materialized.archives['truncated-member.zip']));
+    const truncatedOutput = join(projectRoot, 'truncated-output');
+    await assert.rejects(
+      extractResearchTemplate({ projectRoot, sourcePath: truncatedSource, outputDir: truncatedOutput }),
+      (error) => error.code === 'research_template_archive_entry_invalid'
+    );
+    await assert.rejects(access(truncatedOutput), { code: 'ENOENT' });
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
