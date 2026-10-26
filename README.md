@@ -326,7 +326,7 @@ ad-hoc 签名，签完字节就变了，所以包内 `rg` 的 sha256 与 lock �
 
 | 组件 | 版本 | 来源 | 许可证 | 更新方式 |
 | --- | --- | --- | --- | --- |
-| RTK | v0.48.0 | `https://github.com/rtk-ai/rtk/releases/tag/v0.48.0` ✓ | Apache-2.0 | 双架构二进制放 `resources/rtk-binaries/darwin-*/rtk`；见 [docs/rtk-integration.md](docs/rtk-integration.md) |
+| RTK OSS | v1.1.0 | `https://github.com/rtk-ai/rtk/releases/tag/v1.1.0` ✓ | Apache-2.0 | 官方 OSS arm64 发行包解出 `rtk` 与 `LICENSE`，放入 `resources/rtk-binaries/darwin-arm64/`；见 [docs/rtk-integration.md](docs/rtk-integration.md) |
 
 ### 六、npm 依赖（含版本、来源与许可证）
 

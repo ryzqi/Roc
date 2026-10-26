@@ -2,7 +2,7 @@
 
 ## 概述
 
-Roc 集成 RTK v0.48.0，用于压缩 Roc `run_shell_command` 工具的 shell 输出。集成路径是：
+Roc 集成 RTK v1.1.0 OSS arm64 发行版，用于压缩 Roc `run_shell_command` 工具的 shell 输出。集成路径是：
 
 1. `RTKMiddleware` 通过 LangChain `createMiddleware({ wrapToolCall })` 拦截 shell 工具调用。
 2. `CommandRewriter` 调用 bundled RTK binary 的 `rewrite` 子命令，把支持的命令改成 `rtk ...` 形式。
@@ -17,6 +17,7 @@ Roc 当前只支持 Apple Silicon，并随包提供 arm64 binary。
 
 ```text
 resources/rtk-binaries/darwin-arm64/rtk
+resources/rtk-binaries/darwin-arm64/LICENSE
 ```
 
 打包环境：
@@ -62,7 +63,9 @@ pnpm smoke:mac
 
 ## 版本与来源
 
-- RTK version：v0.48.0
-- Release date：2026-09-04
-- Release source：`https://github.com/rtk-ai/rtk/releases/tag/v0.48.0`
+- RTK version：v1.1.0 OSS
+- Release date：2026-10-25
+- Release asset：`rtk-oss-aarch64-apple-darwin.tar.gz`
+- Release archive SHA-256：`1623590dd8d65374f61589c599c764c08ba9ce993ebe6b601312a89a3c874558`
+- Release source：`https://github.com/rtk-ai/rtk/releases/tag/v1.1.0`
 - LangChain middleware API：`https://docs.langchain.com/oss/javascript/langchain/middleware`

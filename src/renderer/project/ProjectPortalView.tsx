@@ -4,7 +4,7 @@ import type { ResearchProject } from '../../shared/types';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
-import { ProjectCard } from './ProjectCard';
+import { ProjectRow } from './ProjectRow';
 import { ProjectFormDialog, type ProjectFormValues } from './ProjectFormDialog';
 import { isProjectArchived, visibleProjects, type ProjectStatusFilter } from './project-store';
 import { useProjects } from './use-projects';
@@ -59,7 +59,7 @@ export function ProjectPortalView({
   const [archiving, setArchiving] = useState<ResearchProject | null>(null);
   const [deleting, setDeleting] = useState<ResearchProject | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
-  const gridRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Adopt later requests (a second ⌘N after the user closed the form).
   if (createFormRequested && !createOpen) {
@@ -77,7 +77,7 @@ export function ProjectPortalView({
    *
    * The visible set can shrink underneath the cursor (archiving or deleting under
    * 进行中, or a refresh after an edit). Without this clamp no card would match the
-   * stored index, so every card body would be `tabIndex={-1}` and the primary
+   * stored index, so every project row would be `tabIndex={-1}` and the primary
    * "open project" action would become unreachable by keyboard.
    */
   const safeFocusedIndex = shown.length === 0 ? 0 : Math.min(focusedIndex, shown.length - 1);
@@ -89,42 +89,23 @@ export function ProjectPortalView({
     }
   };
 
-  /**
-   * The grid's column count is read from the layout, not assumed: `md:grid-cols-2
-   * lg:grid-cols-3` means the count changes at 768px and 1024px, and a hard-coded 3 made
-   * every vertical arrow move land one column off when the window was narrower.
-   */
-  const columnCount = (): number => {
-    const grid = gridRef.current;
-    if (grid === null) {
-      return 1;
-    }
-    const template = window.getComputedStyle(grid).gridTemplateColumns;
-    const columns = template.split(' ').filter((part) => part.trim().length > 0).length;
-    return Math.max(columns, 1);
-  };
-
-  const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (shown.length === 0) {
       return;
     }
-    // Only while focus is on a card body: the footer action buttons live inside
-    // the same grid, and arrows pressed there must not steal focus to a card.
+    // Keep arrow navigation on the project rows; row action buttons retain normal key behavior.
     const target = event.target;
-    if (!(target instanceof HTMLElement) || target.closest('[data-card-body]') === null) {
+    if (!(target instanceof HTMLElement) || target.closest('[data-project-body]') === null) {
       return;
     }
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    const vertical =
-      event.key === 'ArrowDown' ? columnCount() : event.key === 'ArrowUp' ? -columnCount() : 0;
-    const delta = step !== 0 ? step : vertical;
+    const delta = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
     if (delta === 0) {
       return;
     }
     event.preventDefault();
     const next = Math.min(Math.max(safeFocusedIndex + delta, 0), shown.length - 1);
     setFocusedIndex(next);
-    gridRef.current?.querySelector<HTMLButtonElement>(`[data-card-index="${next}"] [data-card-body]`)?.focus();
+    listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${next}"] [data-project-body]`)?.focus();
   };
 
   const busy = projects.create.pending || projects.update.pending || projects.remove.pending;
@@ -175,27 +156,7 @@ export function ProjectPortalView({
   return (
     <div className="h-full overflow-y-auto" data-testid="portal">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3 border-b border-line-soft pb-4">
-          <h1 className="min-w-0 text-ink text-xl font-semibold tracking-tight sm:text-2xl">研究项目</h1>
-          {/* The count badge: the one number that says how much work the portal is
-              holding, in tabular mono so it does not jump as projects land. */}
-          <span
-            className="shrink-0 rounded-control border border-line bg-surface px-2 py-0.5 font-mono text-muted text-[var(--font-meta-size)]"
-            data-testid="portal-count"
-          >
-            {all.length}
-          </span>
-          <button
-            type="button"
-            data-testid="portal-new-project"
-            onClick={() => setCreateOpen(true)}
-            className="ml-auto flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)]"
-          >
-            <Plus size={14} aria-hidden="true" />
-            新建研究项目
-          </button>
-        </div>
-
+        <h1 className="sr-only">研究项目</h1>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-[var(--control-height)] min-w-[220px] flex-1 items-center gap-2 rounded-control border border-line bg-surface px-2.5">
             <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -244,6 +205,16 @@ export function ProjectPortalView({
               );
             })}
           </div>
+          <button
+            type="button"
+            data-testid="portal-new-project"
+            aria-label="新建研究项目"
+            onClick={() => setCreateOpen(true)}
+            className="ml-auto flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          >
+            <Plus size={14} aria-hidden="true" />
+            新建项目
+          </button>
         </div>
 
         {projects.list.status === 'error' ? (
@@ -271,7 +242,7 @@ export function ProjectPortalView({
         ) : all.length === 0 ? (
           <EmptyState
             title="还没有研究项目"
-            action={{ label: '新建研究项目', onClick: () => setCreateOpen(true) }}
+            action={{ label: '新建项目', onClick: () => setCreateOpen(true) }}
             testId="portal-empty"
           />
         ) : shown.length === 0 ? (
@@ -288,20 +259,21 @@ export function ProjectPortalView({
           />
         ) : (
           <div
-            ref={gridRef}
+            ref={listRef}
             role="list"
             aria-label="研究项目"
-            onKeyDown={onGridKeyDown}
+            onKeyDown={onListKeyDown}
             data-testid="portal-grid"
-            className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3"
+            className="flex flex-col"
           >
             {shown.map((project, index) => (
-              <div role="listitem" key={project.id} data-card-index={index}>
-                <ProjectCard
+              <div role="listitem" key={project.id} data-project-index={index}>
+                <ProjectRow
                   project={project}
                   pinned={projects.pinnedIds.includes(project.id)}
                   archived={isProjectArchived(project)}
                   focused={index === safeFocusedIndex}
+                  showStatus={filter === 'all' || (project.status !== 'active' && project.status !== 'archived')}
                   onFocus={() => setFocusedIndex(index)}
                   onOpen={() => onOpenProject(project.id)}
                   onTogglePin={() => projects.togglePin(project.id)}

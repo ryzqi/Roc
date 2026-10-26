@@ -12,10 +12,8 @@
  * `''` is valid and means the workspace root — `files.listTree` uses it to list
  * the top level.
  *
- * NOTE: the app ships macOS-only (`package.json` `os: ["darwin"]`), so a literal
- * backslash is a legal filename character rather than a separator. It is still
- * rejected as a *separator-like* escape (`..\\`) below, because treating it as
- * one can only ever produce a false negative in our favour.
+ * The app ships macOS-only (`package.json` `os: ["darwin"]`), so `/` is the only
+ * path separator. A literal backslash remains a valid filename character.
  */
 
 export type PathRejection =
@@ -31,21 +29,11 @@ const MAX_RELATIVE_PATH_LENGTH = 1024;
 
 /** Segments that try to move above the workspace root. */
 function hasTraversalSegment(path: string): boolean {
-  return path.split(/[/\\]/u).some((segment) => segment === '..');
+  return path.split('/').some((segment) => segment === '..');
 }
 
 function isAbsoluteLike(path: string): boolean {
-  if (path.startsWith('/')) {
-    return true;
-  }
-  if (path.startsWith('~')) {
-    return true;
-  }
-  // Windows drive letters, and UNC-style prefixes, for defensive completeness.
-  if (/^[a-zA-Z]:/u.test(path)) {
-    return true;
-  }
-  return path.startsWith('\\\\');
+  return path.startsWith('/') || path.startsWith('~');
 }
 
 export function checkRelativePath(path: string): PathCheck {
