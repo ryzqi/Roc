@@ -58,8 +58,8 @@ function foldAscii(value: string): string {
  * 姓氏：`Family, Given` 取逗号前；否则取最后一个词（`Ann van der Berg` → `berg`）。
  *
  * 这是**显示名**上的启发式，不是姓名解析器：Roc 的 `metadata.authors` 存的是展示用的字符串，
- * 检索 API 返回的也是展示名。真正的姓名结构化在 `bibliography.ts` 的 `parsePerson()`，
- * 那条路有 `von`/`jr` 这些部件，本模块只需要一个够用的姓氏。
+ * 检索 API 返回的也是展示名。BibTeX 导入时由 `bibliography-codec.ts` 结构化姓名；
+ * 本模块仍只从展示名中启发式取一个够用的姓氏。
  */
 export function citeKeyAuthor(author: string): string {
   const trimmed = author.trim();

@@ -54,6 +54,7 @@
     "@langchain/mcp-adapters": "2.0.1",
     "@langchain/openai": "1.6.3",
     "@napi-rs/canvas": "1.0.13",
+    "@retorquere/bibtex-parser": "12.1.13",
     "better-sqlite3": "13.0.3",
     "csv-parse": "7.0.3",
     "d3-dsv": "3.0.1",

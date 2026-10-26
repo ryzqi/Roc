@@ -2,8 +2,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { researchBibliographyEntrySchema, researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
-import { ResearchProcessError } from './process-runner';
 import { researchJobError, runResearchJob } from './research-job';
+import {
+  bibliographyCodec,
+  bibliographyCreatorNames,
+  bibliographyCreatorsToCsl,
+  bibliographyFieldText,
+  BibliographyCodecError
+} from './bibliography-codec';
 
 export type BibliographyFormat = z.infer<typeof researchBibliographyFormatSchema>;
 export type BibliographyEntry = {
@@ -52,8 +58,6 @@ const MONTHS: Record<string, number> = Object.fromEntries(
   ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
     .flatMap((name, index) => [[name, index + 1], [name.slice(0, 3), index + 1]])
 );
-const PARTICLES = new Set(['von', 'van', 'de', 'der', 'den', 'la', 'le', 'du', 'del', 'della', 'ter', 'ten', 'bin', 'ibn', 'da', 'das', 'do', 'dos']);
-
 function requiredText(value: unknown, code: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     researchJobError(code);
@@ -69,57 +73,6 @@ function citationKey(value: unknown): string {
   return key;
 }
 
-export function decodeLatex(value: string): string {
-  let index = 0;
-  const parse = (stop: string | null): string => {
-    let output = '';
-    while (index < value.length) {
-      const current = value[index];
-      if (stop !== null && current === stop) {
-        index += 1;
-        break;
-      }
-      if (current === '{') {
-        index += 1;
-        output += parse('}');
-        continue;
-      }
-      if (current === '\\' && index + 1 < value.length) {
-        const next = value[index + 1];
-        if ('%&#_{}$'.includes(next)) {
-          output += next;
-          index += 2;
-          continue;
-        }
-        index += 1;
-        while (index < value.length && /[A-Za-z]/u.test(value[index])) {
-          index += 1;
-        }
-        if (value[index] === '*') {
-          index += 1;
-        }
-        while (index < value.length && value[index] === ' ') {
-          index += 1;
-        }
-        if (value[index] === '{') {
-          index += 1;
-          parse('}');
-        }
-        continue;
-      }
-      if (current === '&') {
-        output += '     ';
-        index += 1;
-        continue;
-      }
-      output += current;
-      index += 1;
-    }
-    return output;
-  };
-  return parse(null).trim();
-}
-
 function decodeUri(value: string): string {
   let next = value.trim();
   if (next.startsWith('\\url{') && next.endsWith('}')) {
@@ -130,89 +83,6 @@ function decodeUri(value: string): string {
 
 export function encodeLatex(value: string): string {
   return value.replace(/([%&#_$])/gu, '\\$1');
-}
-
-type NameParts = { first: string[]; von: string[]; last: string[]; jr: string[]; literal: boolean };
-
-function splitTopLevel(value: string, separator: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let current = '';
-  for (let index = 0; index < value.length; ) {
-    if (value[index] === '{') {
-      depth += 1;
-      current += value[index];
-      index += 1;
-      continue;
-    }
-    if (value[index] === '}') {
-      depth = Math.max(0, depth - 1);
-      current += value[index];
-      index += 1;
-      continue;
-    }
-    if (depth === 0 && value.slice(index, index + separator.length) === separator) {
-      parts.push(current);
-      current = '';
-      index += separator.length;
-      continue;
-    }
-    current += value[index];
-    index += 1;
-  }
-  parts.push(current);
-  return parts;
-}
-
-function parsePerson(raw: string): NameParts {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}') && !trimmed.slice(1, -1).includes('}')) {
-    return { first: [], von: [], last: [trimmed], jr: [], literal: true };
-  }
-  const comma = splitTopLevel(trimmed, ',').map((part) => part.trim()).filter((part) => part.length > 0);
-  if (comma.length >= 2) {
-    const lastTokens = comma[0].split(/\s+/u).filter(Boolean);
-    let von: string[] = [];
-    let last = lastTokens;
-    const firstParticle = lastTokens.findIndex((token) => PARTICLES.has(token.toLowerCase()));
-    if (firstParticle !== -1) {
-      von = lastTokens.slice(firstParticle, firstParticle + 1);
-      last = [...lastTokens.slice(0, firstParticle), ...lastTokens.slice(firstParticle + 1)];
-      if (last.length === 0) {
-        last = lastTokens.slice(-1);
-        von = lastTokens.slice(0, -1);
-      }
-    }
-    const jr = comma.length >= 3 ? [comma[1]] : [];
-    const first = splitTopLevel(comma[comma.length >= 3 ? 2 : 1], ' ').map((part) => part.trim()).filter(Boolean);
-    return { first, von, last, jr, literal: false };
-  }
-  const tokens = trimmed.split(/\s+/u).filter(Boolean);
-  return { first: tokens.slice(0, -1), von: [], last: tokens.slice(-1), jr: [], literal: false };
-}
-
-function authorNames(value: string): { names: string[]; people: Array<Record<string, string>> } {
-  if (value.trim().length === 0) {
-    return { names: [], people: [] };
-  }
-  const names: string[] = [];
-  const people: Array<Record<string, string>> = [];
-  for (const raw of splitTopLevel(value, ' and ')) {
-    const person = parsePerson(raw);
-    const family = decodeLatex(person.last.join(' '));
-    const given = decodeLatex(person.first.join(' '));
-    const particle = decodeLatex(person.von.join(' '));
-    const suffix = decodeLatex(person.jr.join(' '));
-    const name = [given, particle, family, suffix].filter((part) => part.length > 0).join(' ');
-    if (name.length === 0) {
-      researchJobError('research_bibliography_authors_invalid');
-    }
-    names.push(name);
-    people.push(person.literal ? { literal: family } : Object.fromEntries(
-      [['given', given], ['family', family], ['non-dropping-particle', particle], ['suffix', suffix]].filter(([, part]) => part.length > 0)
-    ));
-  }
-  return { names, people };
 }
 
 function cslAuthorField(people: unknown): string {
@@ -277,12 +147,25 @@ function cslDateParts(value: unknown): number[][] | null {
   return parts as number[][];
 }
 
-function entryRecord(key: string, entryType: string, fields: Record<string, string>, preambles: string[], csl: Record<string, unknown> | null): BibliographyEntry {
-  const title = decodeLatex(requiredText(fields.title, 'research_bibliography_title_required'));
+type BibliographyPresentation = {
+  title: string;
+  authors: string[];
+  abstract: string | null;
+};
+
+function entryRecord(
+  key: string,
+  entryType: string,
+  fields: Record<string, string>,
+  preambles: string[],
+  csl: Record<string, unknown> | null,
+  presentation: BibliographyPresentation
+): BibliographyEntry {
+  const title = requiredText(presentation.title, 'research_bibliography_title_required');
   if (title.length === 0) {
     researchJobError('research_bibliography_title_required');
   }
-  const authors = authorNames(fields.author ?? '').names;
+  const authors = presentation.authors;
   const date = fields.year ?? fields.date ?? '';
   const year = /^(-?\d{1,4})(?:\b|-)/u.exec(date);
   return {
@@ -295,8 +178,42 @@ function entryRecord(key: string, entryType: string, fields: Record<string, stri
     authors,
     doi: fields.doi ? decodeUri(fields.doi) : null,
     publishedYear: year ? Number(year[1]) : null,
-    abstract: fields.abstract ? decodeLatex(fields.abstract) : null,
+    abstract: presentation.abstract,
     url: fields.url ? decodeUri(fields.url) : null
+  };
+}
+
+function cslCreatorNames(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((person): string[] => {
+    if (typeof person !== 'object' || person === null) {
+      return [];
+    }
+    const record = person as Record<string, unknown>;
+    if (typeof record.literal === 'string') {
+      return [record.literal.trim()].filter((name) => name.length > 0);
+    }
+    const name = [record.given, record['dropping-particle'], record['non-dropping-particle'], record.family, record.suffix]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map((part) => part.trim())
+      .join(' ');
+    return name.length > 0 ? [name] : [];
+  });
+}
+
+function bibtexPresentation(entry: ReturnType<typeof bibliographyCodec.parse>['entries'][number]): BibliographyPresentation {
+  const title = bibliographyFieldText(entry.normalizedFields, 'title');
+  const rawAuthor = entry.fields.author?.trim() ?? '';
+  const normalizedAuthor = (entry.normalizedFields as Record<string, unknown>).author;
+  if (rawAuthor.length > 0 && !Array.isArray(normalizedAuthor)) {
+    researchJobError('research_bibliography_authors_invalid');
+  }
+  return {
+    title: title ?? '',
+    authors: bibliographyCreatorNames(normalizedAuthor),
+    abstract: bibliographyFieldText(entry.normalizedFields, 'abstract') ?? null
   };
 }
 
@@ -308,9 +225,13 @@ function journalTitle(fields: Record<string, string>): string | undefined {
   return values[0];
 }
 
-function bibDate(fields: Record<string, string>, year: number | null): Record<string, unknown> | null {
+function bibDate(
+  fields: Record<string, string>,
+  normalizedFields: ReturnType<typeof bibliographyCodec.parse>['entries'][number]['normalizedFields'],
+  year: number | null
+): Record<string, unknown> | null {
   if (fields.date) {
-    const raw = decodeLatex(fields.date);
+    const raw = bibliographyFieldText(normalizedFields, 'date') ?? fields.date;
     const dates = raw.split('/');
     if (dates.length <= 2 && dates.every((value) => /^-?\d{1,4}(?:-\d{2}){0,2}$/u.test(value))) {
       const parts = dates.map((value) => {
@@ -331,7 +252,7 @@ function bibDate(fields: Record<string, string>, year: number | null): Record<st
   }
   const parts: number[] = [year];
   if (fields.month) {
-    const month = decodeLatex(fields.month).toLowerCase();
+    const month = (bibliographyFieldText(normalizedFields, 'month') ?? fields.month).toLowerCase();
     if (/^\d+$/u.test(month)) {
       parts.push(Number(month));
     } else if (month in MONTHS) {
@@ -348,219 +269,27 @@ function bibDate(fields: Record<string, string>, year: number | null): Record<st
   return result;
 }
 
-class BibParser {
-  constructor(private readonly text: string, private index = 0, readonly failedLines: number[] = []) {}
-
-  line(): number {
-    return this.text.slice(0, this.index).split('\n').length;
-  }
-
-  peek(): string {
-    return this.text[this.index] ?? '';
-  }
-
-  skip(): void {
-    while (this.index < this.text.length) {
-      const current = this.text[this.index];
-      if (/\s/u.test(current)) {
-        this.index += 1;
-        continue;
-      }
-      if (current === '%') {
-        while (this.index < this.text.length && this.text[this.index] !== '\n') {
-          this.index += 1;
-        }
-        continue;
-      }
-      break;
-    }
-  }
-
-  takeUntil(pattern: RegExp): string {
-    const start = this.index;
-    while (this.index < this.text.length && !pattern.test(this.text[this.index])) {
-      this.index += 1;
-    }
-    return this.text.slice(start, this.index);
-  }
-
-  braced(): string {
-    if (this.peek() !== '{') {
-      throw new Error('missing_brace');
-    }
-    let depth = 0;
-    const start = this.index;
-    do {
-      if (this.text[this.index] === '{') {
-        depth += 1;
-      } else if (this.text[this.index] === '}') {
-        depth -= 1;
-      } else if (this.text[this.index] === '\\') {
-        this.index += 1;
-      }
-      this.index += 1;
-    } while (this.index < this.text.length && depth > 0);
-    if (depth !== 0) {
-      throw new Error('unbalanced');
-    }
-    return this.text.slice(start + 1, this.index - 1);
-  }
-
-  quoted(): string {
-    this.index += 1;
-    let output = '';
-    while (this.index < this.text.length && this.text[this.index] !== '"') {
-      if (this.text[this.index] === '\\') {
-        output += this.text[this.index];
-        this.index += 1;
-      }
-      output += this.text[this.index] ?? '';
-      this.index += 1;
-    }
-    if (this.text[this.index] !== '"') {
-      throw new Error('unbalanced');
-    }
-    this.index += 1;
-    return output;
-  }
-
-  value(strings: Map<string, string>): string {
-    const chunks: string[] = [];
-    for (;;) {
-      this.skip();
-      if (this.peek() === '{') {
-        chunks.push(this.braced());
-      } else if (this.peek() === '"') {
-        chunks.push(this.quoted());
-      } else if (/[0-9]/u.test(this.peek())) {
-        chunks.push(this.takeUntil(/[^0-9]/u));
-      } else if (/[A-Za-z]/u.test(this.peek())) {
-        const name = this.takeUntil(/[^A-Za-z0-9_:-]/u);
-        chunks.push(strings.get(name.toLowerCase()) ?? name);
-      } else {
-        throw new Error('value');
-      }
-      this.skip();
-      if (this.peek() === '#') {
-        this.index += 1;
-        continue;
-      }
-      return chunks.join('');
-    }
-  }
-
-  parse(): { preambles: string[]; entries: BibliographyEntry[] } {
-    const strings = new Map<string, string>();
-    const preambles: string[] = [];
-    const entries: BibliographyEntry[] = [];
-    while (this.index < this.text.length) {
-      this.skip();
-      if (this.index >= this.text.length) {
-        break;
-      }
-      if (this.peek() !== '@') {
-        this.failedLines.push(this.line());
-        this.index += 1;
-        continue;
-      }
-      const startLine = this.line();
-      try {
-        this.index += 1;
-        const type = this.takeUntil(/[^A-Za-z]/u).toLowerCase();
-        this.skip();
-        const closer = this.peek() === '(' ? ')' : this.peek() === '{' ? '}' : '';
-        if (closer.length === 0) {
-          throw new Error('entry');
-        }
-        this.index += 1;
-        this.skip();
-        if (type === 'comment') {
-          if (this.peek() === '{') {
-            this.braced();
-          } else {
-            this.takeUntil(new RegExp(`[${closer}]`));
-            this.index += 1;
-          }
-          continue;
-        }
-        if (type === 'preamble') {
-          const value = this.peek() === '"' ? this.quoted() : this.peek() === '{' ? this.braced() : this.value(strings);
-          this.skip();
-          if (this.peek() === closer) {
-            this.index += 1;
-          }
-          preambles.push(value);
-          continue;
-        }
-        if (type === 'string') {
-          const name = this.takeUntil(/[^A-Za-z0-9_]/u).toLowerCase();
-          this.skip();
-          if (this.peek() !== '=') {
-            throw new Error('string');
-          }
-          this.index += 1;
-          strings.set(name, this.value(strings));
-          this.skip();
-          if (this.peek() === closer) {
-            this.index += 1;
-          }
-          continue;
-        }
-        const key = this.takeUntil(/[,}\s]/u);
-        this.skip();
-        if (this.peek() === ',') {
-          this.index += 1;
-        }
-        const fields: Record<string, string> = {};
-        while (this.index < this.text.length) {
-          this.skip();
-          if (this.peek() === closer || this.peek() === '') {
-            break;
-          }
-          const field = this.takeUntil(/[^A-Za-z0-9_:-]/u).toLowerCase();
-          this.skip();
-          if (this.peek() !== '=') {
-            throw new Error('field');
-          }
-          this.index += 1;
-          if (field in fields) {
-            researchJobError('research_bibliography_fields_invalid');
-          }
-          fields[field] = this.value(strings);
-          this.skip();
-          if (this.peek() === ',') {
-            this.index += 1;
-          }
-        }
-        if (this.peek() !== closer) {
-          throw new Error('unbalanced');
-        }
-        this.index += 1;
-        entries.push(entryRecord(key, type, fields, preambles, null));
-      } catch (error) {
-        if (error instanceof ResearchProcessError) {
-          throw error;
-        }
-        this.failedLines.push(startLine);
-        while (this.index < this.text.length && this.text[this.index] !== '@') {
-          this.index += 1;
-        }
-      }
-    }
-    return { preambles, entries };
-  }
-}
-
 export function readBibtex(text: string): BibliographyEntry[] {
-  const parser = new BibParser(text);
-  const parsed = parser.parse();
-  if (parser.failedLines.length > 0) {
-    researchJobError(`research_bibliography_parse_failed:lines=${parser.failedLines.slice(0, 10).join(',')}`);
+  let parsed: ReturnType<typeof bibliographyCodec.parse>;
+  try {
+    parsed = bibliographyCodec.parse(text);
+  } catch (error) {
+    if (error instanceof BibliographyCodecError) {
+      researchJobError(error.code);
+    }
+    throw error;
   }
   if (parsed.entries.length === 0 || parsed.entries.length > MAX_ENTRIES) {
     researchJobError('research_bibliography_entry_count_invalid');
   }
-  return parsed.entries.map((entry) => ({ ...entry, preambles: parsed.preambles }));
+  return parsed.entries.map((entry) => entryRecord(
+    entry.citationKey,
+    entry.entryType,
+    entry.fields,
+    parsed.preambles,
+    null,
+    bibtexPresentation(entry)
+  ));
 }
 
 export function readCsl(text: string): BibliographyEntry[] {
@@ -620,12 +349,19 @@ export function readCsl(text: string): BibliographyEntry[] {
         fields.date = encodeLatex(issued.literal ?? issued.raw);
       }
     }
-    entries.push(entryRecord(key, CSL_TYPES[cslType], fields, [], structuredClone(record)));
+    entries.push(entryRecord(key, CSL_TYPES[cslType], fields, [], structuredClone(record), {
+      title: requiredText(record.title, 'research_bibliography_title_required'),
+      authors: cslCreatorNames(record.author ?? []),
+      abstract: typeof record.abstract === 'string' ? record.abstract : null
+    }));
   }
   return entries;
 }
 
-function exportCsl(entry: BibliographyEntry): Record<string, unknown> {
+function exportCsl(
+  entry: BibliographyEntry,
+  normalizedFields: ReturnType<typeof bibliographyCodec.parse>['entries'][number]['normalizedFields']
+): Record<string, unknown> {
   if (entry.csl === null && !(entry.entryType in BIB_TYPES)) {
     researchJobError(`research_bibliography_type_unsupported:${entry.entryType}`);
   }
@@ -636,8 +372,12 @@ function exportCsl(entry: BibliographyEntry): Record<string, unknown> {
     item['citation-key'] = entry.citationKey;
   }
   for (const role of ['author', 'editor', 'translator']) {
-    const { names, people } = authorNames(entry.fields[role] ?? '');
-    const original = authorNames(cslAuthorField((item[role] ?? []) as unknown[])).names;
+    const sourceCreators = (normalizedFields as Record<string, unknown>)[role];
+    const names = bibliographyCreatorNames(sourceCreators);
+    const people = bibliographyCreatorsToCsl(sourceCreators);
+    const originalPeople = item[role] ?? [];
+    cslAuthorField(originalPeople);
+    const original = cslCreatorNames(originalPeople);
     if (people.length > 0 && names.join('\0') !== original.join('\0')) {
       item[role] = people;
     } else if (people.length === 0) {
@@ -647,14 +387,19 @@ function exportCsl(entry: BibliographyEntry): Record<string, unknown> {
   for (const [cslName, bibName] of Object.entries(CSL_FIELDS)) {
     const value = entry.fields[bibName];
     if (value !== undefined) {
-      item[cslName] = bibName === 'doi' || bibName === 'url' ? decodeUri(value) : decodeLatex(value);
+      item[cslName] = bibName === 'doi' || bibName === 'url'
+        ? decodeUri(value)
+        : bibliographyFieldText(normalizedFields, bibName) ?? value;
     }
   }
-  const container = BOOK_CONTAINERS.has(String(item.type)) ? entry.fields.booktitle : journalTitle(entry.fields);
+  journalTitle(entry.fields);
+  const container = BOOK_CONTAINERS.has(String(item.type))
+    ? bibliographyFieldText(normalizedFields, 'booktitle') ?? entry.fields.booktitle
+    : bibliographyFieldText(normalizedFields, 'journaltitle') ?? bibliographyFieldText(normalizedFields, 'journal') ?? journalTitle(entry.fields);
   if (container !== undefined) {
-    item['container-title'] = decodeLatex(container);
+    item['container-title'] = container;
   }
-  const issued = bibDate(entry.fields, entry.publishedYear);
+  const issued = bibDate(entry.fields, normalizedFields, entry.publishedYear);
   if (issued !== null) {
     const original = item.issued;
     if (typeof original === 'object' && original !== null && JSON.stringify((original as Record<string, unknown>)['date-parts']) === JSON.stringify(issued['date-parts'])) {
@@ -670,10 +415,27 @@ function brace(value: string): string {
   return `{${value}}`;
 }
 
+function collectPreambles(entries: BibliographyEntry[]): string[] {
+  const preambles: string[] = [];
+  const maximumCounts = new Map<string, number>();
+  for (const entry of entries) {
+    const entryCounts = new Map<string, number>();
+    for (const preamble of entry.preambles) {
+      const count = (entryCounts.get(preamble) ?? 0) + 1;
+      entryCounts.set(preamble, count);
+      if (count > (maximumCounts.get(preamble) ?? 0)) {
+        preambles.push(preamble);
+        maximumCounts.set(preamble, count);
+      }
+    }
+  }
+  return preambles;
+}
+
 function writeBib(entries: BibliographyEntry[], format: 'bibtex' | 'biblatex'): string {
-  const preambles = [...new Set(entries.flatMap((entry) => entry.preambles))];
+  const preambles = collectPreambles(entries);
   const blocks = [
-    ...preambles.map((value) => `@preamble{"${value.replaceAll('"', '\\"')}"}`),
+    ...preambles.map((value) => `@preamble{${brace(value)}}`),
     ...entries.map((entry) => {
       const fields = { ...entry.fields };
       const journal = journalTitle(fields);
@@ -691,6 +453,19 @@ function writeBib(entries: BibliographyEntry[], format: 'bibtex' | 'biblatex'): 
   return `${blocks.join('\n\n')}\n`;
 }
 
+function parseBibOutput(text: string, expected: BibliographyEntry[]): ReturnType<typeof bibliographyCodec.parse> {
+  let parsed: ReturnType<typeof bibliographyCodec.parse>;
+  try {
+    parsed = bibliographyCodec.parse(text);
+  } catch {
+    researchJobError('research_bibliography_export_invalid');
+  }
+  if (parsed.entries.length !== expected.length || parsed.entries.some((entry, index) => entry.citationKey !== expected[index].citationKey)) {
+    researchJobError('research_bibliography_export_invalid');
+  }
+  return parsed;
+}
+
 export function writeBibliography(entries: BibliographyEntry[], format: BibliographyFormat): string {
   if (!['bibtex', 'biblatex', 'csl-json'].includes(format)) {
     researchJobError('research_bibliography_format_invalid');
@@ -705,14 +480,11 @@ export function writeBibliography(entries: BibliographyEntry[], format: Bibliogr
     journalTitle(entry.fields);
     researchBibliographyEntrySchema.parse(entry);
   }
+  const outputFormat = format === 'csl-json' ? 'biblatex' : format;
+  const output = writeBib(entries, outputFormat);
+  const restored = parseBibOutput(output, entries);
   if (format === 'csl-json') {
-    return `${JSON.stringify(entries.map((entry) => exportCsl(entry)), null, 2)}\n`;
-  }
-  const output = writeBib(entries, format);
-  const restored = new BibParser(output);
-  restored.parse();
-  if (restored.failedLines.length > 0) {
-    researchJobError('research_bibliography_export_invalid');
+    return `${JSON.stringify(entries.map((entry, index) => exportCsl(entry, restored.entries[index].normalizedFields)), null, 2)}\n`;
   }
   return output;
 }
@@ -734,6 +506,9 @@ export function normalizeBibliographyRecords(records: unknown): BibliographyEntr
     if (authors.length > 0) {
       fields.author = authors.map((name) => `{${encodeLatex(requiredText(name, 'research_bibliography_authors_invalid'))}}`).join(' and ');
     }
+    const abstract = metadata.abstract === null || metadata.abstract === undefined
+      ? null
+      : requiredText(metadata.abstract, 'research_bibliography_abstract_invalid');
     for (const name of ['doi', 'url', 'abstract'] as const) {
       const value = metadata[name];
       if (value !== null && value !== undefined) {
@@ -747,7 +522,11 @@ export function normalizeBibliographyRecords(records: unknown): BibliographyEntr
       }
       fields.year = String(metadata.publishedYear);
     }
-    return entryRecord((record as { citationKey: string }).citationKey, 'misc', fields, [], null);
+    return entryRecord((record as { citationKey: string }).citationKey, 'misc', fields, [], null, {
+      title: requiredText(metadata.title, 'research_bibliography_title_required'),
+      authors: authors.map((name) => requiredText(name, 'research_bibliography_authors_invalid')),
+      abstract
+    });
   });
 }
 
