@@ -10,15 +10,14 @@ import { highlightCodeTokens, type CodeToken } from '../syntax-highlight';
  *
  *   1. **No `dangerouslySetInnerHTML`.** The legacy block injected highlight.js's
  *      `.value` string. The highlighter is a trust boundary on a surface that renders
- *      model output, so this renders `CodeToken[]` as real `<span>` elements instead:
- *      `syntax-highlight.ts` only accepts hljs's allowlisted markup and returns `null`
- *      for anything else, and the fallback is plain text rather than injected markup.
+ *      model output, so this renders Lowlight's validated AST as `CodeToken[]` and
+ *      real `<span>` elements. Unexpected AST shapes fall back to plain source text.
  *   2. Legacy CSS classes → Tailwind + semantic tokens; the legacy shell's
  *      `useCopyFeedback` (`markCopied`) → the new shell's (`copy`).
  *
- * `extractText` is kept verbatim: pulling the raw source out of the React children
- * `react-markdown` hands over (including the nested `<code>` element) is what makes the
- * copy button copy source rather than highlighted markup.
+ * `extractText` pulls the raw source out of the React children `react-markdown` hands
+ * over (including the nested `<code>` element), so the copy button copies source rather
+ * than highlighted markup.
  */
 
 export type CodeBlockProps = {

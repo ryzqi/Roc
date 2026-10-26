@@ -101,6 +101,7 @@ before(async () => {
     import { markdownComponents } from './src/renderer/assistant/blocks/markdown-components.ts';
     import { MarkdownView } from './src/renderer/assistant/blocks/markdown-view.tsx';
     import { StreamingMarkdownView } from './src/renderer/assistant/blocks/streaming-markdown-view.tsx';
+    import { CodeBlock } from './src/renderer/assistant/blocks/code-block.tsx';
     import { Streamdown } from 'streamdown';
 
     const roots = new Map();
@@ -166,6 +167,26 @@ before(async () => {
     window.mountPair = text => {
       mount('current-root', React.createElement(MarkdownView, { text }));
       mount('candidate-root', React.createElement(CandidateStatic, { text }));
+    };
+    window.mountCodeBlock = (source, language) => mount(
+      'candidate-root',
+      React.createElement(CodeBlock, {
+        children: React.createElement('code', { className: 'language-' + language }, source)
+      })
+    );
+    window.codeBlockSnapshot = () => {
+      const block = document.querySelector('#candidate-root [data-testid="assistant-code-block"]');
+      const code = block?.querySelector('pre code');
+      return {
+        text: code?.textContent ?? null,
+        spans: code?.querySelectorAll('span').length ?? 0,
+        images: block?.querySelectorAll('img').length ?? 0,
+        scripts: block?.querySelectorAll('script').length ?? 0,
+        eventAttributes: Array.from(block?.querySelectorAll('*') ?? [])
+          .flatMap(element => Array.from(element.attributes, attribute => attribute.name))
+          .filter(name => /^on/iu.test(name)),
+        pwned: window.markdownGatePwned === true
+      };
     };
     window.mountTransition = (text, isStreaming) => {
       window.transitionText = text;
@@ -401,8 +422,9 @@ test('streaming completion measures DOM, height, and scroll-anchor changes acros
 
   const gfmTransition = artifact.transitions.find((item) => item.name === 'gfm');
   assert.ok(gfmTransition.before.snapshot.codeBlocks.length > 0, 'GFM transition must exercise a fenced code block');
-  assert.ok(gfmTransition.before.snapshot.codeBlocks.some((html) => html.includes('const answer: number = 42;')));
-  assert.ok(gfmTransition.after.snapshot.codeBlocks.some((html) => html.includes('const answer: number = 42;')));
+  for (const snapshot of [gfmTransition.before.snapshot, gfmTransition.after.snapshot]) {
+    assert.ok(snapshot.nodes.some((node) => node.tag === 'code' && node.text.includes('const answer: number = 42;')));
+  }
   artifact.transitionGate = {
     passed: artifact.transitions.every((item) =>
       !item.elementsChanged &&
@@ -425,4 +447,22 @@ test('streaming completion measures DOM, height, and scroll-anchor changes acros
   };
   assert.equal(artifact.transitionGate.passed, false, 'transition output changed; review the unification decision');
   assert.ok(artifact.transitionGate.failedCases.includes('gfm'), 'GFM transition must remain part of the gate');
+});
+
+test('code highlighting renders forged HTML as source text', async () => {
+  const source = '<img src=x onerror="window.markdownGatePwned = true"><script>window.markdownGatePwned = true</script>&amp;';
+  await page.evaluate((code) => {
+    window.markdownGatePwned = false;
+    window.mountCodeBlock(code, 'html');
+  }, source);
+  await page.waitForFunction(() => document.querySelector('#candidate-root pre code span') !== null);
+  await page.waitForTimeout(50);
+
+  const result = await page.evaluate(() => window.codeBlockSnapshot());
+  assert.equal(result.text, source);
+  assert.ok(result.spans > 0, 'the test must exercise highlighted AST output');
+  assert.equal(result.images, 0);
+  assert.equal(result.scripts, 0);
+  assert.deepEqual(result.eventAttributes, []);
+  assert.equal(result.pwned, false);
 });

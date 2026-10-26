@@ -1,20 +1,14 @@
-import type { LanguageFn } from 'highlight.js';
-import highlight from 'highlight.js/lib/core';
+import { createLowlight, type LanguageFn } from 'lowlight';
 
 /**
  * Lazy syntax highlighting (T4.4), ported from the legacy
  * `chat/syntax-highlight.ts`.
  *
- * Two things changed and nothing else:
- *
- *   1. The legacy module imported `styles/syntax-highlight.css` — a parallel
- *      stylesheet, which this shell does not have (R5). The `.hljs-*` classes are
- *      mapped onto the existing `--syntax-*` tokens under the `.roc-code` scope in
- *      `styles/index.css`, so the theme follows the light/dark switch like every
- *      other colour.
- *   2. Language grammars stay **dynamic imports**: each one becomes its own chunk,
- *      and `highlight.js` itself is therefore never in the eager graph (the P3
- *      eager-graph guard would fail if it were).
+ * Language grammars stay dynamic imports, so only a code block's language is loaded
+ * when needed. Lowlight returns a HAST tree; the small adapter below accepts only
+ * text nodes and highlighted `span` elements with known class shapes. The renderer
+ * builds React spans from those tokens and falls back to source text if the tree is
+ * unexpected.
  */
 
 const languageLoaders: Record<string, () => Promise<{ default: LanguageFn }>> = {
@@ -33,7 +27,8 @@ const languageLoaders: Record<string, () => Promise<{ default: LanguageFn }>> = 
   css: () => import('highlight.js/lib/languages/css')
 };
 
-const registeredLanguages = new Set<string>();
+const lowlight = createLowlight();
+const languageRegistrations = new Map<string, Promise<void>>();
 
 /** A run of code text with the `hljs-*` classes that apply to it. */
 export type CodeToken = {
@@ -41,97 +36,107 @@ export type CodeToken = {
   classes: readonly string[];
 };
 
+const allowedModifierClasses = new Set(['class_', 'function_', 'language_']);
+const safeClassName = /^[a-z0-9_-]+$/u;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isAllowedClassName(value: string): boolean {
+  return safeClassName.test(value) && (value.startsWith('hljs-') || allowedModifierClasses.has(value));
+}
+
 /**
- * Syntax-highlights `code` and returns **React-renderable tokens**, never HTML.
- *
- * The legacy block injected `highlight.js`'s `.value` through
- * `dangerouslySetInnerHTML`. That is safe *today* (hljs escapes the source and only
- * emits its own `<span class="hljs-…">` wrappers), but it is an unverified trust
- * boundary in a surface that renders model output: a grammar bug or a future hljs
- * change would become script execution.
- *
- * `tokenizeHighlightedHtml` accepts only the markup hljs is allowed to produce, so
- * the component builds `<span>` elements itself. Anything unexpected yields `null`
- * and the caller falls back to plain text — the failure mode is "no colours", not
- * "injected markup".
+ * Convert a Lowlight root into React-renderable tokens. Unexpected tags, properties,
+ * or classes reject the whole tree so the caller can keep the original source text.
+ */
+export function lowlightRootToCodeTokens(root: unknown, source: string): CodeToken[] | null {
+  if (!isRecord(root) || root.type !== 'root' || !Array.isArray(root.children)) {
+    return null;
+  }
+
+  const tokens: CodeToken[] = [];
+  const visit = (node: unknown, inheritedClasses: readonly string[]): boolean => {
+    if (!isRecord(node)) {
+      return false;
+    }
+
+    if (node.type === 'text') {
+      if (typeof node.value !== 'string') {
+        return false;
+      }
+      if (node.value.length > 0) {
+        tokens.push({ text: node.value, classes: inheritedClasses });
+      }
+      return true;
+    }
+
+    if (
+      node.type !== 'element' ||
+      node.tagName !== 'span' ||
+      !Array.isArray(node.children) ||
+      !isRecord(node.properties)
+    ) {
+      return false;
+    }
+
+    const propertyNames = Object.keys(node.properties);
+    if (propertyNames.length !== 1 || propertyNames[0] !== 'className') {
+      return false;
+    }
+    const localClasses = node.properties.className;
+    if (
+      !Array.isArray(localClasses) ||
+      localClasses.length === 0 ||
+      !localClasses.every((name): name is string => typeof name === 'string' && isAllowedClassName(name)) ||
+      !localClasses.some((name) => name.startsWith('hljs-'))
+    ) {
+      return false;
+    }
+
+    const classes = [...inheritedClasses, ...localClasses];
+    return node.children.every((child) => visit(child, classes));
+  };
+
+  if (!root.children.every((child) => visit(child, []))) {
+    return null;
+  }
+  return tokens.map((token) => token.text).join('') === source ? tokens : null;
+}
+
+async function ensureLanguageRegistered(language: string, loader: () => Promise<{ default: LanguageFn }>): Promise<void> {
+  let registration = languageRegistrations.get(language);
+  if (registration === undefined) {
+    registration = loader()
+      .then(({ default: grammar }) => {
+        lowlight.register(language, grammar);
+      })
+      .catch((error: unknown) => {
+        if (languageRegistrations.get(language) === registration) {
+          languageRegistrations.delete(language);
+        }
+        throw error;
+      });
+    languageRegistrations.set(language, registration);
+  }
+  await registration;
+}
+
+/**
+ * Syntax-highlights `code` and returns React-renderable tokens, never HTML.
+ * Unknown or absent language labels keep the existing plain-text rendering path.
  */
 export async function highlightCodeTokens(language: string | null, code: string): Promise<CodeToken[] | null> {
   if (language === null) {
     return null;
   }
   const normalized = language.toLowerCase();
-  const loader = languageLoaders[normalized];
+  const loader = Object.hasOwn(languageLoaders, normalized) ? languageLoaders[normalized] : undefined;
   if (loader === undefined) {
     return null;
   }
-  if (!registeredLanguages.has(normalized)) {
-    const module = await loader();
-    highlight.registerLanguage(normalized, module.default);
-    registeredLanguages.add(normalized);
-  }
-  return tokenizeHighlightedHtml(highlight.highlight(code, { language: normalized, ignoreIllegals: true }).value);
+
+  await ensureLanguageRegistered(normalized, loader);
+  return lowlightRootToCodeTokens(lowlight.highlight(normalized, code), code);
 }
-
-const ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#039;': "'"
-};
-
-function decodeEntities(value: string): string {
-  return value.replace(/&(?:amp|lt|gt|quot|#039);/gu, (match) => ENTITIES[match] ?? match);
-}
-
-/**
- * Parses highlight.js output into tokens, or returns `null` if it is not exactly
- * the allowlisted shape.
- *
- * Allowed: `<span class="hljs-…">`, `</span>`, and text with the five entities hljs
- * escapes. Anything else — another tag, an inline handler, an unquoted attribute, a
- * non-`hljs-` class, unbalanced tags — is rejected.
- */
-export function tokenizeHighlightedHtml(html: string): CodeToken[] | null {
-  const tokens: CodeToken[] = [];
-  const classStack: string[][] = [];
-  const pushText = (text: string): void => {
-    if (text.length === 0) {
-      return;
-    }
-    const classes = classStack.flat();
-    tokens.push({ text: decodeEntities(text), classes });
-  };
-
-  for (let index = 0; index < html.length; ) {
-    const open = html.indexOf('<', index);
-    if (open < 0) {
-      pushText(html.slice(index));
-      break;
-    }
-    pushText(html.slice(index, open));
-
-    if (html.startsWith('</span>', open)) {
-      if (classStack.pop() === undefined) {
-        return null;
-      }
-      index = open + '</span>'.length;
-      continue;
-    }
-
-    const spanMatch = /^<span class="([a-z0-9 -]*)">/u.exec(html.slice(open));
-    if (spanMatch === null) {
-      return null;
-    }
-    const classAttribute = spanMatch[1] ?? '';
-  const names = classAttribute.split(' ').filter((name) => name.length > 0);
-    if (names.length === 0 || names.some((name) => !name.startsWith('hljs-'))) {
-      return null;
-    }
-    classStack.push(names);
-    index = open + spanMatch[0].length;
-  }
-
-  return classStack.length === 0 ? tokens : null;
-}
-

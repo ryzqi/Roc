@@ -106,37 +106,70 @@ test('the sequence guard rejects replays and keeps the newest window bounded', (
 });
 
 /* ------------------------------------------------------------------ */
-/* highlight.js output allowlist                                       */
+/* Lowlight AST and safe React text                                    */
 /* ------------------------------------------------------------------ */
 
-test('highlight.js markup is tokenised, not injected', () => {
-  const tokens = syntax.tokenizeHighlightedHtml(
-    '<span class="hljs-keyword">const</span> x = <span class="hljs-string">"a&amp;b"</span>;'
-  );
-  assert.notEqual(tokens, null);
-  assert.deepEqual(tokens[0], { text: 'const', classes: ['hljs-keyword'] });
-  assert.equal(tokens[1].text, ' x = ');
-  assert.deepEqual(tokens[1].classes, []);
-  // Entities are decoded once, so the rendered text matches the source.
-  assert.equal(tokens[2].text, '"a&b"');
-  assert.deepEqual(tokens[2].classes, ['hljs-string']);
+test('lowlight preserves source text, aliases, and nested highlight classes', async () => {
+  const cases = [
+    { alias: 'js', canonical: 'javascript', code: 'function greet(name) { return "<b> & text"; }' },
+    { alias: 'ts', canonical: 'typescript', code: 'const count: number = 1;' },
+    { alias: 'shell', canonical: 'bash', code: 'echo "$HOME"' },
+    { alias: 'html', canonical: 'xml', code: '<img src=x onerror="alert(1)">&amp;' }
+  ];
+  for (const item of cases) {
+    const aliasTokens = await syntax.highlightCodeTokens(item.alias, item.code);
+    const canonicalTokens = await syntax.highlightCodeTokens(item.canonical, item.code);
+    assert.notEqual(aliasTokens, null, `${item.alias} did not highlight`);
+    assert.deepEqual(aliasTokens, canonicalTokens, `${item.alias} changed the canonical grammar output`);
+    assert.equal(aliasTokens.map((token) => token.text).join(''), item.code);
+    assert.ok(aliasTokens.some((token) => token.classes.some((name) => name.startsWith('hljs-'))));
+  }
+
+  const javascript = await syntax.highlightCodeTokens('js', cases[0].code);
+  assert.ok(javascript.some((token) => token.classes.includes('hljs-keyword')));
+  assert.ok(javascript.some((token) => token.classes.includes('hljs-title') && token.classes.includes('function_')));
+  const html = await syntax.highlightCodeTokens('html', cases[3].code);
+  assert.ok(html.some((token) => token.classes.includes('hljs-tag')));
+  assert.ok(html.some((token) => token.classes.includes('hljs-attr')));
+
+  const concurrentCode = 'def greet(name):\n    return name';
+  const [firstPython, secondPython] = await Promise.all([
+    syntax.highlightCodeTokens('python', concurrentCode),
+    syntax.highlightCodeTokens('python', concurrentCode)
+  ]);
+  assert.notEqual(firstPython, null);
+  assert.deepEqual(secondPython, firstPython);
+  assert.equal(firstPython.map((token) => token.text).join(''), concurrentCode);
 });
 
-test('any markup highlight.js would not emit is rejected', () => {
-  const forged = [
-    '<img src=x onerror="alert(1)">',
-    '<script>alert(1)</script>',
-    '<span onclick="alert(1)">x</span>',
-    '<span class="evil">x</span>',
-    '<span class="hljs-keyword" style="x">y</span>',
-    '<span class="hljs-keyword">unbalanced',
-    '</span>',
-    '<div class="hljs-keyword">x</div>'
-  ];
-  for (const markup of forged) {
-    assert.equal(syntax.tokenizeHighlightedHtml(markup), null, markup);
+test('unknown languages and unsafe lowlight nodes fall back without emitting markup', async () => {
+  const code = '<img src=x onerror=alert(1)>';
+  assert.equal(await syntax.highlightCodeTokens(null, code), null);
+  for (const unknown of ['roc-unknown', 'constructor', 'toString', '__proto__']) {
+    assert.equal(await syntax.highlightCodeTokens(unknown, code), null, `${unknown} must stay plain text`);
   }
-  assert.deepEqual(syntax.tokenizeHighlightedHtml('plain text'), [{ text: 'plain text', classes: [] }]);
+
+  const valid = {
+    type: 'root',
+    children: [
+      { type: 'element', tagName: 'span', properties: { className: ['hljs-title', 'function_'] }, children: [{ type: 'text', value: 'greet' }] },
+      { type: 'text', value: '(<b>&amp;)' }
+    ]
+  };
+  assert.deepEqual(syntax.lowlightRootToCodeTokens(valid, 'greet(<b>&amp;)'), [
+    { text: 'greet', classes: ['hljs-title', 'function_'] },
+    { text: '(<b>&amp;)', classes: [] }
+  ]);
+  assert.equal(syntax.lowlightRootToCodeTokens(valid, 'greet()'), null, 'an incomplete AST must retain source fallback');
+
+  const forgedTrees = [
+    { type: 'root', children: [{ type: 'element', tagName: 'img', properties: { onError: 'alert(1)' }, children: [] }] },
+    { type: 'root', children: [{ type: 'element', tagName: 'span', properties: { className: ['hljs-keyword', 'onclick=alert(1)'] }, children: [{ type: 'text', value: 'x' }] }] },
+    { type: 'root', children: [{ type: 'script', value: 'alert(1)' }] }
+  ];
+  for (const tree of forgedTrees) {
+    assert.equal(syntax.lowlightRootToCodeTokens(tree, ''), null);
+  }
 });
 
 /* ------------------------------------------------------------------ */
