@@ -28,6 +28,15 @@ const { extractResearchTemplate } = await importTypeScriptModule('src/main/plugi
   platform: 'node',
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
+const { modelPackManifest } = await importTypeScriptModule('src/main/plugins/research/model-catalog.ts', {
+  platform: 'node',
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
+  platform: 'node',
+  external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr'],
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
 
 function zipEntries(archive) {
   const entries = [];
@@ -71,6 +80,7 @@ test('architecture repair corpus stays internally consistent', async () => {
   const pdf = await readFile(join(repositoryRoot, corpus.documents.pdf.path));
   assert.equal(createHash('sha256').update(pdf).digest('hex'), corpus.documents.pdf.sha256);
   assert.equal(corpus.documents.tiff.find((item) => item.id === 'multipage-rgb').pages.length, 2);
+  assert.equal(corpus.documents.tiff.find((item) => item.id === 'deflate-rgb-page').compression, 'deflate');
 
   assert.ok(corpus.archives.rejectionCases.some((item) => item.id === 'corrupt-crc'));
   assert.ok(corpus.archives.limitCases.some((item) => item.target === 'template-import' && item.entryCount === 5001));
@@ -178,6 +188,55 @@ test('template import verifies CRC and normalizes truncated archive failures wit
       (error) => error.code === 'research_template_archive_entry_invalid'
     );
     await assert.rejects(access(truncatedOutput), { code: 'ENOENT' });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('research TIFF parser rejects invalid dimensions before pixel decode and cleans output', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-tiff-preflight-'));
+  try {
+    const corpusRoot = join(temporaryRoot, 'corpus');
+    await mkdir(corpusRoot);
+    const materialized = await materializeArchitectureCorpus(corpusRoot, { fileCounts: [] });
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+    const modelFiles = {
+      detection: '/unused/detection.onnx',
+      recognition: '/unused/recognition.onnx',
+      dictionary: '/unused/dictionary.txt',
+      layout: '/unused/layout.onnx',
+      table: '/unused/table.onnx'
+    };
+    const parse = (sourcePath, outputDir) => parseResearchDocument({
+      projectRoot,
+      sourcePath,
+      outputDir,
+      options: { tier: 'compact', device: 'cpu', pageRange: '1' },
+      modelFiles,
+      modelManifest: modelPackManifest('compact')
+    });
+
+    for (const fixture of ['oversized-ifd', 'malformed-ifd']) {
+      const sourcePath = join(projectRoot, `${fixture}.tif`);
+      const outputDir = join(projectRoot, `${fixture}-output`);
+      await writeFile(sourcePath, await readFile(materialized.documents.tiff[fixture]));
+      await assert.rejects(parse(sourcePath, outputDir), (error) => error.code === 'research_image_too_large');
+      await assert.rejects(access(outputDir), { code: 'ENOENT' });
+    }
+
+    const multipagePath = join(projectRoot, 'multipage-rgb.tif');
+    await writeFile(multipagePath, await readFile(materialized.documents.tiff['multipage-rgb']));
+    const multipage = await decodeRasterDocument(multipagePath);
+    assert.equal(multipage.pageCount, 2);
+    assert.deepEqual(Array.from((await multipage.page(1)).data), [0, 0, 0, 255]);
+    assert.deepEqual(Array.from((await multipage.page(2)).data), [255, 255, 255, 255]);
+
+    const compressedPath = join(projectRoot, 'deflate-rgb-page.tif');
+    await writeFile(compressedPath, await readFile(materialized.documents.tiff['deflate-rgb-page']));
+    assert.equal(UTIF.decode(await readFile(compressedPath))[0].t259[0], 8);
+    const compressed = await decodeRasterDocument(compressedPath);
+    assert.deepEqual(Array.from((await compressed.page(1)).data), [10, 20, 30, 255, 40, 50, 60, 255]);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, realpath, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crc32, deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync, deflateSync } from 'node:zlib';
 
 import UTIF from 'utif';
 
@@ -128,15 +128,27 @@ function oversizedMembers(target) {
   }));
 }
 
-function tiffPage(page) {
+function tiffPage(page, compression = 'none') {
   if (page.rgba.length !== page.width * page.height * 4) {
     throw new Error(`invalid_tiff_fixture_pixels:${page.width}x${page.height}`);
   }
-  return Buffer.from(UTIF.encodeImage(Uint8Array.from(page.rgba), page.width, page.height));
+  const encoded = Buffer.from(UTIF.encodeImage(Uint8Array.from(page.rgba), page.width, page.height));
+  if (compression === 'none') return encoded;
+  if (compression !== 'deflate') throw new Error(`unsupported_tiff_fixture_compression:${compression}`);
+
+  const ifd = UTIF.decode(encoded)[0];
+  const pixels = encoded.subarray(ifd.t273[0], ifd.t273[0] + ifd.t279[0]);
+  const compressedPixels = deflateSync(pixels);
+  ifd.t259 = [8];
+  ifd.t279 = [compressedPixels.length];
+  let metadata = Buffer.from(UTIF.encode([ifd]));
+  ifd.t273 = [metadata.length];
+  metadata = Buffer.from(UTIF.encode([ifd]));
+  return Buffer.concat([metadata, compressedPixels]);
 }
 
-function tiffPages(pages) {
-  const encoded = pages.map(tiffPage);
+function tiffPages(pages, compression = 'none') {
+  const encoded = pages.map((page) => tiffPage(page, compression));
   const ifds = encoded.map((bytes) => UTIF.decode(bytes)[0]);
   const pixels = ifds.map((ifd, index) => encoded[index].subarray(ifd.t273[0], ifd.t273[0] + ifd.t279[0]));
   let metadata = Buffer.from(UTIF.encode(ifds));
@@ -240,7 +252,7 @@ export async function materializeArchitectureCorpus(outputRoot, options = {}) {
   for (const item of corpus.documents.tiff) {
     if (item.pages !== undefined && !item.pages.some((page) => page.pixelsMaterialized === false)) {
       const path = join(documentsRoot, `${item.id}.tif`);
-      await writeFile(path, tiffPages(item.pages));
+      await writeFile(path, tiffPages(item.pages, item.compression ?? 'none'));
       tiffArtifacts[item.id] = path;
     }
   }

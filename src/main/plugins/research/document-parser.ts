@@ -436,22 +436,40 @@ async function writeParseResult(job: ResearchJobPaths, input: {
 
 type RasterDocument = { pageCount: number; page(pageNumber: number): Promise<Raster> };
 
-async function decodeRasterDocument(path: string): Promise<RasterDocument> {
+export async function decodeRasterDocument(path: string): Promise<RasterDocument> {
   const extension = extname(path).toLowerCase();
   if (extension === '.tif' || extension === '.tiff') {
     const buffer = toArrayBuffer(await readFile(path));
     const pages = UTIF.decode(buffer);
     if (pages.length === 0) researchJobError('research_image_decode_failed');
+    const dimensions = pages.map((directory) => {
+      const widthTag = directory.t256;
+      const heightTag = directory.t257;
+      const width = Array.isArray(widthTag) && typeof widthTag[0] === 'number' ? widthTag[0] : undefined;
+      const height = Array.isArray(heightTag) && typeof heightTag[0] === 'number' ? heightTag[0] : undefined;
+      assertRasterSize(width, height);
+      return { width, height };
+    });
     return {
       pageCount: pages.length,
       page: async (pageNumber) => {
         const directory = pages[pageNumber - 1];
-        if (directory === undefined) researchJobError('research_image_page_invalid');
-        UTIF.decodeImage(buffer, directory);
-        const width = directory.width;
-        const height = directory.height;
-        assertRasterSize(width, height);
-        return { width, height, data: UTIF.toRGBA8(directory) };
+        const expectedDimensions = dimensions[pageNumber - 1];
+        if (directory === undefined || expectedDimensions === undefined) researchJobError('research_image_page_invalid');
+        try {
+          UTIF.decodeImage(buffer, directory);
+          const width = directory.width;
+          const height = directory.height;
+          assertRasterSize(width, height);
+          if (width !== expectedDimensions.width || height !== expectedDimensions.height) {
+            researchJobError('research_image_decode_failed');
+          }
+          const data = UTIF.toRGBA8(directory);
+          if (data.byteLength !== width * height * 4) researchJobError('research_image_pixel_buffer_invalid');
+          return { width, height, data };
+        } finally {
+          directory.data = new Uint8Array(0);
+        }
       }
     };
   }
@@ -590,8 +608,9 @@ function hasHighQualityNativeText(value: string): boolean {
   return printableCount / value.length >= MIN_NATIVE_TEXT_PRINTABLE_RATIO;
 }
 
-function assertRasterSize(width: number, height: number): void {
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > MAX_PAGE_PIXELS) {
+function assertRasterSize(width: number | undefined, height: number | undefined): void {
+  if (width === undefined || height === undefined || !Number.isInteger(width) || !Number.isInteger(height)
+    || width < 1 || height < 1 || width * height > MAX_PAGE_PIXELS) {
     researchJobError('research_image_too_large');
   }
 }
