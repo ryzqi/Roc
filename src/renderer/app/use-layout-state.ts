@@ -52,7 +52,11 @@ export function layoutModeForWidth(width: number): LayoutMode {
   return width < DRAWER_THRESHOLD ? 'drawers' : 'columns';
 }
 
+export type LayoutPreset = 'normal' | 'focus' | 'collaboration';
+
 export type LayoutState = {
+  preset: LayoutPreset;
+  setPreset: (preset: LayoutPreset) => void;
   mode: LayoutMode;
   sidebarWidth: number;
   sidebarCollapsed: boolean;
@@ -94,6 +98,29 @@ export function useLayoutState(): LayoutState {
   const [assistantWidth, setAssistantWidth] = useState(() => readAssistantWidth());
   const [sidebarTab, setSidebarTabState] = useState<SidebarTab>(() => readSidebarTab());
 
+  const [preset, setPresetState] = useState<LayoutPreset>('normal');
+  const previousLayout = useRef<{ sidebarWidth: number; assistantWidth: number; sidebarCollapsed: boolean } | null>(null);
+  const setPreset = useCallback((next: LayoutPreset) => {
+    if (next === preset) return;
+    if (preset === 'normal') previousLayout.current = { sidebarWidth, assistantWidth, sidebarCollapsed };
+    if (next === 'normal') {
+      const previous = previousLayout.current;
+      if (previous !== null) {
+        setSidebarWidth(previous.sidebarWidth);
+        setAssistantWidth(previous.assistantWidth);
+        setSidebarCollapsed(previous.sidebarCollapsed);
+      }
+      previousLayout.current = null;
+    } else if (next === 'focus') {
+      setSidebarCollapsed(true);
+    } else {
+      setSidebarCollapsed(false);
+      setSidebarWidth(SIDEBAR_WIDTH.min);
+      setAssistantWidth(Math.max(ASSISTANT_WIDTH.default, Math.floor(windowWidth * 0.4)));
+    }
+    setPresetState(next);
+  }, [preset, sidebarWidth, assistantWidth, sidebarCollapsed, windowWidth]);
+
   const mode = layoutModeForWidth(windowWidth);
   const effectiveSidebarWidth = sidebarCollapsed || mode === 'drawers' ? 0 : sidebarWidth;
 
@@ -112,6 +139,7 @@ export function useLayoutState(): LayoutState {
     }
     persistTimerRef.current = window.setTimeout(() => {
       persistTimerRef.current = null;
+      if (previousLayout.current !== null) return;
       writeSidebarWidth(sidebarWidthRef.current);
       writeAssistantWidth(assistantWidthRef.current);
     }, PERSIST_DEBOUNCE_MS);
@@ -135,7 +163,7 @@ export function useLayoutState(): LayoutState {
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((current) => {
       const next = !current;
-      writeSidebarCollapsed(next);
+      if (previousLayout.current === null) writeSidebarCollapsed(next);
       return next;
     });
   }, []);
@@ -170,12 +198,12 @@ export function useLayoutState(): LayoutState {
 
   const resetSidebar = useCallback(() => {
     setSidebarWidth(SIDEBAR_WIDTH.default);
-    writeSidebarWidth(SIDEBAR_WIDTH.default);
+    if (previousLayout.current === null) writeSidebarWidth(SIDEBAR_WIDTH.default);
   }, []);
 
   const resetAssistant = useCallback(() => {
     setAssistantWidth(ASSISTANT_WIDTH.default);
-    writeAssistantWidth(ASSISTANT_WIDTH.default);
+    if (previousLayout.current === null) writeAssistantWidth(ASSISTANT_WIDTH.default);
   }, []);
 
   const setSidebarTab = useCallback((tab: SidebarTab) => {
@@ -185,6 +213,8 @@ export function useLayoutState(): LayoutState {
 
   return {
     mode,
+    preset,
+    setPreset,
     sidebarWidth: clamp(sidebarWidth, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max),
     sidebarCollapsed,
     assistantWidth: clamp(

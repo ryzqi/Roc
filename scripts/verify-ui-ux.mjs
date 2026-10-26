@@ -83,6 +83,36 @@ try {
       await page.screenshot({ path: join(artifact, 'editor.png') });
     });
   }
+  if (process.env.ROC_UI_PHASE === 'layout') {
+    await check('Focus enlarges canvas and restores previous geometry', async () => {
+      const sidebar = await page.getByTestId('sidebar-column').boundingBox();
+      const canvas = await page.getByTestId('canvas-column').boundingBox();
+      await editor.fill('layout draft');
+      await page.getByTestId('layout-preset-focus').click();
+      await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
+      await expect(page.getByTestId('assistant-column')).toHaveCount(0);
+      expect((await page.getByTestId('canvas-column').boundingBox()).width).toBeGreaterThan(canvas.width);
+      await expect(editor).toHaveText('layout draft');
+      await page.screenshot({ path: join(artifact, 'focus.png') });
+      await page.getByTestId('layout-preset-normal').click();
+      expect((await page.getByTestId('sidebar-column').boundingBox()).width).toBe(sidebar.width);
+      expect((await page.getByTestId('canvas-column').boundingBox()).width).toBe(canvas.width);
+    });
+    await check('Collaboration opens assistant, normal restores prior visibility', async () => {
+      await page.getByTestId('layout-preset-collaboration').click();
+      await expect(page.getByTestId('assistant-column')).toBeVisible();
+      expect((await page.getByTestId('canvas-column').boundingBox()).width).toBeGreaterThanOrEqual(360);
+      await page.getByTestId('layout-preset-normal').click();
+      await expect(page.getByTestId('assistant-column')).toHaveCount(0);
+    });
+    await check('Focus shortcut toggles without changing document', async () => {
+      await editor.click(); await page.keyboard.press('Meta+Shift+f');
+      await expect(page.getByTestId('layout-preset-focus')).toHaveAttribute('aria-pressed', 'true');
+      await page.keyboard.press('Meta+Shift+f');
+      await expect(page.getByTestId('layout-preset-normal')).toHaveAttribute('aria-pressed', 'true');
+      await expect(editor).toHaveText('layout draft');
+    });
+  }
   await check('Failed save retains draft and blocks navigation', async () => {
     await editor.fill('must survive failed write');
     renameSync(main, `${main}.bak`); mkdirSync(main);

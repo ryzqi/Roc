@@ -47,7 +47,7 @@ export function WorkspaceLayout({
   assistantAvailable
 }: WorkspaceLayoutProps): React.JSX.Element {
   const sidebarVisible = !layout.sidebarCollapsed && !layout.sidebarAsDrawer;
-  const assistantVisible = assistantAvailable && assistantOpen && !layout.assistantAsDrawer;
+  const assistantVisible = assistantAvailable && assistantOpen && layout.preset !== 'focus' && !layout.assistantAsDrawer;
 
   // Report the clamp state so the divider can announce why dragging stopped,
   // instead of the handle silently refusing to move.
@@ -60,6 +60,7 @@ export function WorkspaceLayout({
       className="flex min-h-0 flex-1"
       data-testid="workspace-layout"
       data-layout-mode={layout.mode}
+      data-layout-preset={layout.preset}
       style={
         {
           '--sidebar-w': `${layout.sidebarWidth}px`,
@@ -117,7 +118,7 @@ export function WorkspaceLayout({
         </ModalShell>
       ) : null}
 
-      {layout.assistantAsDrawer && assistantAvailable && assistantOpen ? (
+      {layout.assistantAsDrawer && assistantAvailable && assistantOpen && layout.preset !== 'focus' ? (
         <ModalShell
           open
           kind="drawer"

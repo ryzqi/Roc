@@ -33,6 +33,7 @@ export type ShortcutHandlers = {
   onToggleAssistant: () => void;
   onOpenSearch: () => void;
   onCycleTheme: () => void;
+  onToggleFocus?: () => void;
 };
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
@@ -47,6 +48,11 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
       const key = event.key.toLowerCase();
       const withShiftOrAlt = event.shiftKey || event.altKey;
 
+      if (meta && event.shiftKey && !event.altKey && key === 'f' && !event.isComposing && overlayStackDepth() === 0) {
+        event.preventDefault();
+        ref.current.onToggleFocus?.();
+        return;
+      }
       if (meta && !withShiftOrAlt) {
         // ⌘K is the one shortcut that works through an overlay: it opens the
         // palette and, when the palette is already open, is a no-op there.

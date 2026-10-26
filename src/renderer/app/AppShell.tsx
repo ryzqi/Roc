@@ -4,7 +4,7 @@ import { canvasViewForDrawerSection, isCanvasTabId, type DrawerSectionId, type M
 import { errorMessage } from './loaded-state';
 import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
-import { useLayoutState } from './use-layout-state';
+import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
 import { clearUiState, purgeLegacyStorage } from './ui-state';
 import { ViewContent } from './ViewContent';
@@ -490,7 +490,22 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     };
   }, [client]);
 
+  const previousAssistantOpen = useRef<boolean | null>(null);
+  const applyLayoutPreset = (next: LayoutPreset): void => {
+    if (layout.preset === 'normal' && next !== 'normal') previousAssistantOpen.current = route.assistantOpen;
+    layout.setPreset(next);
+    if (next === 'collaboration') navigate({ ...route, assistantOpen: true });
+    if (next === 'normal' && previousAssistantOpen.current !== null) {
+      navigate({ ...route, assistantOpen: previousAssistantOpen.current });
+      previousAssistantOpen.current = null;
+    }
+  };
+  const toggleFocus = (): void => {
+    if (route.projectId !== null) applyLayoutPreset(layout.preset === 'focus' ? 'normal' : 'focus');
+  };
+
   const toggleAssistant = (): void => {
+    if (layout.preset === 'focus') { applyLayoutPreset('normal'); return; }
     navigate({ ...route, assistantOpen: !route.assistantOpen });
   };
 
@@ -498,6 +513,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     onToggleSidebar: layout.toggleSidebar,
     onToggleAssistant: toggleAssistant,
     onOpenSearch: openSearch,
+    onToggleFocus: toggleFocus,
     onCycleTheme: cycleTheme
   });
 
@@ -541,7 +557,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         onOpenSearch={openSearch}
         sidebarCollapsed={layout.sidebarCollapsed}
         onToggleSidebar={layout.toggleSidebar}
-        assistantOpen={route.assistantOpen}
+        assistantOpen={route.assistantOpen && layout.preset !== 'focus'}
         onToggleAssistant={toggleAssistant}
         onOpenGit={() => navigate({ ...route, tool: 'git' })}
         onOpenManagement={() => {
@@ -641,6 +657,18 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                 </p>
               ) : null}
               <WorkspaceCanvas
+                actions={
+                  <div role="group" aria-label="工作模式" className="flex items-center gap-0.5">
+                    {([['normal', '常规'], ['focus', '专注'], ['collaboration', '协作']] as const).map(([id, label]) => (
+                      <button key={id} type="button" aria-pressed={layout.preset === id} data-testid={`layout-preset-${id}`}
+                        title={id === 'focus' ? '专注工作 (⌘⇧F)' : `${label}模式`}
+                        onClick={() => applyLayoutPreset(id)}
+                        className="rounded-control px-2 py-1 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                }
                 activeTab={canvasTabForView(route.view)}
                 onTabChange={(tab) =>
                   // Switching canvas tabs clears the drawer tool rather than leaving it open
