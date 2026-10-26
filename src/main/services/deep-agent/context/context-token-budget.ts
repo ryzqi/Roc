@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import { AIMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import type { TiktokenModel } from 'js-tiktoken';
+import type { TiktokenBPE, TiktokenModel } from 'js-tiktoken/lite';
 import type { ProviderType } from '../../../../shared/types';
+
+type TiktokenLiteModule = typeof import('js-tiktoken/lite');
+type Tokenizer = InstanceType<TiktokenLiteModule['Tiktoken']>;
+type TokenizerEncodingName = ReturnType<TiktokenLiteModule['getEncodingNameForModel']>;
+type RanksLoader = () => Promise<{ default: TiktokenBPE }>;
 
 export type ContextBudgetProfile = {
   contextWindowTokens: number;
@@ -37,15 +42,31 @@ const BASE_SYSTEM_TOOL_OVERHEAD_TOKENS = 128;
 const MAX_SUMMARY_INPUT_TOKENS = 16_384;
 
 const profileCache = new WeakMap<ContextTokenCounter, Map<string, ContextBudgetProfile>>();
-const tokenizers = new Map<string, ReturnType<typeof import('js-tiktoken')['getEncoding']>>();
+const rankLoaders: Record<TokenizerEncodingName, RanksLoader> = {
+  cl100k_base: () => import('js-tiktoken/ranks/cl100k_base'),
+  gpt2: () => import('js-tiktoken/ranks/gpt2'),
+  o200k_base: () => import('js-tiktoken/ranks/o200k_base'),
+  p50k_base: () => import('js-tiktoken/ranks/p50k_base'),
+  p50k_edit: () => import('js-tiktoken/ranks/p50k_edit'),
+  r50k_base: () => import('js-tiktoken/ranks/r50k_base')
+};
+const tokenizers = new Map<TokenizerEncodingName, Promise<Tokenizer>>();
 
-async function loadTokenizer(modelId: string): Promise<ReturnType<typeof import('js-tiktoken')['getEncoding']> | null> {
-  const module = await import('js-tiktoken');
-  let name: ReturnType<typeof module.getEncodingNameForModel>;
+async function loadTokenizer(modelId: string): Promise<Tokenizer | null> {
+  const module = await import('js-tiktoken/lite');
+  let name: TokenizerEncodingName;
   try { name = module.getEncodingNameForModel(modelId as TiktokenModel); } catch { return null; }
   let tokenizer = tokenizers.get(name);
-  if (tokenizer === undefined) { tokenizer = module.getEncoding(name); tokenizers.set(name, tokenizer); }
-  return tokenizer;
+  if (tokenizer === undefined) {
+    tokenizer = rankLoaders[name]().then(({ default: ranks }) => new module.Tiktoken(ranks));
+    tokenizers.set(name, tokenizer);
+  }
+  try {
+    return await tokenizer;
+  } catch (error) {
+    if (tokenizers.get(name) === tokenizer) tokenizers.delete(name);
+    throw error;
+  }
 }
 
 export function createContextTokenCounter(input: { modelId: string; providerType: ProviderType; baseUrl: string | null }): ContextTokenCounter {
@@ -53,14 +74,20 @@ export function createContextTokenCounter(input: { modelId: string; providerType
     (input.baseUrl === null || new URL(input.baseUrl).origin === 'https://api.openai.com');
   let estimated = false;
   const cache = new Map<string, ContextTokenCount>();
-  let encoding: Promise<ReturnType<typeof import('js-tiktoken')['encodingForModel']> | null> | null = null;
+  let encoding: Promise<Tokenizer | null> | null = null;
   const countText = async (text: string): Promise<ContextTokenCount> => {
     const cached = cache.get(text);
     if (cached !== undefined) return cached;
     let count: ContextTokenCount;
     if (officialOpenAI) {
-      encoding ??= loadTokenizer(input.modelId);
-      const tokenizer = await encoding;
+      const loading = encoding ??= loadTokenizer(input.modelId);
+      let tokenizer: Tokenizer | null;
+      try {
+        tokenizer = await loading;
+      } catch (error) {
+        if (encoding === loading) encoding = null;
+        throw error;
+      }
       count = tokenizer === null ? { estimated: true, tokens: conservativeTextEstimate(text) }
         : { estimated: false, tokens: tokenizer.encode(text, [], []).length };
     } else {
