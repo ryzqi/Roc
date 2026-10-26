@@ -1,5 +1,6 @@
 import { mkdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, OPS, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { pdfjsAssetDirectory } from './pdfjs-assets';
@@ -37,7 +38,17 @@ export type ResearchPdfPageImage = {
   height: number;
   text: string;
   pngBytes: number;
-  image: { width: number; height: number; data: Uint8Array };
+  image: { width: number; height: number; data: Uint8Array } | null;
+};
+
+export type ResearchPdfStage = 'native-text' | 'visual-inspection' | 'page-render' | 'page-png-encode' | 'ocr-raster' |
+  'page-write' | 'model-validation' | 'model-initialization' | 'ocr-inference' | 'region-write' | 'parse-artifact-write';
+export type ResearchPdfStageObserver = (event: { stage: ResearchPdfStage; page: number | null; durationMs: number }) => void;
+
+export type ResearchPdfPageRenderOptions = {
+  includeRgbaImage?: boolean;
+  text?: string;
+  onStage?: ResearchPdfStageObserver;
 };
 
 export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDFDocumentProxy) => Promise<T>): Promise<T> {
@@ -65,6 +76,23 @@ export async function researchPdfPageHasVisualContent(page: PDFPageProxy): Promi
   return operatorList.fnArray.some((operation) => NON_TEXT_VISUAL_OPERATIONS.has(operation));
 }
 
+export async function extractResearchPdfPageText(
+  page: PDFPageProxy,
+  pageNumber?: number,
+  onStage?: ResearchPdfStageObserver
+): Promise<string> {
+  const startedAt = performance.now();
+  try {
+    const textContent = await page.getTextContent();
+    return textContent.items.map((item) => {
+      if (!('str' in item)) return '';
+      return `${String(item.str)}${'hasEOL' in item && item.hasEOL ? '\n' : ' '}`;
+    }).join('').replace(/[ \t]+\n/gu, '\n').trim();
+  } finally {
+    onStage?.({ stage: 'native-text', page: pageNumber ?? null, durationMs: performance.now() - startedAt });
+  }
+}
+
 /** Render and extract text from one page using the shared bounded PDF.js/canvas path. */
 export async function renderResearchPdfPage(
   page: PDFPageProxy,
@@ -73,8 +101,10 @@ export async function renderResearchPdfPage(
   outputDir: string,
   scale: number = DEFAULT_PARSE_SCALE,
   clampToPixelLimit = false,
-  maximumPngBytes?: number
+  maximumPngBytes?: number,
+  options: ResearchPdfPageRenderOptions = {}
 ): Promise<ResearchPdfPageImage> {
+  const text = options.text ?? await extractResearchPdfPageText(page, pageNumber, options.onStage);
   let viewport = page.getViewport({ scale });
   let pixels = viewport.width * viewport.height;
   if (clampToPixelLimit && pixels > MAX_PAGE_PIXELS) {
@@ -88,10 +118,16 @@ export async function renderResearchPdfPage(
     researchJobError('research_pdf_page_too_large');
   }
   const canvas = createCanvas(width, height);
+  let startedAt = performance.now();
   await page.render({ canvasContext: canvas.getContext('2d'), viewport, canvas } as never).promise;
-  const png = await canvas.encode('png');
+  options.onStage?.({ stage: 'page-render', page: pageNumber, durationMs: performance.now() - startedAt });
+  startedAt = performance.now();
+  let png: Buffer | undefined = await canvas.encode('png');
+  options.onStage?.({ stage: 'page-png-encode', page: pageNumber, durationMs: performance.now() - startedAt });
   if (maximumPngBytes !== undefined && png.byteLength > maximumPngBytes) researchJobError('research_document_asset_too_large');
+  const pngBytes = png.byteLength;
   const target = join(outputDir, `page-${pageNumber}.png`);
+  startedAt = performance.now();
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
   const handle = await open(target, 'wx', 0o600);
   try {
@@ -99,13 +135,15 @@ export async function renderResearchPdfPage(
   } finally {
     await handle.close();
   }
-  const context = canvas.getContext('2d');
-  const imageData = context.getImageData(0, 0, width, height).data;
-  const textContent = await page.getTextContent();
-  const text = textContent.items.map((item) => {
-    if (!('str' in item)) return '';
-    return `${String(item.str)}${'hasEOL' in item && item.hasEOL ? '\n' : ' '}`;
-  }).join('').replace(/[ \t]+\n/gu, '\n').trim();
+  options.onStage?.({ stage: 'page-write', page: pageNumber, durationMs: performance.now() - startedAt });
+  png = undefined;
+  let image: ResearchPdfPageImage['image'] = null;
+  if (options.includeRgbaImage !== false) {
+    startedAt = performance.now();
+    const imageData = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+    image = { width, height, data: new Uint8Array(imageData.buffer, imageData.byteOffset, imageData.byteLength) };
+    options.onStage?.({ stage: 'ocr-raster', page: pageNumber, durationMs: performance.now() - startedAt });
+  }
   return {
     path: target,
     page: pageNumber,
@@ -113,8 +151,8 @@ export async function renderResearchPdfPage(
     width,
     height,
     text,
-    pngBytes: png.byteLength,
-    image: { width, height, data: new Uint8Array(imageData.buffer, imageData.byteOffset, imageData.byteLength) }
+    pngBytes,
+    image
   };
 }
 
@@ -143,7 +181,9 @@ async function renderPage(job: ResearchJobPaths, pageNumber: number, scale: numb
     if (pageNumber > pdf.numPages) researchJobError('research_pdf_page_out_of_range');
     const page: PDFPageProxy = await pdf.getPage(pageNumber);
     try {
-      const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, job.output, scale);
+      const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, job.output, scale, false, undefined, {
+        includeRgbaImage: false
+      });
       return { path: rendered.path, page: rendered.page, pageCount: rendered.pageCount, width: rendered.width, height: rendered.height, text: rendered.text };
     } finally {
       page.cleanup();

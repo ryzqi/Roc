@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
 import { extname, join } from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { parseDocument } from 'htmlparser2';
@@ -15,7 +16,14 @@ import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocum
 import type { z } from 'zod';
 import { ResearchProcessError } from './process-runner';
 import { runResearchJob, researchJobError, type ResearchJobPaths } from './research-job';
-import { renderResearchPdfPage, researchPdfPageHasVisualContent, withResearchPdf } from './pdf-render';
+import {
+  extractResearchPdfPageText,
+  renderResearchPdfPage,
+  researchPdfPageHasVisualContent,
+  withResearchPdf,
+  type ResearchPdfStage,
+  type ResearchPdfStageObserver
+} from './pdf-render';
 import { researchModelLock, getModelAsset, modelPackManifest } from './model-catalog';
 import type { ResearchModelFiles } from './model-store';
 import { withOcrSessionScope, type OcrSessionRegistrar } from './ocr-session-scope';
@@ -62,6 +70,7 @@ type ParserInput = {
   modelManifest: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  onStage?: ResearchPdfStageObserver;
 };
 
 export async function parseResearchDocument(input: ParserInput): Promise<ParseDocument> {
@@ -115,15 +124,32 @@ async function parsePdf(
       throwIfAborted(signal);
       const page = await pdf.getPage(pageNumber);
       try {
-        const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
-          researchDocumentLimits.maxAssetBytes);
-        accountAsset(assets, assetBudget, rendered.pngBytes);
-        assets.push({ path: `pages/page-${pageNumber}.png`, kind: 'page', page: pageNumber });
-        const nativeText = normalizeText(rendered.text);
-        nativeTextPages.push(nativeText);
+        const nativeText = normalizeText(await extractResearchPdfPageText(page, pageNumber, input.onStage));
+        throwIfAborted(signal);
+        const hasHighQualityText = input.modelFiles !== null && hasHighQualityNativeText(nativeText);
+        let hasVisualContent = false;
+        if (hasHighQualityText) {
+          const visualInspectionStartedAt = performance.now();
+          try {
+            hasVisualContent = await researchPdfPageHasVisualContent(page);
+          } finally {
+            recordPdfStage(input.onStage, 'visual-inspection', pageNumber, visualInspectionStartedAt);
+          }
+          throwIfAborted(signal);
+        }
         const nativeTextOnly = input.modelFiles === null
           ? nativeText.length > 0
-          : hasHighQualityNativeText(nativeText) && !(await researchPdfPageHasVisualContent(page));
+          : hasHighQualityText && !hasVisualContent;
+        const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
+          researchDocumentLimits.maxAssetBytes, {
+            includeRgbaImage: !nativeTextOnly,
+            text: nativeText,
+            onStage: input.onStage
+          });
+        throwIfAborted(signal);
+        accountAsset(assets, assetBudget, rendered.pngBytes);
+        assets.push({ path: `pages/page-${pageNumber}.png`, kind: 'page', page: pageNumber });
+        nativeTextPages.push(nativeText);
         if (nativeTextOnly) {
           pageBlocks.push(makeBlock(`page-${pageNumber}-text`, 'paragraph', 'Page text', nativeText, pageNumber, [0, 0, rendered.width, rendered.height], null));
           pageResults.push({ page: pageNumber, text: nativeText, regions: [] });
@@ -131,9 +157,16 @@ async function parsePdf(
           continue;
         }
         if (input.modelFiles === null) researchJobError('research_model_pack_required');
-        service ??= await createStructureService(input.modelFiles, options.device, registerSession, signal);
+        service ??= await createStructureService(input.modelFiles, options.device, registerSession, signal, input.onStage);
         throwIfAborted(signal);
-        const inference = await service.service.run(rendered.image, structureRunOptions(service.hasFormula));
+        if (rendered.image === null) researchJobError('research_pdf_ocr_raster_missing');
+        const inferenceStartedAt = performance.now();
+        let inference: Awaited<ReturnType<PaddleStructureService['run']>>;
+        try {
+          inference = await service.service.run(rendered.image, structureRunOptions(service.hasFormula));
+        } finally {
+          recordPdfStage(input.onStage, 'ocr-inference', pageNumber, inferenceStartedAt);
+        }
         throwIfAborted(signal);
         usedOcr = true;
         actualDevice = service.device;
@@ -144,11 +177,16 @@ async function parsePdf(
           const regionImage = region.image;
           const relativeImagePath = regionImage === undefined ? null : `regions/page-${pageNumber}-region-${regionIndex + 1}.png`;
           if (regionImage !== undefined && relativeImagePath !== null) {
-            const assetKind = regionType === 'table' ? 'table' : 'figure';
-            const bytes = await imagePng(regionImage);
-            accountAsset(assets, assetBudget, bytes.byteLength);
-            await writePng(job.output, relativeImagePath, bytes);
-            assets.push({ path: relativeImagePath, kind: assetKind, page: pageNumber });
+            const regionWriteStartedAt = performance.now();
+            try {
+              const assetKind = regionType === 'table' ? 'table' : 'figure';
+              const bytes = await imagePng(regionImage);
+              accountAsset(assets, assetBudget, bytes.byteLength);
+              await writePng(job.output, relativeImagePath, bytes);
+              assets.push({ path: relativeImagePath, kind: assetKind, page: pageNumber });
+            } finally {
+              recordPdfStage(input.onStage, 'region-write', pageNumber, regionWriteStartedAt);
+            }
           }
           const block = makeBlock(
             `page-${pageNumber}-region-${regionIndex + 1}`,
@@ -189,17 +227,22 @@ async function parsePdf(
       parseMode = nativeTextPages.some((text) => text.length > 0) ? 'mixed' : 'ocr';
     }
     const warnings = input.modelFiles === null ? ['research_models_missing_native_text_only'] : [];
-    return await writeParseResult(job, {
-      options,
-      modelManifest: service === null ? '' : input.modelManifest,
-      device: actualDevice,
-      pageCount: pdf.numPages,
-      parseMode,
-      blocks: pageBlocks,
-      assets,
-      pageResults,
-      warnings
-    });
+    const artifactWriteStartedAt = performance.now();
+    try {
+      return await writeParseResult(job, {
+        options,
+        modelManifest: service === null ? '' : input.modelManifest,
+        device: actualDevice,
+        pageCount: pdf.numPages,
+        parseMode,
+        blocks: pageBlocks,
+        assets,
+        pageResults,
+        warnings
+      });
+    } finally {
+      recordPdfStage(input.onStage, 'parse-artifact-write', null, artifactWriteStartedAt);
+    }
   });
 }
 
@@ -289,7 +332,8 @@ async function createStructureService(
   files: ResearchModelFiles,
   preferredDevice: ResearchParseOptions['device'],
   registerSession: OcrSessionRegistrar,
-  signal: AbortSignal
+  signal: AbortSignal,
+  onStage?: ResearchPdfStageObserver
 ): Promise<StructureRuntime> {
   const fileEntries: Array<[string, string]> = [
     ['ocr-det', files.detection], ['ocr-rec', files.recognition], ['ocr-dictionary', files.dictionary], ['layout', files.layout], ['table', files.table]
@@ -301,17 +345,23 @@ async function createStructureService(
     fileEntries.push(['formula', formulaPath], ['formula-tokenizer', tokenizerPath]);
   }
   const buffers = new Map<string, Buffer>();
-  for (const [id, file] of fileEntries) {
-    throwIfAborted(signal);
-    const bytes = await readFile(file);
-    const asset = getModelAsset(id as Parameters<typeof getModelAsset>[0]);
-    if (bytes.byteLength !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) {
-      throw new ResearchProcessError('research_model_asset_invalid');
+  let dictionary: string[] = [];
+  const modelValidationStartedAt = performance.now();
+  try {
+    for (const [id, file] of fileEntries) {
+      throwIfAborted(signal);
+      const bytes = await readFile(file);
+      const asset = getModelAsset(id as Parameters<typeof getModelAsset>[0]);
+      if (bytes.byteLength !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) {
+        throw new ResearchProcessError('research_model_asset_invalid');
+      }
+      buffers.set(id, bytes);
     }
-    buffers.set(id, bytes);
+    dictionary = buffers.get('ocr-dictionary')?.toString('utf8').trimEnd().split(/\r?\n/u) ?? [];
+    if (dictionary.length !== 6904) throw new ResearchProcessError('research_model_dictionary_invalid');
+  } finally {
+    recordPdfStage(onStage, 'model-validation', null, modelValidationStartedAt);
   }
-  const dictionary = buffers.get('ocr-dictionary')?.toString('utf8').trimEnd().split(/\r?\n/u) ?? [];
-  if (dictionary.length !== 6904) throw new ResearchProcessError('research_model_dictionary_invalid');
   // The PP-OCRv6 tiny preset has one extra CTC class for spaces beyond the locked dictionary file.
   dictionary.push(' ');
   const ocrDet = buffers.get('ocr-det');
@@ -360,22 +410,27 @@ async function createStructureService(
     }
   };
   throwIfAborted(signal);
-  const formulaOptions = hasFormula
-    ? await createFormulaOptions(buffers.get('formula'), buffers.get('formula-tokenizer'))
-    : undefined;
-  const service = await PaddleStructureService.createInstance({
-    ort: configuredOrt,
-    ocr: {
-      modelPreset: 'PP-OCRv6_tiny',
-      detection: { modelBuffer: toArrayBuffer(ocrDet) },
-      recognition: { modelBuffer: toArrayBuffer(ocrRec), charactersDictionary: dictionary }
-    },
-    layout: { modelBuffer: toArrayBuffer(layout), preset: 'PP-DocLayout-S' },
-    tableStructure: { modelBuffer: toArrayBuffer(table), preset: 'SLANet' },
-    formulaRecognition: formulaOptions,
-    options: structureRunOptions(hasFormula)
-  });
-  return { service, hasFormula, device: preferredDevice === 'coreml' && !usedCpuFallback ? 'coreml' : 'cpu' };
+  const modelInitializationStartedAt = performance.now();
+  try {
+    const formulaOptions = hasFormula
+      ? await createFormulaOptions(buffers.get('formula'), buffers.get('formula-tokenizer'))
+      : undefined;
+    const service = await PaddleStructureService.createInstance({
+      ort: configuredOrt,
+      ocr: {
+        modelPreset: 'PP-OCRv6_tiny',
+        detection: { modelBuffer: toArrayBuffer(ocrDet) },
+        recognition: { modelBuffer: toArrayBuffer(ocrRec), charactersDictionary: dictionary }
+      },
+      layout: { modelBuffer: toArrayBuffer(layout), preset: 'PP-DocLayout-S' },
+      tableStructure: { modelBuffer: toArrayBuffer(table), preset: 'SLANet' },
+      formulaRecognition: formulaOptions,
+      options: structureRunOptions(hasFormula)
+    });
+    return { service, hasFormula, device: preferredDevice === 'coreml' && !usedCpuFallback ? 'coreml' : 'cpu' };
+  } finally {
+    recordPdfStage(onStage, 'model-initialization', null, modelInitializationStartedAt);
+  }
 }
 
 async function createFormulaOptions(formula: Buffer | undefined, tokenizer: Buffer | undefined): Promise<{
@@ -640,6 +695,11 @@ function hasHighQualityNativeText(value: string): boolean {
   if (wordCount < MIN_NATIVE_TEXT_WORDS) return false;
   const printableCount = value.match(/[\p{L}\p{N}\p{P}\p{Zs}]/gu)?.length ?? 0;
   return printableCount / value.length >= MIN_NATIVE_TEXT_PRINTABLE_RATIO;
+}
+
+function recordPdfStage(observer: ResearchPdfStageObserver | undefined, stage: ResearchPdfStage, page: number | null,
+  startedAt: number): void {
+  observer?.({ stage, page, durationMs: performance.now() - startedAt });
 }
 
 function assertRasterSize(width: number | undefined, height: number | undefined): void {

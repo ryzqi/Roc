@@ -33,11 +33,67 @@ const { modelPackManifest } = await importTypeScriptModule('src/main/plugins/res
   platform: 'node',
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
-const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
+const { renderResearchPdfPage, withResearchPdf } = await importTypeScriptModule('src/main/plugins/research/pdf-render.ts', {
   platform: 'node',
-  external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr'],
+  external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
+const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
+  platform: 'node',
+  external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'],
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+
+function vectorOnlyPdf() {
+  return buildPdf([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] /Resources << >> /Contents 4 0 R >>',
+    pdfStream('0 0 72 72 re f')
+  ]);
+}
+
+function textOnlyPdf({ includeVector = false } = {}) {
+  const words = Array.from({ length: 100 }, (_, index) => `evidence${index}`);
+  const lines = Array.from({ length: 10 }, (_, index) => words.slice(index * 10, index * 10 + 10).join(' '));
+  const textStream = `BT\n/F1 8 Tf\n40 760 Td\n${lines.map((line) => `(${line}) Tj\n0 -12 Td`).join('\n')}\nET`;
+  const stream = includeVector ? `${textStream}\n0 0 72 72 re f` : textStream;
+  return buildPdf([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    pdfStream(stream),
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ]);
+}
+
+function rasterOnlyPdf() {
+  return buildPdf([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>',
+    pdfStream('q 72 0 0 72 0 0 cm /Im0 Do Q'),
+    '<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 7 >>\nstream\nFF0000>\nendstream'
+  ]);
+}
+
+function pdfStream(stream) {
+  return `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`;
+}
+
+function buildPdf(objects) {
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
 
 function zipEntries(archive) {
   const entries = [];
@@ -150,6 +206,164 @@ test('architecture repair corpus materializes reusable ZIP, TIFF, history, and f
     const cliResult = spawnSync(process.execPath, [join(fixtureRoot, 'materialize.mjs'), cliOutputRoot, '--file-counts=0'], { encoding: 'utf8' });
     assert.equal(cliResult.status, 0, cliResult.stderr);
     assert.deepEqual(JSON.parse(cliResult.stdout), { output: await realpath(cliOutputRoot), archiveCount: 15, fileCounts: [0] });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('native-text PDF stages preserve page evidence without allocating an OCR raster', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-stages-'));
+  try {
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+    const sourcePath = join(projectRoot, 'native-text.pdf');
+    const outputDir = join(projectRoot, 'parsed');
+    await writeFile(sourcePath, await readFile(join(repositoryRoot, corpus.documents.pdf.path)));
+    const stages = [];
+
+    const parsed = await parseResearchDocument({
+      projectRoot,
+      sourcePath,
+      outputDir,
+      options: { tier: 'compact', device: 'cpu', pageRange: '1' },
+      modelFiles: null,
+      modelManifest: modelPackManifest('compact'),
+      onStage: (event) => stages.push(event)
+    });
+
+    assert.equal(parsed.parseMode, 'native-text');
+    assert.ok(parsed.content.length > 0);
+    assert.deepEqual(parsed.assets.map((asset) => ({ kind: asset.kind, page: asset.page })), [{ kind: 'page', page: 1 }]);
+    const pagePng = await readFile(join(outputDir, parsed.assets[0].path));
+    assert.deepEqual(pagePng.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    assert.ok(pagePng.byteLength > 0);
+    const middle = JSON.parse(await readFile(join(outputDir, parsed.artifacts.middleJson), 'utf8'));
+    assert.equal(middle.content, parsed.content);
+    assert.equal(middle.pages[0].page, 1);
+    assert.ok(parsed.blocks.every((block) => block.locations.every((location) => location.page === 1)));
+    assert.ok(stages.some((event) => event.stage === 'native-text'));
+    assert.ok(stages.some((event) => event.stage === 'page-render'));
+    assert.ok(stages.some((event) => event.stage === 'page-png-encode'));
+    assert.ok(stages.some((event) => event.stage === 'page-write'));
+    assert.equal(stages.some((event) => event.stage === 'ocr-raster'), false);
+    assert.equal(stages.some((event) => event.stage === 'ocr-inference'), false);
+    assert.ok(stages.findIndex((event) => event.stage === 'native-text') < stages.findIndex((event) => event.stage === 'page-render'));
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('OCR raster bytes match the rendered page after its PNG evidence is written', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-raster-'));
+  try {
+    const outputDir = join(temporaryRoot, 'pages');
+    const stages = [];
+    const rendered = await withResearchPdf(rasterOnlyPdf(), async (pdf) => {
+      const page = await pdf.getPage(1);
+      try {
+        return await renderResearchPdfPage(page, 1, pdf.numPages, outputDir, 1.5, true, 1024 * 1024, {
+          includeRgbaImage: true,
+          onStage: (event) => stages.push(event)
+        });
+      } finally {
+        page.cleanup();
+      }
+    });
+
+    assert.ok(rendered.image);
+    assert.equal(rendered.image.width, rendered.width);
+    assert.equal(rendered.image.height, rendered.height);
+    assert.equal(rendered.image.data.byteLength, rendered.width * rendered.height * 4);
+    assert.ok(rendered.image.data.some((value) => value !== 0));
+    const pagePng = await readFile(rendered.path);
+    assert.deepEqual(pagePng.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    assert.ok(pagePng.byteLength > 0);
+    assert.ok(stages.findIndex((event) => event.stage === 'page-write') < stages.findIndex((event) => event.stage === 'ocr-raster'));
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('visual-only PDF retains OCR raster routing and removes output when its model pack is unavailable', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-ocr-route-'));
+  try {
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+    const sourcePath = join(projectRoot, 'vector-only.pdf');
+    const outputDir = join(projectRoot, 'parsed');
+    await writeFile(sourcePath, vectorOnlyPdf());
+    const stages = [];
+
+    await assert.rejects(parseResearchDocument({
+      projectRoot,
+      sourcePath,
+      outputDir,
+      options: { tier: 'compact', device: 'cpu', pageRange: '1' },
+      modelFiles: null,
+      modelManifest: modelPackManifest('compact'),
+      onStage: (event) => stages.push(event)
+    }), (error) => error.code === 'research_model_pack_required');
+
+    assert.ok(stages.some((event) => event.stage === 'ocr-raster'));
+    assert.equal(stages.some((event) => event.stage === 'ocr-inference'), false);
+    await assert.rejects(access(outputDir), { code: 'ENOENT' });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('text-only, scanned and mixed PDF pages retain their existing OCR routing decisions', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-routing-'));
+  try {
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+    const modelFiles = {
+      detection: join(projectRoot, 'missing', 'detection.onnx'),
+      recognition: join(projectRoot, 'missing', 'recognition.onnx'),
+      dictionary: join(projectRoot, 'missing', 'dictionary.txt'),
+      layout: join(projectRoot, 'missing', 'layout.onnx'),
+      table: join(projectRoot, 'missing', 'table.onnx')
+    };
+    const parse = (sourcePath, outputDir, onStage) => parseResearchDocument({
+      projectRoot,
+      sourcePath,
+      outputDir,
+      options: { tier: 'compact', device: 'cpu', pageRange: '1' },
+      modelFiles,
+      modelManifest: modelPackManifest('compact'),
+      onStage
+    });
+
+    const textPath = join(projectRoot, 'text-only.pdf');
+    const textOutput = join(projectRoot, 'text-output');
+    await writeFile(textPath, textOnlyPdf());
+    const textStages = [];
+    const textResult = await parse(textPath, textOutput, (event) => textStages.push(event));
+    assert.equal(textResult.parseMode, 'native-text');
+    assert.ok(textResult.content.length >= 600);
+    assert.equal(textResult.blocks[0].locations[0].page, 1);
+    const textMiddle = JSON.parse(await readFile(join(textOutput, textResult.artifacts.middleJson), 'utf8'));
+    assert.equal(textMiddle.pages[0].page, 1);
+    assert.equal(textMiddle.pages[0].text, textResult.content);
+    assert.ok(textStages.some((event) => event.stage === 'visual-inspection'));
+    assert.equal(textStages.some((event) => event.stage === 'ocr-raster'), false);
+    assert.equal(textStages.some((event) => event.stage === 'ocr-inference'), false);
+    assert.equal(textStages.some((event) => event.stage === 'model-validation'), false);
+    assert.equal(textStages.some((event) => event.stage === 'model-initialization'), false);
+
+    for (const [fixture, bytes] of [['scanned', rasterOnlyPdf()], ['mixed', textOnlyPdf({ includeVector: true })]]) {
+      const sourcePath = join(projectRoot, `${fixture}.pdf`);
+      const outputDir = join(projectRoot, `${fixture}-output`);
+      const stages = [];
+      await writeFile(sourcePath, bytes);
+      await assert.rejects(parse(sourcePath, outputDir, (event) => stages.push(event)), (error) => error.code === 'ENOENT');
+      assert.ok(stages.some((event) => event.stage === 'ocr-raster'), fixture);
+      assert.ok(stages.some((event) => event.stage === 'model-validation'), fixture);
+      assert.equal(stages.some((event) => event.stage === 'model-initialization'), false, fixture);
+      assert.equal(stages.some((event) => event.stage === 'ocr-inference'), false, fixture);
+      if (fixture === 'mixed') assert.ok(stages.some((event) => event.stage === 'visual-inspection'));
+      await assert.rejects(access(outputDir), { code: 'ENOENT' });
+    }
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
