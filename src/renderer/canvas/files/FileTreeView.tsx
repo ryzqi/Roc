@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useContentPreferences } from '../../app/use-content-preferences';
 import { fileTreeWindow } from './file-tree-window';
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import type { FileEntry } from '../../../shared/types';
@@ -23,7 +24,7 @@ import {
  *
  * **Windowing.** Beyond `VIRTUALISE_THRESHOLD` rows the list renders only the
  * visible slice (plus overscan) with spacer elements preserving scroll height.
- * Rows are a fixed 24px so the arithmetic is exact; the plan asks for
+ * Rows use 24px/28px for compact/comfortable density so the arithmetic is exact; the plan asks for
  * virtualisation past 200 rows and large repositories hit that immediately. The
  * focused row stays mounted as a separate pinned row when outside the viewport,
  * preserving roving focus without mounting every intervening row.
@@ -40,7 +41,6 @@ import {
  * `cursor: pointer`, and a directory row's disclosure is a real button.
  */
 
-const ROW_HEIGHT = 24;
 const OVERSCAN = 8;
 const VIRTUALISE_THRESHOLD = 200;
 /** Typing this long after the previous character starts a new search prefix. */
@@ -148,6 +148,8 @@ export function FileTreeView({
   revealPath = null,
   rejectedPath = null
 }: FileTreeViewProps): React.JSX.Element {
+  const { preferences } = useContentPreferences();
+  const rowHeight = preferences.density === 'comfortable' ? 28 : 24;
   const tree = useFileTree(client, { workspacePathKey, projectId });
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -188,9 +190,9 @@ export function FileTreeView({
   const activeIndex = tree.rows.findIndex((row) => row.entry.relativePath === activePath);
 
   const virtualise = tree.rows.length > VIRTUALISE_THRESHOLD;
-  const windowStart = virtualise ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN) : 0;
+  const windowStart = virtualise ? Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN) : 0;
   const windowEnd = virtualise
-    ? Math.min(tree.rows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+    ? Math.min(tree.rows.length, Math.ceil((scrollTop + viewportHeight) / rowHeight) + OVERSCAN)
     : tree.rows.length;
   const { indices, trailingRows } = fileTreeWindow(tree.rows.length, windowStart, windowEnd, activeIndex);
 
@@ -417,7 +419,7 @@ export function FileTreeView({
         {indices.map(({ index, gap }) => {
           const row = tree.rows[index]!;
           return <Fragment key={row.entry.relativePath}>
-            {gap > 0 ? <div aria-hidden="true" style={{ height: gap * ROW_HEIGHT }} /> : null}
+            {gap > 0 ? <div aria-hidden="true" style={{ height: gap * rowHeight }} /> : null}
           <TreeRow
             key={row.entry.relativePath}
             row={row}
@@ -449,7 +451,7 @@ export function FileTreeView({
         })}
 
         {trailingRows > 0 ? (
-          <div aria-hidden="true" style={{ height: trailingRows * ROW_HEIGHT }} />
+          <div aria-hidden="true" style={{ height: trailingRows * rowHeight }} />
         ) : null}
       </div>
     </div>
@@ -496,8 +498,8 @@ function TreeRow({
         onFocus={onFocused}
         className={
           selected
-            ? 'flex h-[24px] w-full items-center gap-1 bg-accent-soft pr-2 text-left'
-            : 'flex h-[24px] w-full items-center gap-1 pr-2 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
+            ? 'flex h-[var(--file-row-height)] w-full items-center gap-1 bg-accent-soft pr-2 text-left'
+            : 'flex h-[var(--file-row-height)] w-full items-center gap-1 pr-2 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
         }
         style={{ paddingLeft: 6 + row.depth * 12 }}
         title={row.entry.relativePath}

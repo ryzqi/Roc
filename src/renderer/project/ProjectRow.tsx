@@ -50,7 +50,7 @@ export function ProjectRow({
     <div
       data-testid={`portal-card-${project.id}`}
       data-archived={archived}
-      className={`${variant === 'cards' ? 'flex h-full min-w-0 flex-col items-stretch gap-2 rounded-card border-[0.5px] border-line p-3' : 'flex min-w-0 items-center gap-2 border-b-[0.5px] border-line-soft px-1 py-2'} ${archived ? 'opacity-70' : ''}`}
+      className={`${variant === 'cards' ? 'flex h-full min-w-0 flex-col items-stretch gap-2 rounded-card border-[0.5px] border-line p-3' : 'flex min-w-0 items-center gap-2 border-b-[0.5px] border-line-soft px-1 py-[var(--control-pad-y)] min-h-[var(--list-row-height)]'} ${archived ? 'opacity-70' : ''}`}
     >
       <button
         type="button"

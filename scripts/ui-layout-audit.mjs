@@ -64,7 +64,7 @@ try {
   smokeProvider = await startSmokeProvider({});
   app = await electron.launch({
     executablePath: smokeTarget.executablePath,
-    args: smokeTarget.launchArgs,
+    args: [`--user-data-dir=${dataRoot}/chromium`, ...smokeTarget.launchArgs],
     env: {
       ...process.env,
       ROC_SMOKE: '1',
@@ -153,7 +153,8 @@ try {
     }
     await capture(page, `assistant-${viewport.id}`);
 
-    await page.click('[data-testid="titlebar-settings"]');
+    // Native menu navigation remains reachable while ambient drawers cover the titlebar.
+    await navigate(page, `page=settings&project=${project.id}&view=latex&assistant=1`);
     await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 15_000 });
     await capture(page, `settings-${viewport.id}`);
     await page.keyboard.press('Escape');

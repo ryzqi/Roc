@@ -277,6 +277,8 @@
   --control-gap: 8px;
   --control-hit: 32px;
   --control-hit-min: 28px;
+  --list-row-height: 28px;
+  --file-row-height: 24px;
 
   /* Motion */
   --duration-fast: 120ms;
@@ -295,7 +297,7 @@
   --font-ui-size: 13px;
   --font-meta-size: 12px;
   --font-micro-size: 11px;
-  --font-read-size: 14px;
+  --font-read-size: 15px;
   /* The reader's 「大号」 size. A token rather than a magic number at the call
      site, so the two sizes stay a scale. */
   --font-read-large-size: 16px;
@@ -536,4 +538,15 @@
   --material-sidebar: var(--bg-soft);
   --material-list: var(--bg-soft);
   --material-detail: var(--surface);
+}
+
+/* Density changes controls/rows, while content font preferences remain independent. */
+:root[data-density='comfortable'] {
+  --control-height: 36px;
+  --control-height-compact: 32px;
+  --control-height-input: 36px;
+  --control-hit: 36px;
+  --list-row-height: 32px;
+  --file-row-height: 28px;
+  --control-pad-y: 6px;
 }

@@ -11,6 +11,9 @@ mkdirSync(artifact, { recursive: true });
 const paths = await createSmokePaths();
 seedSmokeWorkspace(paths.workspaceRoot, paths.remoteRoot);
 seedSmokeSkillSource(paths.skillSourceRoot);
+if (process.env.ROC_UI_PHASE === 'preferences') {
+  for (let i = 0; i < 240; i++) writeFileSync(join(paths.workspaceRoot, 'docs', `density-${String(i).padStart(3, '0')}.dat`), 'density fixture');
+}
 const main = join(paths.workspaceRoot, 'main.tex');
 writeFileSync(main, '\\documentclass{article}\n\\begin{document}\nOriginal\n\\end{document}\n');
 writeFileSync(join(paths.workspaceRoot, 'refs.bib'), '@article{example, title={Example}}\n');
@@ -21,7 +24,7 @@ const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'di
 let app;
 async function check(name, action) { await action(); results.push(name); console.log(`PASS ${name}`); }
 try {
-  app = await electron.launch({ executablePath: target.executablePath, args: target.launchArgs, env: {
+  app = await electron.launch({ executablePath: target.executablePath, args: [`--user-data-dir=${join(paths.dataRoot, 'chromium')}`, ...target.launchArgs], env: {
     ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: paths.dataRoot, ROC_SMOKE_API_KEY: 'smoke-test-key'
   } });
   const page = await app.firstWindow();
@@ -255,8 +258,47 @@ try {
       await page.screenshot({ path: join(artifact, 'navigation.png') });
     });
   }
+  if (process.env.ROC_UI_PHASE === 'preferences') {
+    await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+    await file('refs.bib').click();
+    await page.getByTestId('titlebar-settings').click();
+    await page.getByTestId('settings-section-app').click();
+    await check('Density and content sizes apply separately from UI typography', async () => {
+      await page.getByTestId('settings-density-comfortable').click();
+      await page.getByTestId('settings-read-size-16').click();
+      await page.getByTestId('settings-code-size-14').click();
+      const values = await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return ['--font-ui-size', '--font-read-size', '--font-code-size', '--control-height'].map(key => style.getPropertyValue(key).trim());
+      });
+      expect(values).toEqual(['13px', '16px', '14px', '36px']);
+      await expect(page.getByTestId('settings-content-preferences').getByRole('status')).toContainText('显示偏好已更新');
+      await page.screenshot({ path: join(artifact, 'preferences.png') });
+      await page.getByTestId('settings-theme-light').click();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.cm-scroller')).toHaveCSS('font-size', '14px');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    });
+    await check('Display preferences persist through reload', async () => {
+      await page.reload(); await page.getByTestId('roc-app').waitFor();
+      await expect(page.locator('html')).toHaveAttribute('data-density', 'comfortable');
+      await file('refs.bib').click();
+      await expect(page.locator('.cm-scroller')).toHaveCSS('font-size', '14px');
+      await page.getByTestId('sidebar-tab-files').click();
+      const first = page.getByTestId('file-tree-row-00-overview.txt');
+      await expect(first).toHaveCSS('height', '28px');
+      const docs = page.getByTestId('file-tree-row-docs');
+      if (await docs.getAttribute('aria-expanded') !== 'true') await docs.click();
+      await expect(page.getByTestId('file-tree')).toContainText(/2\d{2} 项/);
+      expect(await page.getByRole('treeitem').count()).toBeLessThan(100);
+      await docs.focus(); await page.keyboard.press('End');
+      await expect(page.getByTestId('file-tree-row-refs.bib')).toBeFocused();
+      await expect(page.getByTestId('file-tree-row-refs.bib')).toBeInViewport();
+      await page.screenshot({ path: join(artifact, 'light-editor.png') });
+    });
+  }
   expect(errors).toEqual([]);
-  writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
+  writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: `ROC_UI_PHASE=${process.env.ROC_UI_PHASE ?? 'unsaved'}${process.env.ROC_CLIP_AUDIT ? ` ROC_CLIP_AUDIT=${process.env.ROC_CLIP_AUDIT}` : ''} node scripts/verify-ui-ux.mjs`, cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: false, results, errors, error: String(error) }, null, 2));
   throw error;

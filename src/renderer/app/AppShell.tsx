@@ -4,6 +4,7 @@ import { canvasViewForDrawerSection, isCanvasTabId, type DrawerSectionId, type M
 import { errorMessage } from './loaded-state';
 import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
+import { useContentPreferenceSync } from './use-content-preferences';
 import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
 import { clearUiState, purgeLegacyStorage, recordProjectVisit } from './ui-state';
@@ -141,6 +142,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
   const layout = useLayoutState();
+  useContentPreferenceSync();
 
   /**
    * `?tool=files` as a one-shot request to show the 文件 tab.

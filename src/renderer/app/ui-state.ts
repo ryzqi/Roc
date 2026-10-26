@@ -16,6 +16,7 @@ export const uiStateKeys = {
   sidebarCollapsed: `${UI_STATE_PREFIX}sidebar.collapsed`,
   sidebarTab: `${UI_STATE_PREFIX}sidebar.tab`,
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
+  contentPreferences: `${UI_STATE_PREFIX}content.preferences`,
   themeOverride: `${UI_STATE_PREFIX}theme.override`,
   /** Local-only pinning. Not product data; the backend has no star field (B1). */
   projectView: `${UI_STATE_PREFIX}project.view`,
@@ -343,4 +344,32 @@ export function readRecentProjectIds(): string[] {
 }
 export function recordProjectVisit(id: string): void {
   writeRaw(uiStateKeys.recentProjectIds, JSON.stringify([id, ...readRecentProjectIds().filter(value => value !== id)].slice(0, 12)));
+}
+
+export type ContentPreferences = {
+  density: 'compact' | 'comfortable';
+  readSize: 14 | 15 | 16;
+  codeSize: 12 | 13 | 14;
+};
+export const CONTENT_PREFERENCES_CHANGED = 'roc:content-preferences-changed';
+export function readContentPreferences(): ContentPreferences {
+  const fallback: ContentPreferences = { density: 'compact', readSize: 15, codeSize: 12 };
+  const raw = readRaw(uiStateKeys.contentPreferences);
+  if (raw === null) return fallback;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object') return fallback;
+    const input = parsed as Record<string, unknown>;
+    return {
+      density: input.density === 'comfortable' ? 'comfortable' : 'compact',
+      readSize: input.readSize === 14 || input.readSize === 16 ? input.readSize : 15,
+      codeSize: input.codeSize === 13 || input.codeSize === 14 ? input.codeSize : 12
+    };
+  } catch {
+    return fallback;
+  }
+}
+export function writeContentPreferences(preferences: ContentPreferences): void {
+  writeRaw(uiStateKeys.contentPreferences, JSON.stringify(preferences));
+  window.dispatchEvent(new Event(CONTENT_PREFERENCES_CHANGED));
 }

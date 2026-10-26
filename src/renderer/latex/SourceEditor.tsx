@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
+import { useContentPreferences } from '../app/use-content-preferences';
 import { tags } from '@lezer/highlight';
 
 const sourceHighlight = HighlightStyle.define([
@@ -35,6 +36,7 @@ export function SourceEditor({ value, readOnly, onChange }: {
   readOnly: boolean;
   onChange: (value: string) => void;
 }): React.JSX.Element {
+  const { preferences } = useContentPreferences();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -73,6 +75,8 @@ export function SourceEditor({ value, readOnly, onChange }: {
   useEffect(() => {
     view.current?.dispatch({ effects: readOnlyConfig.current.reconfigure(EditorState.readOnly.of(readOnly)) });
   }, [readOnly]);
+
+  useEffect(() => { view.current?.requestMeasure(); }, [preferences.codeSize]);
 
   return <div ref={host} className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="latex-source-editor" />;
 }

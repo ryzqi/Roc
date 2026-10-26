@@ -1,3 +1,4 @@
+import { ContentPreferences } from './ContentPreferences';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { ThemeOverride } from '../../app/ui-state';
 import { themeOverrideLabel } from '../../shell/appearance';
@@ -20,7 +21,7 @@ import {
 } from '../../shared/form-ui';
 
 /**
- * 应用基础 · 任务与调度 (T8.3).
+ * 应用基础，任务与调度 (T8.3).
  *
  * 应用基础 writes two `appSettingsSchema` fields the main process actually applies —
  * `startup.openAtLogin` (through `macos-host-service`) and `globalHotkey` (`globalShortcut`) —
@@ -28,8 +29,8 @@ import {
  * succeed". 外观 is a renderer UI preference and stays in `ui-state.ts`: it is
  * applied immediately, not drafted, because it has no backend field to save.
  *
- * The legacy `fontSize` / `editorFontSize` / `autoSwitchWorkspace` have no backend field and
- * no consumer in the new shell; they are removed (F22) rather than added as dead controls.
+ * Content size and density are renderer preferences with live token consumers; they
+ * persist through ui-state independently of the backend settings draft.
  */
 
 export function AppSection({
@@ -84,7 +85,7 @@ export function AppSection({
             host === null
               ? undefined
               : `系统实际状态：${host.startup.effectiveOpenAtLogin ? '已启用' : '未启用'}${
-                  host.startup.syncError === null ? '' : ` · 同步错误：${host.startup.syncError}`
+                  host.startup.syncError === null ? '' : `，同步错误：${host.startup.syncError}`
                 }`
           }
           testId="settings-open-at-login"
@@ -148,6 +149,7 @@ export function AppSection({
           ))}
         </div>
       </div>
+      <ContentPreferences />
     </FormSection>
   );
 }
@@ -292,7 +294,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             value={
               trayStatus === null
                 ? '读取中…'
-                : `共 ${trayStatus.backgroundTasks.total} · 运行 ${trayStatus.backgroundTasks.running} · 失败 ${trayStatus.backgroundTasks.failed} · 待确认 ${trayStatus.backgroundTasks.pendingConfirmation}`
+                : `共 ${trayStatus.backgroundTasks.total}，运行 ${trayStatus.backgroundTasks.running}，失败 ${trayStatus.backgroundTasks.failed}，待确认 ${trayStatus.backgroundTasks.pendingConfirmation}`
             }
             testId="settings-background-tasks"
           />
