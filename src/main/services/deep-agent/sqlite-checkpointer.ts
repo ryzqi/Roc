@@ -319,20 +319,28 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     if (source === null) {
       return;
     }
-    const checkpoints = readSourceRows<StoredCheckpointRow>(
-      source,
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
-         checkpoint_blob, metadata_type, metadata_blob, created_at
-       FROM langgraph_checkpoints`
-    );
-    const writes = readSourceRows<StoredWriteRow>(
-      source,
-      // 升级前的备份没有 `task_path` 列（`readSourceRows` 会吞掉 SQL 错误并返回空数组，
-      // 所以直接选它会让旧备份静默恢复不了任何 writes——必须先看列在不在）。
-      `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at,
-         ${hasTableColumn(source, 'langgraph_checkpoint_writes', 'task_path') ? 'task_path' : "'' AS task_path"}
-       FROM langgraph_checkpoint_writes`
-    );
+    const hasCheckpointsTable = hasTable(source, 'langgraph_checkpoints');
+    const hasWritesTable = hasTable(source, 'langgraph_checkpoint_writes');
+    if (hasCheckpointsTable !== hasWritesTable) {
+      throw new Error('agent_checkpoint_restore_incomplete_schema');
+    }
+    const checkpoints = hasCheckpointsTable
+      ? readSourceRows<StoredCheckpointRow>(
+          source,
+          `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
+             checkpoint_blob, metadata_type, metadata_blob, created_at
+           FROM langgraph_checkpoints`
+        )
+      : [];
+    const writes = hasWritesTable
+      ? readSourceRows<StoredWriteRow>(
+          source,
+          // 升级前的备份没有 `task_path` 列；先检查列，再查询旧/新两种表形状。
+          `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at,
+             ${hasTableColumn(source, 'langgraph_checkpoint_writes', 'task_path') ? 'task_path' : "'' AS task_path"}
+           FROM langgraph_checkpoint_writes`
+        )
+      : [];
     const insertCheckpoint = this.db.prepare(
       `INSERT INTO langgraph_checkpoints (
         thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
@@ -346,49 +354,51 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
       )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-    for (const row of checkpoints) {
-      try {
-        insertCheckpoint.run(
-          row.thread_id,
-          row.checkpoint_ns,
-          row.checkpoint_id,
-          row.parent_checkpoint_id,
-          row.checkpoint_type,
-          row.checkpoint_blob,
-          row.metadata_type,
-          row.metadata_blob,
-          row.created_at
-        );
-      } catch (error) {
-        if (isDuplicateRowError(error)) {
-          continue;
+    this.db.transaction(() => {
+      for (const row of checkpoints) {
+        try {
+          insertCheckpoint.run(
+            row.thread_id,
+            row.checkpoint_ns,
+            row.checkpoint_id,
+            row.parent_checkpoint_id,
+            row.checkpoint_type,
+            row.checkpoint_blob,
+            row.metadata_type,
+            row.metadata_blob,
+            row.created_at
+          );
+        } catch (error) {
+          if (isDuplicateRowError(error)) {
+            continue;
+          }
+          throw error;
         }
-        throw error;
       }
-    }
-    for (const row of writes) {
-      try {
-        insertWrite.run(
-          row.thread_id,
-          row.checkpoint_ns,
-          row.checkpoint_id,
-          row.task_id,
-          row.idx,
-          row.channel,
-          row.value_type,
-          row.value_blob,
-          row.created_at,
-          row.task_path
-        );
-      } catch (error) {
-        // 重复行跳过；其余错误必须响：以前这里一律 `continue`，一个列对不上就会**静默**恢复出
-        // 空的写入集，看起来跟「备份里本来就没内容」一模一样。
-        if (isDuplicateRowError(error)) {
-          continue;
+      for (const row of writes) {
+        try {
+          insertWrite.run(
+            row.thread_id,
+            row.checkpoint_ns,
+            row.checkpoint_id,
+            row.task_id,
+            row.idx,
+            row.channel,
+            row.value_type,
+            row.value_blob,
+            row.created_at,
+            row.task_path
+          );
+        } catch (error) {
+          // 重复行跳过；其余错误必须响：以前这里一律 `continue`，一个列对不上就会**静默**恢复出
+          // 空的写入集，看起来跟「备份里本来就没内容」一模一样。
+          if (isDuplicateRowError(error)) {
+            continue;
+          }
+          throw error;
         }
-        throw error;
       }
-    }
+    })();
   }
 
   readPendingInterrupts(threadId: string): RocCheckpointInterrupt[] | null {
@@ -451,26 +461,32 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     // 1. 检查 checkpoint 链完整性
     const checkpoints = this.db
       .prepare(
-        `SELECT checkpoint_id, parent_checkpoint_id, created_at
+        `SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id
          FROM langgraph_checkpoints
-         WHERE thread_id = ?
-         ORDER BY created_at ASC`
+         WHERE thread_id = ?`
       )
       .all(threadId) as Array<{
+      checkpoint_ns: string;
       checkpoint_id: string;
       parent_checkpoint_id: string | null;
-      created_at: string;
     }>;
 
-    if (checkpoints.length === 0) {
-      return { valid: true, issues: [] };
+    const idsByNamespace = new Map<string, Set<string>>();
+    for (const checkpoint of checkpoints) {
+      let ids = idsByNamespace.get(checkpoint.checkpoint_ns);
+      if (ids === undefined) {
+        ids = new Set();
+        idsByNamespace.set(checkpoint.checkpoint_ns, ids);
+      }
+      ids.add(checkpoint.checkpoint_id);
     }
-
-    const idSet = new Set(checkpoints.map((c) => c.checkpoint_id));
     for (const cp of checkpoints) {
-      if (cp.parent_checkpoint_id !== null && !idSet.has(cp.parent_checkpoint_id)) {
+      if (cp.parent_checkpoint_id !== null && !idsByNamespace.get(cp.checkpoint_ns)?.has(cp.parent_checkpoint_id)) {
         issues.push(
-          `Checkpoint ${cp.checkpoint_id} 引用缺失的父节点 ${cp.parent_checkpoint_id}`
+          `Checkpoint ${JSON.stringify([cp.checkpoint_ns, cp.checkpoint_id])} 引用缺失的父节点 ${JSON.stringify([
+            cp.checkpoint_ns,
+            cp.parent_checkpoint_id
+          ])}`
         );
       }
     }
@@ -478,30 +494,22 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     // 2. 检查孤立的 writes
     const orphanedWrites = this.db
       .prepare(
-        `SELECT DISTINCT w.checkpoint_id
+        `SELECT DISTINCT w.checkpoint_ns, w.checkpoint_id
          FROM langgraph_checkpoint_writes w
          LEFT JOIN langgraph_checkpoints c
            ON w.thread_id = c.thread_id
+           AND w.checkpoint_ns = c.checkpoint_ns
            AND w.checkpoint_id = c.checkpoint_id
          WHERE w.thread_id = ? AND c.checkpoint_id IS NULL`
       )
-      .all(threadId) as Array<{ checkpoint_id: string }>;
+      .all(threadId) as Array<{ checkpoint_ns: string; checkpoint_id: string }>;
 
     if (orphanedWrites.length > 0) {
       issues.push(
-        `发现 ${orphanedWrites.length} 个孤立的 write 批次: ${orphanedWrites.map((w) => w.checkpoint_id).join(', ')}`
+        `发现 ${orphanedWrites.length} 个孤立的 write 批次: ${orphanedWrites
+          .map((write) => JSON.stringify([write.checkpoint_ns, write.checkpoint_id]))
+          .join(', ')}`
       );
-    }
-
-    // 3. 检查时间戳单调性
-    for (let i = 1; i < checkpoints.length; i++) {
-      const prev = new Date(checkpoints[i - 1].created_at).getTime();
-      const curr = new Date(checkpoints[i].created_at).getTime();
-      if (curr < prev) {
-        issues.push(
-          `Checkpoint 时间戳非单调递增: ${checkpoints[i - 1].checkpoint_id} (${prev}) -> ${checkpoints[i].checkpoint_id} (${curr})`
-        );
-      }
     }
 
     return { valid: issues.length === 0, issues };
@@ -818,11 +826,7 @@ function requireStorageKey(value: unknown, code: string): string {
 }
 
 function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
-  try {
-    return source.prepare(sql).all() as TRow[];
-  } catch {
-    return [];
-  }
+  return source.prepare(sql).all() as TRow[];
 }
 
 /**
@@ -834,14 +838,32 @@ function isDuplicateRowError(error: unknown): boolean {
     return false;
   }
   const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT');
+  return code === 'SQLITE_CONSTRAINT_PRIMARYKEY' || code === 'SQLITE_CONSTRAINT_UNIQUE';
 }
 
 /**
- * 恢复备份前先看列在不在。`readSourceRows` 会吞掉 SQL 错误并返回空数组，
- * 所以「旧备份里没有新列」必须在这里分辨，不能靠一次 SELECT 失败去表达。
- *
- * 表名只能传本文件里的字面量，不要把它接到任何用户输入上。
+ * Only checkpoint tables absent from an older backup are optional during restore.
+ * Table names passed here are internal literals, never user input.
+ */
+function hasTable(source: DatabaseConnection, table: string): boolean {
+  const objects = source
+    .prepare(
+      `SELECT type, 'main' AS schema_name FROM sqlite_master WHERE name = ?
+       UNION ALL
+       SELECT type, 'temp' AS schema_name FROM sqlite_temp_master WHERE name = ?`
+    )
+    .all(table, table) as Array<{ type: string; schema_name: string }>;
+  if (objects.length === 0) {
+    return false;
+  }
+  if (objects.length !== 1 || objects[0].type !== 'table' || objects[0].schema_name !== 'main') {
+    throw new Error('agent_checkpoint_restore_invalid_schema_object');
+  }
+  return true;
+}
+
+/**
+ * 旧写入表没有 `task_path` 时用根任务空路径补齐；表名只能传本文件里的字面量。
  */
 function hasTableColumn(source: DatabaseConnection, table: string, column: string): boolean {
   const rows = source.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;

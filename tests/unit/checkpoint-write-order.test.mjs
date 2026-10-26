@@ -67,6 +67,23 @@ async function seedCheckpoint(checkpointer) {
   return { configurable: { thread_id: threadId, checkpoint_ns: '', checkpoint_id: checkpointId } };
 }
 
+function insertCheckpointRow(db, input) {
+  db.prepare(
+    `INSERT INTO langgraph_checkpoints
+      (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id,
+       checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
+     VALUES (?, ?, ?, ?, 'json', ?, 'json', ?, ?)`
+  ).run(
+    input.threadId,
+    input.checkpointNs,
+    input.checkpointId,
+    input.parentCheckpointId ?? null,
+    Buffer.from('{}'),
+    Buffer.from('{}'),
+    input.createdAt ?? new Date().toISOString()
+  );
+}
+
 const pendingOrder = (tuple) =>
   tuple.pendingWrites.map(([taskId, channel, value]) => `${taskId}:${channel}:${value}`);
 
@@ -181,5 +198,109 @@ test('恢复旧形状的备份时补齐 task_path，且不丢写入', async () =
   assert.deepEqual(
     targetDb.prepare('SELECT task_id, task_path FROM langgraph_checkpoint_writes').all(),
     [{ task_id: 'task-a', task_path: '' }]
+  );
+});
+
+test('integrity validation keeps parent and write identities scoped to checkpoint namespace', () => {
+  const { db, checkpointer } = createCheckpointer();
+  const integrityThreadId = 'thread-integrity';
+  insertCheckpointRow(db, {
+    threadId: integrityThreadId,
+    checkpointNs: 'alpha',
+    checkpointId: 'child',
+    parentCheckpointId: 'shared-parent'
+  });
+  insertCheckpointRow(db, {
+    threadId: integrityThreadId,
+    checkpointNs: 'beta',
+    checkpointId: 'shared-parent'
+  });
+  db.prepare(
+    `INSERT INTO langgraph_checkpoint_writes
+      (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at, task_path)
+     VALUES (?, 'gamma', 'shared-parent', 'task-gamma', 0, 'channel', 'json', ?, ?, '')`
+  ).run(integrityThreadId, Buffer.from('"value"'), new Date().toISOString());
+
+  const result = checkpointer.validateCheckpointIntegrity(integrityThreadId);
+
+  assert.equal(result.valid, false);
+  assert.ok(
+    result.issues.some((issue) => issue.includes(JSON.stringify(['alpha', 'child'])) && issue.includes(JSON.stringify(['alpha', 'shared-parent'])))
+  );
+  assert.ok(result.issues.some((issue) => issue.includes(JSON.stringify(['gamma', 'shared-parent']))));
+
+  db.prepare(
+    `INSERT INTO langgraph_checkpoint_writes
+      (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at, task_path)
+     VALUES ('thread-without-checkpoints', 'delta', 'orphan-only', 'task-delta', 0, 'channel', 'json', ?, ?, '')`
+  ).run(Buffer.from('"value"'), new Date().toISOString());
+  const emptyThreadResult = checkpointer.validateCheckpointIntegrity('thread-without-checkpoints');
+  assert.equal(emptyThreadResult.valid, false);
+  assert.ok(emptyThreadResult.issues.some((issue) => issue.includes(JSON.stringify(['delta', 'orphan-only']))));
+});
+
+test('backup restore tolerates an empty legacy schema but rejects malformed source schemas', () => {
+  const { db: targetDb, checkpointer } = createCheckpointer();
+  const emptyLegacy = new Database(':memory:');
+  assert.doesNotThrow(() => checkpointer.restoreFrom(emptyLegacy));
+  assert.equal(targetDb.prepare('SELECT count(*) AS count FROM langgraph_checkpoints').get().count, 0);
+  assert.equal(targetDb.prepare('SELECT count(*) AS count FROM langgraph_checkpoint_writes').get().count, 0);
+
+  const malformedSource = new Database(':memory:');
+  malformedSource.exec('CREATE TABLE langgraph_checkpoints (thread_id TEXT)');
+  malformedSource.exec('CREATE TABLE langgraph_checkpoint_writes (thread_id TEXT)');
+  assert.throws(() => checkpointer.restoreFrom(malformedSource), /no such column/);
+
+  const partialLegacy = new Database(':memory:');
+  partialLegacy.exec('CREATE TABLE langgraph_checkpoint_writes (thread_id TEXT)');
+  assert.throws(() => checkpointer.restoreFrom(partialLegacy), /agent_checkpoint_restore_incomplete_schema/);
+
+  const viewSource = new Database(':memory:');
+  viewSource.exec(`
+    CREATE VIEW langgraph_checkpoints AS SELECT 1 AS placeholder;
+    CREATE VIEW langgraph_checkpoint_writes AS SELECT 1 AS placeholder;
+  `);
+  assert.throws(() => checkpointer.restoreFrom(viewSource), /agent_checkpoint_restore_invalid_schema_object/);
+});
+
+test('backup restore skips duplicate keys but propagates invalid row constraints', () => {
+  const { db: targetDb, checkpointer } = createCheckpointer();
+  const duplicateSource = new Database(':memory:');
+  duplicateSource.exec(`
+    CREATE TABLE langgraph_checkpoints (
+      thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, parent_checkpoint_id TEXT,
+      checkpoint_type TEXT, checkpoint_blob BLOB, metadata_type TEXT, metadata_blob BLOB, created_at TEXT
+    );
+    CREATE TABLE langgraph_checkpoint_writes (
+      thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER,
+      channel TEXT, value_type TEXT, value_blob BLOB, created_at TEXT
+    );
+    INSERT INTO langgraph_checkpoints VALUES
+      ('thread-restore', '', 'same-checkpoint', NULL, 'json', X'7B7D', 'json', X'7B7D', '2026-01-01T00:00:00.000Z'),
+      ('thread-restore', '', 'same-checkpoint', NULL, 'json', X'7B7D', 'json', X'7B7D', '2026-01-01T00:00:00.000Z');
+  `);
+
+  assert.doesNotThrow(() => checkpointer.restoreFrom(duplicateSource));
+  assert.equal(targetDb.prepare('SELECT count(*) AS count FROM langgraph_checkpoints').get().count, 1);
+
+  const invalidRowSource = new Database(':memory:');
+  invalidRowSource.exec(`
+    CREATE TABLE langgraph_checkpoints (
+      thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, parent_checkpoint_id TEXT,
+      checkpoint_type TEXT, checkpoint_blob BLOB, metadata_type TEXT, metadata_blob BLOB, created_at TEXT
+    );
+    CREATE TABLE langgraph_checkpoint_writes (
+      thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER,
+      channel TEXT, value_type TEXT, value_blob BLOB, created_at TEXT
+    );
+    INSERT INTO langgraph_checkpoints VALUES
+      ('thread-invalid', '', 'valid-before-failure', NULL, 'json', X'7B7D', 'json', X'7B7D', '2026-01-01T00:00:00.000Z'),
+      ('thread-invalid', '', 'invalid-checkpoint', NULL, NULL, X'7B7D', 'json', X'7B7D', '2026-01-01T00:00:00.000Z');
+  `);
+
+  assert.throws(() => checkpointer.restoreFrom(invalidRowSource), /NOT NULL constraint failed/);
+  assert.equal(
+    targetDb.prepare('SELECT count(*) AS count FROM langgraph_checkpoints WHERE checkpoint_id = ?').get('valid-before-failure').count,
+    0
   );
 });
