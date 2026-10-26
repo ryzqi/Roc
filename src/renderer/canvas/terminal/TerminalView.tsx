@@ -187,7 +187,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     };
 
     const resizeObserver = new ResizeObserver(() => {
-      if (disposed) {
+      if (disposed || host.clientWidth === 0 || host.clientHeight === 0) {
         return;
       }
       fitAddon.fit();

@@ -7,7 +7,6 @@ import type { Transition, Variants } from 'motion/react';
  * | surface                | preset                            |
  * |------------------------|-----------------------------------|
  * | canvas tab indicator   | `tabIndicatorTransition` 0.18     |
- * | canvas view swap       | `viewFadeVariants` 0.12           |
  * | popover / dropdown     | `popoverVariants` 0.12            |
  * | collapsible section    | `collapseVariants` 0.16 / 0.15    |
  * | modal                  | `modalPopVariants` 0.18           |
@@ -25,15 +24,6 @@ import type { Transition, Variants } from 'motion/react';
 
 /** Shared easing: a fast start with a long settle. */
 const SOFT = [0.16, 1, 0.3, 1] as const;
-
-/** Canvas view cross-fade (`AnimatePresence mode="wait"`, 120ms). */
-export const viewFadeTransition: Transition = { duration: 0.12 };
-
-export const viewFadeVariants: Variants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1 },
-  exit: { opacity: 0 }
-};
 
 /**
  * The sliding underline shared by the canvas tab strip and the sidebar's own

@@ -114,6 +114,55 @@ try {
       await expect(editor).toHaveText('layout draft');
     });
   }
+  if (process.env.ROC_UI_PHASE === 'transitions') {
+    await check('Canvas switches preserve editor and terminal instances', async () => {
+      await editor.evaluate(el => { el.dataset.instance = 'original-editor'; });
+      await page.getByTestId('canvas-tab-terminal').click();
+      const terminal = page.getByTestId('terminal-xterm');
+      await terminal.waitFor();
+      await terminal.evaluate(el => { el.dataset.instance = 'original-terminal'; });
+      await terminal.click(); await page.keyboard.type('echo ROC_KEEP_SESSION'); await page.keyboard.press('Enter');
+      await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
+      await page.getByTestId('canvas-tab-latex').click();
+      await expect(editor).toBeVisible(); await expect(editor).toHaveAttribute('data-instance', 'original-editor');
+      await expect(editor).toHaveText('keyboard save');
+      await page.getByTestId('canvas-tab-terminal').click();
+      await expect(terminal).toHaveAttribute('data-instance', 'original-terminal');
+      await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
+      await page.getByTestId('canvas-tab-latex').click();
+      await expect(editor).toBeVisible();
+    });
+    await check('Warm switches have no blank exit phase, including reduced motion', async () => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.evaluate(() => {
+        window.__canvasGaps = [];
+        const inspect = () => {
+          const active = [...document.querySelectorAll('[data-shown-view]')].filter(el => el.getBoundingClientRect().width > 0);
+          if (active.length !== 1) window.__canvasGaps.push(active.length);
+        };
+        window.__canvasObserver = new MutationObserver(inspect);
+        window.__canvasObserver.observe(document.querySelector('[data-testid="canvas"]'), { subtree: true, attributes: true, childList: true });
+      });
+      await page.getByTestId('canvas-tab-terminal').click();
+      await page.getByTestId('canvas-tab-latex').click();
+      expect(await page.evaluate(() => { window.__canvasObserver.disconnect(); return window.__canvasGaps; })).toEqual([]);
+      await expect(editor).toHaveAttribute('data-instance', 'original-editor');
+    });
+  }
+  if (process.env.ROC_UI_PHASE === 'transitions') {
+    await check('Direct project switch discards cached workspace instances', async () => {
+      const otherPath = mkdtempSync(join(tmpdir(), 'roc-ui-other-'));
+      writeFileSync(join(otherPath, 'main.tex'), 'other project content');
+      const other = await page.evaluate(workspacePath => window.roc.research.createProject({ title: 'Other', description: 'Other project', workspacePath }), otherPath);
+      expect(other.ok).toBe(true);
+      await navigate(page, `page=research&project=${other.data.id}&view=latex`);
+      await page.getByTestId('production-latex-no-file').waitFor(); await file('main.tex').click();
+      await expect(editor).toHaveText('other project content');
+      await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+      await page.getByTestId('production-latex-no-file').waitFor(); await file('main.tex').click();
+      await expect(editor).toHaveText('keyboard save');
+    });
+  }
   await check('Failed save retains draft and blocks navigation', async () => {
     await editor.fill('must survive failed write');
     renameSync(main, `${main}.bak`); mkdirSync(main);

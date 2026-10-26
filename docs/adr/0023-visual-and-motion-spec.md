@@ -37,7 +37,7 @@ Tailwind 4 `@theme` → CSS 变量 → 组件类名。组件里禁止写死 hex�
 ### 7. 动效
 
 - 引擎统一用 `motion/react`，`main.tsx` 挂 `MotionConfig reducedMotion="user"`。
-- 视图切换 120ms 淡入淡出；画布 tab 指示器共享 `layoutId` 弹簧滑动。
+- 画布模块就绪后直接切换，冷加载期间保留当前画布；已访问视图在同一项目内保留挂载、滚动与编辑状态，切换项目清空。画布 tab 指示器继续使用共享 `layoutId` 弹簧滑动。
 - 浮层有进有出：模态 180ms 缩放、抽屉 200ms 右侧滑入、遮罩淡入淡出。
 - 折叠块用原生 `<details>` + `::details-content` + `interpolate-size: allow-keywords`，两端都是真动画，语义不动（键盘、读屏、流式期间可用都来自原生元素）。
 - 不为动效保留死代码：没有调用点的工具类删掉，不养第二套词汇表。

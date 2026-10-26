@@ -684,7 +684,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                 {/* The scope is what lazily loaded views read; the routing
                     props stay on `ViewContent` (see workspace-scope.tsx). */}
                 <WorkspaceScopeProvider value={scope}>
-                  <ViewContent view={route.view} projectId={route.projectId} />
+                  <ViewContent key={route.projectId} view={route.view} projectId={route.projectId} />
                 </WorkspaceScopeProvider>
               </WorkspaceCanvas>
             </div>

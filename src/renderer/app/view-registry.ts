@@ -9,9 +9,8 @@ import type { AppViewId } from './routes';
  *   1. **Hysteresis** — when switching to a view whose chunk is not resident,
  *      the canvas must keep showing the previous view instead of blanking, then
  *      swap when the new one is ready (the legacy shell's `useShownView`).
- *   2. **Scroll reset** — the canvas is a single scroll surface,
- *      so its offset is reset when the *shown* view changes, not when the
- *      requested one does.
+ *   2. **State retention** — the canvas host reveals a resident primary view
+ *      without remounting it, preserving its own scroll and editing state.
  *
  * Both need the resolution moment to be observable from React, so the loader
  * notifies subscribers when a module resolves. View components need no extra
