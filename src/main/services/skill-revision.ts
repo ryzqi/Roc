@@ -11,6 +11,7 @@ export type SkillContentRevision = {
 };
 
 const ignored = new Set(['.git', '.DS_Store', skillStateFileName]);
+const maxSkillRevisionBytes = 64 * 1024 * 1024;
 
 export function hashSkillBytes(bytes: string | Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -34,14 +35,14 @@ export function readSkillRevision(root: string): SkillContentRevision {
       if (entry.isDirectory()) { collect(path, relative + '/', depth + 1); continue; }
       if (!entry.isFile()) throw new Error('skill_revision_file_type');
       
-      if (bytes > 32 * 1024 * 1024 || files.length >= 2000) throw new Error('skill_revision_size_limit');
+      if (bytes > maxSkillRevisionBytes || files.length >= 2000) throw new Error('skill_revision_size_limit');
       const hash = createHash('sha256');
       const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         let count: number;
         while ((count = readSync(descriptor, buffer, 0, buffer.length, null)) > 0) {
           bytes += count;
-          if (bytes > 32 * 1024 * 1024) throw new Error('skill_revision_size_limit');
+          if (bytes > maxSkillRevisionBytes) throw new Error('skill_revision_size_limit');
           hash.update(buffer.subarray(0, count));
         }
       } finally { closeSync(descriptor); }
