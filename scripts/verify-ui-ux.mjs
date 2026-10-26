@@ -158,6 +158,29 @@ try {
       await expect(page.getByTestId(`portal-card-${project.data.id}`)).toContainText('更新于');
     });
   }
+  if (process.env.ROC_UI_PHASE === 'drawers') {
+    await check('Drawer shells survive closing for complete exit', async () => {
+      await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.setMinimumSize(800, 600); w.setSize(980, 760); });
+      await navigate(page, `page=research&project=${project.data.id}&view=latex&assistant=1`);
+      await page.getByTestId('assistant-drawer-close').click();
+      await expect(page.getByTestId('assistant-drawer')).toHaveCount(1);
+      await expect(page.getByTestId('assistant-drawer')).toHaveCount(0);
+      await page.getByTestId('sidebar-drawer-close').click();
+      await expect(page.getByTestId('sidebar-drawer')).toHaveCount(1);
+      await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0);
+    });
+    await check('Drawer Escape restores opener focus and reduced motion closes', async () => {
+      const opener = page.getByTestId('titlebar-toggle-sidebar');
+      await opener.click(); await page.getByTestId('sidebar-drawer-panel').waitFor();
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0); await expect(opener).toBeFocused();
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await opener.click(); await page.getByTestId('sidebar-drawer-panel').waitFor();
+      await page.getByTestId('sidebar-drawer-close').click();
+      await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0);
+      await page.screenshot({ path: join(artifact, 'drawers-closed.png') });
+    });
+  }
   expect(errors).toEqual([]);
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: 'node scripts/verify-ui-ux.mjs', cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {

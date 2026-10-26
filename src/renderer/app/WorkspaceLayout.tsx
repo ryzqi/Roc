@@ -104,9 +104,8 @@ export function WorkspaceLayout({
         {canvas}
       </main>
 
-      {layout.sidebarAsDrawer && !layout.sidebarCollapsed && assistantAvailable ? (
         <ModalShell
-          open
+          open={layout.sidebarAsDrawer && !layout.sidebarCollapsed && assistantAvailable}
           kind="drawer"
           title="项目上下文"
           onClose={onToggleSidebar}
@@ -116,11 +115,9 @@ export function WorkspaceLayout({
         >
           {sidebar}
         </ModalShell>
-      ) : null}
 
-      {layout.assistantAsDrawer && assistantAvailable && assistantOpen && layout.preset !== 'focus' ? (
         <ModalShell
-          open
+          open={layout.assistantAsDrawer && assistantAvailable && assistantOpen && layout.preset !== 'focus'}
           kind="drawer"
           title="研究助手"
           onClose={onToggleAssistant}
@@ -130,7 +127,6 @@ export function WorkspaceLayout({
         >
           {assistant}
         </ModalShell>
-      ) : null}
     </div>
   );
 }
