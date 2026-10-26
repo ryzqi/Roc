@@ -52,7 +52,7 @@ export function LatexPanel(): React.JSX.Element {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<string | null>(null);
-  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void } | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; kind?: 'unload' } | null>(null);
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
   const [note, setNote] = useState<string | null>(null);
@@ -177,7 +177,7 @@ export function LatexPanel(): React.JSX.Element {
       if (!dirtyRef.current && !savingRef.current) return;
       event.preventDefault();
       event.returnValue = '';
-      if (!savingRef.current) setPendingLeave((current) => current ?? { proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
+      if (!savingRef.current) setPendingLeave((current) => current ?? { kind: 'unload', proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
     };
     window.addEventListener(BEFORE_NAVIGATE, guard);
     window.addEventListener('beforeunload', beforeUnload);
@@ -238,11 +238,11 @@ export function LatexPanel(): React.JSX.Element {
             setPendingLeave(null);
             action?.proceed();
           });
-        }} className={primaryButtonClass}>{save.pending ? '正在保存…' : '保存并继续'}</button>
+        }} className={primaryButtonClass}>{save.pending ? '正在保存…' : pendingLeave?.kind === 'unload' ? '保存' : '保存并继续'}</button>
       </>}
     >
-      <p className="text-ink">{selectedPath} 有未保存的修改。放弃后无法恢复这些修改。</p>
-      {save.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{save.error}</p>}
+      <p className="text-ink">{selectedPath} 有未保存的修改。放弃后无法恢复这些修改。{pendingLeave?.kind === 'unload' ? '处理后请重试关闭或刷新窗口。' : ''}</p>
+      {save.error === null ? null : <p role="alert" className="text-[var(--st-bad)]">{save.error}</p>}
     </ModalShell>
     <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
       <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">

@@ -36,7 +36,7 @@ import {
  * next row whose name starts with the typed prefix. Enter/Space are left to the
  * row button's native activation, so a keystroke cannot fire the action twice.
  *
- * Interaction rules: rows are 24px inside a 36-40px target
+ * Interaction rules: rows are 24px/28px inside a 36-40px target
  * band, selection uses `--accent-soft`, hover uses `--overlay-hover`, there is no
  * `cursor: pointer`, and a directory row's disclosure is a real button.
  */

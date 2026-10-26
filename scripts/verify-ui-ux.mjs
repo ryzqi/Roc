@@ -297,6 +297,18 @@ try {
       await page.screenshot({ path: join(artifact, 'light-editor.png') });
     });
   }
+  if (process.env.ROC_UI_PHASE === 'preferences') {
+    await check('Reset local preferences updates mounted content immediately', async () => {
+      await page.getByTestId('titlebar-settings').click();
+      await page.getByTestId('settings-section-backup').click();
+      await page.getByTestId('settings-reset-ui').click();
+      await page.getByTestId('settings-reset-confirm-confirm').click();
+      await expect(page.getByTestId('settings-reset-confirm')).toHaveCount(0);
+      await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.cm-scroller')).toHaveCSS('font-size', '12px');
+    });
+  }
   expect(errors).toEqual([]);
   writeFileSync(join(artifact, 'report.json'), JSON.stringify({ passed: true, results, errors, audits, command: `ROC_UI_PHASE=${process.env.ROC_UI_PHASE ?? 'unsaved'}${process.env.ROC_CLIP_AUDIT ? ` ROC_CLIP_AUDIT=${process.env.ROC_CLIP_AUDIT}` : ''} node scripts/verify-ui-ux.mjs`, cwd: process.cwd(), platform: process.platform, dataRoot: paths.dataRoot }, null, 2));
 } catch(error) {

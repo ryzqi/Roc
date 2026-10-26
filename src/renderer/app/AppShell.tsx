@@ -7,7 +7,7 @@ import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useContentPreferenceSync } from './use-content-preferences';
 import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
-import { clearUiState, purgeLegacyStorage, recordProjectVisit } from './ui-state';
+import { clearUiState, purgeLegacyStorage, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
@@ -739,6 +739,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
             // otherwise the DOM keeps an override whose stored value was just deleted.
             onResetUiPreferences={() => {
               clearUiState();
+              window.dispatchEvent(new Event(CONTENT_PREFERENCES_CHANGED));
               setOverride('system');
             }}
             onClose={() => navigate({ ...route, page: 'research' })}
