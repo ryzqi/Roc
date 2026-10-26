@@ -1,9 +1,7 @@
 import { memo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CodeBlock } from './code-block';
-import { MarkdownImage } from './markdown-image';
-import { MarkdownLink } from './markdown-link';
+import { markdownComponents } from './markdown-components';
 
 /**
  * Settled Markdown (T4.4), ported from `chat/markdown-view.tsx`.
@@ -16,7 +14,6 @@ import { MarkdownLink } from './markdown-link';
  * a run, and settled messages must not re-parse their Markdown each time (R8).
  */
 const remarkPlugins = [remarkGfm];
-const markdownComponents = { a: MarkdownLink, img: MarkdownImage, pre: CodeBlock };
 
 export const MarkdownView = memo(
   function MarkdownView({ text }: { text: string }): React.JSX.Element {

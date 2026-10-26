@@ -1,8 +1,6 @@
 import { memo } from 'react';
 import { Streamdown } from 'streamdown';
-import { CodeBlock } from './code-block';
-import { MarkdownImage } from './markdown-image';
-import { MarkdownLink } from './markdown-link';
+import { markdownComponents } from './markdown-components';
 import { MarkdownView } from './markdown-view';
 
 /**
@@ -10,15 +8,12 @@ import { MarkdownView } from './markdown-view';
  *
  * While a run is producing tokens, `Streamdown` renders incomplete Markdown without
  * flickering between half-parsed states; once the block settles it hands over to
- * `MarkdownView`, which is the same renderer used for history. That split is kept
- * as-is — it is the reason a streaming answer does not jump on completion.
+ * `MarkdownView`, which is also used for history. The compatibility gate records
+ * parser and scroll-anchor differences, so keep this split until they are resolved.
  *
- * Both Markdown renderers are lazily loaded by the transcript, so `streamdown` and
- * `react-markdown` stay out of the eager graph (the P3 eager-package guard enforces
- * it; they are on its deny-list).
+ * The streaming renderer remains behind the transcript's lazy boundary. See
+ * `tests/renderer/markdown-renderers.test.mjs` before changing the settled parser.
  */
-const markdownComponents = { a: MarkdownLink, img: MarkdownImage, pre: CodeBlock };
-
 export type StreamingMarkdownViewProps = {
   text: string;
   isStreaming: boolean;
