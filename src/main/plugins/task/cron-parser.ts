@@ -21,6 +21,11 @@ const fields: CronField[] = [
   { name: 'month', min: 1, max: 12 },
   { name: 'day_of_week', min: 0, max: 7 }
 ];
+const maxMinutesToScan = 366 * 24 * 60;
+// A local minute step can jump forward by the timezone offset increase at a fall-back transition.
+// Search a bounded margin, then count those jumps before accepting a candidate.
+const searchOffsetMarginMinutes = 4 * 24 * 60;
+const timezoneOffsetSampleIntervalMs = 6 * 60 * 60 * 1000;
 
 export function parseCronExpression(expression: string): ParsedCronExpression {
   const parts = expression.trim().split(/\s+/);
@@ -54,13 +59,46 @@ export function computeNextCronRunAt(expression: string, after: Date = new Date(
   const candidate = new Date(after.getTime());
   candidate.setSeconds(0, 0);
   candidate.setMinutes(candidate.getMinutes() + 1);
+  const searchHorizonMs = candidate.getTime() + (maxMinutesToScan - 1 + searchOffsetMarginMinutes) * 60_000;
+  const hours = [...parsed.hours].sort((left, right) => left - right);
+  const minutes = [...parsed.minutes].sort((left, right) => left - right);
+  const dayStart = new Date(candidate.getTime());
+  dayStart.setHours(0, 0, 0, 0);
 
-  const maxMinutesToScan = 366 * 24 * 60;
-  for (let offset = 0; offset < maxMinutesToScan; offset += 1) {
-    if (matches(parsed, candidate)) {
-      return candidate.toISOString();
+  for (let dayOffset = 0; dayStart.getTime() <= searchHorizonMs; dayOffset += 1) {
+    const base = dayOffset === 0 ? candidate : dayStart;
+    if (matchesDate(parsed, base)) {
+      for (const hour of hours) {
+        if (hour < base.getHours()) {
+          continue;
+        }
+        for (const minute of minutes) {
+          if (hour === base.getHours() && minute < base.getMinutes()) {
+            continue;
+          }
+
+          const next = new Date(base.getTime());
+          next.setHours(hour, minute, 0, 0);
+          if (
+            next >= candidate &&
+            next.getTime() <= searchHorizonMs &&
+            next.getHours() === hour &&
+            next.getMinutes() === minute &&
+            matchesDate(parsed, next)
+          ) {
+            const iterationOffset =
+              (next.getTime() - candidate.getTime()) / 60_000 - positiveTimezoneOffsetIncreaseMinutes(candidate, next);
+            if (iterationOffset >= maxMinutesToScan) {
+              throw invalidCron();
+            }
+            return next.toISOString();
+          }
+        }
+      }
     }
-    candidate.setMinutes(candidate.getMinutes() + 1);
+
+    dayStart.setDate(dayStart.getDate() + 1);
+    dayStart.setHours(0, 0, 0, 0);
   }
 
   throw invalidCron();
@@ -131,14 +169,37 @@ function parseNumber(raw: string, field: CronField, allowSevenForSunday: boolean
   return value;
 }
 
-function matches(parsed: ParsedCronExpression, date: Date): boolean {
+function matchesDate(parsed: ParsedCronExpression, date: Date): boolean {
   return (
-    parsed.minutes.has(date.getMinutes()) &&
-    parsed.hours.has(date.getHours()) &&
     parsed.daysOfMonth.has(date.getDate()) &&
     parsed.months.has(date.getMonth() + 1) &&
     parsed.daysOfWeek.has(date.getDay())
   );
+}
+
+function positiveTimezoneOffsetIncreaseMinutes(start: Date, end: Date): number {
+  // Reconstruct the original minute scan's iteration count without scanning every minute. A
+  // fall-back setter step advances UTC by one minute plus the timezone offset increase; spring
+  // gaps change the local label but do not add elapsed UTC minutes.
+  let previousOffset = start.getTimezoneOffset();
+  let increase = 0;
+  for (
+    let timestamp = start.getTime() + timezoneOffsetSampleIntervalMs;
+    timestamp < end.getTime();
+    timestamp += timezoneOffsetSampleIntervalMs
+  ) {
+    const offset = new Date(timestamp).getTimezoneOffset();
+    if (offset > previousOffset) {
+      increase += offset - previousOffset;
+    }
+    previousOffset = offset;
+  }
+
+  const finalOffset = end.getTimezoneOffset();
+  if (finalOffset > previousOffset) {
+    increase += finalOffset - previousOffset;
+  }
+  return increase;
 }
 
 function invalidCron(): RocDomainError {
