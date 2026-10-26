@@ -11,24 +11,25 @@ Roc 集成 RTK v0.48.0，用于压缩 Roc `run_shell_command` 工具的 shell �
 
 ## 资源位置
 
+Roc 当前只支持 Apple Silicon，并随包提供 arm64 binary。
+
 开发环境：
 
 ```text
-resources/rtk-binaries/darwin-x64/rtk
 resources/rtk-binaries/darwin-arm64/rtk
 ```
 
 打包环境：
 
 ```text
-<Roc resources>/rtk-binaries/darwin-<arch>/rtk
+<Roc resources>/rtk-binaries/darwin-arm64/rtk
 ```
 
-`electron-builder.yml` 通过 `extraResources` 把 `resources/rtk-binaries` 复制到应用资源目录。
+`electron-builder.yml` 通过 `extraResources` 把 `darwin-arm64` 目录复制到应用资源目录。
 
 ## 关键模块
 
-- `src/rtk-integration/binary-manager.ts`：只解析 `darwin-arm64` / `darwin-x64` 的 RTK binary 路径并检查可用性。
+- `src/rtk-integration/binary-manager.ts`：只解析 `darwin-arm64` 的 RTK binary 路径并检查可用性；其他架构返回不可用，由调用方降级。
 - `src/rtk-integration/rewriter.ts`：调用 `rtk rewrite <command>`，解析 `rtk ...` 参数。
 - `src/rtk-integration/middleware.ts`：拦截 LangChain shell 工具调用并改写命令。
 - `src/main/services/rtk-service.ts`：向 Roc 状态面板和执行链暴露 bundled RTK binary 状态。
@@ -36,27 +37,25 @@ resources/rtk-binaries/darwin-arm64/rtk
 
 ## 调试
 
-验证 Apple Silicon binary（Intel Mac 将 `darwin-arm64` 替换为 `darwin-x64`）：
+验证 Apple Silicon binary：
 
 ```bash
-rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/rtk --version
-rtk proxy /Users/Apple_501/Desktop/Roc/Roc/resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
+resources/rtk-binaries/darwin-arm64/rtk --version
+resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
 ```
 
-运行完整验证：
-
-`pnpm test` 写 `.artifacts/smoke-electron/result.json`。`smoke:mac` 写 `.artifacts/mac-package/result.json`。
+从仓库根目录运行完整验证：`pnpm test` 写 `.artifacts/smoke-electron/result.json`；`pnpm smoke:mac` 写 `.artifacts/mac-package/result.json`。
 
 ```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc typecheck
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc package:dir
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc smoke:mac
+pnpm typecheck
+pnpm test
+pnpm package:dir
+pnpm smoke:mac
 ```
 
 ## 降级行为
 
-- `RTKBinaryManager` 找不到当前 macOS 架构 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行。
+- `RTKBinaryManager` 在非 arm64 架构上不提供 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原命令执行。
 - `rtk rewrite` 返回 unsupported：Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行，并记录 `command_not_supported`。
 - RTK deny：middleware 返回错误 `ToolMessage`，不执行原命令。
 - 改写后命令执行失败：默认回退原命令；实际执行仍受 `ShellExecutionService` 的 RTK 与 shell 风险策略约束。

@@ -64,7 +64,7 @@ await research.prepareExport({
 
 结果是：**一份引用键对不上的模板会编译成功并交付出去**，错误只在 PDF 里以一个未定义引用出现。
 正文自己的 `\cite` 键由构造保证来自快照（`renderCitations()` 缺键就抛 `research_citation_key_required`），
-所以这条规则真正的目标是**模板自己的 `.tex`**。它扫描本次会参与编译的 `.tex`（入口 + 模板文件 + 生成的正交），
+所以这条规则真正的目标是**模板自己的 `.tex`**。它扫描本次会参与编译的 `.tex`（入口 + 模板文件 + 生成的正文），
 跳过注释、`verbatim` / `lstlisting` / `minted` 与 `\nocite{*}`。
 
 错误信息带定位（`<码>:<claimId>`）：科研域的错误码直接就是用户看到的信号，
@@ -140,7 +140,10 @@ await research.writeExport({ projectId, exportId, destinationPath: '/absolute/de
 ## 验证
 
 ```bash
-rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/smoke.ts --toolchain /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 --models /Users/Apple_501/Desktop/Roc/Roc/.runtime/research-models --output /Users/Apple_501/Desktop/Roc/Roc/.artifacts/research-toolchain-smoke
+node scripts/research/smoke.ts \
+  --toolchain .runtime/research-toolchain/darwin-arm64 \
+  --models .runtime/research-models \
+  --output .artifacts/research-toolchain-smoke
 ```
 
 成功后读取该输出目录的 `result.json`，其中保留 PDF、页面图和解析结果。应用端到端另见 `pnpm test` 的 `.artifacts/smoke-electron/result.json`。

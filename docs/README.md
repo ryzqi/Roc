@@ -1,6 +1,6 @@
 # 文档
 
-产品口径以仓库根 [README.md](../README.md) 和 [CONTEXT.md](../CONTEXT.md) 为准。本目录收科研合同与壳层口径。
+产品口径以仓库根 [README.md](../README.md) 和 [CONTEXT.md](../CONTEXT.md) 为准。本目录记录科研合同、壳层与随包技能等专题。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -11,8 +11,7 @@
 | [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
-| [awesome-scientific-writing-evaluation.md](awesome-scientific-writing-evaluation.md) | 外部开源清单对 Roc 的适用性评估（评估结论，非待办） |
-| [轻量依赖调研](reports/2026-10-25-lightweight-dependency-review.md) | 当前依赖成本、GitHub 替代方案、迁移边界与验证顺序（评估结论，非待办） |
+| [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
 与 [`src/renderer/shared/motion.ts`](../src/renderer/shared/motion.ts)，取舍理由见
@@ -20,9 +19,7 @@
 
 ## 测试 seam
 
-产品代码里的 `ROC_SMOKE` 分支是**原生对话框的替身**：闸门与 smoke 用 Playwright 驱动打包应用，
-点不到系统面板，也不该被系统面板拦住。它们保留是有意的——删掉会让全部闸门变红，换成测试注入则要同时改七个脚本。
-逐处列在这里以便审计：
+产品代码里的 `ROC_SMOKE` 分支为原生对话框提供确定性行为，供打包应用的 Playwright smoke 与验收脚本驱动。修改这些分支时，要同步调整使用对应对话框的验证入口。逐处列在这里以便审计：
 
 | 位置 | 行为 | 谁在用 |
 | --- | --- | --- |

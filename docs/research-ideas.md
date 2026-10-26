@@ -20,6 +20,23 @@ await research.createProject({
 工件类型必须是 `idea_canvas`。七个字段都要填写：问题、假设、新颖性、支持证据、反证、实验、风险。支持性内容必须引用本项目真实 `evidenceIds`；假设和待验证字段不得标成 supported。空的反证可以保留，但字段本身不能缺。写入使用 `expectedVersion`：首次为 `null`，之后必须匹配当前版本。
 
 ```typescript
+// 替换为当前项目中已有的真实 evidence ID。
+const evidenceId = 'evidence-id-from-this-project';
+const fields = [
+  { key: 'problem', content: '如何保持证据图可检查？', status: 'pending', evidenceIds: [] },
+  { key: 'hypothesis', content: '结构化 Canvas 能减少无依据晋升。', status: 'hypothesis', evidenceIds: [] },
+  { key: 'novelty', content: '晋升保留已批准 Canvas 版本。', status: 'pending', evidenceIds: [] },
+  { key: 'supportingEvidence', content: '既有方法缺少晋升记录。', status: 'supported', evidenceIds: [evidenceId] },
+  { key: 'counterevidence', content: '', status: 'pending', evidenceIds: [] },
+  { key: 'experiment', content: '批准后晋升并核对来源。', status: 'pending', evidenceIds: [] },
+  { key: 'risks', content: '过期 Canvas 可能重复创建项目。', status: 'pending', evidenceIds: [] }
+] satisfies Array<{
+  key: 'problem' | 'hypothesis' | 'novelty' | 'supportingEvidence' | 'counterevidence' | 'experiment' | 'risks';
+  content: string;
+  status: 'supported' | 'hypothesis' | 'pending';
+  evidenceIds: string[];
+}>;
+
 await research.saveIdeaCanvas({
   artifactId,
   expectedVersion: null,
@@ -46,7 +63,8 @@ await research.saveIdeaCanvas({
 await research.promoteIdeaCanvas({
   artifactId,
   expectedVersion: 1,
-  title: '证据图项目'
+  title: '证据图项目',
+  workspacePath: '/Users/me/research/evidence-graph-project'
 });
 ```
 
@@ -63,7 +81,7 @@ capability。深链到 `?view=ideas` 会明确失败。
 ## 验证
 
 ```bash
-rtk pnpm --dir /Users/Apple_501/Desktop/Roc/Roc test
+pnpm test
 ```
 
 成功后读取 `.artifacts/smoke-electron/result.json`。

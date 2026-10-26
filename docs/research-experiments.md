@@ -45,8 +45,8 @@ R/Julia 解释器、包元数据及锁文件摘要均纳入环境指纹，运行
 
 实验域**没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：启动 TypeScript/R/Julia 实验、读取日志与发布走上面的 capability（`research.experiment.startOwned` / `publishOwned`），由对话代理调用；深链到 `?view=experiments` 会明确失败。`inspectExperimentEnvironment` 供 Agent 与诊断，不是 UI 前置。任意本机 R/Julia 包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
 
-修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令重建两个架构、合并为通用库并更新源码/二进制哈希。应用运行时直接使用已构建资源。
+修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令只构建 arm64 库，并更新源码与二进制哈希。应用运行时直接使用已构建资源。
 
 ```bash
-rtk proxy node /Users/Apple_501/Desktop/Roc/Roc/scripts/research/build-r-process.ts
+node scripts/research/build-r-process.ts
 ```

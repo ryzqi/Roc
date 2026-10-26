@@ -104,6 +104,8 @@ IPC         roc:research:prose-lint   →  preload: research.lintManuscript
 
 ```bash
 node --test tests/unit/research-prose-projection.test.mjs   # 投影与定位规则
-rtk proxy node scripts/research/smoke.ts --toolchain .runtime/research-toolchain/darwin-$(node -p process.arch) \
-  --models .runtime/research-models --output .artifacts/research-toolchain-smoke
+node scripts/research/smoke.ts \
+  --toolchain .runtime/research-toolchain/darwin-arm64 \
+  --models .runtime/research-models \
+  --output .artifacts/research-toolchain-smoke
 ```
