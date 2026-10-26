@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { requestNavigation } from './navigation-guard';
 import type { RocClient } from '../shared/roc-client';
 import { menuIntentForPage, type MenuIntent } from '../../shared/surfaces';
 import { appRouteToSearch, normalizeAppRoute, readAppRoute, sameAppRoute, writeAppRoute, type AppRoute } from './routes';
@@ -41,8 +42,14 @@ export function useAppRoute(): AppRouteController {
   useEffect(() => {
     const onPopState = (): void => {
       const next = readAppRoute();
-      routeRef.current = next;
-      setRoute(next);
+      const previous = routeRef.current;
+      // Restore the mounted route while an unsaved-change decision is pending.
+      writeAppRoute(previous);
+      requestNavigation(next, () => {
+        writeAppRoute(next);
+        routeRef.current = next;
+        setRoute(next);
+      });
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -53,9 +60,11 @@ export function useAppRoute(): AppRouteController {
     if (sameAppRoute(routeRef.current, normalized)) {
       return;
     }
-    writeAppRoute(normalized, options?.mode ?? 'replace');
-    routeRef.current = normalized;
-    setRoute(normalized);
+    requestNavigation(normalized, () => {
+      writeAppRoute(normalized, options?.mode ?? 'replace');
+      routeRef.current = normalized;
+      setRoute(normalized);
+    });
   }, []);
 
   return { route, navigate };

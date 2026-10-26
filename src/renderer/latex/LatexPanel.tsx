@@ -3,6 +3,8 @@ import { Code2, FileText, Save } from 'lucide-react';
 import type { FilePreviewResult } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
+import { ModalShell } from '../shell/ModalShell';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime, formatBytes } from '../shared/format';
@@ -48,6 +50,10 @@ export function LatexPanel(): React.JSX.Element {
   const canWrite = scope.writable;
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void } | null>(null);
+  const savingRef = useRef(false);
+  const dirtyRef = useRef(false);
   const [note, setNote] = useState<string | null>(null);
 
   const files = useAsyncResource<{ path: string; sizeBytes: number; updatedAt: string }[]>(
@@ -113,17 +119,83 @@ export function LatexPanel(): React.JSX.Element {
     }
     loadedPathRef.current = selectedPath;
     setDraft(previewData.content);
+    setBaseline(previewData.content);
     // 不清 note/recovery：保存后会立刻 `preview.reload()`，而重读会让本效应再跑一次 —— 那会把
     // 「已保存 N 字节」与 recovery point 在不到一次 IPC 往返内抹掉（评审 P2）。清空只发生在换文件时。
   }, [isText, previewData, selectedPath]);
 
-  const onSelect = useCallback((path: string | null) => {
+  const selectFile = useCallback((path: string | null) => {
     loadedPathRef.current = null;
     setDraft(null);
+    setBaseline(null);
+    save.reset();
     setNote(null);
     setRecovery(null);
     setSelectedPath(path);
-  }, []);
+  }, [save.reset]);
+
+  const dirty = draft !== null && baseline !== null && draft !== baseline;
+  dirtyRef.current = dirty;
+
+  const requestLeave = (proceed: () => void): void => {
+    if (savingRef.current) return;
+    if (dirtyRef.current) setPendingLeave((current) => current ?? { proceed });
+    else proceed();
+  };
+  const onSelect = (path: string | null): void => {
+    if (path !== selectedPath) requestLeave(() => selectFile(path));
+  };
+
+  const saveDraft = async (): Promise<boolean> => {
+    if (!canEdit || selectedPath === null || draft === null || savingRef.current) return false;
+    savingRef.current = true;
+    const content = draft;
+    try {
+      const saved = await save.run({ path: selectedPath, content });
+      if (saved === null) return false;
+      setBaseline(content);
+      dirtyRef.current = false;
+      setNote(`已保存 ${saved.bytesWritten} 字节。`);
+      setRecovery('写入前已保留备份。');
+      files.reload();
+      return true;
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const guard = (event: Event): void => {
+      const request = event as CustomEvent<NavigationRequest>;
+      if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'latex') return;
+      if (!dirtyRef.current && !savingRef.current) return;
+      event.preventDefault();
+      if (!savingRef.current) setPendingLeave((current) => current ?? { proceed: request.detail.proceed });
+    };
+    const beforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current && !savingRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+      if (!savingRef.current) setPendingLeave((current) => current ?? { proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
+    };
+    window.addEventListener(BEFORE_NAVIGATE, guard);
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      window.removeEventListener(BEFORE_NAVIGATE, guard);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+  }, [scope.projectId]);
+
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's' && !event.isComposing) {
+        event.preventDefault();
+        if (dirtyRef.current) void saveDraft();
+      }
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  });
 
   if (scope.workspacePath === null) {
     return (
@@ -138,9 +210,39 @@ export function LatexPanel(): React.JSX.Element {
     );
   }
 
-  const dirty = canEdit && draft !== null && previewData !== null && draft !== previewData.content;
 
   return (
+    <>
+    <ModalShell
+      open={pendingLeave !== null}
+      title="保存文稿修改？"
+      testId="latex-unsaved"
+      closeOnBackdrop={false}
+      beforeClose={() => !savingRef.current}
+      onClose={() => setPendingLeave(null)}
+      widthClassName="w-[520px]"
+      footer={<>
+        <button type="button" disabled={save.pending} onClick={() => setPendingLeave(null)} className="rounded-control border border-line px-3 py-1">取消</button>
+        <button type="button" disabled={save.pending} onClick={() => {
+          const action = pendingLeave;
+          setPendingLeave(null);
+          dirtyRef.current = false;
+          setDraft(baseline);
+          action?.proceed();
+        }} className="rounded-control border border-line px-3 py-1">放弃修改</button>
+        <button type="button" disabled={save.pending || !canEdit} onClick={() => {
+          const action = pendingLeave;
+          void saveDraft().then((saved) => {
+            if (!saved) return;
+            setPendingLeave(null);
+            action?.proceed();
+          });
+        }} className={primaryButtonClass}>{save.pending ? '正在保存…' : '保存并继续'}</button>
+      </>}
+    >
+      <p className="text-ink">{selectedPath} 有未保存的修改。放弃后无法恢复这些修改。</p>
+      {save.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{save.error}</p>}
+    </ModalShell>
     <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
       <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <span className="shrink-0 text-muted text-[var(--font-meta-size)]">文稿</span>
@@ -190,7 +292,7 @@ export function LatexPanel(): React.JSX.Element {
                     {file.path}
                   </span>
                   <span className="text-subtle text-[var(--font-micro-size)]">
-                    {formatBytes(file.sizeBytes)} · {formatBeijingDateTime(file.updatedAt)}
+                    {formatBytes(file.sizeBytes)}　{formatBeijingDateTime(file.updatedAt)}
                   </span>
                 </button>
               </li>
@@ -212,14 +314,13 @@ export function LatexPanel(): React.JSX.Element {
             testId="production-latex-editor"
             action={{
               label: dirty ? '放弃修改' : '重新读取',
-              onClick: () => {
-                if (dirty) {
-                  setDraft(previewData?.content ?? null);
-                  setNote('已放弃未保存的修改。');
-                  return;
-                }
+              onClick: () => requestLeave(() => {
+                loadedPathRef.current = null;
+                setDraft(baseline);
+                dirtyRef.current = false;
                 preview.reload();
-              },
+              }),
+              disabled: save.pending,
               testId: 'production-latex-reload'
             }}
           >
@@ -245,7 +346,7 @@ export function LatexPanel(): React.JSX.Element {
                   value={draft ?? previewData.content}
                   rows={20}
                   spellCheck={false}
-                  disabled={!canEdit}
+                  disabled={!canEdit || save.pending}
                   onChange={(event) => setDraft(event.target.value)}
                   className="w-full resize-y rounded-control border border-line bg-bg px-2 py-1 font-mono text-ink text-[var(--font-code-size)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                 />
@@ -254,28 +355,14 @@ export function LatexPanel(): React.JSX.Element {
                     type="button"
                     data-testid="production-latex-save"
                     disabled={!canEdit || save.pending || !dirty || draft === null}
-                    onClick={() => {
-                      if (draft === null) {
-                        return;
-                      }
-                      void save.run({ path: selectedPath, content: draft }).then((saved) => {
-                        if (saved === null) {
-                          return;
-                        }
-                        setNote(`已保存 ${saved.bytesWritten} 字节。`);
-                        setRecovery('写入前已保留备份。');
-                        loadedPathRef.current = null;
-                        preview.reload();
-                        files.reload();
-                      });
-                    }}
+                    onClick={() => void saveDraft()}
                     className={primaryButtonClass}
                   >
                     <Save size={12} aria-hidden="true" className="mr-1 inline" />
                     保存
                   </button>
-                  <span className="text-subtle text-[var(--font-micro-size)]" data-testid="production-latex-state">
-                    {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'} · {formatBytes(previewData.sizeBytes)}
+                  <span className="text-subtle text-[var(--font-micro-size)]" role="status" data-testid="production-latex-state">
+                    {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
                   </span>
                   {canWrite ? null : (
                     <span className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="production-latex-readonly">
@@ -301,6 +388,7 @@ export function LatexPanel(): React.JSX.Element {
 
       </div>
     </div>
+    </>
   );
 }
 
