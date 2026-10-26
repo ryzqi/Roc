@@ -20,6 +20,7 @@ before(async () => {
       import { useSettingsStore } from './src/renderer/settings/settings-scope';
       import { useMcp } from './src/renderer/management/use-mcp';
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
+      import { buildTranscriptVirtuosoWindow, ChatTranscriptPanel, useTranscriptFirstItemIndex } from './src/renderer/assistant/transcript-panel';
       import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
       window.validateIndexWrite = request => researchIndexSettingsSaveSchema.parse(request);
@@ -29,8 +30,18 @@ before(async () => {
         mcp: p => useMcp(p.client, p.skills ?? []),
         mcpPair: p => { window.authorization = useMcp(p.client, null); return useMcp(p.client, p.skills ?? []); },
         chat: p => useChatSession(p),
+        transcriptIndex: p => useTranscriptFirstItemIndex(p),
         git: p => useGitWorkspace(p.client, p.workspacePath)
       };
+      window.buildTranscriptVirtuosoWindow = buildTranscriptVirtuosoWindow;
+      function TranscriptHarness(props) {
+        const scrollRef = React.useRef(null);
+        return React.createElement('div', {
+          id: 'transcript-scroll-parent', ref: scrollRef,
+          style: {height: '320px', width: '480px', overflowY: 'auto', position: 'relative', display: 'flex', flexDirection: 'column'}
+        }, React.createElement(ChatTranscriptPanel, {...props, scrollContainerRef: scrollRef}));
+      }
+      window.mountTranscript = props => flushSync(() => root.render(React.createElement(TranscriptHarness, props)));
       let serial = 0;
       window.mount = (kind, props, fresh = false) => {
         if (fresh) serial++;
@@ -47,7 +58,13 @@ before(async () => {
     `, resolveDir: process.cwd(), loader: 'js' },
     outfile: join(dir, 'hooks.js'), bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'
   });
-  writeFileSync(join(dir, 'index.html'), '<div id="root"></div><script src="hooks.js"></script>');
+  writeFileSync(join(dir, 'index.html'), `
+    <style>
+      #transcript-scroll-parent > [data-testid="assistant-transcript-host"] { height: 100%; flex: 1 1 0; min-height: 0; }
+      #transcript-scroll-parent .h-full { height: 100%; }
+    </style>
+    <div id="root"></div><script src="hooks.js"></script>
+  `);
   writeFileSync(join(dir, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron');
     app.setPath('userData', ${JSON.stringify(join(dir, 'data'))});
@@ -63,8 +80,11 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
-  await app?.close();
-  if (dir) rmSync(dir, { recursive: true, force: true });
+  try {
+    await app?.close();
+  } finally {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
   assert.deepEqual(rendererErrors, [], 'renderer must not throw during lifecycle tests');
 });
 
@@ -206,6 +226,93 @@ async function chatFixture() {
   await page.waitForFunction(() => typeof live === 'function');
 }
 
+async function persistedHistoryFixture({
+  threadId = 'history-a',
+  initialPage,
+  switchedPage,
+  reloadPages = [],
+  beforePages = [],
+  afterPages = [],
+  deferredInitial = false,
+  deferredBefore = false
+}) {
+  await page.evaluate((input) => {
+    window.historyCalls = [];
+    window.initialCounts = {};
+    window.reloadPages = input.reloadPages;
+    window.beforePages = input.beforePages;
+    window.afterPages = input.afterPages;
+    window.initialPageDeferred = input.deferredInitial ? deferred() : null;
+    window.beforePageDeferred = input.deferredBefore ? deferred() : null;
+    window.beforeDeferredUsed = false;
+    window.live = null;
+    window.client = {api: {
+      window: {onHidden: () => () => {}},
+      chat: {
+        onRunEvent: cb => { live = cb; return () => { live = null; }; },
+        getActiveRun: async () => ok(null),
+        getRunEvents: async () => ok({events: []})
+      },
+      tasks: {
+        getThreadMessages: async request => {
+          historyCalls.push(structuredClone(request));
+          if (request.cursor === null) {
+            const count = initialCounts[request.threadId] ?? 0;
+            initialCounts[request.threadId] = count + 1;
+            if (count === 0 && request.threadId === input.threadId && initialPageDeferred !== null) {
+              return initialPageDeferred.promise;
+            }
+            if (count === 0) {
+              return ok(request.threadId === input.threadId ? input.initialPage : input.switchedPage);
+            }
+            return ok(reloadPages.shift() ?? input.initialPage);
+          }
+          if (request.cursor.direction === 'before') {
+            if (!beforeDeferredUsed && beforePageDeferred !== null) {
+              beforeDeferredUsed = true;
+              return beforePageDeferred.promise;
+            }
+            return ok(beforePages.shift());
+          }
+          return ok(afterPages.shift());
+        }
+      }
+    }};
+    window.props = {client, threadId: input.threadId, projectId: 'p', workspacePath: '/p', onThreadId: () => {}};
+    mount('chat', props, true);
+  }, {threadId, initialPage, switchedPage, reloadPages, beforePages, afterPages, deferredInitial, deferredBefore});
+  await page.waitForFunction(() => typeof live === 'function' && historyCalls.length > 0);
+  if (!deferredInitial) {
+    await page.waitForFunction(() => latest.history.loadingInitial === false);
+  }
+}
+
+function persistedEvent(threadId, sequence) {
+  return {
+    id: threadId + '-event-' + sequence,
+    threadId,
+    runId: 'run-' + threadId,
+    createdAt: '2026-10-27T00:00:00.000Z',
+    sequence,
+    type: 'message',
+    payload: {role: 'user', content: 'message ' + sequence}
+  };
+}
+
+function persistedPage(threadId, first, last, options = {}) {
+  const items = [];
+  for (let sequence = first; sequence <= last; sequence += 1) {
+    items.push(persistedEvent(threadId, sequence));
+  }
+  return {
+    items,
+    hasMoreBefore: options.hasMoreBefore ?? false,
+    hasMoreAfter: options.hasMoreAfter ?? false,
+    oldestSequence: items[0]?.sequence ?? null,
+    newestSequence: items.at(-1)?.sequence ?? null
+  };
+}
+
 test('switching conversations ignores old active-run response and unrelated live events', async () => {
   await chatFixture();
   await page.evaluate(() => { mount('chat', {...props, threadId: 'b'}); activeA.resolve(ok({runId: 'ra'})); });
@@ -213,6 +320,274 @@ test('switching conversations ignores old active-run response and unrelated live
   assert.equal(await page.evaluate(() => replayCalls.length), 0);
   await page.evaluate(() => live({type:'run_started', runId:'ra', threadId:'a', providerId:'p', modelId:'m', mode:'chat', createdAt:'now'}));
   assert.equal(await page.evaluate(() => latest.runState.status), 'idle');
+});
+
+test('persisted history reconciles an event that arrives during initial load and retains the newest window', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 1, 400),
+    afterPages: [
+      persistedPage('history-a', 400, 450, {hasMoreAfter: true}),
+      persistedPage('history-a', 450, 500)
+    ],
+    deferredInitial: true
+  });
+  await page.evaluate(() => live({
+    type: 'run_started', runId: 'run-history-a', threadId: 'history-a',
+    providerId: 'p', modelId: 'm', mode: 'chat', createdAt: 'now'
+  }));
+  await page.evaluate((initialPage) => initialPageDeferred.resolve(ok(initialPage)), persistedPage('history-a', 1, 400));
+  await page.waitForFunction(() => historyCalls.length === 3 && latest.history.events.length === 400 && latest.history.events.at(-1).sequence === 500);
+  assert.deepEqual(await page.evaluate(() => ({
+    cursors: historyCalls.slice(1).map(request => request.cursor),
+    first: latest.history.events[0].sequence,
+    last: latest.history.events.at(-1).sequence,
+    count: latest.history.events.length,
+    hasMoreBefore: latest.history.hasMoreBefore,
+    tailTrimmed: latest.history.tailTrimmed,
+    trimRevision: latest.history.trimRevision
+  })), {
+    cursors: [
+      {direction: 'after', sequence: 400},
+      {direction: 'after', sequence: 450}
+    ],
+    first: 101,
+    last: 500,
+    count: 400,
+    hasMoreBefore: true,
+    tailTrimmed: false,
+    trimRevision: 2
+  });
+});
+
+test('older-page prepend trims the tail, and reloadLatest starts a new window', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 101, 500, {hasMoreBefore: true}),
+    beforePages: [persistedPage('history-a', 1, 100)],
+    reloadPages: [persistedPage('history-a', 401, 500, {hasMoreBefore: true})]
+  });
+  await page.evaluate(() => latest.history.loadOlder());
+  await page.waitForFunction(() => latest.history.prependRevision === 1 && latest.history.tailTrimmed);
+  assert.deepEqual(await page.evaluate(() => ({
+    cursor: historyCalls[1].cursor,
+    first: latest.history.events[0].sequence,
+    last: latest.history.events.at(-1).sequence,
+    count: latest.history.events.length,
+    hasMoreBefore: latest.history.hasMoreBefore,
+    prependRevision: latest.history.prependRevision
+  })), {
+    cursor: {direction: 'before', sequence: 101},
+    first: 1,
+    last: 400,
+    count: 400,
+    hasMoreBefore: false,
+    prependRevision: 1
+  });
+  await page.evaluate(() => latest.history.reloadLatest());
+  await page.waitForFunction(() => latest.history.windowEpoch === 1 && !latest.history.tailTrimmed);
+  assert.deepEqual(await page.evaluate(() => ({
+    cursor: historyCalls[2].cursor,
+    first: latest.history.events[0].sequence,
+    last: latest.history.events.at(-1).sequence,
+    count: latest.history.events.length,
+    hasMoreBefore: latest.history.hasMoreBefore
+  })), {
+    cursor: null,
+    first: 401,
+    last: 500,
+    count: 100,
+    hasMoreBefore: true
+  });
+});
+
+test('stale older-page response cannot replace the selected thread history', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 201, 300, {hasMoreBefore: true}),
+    switchedPage: persistedPage('history-b', 1001, 1001),
+    deferredBefore: true
+  });
+  await page.evaluate(() => { window.olderLoad = latest.history.loadOlder(); });
+  await page.waitForFunction(() => historyCalls.length === 2 && latest.history.loadingOlder);
+  await page.evaluate(() => mount('chat', {...props, threadId: 'history-b'}));
+  await page.waitForFunction(() => latest.history.threadId === 'history-b' && !latest.history.loadingInitial);
+  await page.evaluate((beforePage) => beforePageDeferred.resolve(ok(beforePage)), persistedPage('history-a', 101, 200));
+  await page.evaluate(async () => await olderLoad);
+  assert.deepEqual(await page.evaluate(() => ({
+    threadId: latest.history.threadId,
+    ids: latest.history.events.map(event => event.id),
+    loadingOlder: latest.history.loadingOlder,
+    error: latest.history.error
+  })), {
+    threadId: 'history-b',
+    ids: ['history-b-event-1001'],
+    loadingOlder: false,
+    error: null
+  });
+});
+
+test('stale initial history response cannot replace the selected thread', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 1, 2),
+    switchedPage: persistedPage('history-b', 1001, 1001),
+    deferredInitial: true
+  });
+  await page.evaluate(() => mount('chat', {...props, threadId: 'history-b'}));
+  await page.waitForFunction(() => latest.history.threadId === 'history-b' && !latest.history.loadingInitial);
+  await page.evaluate(async (initialPage) => {
+    initialPageDeferred.resolve(ok(initialPage));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }, persistedPage('history-a', 1, 2));
+  assert.deepEqual(await page.evaluate(() => ({
+    threadId: latest.history.threadId,
+    eventIds: latest.history.events.map(event => event.id),
+    loadingInitial: latest.history.loadingInitial,
+    error: latest.history.error
+  })), {
+    threadId: 'history-b',
+    eventIds: ['history-b-event-1001'],
+    loadingInitial: false,
+    error: null
+  });
+});
+
+test('transcript virtual index preserves the visible key across prepend, trim, and reload', async () => {
+  const original = Array.from({length: 400}, (_, index) => 'event-' + (101 + index));
+  const prepended = Array.from({length: 400}, (_, index) => 'event-' + (1 + index));
+  await page.evaluate((messageKeys) => mount('transcriptIndex', {
+    threadId: 'history-a', messageCount: messageKeys.length, messageKeys,
+    prependRevision: 0, trimRevision: 0, windowEpoch: 0
+  }, true), original);
+  const originalIndex = await page.evaluate(() => latest);
+  await page.evaluate((messageKeys) => mount('transcriptIndex', {
+    threadId: 'history-a', messageCount: messageKeys.length, messageKeys,
+    prependRevision: 1, trimRevision: 0, windowEpoch: 0
+  }), prepended);
+  const prependedIndex = await page.evaluate(() => latest);
+  assert.equal(prependedIndex + 100, originalIndex);
+
+  await page.evaluate((messageKeys) => mount('transcriptIndex', {
+    threadId: 'history-a', messageCount: messageKeys.length, messageKeys,
+    prependRevision: 1, trimRevision: 0, windowEpoch: 1
+  }), Array.from({length: 100}, (_, index) => 'event-' + (401 + index)));
+  assert.equal(await page.evaluate(() => latest), 1_000_000);
+  assert.deepEqual(await page.evaluate(() => buildTranscriptVirtuosoWindow({firstItemIndex: latest, messageCount: 100})), {
+    firstItemIndex: 1_000_000,
+    initialTopMostItemIndex: 1_000_099
+  });
+
+  const recentStart = Array.from({length: 400}, (_, index) => 'event-' + (1 + index));
+  const recentEnd = Array.from({length: 400}, (_, index) => 'event-' + (51 + index));
+  await page.evaluate((messageKeys) => mount('transcriptIndex', {
+    threadId: 'history-trim', messageCount: messageKeys.length, messageKeys,
+    prependRevision: 0, trimRevision: 0, windowEpoch: 0
+  }, true), recentStart);
+  const beforeTrimIndex = await page.evaluate(() => latest);
+  await page.evaluate((messageKeys) => mount('transcriptIndex', {
+    threadId: 'history-trim', messageCount: messageKeys.length, messageKeys,
+    prependRevision: 0, trimRevision: 1, windowEpoch: 0
+  }), recentEnd);
+  assert.equal(await page.evaluate(() => latest), beforeTrimIndex + 50);
+});
+
+test('rendered transcript keeps the same visible message anchored across prepend and retention trim', async () => {
+  const initial = Array.from({length: 80}, (_, index) => ({
+    key: `event-${index}`,
+    source: 'persisted',
+    role: 'user',
+    content: `Message ${index}`,
+    reasoning: null,
+    blocks: [],
+    interrupts: [],
+    isStreaming: false
+  }));
+  const prepended = Array.from({length: 20}, (_, index) => ({
+    key: `event-${index - 20}`,
+    source: 'persisted',
+    role: 'user',
+    content: `Message ${index - 20}`,
+    reasoning: null,
+    blocks: [],
+    interrupts: [],
+    isStreaming: false
+  }));
+  const props = {
+    threadId: 'history-anchor',
+    messages: initial,
+    prependRevision: 0,
+    trimRevision: 0,
+    windowEpoch: 0,
+    tailTrimmed: false,
+    hasMoreBefore: true,
+    loadingOlder: false
+  };
+  await page.evaluate(props => mountTranscript({...props, loadOlder: async () => {}, onJumpToLatest: async () => {}}), props);
+  const visibleAnchorHandle = await page.waitForFunction(() => {
+    const parent = document.getElementById('transcript-scroll-parent');
+    if (!parent) return null;
+    const parentRect = parent.getBoundingClientRect();
+    const anchor = Array.from(document.querySelectorAll('[data-testid="assistant-message-user"]')).find(element => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > parentRect.top && rect.top < parentRect.bottom;
+    });
+    if (!anchor) return null;
+    return {
+      content: anchor.textContent,
+      top: anchor.getBoundingClientRect().top - parentRect.top
+    };
+  });
+  const visibleAnchor = await visibleAnchorHandle.jsonValue();
+  const readAnchorTop = async () => {
+    const handle = await page.waitForFunction(content => {
+      const parent = document.getElementById('transcript-scroll-parent');
+      const anchor = Array.from(document.querySelectorAll('[data-testid="assistant-message-user"]'))
+        .find(element => element.textContent === content);
+      if (!parent || !anchor) return null;
+      const parentRect = parent.getBoundingClientRect();
+      const rect = anchor.getBoundingClientRect();
+      if (rect.bottom <= parentRect.top || rect.top >= parentRect.bottom) return null;
+      return rect.top - parentRect.top;
+    }, visibleAnchor.content);
+    return handle.jsonValue();
+  };
+  const beforeTop = visibleAnchor.top;
+
+  await page.evaluate(({props, prepended}) => {
+    mountTranscript({
+      ...props,
+      messages: [...prepended, ...props.messages],
+      prependRevision: 1,
+      loadOlder: async () => {},
+      onJumpToLatest: async () => {}
+    });
+  }, {props, prepended});
+  const afterTop = await readAnchorTop();
+  assert.ok(Math.abs(afterTop - beforeTop) <= 2, `visible message moved from ${beforeTop}px to ${afterTop}px`);
+
+  const retainedWindow = [
+    ...prepended.slice(10),
+    ...initial,
+    ...Array.from({length: 10}, (_, index) => ({
+      key: `event-${80 + index}`,
+      source: 'persisted',
+      role: 'user',
+      content: `Message ${80 + index}`,
+      reasoning: null,
+      blocks: [],
+      interrupts: [],
+      isStreaming: false
+    }))
+  ];
+  await page.evaluate(({props, retainedWindow}) => {
+    mountTranscript({
+      ...props,
+      messages: retainedWindow,
+      prependRevision: 1,
+      trimRevision: 1,
+      loadOlder: async () => {},
+      onJumpToLatest: async () => {}
+    });
+  }, {props, retainedWindow});
+  const afterTrimTop = await readAnchorTop();
+  assert.ok(Math.abs(afterTrimTop - afterTop) <= 2, `visible message moved from ${afterTop}px to ${afterTrimTop}px after trim`);
 });
 
 test('switching conversations ignores replay already in flight', async () => {
