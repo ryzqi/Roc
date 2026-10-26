@@ -18,6 +18,7 @@ import { runResearchJob, researchJobError, type ResearchJobPaths } from './resea
 import { renderResearchPdfPage, researchPdfPageHasVisualContent, withResearchPdf } from './pdf-render';
 import { researchModelLock, getModelAsset, modelPackManifest } from './model-catalog';
 import type { ResearchModelFiles } from './model-store';
+import { withOcrSessionScope, type OcrSessionRegistrar } from './ocr-session-scope';
 
 const MAX_SOURCE_BYTES = 512 * 1024 * 1024;
 const MAX_HTML_BYTES = 64 * 1024 * 1024;
@@ -80,17 +81,24 @@ export async function parseResearchDocument(input: ParserInput): Promise<ParseDo
     maxSourceBytes,
     sourceExtensions: SUPPORTED_EXTENSIONS,
     timeoutMs: input.timeoutMs ?? 600_000,
-    signal: input.signal
-  }, async (job) => {
-    throwIfAborted(input.signal);
-    if (extension === '.pdf') return await parsePdf(job, input, options);
+    signal: input.signal,
+    awaitOperationCleanupOnAbort: true
+  }, async (job, signal) => await withOcrSessionScope(async (registerSession) => {
+    throwIfAborted(signal);
+    if (extension === '.pdf') return await parsePdf(job, input, options, registerSession, signal);
     if (extension === '.html' || extension === '.htm') return await parseHtml(job, options);
-    return await parseImage(job, input, options);
-  });
+    return await parseImage(job, input, options, registerSession, signal);
+  }));
   return researchParsedDocumentSchema.parse(result);
 }
 
-async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: ResearchParseOptions): Promise<ParseResult> {
+async function parsePdf(
+  job: ResearchJobPaths,
+  input: ParserInput,
+  options: ResearchParseOptions,
+  registerSession: OcrSessionRegistrar,
+  signal: AbortSignal
+): Promise<ParseResult> {
   const bytes = await readFile(job.source);
   return await withResearchPdf(bytes, async (pdf) => {
     const pages = parsePageRange(options.pageRange, pdf.numPages);
@@ -104,7 +112,7 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
     let usedOcr = false;
     let actualDevice: 'coreml' | 'cpu' = 'cpu';
     for (const pageNumber of pages) {
-      throwIfAborted(input.signal);
+      throwIfAborted(signal);
       const page = await pdf.getPage(pageNumber);
       try {
         const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
@@ -123,8 +131,10 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
           continue;
         }
         if (input.modelFiles === null) researchJobError('research_model_pack_required');
-        service ??= await createStructureService(input.modelFiles, options.device);
+        service ??= await createStructureService(input.modelFiles, options.device, registerSession, signal);
+        throwIfAborted(signal);
         const inference = await service.service.run(rendered.image, structureRunOptions(service.hasFormula));
+        throwIfAborted(signal);
         usedOcr = true;
         actualDevice = service.device;
         const pageRegions: unknown[] = [];
@@ -193,25 +203,33 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
   });
 }
 
-async function parseImage(job: ResearchJobPaths, input: ParserInput, options: ResearchParseOptions): Promise<ParseResult> {
+async function parseImage(
+  job: ResearchJobPaths,
+  input: ParserInput,
+  options: ResearchParseOptions,
+  registerSession: OcrSessionRegistrar,
+  signal: AbortSignal
+): Promise<ParseResult> {
   if (input.modelFiles === null) researchJobError('research_model_pack_required');
   const rasterDocument = await decodeRasterDocument(job.source);
+  throwIfAborted(signal);
   const pages = parsePageRange(options.pageRange, rasterDocument.pageCount);
-  const service = await createStructureService(input.modelFiles, options.device);
+  const service = await createStructureService(input.modelFiles, options.device, registerSession, signal);
   const blocks: ParseBlock[] = [];
   const assets: ParseAsset[] = [];
   const assetBudget = { totalBytes: 0 };
   const pageResults: Array<{ page: number; text: string; regions: unknown[] }> = [];
   for (const pageNumber of pages) {
-    throwIfAborted(input.signal);
+    throwIfAborted(signal);
     const raster = await rasterDocument.page(pageNumber);
     const pageImagePath = `pages/page-${pageNumber}.png`;
     const pagePng = await imagePng(raster);
     accountAsset(assets, assetBudget, pagePng.byteLength);
     await writePng(job.output, pageImagePath, pagePng);
     assets.push({ path: pageImagePath, kind: 'page', page: pageNumber });
+    throwIfAborted(signal);
     const inference = await service.service.run(raster, structureRunOptions(service.hasFormula));
-    throwIfAborted(input.signal);
+    throwIfAborted(signal);
     const regions: unknown[] = [];
     for (const [index, region] of inference.regions.entries()) {
       const regionType = normalizeRegionType(region.type);
@@ -267,7 +285,12 @@ async function parseHtml(job: ResearchJobPaths, options: ResearchParseOptions): 
 
 type StructureRuntime = { service: PaddleStructureService; device: 'coreml' | 'cpu'; hasFormula: boolean };
 
-async function createStructureService(files: ResearchModelFiles, preferredDevice: ResearchParseOptions['device']): Promise<StructureRuntime> {
+async function createStructureService(
+  files: ResearchModelFiles,
+  preferredDevice: ResearchParseOptions['device'],
+  registerSession: OcrSessionRegistrar,
+  signal: AbortSignal
+): Promise<StructureRuntime> {
   const fileEntries: Array<[string, string]> = [
     ['ocr-det', files.detection], ['ocr-rec', files.recognition], ['ocr-dictionary', files.dictionary], ['layout', files.layout], ['table', files.table]
   ];
@@ -279,6 +302,7 @@ async function createStructureService(files: ResearchModelFiles, preferredDevice
   }
   const buffers = new Map<string, Buffer>();
   for (const [id, file] of fileEntries) {
+    throwIfAborted(signal);
     const bytes = await readFile(file);
     const asset = getModelAsset(id as Parameters<typeof getModelAsset>[0]);
     if (bytes.byteLength !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) {
@@ -302,15 +326,24 @@ async function createStructureService(files: ResearchModelFiles, preferredDevice
       create: async (modelBuffer) => {
         let session: Awaited<ReturnType<typeof ort.InferenceSession.create>> | undefined;
         const sessionOptions = { intraOpNumThreads: 2, interOpNumThreads: 1 };
+        throwIfAborted(signal);
         if (preferredDevice === 'coreml') {
           try {
             session = await ort.InferenceSession.create(modelBuffer, { ...sessionOptions, executionProviders: ['coreml', 'cpu'] });
           } catch {
             usedCpuFallback = true;
+            throwIfAborted(signal);
           }
         }
         session ??= await ort.InferenceSession.create(modelBuffer, { ...sessionOptions, executionProviders: ['cpu'] });
         const nativeSession = session;
+        let releasePromise: Promise<void> | undefined;
+        const release = (): Promise<void> => {
+          releasePromise ??= nativeSession.release();
+          return releasePromise;
+        };
+        registerSession({ release });
+        throwIfAborted(signal);
         const nativeInputMetadata = nativeSession.inputMetadata;
         const inputMetadataOptions = nativeInputMetadata?.map((metadata) => {
           if ('shape' in metadata) return { shape: metadata.shape };
@@ -321,11 +354,12 @@ async function createStructureService(files: ResearchModelFiles, preferredDevice
           ...(inputMetadataOptions === undefined ? {} : { inputMetadata: inputMetadataOptions }),
           outputNames: nativeSession.outputNames,
           run: (feeds: Parameters<typeof nativeSession.run>[0]) => nativeSession.run(feeds),
-          release: () => nativeSession.release()
+          release
         };
       }
     }
   };
+  throwIfAborted(signal);
   const formulaOptions = hasFormula
     ? await createFormulaOptions(buffers.get('formula'), buffers.get('formula-tokenizer'))
     : undefined;

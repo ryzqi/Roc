@@ -106,8 +106,12 @@ export async function prepareResearchJob(input: {
 }
 
 export async function runResearchJob<T extends object>(
-  input: Parameters<typeof prepareResearchJob>[0] & { signal?: AbortSignal; timeoutMs?: number },
-  operation: (job: ResearchJobPaths) => Promise<T>
+  input: Parameters<typeof prepareResearchJob>[0] & {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    awaitOperationCleanupOnAbort?: boolean;
+  },
+  operation: (job: ResearchJobPaths, signal: AbortSignal) => Promise<T>
 ): Promise<T & { sourceHash: string }> {
   if (input.signal?.aborted) {
     researchJobError('research_process_cancelled');
@@ -128,12 +132,14 @@ export async function runResearchJob<T extends object>(
   input.signal?.addEventListener('abort', abort, { once: true });
   const timeout = setTimeout(abort, timeoutMs);
   timeout.unref();
+  let operationPromise: Promise<T> | undefined;
   try {
     if (input.signal?.aborted || controller.signal.aborted) {
       researchJobError('research_process_cancelled');
     }
+    operationPromise = Promise.resolve(operation(job, controller.signal));
     const result = await Promise.race([
-      operation(job),
+      operationPromise,
       new Promise<never>((_, reject) => {
         const fail = (): void => {
           reject(new ResearchProcessError(input.signal?.aborted ? 'research_process_cancelled' : 'research_process_timeout'));
@@ -150,10 +156,86 @@ export async function runResearchJob<T extends object>(
     }
     return { ...result, sourceHash: job.sourceHash };
   } catch (error) {
-    await rm(job.output, { recursive: true, force: true });
-    throw error;
+    let failure = error;
+    if (input.awaitOperationCleanupOnAbort === true && controller.signal.aborted && operationPromise !== undefined) {
+      try {
+        await operationPromise;
+      } catch (operationError) {
+        failure = preserveAbortFailure(error, operationError);
+      }
+    }
+    try {
+      await rm(job.output, { recursive: true, force: true });
+    } catch (cleanupError) {
+      failure = attachResearchJobErrorDetails(failure, { outputCleanupErrors: [cleanupError] }, 'research_job_output_cleanup_failed');
+    }
+    throw failure;
   } finally {
     clearTimeout(timeout);
     input.signal?.removeEventListener('abort', abort);
   }
+}
+
+function preserveAbortFailure(primaryError: unknown, operationError: unknown): unknown {
+  if (operationError === primaryError) return primaryError;
+  const operationCode = errorCode(operationError);
+  const isAbortContinuation = operationCode === 'research_process_cancelled' || operationCode === 'research_cancelled';
+  const nestedCleanupErrors = operationError instanceof Error
+    ? (operationError as Error & { cleanupErrors?: unknown[] }).cleanupErrors ?? []
+    : [];
+  const isCleanupAggregate = operationError instanceof AggregateError && operationError.name === 'OcrSessionCleanupError';
+  const isCleanupAfterParseAggregate = operationError instanceof AggregateError && operationError.name === 'OcrSessionCleanupAfterParseError';
+  const cleanupErrors = isCleanupAggregate ? operationError.errors : nestedCleanupErrors;
+  const parseCause = isCleanupAfterParseAggregate ? operationError.cause : undefined;
+  const parseCauseCode = errorCode(parseCause);
+  const isParseCauseAbort = parseCauseCode === 'research_process_cancelled' || parseCauseCode === 'research_cancelled';
+  const operationErrors = isAbortContinuation || isCleanupAggregate || isParseCauseAbort
+    ? []
+    : isCleanupAfterParseAggregate && parseCause !== undefined
+      ? [parseCause]
+      : [operationError];
+  if (cleanupErrors.length === 0 && operationErrors.length === 0) return primaryError;
+
+  return attachResearchJobErrorDetails(primaryError, { cleanupErrors, operationErrors }, 'research_job_abort_cleanup_failed');
+}
+
+function attachResearchJobErrorDetails(
+  primaryError: unknown,
+  details: { cleanupErrors?: unknown[]; operationErrors?: unknown[]; outputCleanupErrors?: unknown[] },
+  aggregateMessage: string
+): unknown {
+  const entries = Object.entries(details).filter((entry): entry is [keyof typeof details, unknown[]] =>
+    Array.isArray(entry[1]) && entry[1].length > 0
+  );
+  if (entries.length === 0) return primaryError;
+
+  if (primaryError instanceof Error) {
+    try {
+      for (const [key, errors] of entries) {
+        const previous = (primaryError as Error & Record<string, unknown[]>)[key] ?? [];
+        Object.defineProperty(primaryError, key, { value: [...previous, ...errors], enumerable: true, configurable: true });
+      }
+      return primaryError;
+    } catch {
+      // Use an aggregate only when the original failure cannot accept diagnostic fields.
+    }
+  }
+
+  const secondaryErrors = entries.flatMap(([, errors]) => errors);
+  const aggregate = new AggregateError(
+    [primaryError, ...secondaryErrors],
+    aggregateMessage,
+    { cause: primaryError }
+  );
+  const primaryCode = errorCode(primaryError);
+  if (primaryCode !== null) Object.defineProperty(aggregate, 'code', { value: primaryCode, enumerable: true });
+  for (const [key, errors] of entries) {
+    Object.defineProperty(aggregate, key, { value: errors, enumerable: true, configurable: true });
+  }
+  return aggregate;
+}
+
+function errorCode(error: unknown): string | null {
+  if (!(error instanceof Error) || !('code' in error) || typeof error.code !== 'string') return null;
+  return error.code;
 }

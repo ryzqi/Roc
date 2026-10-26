@@ -5,6 +5,7 @@ import { extractResearchTemplate } from './template-archive';
 import { normalizeResearchBibliography, readResearchBibliography, writeResearchBibliography } from './bibliography';
 import { renderResearchPdf } from './pdf-render';
 import { ResearchProcessError } from './process-runner';
+import { summarizeOcrCleanupErrors, summarizeOcrOperationErrors } from './ocr-session-scope';
 import type { ResearchModelFiles } from './model-store';
 import { researchParseOptionsSchema } from '../../../shared/schemas/research-production';
 import { researchFigureRenderJobSchema } from '../../../shared/schemas/research-figures';
@@ -107,14 +108,42 @@ export async function runResearchJobCli(): Promise<number> {
   } catch (error) {
     let code = 'research_runtime_failed';
     if (error instanceof ResearchProcessError) code = error.code;
+    else if (error instanceof Error && 'code' in error && typeof error.code === 'string') code = error.code;
     else if (error instanceof Error && error.message.startsWith('research_')) code = error.message;
     process.stderr.write(error instanceof Error ? `${error.stack ?? error.message}\n` : `${String(error)}\n`);
+    const cleanupErrors = summarizeOcrCleanupErrors(error);
+    if (cleanupErrors.length > 0) {
+      process.stderr.write(`research_ocr_cleanup_errors:${JSON.stringify(cleanupErrors)}\n`);
+    }
+    const operationErrors = summarizeOcrOperationErrors(error);
+    if (operationErrors.length > 0) {
+      process.stderr.write(`research_ocr_post_abort_errors:${JSON.stringify(operationErrors)}\n`);
+    }
+    const outputCleanupErrors = summarizeErrorProperty(error, 'outputCleanupErrors');
+    if (outputCleanupErrors.length > 0) {
+      process.stderr.write(`research_job_output_cleanup_errors:${JSON.stringify(outputCleanupErrors)}\n`);
+    }
     process.stdout.write(`${JSON.stringify({ ok: false, error: { code, type: error instanceof Error ? error.constructor.name : 'Error' } })}\n`);
     return 1;
   } finally {
     process.removeListener('SIGTERM', abort);
     process.removeListener('SIGINT', abort);
   }
+}
+
+function summarizeErrorProperty(error: unknown, property: string): string[] {
+  if (!(error instanceof Error)) return [];
+  const values = (error as Error & Record<string, unknown[]>)[property];
+  if (!Array.isArray(values)) return [];
+  return values.flatMap((value) => {
+    if (value instanceof AggregateError) return value.errors.map(summarizeErrorValue);
+    return [summarizeErrorValue(value)];
+  }).slice(0, 20);
+}
+
+function summarizeErrorValue(error: unknown): string {
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return message.slice(0, 1000);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

@@ -10,6 +10,7 @@ export type ResearchProcessRequest = {
   writablePaths: readonly string[];
   environment: NodeJS.ProcessEnv;
   timeoutMs: number;
+  terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
   networkAccess: 'none' | 'loopback' | 'full';
   allowPosixSpawn: boolean;
@@ -115,6 +116,8 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
 export async function runResearchProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
   if (process.platform !== 'darwin') throw new Error('research_runtime_macos_required');
   if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0) throw new Error('research_process_timeout_required');
+  const terminationGraceMs = request.terminationGraceMs ?? 1000;
+  if (!Number.isSafeInteger(terminationGraceMs) || terminationGraceMs < 0) throw new Error('research_process_termination_grace_invalid');
   const limit = request.maxOutputBytes ?? 16 * 1024 * 1024;
   if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('research_process_output_limit_invalid');
   if (request.signal?.aborted) throw new ResearchProcessError('research_process_cancelled');
@@ -153,7 +156,12 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
       if (stopped !== null || settled || settling) return;
       stopped = code;
       kill('SIGTERM');
-      forcedKill = setTimeout(() => kill('SIGKILL'), code === 'research_process_write_limit' ? 100 : 1000);
+      const graceMs = code === 'research_process_write_limit'
+        ? 100
+        : code === 'research_process_cancelled' || code === 'research_process_timeout'
+          ? terminationGraceMs
+          : 1000;
+      forcedKill = setTimeout(() => kill('SIGKILL'), graceMs);
       forcedKill.unref();
     };
     let writeMonitor: ReturnType<typeof setTimeout> | undefined;

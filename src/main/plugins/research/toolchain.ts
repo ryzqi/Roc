@@ -331,6 +331,7 @@ export class ResearchToolchain {
     const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir };
     const packagedCli = fileURLToPath(new URL('./research-job-cli.js', import.meta.url));
     if (!existsSync(packagedCli)) {
+      if (operation.operation === 'parse_document') throw new ResearchProcessError('research_worker_unavailable');
       return await this.jobInProcess(input, operation, schema);
     }
     const require = createRequire(import.meta.url);
@@ -379,7 +380,12 @@ export class ResearchToolchain {
     const parseOptions = operation.operation === 'parse_document' && operation.options !== null && typeof operation.options === 'object'
       ? operation.options as Partial<ResearchParseOptions> : null;
     let timeoutMs = 60_000;
-    if (operation.operation === 'parse_document') timeoutMs = 600_000;
+    let terminationGraceMs = 1000;
+    if (operation.operation === 'parse_document') {
+      // The parser's own timeout aborts its job first; leave time for an active native inference to settle and release sessions.
+      timeoutMs = 660_000;
+      terminationGraceMs = 60_000;
+    }
     else if (operation.operation === 'render_figure') {
       const requestedTimeout = typeof operation.timeoutMs === 'number' ? operation.timeoutMs : 60_000;
       timeoutMs = Math.max(1, Math.min(3_600_000, requestedTimeout));
@@ -392,6 +398,7 @@ export class ResearchToolchain {
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
       timeoutMs,
+      terminationGraceMs,
       signal: input.signal,
       input: JSON.stringify(request),
       allowGpuAcceleration: parseOptions?.device === 'coreml' && modelPaths.length > 0,
