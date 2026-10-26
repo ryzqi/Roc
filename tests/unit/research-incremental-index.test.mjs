@@ -14,7 +14,7 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     const modules = {};
     for (const [name, entry] of Object.entries({ files: 'src/main/plugins/research/index-files.ts', repo: 'src/main/plugins/research/repository.ts', schema: 'src/main/infrastructure/database-schemas.ts', options: 'src/shared/schemas/research-index.ts' })) {
       const outfile = join(dir, `${name}.mjs`);
-      await build({ entryPoints: [entry], outfile, bundle: true, format: 'esm', platform: 'node', packages: 'external', loader: { '.py': 'text', '.md': 'text' } });
+      await build({ entryPoints: [entry], outfile, bundle: true, format: 'esm', platform: 'node', packages: 'external', loader: { '.md': 'text' } });
       modules[name] = await import(outfile);
     }
     const root = join(dir, 'workspace');

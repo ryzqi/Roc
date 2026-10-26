@@ -107,7 +107,7 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
     ...networkRules,
     // Jobs using the ORT CoreML provider need the Apple GPU/CoreML services. This permission is
-    // opt-in per job; CPU inference and ordinary Python jobs do not receive it.
+    // opt-in per job; CPU inference and ordinary experiment jobs do not receive it.
     ...(request.allowGpuAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient"))'] : [])
   ].join('\n');
 }

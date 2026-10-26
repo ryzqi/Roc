@@ -22,7 +22,7 @@ export function requireAbsolutePath(value: string): string {
   return value;
 }
 
-async function resolvePythonStyle(path: string, strict: boolean): Promise<string> {
+async function resolveResearchPath(path: string, strict: boolean): Promise<string> {
   const absolute = requireAbsolutePath(path);
   const segments = absolute.split('/').filter((part, index) => index === 0 || part.length > 0);
   let resolved = '/';
@@ -70,11 +70,11 @@ export async function prepareResearchJob(input: {
   sourceExtensions?: readonly string[];
   sourceExtensionError?: string;
 }): Promise<ResearchJobPaths> {
-  const root = await resolvePythonStyle(input.projectRoot, true);
+  const root = await resolveResearchPath(input.projectRoot, true);
   if (!(await lstat(root)).isDirectory()) {
     researchJobError('research_project_directory_required');
   }
-  const source = await resolvePythonStyle(input.sourcePath, true);
+  const source = await resolveResearchPath(input.sourcePath, true);
   assertInsideProject(root, source);
   const sourceInfo = await stat(source);
   if (!sourceInfo.isFile()) {
@@ -97,7 +97,7 @@ export async function prepareResearchJob(input: {
       throw error;
     }
   }
-  const output = await resolvePythonStyle(input.outputDir, false);
+  const output = await resolveResearchPath(input.outputDir, false);
   assertInsideProject(root, output);
   if (dirname(output) === output) {
     researchJobError('research_path_outside_project');

@@ -291,61 +291,8 @@ function packagedToolchainSha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
-const packagedResearchLeftoverNames = new Set([
-  'PyObjCTest',
-  'pip',
-  'debugpy',
-  'pydevd_plugins',
-  'jedi',
-  'parso',
-  'IPython',
-  'ipykernel',
-  'ipykernel_launcher.py',
-  'ipython_pygments_lexers.py',
-  'matplotlib_inline',
-  'jupyter.py',
-  'jupyter_client',
-  'jupyter_core',
-  'nbclient',
-  'nbformat',
-  'tornado',
-  'zmq',
-  'prompt_toolkit',
-  'pexpect',
-  'ptyprocess',
-  'appnope',
-  'asttokens',
-  'executing',
-  'stack_data',
-  'pure_eval',
-  'traitlets',
-  'comm',
-  'fastjsonschema',
-  'nest_asyncio2.py',
-  'faker',
-  'polyfactory'
-]);
-
-function isPackagedResearchLeftoverPart(part) {
-  const lower = part.toLowerCase();
-  if (lower === '__pycache__') return true;
-  for (const name of packagedResearchLeftoverNames) {
-    const leftover = name.toLowerCase();
-    if (
-      lower === leftover
-      || (lower.startsWith(`${leftover}-`) && (lower.endsWith('.dist-info') || lower.endsWith('.egg-info')))
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function isExcludedPackagedResearchPath(relativePath) {
-  if (relativePath === 'models' || relativePath.startsWith('models/')) return true;
-  if (relativePath.endsWith('.pyc')) return true;
-  if (relativePath === 'python/include' || relativePath.startsWith('python/include/')) return true;
-  return relativePath.split('/').some((part) => isPackagedResearchLeftoverPart(part));
+  return relativePath === 'models' || relativePath.startsWith('models/');
 }
 
 /**
@@ -366,6 +313,59 @@ function readJsonFile(path, code) {
   }
 }
 
+function assertResearchToolVersions(manifest, lock, architecture, { root, prepareScript } = {}) {
+  const declaredTools = lock?.architectures?.[String(architecture)];
+  if (typeof declaredTools !== 'object' || declaredTools === null || Array.isArray(declaredTools)) {
+    throw new Error(`Research toolchain lock declares no tools for architecture ${architecture}`);
+  }
+  const expectedNames = Object.keys(declaredTools).sort();
+  const versions = manifest?.versions;
+  const actualNames = typeof versions === 'object' && versions !== null && !Array.isArray(versions)
+    ? Object.keys(versions).sort()
+    : [];
+  if (actualNames.length !== expectedNames.length || actualNames.some((name, index) => name !== expectedNames[index])) {
+    const rebuild = prepareScript === undefined ? '' : ` Rebuild ${root} with: rtk proxy node ${prepareScript} --arch ${architecture} --output ${root}`;
+    throw new Error(
+      `Research toolchain manifest tool set mismatch for packaging: manifest=${JSON.stringify(actualNames)} lock=${JSON.stringify(expectedNames)}.${rebuild}`
+    );
+  }
+  for (const name of expectedNames) {
+    const expected = lock[`${name}Version`];
+    const actual = versions[name];
+    if (typeof expected !== 'string' || expected.length === 0 || actual !== expected) {
+      const rebuild = prepareScript === undefined ? '' : ` Rebuild ${root} with: rtk proxy node ${prepareScript} --arch ${architecture} --output ${root}`;
+      throw new Error(
+        `Research toolchain ${name} version mismatch for packaging: manifest=${String(actual)} lock=${String(expected)}.${rebuild}`
+      );
+    }
+  }
+}
+
+function packagedPythonArtifact(root) {
+  const exactForbiddenPaths = new Set([
+    'bin/uv', 'licenses/python-packages.json', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt',
+    'locks/pyproject.toml', 'locks/uv.lock', 'pyproject.toml', 'uv.lock'
+  ]);
+  for (const relativePath of exactForbiddenPaths) {
+    if (existsSync(resolve(root, relativePath))) return relativePath;
+  }
+  const queue = [''];
+  while (queue.length > 0) {
+    const relativeDir = queue.pop();
+    const directory = relativeDir === '' ? root : join(root, relativeDir);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const relativePath = relativeDir === '' ? entry.name : `${relativeDir}/${entry.name}`;
+      const lowerName = entry.name.toLowerCase();
+      if (
+        lowerName === 'python' || lowerName === '__pycache__' || lowerName.includes('matplotlib')
+        || lowerName.endsWith('.py') || lowerName.endsWith('.pyc')
+      ) return relativePath;
+      if (entry.isDirectory() && !entry.isSymbolicLink()) queue.push(relativePath);
+    }
+  }
+  return null;
+}
+
 export function assertLiveResearchToolchainForPackaging({
   architecture = process.arch,
   projectRoot: targetProjectRoot = projectRoot
@@ -374,12 +374,19 @@ export function assertLiveResearchToolchainForPackaging({
   const required = [
     'manifest.json',
     'bin/tectonic',
-    'bin/uv',
     'bin/vale',
+    'bin/typst',
     'typescript-experiment-runner.mts',
-    'python/bin/python3',
     'tex/bundle.zip',
-    'licenses/python-packages.json'
+    'vale/.vale.ini',
+    'licenses/README.md',
+    'licenses/sources.json',
+    'licenses/csl-CC-BY-SA-3.0.txt',
+    'licenses/tectonic-MIT.txt',
+    'licenses/typst-APACHE.txt',
+    'licenses/vale-MIT.txt',
+    'locks/tools.lock.json',
+    'locks/tex-bundle-files.txt'
   ];
   for (const relativePath of required) {
     const fullPath = resolve(root, relativePath);
@@ -390,26 +397,11 @@ export function assertLiveResearchToolchainForPackaging({
       );
     }
   }
-  // 版本也要对一遍。只看文件在不在的话，一套旧的 3.12.14/0.12.10 工具链能一路打包成功，
-  // 然后在运行时被 `research_toolchain_version_mismatch` 拒掉——整个科研插件不可用，
-  // 而且要等用户装上才发现。这里按 lock 里该架构声明的工具集逐项比。
   const manifest = readJsonFile(resolve(root, 'manifest.json'), 'research_toolchain_manifest_invalid');
   const sources = researchRuntimeSourcePath(targetProjectRoot);
   const lock = readJsonFile(resolve(sources, 'tools.lock.json'), 'research_toolchain_lock_invalid');
-  const declaredTools = lock?.architectures?.[String(architecture)];
-  if (typeof declaredTools !== 'object' || declaredTools === null) {
-    throw new Error(`Research toolchain lock declares no tools for architecture ${architecture}`);
-  }
-  for (const name of Object.keys(declaredTools)) {
-    const expected = lock[`${name}Version`];
-    const actual = manifest?.versions?.[name];
-    if (typeof expected !== 'string' || expected.length === 0 || actual !== expected) {
-      const prepareScript = resolve(targetProjectRoot, 'scripts/research/prepare.ts');
-      throw new Error(
-        `Research toolchain ${name} version mismatch for packaging: manifest=${String(actual)} lock=${String(expected)}. Rebuild ${root} with: rtk proxy node ${prepareScript} --arch ${architecture} --output ${root}`
-      );
-    }
-  }
+  const prepareScript = resolve(targetProjectRoot, 'scripts/research/prepare.ts');
+  assertResearchToolVersions(manifest, lock, architecture, { root, prepareScript });
 }
 
 function removeExcludedPackagedResearchPaths(root) {
@@ -489,6 +481,7 @@ export function finalizePackagedResearchToolchain({
 }) {
   const root = researchToolchainResourcePath(resourcesDir);
   rmSync(resolve(root, 'figure.py'), { force: true });
+  rmSync(resolve(root, 'bibliography.py'), { force: true });
   removeExcludedPackagedResearchPaths(root);
   const manifestPath = resolve(root, 'manifest.json');
   const manifest = readJsonFile(manifestPath, 'packaged_toolchain_manifest_invalid');
@@ -514,24 +507,22 @@ export function verifyPackagedResearchToolchain({
   const required = [
     'manifest.json',
     'bin/tectonic',
-    'bin/uv',
     'bin/vale',
+    'bin/typst',
     'typescript-experiment-runner.mts',
-    'python/bin/python3',
     'tex/bundle.zip',
-    // Vale 的配置与规则集与二进制同等重要：少了它们 `lintProse()` 会在运行时报错，
-    // 而只有这条打包断言能在 `afterPack` 阶段把它拦住。
     'vale/.vale.ini',
     'vale/styles/RocAcademic/Hedging.yml',
     'vale/styles/RocAcademicZh/Hedging.yml',
     'vale/styles/config/vocabularies/Roc/accept.txt',
     'licenses/README.md',
     'licenses/sources.json',
-    'licenses/python-packages.json',
+    'licenses/csl-CC-BY-SA-3.0.txt',
     'licenses/tectonic-MIT.txt',
-    'licenses/uv-MIT.txt',
-    'licenses/uv-APACHE.txt',
+    'licenses/typst-APACHE.txt',
     'licenses/vale-MIT.txt',
+    'locks/tools.lock.json',
+    'locks/tex-bundle-files.txt'
   ];
   for (const relativePath of required) {
     const fullPath = resolve(root, relativePath);
@@ -543,51 +534,20 @@ export function verifyPackagedResearchToolchain({
   if (manifest.platform !== 'darwin' || manifest.architecture !== architecture) {
     throw new Error(`Packaged research toolchain architecture mismatch: ${manifest.architecture}`);
   }
-  const licenses = readJsonFile(resolve(root, 'licenses/python-packages.json'), 'packaged_toolchain_licenses_invalid');
-  if (!Array.isArray(licenses) || licenses.length === 0) {
-    throw new Error('Packaged research toolchain is missing python license records.');
+  const lock = readJsonFile(resolve(root, 'locks/tools.lock.json'), 'packaged_toolchain_lock_invalid');
+  assertResearchToolVersions(manifest, lock, architecture);
+  const pythonArtifact = packagedPythonArtifact(root);
+  if (pythonArtifact !== null) {
+    throw new Error(`Packaged research toolchain must not include Python or uv resources: ${pythonArtifact}.`);
   }
   if (existsSync(resolve(root, 'models'))) {
     throw new Error('Packaged research toolchain must not include models.');
   }
-  const leftover = packagedResearchLeftover(root);
-  if (leftover !== null) {
-    throw new Error(`Packaged research toolchain must not include ${leftover}.`);
-  }
-  if (existsSync(resolve(root, 'figure.py'))) {
-    throw new Error('Legacy figure renderer must not be packaged.');
+  if (existsSync(resolve(root, 'figure.py')) || existsSync(resolve(root, 'bibliography.py'))) {
+    throw new Error('Legacy Python scripts must not be packaged.');
   }
 }
 
-function packagedPythonSiteLeftover(root) {
-  const lib = resolve(root, 'python/lib');
-  if (!existsSync(lib)) return null;
-  for (const entry of readdirSync(lib, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.isSymbolicLink() || !entry.name.startsWith('python')) continue;
-    const site = resolve(lib, entry.name, 'site-packages');
-    if (!existsSync(site)) continue;
-    for (const installed of readdirSync(site)) {
-      if (isPackagedResearchLeftoverPart(installed)) return installed;
-    }
-  }
-  return null;
-}
-
-function packagedResearchLeftover(root) {
-  const siteLeftover = packagedPythonSiteLeftover(root);
-  if (siteLeftover !== null) return siteLeftover;
-  const queue = [''];
-  while (queue.length > 0) {
-    const relativeDir = queue.pop();
-    const directory = relativeDir === '' ? root : join(root, relativeDir);
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const relativePath = relativeDir === '' ? entry.name : `${relativeDir}/${entry.name}`;
-      if (isExcludedPackagedResearchPath(relativePath)) return relativePath;
-      if (entry.isDirectory() && !entry.isSymbolicLink()) queue.push(relativePath);
-    }
-  }
-  return null;
-}
 
 export function verifyPackagedFileLayout({ resourcesDir }) {
   const require = createRequire(import.meta.url);

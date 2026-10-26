@@ -74,7 +74,7 @@ function scanMachO(root) {
         continue;
       }
       if (!entry.isFile()) continue;
-      if (!/\.(so|dylib|node)(\.|$)/u.test(entry.name) && !entry.name.endsWith('bin/python3')) continue;
+      if (!/\.(so|dylib|node)(\.|$)/u.test(entry.name)) continue;
       let archs;
       try {
         archs = execFileSync('/usr/bin/lipo', ['-archs', full], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -205,13 +205,13 @@ if (strict) {
   } else {
     const info = execFileSync('/usr/bin/lipo', ['-archs', appBinary], { encoding: 'utf8' }).trim();
     assertCheck('D 产物', '打包后的 Roc 只含 arm64', info === 'arm64', info);
-    const toolchainPython = resolve('release/mac-arm64/Roc.app/Contents/Resources/research-toolchain/python/bin/python3');
-    if (existsSync(toolchainPython)) {
-      const pyInfo = execFileSync('/usr/bin/lipo', ['-archs', toolchainPython], { encoding: 'utf8' }).trim();
-      assertCheck('D 产物', '随包 Python 只含 arm64', pyInfo === 'arm64', pyInfo);
-    } else {
-      assertCheck('D 产物', '随包 Python 存在', false, `missing ${toolchainPython}`);
-    }
+    const toolchainRoot = resolve('release/mac-arm64/Roc.app/Contents/Resources/research-toolchain');
+    const pythonResources = [
+      'python', 'bin/uv', 'pyproject.toml', 'uv.lock', 'licenses/python-packages.json',
+      'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt'
+    ].filter((path) => existsSync(join(toolchainRoot, path)));
+    assertCheck('D 产物', '科研工具链不包含 Python/uv 资源', pythonResources.length === 0,
+      pythonResources.length === 0 ? 'no Python/uv resources' : pythonResources.join(', '));
 
     // 逐二进制清点随包的 Mach-O。
     //

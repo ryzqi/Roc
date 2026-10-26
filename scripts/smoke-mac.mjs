@@ -177,7 +177,19 @@ try {
     const target = `darwin-${process.arch}`;
     const rtk = spawnSync(join(rtkRoot, target, 'rtk'), ['--version'], { encoding: 'utf8', timeout: 10000 });
     const toolchainRoot = join(process.resourcesPath, 'research-toolchain');
-    const toolchainFiles = ['manifest.json', 'licenses/python-packages.json', 'bin/tectonic', 'python/bin/python3'];
+    const toolchainFiles = [
+      'manifest.json',
+      'bin/tectonic',
+      'bin/vale',
+      'bin/typst',
+      'typescript-experiment-runner.mts',
+      'tex/bundle.zip',
+      'licenses/README.md',
+      'licenses/sources.json',
+      'licenses/tectonic-MIT.txt',
+      'licenses/vale-MIT.txt',
+      'licenses/typst-APACHE.txt'
+    ];
     const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules');
     const ortNativeRoot = join(unpacked, 'onnxruntime-node', 'bin', 'napi-v6', 'darwin', process.arch);
     const ortNativeFiles = fs.readdirSync(ortNativeRoot).sort();
@@ -194,6 +206,8 @@ try {
         missing: toolchainFiles.filter((file) => !fs.existsSync(join(toolchainRoot, file))),
         architecture: JSON.parse(fs.readFileSync(join(toolchainRoot, 'manifest.json'), 'utf8')).architecture,
         modelWeightsBundled: fs.existsSync(join(toolchainRoot, 'models')),
+        pythonResourcesBundled: ['python', 'bin/uv', 'pyproject.toml', 'uv.lock', 'licenses/python-packages.json', 'licenses/uv-MIT.txt', 'licenses/uv-APACHE.txt']
+          .filter((file) => fs.existsSync(join(toolchainRoot, file))),
         legacyParserBundled: fs.existsSync(join(toolchainRoot, 'worker.py')),
         legacyFigureBundled: fs.existsSync(join(toolchainRoot, 'figure.py'))
       },
@@ -216,6 +230,7 @@ try {
   assert.deepEqual(native.researchToolchain.missing, []);
   assert.equal(native.researchToolchain.architecture, native.arch);
   assert.equal(native.researchToolchain.modelWeightsBundled, false);
+  assert.deepEqual(native.researchToolchain.pythonResourcesBundled, []);
   assert.equal(native.researchToolchain.legacyParserBundled, false);
   assert.equal(native.researchToolchain.legacyFigureBundled, false);
   assert.deepEqual(native.sqlitePrebuilds, [`darwin-${native.arch}.node`]);

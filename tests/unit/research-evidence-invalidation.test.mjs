@@ -44,8 +44,8 @@ before(async () => {
       platform: 'node',
       target: 'node22',
       packages: 'external',
-      // `repository.ts` transitively inlines `figure.py` and the stage SKILL.md files via `?raw`.
-      loader: { '.py': 'text', '.md': 'text' },
+      // `repository.ts` transitively inlines the stage SKILL.md files via `?raw`.
+      loader: { '.md': 'text' },
       logLevel: 'silent'
     });
   await build('src/main/plugins/research/repository.ts', join(tempDir, 'repository.mjs'));

@@ -22,7 +22,7 @@ import { formatBytes } from '../../shared/format';
  * `src/shared/schemas` (findings F22). They are removed, not greyed out and not invented.
  *
  * What remains is real: `research.models.status/download` for the local parsing models and
- * `research.toolchain.status` for the Python/uv/tectonic toolchain, plus `rtk.status`.
+ * `research.toolchain.status` for the TeX/Typst/native experiment toolchain, plus `rtk.status`.
  */
 
 const POLL_INTERVAL_MS = 2_000;
@@ -290,12 +290,8 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
           value={toolchainStatus === null ? '读取中…' : toolchainStatus.available ? '可用' : '不可用'}
           testId="settings-toolchain-available"
         />
-        <KeyValueRow
-          label="Python"
-          value={toolchainStatus?.versions?.python ?? '—'}
-          testId="settings-toolchain-python"
-        />
-        <KeyValueRow label="uv" value={toolchainStatus?.versions?.uv ?? '—'} testId="settings-toolchain-uv" />
+        <KeyValueRow label="Vale" value={toolchainStatus?.versions?.vale ?? '—'} testId="settings-toolchain-vale" />
+        <KeyValueRow label="Typst" value={toolchainStatus?.versions?.typst ?? '—'} testId="settings-toolchain-typst" />
         <KeyValueRow
           label="tectonic"
           value={toolchainStatus?.versions?.tectonic ?? '—'}

@@ -1,0 +1,36 @@
+% Source for the committed P5 parser acceptance fixture.
+% Rebuild on Apple Silicon with:
+% .runtime/research-toolchain/darwin-arm64/bin/tectonic --bundle .runtime/research-toolchain/darwin-arm64/tex/bundle.zip --only-cached --untrusted --outdir tests/smoke/lib/assets tests/smoke/lib/assets/p5-paper.tex
+% The app does not compile this file; the generated PDF is the checked-in fixture.
+\documentclass[11pt]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath}
+\pagestyle{plain}
+\begin{document}
+
+\section{Introduction}
+Deep learning has transformed scientific discovery across many domains.
+
+Prior work studies transfer learning and representation quality.
+
+\begin{equation}
+\mathcal{L}(\theta)=\frac{1}{N}\sum_{i=1}^{N}\left(y_i-f_\theta(x_i)\right)^2+\lambda\|\theta\|_2^2
+\end{equation}
+
+\begin{center}
+\begin{tabular}{|l|c|c|}
+\hline
+Method & Accuracy & F1 \\
+\hline
+Baseline & 0.812 & 0.804 \\
+\hline
+Ours & 0.897 & 0.891 \\
+\hline
+\end{tabular}
+\end{center}
+\noindent Table 1: Comparison of results on the benchmark.
+
+\section{Method}
+We optimize the objective above with stochastic gradient descent.
+
+\end{document}

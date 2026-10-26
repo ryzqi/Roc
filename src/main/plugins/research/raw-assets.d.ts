@@ -3,11 +3,6 @@ declare module '*.md?raw' {
   export default content;
 }
 
-declare module '*.py?raw' {
-  const content: string;
-  export default content;
-}
-
 declare module '*.c?raw' {
   const source: string;
   export default source;

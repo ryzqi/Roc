@@ -1,7 +1,5 @@
 {
   "schemaVersion": 1,
-  "pythonVersion": "3.12.15",
-  "uvVersion": "0.13.5",
   "tectonicVersion": "0.17.0",
   "valeVersion": "3.24.0",
   "typstVersion": "0.15.0",
@@ -15,14 +13,6 @@
   },
   "architectures": {
     "arm64": {
-      "python": {
-        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        "sha256": "7b8d00b751db21cea87dc551a8f8165147c5fbc5251d5537d7e5497dde00a219"
-      },
-      "uv": {
-        "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz",
-        "sha256": "743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73"
-      },
       "tectonic": {
         "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-aarch64-apple-darwin.tar.gz",
         "sha256": "a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667"

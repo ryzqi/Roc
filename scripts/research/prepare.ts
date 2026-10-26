@@ -1,18 +1,17 @@
 import { constants } from 'node:fs';
-import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
-import { collectPythonLicenses } from './collect-licenses.ts';
 import { verifyManifest, writeManifest } from './manifest.ts';
 
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
 const SCRIPTS = fileURLToPath(new URL('.', import.meta.url));
-const LOCK_FILES = ['pyproject.toml', 'uv.lock', 'tools.lock.json', 'tex-bundle-files.txt', '.python-version'] as const;
+const LOCK_FILES = ['tools.lock.json', 'tex-bundle-files.txt'] as const;
 /**
  * 与脚本一起进 lockHashes 的 **src 文件**。
  *
@@ -26,21 +25,16 @@ const SCRIPT_FILES = [
   'download-asset.ts',
   'manifest.ts',
   'smoke.ts',
-  'build-r-process.ts',
-  'collect-licenses.ts'
+  'build-r-process.ts'
 ] as const;
 const DARWIN_O_EXLOCK = 0x20;
 const PROXY_KEYS = [
   'PATH', 'HOME', 'TMPDIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY',
   'https_proxy', 'http_proxy', 'no_proxy', 'SSL_CERT_FILE'
 ];
-const PYTHON_WRAPPER = "#!/bin/sh\n'''exec' \"$(dirname \"$0\")/python3\" \"$0\" \"$@\"\n' '''\n";
-const PYTHON_EXEC_MARKER = "'''exec' ";
 
 type ToolsLock = {
   schemaVersion: number;
-  pythonVersion: string;
-  uvVersion: string;
   tectonicVersion: string;
   /**
    * Vale（prose linter）的版本。它不在归档里跑，而是作为 `bin/vale` 被 `lintProse()` 直接调。
@@ -70,7 +64,7 @@ async function pathInfo(path: string) {
 }
 
 /**
- * Roc 只发布 Apple Silicon。随包 Python、TeX 与绘图工具当前只构建 arm64，
+ * Roc 只发布 Apple Silicon。随包 TeX 与报告排版工具当前只构建 arm64，
  * 所以这里**只能**返回 arm64，而不是「支持的两个架构之一」。
  */
 function hostArchitecture(): 'arm64' {
@@ -84,27 +78,15 @@ function overlaps(left: string, right: string): boolean {
   return left === right || left.startsWith(`${right}${sep}`) || right.startsWith(`${left}${sep}`);
 }
 
-export function buildEnvironment(cache: string): NodeJS.ProcessEnv {
+export function buildEnvironment(): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const key of PROXY_KEYS) {
     const value = process.env[key];
     if (value !== undefined) environment[key] = value;
   }
-  environment.UV_CACHE_DIR = join(cache, 'uv');
-  environment.UV_NO_PROGRESS = '1';
-  environment.UV_PYTHON_DOWNLOADS = 'never';
-  environment.PYTHONNOUSERSITE = '1';
-  environment.PYTHONDONTWRITEBYTECODE = '1';
   return environment;
 }
 
-function extractBuildConstraints(pyproject: string): string[] {
-  const match = /(?:^|\n)build-constraint-dependencies\s*=\s*\[(.*?)\]/su.exec(pyproject);
-  if (match === null) fail('research_tools_lock_invalid');
-  const items = [...match[1].matchAll(/"((?:\\.|[^"\\])+)"/gu)].map((item) => item[1]);
-  if (items.length === 0) fail('research_tools_lock_invalid');
-  return items;
-}
 
 async function copyPreservingMode(source: string, destination: string): Promise<void> {
   await copyFile(source, destination);
@@ -170,7 +152,7 @@ async function runCommand(
  */
 async function extractTarXz(archive: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
-  await runCommand('/usr/bin/tar', ['-xf', archive, '-C', destination], { env: buildEnvironment(dirname(archive)) });
+  await runCommand('/usr/bin/tar', ['-xf', archive, '-C', destination], { env: buildEnvironment() });
 }
 
 async function withPrepareLock(lockPath: string, work: () => Promise<void>): Promise<void> {  if ((await pathInfo(lockPath))?.isSymbolicLink()) fail('research_toolchain_lock_symlink');
@@ -191,49 +173,12 @@ async function withPrepareLock(lockPath: string, work: () => Promise<void>): Pro
   }
 }
 
-function firstLines(bytes: Buffer): { first: Buffer; second: Buffer } {
-  const firstEnd = bytes.indexOf(0x0a);
-  const first = bytes.subarray(0, firstEnd === -1 ? Math.min(bytes.length, 4096) : Math.min(firstEnd + 1, 4096));
-  if (firstEnd === -1 || first.toString('latin1') !== '#!/bin/sh\n') return { first, second: Buffer.alloc(0) };
-  const rest = bytes.subarray(firstEnd + 1);
-  const secondEnd = rest.indexOf(0x0a);
-  const second = rest.subarray(0, secondEnd === -1 ? Math.min(rest.length, 4096) : Math.min(secondEnd + 1, 4096));
-  return { first, second };
-}
 
-export async function portablePython(prefix: string): Promise<void> {
-  const bin = join(prefix, 'bin');
-  const prefixBytes = Buffer.from(prefix);
-  const marker = Buffer.from(PYTHON_EXEC_MARKER);
-  for (const entry of await readdir(bin, { withFileTypes: true })) {
-    const script = join(bin, entry.name);
-    if (entry.isSymbolicLink() || !entry.isFile()) continue;
-    const bytes = await readFile(script);
-    const { first, second } = firstLines(bytes);
-    if (!first.subarray(0, 2).equals(Buffer.from('#!'))) continue;
-    const wrapped = second.subarray(0, marker.length).equals(marker) && second.includes(prefixBytes);
-    if (!first.includes(prefixBytes) && !wrapped) continue;
-    const text = bytes.toString('utf8');
-    const body = wrapped ? text.split('\n').slice(3).join('\n') : text.split('\n').slice(1).join('\n');
-    const mode = (await lstat(script)).mode;
-    await writeFile(script, PYTHON_WRAPPER + body, 'utf8');
-    await chmod(script, mode & 0o777);
-  }
-  const prefixRoot = await realpath(prefix);
-  for (const file of await walkFiles(prefix)) {
-    if (!file.endsWith('.pyc')) continue;
-    const info = await lstat(file);
-    if (info.isSymbolicLink()) fail('research_python_bytecode_path_invalid');
-    const resolved = await realpath(file);
-    if (resolved !== prefixRoot && !resolved.startsWith(`${prefixRoot}${sep}`)) fail('research_python_bytecode_path_invalid');
-    await rm(file);
-  }
-}
 
 export async function computeLockHashes(): Promise<Record<string, string>> {
   const lockHashes: Record<string, string> = {};
   for (const name of LOCK_FILES) lockHashes[name] = await fileSha256(join(SOURCES, name));
-  const runtimeFiles = (await readdir(SOURCES)).filter((name) => name.endsWith('.py') || name.endsWith('.mts')).sort();
+  const runtimeFiles = (await readdir(SOURCES)).filter((name) => name.endsWith('.mts')).sort();
   for (const name of runtimeFiles) lockHashes[name] = await fileSha256(join(SOURCES, name));
   const licenseRoot = join(SOURCES, 'licenses');
   if (await pathInfo(licenseRoot) !== null) {
@@ -290,7 +235,6 @@ export async function prepare(architecture: string, outputPath: string, cachePat
   }
   await mkdir(cache, { recursive: true });
   await mkdir(dirname(output), { recursive: true });
-  const environment = buildEnvironment(cache);
   await withPrepareLock(join(cache, 'prepare.lock'), async () => {
     const staging = await mkdtemp(join(dirname(output), '.research-toolchain-'));
     try {
@@ -306,29 +250,12 @@ export async function prepare(architecture: string, outputPath: string, cachePat
         // 安全边界留给调用方：只从解出来的树里 copy 一个同名二进制进 `bin/`，其余丢弃。
         if (item.url.endsWith('.tar.xz')) await extractTarXz(archive, extracted);
         else await extractToolArchive(archive, extracted);
-        if (name === 'python') {
-          await rename(join(extracted, 'python'), join(root, 'python'));
-        } else {
-          const candidates = await findNamedFiles(extracted, name);
-          if (candidates.length !== 1) fail(`research_tool_binary_ambiguous:${name}`);
-          await copyPreservingMode(candidates[0], join(root, 'bin', name));
-        }
+        const candidates = await findNamedFiles(extracted, name);
+        if (candidates.length !== 1) fail(`research_tool_binary_ambiguous:${name}`);
+        await copyPreservingMode(candidates[0], join(root, 'bin', name));
       }
-      const python = join(root, 'python/bin/python3');
-      const uv = join(root, 'bin/uv');
-      const requirements = join(root, 'requirements.txt');
-      const constraints = join(root, 'build-constraints.txt');
-      await writeFile(constraints, `${extractBuildConstraints(await readFile(join(SOURCES, 'pyproject.toml'), 'utf8')).join('\n')}\n`);
-      await runCommand(uv, [
-        'export', '--locked', '--no-dev', '--no-emit-project', '--no-header', '--no-annotate',
-        '--project', SOURCES, '--python', python, '--output-file', requirements
-      ], { env: environment, discardStdout: true });
-      await runCommand(uv, [
-        'pip', 'sync', '--python', python, '--require-hashes', '--strict', '--link-mode', 'copy',
-        '--default-index', 'https://pypi.org/simple', '--build-constraints', constraints, requirements
-      ], { env: environment });
       // 模型不再进工具链归档（提案 §5）：它们由 `research.models.*` 落到用户数据目录，
-      // 工具链只保留代码与 Python 依赖，构建也不再联网拉 2 GB 权重。
+      // 工具链只保留代码与原生工具，构建也不再联网拉 2 GB 权重。
       const bundle = tools.texBundle;
       const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
         expectedSize: bundle.size
@@ -342,7 +269,7 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       if (await fileSha256(cachedZip) !== bundle.zipSha256) fail('research_tex_zip_hash_mismatch');
       await mkdir(join(root, 'tex'));
       await copyPreservingMode(cachedZip, join(root, 'tex/bundle.zip'));
-      for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.py') || item.endsWith('.mts'))) {
+      for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.mts'))) {
         await copyPreservingMode(join(SOURCES, name), join(root, name));
       }
       await mkdir(join(root, 'locks'));
@@ -350,10 +277,7 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
       await cp(join(SOURCES, 'vale'), join(root, 'vale'), { recursive: true, preserveTimestamps: true });
       await cp(join(SOURCES, 'csl'), join(root, 'csl'), { recursive: true, preserveTimestamps: true });
-      const collected = await collectPythonLicenses(root);
-      await writeFile(join(root, 'licenses/python-packages.json'), `${JSON.stringify(collected, null, 2)}\n`, 'utf8');
-      await portablePython(join(root, 'python'));
-      const versions = { python: tools.pythonVersion, uv: tools.uvVersion, tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion };
+      const versions = { tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion };
       const manifest = await writeManifest(root, { architecture, versions, lockHashes });
       await rename(root, output);
       console.log(`科研工具链已准备：${output}（${manifest.entries.length} 个文件或链接）`);

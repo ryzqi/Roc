@@ -20,7 +20,7 @@ before(async () => {
     export { withLiteratureContext } from './src/main/services/literature-context';
     export { createLiteratureTools } from './src/main/plugins/agent/literature-tools';
   `, resolveDir: process.cwd() }, outfile, bundle: true, format: 'esm', platform: 'node', target: 'node22',
-    packages: 'external', loader: { '.py': 'text', '.md': 'text' }, logLevel: 'silent' });
+    packages: 'external', loader: { '.md': 'text' }, logLevel: 'silent' });
   api = await import(outfile);
 });
 after(() => rmSync(directory, { recursive: true, force: true }));

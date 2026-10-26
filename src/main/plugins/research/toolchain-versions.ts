@@ -8,19 +8,13 @@
  * 加载不了单测——它直读 `tools.lock.json`，并依赖 `pdfjs-dist` 与 `@napi-rs/canvas` 的原生绑定
  *（`tests/unit` 的 `bundle-ts.mjs` 是 `platform:'neutral'` 且没有文件系统基址）。
  *
- * ## 为什么键集来自 lock 而不是写死的三个名字
+ * ## 为什么键集来自 lock 而不是写死
  *
- * 曾经它是 `z.object({ python, uv, tectonic }).strict()` 加三条 `!==` 比较。往工具链里加
- * 第四个工具（Vale）时，那段代码要求同时改 zod schema、`verify()` 的比较、`prepare.ts` 的
- * `ToolsLock` 类型和 `versions` 记录——四处同步，漏一处就是**新工具被静默放行**（manifest
- * 里没有它的版本，没有任何代码会发现）。改成「键集 = `architectures[arch]` 的键」之后，
- * 加工具只改 lock 与 `prepare.ts`，读侧自动跟随。
+ * 工具版本曾经逐个固定在 manifest 校验逻辑中；每增加一个工具都要同步修改 schema、版本比较、
+ * `prepare.ts` 的 `ToolsLock` 类型和版本记录，容易漏掉并静默放行。现在以 `architectures[arch]`
+ * 的工具名为键集，manifest 对应版本由同名 `<name>Version` 提供。增加工具时只需更新 lock 和准备脚本，
+ * 读取侧会自动校验完整键集。
  *
- * ## `python` 的版本键为什么也叫 `python`
- *
- * lock 的 `architectures[arch].<name>` 是下载归档的名字，manifest 的版本键是逻辑工具名；
- * 两者在这里是同一套（`python` / `uv` / `tectonic` / 以后的 `vale`）。唯一的特例是归档内
- * 的**文件**名字（`python` 归档里是 `bin/python3`），那属于 `prepare.ts` 的分支，与本模块无关。
  */
 
 export type ToolchainToolVersions = Readonly<Record<string, string>>;

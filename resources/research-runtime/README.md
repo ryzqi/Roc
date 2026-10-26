@@ -8,15 +8,15 @@
 
 解析契约为 v3，输入支持 PDF、HTML、PNG、JPEG、BMP、WebP 和 TIFF；HTML 与带文本层的 PDF 可以不下载模型，扫描件及图片需要模型。旧 Python 解析器与旧模型包已移除，不提供旧协议兼容路径。
 
-## Python 与科研工具
+## 实验与科研工具
 
-随应用分发的 CPython 3.12.15 暂时保留在工具链中，供后续移除 Python runtime 的打包任务清理；新建实验不再接受 Python，历史 Python 运行只读。Matplotlib 3.11.2 仍留在旧锁定环境中，已经不承担图稿渲染；确认数据任务迁移后会连同 Python runtime 一起移除。新实验使用 Electron 45 内置的 Node 24.22.0 执行版本化 `.mts` 源码，Node 原生剥离 TypeScript 类型，不额外安装转译器。TypeScript 实验通过 `run(context)` 接口读取快照、处理参数并写入受限输出目录，只有 `d3-dsv`、`csv-parse` 和 `simple-statistics` 这组锁定依赖可被运行器加载。科研图稿使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染。
+科研运行时不分发 Python 或 uv，也不会执行 Python 实验源码。历史 Python 运行记录仍可只读查看，不支持重新运行。数据实验使用 Electron 45 内置的 Node 24.22.0 执行版本化 `.mts` 源码，不额外安装转译器；TypeScript 实验通过 `run(context)` 接口读取快照、处理参数并写入受限输出目录，只开放锁定的 `d3-dsv`、`csv-parse` 和 `simple-statistics` 依赖。R 和 Julia 实验保留各自的环境配置与运行链路。科研图稿使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染。
 
 Vale 3.24.0 与仓库内 `vale/` 规则集用于文稿检查（合同见 `docs/research-prose.md`）。Typst 0.15.0 只负责导出附带的 `report.pdf`（`src/main/plugins/research/typst-report.ts`），不进入 LaTeX 主链。`csl/` 保存 APA、IEEE、GB/T 7714 引用格式数据；TeX 离线子集由 `tex-bundle-files.txt` 固定。
 
 ## 构建与检查
 
-准备 Python/R/TeX 工具链需要 Apple Silicon macOS、Node 26 和首次下载所需的网络。`prepare.ts` 只接受 `--arch arm64`。模型要先通过应用的模型管理界面下载到 `.runtime/research-models`，然后可以运行：
+准备科研工具链需要 Apple Silicon macOS、Node 26 和首次下载所需的网络；缓存命中的归档与 TeX bundle 会复用。`prepare.ts` 只接受 `--arch arm64`，不需要先下载 OCR 模型：
 
 ```bash
 pnpm exec tsx scripts/research/prepare.ts --arch arm64 --output .runtime/research-toolchain/darwin-arm64
@@ -24,6 +24,6 @@ pnpm exec tsx scripts/research/manifest.ts --root .runtime/research-toolchain/da
 pnpm exec tsx scripts/research/smoke.ts --toolchain .runtime/research-toolchain/darwin-arm64 --models .runtime/research-models --output .artifacts/research-toolchain-smoke
 ```
 
-`prepare.ts` 按 `tools.lock.json`、`uv.lock` 与 TeX 文件清单组装剩余工具，并把根目录 `.py` 和 `.mts` 运行器一并逐文件哈希，生成完整性清单和实际 Python 包许可证索引。生成的解释器、环境与第三方二进制在 `.runtime/`，不提交到源码仓库。输出目录必须不存在；已存在时只做完整性校验，不覆盖。
+`prepare.ts` 按 `tools.lock.json` 与 TeX 文件清单组装 Tectonic、Vale、Typst 和 TypeScript 运行器，只复制锁定的原生工具与 `.mts` 源码，并生成包含工具、脚本、规则、样式和许可证的完整性清单。科研工具链不含 Python、uv、Matplotlib 或 Python 包许可证索引。生成的工具与许可证在 `.runtime/`，不提交到源码仓库。输出目录必须不存在；已存在时只做完整性校验，不覆盖。
 
-`smoke.ts` 保留 LaTeX 编译、主进程 PDF 渲染、原生 OCR/表格/公式/图稿解析以及 Vega-Lite PNG/SVG/PDF 图稿渲染覆盖。解析样例通过同一个 `research-job-cli.ts` 和 v3 结果契约运行。
+完整 smoke 检查还会验证 OCR 与解析管线；执行这部分前，需通过应用的模型管理界面下载模型到 `.runtime/research-models`。LaTeX 编译、主进程 PDF 渲染、原生表格/公式/图稿解析以及 Vega-Lite PNG/SVG/PDF 图稿渲染均由同一套 smoke 检查覆盖，解析样例通过 `research-job-cli.ts` 和 v3 结果契约运行。

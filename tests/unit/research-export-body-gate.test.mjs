@@ -25,13 +25,13 @@ import Database from 'better-sqlite3';
  *      rendered as prose *and* as a caption.
  *
  * `better-sqlite3` is native and cannot be bundled into a `data:` module, hence the temp directory
- * with a `node_modules` symlink. The `?raw` loaders are needed because `repository.ts` reaches
- * `figure-runner.ts` and `research-skills.ts`, which inline `figure.py` and the stage Skills.
+ * with a `node_modules` symlink. The `?raw` loader is needed because `repository.ts` reaches
+ * `research-skills.ts`, which imports the stage Skills as raw Markdown.
  *
- * On the loaders: esbuild resolves a `?raw` specifier as a path whose extension is still `.py` /
- * `.md`, so a `loader` map is enough — no `onResolve` plugin to strip the suffix. The product build
- * needs none of this because Vite/rolldown handles `?raw` natively; `electron.vite.config.ts` has no
- * loader configuration to copy from.
+ * For the loader, esbuild resolves a `?raw` specifier as a path whose extension is still `.md`, so a
+ * loader map is enough — no `onResolve` plugin to strip the suffix. The product build needs none of
+ * this because Vite/rolldown handles `?raw` natively; `electron.vite.config.ts` has no loader
+ * configuration to copy from.
  */
 
 let tempDir;
@@ -56,7 +56,7 @@ before(async () => {
       platform: 'node',
       target: 'node22',
       packages: 'external',
-      loader: { '.py': 'text', '.md': 'text' },
+      loader: { '.md': 'text' },
       logLevel: 'silent'
     });
   await build('src/main/plugins/research/export-sources.ts', join(tempDir, 'export-sources.mjs'));

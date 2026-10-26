@@ -7,15 +7,13 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 /**
  * The manifest's `versions` record is the toolchain's audit trail.
  *
- * `tools.lock.json` declares tools per architecture (`python`, `uv`, `tectonic`, and later `vale`)
- * and the manifest records each one's version. Two properties make that record trustworthy, and
- * both are pinned here:
+ * `tools.lock.json` declares tools per architecture (`tectonic`, `vale`, and `typst`), and the
+ * manifest records each one's version. Two properties make that record trustworthy, and both are
+ * pinned here:
  *
- *   1. the **key set comes from the lock**, not from a hand-written triple. That is what lets a new
- *      tool be added by editing the lock and `prepare.ts` alone; the reader follows. Before this,
- *      adding a fourth tool required four synchronised edits, and missing the compare step meant the
- *      new binary shipped with no version recorded anywhere — silently unauditable;
- *   2. the two sets must match **exactly**. An extra recorded key is also a mismatch: a manifest
+ *   1. the key set comes from the lock, not from a hand-written list; adding a tool means adding
+ *      its archive and `<name>Version` to the lock, and the reader follows;
+ *   2. the two sets must match exactly. An extra recorded key is also a mismatch: a manifest
  *      carrying a tool the lock does not declare was not produced by these sources.
  *
  * Why an archive is not enough on its own: a tool registered in `architectures[arch]` without a
@@ -24,8 +22,8 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
  *
  * The compare deliberately returns booleans/`null` rather than throwing domain errors: `toolchain.ts`
  * is the only layer that knows this is a `research_toolchain_version_mismatch`, and it is the only
- * layer that can load `tools.lock.json`, inline `worker.py`, and reach the native canvas bindings —
- * none of which `tests/unit` can bundle (`bundle-ts.mjs` is `platform:'neutral'`).
+ * layer that can load `tools.lock.json` and reach native canvas bindings — neither of which
+ * `tests/unit` can bundle (`bundle-ts.mjs` is `platform:'neutral'`).
  */
 
 const { lockedToolVersions, toolVersionsMatch } = await importTypeScriptModule(
@@ -38,40 +36,42 @@ function lock(architectures, versions = {}) {
   return { schemaVersion: 1, ...versions, architectures };
 }
 
-const threeTools = { python: archive, uv: archive, tectonic: archive };
+const threeTools = { tectonic: archive, vale: archive, typst: archive };
+const threeVersions = { tectonicVersion: '0.17.0', valeVersion: '3.24.0', typstVersion: '0.15.0' };
 
 test('the version keys are the tools the lock declares for that architecture', () => {
-  const value = lock({ arm64: threeTools }, { pythonVersion: '3.12.14', uvVersion: '0.12.10', tectonicVersion: '0.17.0' });
+  const value = lock({ arm64: threeTools }, threeVersions);
   assert.deepEqual(lockedToolVersions(value, 'arm64'), {
-    python: '3.12.14',
-    uv: '0.12.10',
-    tectonic: '0.17.0'
+    tectonic: '0.17.0',
+    vale: '3.24.0',
+    typst: '0.15.0'
   });
 });
 
 test('adding a tool only needs the lock entry and its version key — the reader follows', () => {
-  const value = lock({ arm64: { ...threeTools, vale: archive } },
-    { pythonVersion: '3.12.14', uvVersion: '0.12.10', tectonicVersion: '0.17.0', valeVersion: '3.24.0' });
+  const value = lock({ arm64: { ...threeTools, proofreader: archive } }, {
+    ...threeVersions,
+    proofreaderVersion: '1.0.0'
+  });
   assert.deepEqual(lockedToolVersions(value, 'arm64'), {
-    python: '3.12.14',
-    uv: '0.12.10',
     tectonic: '0.17.0',
-    vale: '3.24.0'
+    vale: '3.24.0',
+    typst: '0.15.0',
+    proofreader: '1.0.0'
   });
 });
 
 test('each architecture is read on its own', () => {
   const value = lock(
-    { arm64: threeTools, x64: { ...threeTools, vale: archive } },
-    { pythonVersion: '3.12.14', uvVersion: '0.12.10', tectonicVersion: '0.17.0', valeVersion: '3.24.0' }
+    { arm64: threeTools, x64: { ...threeTools, proofreader: archive } },
+    { ...threeVersions, proofreaderVersion: '1.0.0' }
   );
-  assert.equal(Object.hasOwn(lockedToolVersions(value, 'arm64'), 'vale'), false);
-  assert.equal(Object.hasOwn(lockedToolVersions(value, 'x64'), 'vale'), true);
+  assert.equal(Object.hasOwn(lockedToolVersions(value, 'arm64'), 'proofreader'), false);
+  assert.equal(Object.hasOwn(lockedToolVersions(value, 'x64'), 'proofreader'), true);
 });
 
 test('a registered archive without a declared version is a broken lock, not a default', () => {
-  const value = lock({ arm64: { ...threeTools, vale: archive } },
-    { pythonVersion: '3.12.14', uvVersion: '0.12.10', tectonicVersion: '0.17.0' });
+  const value = lock({ arm64: { ...threeTools, proofreader: archive } }, threeVersions);
   assert.equal(lockedToolVersions(value, 'arm64'), null);
 });
 
@@ -79,19 +79,23 @@ test('a malformed lock yields null rather than an empty key set', () => {
   const malformed = [
     null, undefined, 'arm64', 7, [],
     {},
-    lock(null, { pythonVersion: '3.12.14' }),
-    lock({}, { pythonVersion: '3.12.14' }),
-    lock({ arm64: [] }, { pythonVersion: '3.12.14' }),
-    lock({ arm64: {} }, { pythonVersion: '3.12.14' }),
+    lock(null, { tectonicVersion: '0.17.0' }),
+    lock({}, { tectonicVersion: '0.17.0' }),
+    lock({ arm64: [] }, { tectonicVersion: '0.17.0' }),
+    lock({ arm64: {} }, { tectonicVersion: '0.17.0' }),
     lock({ arm64: threeTools }, {}),
-    lock({ arm64: { ...threeTools, vale: archive } }, { pythonVersion: '1', uvVersion: '2', tectonicVersion: '3' }),
-    lock({ arm64: { ...threeTools, vale: archive } }, { pythonVersion: '1', uvVersion: '2', tectonicVersion: '3', valeVersion: '' })
+    lock({ arm64: { ...threeTools, proofreader: archive } }, {
+      tectonicVersion: '0.17.0', valeVersion: '3.24.0', typstVersion: '0.15.0'
+    }),
+    lock({ arm64: { ...threeTools, proofreader: archive } }, {
+      ...threeVersions, proofreaderVersion: ''
+    })
   ];
   for (const value of malformed) {
     assert.equal(lockedToolVersions(value, 'arm64'), null, JSON.stringify(value));
   }
   // An empty architecture name is never a valid tool set.
-  assert.equal(lockedToolVersions(lock({ arm64: threeTools }, { pythonVersion: '1', uvVersion: '2', tectonicVersion: '3' }), ''), null);
+  assert.equal(lockedToolVersions(lock({ arm64: threeTools }, threeVersions), ''), null);
 });
 
 /**
@@ -112,39 +116,38 @@ test('the shipped lock satisfies the reader contract for every architecture it d
     assert.notEqual(versions, null, `the shipped lock is unreadable for ${architecture}`);
     // Every declared archive has a version, and vice versa: that is the whole contract.
     assert.deepEqual(Object.keys(versions).sort(), Object.keys(shipped.architectures[architecture]).sort(), architecture);
-    for (const name of ['python', 'uv', 'tectonic']) {
+    for (const name of ['tectonic', 'vale', 'typst']) {
       assert.equal(typeof versions[name], 'string', `${name} lost its version for ${architecture}`);
     }
   }
-  // 每个工具都是“被声明的工具”，版本必须可审计。没有版本的归档正是 `lockedToolVersions`
-  // 拒绝的形状，重建也不会发现。Typst 与 Vale 一样走这条通用规则，没有特判。
-  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['python', 'tectonic', 'typst', 'uv', 'vale']);
+  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['tectonic', 'typst', 'vale']);
   assert.equal(typeof shipped.valeVersion, 'string');
   assert.equal(lockedToolVersions(shipped, 'arm64').vale, shipped.valeVersion);
   assert.equal(typeof shipped.typstVersion, 'string');
   assert.equal(lockedToolVersions(shipped, 'arm64').typst, shipped.typstVersion);
-  // Roc 只发 Apple Silicon：lock 里除了 arm64 不该再有别的架构。留一个 x64 分支会让
-  // 「应用只有 arm64」这条交付事实在源码层就失真，也会让人以为 Intel 机器还受支持。
+  // Roc 只发 Apple Silicon：lock 里除了 arm64 不该再有别的架构。
   assert.deepEqual(architectures, ['arm64']);
 });
 
 test('the recorded set must match the expected set key for key', () => {
-  const expected = { python: '3.12.14', uv: '0.12.10', tectonic: '0.17.0' };
-  assert.equal(toolVersionsMatch({ python: '3.12.14', uv: '0.12.10', tectonic: '0.17.0' }, expected), true);
+  const expected = { tectonic: '0.17.0', vale: '3.24.0', typst: '0.15.0' };
+  assert.equal(toolVersionsMatch({ tectonic: '0.17.0', vale: '3.24.0', typst: '0.15.0' }, expected), true);
   // Order is irrelevant.
-  assert.equal(toolVersionsMatch({ tectonic: '0.17.0', uv: '0.12.10', python: '3.12.14' }, expected), true);
+  assert.equal(toolVersionsMatch({ typst: '0.15.0', tectonic: '0.17.0', vale: '3.24.0' }, expected), true);
 });
 
-test('a missing, extra or drifted key is a mismatch — including the unaudited tool case', () => {
-  const expected = { python: '3.12.14', uv: '0.12.10', tectonic: '0.17.0' };
+test('a missing, extra or drifted key is a mismatch', () => {
+  const expected = { tectonic: '0.17.0', vale: '3.24.0', typst: '0.15.0' };
   const mismatches = {
-    'a tool went missing': { python: '3.12.14', uv: '0.12.10' },
-    'the manifest carries a tool the lock never declared': { python: '3.12.14', uv: '0.12.10', tectonic: '0.17.0', vale: '3.24.0' },
-    'one version drifted': { python: '3.12.14', uv: '0.12.11', tectonic: '0.17.0' },
-    'a version is not a string': { python: 3, uv: '0.12.10', tectonic: '0.17.0' },
-    'a version is empty': { python: '', uv: '0.12.10', tectonic: '0.17.0' },
-    'the record is not an object': 'python',
-    'the record is an array': ['python'],
+    'a tool went missing': { tectonic: '0.17.0', typst: '0.15.0' },
+    'the manifest carries a tool the lock never declared': {
+      tectonic: '0.17.0', vale: '3.24.0', typst: '0.15.0', proofreader: '1.0.0'
+    },
+    'one version drifted': { tectonic: '0.17.0', vale: '3.24.0', typst: '0.15.1' },
+    'a version is not a string': { tectonic: '0.17.0', vale: '3.24.0', typst: 15 },
+    'a version is empty': { tectonic: '0.17.0', vale: '', typst: '0.15.0' },
+    'the record is not an object': 'toolchain',
+    'the record is an array': ['tectonic'],
     'the record is absent': undefined
   };
   for (const [label, recorded] of Object.entries(mismatches)) {
