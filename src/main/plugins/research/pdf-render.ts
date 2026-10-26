@@ -1,13 +1,33 @@
 import { mkdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
-import { getDocument, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, OPS, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { pdfjsAssetDirectory } from './pdfjs-assets';
 import { researchJobError, runResearchJob, type ResearchJobPaths } from './research-job';
 
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SOURCE = 512 * 1024 * 1024;
 const DEFAULT_PARSE_SCALE = 1.5;
+const NON_TEXT_VISUAL_OPERATIONS = new Set([
+  OPS.constructPath,
+  OPS.stroke,
+  OPS.closeStroke,
+  OPS.fill,
+  OPS.eoFill,
+  OPS.fillStroke,
+  OPS.eoFillStroke,
+  OPS.closeFillStroke,
+  OPS.closeEOFillStroke,
+  OPS.rawFillPath,
+  OPS.shadingFill,
+  OPS.paintImageMaskXObject,
+  OPS.paintImageMaskXObjectGroup,
+  OPS.paintImageXObject,
+  OPS.paintInlineImageXObject,
+  OPS.paintInlineImageXObjectGroup,
+  OPS.paintImageXObjectRepeat,
+  OPS.paintSolidColorImageMask
+]);
 
 export type ResearchPdfPageImage = {
   path: string;
@@ -22,7 +42,7 @@ export type ResearchPdfPageImage = {
 
 export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDFDocumentProxy) => Promise<T>): Promise<T> {
   const loadingTask = getDocument({
-    data: bytes,
+    data: Buffer.isBuffer(bytes) ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) : bytes,
     disableFontFace: true,
     useSystemFonts: true,
     useWorkerFetch: false,
@@ -37,6 +57,12 @@ export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDF
   } finally {
     await loadingTask.destroy();
   }
+}
+
+/** True when a page paints image or vector content beyond selectable PDF text. */
+export async function researchPdfPageHasVisualContent(page: PDFPageProxy): Promise<boolean> {
+  const operatorList = await page.getOperatorList();
+  return operatorList.fnArray.some((operation) => NON_TEXT_VISUAL_OPERATIONS.has(operation));
 }
 
 /** Render and extract text from one page using the shared bounded PDF.js/canvas path. */

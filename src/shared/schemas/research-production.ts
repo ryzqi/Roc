@@ -85,7 +85,7 @@ export const researchDocumentLimits = {
 } as const;
 
 export const researchParseContractVersion = 3;
-export const researchParserVersion = 'roc-research-parser/1' as const;
+export const researchParserVersion = 'roc-research-parser/2' as const;
 export const researchParseTiers = researchModelPacks;
 export const researchParseOptionsSchema = z.object({
   tier: z.enum(researchParseTiers),

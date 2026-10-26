@@ -15,7 +15,7 @@ import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocum
 import type { z } from 'zod';
 import { ResearchProcessError } from './process-runner';
 import { runResearchJob, researchJobError, type ResearchJobPaths } from './research-job';
-import { renderResearchPdfPage, withResearchPdf } from './pdf-render';
+import { renderResearchPdfPage, researchPdfPageHasVisualContent, withResearchPdf } from './pdf-render';
 import { researchModelLock, getModelAsset, modelPackManifest } from './model-catalog';
 import type { ResearchModelFiles } from './model-store';
 
@@ -23,6 +23,9 @@ const MAX_SOURCE_BYTES = 512 * 1024 * 1024;
 const MAX_HTML_BYTES = 64 * 1024 * 1024;
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SELECTED_PAGES = 500;
+const MIN_NATIVE_TEXT_CHARACTERS = 600;
+const MIN_NATIVE_TEXT_WORDS = 80;
+const MIN_NATIVE_TEXT_PRINTABLE_RATIO = 0.9;
 const PARSER_VERSION = researchParserVersion;
 const SUPPORTED_EXTENSIONS = ['.pdf', '.html', '.htm', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp'] as const;
 
@@ -92,14 +95,14 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
   return await withResearchPdf(bytes, async (pdf) => {
     const pages = parsePageRange(options.pageRange, pdf.numPages);
     if (pages.length > MAX_SELECTED_PAGES) researchJobError('research_parse_page_limit');
-    const service = input.modelFiles === null ? null : await createStructureService(input.modelFiles, options.device);
+    let service: StructureRuntime | null = null;
     const pageBlocks: ParseBlock[] = [];
     const assets: ParseAsset[] = [];
     const assetBudget = { totalBytes: 0 };
     const pageResults: Array<{ page: number; text: string; regions: unknown[] }> = [];
     const nativeTextPages: string[] = [];
     let usedOcr = false;
-    let actualDevice: 'coreml' | 'cpu' = service?.device ?? 'cpu';
+    let actualDevice: 'coreml' | 'cpu' = 'cpu';
     for (const pageNumber of pages) {
       throwIfAborted(input.signal);
       const page = await pdf.getPage(pageNumber);
@@ -110,12 +113,17 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
         assets.push({ path: `pages/page-${pageNumber}.png`, kind: 'page', page: pageNumber });
         const nativeText = normalizeText(rendered.text);
         nativeTextPages.push(nativeText);
-        if (service === null) {
-          if (nativeText.length === 0) researchJobError('research_model_pack_required');
+        const nativeTextOnly = input.modelFiles === null
+          ? nativeText.length > 0
+          : hasHighQualityNativeText(nativeText) && !(await researchPdfPageHasVisualContent(page));
+        if (nativeTextOnly) {
           pageBlocks.push(makeBlock(`page-${pageNumber}-text`, 'paragraph', 'Page text', nativeText, pageNumber, [0, 0, rendered.width, rendered.height], null));
           pageResults.push({ page: pageNumber, text: nativeText, regions: [] });
+          if (pageBlocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
           continue;
         }
+        if (input.modelFiles === null) researchJobError('research_model_pack_required');
+        service ??= await createStructureService(input.modelFiles, options.device);
         const inference = await service.service.run(rendered.image, structureRunOptions(service.hasFormula));
         usedOcr = true;
         actualDevice = service.device;
@@ -165,12 +173,12 @@ async function parsePdf(job: ResearchJobPaths, input: ParserInput, options: Rese
         page.cleanup();
       }
     }
-    if (service === null && nativeTextPages.every((text) => text.length === 0)) researchJobError('research_model_pack_required');
+    if (input.modelFiles === null && nativeTextPages.every((text) => text.length === 0)) researchJobError('research_model_pack_required');
     let parseMode: ParseResult['parseMode'] = 'native-text';
     if (usedOcr) {
       parseMode = nativeTextPages.some((text) => text.length > 0) ? 'mixed' : 'ocr';
     }
-    const warnings = service === null ? ['research_models_missing_native_text_only'] : [];
+    const warnings = input.modelFiles === null ? ['research_models_missing_native_text_only'] : [];
     return await writeParseResult(job, {
       options,
       modelManifest: service === null ? '' : input.modelManifest,
@@ -280,6 +288,8 @@ async function createStructureService(files: ResearchModelFiles, preferredDevice
   }
   const dictionary = buffers.get('ocr-dictionary')?.toString('utf8').trimEnd().split(/\r?\n/u) ?? [];
   if (dictionary.length !== 6904) throw new ResearchProcessError('research_model_dictionary_invalid');
+  // The PP-OCRv6 tiny preset has one extra CTC class for spaces beyond the locked dictionary file.
+  dictionary.push(' ');
   const ocrDet = buffers.get('ocr-det');
   const ocrRec = buffers.get('ocr-rec');
   const layout = buffers.get('layout');
@@ -570,6 +580,14 @@ function regionTextValue(region: {
 
 function normalizeText(value: string): string {
   return value.replace(/\u0000/gu, '').replace(/[ \t]+/gu, ' ').replace(/\n{3,}/gu, '\n\n').trim();
+}
+
+function hasHighQualityNativeText(value: string): boolean {
+  if (value.length < MIN_NATIVE_TEXT_CHARACTERS) return false;
+  const wordCount = value.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
+  if (wordCount < MIN_NATIVE_TEXT_WORDS) return false;
+  const printableCount = value.match(/[\p{L}\p{N}\p{P}\p{Zs}]/gu)?.length ?? 0;
+  return printableCount / value.length >= MIN_NATIVE_TEXT_PRINTABLE_RATIO;
 }
 
 function assertRasterSize(width: number, height: number): void {
