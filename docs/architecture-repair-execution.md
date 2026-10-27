@@ -137,6 +137,14 @@ The first independent review found that a new path reported as `change` would ot
 
 The bounded cache matters because `resolveScheduledOccurrenceSchedule` advances missed occurrences inside `claimInCurrentTransaction`, which runs within SQLite transactions. Raw per-call Croner construction was 9–12× slower on common schedules; the warm bounded-cache path is faster than the old parser and uses no scheduled timer.
 
+## Phase 3 — Fuzzy search comparison
+
+**Status:** Final Standards and Spec reviews passed with no findings. The offline result is a no-go for production Fuzzysort adoption; Phase 3 made no source or root dependency changes.
+
+The annotated 15-query comparison improved macro NDCG@5 from `0.7459` to `0.9306` and NDCG@10 from `0.7615` to `0.9534` at threshold `0.25`, but `rpt` fell from `0.64` to `0.36` at NDCG@5. The detailed query labels, relevant ranks, and full baseline/candidate Top-5/Top-10 ranked paths with relevance flags are in `docs/architecture-repair-phase-3-search-evaluation.md` and `scripts/benchmarks/phase-3-file-name-search/quality-eval-results.json`.
+
+On the same nested 20k corpus, the candidate added a median `38,395KB` heap and `25,056KB` peak RSS. Cold name was `86.293ms` versus `78.038ms`; hot basename p50/p95 was `1.646/1.873ms` versus `1.501/1.726ms`. The complete path-first request measured `100.691ms` versus `70.219ms` baseline, about `43%` slower. Cold totals include Fuzzysort snapshot construction; the first `go()` synchronously finishes its index preparation. Phase 0 has no explicit numeric budgets; using the measured baseline as a no-regression reference, this candidate does not pass the plan's latency/memory gate. The real-filesystem compatibility check verified actual `FileService` snapshots preserve workspace isolation, ignored `.git` and `node_modules` directories, symlink exclusion, basename-before-path ordering, unique paths, equal-score basename ties matching the existing comparator, empty-query traversal order, and result-limit truncation. Unicode coverage is limited to the labelled CJK and Latin-diacritic cases and does not establish equivalence across all normalization forms. A 50,000-file run confirmed that the real snapshot builder caps at 20,000 entries and sets `truncated=true`; baseline and candidate both returned 20 results and retained `truncated=true` for basename and path queries. The candidate retained about `38,400KB` extra heap at the cap and its fresh path-first request took `119.927ms` versus `90.560ms` baseline (about `32%` slower). Reproducible offline scripts and full annotated Top-5/Top-10 relevance output are committed under `scripts/benchmarks/phase-3-file-name-search/`; Fuzzysort itself remains an isolated, non-root dependency.
+
 ## Decisions
 
 - Keep native-text page PNG and both JSON artifact paths while their consumer contracts require them; optimize only after a compatible consumer migration and measured benefit.
@@ -148,7 +156,7 @@ The bounded cache matters because `resolveScheduledOccurrenceSchedule` advances 
 
 - Phase 1: Committed.
 - Phase 2: Committed.
-- Phase 3: Pending.
+- Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
 - Phase 4: Pending.
 - Phase 5: Pending.
 - Phase 6: Pending.

@@ -1,0 +1,1896 @@
+{
+  "evaluator": "offline-manual-top-k-v1",
+  "corpusFiles": 50,
+  "snapshotTruncated": false,
+  "fuzzyVersion": "4.0.2",
+  "fuzzysortNormalization": "library default NFKD/diacritic and punctuation remapping",
+  "fuzzyThreshold": 0.25,
+  "contractChecks": {
+    "emptyQueryOrderAndTruncation": true,
+    "resultLimitTruncation": true,
+    "snapshotCapFlagWithoutMatches": true,
+    "stableTiesAndUniquePaths": true
+  },
+  "ranking": "basename score group first; path-only group second; within each group score desc, then current path-length/localeCompare ties",
+  "aggregate": {
+    "baseline": {
+      "p5": 0.4267,
+      "p10": 0.2267,
+      "r5": 0.7844,
+      "r10": 0.8111,
+      "ndcg5": 0.7459,
+      "ndcg10": 0.7615
+    },
+    "fuzzysort": {
+      "p5": 0.4933,
+      "p10": 0.2667,
+      "r5": 0.96,
+      "r10": 1,
+      "ndcg5": 0.9306,
+      "ndcg10": 0.9534
+    }
+  },
+  "queries": [
+    {
+      "query": "rpt",
+      "note": "Short acronym can mean report or research-plan-template; arpot/retry-policy are distractors.",
+      "relevantPaths": [
+        "analysis/report.md",
+        "docs/weekly-report.md",
+        "docs/annual-project-report.md",
+        "reports/quarterly-report.md",
+        "docs/research-plan-template.md"
+      ],
+      "baseline": {
+        "truncated": true,
+        "top5": [
+          {
+            "path": "analysis/report.md",
+            "relevant": true
+          },
+          {
+            "path": "tmp/arpot-cache.md",
+            "relevant": false
+          },
+          {
+            "path": "docs/weekly-report.md",
+            "relevant": true
+          },
+          {
+            "path": "src/shared/retry-policy.ts",
+            "relevant": false
+          },
+          {
+            "path": "reports/quarterly-report.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "analysis/report.md",
+            "relevant": true
+          },
+          {
+            "path": "tmp/arpot-cache.md",
+            "relevant": false
+          },
+          {
+            "path": "docs/weekly-report.md",
+            "relevant": true
+          },
+          {
+            "path": "src/shared/retry-policy.ts",
+            "relevant": false
+          },
+          {
+            "path": "reports/quarterly-report.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/annual-project-report.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/research-plan-template.md",
+            "relevant": true
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/types/foo.bar.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "relevant": false
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": true,
+        "total": 21,
+        "top5": [
+          {
+            "path": "src/shared/retry-policy.ts",
+            "score": 0.6618,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "docs/research-plan-template.md",
+            "score": 0.649,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "tmp/arpot-cache.md",
+            "score": 0.352,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "analysis/report.md",
+            "score": 0.3178,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.298,
+            "source": "basename",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/shared/retry-policy.ts",
+            "score": 0.6618,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "docs/research-plan-template.md",
+            "score": 0.649,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "tmp/arpot-cache.md",
+            "score": 0.352,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "analysis/report.md",
+            "score": 0.3178,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.298,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "docs/weekly-report.md",
+            "score": 0.2969,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "reports/quarterly-report.md",
+            "score": 0.2896,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/annual-project-report.md",
+            "score": 0.2795,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/projects/project-list.tsx",
+            "score": 0.6098,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "score": 0.5957,
+            "source": "path",
+            "relevant": false
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 0.6,
+            "ndcg": 0.639945385422766
+          },
+          "p10": {
+            "precision": 0.5,
+            "recall": 1,
+            "ndcg": 0.8738100898801323
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 0.4,
+            "ndcg": 0.36005461457723403
+          },
+          "p10": {
+            "precision": 0.5,
+            "recall": 1,
+            "ndcg": 0.7009124514018641
+          }
+        }
+      }
+    },
+    {
+      "query": "cfg",
+      "note": "Abbreviation for configuration; unrelated c-f-g letter sequences are distractors.",
+      "relevantPaths": [
+        "src/config/configuration.ts",
+        "settings/editor-config.json"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "relevant": false
+          },
+          {
+            "path": "settings/editor-config.json",
+            "relevant": true
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "relevant": true
+          },
+          {
+            "path": "docs/foo-bar-guide.md",
+            "relevant": false
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "relevant": false
+          },
+          {
+            "path": "settings/editor-config.json",
+            "relevant": true
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "relevant": true
+          },
+          {
+            "path": "docs/foo-bar-guide.md",
+            "relevant": false
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "relevant": false
+          },
+          {
+            "path": "workspaces/current-project/file-search-settings.json",
+            "relevant": false
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 6,
+        "top5": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.3178,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "score": 0.3167,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "settings/editor-config.json",
+            "score": 0.2963,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/foo-bar-guide.md",
+            "score": 0.2969,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "score": 0.2896,
+            "source": "path",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.3178,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "score": 0.3167,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "settings/editor-config.json",
+            "score": 0.2963,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/foo-bar-guide.md",
+            "score": 0.2969,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "score": 0.2896,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "workspaces/current-project/file-search-settings.json",
+            "score": 0.2551,
+            "source": "path",
+            "relevant": false
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 0.6934264036172708
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 0.6934264036172708
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 0.6934264036172708
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 0.6934264036172708
+          }
+        }
+      }
+    },
+    {
+      "query": "api",
+      "note": "API service and documentation across main/renderer layers.",
+      "relevantPaths": [
+        "src/main/ipc/file-api.ts",
+        "src/renderer/ipc/file-api-client.ts",
+        "docs/api-usage.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "docs/api-usage.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/capability-guide.md",
+            "relevant": false
+          },
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/ipc/file-api-client.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/shared/retry-policy.ts",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/api-usage.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/capability-guide.md",
+            "relevant": false
+          },
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/ipc/file-api-client.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/shared/retry-policy.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/task/task-runner.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/agent/run-harness.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/agent/session-runner.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "relevant": false
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 11,
+        "top5": [
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "score": 0.9064,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/api-usage.md",
+            "score": 0.9005,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/ipc/file-api-client.ts",
+            "score": 0.8693,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/capability-guide.md",
+            "score": 0.3469,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.2955,
+            "source": "path",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "score": 0.9064,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/api-usage.md",
+            "score": 0.9005,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/ipc/file-api-client.ts",
+            "score": 0.8693,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/capability-guide.md",
+            "score": 0.3469,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.2955,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/task/task-runner.ts",
+            "score": 0.2955,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/agent/run-harness.ts",
+            "score": 0.2955,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/plugins/agent/session-runner.ts",
+            "score": 0.2955,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "score": 0.2816,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/shared/retry-policy.ts",
+            "score": 0.2802,
+            "source": "path",
+            "relevant": false
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 0.9060254355346823
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 0.9060254355346823
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "cron",
+      "note": "Cron implementation and its contract.",
+      "relevantPaths": [
+        "src/main/plugins/task/cron-parser.ts",
+        "docs/scheduler/cron-contract.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "relevant": false
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "relevant": false
+          },
+          {
+            "path": "docs/scheduler/cron-contract.md",
+            "relevant": true
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "cache/cafe-green-graph.json",
+            "relevant": false
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "relevant": false
+          },
+          {
+            "path": "docs/scheduler/cron-contract.md",
+            "relevant": true
+          },
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/shared/use-async-action.ts",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "relevant": false
+          },
+          {
+            "path": "workspaces/current-project/file-search-settings.json",
+            "relevant": false
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "relevant": false
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 9,
+        "top5": [
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.8948,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/scheduler/cron-contract.md",
+            "score": 0.884,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "score": 0.2975,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.2843,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "score": 0.2793,
+            "source": "path",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/plugins/task/cron-parser.ts",
+            "score": 0.8948,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/scheduler/cron-contract.md",
+            "score": 0.884,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/config/configuration.ts",
+            "score": 0.2975,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.2843,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "score": 0.2793,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "score": 0.2719,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/shared/use-async-action.ts",
+            "score": 0.269,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "score": 0.2652,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "score": 0.26,
+            "source": "path",
+            "relevant": false
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 0.5706417189553201
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 0.5706417189553201
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "readme",
+      "note": "Case-insensitive README lookup.",
+      "relevantPaths": [
+        "README.md",
+        "docs/ReadMe-Workspace.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "README.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/ReadMe-Workspace.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "README.md",
+            "relevant": true
+          },
+          {
+            "path": "docs/ReadMe-Workspace.md",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 2,
+        "top5": [
+          {
+            "path": "README.md",
+            "score": 0.9524,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/ReadMe-Workspace.md",
+            "score": 0.8793,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "README.md",
+            "score": 0.9524,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/ReadMe-Workspace.md",
+            "score": 0.8793,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "论文",
+      "note": "CJK query across basename and path.",
+      "relevantPaths": [
+        "papers/论文/方法比较.md",
+        "研究/论文引文管理.csv",
+        "docs/论文与数据.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "docs/论文与数据.md",
+            "relevant": true
+          },
+          {
+            "path": "研究/论文引文管理.csv",
+            "relevant": true
+          },
+          {
+            "path": "papers/论文/方法比较.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/论文与数据.md",
+            "relevant": true
+          },
+          {
+            "path": "研究/论文引文管理.csv",
+            "relevant": true
+          },
+          {
+            "path": "papers/论文/方法比较.md",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 3,
+        "top5": [
+          {
+            "path": "docs/论文与数据.md",
+            "score": 0.9207,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "研究/论文引文管理.csv",
+            "score": 0.9055,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "papers/论文/方法比较.md",
+            "score": 0.8633,
+            "source": "path",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/论文与数据.md",
+            "score": 0.9207,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "研究/论文引文管理.csv",
+            "score": 0.9055,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "papers/论文/方法比较.md",
+            "score": 0.8633,
+            "source": "path",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "café",
+      "note": "Accent-insensitive café search; exact café names and the unaccented cafe variant are relevant.",
+      "relevantPaths": [
+        "research/café/summary.txt",
+        "research/café/project-notes.md",
+        "research/cafe-notes.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "research/café/summary.txt",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "research/café/summary.txt",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 11,
+        "top5": [
+          {
+            "path": "research/cafe-notes.md",
+            "score": 0.9009,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.8582,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "research/café/summary.txt",
+            "score": 0.8332,
+            "source": "path",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "score": 0.811,
+            "source": "path",
+            "relevant": true
+          },
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "score": 0.2839,
+            "source": "path",
+            "relevant": false
+          }
+        ],
+        "top10": [
+          {
+            "path": "research/cafe-notes.md",
+            "score": 0.9009,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "cache/cafe-green-graph.json",
+            "score": 0.8582,
+            "source": "basename",
+            "relevant": false
+          },
+          {
+            "path": "research/café/summary.txt",
+            "score": 0.8332,
+            "source": "path",
+            "relevant": true
+          },
+          {
+            "path": "research/café/project-notes.md",
+            "score": 0.811,
+            "source": "path",
+            "relevant": true
+          },
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "score": 0.2839,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/ipc/file-api.ts",
+            "score": 0.2755,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/services/file-index.ts",
+            "score": 0.2672,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/services/file-search.ts",
+            "score": 0.2672,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/services/file-watcher.ts",
+            "score": 0.2672,
+            "source": "path",
+            "relevant": false
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "score": 0.2657,
+            "source": "path",
+            "relevant": false
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 0.6666666666666666,
+            "ndcg": 0.7653606369886217
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 0.6666666666666666,
+            "ndcg": 0.7653606369886217
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 0.9060254355346823
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 0.9060254355346823
+          }
+        }
+      }
+    },
+    {
+      "query": "résumé",
+      "note": "Accent-insensitive mixed-Unicode query.",
+      "relevantPaths": [
+        "papers/résumé/model.txt",
+        "docs/resume-style.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "papers/résumé/model.txt",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "papers/résumé/model.txt",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 2,
+        "top5": [
+          {
+            "path": "docs/resume-style.md",
+            "score": 0.901,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "papers/résumé/model.txt",
+            "score": 0.8585,
+            "source": "path",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/resume-style.md",
+            "score": 0.901,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "papers/résumé/model.txt",
+            "score": 0.8585,
+            "source": "path",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "ndcg": 0.6131471927654584
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 0.5,
+            "ndcg": 0.6131471927654584
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "foo.bar",
+      "note": "Punctuation-sensitive source filename.",
+      "relevantPaths": [
+        "src/types/foo.bar.ts"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "src/types/foo.bar.ts",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/types/foo.bar.ts",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 1,
+        "top5": [
+          {
+            "path": "src/types/foo.bar.ts",
+            "score": 0.9524,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/types/foo.bar.ts",
+            "score": 0.9524,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "index",
+      "note": "Duplicate basenames and path hits; all five index files are relevant.",
+      "relevantPaths": [
+        "src/main/index.ts",
+        "src/renderer/index.ts",
+        "src/renderer/workspace/index.ts",
+        "src/main/services/file-index.ts",
+        "src/renderer/workspace/file-index-panel.tsx"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "src/main/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 5,
+        "top5": [
+          {
+            "path": "src/main/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-index.ts",
+            "score": 0.9075,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "score": 0.8702,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/index.ts",
+            "score": 0.9523,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-index.ts",
+            "score": 0.9075,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/renderer/workspace/file-index-panel.tsx",
+            "score": 0.8702,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 1,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.5,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 1,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.5,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "analysis",
+      "note": "Analysis notes plus a deep path hit and basename hits.",
+      "relevantPaths": [
+        "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+        "src/main/research/analysis-summary.ts",
+        "analysis/report.md",
+        "analysis-notes.txt"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "analysis-notes.txt",
+            "relevant": true
+          },
+          {
+            "path": "src/main/research/analysis-summary.ts",
+            "relevant": true
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "relevant": true
+          },
+          {
+            "path": "analysis/report.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "analysis-notes.txt",
+            "relevant": true
+          },
+          {
+            "path": "src/main/research/analysis-summary.ts",
+            "relevant": true
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "relevant": true
+          },
+          {
+            "path": "analysis/report.md",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 4,
+        "top5": [
+          {
+            "path": "analysis-notes.txt",
+            "score": 0.895,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/research/analysis-summary.ts",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "analysis/report.md",
+            "score": 0.895,
+            "source": "path",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "analysis-notes.txt",
+            "score": 0.895,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/research/analysis-summary.ts",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "projects/2025/experiments/longitudinal/studies/cohort-a/analysis-results.md",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "analysis/report.md",
+            "score": 0.895,
+            "source": "path",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.8,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.8,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.4,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "watcher",
+      "note": "Duplicate concepts across service and workspace paths.",
+      "relevantPaths": [
+        "src/main/files/watcher-service.ts",
+        "src/main/services/file-watcher.ts",
+        "src/main/workspace/file-watcher-state.ts"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-watcher.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/services/file-watcher.ts",
+            "relevant": true
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 3,
+        "top5": [
+          {
+            "path": "src/main/services/file-watcher.ts",
+            "score": 0.9076,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "score": 0.8747,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/services/file-watcher.ts",
+            "score": 0.9076,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/files/watcher-service.ts",
+            "score": 0.8894,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "src/main/workspace/file-watcher-state.ts",
+            "score": 0.8747,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "async action",
+      "note": "Word-separated query against punctuation-separated basename.",
+      "relevantPaths": [
+        "src/renderer/shared/use-async-action.ts"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [],
+        "top10": []
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 1,
+        "top5": [
+          {
+            "path": "src/renderer/shared/use-async-action.ts",
+            "score": 0.8768,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/renderer/shared/use-async-action.ts",
+            "score": 0.8768,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0,
+            "recall": 0,
+            "ndcg": 0
+          },
+          "p10": {
+            "precision": 0,
+            "recall": 0,
+            "ndcg": 0
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "file search",
+      "note": "Two-word mixed basename/path query.",
+      "relevantPaths": [
+        "src/main/services/file-search.ts",
+        "docs/file-search-guide.md",
+        "workspaces/current-project/file-search-settings.json"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [],
+        "top10": []
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 3,
+        "top5": [
+          {
+            "path": "src/main/services/file-search.ts",
+            "score": 0.9009,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "score": 0.8701,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "workspaces/current-project/file-search-settings.json",
+            "score": 0.8393,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "src/main/services/file-search.ts",
+            "score": 0.9009,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "docs/file-search-guide.md",
+            "score": 0.8701,
+            "source": "basename",
+            "relevant": true
+          },
+          {
+            "path": "workspaces/current-project/file-search-settings.json",
+            "score": 0.8393,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0,
+            "recall": 0,
+            "ndcg": 0
+          },
+          "p10": {
+            "precision": 0,
+            "recall": 0,
+            "ndcg": 0
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.6,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.3,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    },
+    {
+      "query": "研究计划",
+      "note": "Mixed Chinese basename search.",
+      "relevantPaths": [
+        "docs/重要研究计划.md"
+      ],
+      "baseline": {
+        "truncated": false,
+        "top5": [
+          {
+            "path": "docs/重要研究计划.md",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/重要研究计划.md",
+            "relevant": true
+          }
+        ]
+      },
+      "fuzzysort": {
+        "truncated": false,
+        "total": 1,
+        "top5": [
+          {
+            "path": "docs/重要研究计划.md",
+            "score": 0.9312,
+            "source": "basename",
+            "relevant": true
+          }
+        ],
+        "top10": [
+          {
+            "path": "docs/重要研究计划.md",
+            "score": 0.9312,
+            "source": "basename",
+            "relevant": true
+          }
+        ]
+      },
+      "metrics": {
+        "baseline": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 1,
+            "ndcg": 1
+          }
+        },
+        "fuzzysort": {
+          "p5": {
+            "precision": 0.2,
+            "recall": 1,
+            "ndcg": 1
+          },
+          "p10": {
+            "precision": 0.1,
+            "recall": 1,
+            "ndcg": 1
+          }
+        }
+      }
+    }
+  ]
+}
