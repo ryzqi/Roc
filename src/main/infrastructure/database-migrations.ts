@@ -17,10 +17,12 @@ export type RocSchemaMetadata = {
   updatedAt: string;
 };
 
+const expectedSchemaCache = new Map<string, ReadonlyMap<string, string>>();
+
 /**
  * 把库推到 `migrations` 声明的形状。三条路：
  *
- * 1. **已经是最新**（`sqlite_master` 里的对象与清单逐字一致）：只补记 ledger。
+ * 1. **已经是最新**（`sqlite_master` 里的对象与清单逐字一致）：历史 ledger 一致或为空时只补记 ledger；已记录的 migration 被改写仍要求重建。
  * 2. **空库**（无对象、无 ledger）：从头跑全部迁移。
  * 3. **已应用一部分**：只要是**追加式**变化（新增列/新增表），就把未应用的迁移按版本顺序跑完，
  *    并在同一个事务里验证最终形状与清单一致。历史 migration 被改写（名字或 checksum 变了）、
@@ -41,8 +43,19 @@ export function applyDatabaseMigrations(
   ensureLedgerTables(db);
   validateMigrationList(input.migrations);
   const applied = readAppliedMigrations(db, input.dbName);
-  // 预期形状只算一次：升级路径上要在事务里再验一次，不必把全部 migration 在探测库里重跑两遍。
-  const expectedObjects = readSchemaObjects(input.migrations.map((migration) => migration.sql).join('\n'));
+  const rewritten = [...applied.entries()].find(([version, record]) => {
+    const migration = input.migrations.find((entry) => entry.version === version);
+    return (
+      migration === undefined ||
+      migration.name !== record.name ||
+      checksumMigration(migration) !== record.checksum
+    );
+  });
+  if (rewritten !== undefined) {
+    // 已经执行过的 migration 被改写：即使当前 schema 碰巧相同，也没有可信的历史起点。
+    throw new Error('database_schema_rebuild_required');
+  }
+  const expectedObjects = getExpectedSchemaObjects(input.migrations);
   if (schemaObjectsMatch(db, expectedObjects)) {
     if (!appliedMigrationsMatch(applied, input.migrations)) {
       recordCurrentMigrations(db, input.dbName, input.migrations, now);
@@ -66,19 +79,6 @@ export function applyDatabaseMigrations(
     // 有对象但没有 ledger：来历不明的库，不猜它停在哪个版本。
     throw new Error('database_schema_rebuild_required');
   }
-  const rewritten = [...applied.entries()].find(([version, record]) => {
-    const migration = input.migrations.find((entry) => entry.version === version);
-    return (
-      migration === undefined ||
-      migration.name !== record.name ||
-      checksumMigration(migration) !== record.checksum
-    );
-  });
-  if (rewritten !== undefined) {
-    // 已经执行过的 migration 被改写：没有可信的起点，只能重建。
-    throw new Error('database_schema_rebuild_required');
-  }
-
   const pending = input.migrations.filter((migration) => !applied.has(migration.version));
   const applyPending = db.transaction(() => {
     for (const migration of pending) {
@@ -221,6 +221,20 @@ function schemaObjectsMatch(db: DatabaseConnection, expected: ReadonlyMap<string
     }
   }
   return true;
+}
+
+function getExpectedSchemaObjects(
+  migrations: readonly RocDatabaseMigration[]
+): ReadonlyMap<string, string> {
+  const sql = migrations.map((migration) => migration.sql).join('\n');
+  const checksum = checksumText(sql);
+  const cached = expectedSchemaCache.get(checksum);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const objects = readSchemaObjects(sql);
+  expectedSchemaCache.set(checksum, objects);
+  return objects;
 }
 
 function readSchemaObjects(sql: string): Map<string, string> {

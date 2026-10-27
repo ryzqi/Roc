@@ -101,6 +101,30 @@ test('已经是最新的库只补 ledger，不动 schema', () => {
   assert.deepEqual(columnNames(db, 'widgets'), ['id', 'label', 'owner']);
 });
 
+test('已记录 migration 名称或 checksum 被改写时，即使最终 schema 相同也要求重建', () => {
+  const rewrittenMigrations = [
+    [migration(1, 'renamed_widgets', baseMigrations[0].sql), baseMigrations[1]],
+    [migration(1, 'widgets', baseMigrations[0].sql.replace('label TEXT', 'label  TEXT')), baseMigrations[1]]
+  ];
+
+  for (const migrations of rewrittenMigrations) {
+    const db = new Database(':memory:');
+    applyDatabaseMigrations(db, { dbName: 'core', migrations: baseMigrations });
+    const ledgerBefore = db
+      .prepare('SELECT version, name, checksum FROM schema_migrations WHERE db_name = ? ORDER BY version')
+      .all('core');
+
+    assert.throws(
+      () => applyDatabaseMigrations(db, { dbName: 'core', migrations }),
+      /database_schema_rebuild_required/u
+    );
+    assert.deepEqual(
+      db.prepare('SELECT version, name, checksum FROM schema_migrations WHERE db_name = ? ORDER BY version').all('core'),
+      ledgerBefore
+    );
+  }
+});
+
 test('已应用的 migration 被改写时要求重建', () => {
   const db = new Database(':memory:');
   applyDatabaseMigrations(db, { dbName: 'core', migrations: baseMigrations });
