@@ -8,7 +8,13 @@ No production code or dependency changed for this evaluation.
 
 ## Versions and schema
 
-The evaluated package is `@langchain/langgraph-checkpoint-sqlite@1.1.0` (npm metadata retrieved 2026-10-27). It depends on `better-sqlite3 ^12.10.0`; Roc pins `better-sqlite3 13.0.3`. From the repository root, `rtk proxy pnpm install --lockfile-only --ignore-scripts --ignore-workspace --dir /Users/Apple_501/Desktop/Roc/Roc/.planning/2026-10-27-roc-architecture-repair-plan/pr9-prototype/dependency-simulation --lockfile-dir /Users/Apple_501/Desktop/Roc/Roc/.planning/2026-10-27-roc-architecture-repair-plan/pr9-prototype/dependency-simulation` completed with pnpm 12.5.1 and resolved both `better-sqlite3@12.11.1` and `better-sqlite3@13.0.3`. The resulting lockfile is `.planning/2026-10-27-roc-architecture-repair-plan/pr9-prototype/dependency-simulation/pnpm-lock.yaml`.
+The evaluated package is `@langchain/langgraph-checkpoint-sqlite@1.1.0` (npm metadata retrieved 2026-10-27). It depends on `better-sqlite3 ^12.10.0`; Roc pins `better-sqlite3 13.0.3`. From `.planning/2026-10-27-roc-architecture-repair-plan/pr9-prototype/dependency-simulation/`, run:
+
+```sh
+rtk proxy pnpm install --lockfile-only --ignore-scripts --ignore-workspace --lockfile-dir .
+```
+
+The command completed with pnpm 12.5.1 and resolved both `better-sqlite3@12.11.1` and `better-sqlite3@13.0.3`. The resulting lockfile is `.planning/2026-10-27-roc-architecture-repair-plan/pr9-prototype/dependency-simulation/pnpm-lock.yaml`.
 
 The official saver creates `checkpoints` and `writes`. Roc currently uses `langgraph_checkpoints` and `langgraph_checkpoint_writes`. The official checkpoint row has one serializer `type` for both checkpoint and metadata and no `created_at`; Roc stores separate checkpoint and metadata types and a timestamp. The official writes table also has no timestamp. The prototype only copied rows whose checkpoint and metadata serializer types matched.
 
