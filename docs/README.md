@@ -11,6 +11,7 @@
 | [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
+| [architecture-repair-plan.md](architecture-repair-plan.md) | 架构收敛审计结果与逐项修复计划 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
