@@ -147,7 +147,7 @@ On the same nested 20k corpus, the candidate added a median `38,395KB` heap and 
 
 ## Phase 4 — PDF work reduction
 
-**Status:** Phase 4 implementation and validation are complete: 468 unit tests, 26 renderer tests, build/chunk checks, and fresh ten-run same-hash baselines pass. The original three Spec findings and both follow-up Spec/Standards findings are fixed; final Standards and Spec reviews returned no findings. Phase 4 commit is pending.
+**Status:** Phase 4 implementation and validation are complete: 468 unit tests, 26 renderer tests, build/chunk checks, and fresh ten-run same-hash baselines pass. The original three Spec findings and both follow-up Spec/Standards findings are fixed; final Standards and Spec reviews returned no findings. Phase 4 is committed as `65c87c7`.
 
 ### Consumer and compatibility audit
 
@@ -199,7 +199,7 @@ No model pack is available to measure model initialization or inference, so this
 - Phase 1: Committed.
 - Phase 2: Committed.
 - Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
-- Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; commit pending.
+- Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
 - Phase 5: Pending.
 - Phase 6: Pending.
 - Phase 7: Pending.
