@@ -53,7 +53,6 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
       version: '1.0.0',
       displayName: 'MCP',
       description: 'Roc MCP plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 50,
       dependencies: [],

@@ -122,7 +122,6 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       version: '1.0.0',
       displayName: 'Agent',
       description: 'Roc agent runtime plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 10,
       dependencies: resolveDependencies(options),

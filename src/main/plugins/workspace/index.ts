@@ -124,7 +124,6 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       version: '1.0.0',
       displayName: 'Workspace',
       description: 'Roc workspace plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 40,
       dependencies: [],

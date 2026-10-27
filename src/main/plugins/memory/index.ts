@@ -225,7 +225,6 @@ export function createMemoryPlugin(options: MemoryPluginOptions): RocPlugin {
       version: '1.0.0',
       displayName: 'Memory',
       description: 'Roc memory plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 20,
       dependencies: ['@roc/plugin-agent'],

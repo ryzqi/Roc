@@ -76,7 +76,6 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
       version: '1.0.0',
       displayName: 'Diagnostics',
       description: 'Roc diagnostics plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 80,
       dependencies: ['@roc/plugin-task', '@roc/plugin-runtime-tools'],

@@ -167,7 +167,6 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       version: '1.0.0',
       displayName: 'Research Workbench',
       description: '科研项目、阶段流程和 Provenance 基础能力。',
-      loadPhase: 'critical',
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],

@@ -23,7 +23,6 @@ export function createAppPlugin(options: AppPluginOptions): RocPlugin {
       version: '1.0.0',
       displayName: 'App',
       description: 'Roc app status plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 0,
       dependencies: [],

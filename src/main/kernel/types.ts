@@ -1,8 +1,6 @@
 import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
 
-export type PluginLoadPhase = 'critical' | 'deferred' | 'on_demand';
-
 export type RocPluginHealth =
   | { status: 'healthy' }
   | { status: 'degraded'; reason: string }
@@ -20,7 +18,6 @@ export type RocPluginManifest = {
   readonly version: string;
   readonly displayName: string;
   readonly description: string;
-  readonly loadPhase: PluginLoadPhase;
   readonly required: boolean;
   readonly order: number;
   readonly dependencies: readonly string[];

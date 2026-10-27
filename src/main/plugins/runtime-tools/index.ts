@@ -74,7 +74,6 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
       version: '1.0.0',
       displayName: 'Runtime Tools',
       description: 'Roc runtime tools plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 70,
       dependencies: [],

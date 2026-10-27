@@ -14,7 +14,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 - 路由：`src/renderer/app/routes.ts`（`page` / `project` / `view` / `tool` / `file` / `assistant`）
 - **面表**：`src/shared/surfaces.ts`（「有哪些面、每个落在哪」的唯一真理源）
 - 视图注册：`src/renderer/app/view-registry.ts`（懒加载 + 解析跟踪）
-- 主进程：`src/main/plugins/research/`，`loadPhase: critical`
+- 主进程：`src/main/plugins/research/`，内置插件按依赖关系与清单顺序加载
 - 数据根：`~/.roc`；库、索引、实验、导出分别在 `research-library` / `research-index` /
   `research-experiments` / `research-exports`
 

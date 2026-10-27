@@ -109,7 +109,6 @@ export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
       version: '1.0.0',
       displayName: 'Task',
       description: 'Roc task plugin.',
-      loadPhase: 'critical',
       required: true,
       order: 30,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],

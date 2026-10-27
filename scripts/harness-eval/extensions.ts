@@ -46,7 +46,7 @@ export async function verifyExtensions(name: string, directory: string): Promise
     const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached: true, stdio: 'ignore' });
     await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     const descriptor = { name: 'fixture.failed', version: '1', inputSchema: z.object({}), outputSchema: z.string() };
-    const plugin: RocPlugin = { manifest: { id: 'fixture-failed', version: '1', displayName: 'Fixture', description: 'Fixture', loadPhase: 'critical', required: false, order: 0, dependencies: [], capabilities: [descriptor] },
+    const plugin: RocPlugin = { manifest: { id: 'fixture-failed', version: '1', displayName: 'Fixture', description: 'Fixture', required: false, order: 0, dependencies: [], capabilities: [descriptor] },
       initialize: async context => {
         context.capabilities.register('fixture-failed', descriptor, async () => 'forbidden');
         context.eventBus.subscribe('fixture', () => { calls++; });

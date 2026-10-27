@@ -4,8 +4,7 @@ import type {
   RocEventBus,
   RocPlugin,
   RocPluginContext,
-  RocPluginHealth,
-  RocPluginManifest
+  RocPluginHealth
 } from './types';
 
 type PluginLoaderStatus = {
@@ -16,12 +15,6 @@ type PluginLoaderOptions = {
   eventBus: RocEventBus;
   capabilities: RocCapabilityRegistry;
   createContext(plugin: RocPlugin, capabilities: RocCapabilityRegistry): RocPluginContext;
-};
-
-const loadPhaseRank: Record<RocPluginManifest['loadPhase'], number> = {
-  critical: 0,
-  deferred: 1,
-  on_demand: 2
 };
 
 export class PluginLoader {
@@ -223,10 +216,6 @@ function sortPlugins(plugins: readonly RocPlugin[]): RocPlugin[] {
 }
 
 function compareManifestOrder(left: RocPlugin, right: RocPlugin): number {
-  const phaseOrder = loadPhaseRank[left.manifest.loadPhase] - loadPhaseRank[right.manifest.loadPhase];
-  if (phaseOrder !== 0) {
-    return phaseOrder;
-  }
   const manifestOrder = left.manifest.order - right.manifest.order;
   if (manifestOrder !== 0) {
     return manifestOrder;
