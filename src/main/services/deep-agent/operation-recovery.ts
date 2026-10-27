@@ -1,48 +1,68 @@
-import type { RocSqliteCheckpointer } from './sqlite-checkpointer';
+import type { RocCheckpointInterrupt, RocSqliteCheckpointer } from './sqlite-checkpointer';
 
-export type OperationRecoveryContext = {
-  runId: string;
-  threadId: string;
-  lastCheckpointId: string | null;
-};
+export type CheckpointRecoveryReader = Pick<
+  RocSqliteCheckpointer,
+  'hasCheckpoint' | 'readPendingInterrupts' | 'validateCheckpointIntegrity'
+>;
 
 export type RecoveryResult =
-  | { kind: 'no_checkpoint'; action: 'restart' }
+  | { kind: 'no_checkpoint'; action: 'fail'; code: 'agent_checkpoint_missing'; reason: string }
   | { kind: 'clean_checkpoint'; action: 'resume_from_checkpoint' }
-  | { kind: 'interrupted'; action: 'resume_with_interrupt'; payload: unknown }
-  | { kind: 'corrupted'; action: 'fail'; reason: string };
+  | { kind: 'interrupted'; action: 'resume_with_interrupt'; interrupts: RocCheckpointInterrupt[] }
+  | { kind: 'corrupted'; action: 'fail'; code: string; reason: string };
 
 export async function recoverOrphanedOperation(
-  context: OperationRecoveryContext,
-  checkpointer: RocSqliteCheckpointer
+  context: { threadId: string },
+  checkpointer: CheckpointRecoveryReader
 ): Promise<RecoveryResult> {
-  // 1. 检查 checkpoint 是否存在
-  const hasCheckpoint = checkpointer.hasCheckpoint(context.threadId);
-  if (!hasCheckpoint) {
-    return { kind: 'no_checkpoint', action: 'restart' };
-  }
-
-  // 2. 读取 pending interrupts
-  const interrupts = checkpointer.readPendingInterrupts(context.threadId);
-  if (interrupts !== null && interrupts.length > 0) {
+  if (!checkpointer.hasCheckpoint(context.threadId)) {
     return {
-      kind: 'interrupted',
-      action: 'resume_with_interrupt',
-      payload: interrupts[0].payload
+      kind: 'no_checkpoint',
+      action: 'fail',
+      code: 'agent_checkpoint_missing',
+      reason: 'Checkpoint 缺失，无法安全恢复运行。'
     };
   }
 
-  // 3. 检查 checkpoint 完整性
-  const integrity = checkpointer.validateCheckpointIntegrity(context.threadId);
+  let integrity: ReturnType<CheckpointRecoveryReader['validateCheckpointIntegrity']>;
+  try {
+    integrity = checkpointer.validateCheckpointIntegrity(context.threadId);
+  } catch (error) {
+    return {
+      kind: 'corrupted',
+      action: 'fail',
+      code: 'agent_checkpoint_integrity_unavailable',
+      reason: error instanceof Error ? error.message : 'Checkpoint 完整性检查不可用。'
+    };
+  }
   if (!integrity.valid) {
     return {
       kind: 'corrupted',
       action: 'fail',
+      code: 'agent_checkpoint_integrity_invalid',
       reason: `Checkpoint 完整性检查失败: ${integrity.issues.join('; ')}`
     };
   }
 
-  // 4. 默认返回干净的 checkpoint 恢复
+  let interrupts: RocCheckpointInterrupt[] | null;
+  try {
+    interrupts = checkpointer.readPendingInterrupts(context.threadId);
+  } catch (error) {
+    return {
+      kind: 'corrupted',
+      action: 'fail',
+      code: 'agent_checkpoint_interrupt_invalid',
+      reason: error instanceof Error ? error.message : 'agent_checkpoint_interrupt_invalid'
+    };
+  }
+  if (interrupts !== null && interrupts.length > 0) {
+    return {
+      kind: 'interrupted',
+      action: 'resume_with_interrupt',
+      interrupts
+    };
+  }
+
   return { kind: 'clean_checkpoint', action: 'resume_from_checkpoint' };
 }
 

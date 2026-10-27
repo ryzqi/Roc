@@ -419,8 +419,11 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
          ORDER BY rowid ASC`
       )
       .all(threadId, threadId) as Array<Pick<WriteRow, 'value_type' | 'value_blob'>>;
-    if (rows.length === 0 || rows.some((row) => row.value_type !== 'json')) {
+    if (rows.length === 0) {
       return null;
+    }
+    if (rows.some((row) => row.value_type !== 'json')) {
+      throw new Error('agent_checkpoint_interrupt_value_type_invalid');
     }
     try {
       const values = rows.flatMap((row) => {
@@ -431,17 +434,18 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
           throw new Error('agent_checkpoint_interrupt_invalid');
         }
-        const interruptId = Reflect.get(value, 'id');
+        const record = value as Record<string, unknown>;
+        const interruptId = record.id;
         if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
           throw new Error('agent_checkpoint_interrupt_id_invalid');
         }
         return {
           interruptId,
-          payload: Reflect.get(value, 'value')
+          payload: record.value
         };
       });
     } catch {
-      return null;
+      throw new Error('agent_checkpoint_interrupt_invalid');
     }
   }
 
@@ -724,7 +728,8 @@ function matchesMetadataFilter(metadata: CheckpointMetadata | undefined, filter:
   if (metadata === undefined) {
     return false;
   }
-  return Object.entries(filter).every(([key, value]) => Reflect.get(metadata, key) === value);
+  const metadataRecord: Record<string, unknown> = Object.fromEntries(Object.entries(metadata));
+  return Object.entries(filter).every(([key, value]) => metadataRecord[key] === value);
 }
 
 function readCheckpointKeyForGet(config: RunnableConfig): {

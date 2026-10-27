@@ -1,3 +1,4 @@
+import { isRetryableProviderHttpStatus } from '../provider-request-retry';
 import type { RunFailure } from './types';
 import { toRunFailure } from './error-mapping';
 
@@ -6,7 +7,7 @@ export type FailureCategory = 'user' | 'provider' | 'system' | 'network';
 export type RetryStrategy = {
   maxAttempts: number;
   baseDelayMs: number;
-  conditions: ReadonlySet<'http_429' | 'http_5xx' | 'network' | 'timeout' | 'stream_interrupted'>;
+  conditions: ReadonlySet<'http_408' | 'http_425' | 'http_429' | 'http_5xx' | 'network' | 'timeout' | 'stream_interrupted'>;
   useCheckpointResume: boolean;
 };
 
@@ -26,21 +27,28 @@ export type StructuredFailure = RunFailure & {
 };
 
 export function classifyFailure(error: unknown): StructuredFailure {
-  const baseFailure = toRunFailure(error);
+  const baseFailure = isRunFailure(error) ? error : toRunFailure(error);
   const timestamp = Date.now();
 
   // Provider HTTP 错误
   if (baseFailure.code === 'provider_http_error') {
     const status = extractHttpStatus(baseFailure.message);
+    const retryable = status !== null && isRetryableProviderHttpStatus(status);
+    const condition = status === 429 ? 'http_429' : status === 408 ? 'http_408' : status === 425 ? 'http_425' : 'http_5xx';
     return {
       ...baseFailure,
+      retryable,
       category: 'provider',
-      retryStrategy: {
-        maxAttempts: status === 429 ? 3 : 5,
-        baseDelayMs: status === 429 ? 2000 : 500,
-        conditions: new Set(status === 429 ? ['http_429'] : ['http_5xx']),
-        useCheckpointResume: false
-      },
+      ...(retryable
+        ? {
+            retryStrategy: {
+              maxAttempts: status === 429 ? 3 : 5,
+              baseDelayMs: status === 429 ? 2000 : 500,
+              conditions: new Set([condition]),
+              useCheckpointResume: false
+            }
+          }
+        : {}),
       diagnostic: {
         ...baseFailure.diagnostic,
         httpStatus: status ?? undefined
@@ -144,6 +152,18 @@ export function classifyFailure(error: unknown): StructuredFailure {
     telemetryTags: { layer: 'unknown', subsystem: 'unknown' },
     timestamp
   };
+}
+
+function isRunFailure(value: unknown): value is RunFailure {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as { code: unknown; message: unknown; retryable: unknown };
+  return (
+    typeof record.code === 'string' &&
+    typeof record.message === 'string' &&
+    typeof record.retryable === 'boolean'
+  );
 }
 
 function extractHttpStatus(message: string): number | null {

@@ -3,7 +3,6 @@ import { classifyFailure, type StructuredFailure } from '../../services/deep-age
 import type { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
 
 const maxRecoveryMs = 10 * 60 * 1000;
-const recoverableHttpStatuses = new Set([408, 425, 429]);
 
 export type RecoveryDecision =
   | {
@@ -28,23 +27,15 @@ export function toRecoveryDecision(input: {
 }): RecoveryDecision {
   const structured = classifyFailure(input.failure);
 
-  if (!structured.retryable || !structured.retryStrategy) {
-    // 回退到旧逻辑检查
-    if (!isRecoverableFailure(input.failure)) {
-      return {
-        action: 'fail',
-        reason: 'non_transient',
-        finalFailure: structured
-      };
-    }
+  if (!structured.retryable || structured.retryStrategy === undefined) {
+    return {
+      action: 'fail',
+      reason: 'non_transient',
+      finalFailure: structured
+    };
   }
 
-  const strategy = structured.retryStrategy ?? {
-    maxAttempts: isCheckpointRecoveryFailure(input.failure) ? 3 : 5,
-    baseDelayMs: 500,
-    conditions: new Set([]),
-    useCheckpointResume: isCheckpointRecoveryFailure(input.failure)
-  };
+  const strategy = structured.retryStrategy;
 
   if (input.attempt > strategy.maxAttempts) {
     return {
@@ -84,36 +75,6 @@ export function toRecoveryDecision(input: {
   };
 }
 
-export function isRecoverableFailure(failure: RunFailure): boolean {
-  if (!failure.retryable) {
-    return false;
-  }
-  if (failure.code === 'provider_network_error') {
-    return true;
-  }
-  if (failure.code === 'provider_request_timeout') {
-    return true;
-  }
-  if (isCheckpointRecoveryFailure(failure)) {
-    return true;
-  }
-  if (failure.code !== 'provider_http_error') {
-    return false;
-  }
-  const status = readHttpStatus(failure.message);
-  if (status === null) {
-    return false;
-  }
-  if (recoverableHttpStatuses.has(status)) {
-    return true;
-  }
-  return status >= 500;
-}
-
-function isCheckpointRecoveryFailure(failure: RunFailure): boolean {
-  return failure.code === 'provider_stream_terminated' || failure.code === 'provider_stream_idle';
-}
-
 function calculateBackoffMs(attempt: number, baseMs: number = 500): number {
   const normalizedAttempt = Math.max(0, attempt - 1);
   const exponentialMs = baseMs * Math.pow(2, normalizedAttempt);
@@ -121,12 +82,4 @@ function calculateBackoffMs(attempt: number, baseMs: number = 500): number {
   // 添加 20% 随机抖动(学习 Codex)
   const jitter = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
   return Math.floor(cappedMs * jitter);
-}
-
-function readHttpStatus(message: string): number | null {
-  const match = /\bHTTP\s+(\d{3})\b/u.exec(message);
-  if (match === null) {
-    return null;
-  }
-  return Number(match[1]);
 }

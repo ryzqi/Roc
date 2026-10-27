@@ -12,10 +12,11 @@ import {
   createStreamConsumerState,
   createUsageAccumulator
 } from '../../services/deep-agent/stream-consumers';
-import { defaultErrorTracker } from '../../services/forge-guardrails';
+import { RocDomainError } from '../../services/errors';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import { validateOutcomeConsistency } from '../../services/deep-agent/outcome-validator';
-import { recoverOrphanedOperation } from '../../services/deep-agent/operation-recovery';
+import { resolveCheckpointResume } from './checkpoint-resume';
+import { defaultErrorTracker } from '../../services/forge-guardrails';
 import { validateRunTokenBudget } from '../../services/deep-agent/runtime-state-validator';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
@@ -35,6 +36,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       let resolveOutcome: (outcome: RunOutcome) => void = () => {};
       let rejectOutcome: (error: unknown) => void = () => {};
       let outcomePublished = false;
+      let shouldReleaseMcpResources = false;
       const outcome = new Promise<RunOutcome>((resolve, reject) => {
         resolveOutcome = resolve;
         rejectOutcome = reject;
@@ -42,34 +44,49 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const events = (async function* () {
         try {
       const eventQueue = createChatRunEventQueue();
+      let effectiveResumeFromCheckpoint = input.resumeFromCheckpoint === true;
 
-      // 在构建 harness 前检查是否需要恢复
-      if (input.resumeFromCheckpoint === true && 'validateCheckpointIntegrity' in options.checkpointer) {
-        const checkpointer = options.checkpointer as import('../../services/deep-agent/sqlite-checkpointer').RocSqliteCheckpointer;
-        const recovery = await recoverOrphanedOperation(
-          {
-            runId: input.run.id,
-            threadId: input.run.threadId,
-            lastCheckpointId: null
-          },
-          checkpointer
-        );
+      if (effectiveResumeFromCheckpoint || input.resumePayload !== undefined) {
+        const recovery = await resolveCheckpointResume({
+          checkpointer: options.checkpointer,
+          threadId: input.run.threadId,
+          ...(input.resumePayload === undefined ? {} : { resumePayload: input.resumePayload })
+        });
 
         switch (recovery.action) {
-          case 'restart':
-            break;
-
           case 'fail':
-            eventQueue.fail(new Error(`checkpoint_recovery_failed: ${recovery.reason}`));
-            yield* eventQueue;
-            return;
+            throw new RocDomainError({
+              code: recovery.code,
+              message: recovery.reason,
+              category: 'internal',
+              retryable: false
+            });
 
-          case 'resume_with_interrupt':
-            // LangGraph 会处理 interrupt payload
-            break;
+          case 'resume_with_interrupt': {
+            let interrupts;
+            try {
+              interrupts = projectDeepAgentInterrupts(recovery.interrupts);
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : 'invalid_interrupt_payload';
+              throw new RocDomainError({
+                code: 'agent_checkpoint_interrupt_invalid',
+                message: reason,
+                category: 'internal',
+                retryable: false
+              });
+            }
+            outcomePublished = true;
+            resolveOutcome({
+              status: 'interrupted',
+              interrupts,
+              usage: snapshotUsage(createUsageAccumulator())
+            });
+            yield* createRunInterruptedEvents(input.run.id, input.run.threadId, interrupts);
+            return;
+          }
 
           case 'resume_from_checkpoint':
-            // 标准 checkpoint 恢复,无需额外处理
+            effectiveResumeFromCheckpoint = true;
             break;
         }
       }
@@ -106,6 +123,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         throw overflow;
       };
 
+      shouldReleaseMcpResources =
+        input.snapshot.capabilityManifest.resolvedCapabilities.mcpServers.length > 0;
       const harness = await buildRunHarness(options, {
         abortSignal: executionAbortController.signal,
         emitRuntimeEvent,
@@ -137,7 +156,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const runInput =
         input.resumePayload !== undefined
           ? new Command({ resume: input.resumePayload })
-          : input.resumeFromCheckpoint === true
+          : effectiveResumeFromCheckpoint
             ? null
             : createInitialState(input.run.userInput, input.validatedAttachments);
       const rawRun = await agent.streamEvents(runInput as never, {
@@ -271,7 +290,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           rejectOutcome(error);
           throw error;
         } finally {
-          if (input.snapshot.capabilityManifest.resolvedCapabilities.mcpServers.length > 0) {
+          if (shouldReleaseMcpResources) {
             await options.capabilities.invoke('mcp.tools.release', { runId: input.run.id });
           }
         }

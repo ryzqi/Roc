@@ -168,10 +168,12 @@ export function projectDeepAgentInterrupts(
   if (interrupts.length === 0) {
     throw new Error('agent_interrupt_payload_missing');
   }
-  return interrupts.map((interrupt) => ({
+  const projected = interrupts.map((interrupt) => ({
     interruptId: interrupt.interruptId,
     payload: normalizeChatInterruptPayload(interrupt.payload)
   }));
+  validatePendingInterrupts(projected);
+  return projected;
 }
 
 export function createRunInterruptedEvents(
