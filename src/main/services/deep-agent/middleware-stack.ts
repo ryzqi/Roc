@@ -11,7 +11,6 @@ import {
   createFilesystemToolErrorMiddleware,
   createForgeCleanupMiddleware,
   createForgeIterationTrackingMiddleware,
-  createForgeTieredCompactionMiddleware,
   createRescueParsingMiddleware,
   createToolResolutionMiddleware,
   createToolRuntimeErrorMiddleware,
@@ -61,7 +60,6 @@ export type ContextCompactionWiring = {
 export type MiddlewareStackPolicy = {
   boundToolNames: readonly string[];
   capabilityManifest: RunCapabilityManifestV1;
-  contextBudgetTokens: number | undefined;
   mode: RunExecutionMode;
   runId: string;
   threadId: string;
@@ -73,7 +71,7 @@ export type MiddlewareStackContext = {
   budgetLedger: RunBudgetLedger;
   budgetLimits: RunLimits;
   backend: RocCompositeBackend;
-  contextCompaction: ContextCompactionWiring | undefined;
+  contextCompaction: ContextCompactionWiring;
   executionScope: RunCapabilityExecutionScopeV1;
   hookMiddleware: RocHookMiddlewareOptions | undefined;
   /**
@@ -212,35 +210,25 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     create: () => createFilesystemToolErrorMiddleware()
   },
   {
-    // 下面两格互斥：接了 Roc 压缩就用它，没接才退回 Forge 分层压缩。
+    // Roc's compaction pipeline is the only middleware entry for context compaction.
     name: 'RocContextCompactionPipeline',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
-    create: (context) => context.contextCompaction === undefined
-      ? null
-      : createRocContextCompactionMiddleware({
-          artifactStore: context.contextCompaction.artifactStore,
-          readControlState: () => context.budgetLedger.readContextControlState(context.policy.runId),
-          artifactRecoveryEnabled: context.contextCompaction.artifactRecoveryEnabled,
-          budgetProfile: context.contextCompaction.budgetProfile,
-          emitEvent: context.contextCompaction.emitEvent,
-          mode: context.policy.mode,
-          model: context.model,
-          runId: context.policy.runId,
-          sessionHistory: context.contextCompaction.sessionHistory,
-          threadId: context.policy.threadId,
-          tokenCounter: context.contextCompaction.tokenCounter,
-          workspaceHash: context.policy.workspaceHash,
-          workspacePath: context.policy.workspacePath
-        })
-  },
-  {
-    name: 'ContextEditingMiddleware',
-    scopes: ALL_SCOPES,
-    modes: ALL_MODES,
-    create: (context) => context.contextCompaction === undefined
-      ? createForgeTieredCompactionMiddleware({ budgetTokens: context.policy.contextBudgetTokens })
-      : null
+    create: (context) => createRocContextCompactionMiddleware({
+      artifactStore: context.contextCompaction.artifactStore,
+      readControlState: () => context.budgetLedger.readContextControlState(context.policy.runId),
+      artifactRecoveryEnabled: context.contextCompaction.artifactRecoveryEnabled,
+      budgetProfile: context.contextCompaction.budgetProfile,
+      emitEvent: context.contextCompaction.emitEvent,
+      mode: context.policy.mode,
+      model: context.model,
+      runId: context.policy.runId,
+      sessionHistory: context.contextCompaction.sessionHistory,
+      threadId: context.policy.threadId,
+      tokenCounter: context.contextCompaction.tokenCounter,
+      workspaceHash: context.policy.workspaceHash,
+      workspacePath: context.policy.workspacePath
+    })
   },
   {
     // rescue 只装在 main：候选集来自主 agent 的工具全集，子代理拿不到完整视图。
@@ -330,9 +318,8 @@ export function resolveMiddlewareStack(context: MiddlewareStackContext): DeepAge
  * 测试就拿到什么名字，与 spec 声明对不上时断言会失败。
  */
 export function readMiddlewareName(middleware: DeepAgentMiddleware): string {
-  const name = Reflect.get(middleware as object, 'name');
-  if (typeof name !== 'string' || name.length === 0) {
+  if (!('name' in middleware) || typeof middleware.name !== 'string' || middleware.name.length === 0) {
     throw new Error('middleware_stack_entry_name_missing');
   }
-  return name;
+  return middleware.name;
 }

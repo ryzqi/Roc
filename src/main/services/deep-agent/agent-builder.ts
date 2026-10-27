@@ -56,7 +56,7 @@ export type DeepAgentBuildInput = {
   checkpointer: BaseCheckpointSaver | undefined;
   hookMiddleware?: RocHookMiddlewareOptions;
   toolEffectStore?: AgentToolEffectStore;
-  contextCompaction?: ContextCompactionWiring;
+  contextCompaction: ContextCompactionWiring;
 };
 
 const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
@@ -80,7 +80,6 @@ type DeepAgentBuildPolicy = {
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   workspaceHash: string | null;
   workspacePath: string | null;
-  contextBudgetTokens: number | undefined;
 };
 
 /**
@@ -115,10 +114,7 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
       : createRocFilesystemPermissions(),
     interruptOn: compileInterruptPolicy(snapshot),
     workspaceHash: snapshot.workspace === null ? null : snapshot.workspace.hash,
-    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
-    contextBudgetTokens: snapshot.budget.contextWindowTokens === null
-      ? undefined
-      : snapshot.budget.contextWindowTokens
+    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path
   };
 }
 
@@ -244,6 +240,7 @@ function createDeepAgentSubagents(input: DeepAgentBuildInput, policy: DeepAgentB
   );
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
+    // SAFETY: The filtered tools' names are constrained by the manifest's subagent scope; the dynamic runtime list cannot express deepagents' literal SubagentTools union.
     tools: scopedTools.filter((tool) => {
       const contract = policy.capabilityManifest.tools.find((entry) => entry.modelVisibleName === tool.name);
       return contract !== undefined && (contract.effectClass === 'none' || contract.effectClass === 'network_read');
@@ -346,20 +343,20 @@ function isAnthropicModel(model: unknown): boolean {
     }
     return model.startsWith('claude');
   }
-  if (model === null || typeof model !== 'object') {
+  if (!isRecord(model)) {
     return false;
   }
-  const getName = Reflect.get(model, 'getName');
+  const getName = model.getName;
   if (typeof getName !== 'function') {
     return false;
   }
   const modelName = getName.call(model);
   if (modelName === 'ConfigurableModel') {
-    const defaultConfig = Reflect.get(model, '_defaultConfig');
-    if (defaultConfig === null || typeof defaultConfig !== 'object') {
+    const defaultConfig = model._defaultConfig;
+    if (!isRecord(defaultConfig)) {
       return false;
     }
-    return Reflect.get(defaultConfig, 'modelProvider') === 'anthropic';
+    return defaultConfig.modelProvider === 'anthropic';
   }
   return modelName === 'ChatAnthropic';
 }
@@ -377,6 +374,7 @@ function applySubagentMiddleware(
     : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
   return {
     ...subagent,
+    // SAFETY: `tools` is either a declared subagent list or the main list filtered by the subagent manifest scope; deepagents' literal SubagentTools union cannot represent this runtime selection.
     tools: tools as unknown as SubagentTools,
     permissions: createRocReadOnlyFilesystemPermissions(),
     ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
@@ -402,7 +400,7 @@ function isSubAgentSpec(subagent: RuntimeSubagent): subagent is SubAgent {
 }
 
 function createRescueToolCandidate(tool: ClientTool): RescueToolCandidate {
-  const schema = Reflect.get(tool, 'schema');
+  const schema = 'schema' in tool ? tool.schema : undefined;
   if (!(schema instanceof z.ZodObject)) {
     return tool.name;
   }
