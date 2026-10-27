@@ -17,6 +17,7 @@ before(async () => {
       import React from 'react';
       import { createRoot } from 'react-dom/client';
       import { flushSync } from 'react-dom';
+      import { useAsyncAction } from './src/renderer/app/use-async-resource';
       import { useSettingsStore } from './src/renderer/settings/settings-scope';
       import { useMcp } from './src/renderer/management/use-mcp';
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
@@ -24,6 +25,19 @@ before(async () => {
       import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
       window.validateIndexWrite = request => researchIndexSettingsSaveSchema.parse(request);
+      const actionContainer = document.createElement('div');
+      document.body.appendChild(actionContainer);
+      const actionRoot = createRoot(actionContainer);
+      function AsyncActionHarness({operation}) {
+        const action = useAsyncAction(operation, {label: 'Lifecycle action'});
+        window.latestAction = action;
+        window.actionRenderCount = (window.actionRenderCount ?? 0) + 1;
+        return null;
+      }
+      window.mountAsyncAction = operation => flushSync(() => actionRoot.render(
+        React.createElement(React.StrictMode, null, React.createElement(AsyncActionHarness, {operation}))
+      ));
+      window.clearAsyncAction = () => flushSync(() => actionRoot.render(null));
       const root = createRoot(document.getElementById('root'));
       const hooks = {
         settings: p => useSettingsStore(p.client, p.projectId ?? null),
@@ -54,7 +68,7 @@ before(async () => {
       };
       window.ok = data => ({ok: true, data});
       window.fail = message => ({ok: false, error: {message}});
-      window.deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return {promise, resolve}; };
+      window.deferred = () => { let resolve, reject; const promise = new Promise((r, j) => { resolve = r; reject = j; }); return {promise, resolve, reject}; };
     `, resolveDir: process.cwd(), loader: 'js' },
     outfile: join(dir, 'hooks.js'), bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'
   });
@@ -86,6 +100,55 @@ after(async () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   }
   assert.deepEqual(rendererErrors, [], 'renderer must not throw during lifecycle tests');
+});
+
+test('async action survives StrictMode effect replay and preserves a null success value', async () => {
+  await page.evaluate(() => {
+    clearAsyncAction();
+    window.actionDeferred = deferred();
+    mountAsyncAction(() => actionDeferred.promise);
+    window.actionRun = latestAction.run();
+  });
+  await page.waitForFunction(() => latestAction.pending);
+  await page.evaluate(() => actionDeferred.resolve(ok(null)));
+  assert.deepEqual(await page.evaluate(() => actionRun), {ok: true, data: null});
+  assert.deepEqual(await page.evaluate(() => ({pending: latestAction.pending, error: latestAction.error})), {
+    pending: false,
+    error: null
+  });
+});
+
+test('async action clears pending and records backend failures under StrictMode', async () => {
+  await page.evaluate(() => {
+    clearAsyncAction();
+    window.actionDeferred = deferred();
+    mountAsyncAction(() => actionDeferred.promise);
+    window.actionRun = latestAction.run();
+  });
+  await page.waitForFunction(() => latestAction.pending);
+  await page.evaluate(() => actionDeferred.resolve(fail('backend refused')));
+  assert.deepEqual(await page.evaluate(() => actionRun), {ok: false, error: 'backend refused'});
+  assert.deepEqual(await page.evaluate(() => ({pending: latestAction.pending, error: latestAction.error})), {
+    pending: false,
+    error: 'backend refused'
+  });
+});
+
+test('async action does not render after unmount while its operation settles', async () => {
+  await page.evaluate(() => {
+    clearAsyncAction();
+    window.actionDeferred = deferred();
+    mountAsyncAction(() => actionDeferred.promise);
+    window.actionRun = latestAction.run();
+  });
+  await page.waitForFunction(() => latestAction.pending);
+  await page.evaluate(() => {
+    clearAsyncAction();
+    window.actionRendersAtUnmount = actionRenderCount;
+    actionDeferred.resolve(ok('done'));
+  });
+  assert.deepEqual(await page.evaluate(() => actionRun), {ok: true, data: 'done'});
+  assert.equal(await page.evaluate(() => actionRenderCount), await page.evaluate(() => actionRendersAtUnmount));
 });
 
 async function settingsFixture(projectId = null) {

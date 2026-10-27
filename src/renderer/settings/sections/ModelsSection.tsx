@@ -266,7 +266,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             disabled={setSecret.pending || secretInput.trim().length === 0}
             onClick={() => {
               void setSecret.run({ providerId: provider.id, plaintext: secretInput }).then((result) => {
-                if (result === null) {
+                if (!result.ok) {
                   return;
                 }
                 setSecretInput('');
@@ -476,8 +476,8 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
               }
               setTestResult(null);
               void test.run({ providerId: provider.id, modelId: testModelId }).then((result) => {
-                if (result !== null) {
-                  setTestResult(result);
+                if (result.ok) {
+                  setTestResult(result.data);
                 }
               });
             }}
@@ -535,7 +535,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         onConfirm={() => {
           setClearSecretOpen(false);
           void clearSecret.run(provider.id).then((result) => {
-            if (result !== null) {
+            if (result.ok) {
               reload();
             }
           });

@@ -131,12 +131,12 @@ export function ProjectPortalView({
       workspacePath: values.workspacePath,
       language: values.language
     });
-    if (created === null) {
+    if (!created.ok) {
       return;
     }
     closeCreate();
     projects.refresh();
-    onOpenProject(created.id);
+    onOpenProject(created.data.id);
   };
 
   const submitEdit = async (values: ProjectFormValues): Promise<void> => {
@@ -157,7 +157,7 @@ export function ProjectPortalView({
       // `language` is intentionally absent: the product fixes it at creation even
       // though the backend would accept a change (see `isLanguageLocked`).
     });
-    if (updated === null) {
+    if (!updated.ok) {
       return;
     }
     setEditing(null);
@@ -378,7 +378,7 @@ export function ProjectPortalView({
               id: target.id,
               status: isProjectArchived(target) ? 'active' : 'archived'
             });
-            if (updated !== null) {
+            if (updated.ok) {
               projects.refresh();
             }
           })();
@@ -402,7 +402,7 @@ export function ProjectPortalView({
           }
           void (async () => {
             const removed = await projects.remove.run(target.id);
-            if (removed !== null) {
+            if (removed.ok) {
               projects.refresh();
             }
           })();

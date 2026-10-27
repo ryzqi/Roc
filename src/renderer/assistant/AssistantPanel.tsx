@@ -167,8 +167,8 @@ export function AssistantPanel({
     (key: string): void => {
       void (async () => {
         const next = await switchingModel.run(key);
-        if (next !== null) {
-          setWrittenSnapshot(next);
+        if (next.ok) {
+          setWrittenSnapshot(next.data);
           notifySettingsChanged();
         }
       })();

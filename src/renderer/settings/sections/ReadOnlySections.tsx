@@ -227,7 +227,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           onClick={() => {
             if (status === null) return;
             void importAction.run({ directory: importPath.trim(), pack: status.selectedPack }).then((result) => {
-              if (result !== null) {
+              if (result.ok) {
                 setImportPath('');
                 refresh();
               }

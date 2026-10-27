@@ -13,6 +13,7 @@ import type {
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
 import type { IpcLikeResult } from '../app/loaded-state';
+import { runIpcAction } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import {
   archiveLibraryItem,
@@ -340,24 +341,17 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     async <Result,>(run: () => Promise<IpcLikeResult<Result>>): Promise<Result | null> => {
       setPending(true);
       setActionError(null);
-      // Written **before** the await: the import wrappers read this ref in the same
-      // tick as the failure (they turn an outcome into their own message), and a
-      // ref that only mirrors state would still hold the previous render's value —
-      // the reason every failed import used to report the generic “导入失败”.
+      // Written **before** the await: import wrappers read this ref in the same
+      // tick as the failure, before React commits the state update.
       actionErrorRef.current = null;
       try {
-        const result = await run();
+        const result = await runIpcAction(run);
         if (!result.ok) {
-          actionErrorRef.current = result.error.message;
-          setActionError(result.error.message);
+          actionErrorRef.current = result.error;
+          setActionError(result.error);
           return null;
         }
         return result.data;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        actionErrorRef.current = message;
-        setActionError(message);
-        return null;
       } finally {
         setPending(false);
       }

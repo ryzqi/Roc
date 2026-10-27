@@ -165,8 +165,8 @@ export function RemoteModelPicker({
                   providerId
                 })
                 .then((result) => {
-                  if (result !== null) {
-                    setEntries(result.models);
+                  if (result.ok) {
+                    setEntries(result.data.models);
                   }
                 });
             }}

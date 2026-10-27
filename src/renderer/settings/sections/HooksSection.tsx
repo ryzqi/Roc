@@ -181,7 +181,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                   disabled={trust.pending}
                   onClick={() => {
                     void trust.run({ handlerId: handler.id, hash: handler.hash }).then((result) => {
-                      if (result !== null) {
+                      if (result.ok) {
                         store.reload();
                       }
                     });

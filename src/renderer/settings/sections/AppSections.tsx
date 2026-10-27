@@ -307,7 +307,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             disabled={pause.pending || trayStatus === null || trayStatus.backgroundPaused}
             onClick={() => {
               void pause.run().then((result) => {
-                if (result !== null) {
+                if (result.ok) {
                   tray.reload();
                 }
               });
@@ -322,7 +322,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             disabled={resume.pending || trayStatus === null || !trayStatus.backgroundPaused}
             onClick={() => {
               void resume.run().then((result) => {
-                if (result !== null) {
+                if (result.ok) {
                   tray.reload();
                 }
               });

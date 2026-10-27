@@ -54,7 +54,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
     void (async () => {
       if (action === 'rollback') {
         const result = await rollback.run();
-        if (result !== null) status.reload();
+        if (result.ok) status.reload();
         return;
       }
       const result = await enable.run({
@@ -63,7 +63,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         extraBudgetMicrousd,
         budgetAcknowledged: acknowledged
       });
-      if (result !== null) {
+      if (result.ok) {
         // The acknowledgement belongs to the disclosure just accepted: a later re-enable (which
         // clears the breaker) must be a deliberate act, not a leftover checkbox.
         setAcknowledged(false);

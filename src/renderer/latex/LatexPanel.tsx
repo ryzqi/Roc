@@ -153,10 +153,10 @@ export function LatexPanel(): React.JSX.Element {
     const content = draft;
     try {
       const saved = await save.run({ path: selectedPath, content });
-      if (saved === null) return false;
+      if (!saved.ok) return false;
       setBaseline(content);
       dirtyRef.current = false;
-      setNote(`已保存 ${saved.bytesWritten} 字节。`);
+      setNote(`已保存 ${saved.data.bytesWritten} 字节。`);
       setRecovery('写入前已保留备份。');
       files.reload();
       return true;

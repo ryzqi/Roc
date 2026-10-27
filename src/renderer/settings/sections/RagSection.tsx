@@ -415,12 +415,12 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                       enabled: form.enabled
                     })
                     .then((result) => {
-                      if (result === null) {
+                      if (!result.ok) {
                         return;
                       }
                       setApiKey('');
-                      setSelectedConfigId(result.id);
-                      setForm(formFromConfig(result));
+                      setSelectedConfigId(result.data.id);
+                      setForm(formFromConfig(result.data));
                       embeddings.reload();
                     });
                 }}

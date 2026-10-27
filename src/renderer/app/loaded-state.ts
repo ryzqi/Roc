@@ -8,6 +8,21 @@
 
 export type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string; code?: string } };
 
+export type ActionOutcome<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export async function runIpcAction<T>(
+  operation: () => Promise<IpcLikeResult<T>>
+): Promise<ActionOutcome<T>> {
+  try {
+    const result = await operation();
+    return result.ok
+      ? { ok: true, data: result.data }
+      : { ok: false, error: result.error.message };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+}
+
 /**
  * Backend error codes the renderer branches on.
  *

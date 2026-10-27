@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { errorMessage, type IpcLikeResult } from './loaded-state';
+import { errorMessage, runIpcAction, type ActionOutcome, type IpcLikeResult } from './loaded-state';
 
 /**
  * Uniform IPC resource loading.
@@ -114,13 +114,13 @@ export function useAsyncResource<T>(
 export type AsyncAction<Args extends unknown[], Result> = {
   pending: boolean;
   error: string | null;
-  run: (...args: Args) => Promise<Result | null>;
+  run: (...args: Args) => Promise<ActionOutcome<Result>>;
   reset: () => void;
 };
 
 export function useAsyncAction<Args extends unknown[], Result>(
   action: (...args: Args) => Promise<IpcLikeResult<Result>>,
-  { label }: AsyncResourceOptions
+  _options: AsyncResourceOptions
 ): AsyncAction<Args, Result> {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,39 +128,30 @@ export function useAsyncAction<Args extends unknown[], Result>(
   actionRef.current = action;
   const mountedRef = useRef(true);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    []
-  );
+    };
+  }, []);
 
   const run = useCallback(
-    async (...args: Args): Promise<Result | null> => {
-      setPending(true);
-      setError(null);
-      try {
-        const result = await actionRef.current(...args);
-        if (!result.ok) {
-          // A rejection or failure can outlive the component; do not touch state.
-          if (mountedRef.current) {
-            setError(result.error.message);
-          }
-          return null;
-        }
-        return result.data;
-      } catch (caught) {
-        if (mountedRef.current) {
-          setError(errorMessage(caught));
-        }
-        return null;
-      } finally {
-        if (mountedRef.current) {
-          setPending(false);
-        }
+    async (...args: Args): Promise<ActionOutcome<Result>> => {
+      if (mountedRef.current) {
+        setPending(true);
+        setError(null);
       }
+
+      const result = await runIpcAction(() => actionRef.current(...args));
+      if (mountedRef.current) {
+        if (!result.ok) {
+          setError(result.error);
+        }
+        setPending(false);
+      }
+      return result;
     },
-    [label]
+    []
   );
 
   const reset = useCallback(() => {

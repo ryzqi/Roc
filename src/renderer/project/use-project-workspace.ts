@@ -53,7 +53,7 @@ export function useProjectWorkspace(
         return;
       }
       const updated = await update.run({ id: project.id, workspacePath: selection.data.path });
-      if (updated !== null) {
+      if (updated.ok) {
         onBound();
       }
     })();
