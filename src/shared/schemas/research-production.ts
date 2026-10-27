@@ -84,8 +84,21 @@ export const researchDocumentLimits = {
   maxArtifactBytes: 128 * 1024 * 1024
 } as const;
 
-export const researchParseContractVersion = 3;
+export const researchParseContractVersion = 4;
+/** Increment only when parsed text/locations change; artifact-only contracts keep prior parses/indexes current. */
+export const researchDerivationGenerationVersion = 3;
 export const researchParserVersion = 'roc-research-parser/2' as const;
+
+/** Stable index identity tracks derivation semantics, not the artifact contract version. */
+export function researchParserIdentityPayload(modelManifest: string) {
+  return {
+    engine: 'paddleocr.js' as const,
+    contractVersion: researchDerivationGenerationVersion,
+    parserVersion: researchParserVersion,
+    modelManifest
+  };
+}
+
 export const researchParseTiers = researchModelPacks;
 export const researchParseOptionsSchema = z.object({
   tier: z.enum(researchParseTiers),
@@ -95,8 +108,9 @@ export const researchParseOptionsSchema = z.object({
 export type ResearchParseOptions = z.infer<typeof researchParseOptionsSchema>;
 export type ResearchParseTier = (typeof researchParseTiers)[number];
 
+/** Contracts 3 and 4 remain readable; v4 makes native-text page-image availability explicit in `assets`. */
 export const researchParsedDocumentSchema = z.object({
-  contractVersion: z.literal(researchParseContractVersion),
+  contractVersion: z.union([z.literal(3), z.literal(researchParseContractVersion)]),
   engine: z.literal('paddleocr.js'),
   engineVersion: z.string(),
   parserVersion: z.string(),

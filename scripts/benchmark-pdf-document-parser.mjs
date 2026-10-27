@@ -5,13 +5,16 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { performance } from 'node:perf_hooks';
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { importTypeScriptModule } from './lib/bundle-ts.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const fixturePath = resolve('tests/smoke/lib/assets/p5-paper.pdf');
-const scenarios = ['native-text', 'scanned', 'mixed'];
+const scenarios = ['native-text', 'native-text-clean', 'scanned', 'mixed'];
+const phase4Optimized = process.env.ROC_PHASE4_OPTIMIZED === '1';
+const sampleCount = Number(process.env.ROC_PDF_BENCHMARK_SAMPLES ?? '1');
+if (!Number.isSafeInteger(sampleCount) || sampleCount < 1 || sampleCount > 100) throw new Error('ROC_PDF_BENCHMARK_SAMPLES must be an integer from 1 to 100');
 const workerScenario = process.argv[2] === '--worker' ? process.argv[3] : null;
 
 function pdfStream(stream) {
@@ -46,15 +49,20 @@ function generatedPdf(scenario) {
   const words = Array.from({ length: 100 }, (_, index) => `evidence${index}`);
   const lines = Array.from({ length: 10 }, (_, index) => words.slice(index * 10, index * 10 + 10).join(' '));
   const text = `BT\n/F1 8 Tf\n40 760 Td\n${lines.map((line) => `(${line}) Tj\n0 -12 Td`).join('\n')}\nET`;
-  const content = `${text}\nq 72 0 0 72 0 0 cm /Im0 Do Q`;
-  return buildPdf([
+  const includeVisual = scenario !== 'native-text-clean';
+  const content = includeVisual ? `${text}\nq 72 0 0 72 0 0 cm /Im0 Do Q` : text;
+  const resources = includeVisual
+    ? '/Resources << /Font << /F1 5 0 R >> /XObject << /Im0 6 0 R >> >>'
+    : '/Resources << /Font << /F1 5 0 R >> >>';
+  const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im0 6 0 R >> >> /Contents 4 0 R >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ${resources} /Contents 4 0 R >>`,
     pdfStream(content),
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    image
-  ]);
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ];
+  if (includeVisual) objects.push(image);
+  return buildPdf(objects);
 }
 
 async function listFileBytes(root, relative = '') {
@@ -102,6 +110,8 @@ async function benchmarkScenario(scenario) {
       })
     ]);
     const stages = [];
+    const loopDelay = monitorEventLoopDelay({ resolution: 10 });
+    loopDelay.enable();
     const started = performance.now();
     let parsed = null;
     let errorCode = null;
@@ -111,7 +121,7 @@ async function benchmarkScenario(scenario) {
         sourcePath,
         outputDir,
         options: { tier: 'compact', device: 'cpu', pageRange: '1' },
-        modelFiles: scenario === 'native-text' ? null : missingModelFiles,
+        modelFiles: scenario === 'native-text' || scenario === 'native-text-clean' ? null : missingModelFiles,
         modelManifest: modelPackManifest('compact'),
         onStage: (event) => stages.push({ stage: event.stage, page: event.page, durationMs: Number(event.durationMs.toFixed(3)) })
       });
@@ -119,6 +129,8 @@ async function benchmarkScenario(scenario) {
       errorCode = typeof error === 'object' && error !== null && 'code' in error ? error.code : String(error);
     }
     const elapsedMs = Number((performance.now() - started).toFixed(3));
+    loopDelay.disable();
+    const mainThreadBlockingMaxMs = Number((loopDelay.max / 1e6).toFixed(3));
     let outputs = {};
     try {
       await access(outputDir);
@@ -127,12 +139,34 @@ async function benchmarkScenario(scenario) {
       if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')) throw error;
     }
     const stageNames = stages.map((event) => event.stage);
-    if (scenario === 'native-text') {
-      assert.equal(errorCode, null, 'native-text baseline must parse successfully');
-      assert.equal(parsed?.parseMode, 'native-text', 'native-text baseline must use the native-text route');
-      assert.ok((outputs['pages/page-1.png'] ?? 0) > 0, 'native-text baseline must preserve the page PNG');
-      assert.ok((outputs['artifacts/middle.json'] ?? 0) > 0, 'native-text baseline must write middle.json');
-      assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0, 'native-text baseline must write structured.json');
+    if (scenario === 'native-text' || scenario === 'native-text-clean') {
+      assert.equal(errorCode, null, `${scenario} must parse successfully`);
+      assert.equal(parsed?.parseMode, 'native-text', `${scenario} must use the native-text route`);
+      assert.ok((outputs['artifacts/middle.json'] ?? 0) > 0, `${scenario} must write middle.json`);
+      if (phase4Optimized) {
+        assert.equal(parsed?.contractVersion, 4, `${scenario} must use the versioned artifact contract`);
+        assert.equal(parsed?.artifacts.middleJson, 'artifacts/middle.json');
+        assert.equal(parsed?.artifacts.structuredContent, 'artifacts/structured.json');
+        assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0, `${scenario} must preserve structured.json`);
+      } else {
+        assert.equal(parsed?.contractVersion, 3, `${scenario} baseline must preserve the legacy contract`);
+        assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0, `${scenario} baseline must write structured.json`);
+      }
+      if (scenario === 'native-text-clean') {
+        assert.equal((outputs['pages/page-1.png'] ?? 0) > 0, !phase4Optimized,
+          'the clean text fixture writes page evidence only under the legacy contract');
+        if (phase4Optimized) {
+          assert.ok(stageNames.includes('visual-inspection'));
+          assert.ok(stageNames.includes('page-layout'));
+          for (const stage of ['page-render', 'page-png-encode', 'page-write', 'ocr-raster', 'ocr-inference']) {
+            assert.equal(stageNames.includes(stage), false, `optimized clean text must skip ${stage}`);
+          }
+        }
+      } else if (!phase4Optimized) {
+        assert.ok((outputs['pages/page-1.png'] ?? 0) > 0, 'native-text baseline must preserve the page PNG');
+      }
+      assert.equal(stageNames.includes('ocr-raster'), false, `${scenario} must not allocate an OCR raster`);
+      assert.equal(stageNames.includes('ocr-inference'), false, `${scenario} must not run OCR inference`);
     } else {
       assert.equal(errorCode, 'ENOENT', `${scenario} baseline must stop at missing-model validation`);
       assert.equal(parsed, null, `${scenario} baseline must not produce a parsed document`);
@@ -152,9 +186,13 @@ async function benchmarkScenario(scenario) {
       inputBytes: bytes.byteLength,
       sourceSha256: createHash('sha256').update(bytes).digest('hex'),
       parseMode: parsed?.parseMode ?? null,
+      contractVersion: parsed?.contractVersion ?? null,
+      pageAssetCount: parsed?.assets.filter((asset) => asset.kind === 'page').length ?? 0,
+      artifactPaths: parsed?.artifacts ?? null,
       errorCode,
       elapsedMs,
       peakRssKb: process.resourceUsage().maxRSS,
+      mainThreadBlockingMaxMs,
       stageTotalsMs,
       outputFiles: outputs,
       outputBytes: Object.values(outputs).reduce((total, value) => total + value, 0),
@@ -165,6 +203,41 @@ async function benchmarkScenario(scenario) {
   }
 }
 
+function percentile(values, quantile) {
+  const sorted = [...values].sort((left, right) => left - right);
+  const position = (sorted.length - 1) * quantile;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const value = sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+  return Number(value.toFixed(3));
+}
+
+function metricSummary(values) {
+  return { p50: percentile(values, 0.5), p95: percentile(values, 0.95) };
+}
+
+function summarizeSamples(samples) {
+  if (samples.some((sample) => sample.sourceSha256 !== samples[0].sourceSha256)) {
+    throw new Error(`PDF benchmark input changed between samples for ${samples[0].scenario}`);
+  }
+  const stageNames = [...new Set(samples.flatMap((sample) => Object.keys(sample.stageTotalsMs)))];
+  return {
+    ...samples[0],
+    sampleCount: samples.length,
+    percentiles: {
+      elapsedMs: metricSummary(samples.map((sample) => sample.elapsedMs)),
+      peakRssKb: metricSummary(samples.map((sample) => sample.peakRssKb)),
+      mainThreadBlockingMaxMs: metricSummary(samples.map((sample) => sample.mainThreadBlockingMaxMs)),
+      outputBytes: metricSummary(samples.map((sample) => sample.outputBytes)),
+      stageTotalsMs: Object.fromEntries(stageNames.map((stage) => [
+        stage,
+        metricSummary(samples.map((sample) => sample.stageTotalsMs[stage] ?? 0))
+      ]))
+    },
+    samples
+  };
+}
+
 if (workerScenario !== null) {
   if (!scenarios.includes(workerScenario)) throw new Error(`unsupported PDF scenario: ${workerScenario}`);
   console.log(JSON.stringify(await benchmarkScenario(workerScenario)));
@@ -172,20 +245,29 @@ if (workerScenario !== null) {
   const outputPath = resolve(process.argv[2] ?? '.artifacts/architecture-repair-pdf-baseline.json');
   const results = [];
   for (const scenario of scenarios) {
-    const child = spawnSync(process.execPath, [scriptPath, '--worker', scenario], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
-    if (child.status !== 0) throw new Error(child.stderr || child.stdout || `PDF benchmark failed for ${scenario}`);
-    let result;
-    try {
-      result = JSON.parse(child.stdout.trim());
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`PDF benchmark returned invalid JSON for ${scenario}: ${message}`);
+    const samples = [];
+    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+      const child = spawnSync(process.execPath, [scriptPath, '--worker', scenario], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+      if (child.status !== 0) throw new Error(child.stderr || child.stdout || `PDF benchmark failed for ${scenario}`);
+      try {
+        samples.push(JSON.parse(child.stdout.trim()));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`PDF benchmark returned invalid JSON for ${scenario}: ${message}`);
+      }
     }
-    results.push(result);
+    results.push(summarizeSamples(samples));
   }
+  const command = [
+    phase4Optimized ? 'ROC_PHASE4_OPTIMIZED=1' : '',
+    sampleCount > 1 ? `ROC_PDF_BENCHMARK_SAMPLES=${sampleCount}` : '',
+    `node scripts/benchmark-pdf-document-parser.mjs ${process.argv[2] ?? '.artifacts/architecture-repair-pdf-baseline.json'}`
+  ].filter(Boolean).join(' ');
   const artifact = {
     measuredAt: new Date().toISOString(),
-    command: `node scripts/benchmark-pdf-document-parser.mjs ${process.argv[2] ?? '.artifacts/architecture-repair-pdf-baseline.json'}`,
+    command,
+    comparisonMode: phase4Optimized ? 'phase4-optimized' : 'legacy-baseline',
+    sampleCount,
     workingDirectory: process.cwd(),
     nodeVersion: process.version,
     platform: `${process.platform}-${process.arch}`,
@@ -194,5 +276,5 @@ if (workerScenario !== null) {
   };
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, { flag: 'wx' });
-  console.log(JSON.stringify({ outputPath, scenarios: results.map(({ scenario, parseMode, errorCode, elapsedMs, peakRssKb, outputBytes, stageTotalsMs }) => ({ scenario, parseMode, errorCode, elapsedMs, peakRssKb, outputBytes, stageTotalsMs })) }, null, 2));
+  console.log(JSON.stringify({ outputPath, scenarios: results.map(({ scenario, parseMode, errorCode, sampleCount: runs, percentiles }) => ({ scenario, parseMode, errorCode, sampleCount: runs, percentiles })) }, null, 2));
 }

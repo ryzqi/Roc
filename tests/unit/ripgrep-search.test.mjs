@@ -185,13 +185,14 @@ test('search finds literal matches, honours hidden files and the directory black
     excludeDirectories: ['node_modules']
   });
 
-  assert.deepEqual(
-    result.matches.map((match) => [match.relativePath, match.line, match.column, match.preview]),
-    [
-      ['.notes', 1, 8, 'hidden effect size'],
-      ['papers/draft.md', 1, 7, 'alpha effect size beta']
-    ]
-  );
+  // Ripgrep does not promise traversal order; this test verifies the matches, not directory scheduling.
+  const matches = result.matches
+    .map((match) => [match.relativePath, match.line, match.column, match.preview])
+    .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath));
+  assert.deepEqual(matches, [
+    ['.notes', 1, 8, 'hidden effect size'],
+    ['papers/draft.md', 1, 7, 'alpha effect size beta']
+  ]);
   assert.equal(result.truncated, false);
 });
 

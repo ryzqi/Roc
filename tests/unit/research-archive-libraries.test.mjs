@@ -332,9 +332,10 @@ test('template reader observes descriptor close failure after a prior ZIP parser
       sourcePath: archivePath,
       outputDir: join(temporaryRoot, 'extracted')
     });
+    // Unit test files run concurrently; leave room for the close/error callbacks to reach the event loop.
     const outcome = await Promise.race([
       operation.then((value) => ({ status: 'resolved', value }), (error) => ({ status: 'rejected', error })),
-      new Promise((resolve) => setTimeout(() => resolve({ status: 'timeout' }), 30))
+      new Promise((resolve) => setTimeout(() => resolve({ status: 'timeout' }), 250))
     ]);
     assert.equal(outcome.status, 'rejected', 'reader close failure should settle extraction after a parser error');
     assert.ok(outcome.error.cleanupErrors?.some((error) => error.message === closeError.message), JSON.stringify({

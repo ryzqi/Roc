@@ -12,15 +12,18 @@ import {
   type OrtModule,
   type PaddleStructureRunOptions
 } from 'paddleocr';
-import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParserVersion, type ResearchParseOptions } from '../../../shared/schemas/research-production';
+import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParseContractVersion, researchParserVersion, type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import type { z } from 'zod';
 import { ResearchProcessError } from './process-runner';
 import { runResearchJob, researchJobError, type ResearchJobPaths } from './research-job';
 import {
   extractResearchPdfPageText,
+  measureResearchPdfPage,
   renderResearchPdfPage,
   researchPdfPageHasVisualContent,
   withResearchPdf,
+  type ResearchPdfPageImage,
+  type ResearchPdfPageLayout,
   type ResearchPdfStage,
   type ResearchPdfStageObserver
 } from './pdf-render';
@@ -43,7 +46,7 @@ type ParseDocument = z.infer<typeof researchParsedDocumentSchema>;
 type ParseBlock = ParseDocument['blocks'][number];
 type ParseAsset = ParseDocument['assets'][number];
 type ParseResult = {
-  contractVersion: 3;
+  contractVersion: typeof researchParseContractVersion;
   engine: 'paddleocr.js';
   engineVersion: string;
   parserVersion: string;
@@ -126,7 +129,7 @@ async function parsePdf(
       try {
         const nativeText = normalizeText(await extractResearchPdfPageText(page, pageNumber, input.onStage));
         throwIfAborted(signal);
-        const hasHighQualityText = input.modelFiles !== null && hasHighQualityNativeText(nativeText);
+        const hasHighQualityText = hasHighQualityNativeText(nativeText);
         let hasVisualContent = false;
         if (hasHighQualityText) {
           const visualInspectionStartedAt = performance.now();
@@ -140,18 +143,29 @@ async function parsePdf(
         const nativeTextOnly = input.modelFiles === null
           ? nativeText.length > 0
           : hasHighQualityText && !hasVisualContent;
-        const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
-          researchDocumentLimits.maxAssetBytes, {
-            includeRgbaImage: !nativeTextOnly,
-            text: nativeText,
-            onStage: input.onStage
+        const omitPageImage = nativeTextOnly && hasHighQualityText && !hasVisualContent;
+        let pageLayout: ResearchPdfPageLayout;
+        let ocrImage: ResearchPdfPageImage['image'] = null;
+        if (omitPageImage) {
+          pageLayout = measureResearchPdfPage({
+            page, pageNumber, pageCount: pdf.numPages, text: nativeText, scale: 1.5, clampToPixelLimit: true, onStage: input.onStage
           });
+        } else {
+          const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
+            researchDocumentLimits.maxAssetBytes, {
+              includeRgbaImage: !nativeTextOnly,
+              text: nativeText,
+              onStage: input.onStage
+            });
+          pageLayout = rendered;
+          ocrImage = rendered.image;
+          accountAsset(assets, assetBudget, rendered.pngBytes);
+          assets.push({ path: `pages/page-${pageNumber}.png`, kind: 'page', page: pageNumber });
+        }
         throwIfAborted(signal);
-        accountAsset(assets, assetBudget, rendered.pngBytes);
-        assets.push({ path: `pages/page-${pageNumber}.png`, kind: 'page', page: pageNumber });
         nativeTextPages.push(nativeText);
         if (nativeTextOnly) {
-          pageBlocks.push(makeBlock(`page-${pageNumber}-text`, 'paragraph', 'Page text', nativeText, pageNumber, [0, 0, rendered.width, rendered.height], null));
+          pageBlocks.push(makeBlock(`page-${pageNumber}-text`, 'paragraph', 'Page text', nativeText, pageNumber, [0, 0, pageLayout.width, pageLayout.height], null));
           pageResults.push({ page: pageNumber, text: nativeText, regions: [] });
           if (pageBlocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
           continue;
@@ -159,11 +173,11 @@ async function parsePdf(
         if (input.modelFiles === null) researchJobError('research_model_pack_required');
         service ??= await createStructureService(input.modelFiles, options.device, registerSession, signal, input.onStage);
         throwIfAborted(signal);
-        if (rendered.image === null) researchJobError('research_pdf_ocr_raster_missing');
+        if (ocrImage === null) researchJobError('research_pdf_ocr_raster_missing');
         const inferenceStartedAt = performance.now();
         let inference: Awaited<ReturnType<PaddleStructureService['run']>>;
         try {
-          inference = await service.service.run(rendered.image, structureRunOptions(service.hasFormula));
+          inference = await service.service.run(ocrImage, structureRunOptions(service.hasFormula));
         } finally {
           recordPdfStage(input.onStage, 'ocr-inference', pageNumber, inferenceStartedAt);
         }
@@ -213,7 +227,7 @@ async function parsePdf(
         }
         if (pageBlocks.filter((block) => block.locations[0]?.page === pageNumber).length === 0 && nativeText.length > 0) {
           pageBlocks.push(makeBlock(`page-${pageNumber}-native`, 'paragraph', 'Page text', nativeText, pageNumber,
-            [0, 0, rendered.width, rendered.height], null));
+            [0, 0, pageLayout.width, pageLayout.height], null));
         }
         pageResults.push({ page: pageNumber, text: nativeText, regions: pageRegions });
         if (pageBlocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
@@ -493,7 +507,7 @@ async function writeParseResult(job: ResearchJobPaths, input: {
   const markdown = input.blocks.map((block) => block.kind === 'heading' ? `## ${block.text}` : block.text).filter(Boolean).join('\n\n');
   const artifacts = { middleJson: 'artifacts/middle.json', markdown: 'artifacts/document.md', structuredContent: 'artifacts/structured.json' };
   const result = {
-    contractVersion: 3 as const,
+    contractVersion: researchParseContractVersion as typeof researchParseContractVersion,
     engine: 'paddleocr.js' as const,
     engineVersion: researchModelLock.runtime.paddleocr,
     parserVersion: PARSER_VERSION,
@@ -518,8 +532,8 @@ async function writeParseResult(job: ResearchJobPaths, input: {
   };
   const structured = JSON.stringify({ ...result, pages: input.pageResults }, null, 2);
   await writeText(job.output, artifacts.middleJson, structured);
-  await writeText(job.output, artifacts.structuredContent, structured);
   await writeText(job.output, artifacts.markdown, markdown);
+  await writeText(job.output, artifacts.structuredContent, structured);
   return result;
 }
 

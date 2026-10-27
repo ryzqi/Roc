@@ -6,7 +6,7 @@ import { dirname, extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
-import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParseContractVersion, researchParserVersion, researchRenderedPdfSchema, researchToolchainStatusSchema,
+import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParserIdentityPayload, researchRenderedPdfSchema, researchToolchainStatusSchema,
   type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import type { ResearchModelPack } from '../../../shared/schemas/research-production';
@@ -79,12 +79,7 @@ export class ResearchToolchain {
   }
 
   async identity(): Promise<string> {
-    return researchContentHash(JSON.stringify({
-      engine: 'paddleocr.js',
-      contractVersion: researchParseContractVersion,
-      parserVersion: researchParserVersion,
-      modelManifest: modelPackManifest(this.models.selectedPack)
-    }));
+    return researchContentHash(JSON.stringify(researchParserIdentityPayload(modelPackManifest(this.models.selectedPack))));
   }
 
   async nativeRuntime(jobDir: string): Promise<{ root: string; hash: string; environment: NodeJS.ProcessEnv }> {

@@ -145,9 +145,51 @@ The annotated 15-query comparison improved macro NDCG@5 from `0.7459` to `0.9306
 
 On the same nested 20k corpus, the candidate added a median `38,395KB` heap and `25,056KB` peak RSS. Cold name was `86.293ms` versus `78.038ms`; hot basename p50/p95 was `1.646/1.873ms` versus `1.501/1.726ms`. The complete path-first request measured `100.691ms` versus `70.219ms` baseline, about `43%` slower. Cold totals include Fuzzysort snapshot construction; the first `go()` synchronously finishes its index preparation. Phase 0 has no explicit numeric budgets; using the measured baseline as a no-regression reference, this candidate does not pass the plan's latency/memory gate. The real-filesystem compatibility check verified actual `FileService` snapshots preserve workspace isolation, ignored `.git` and `node_modules` directories, symlink exclusion, basename-before-path ordering, unique paths, equal-score basename ties matching the existing comparator, empty-query traversal order, and result-limit truncation. Unicode coverage is limited to the labelled CJK and Latin-diacritic cases and does not establish equivalence across all normalization forms. A 50,000-file run confirmed that the real snapshot builder caps at 20,000 entries and sets `truncated=true`; baseline and candidate both returned 20 results and retained `truncated=true` for basename and path queries. The candidate retained about `38,400KB` extra heap at the cap and its fresh path-first request took `119.927ms` versus `90.560ms` baseline (about `32%` slower). Reproducible offline scripts and full annotated Top-5/Top-10 relevance output are committed under `scripts/benchmarks/phase-3-file-name-search/`; Fuzzysort itself remains an isolated, non-root dependency.
 
+## Phase 4 — PDF work reduction
+
+**Status:** Phase 4 implementation and validation are complete: 468 unit tests, 26 renderer tests, build/chunk checks, and fresh ten-run same-hash baselines pass. The original three Spec findings and both follow-up Spec/Standards findings are fixed; final Standards and Spec reviews returned no findings. Phase 4 commit is pending.
+
+### Consumer and compatibility audit
+
+- `research.document.asset` serves stored page-image assets through `src/main/pdf-preview-protocol.ts`; `ResearchDocumentService.asset` validates the parse, asset ID, hash, and stored file. This is a real consumer contract. Keep PNGs for pages with visual content, OCR, low-quality text, or inconclusive visual inspection.
+- `PaperReader` renders parsed text blocks. The renderer does not currently fetch page assets. Research exports preview the original PDF. The existing `files.preview*` protocol is unchanged.
+- `artifacts/middle.json` and `artifacts/structured.json` contain identical JSON, but both paths are externally recognizable through the returned contract; v4 continues to write them separately. There is no in-repo reader that needs the second payload, but Phase4 preserves the established filename contract. Existing v3 records retain both paths and remain readable.
+- `researchParseContractVersion` advances to 4 while `researchParserVersion` remains `roc-research-parser/2`; `researchDerivationGenerationVersion` stays at 3 because text, locations, blocks, and citation IDs are unchanged. `ResearchToolchain.identity()` uses the v2 parser and generation-3 identity payload, preserving the prior parser key so artifact-only output changes do not requeue existing documents. Existing v3 parses remain active.
+
+### Changes and measurements
+
+`measureResearchPdfPage` computes the same clamped page dimensions without canvas rendering. The parser omits the page PNG only when native text is high quality and visual inspection succeeds with no visible content. `researchPdfPageHasVisualContent` returns visual content on unknown/non-text operators or if PDF.js inspection throws; this conservatively retains the page image and continues OCR when models are available. Visual pages, OCR pages, low-quality text, and inconclusive pages retain the normal render and asset path. Text, page count, coordinates, and citation identifiers are unchanged.
+
+For contract v4, the `assets` list is authoritative for whether a page image exists; consumers must not infer a PNG from page count. Text, page geometry, locations, and citation identifiers are still emitted for every page. Contract v3 retains its original schema and artifact paths; the existing `files.preview*` protocol remains unchanged.
+
+The benchmark ran 10 fresh Node processes per scenario at the Phase3 commit (`328916c9c9cd2707c1495164cf807019e3502267`) and on the candidate. Both use Node `v26.12.1`, `darwin-arm64`, and matching fixture hashes. The script reports p50/p95 elapsed time, peak RSS, output bytes, per-stage time, and p50/p95 of each run's maximum event-loop delay using `monitorEventLoopDelay`; this measures the parser host process, not Electron startup. Raw ignored artifacts: `.runtime/phase4-pdf-before-review.json` and `.runtime/phase4-pdf-after-review.json`.
+
+| Scenario | Legacy contract 3 | Contract 4 | Result |
+| :--- | :--- | :--- | :--- |
+| Clean native text, SHA-256 `8489dd1fd21d46abeb783e07670263ea2f13220d1cbe1285e10e429454d72fd5` | Elapsed p50/p95 `245.027/253.148ms`; event-loop max p50/p95 `213.123/221.819ms`; RSS p50/p95 `162,528/166,582KB`; `70,644` bytes | Elapsed `57.651/58.664ms`; event-loop max `53.428/54.452ms`; RSS p50/p95 `127,576/134,042KB`; `10,099` bytes | p50 elapsed 76.5% lower, p95 76.8% lower, output 85.7% smaller. Render/encode/write p50 `163.402/28.213/0.797ms` become visual-inspection/layout `2.447/0.113ms`. |
+| Visual `p5-paper.pdf`, SHA-256 `ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5` | Elapsed p50/p95 `268.631/279.032ms`; `72,729` bytes | Elapsed `275.334/291.732ms`; `72,729` bytes; page PNG retained | Output and stages remain on the legacy render path. A separate candidate batch measured `268.175/278.739ms` versus baseline `269.260/277.269ms`; timing varies between runs, with no artifact-size change. |
+| Scanned and mixed routing | Stops at absent model `ENOENT`; output cleaned | Same `ENOENT`; output cleaned | No OCR inference result claimed; model packs are absent. |
+
+No model pack is available to measure model initialization or inference, so this phase makes no OCR-worker claim. The measured gain is isolated to confirmed clean-text pages; the visual fixture remains on the compatibility path.
+
+### Validation
+
+- `node --test tests/unit/architecture-repair-corpus.test.mjs`: 13 passed, including v3 stored-content compatibility, parser-identity stability, separate JSON paths/equal payloads, text coordinates, visual-page PNG retention, failed-inspection fallback, clean-text PNG omission, and output cleanup.
+- `node --test tests/unit/research-archive-libraries.test.mjs tests/unit/ripgrep-search.test.mjs`: 31 passed.
+- `pnpm test:unit`: 468 passed, 0 failed after the Spec fixes and test-runner stability adjustments.
+- `pnpm test:renderer`: one initial run alongside typecheck/LSP had 25/26 pass and timed out once in the transcript-anchor wait; the exact test passed isolated, and the serial full suite passed 26/26. No renderer files changed.
+- `pnpm typecheck`, `pnpm check:ipc`, and `git diff --check`: passed after final code/test changes.
+- `pnpm build`: passed (`pnpm typecheck && electron-vite build`).
+- `pnpm check:renderer-chunks`: passed; renderer eager JS is `1,076,909` bytes across 6 files.
+- Targeted LSP diagnostics: 4 of 5 changed TS files confirmed clean; `src/main/plugins/research/index.ts` timed out once; full TypeScript check passed.
+
+**Review:** The initial Spec findings (distinct JSON path compatibility, unknown operator handling, and repeated/main-thread-blocking measurements) were fixed. Follow-up Spec review found that PDF.js inspection failures could still escape; the visual helper now conservatively retains the image. Follow-up Standards review found artifact version bumps could rotate the index parser key; `researchParserIdentityPayload` keeps the existing v2/generation-3 key stable. Both fixes have regression coverage. Final Standards and Spec reviews returned no findings.
+
 ## Decisions
 
-- Keep native-text page PNG and both JSON artifact paths while their consumer contracts require them; optimize only after a compatible consumer migration and measured benefit.
+- Use contract v4 for page-image policy and retain v3 schema reads; omit page PNG only after a successful no-visual-content inspection on high-quality native text. The visual detector fails closed: any unknown PDF.js operator retains the image.
+- Keep both `artifacts/middle.json` and `artifacts/structured.json` as distinct files in v4. Both returned paths were part of the earlier contract, so preserve the visible path shape even though payloads are identical.
+- Keep `researchDerivationGenerationVersion` at 3 and `researchParserVersion` at `roc-research-parser/2` while output contract advances to 4; `ResearchToolchain.identity()` hashes the same v2/generation-3 payload as before, preventing a corpus-wide reparse for artifact-only changes.
 - Do not claim scanned/mixed OCR inference gains from the no-model baseline. Use a real user-installed model pack for any later OCR performance claim; until available, restrict phase 4 to changes whose evidence does not require inference.
 - Treat project list plus command-palette search as the phase 5 cache candidate because both call the same unfiltered `listProjects` IPC resource; first prove simultaneous consumers and invalidate the shared key after successful writes.
 - Keep each phase's evidence and adopt/no-go decision in this file so every requested phase has a reviewable, committed outcome.
@@ -157,7 +199,7 @@ On the same nested 20k corpus, the candidate added a median `38,395KB` heap and 
 - Phase 1: Committed.
 - Phase 2: Committed.
 - Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
-- Phase 4: Pending.
+- Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; commit pending.
 - Phase 5: Pending.
 - Phase 6: Pending.
 - Phase 7: Pending.

@@ -52,7 +52,7 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
 import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
-import { researchParseContractVersion } from '../../../shared/schemas/research-production';
+import { researchDerivationGenerationVersion } from '../../../shared/schemas/research-production';
 import { ResearchProseLintService } from './prose-lint-service';
 import { registerResearchProseCapabilities, researchProseCapabilities } from './prose-lint-capabilities';
 import { ResearchLibraryService } from './library-service';
@@ -248,10 +248,9 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       literatureImports.recover();
       registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
-      // 派生代际切换（提案 §8）：旧代际结果一律不读，文档回到“有原文、无结果”。
-      // 必须放在 `documents` 服务构造前：切换后任何 `current_parse_id` 都不可能指向旧块。
-      if (researchRepository.documents.switchDerivationGeneration(researchParseContractVersion)) {
-        context.logger.info('research_derivation_generation_switched', { contractVersion: researchParseContractVersion });
+      // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
+      if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {
+        context.logger.info('research_derivation_generation_switched', { generationVersion: researchDerivationGenerationVersion });
       }
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);

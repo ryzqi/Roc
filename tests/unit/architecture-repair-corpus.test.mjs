@@ -33,7 +33,22 @@ const { modelPackManifest } = await importTypeScriptModule('src/main/plugins/res
   platform: 'node',
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
-const { renderResearchPdfPage, withResearchPdf } = await importTypeScriptModule('src/main/plugins/research/pdf-render.ts', {
+const { researchDocumentContentSchema } = await importTypeScriptModule('src/shared/schemas/research-documents.ts', {
+  platform: 'node',
+  external: ['zod'],
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+const { researchDerivationGenerationVersion, researchParseContractVersion, researchParserIdentityPayload } = await importTypeScriptModule('src/shared/schemas/research-production.ts', {
+  platform: 'node',
+  external: ['zod'],
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+const { collectDocumentContent } = await importTypeScriptModule('src/main/plugins/research/document-files.ts', {
+  platform: 'node',
+  external: ['zod'],
+  tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+const { renderResearchPdfPage, withResearchPdf, researchPdfPageHasVisualContent } = await importTypeScriptModule('src/main/plugins/research/pdf-render.ts', {
   platform: 'node',
   external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
@@ -211,14 +226,25 @@ test('architecture repair corpus materializes reusable ZIP, TIFF, history, and f
   }
 });
 
-test('native-text PDF stages preserve page evidence without allocating an OCR raster', async () => {
+test('artifact-only contract changes preserve the index parser identity', () => {
+  assert.equal(researchParseContractVersion, 4);
+  assert.equal(researchDerivationGenerationVersion, 3);
+  assert.deepEqual(researchParserIdentityPayload('a'.repeat(64)), {
+    engine: 'paddleocr.js',
+    contractVersion: 3,
+    parserVersion: 'roc-research-parser/2',
+    modelManifest: 'a'.repeat(64)
+  });
+});
+
+test('native-text PDF with vector content keeps page evidence without an OCR model pack', async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-stages-'));
   try {
     const projectRoot = join(temporaryRoot, 'project');
     await mkdir(projectRoot);
-    const sourcePath = join(projectRoot, 'native-text.pdf');
+    const sourcePath = join(projectRoot, 'native-text-vector.pdf');
     const outputDir = join(projectRoot, 'parsed');
-    await writeFile(sourcePath, await readFile(join(repositoryRoot, corpus.documents.pdf.path)));
+    await writeFile(sourcePath, textOnlyPdf({ includeVector: true }));
     const stages = [];
 
     const parsed = await parseResearchDocument({
@@ -231,26 +257,111 @@ test('native-text PDF stages preserve page evidence without allocating an OCR ra
       onStage: (event) => stages.push(event)
     });
 
+    assert.equal(parsed.contractVersion, 4);
     assert.equal(parsed.parseMode, 'native-text');
     assert.ok(parsed.content.length > 0);
     assert.deepEqual(parsed.assets.map((asset) => ({ kind: asset.kind, page: asset.page })), [{ kind: 'page', page: 1 }]);
     const pagePng = await readFile(join(outputDir, parsed.assets[0].path));
     assert.deepEqual(pagePng.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.ok(pagePng.byteLength > 0);
-    const middle = JSON.parse(await readFile(join(outputDir, parsed.artifacts.middleJson), 'utf8'));
+    assert.notEqual(parsed.artifacts.middleJson, parsed.artifacts.structuredContent);
+    const middleBytes = await readFile(join(outputDir, parsed.artifacts.middleJson));
+    const structuredBytes = await readFile(join(outputDir, parsed.artifacts.structuredContent));
+    assert.deepEqual(structuredBytes, middleBytes);
+    const middle = JSON.parse(middleBytes.toString('utf8'));
     assert.equal(middle.content, parsed.content);
     assert.equal(middle.pages[0].page, 1);
     assert.ok(parsed.blocks.every((block) => block.locations.every((location) => location.page === 1)));
     assert.ok(stages.some((event) => event.stage === 'native-text'));
+    assert.ok(stages.some((event) => event.stage === 'visual-inspection'));
     assert.ok(stages.some((event) => event.stage === 'page-render'));
     assert.ok(stages.some((event) => event.stage === 'page-png-encode'));
     assert.ok(stages.some((event) => event.stage === 'page-write'));
     assert.equal(stages.some((event) => event.stage === 'ocr-raster'), false);
     assert.equal(stages.some((event) => event.stage === 'ocr-inference'), false);
-    assert.ok(stages.findIndex((event) => event.stage === 'native-text') < stages.findIndex((event) => event.stage === 'page-render'));
+    assert.ok(stages.findIndex((event) => event.stage === 'native-text') < stages.findIndex((event) => event.stage === 'visual-inspection'));
+    assert.ok(stages.findIndex((event) => event.stage === 'visual-inspection') < stages.findIndex((event) => event.stage === 'page-render'));
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
+});
+
+test('high-quality text-only pages preserve coordinates without rendering page images', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-architecture-pdf-text-only-'));
+  try {
+    const projectRoot = join(temporaryRoot, 'project');
+    await mkdir(projectRoot);
+    const sourcePath = join(projectRoot, 'text-only.pdf');
+    const outputDir = join(projectRoot, 'parsed');
+    await writeFile(sourcePath, textOnlyPdf());
+    const stages = [];
+
+    const parsed = await parseResearchDocument({
+      projectRoot,
+      sourcePath,
+      outputDir,
+      options: { tier: 'compact', device: 'cpu', pageRange: '1' },
+      modelFiles: null,
+      modelManifest: modelPackManifest('compact'),
+      onStage: (event) => stages.push(event)
+    });
+
+    assert.equal(parsed.contractVersion, 4);
+    assert.equal(parsed.parseMode, 'native-text');
+    assert.ok(parsed.content.length >= 600);
+    assert.deepEqual(parsed.assets, []);
+    assert.deepEqual(parsed.blocks[0].locations[0].bbox, [0, 0, 918, 1188]);
+    assert.notEqual(parsed.artifacts.middleJson, parsed.artifacts.structuredContent);
+    const middleBytes = await readFile(join(outputDir, parsed.artifacts.middleJson));
+    const structuredBytes = await readFile(join(outputDir, parsed.artifacts.structuredContent));
+    assert.deepEqual(structuredBytes, middleBytes);
+    const middle = JSON.parse(middleBytes.toString('utf8'));
+    assert.equal(middle.pages[0].text, parsed.content);
+    assert.ok(stages.some((event) => event.stage === 'visual-inspection'));
+    assert.ok(stages.some((event) => event.stage === 'page-layout'));
+    for (const stage of ['page-render', 'page-png-encode', 'page-write', 'ocr-raster', 'ocr-inference']) {
+      assert.equal(stages.some((event) => event.stage === stage), false, `text-only page must skip ${stage}`);
+    }
+
+    const stored = await collectDocumentContent(await realpath(projectRoot), await realpath(outputDir), parsed);
+    assert.deepEqual(stored.content.assets, []);
+    assert.deepEqual(stored.files, {});
+    assert.notEqual(stored.content.artifacts.middleJson, stored.content.artifacts.structuredContent);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('stored document schema still reads contract 3 outputs with separate JSON paths', () => {
+  const legacy = researchDocumentContentSchema.parse({
+    contractVersion: 3,
+    engine: 'paddleocr.js',
+    engineVersion: 'legacy-test',
+    parserVersion: 'roc-research-parser/2',
+    parserFingerprint: 'a'.repeat(64),
+    modelManifest: '',
+    runtime: { node: 'legacy-test' },
+    tier: 'compact',
+    parseMode: 'native-text',
+    device: 'cpu',
+    sourceHash: 'b'.repeat(64),
+    pageCount: 1,
+    content: 'legacy text',
+    blocks: [{ id: 'block_1', kind: 'paragraph', label: 'Page text', text: 'legacy text', locator: 'page:1',
+      locations: [{ page: 1, bbox: [0, 0, 10, 10], coordinateOrigin: 'TOPLEFT' }], imageAssetId: null }],
+    assets: [{ id: 'asset_0', kind: 'page', page: 1, sha256: 'c'.repeat(64), size: 10 }],
+    artifacts: { middleJson: 'artifacts/middle.json', markdown: 'artifacts/document.md', structuredContent: 'artifacts/structured.json' },
+    warnings: []
+  });
+  assert.equal(legacy.contractVersion, 3);
+  assert.equal(legacy.artifacts.structuredContent, 'artifacts/structured.json');
+});
+
+test('unknown or unavailable PDF operators conservatively retain page images', async () => {
+  const unknownPage = { getOperatorList: async () => ({ fnArray: [Number.MAX_SAFE_INTEGER] }) };
+  const unavailablePage = { getOperatorList: async () => { throw new Error('synthetic_visual_inspection_failure'); } };
+  assert.equal(await researchPdfPageHasVisualContent(unknownPage), true);
+  assert.equal(await researchPdfPageHasVisualContent(unavailablePage), true);
 });
 
 test('OCR raster bytes match the rendered page after its PNG evidence is written', async () => {

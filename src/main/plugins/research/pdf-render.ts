@@ -9,25 +9,59 @@ import { researchJobError, runResearchJob, type ResearchJobPaths } from './resea
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SOURCE = 512 * 1024 * 1024;
 const DEFAULT_PARSE_SCALE = 1.5;
-const NON_TEXT_VISUAL_OPERATIONS = new Set([
-  OPS.constructPath,
-  OPS.stroke,
-  OPS.closeStroke,
-  OPS.fill,
-  OPS.eoFill,
-  OPS.fillStroke,
-  OPS.eoFillStroke,
-  OPS.closeFillStroke,
-  OPS.closeEOFillStroke,
-  OPS.rawFillPath,
-  OPS.shadingFill,
-  OPS.paintImageMaskXObject,
-  OPS.paintImageMaskXObjectGroup,
-  OPS.paintImageXObject,
-  OPS.paintInlineImageXObject,
-  OPS.paintInlineImageXObjectGroup,
-  OPS.paintImageXObjectRepeat,
-  OPS.paintSolidColorImageMask
+const SAFE_TEXT_PAGE_OPERATIONS = new Set([
+  OPS.dependency,
+  OPS.setLineWidth,
+  OPS.setLineCap,
+  OPS.setLineJoin,
+  OPS.setMiterLimit,
+  OPS.setDash,
+  OPS.setRenderingIntent,
+  OPS.setFlatness,
+  OPS.setGState,
+  OPS.save,
+  OPS.restore,
+  OPS.transform,
+  OPS.beginText,
+  OPS.endText,
+  OPS.setCharSpacing,
+  OPS.setWordSpacing,
+  OPS.setHScale,
+  OPS.setLeading,
+  OPS.setFont,
+  OPS.setTextRenderingMode,
+  OPS.setTextRise,
+  OPS.moveText,
+  OPS.setLeadingMoveText,
+  OPS.setTextMatrix,
+  OPS.nextLine,
+  OPS.showText,
+  OPS.showSpacedText,
+  OPS.nextLineShowText,
+  OPS.nextLineSetSpacingShowText,
+  OPS.setCharWidth,
+  OPS.setCharWidthAndBounds,
+  OPS.setStrokeColorSpace,
+  OPS.setFillColorSpace,
+  OPS.setStrokeColor,
+  OPS.setStrokeColorN,
+  OPS.setFillColor,
+  OPS.setFillColorN,
+  OPS.setStrokeGray,
+  OPS.setFillGray,
+  OPS.setStrokeRGBColor,
+  OPS.setFillRGBColor,
+  OPS.setStrokeCMYKColor,
+  OPS.setFillCMYKColor,
+  OPS.markPoint,
+  OPS.markPointProps,
+  OPS.beginMarkedContent,
+  OPS.beginMarkedContentProps,
+  OPS.endMarkedContent,
+  OPS.beginCompat,
+  OPS.endCompat,
+  OPS.setStrokeTransparent,
+  OPS.setFillTransparent
 ]);
 
 export type ResearchPdfPageImage = {
@@ -41,7 +75,18 @@ export type ResearchPdfPageImage = {
   image: { width: number; height: number; data: Uint8Array } | null;
 };
 
-export type ResearchPdfStage = 'native-text' | 'visual-inspection' | 'page-render' | 'page-png-encode' | 'ocr-raster' |
+export type ResearchPdfPageLayout = Pick<ResearchPdfPageImage, 'page' | 'pageCount' | 'width' | 'height' | 'text'>;
+export type ResearchPdfPageLayoutOptions = {
+  page: PDFPageProxy;
+  pageNumber: number;
+  pageCount: number;
+  text: string;
+  scale?: number;
+  clampToPixelLimit?: boolean;
+  onStage?: ResearchPdfStageObserver;
+};
+
+export type ResearchPdfStage = 'native-text' | 'visual-inspection' | 'page-layout' | 'page-render' | 'page-png-encode' | 'ocr-raster' |
   'page-write' | 'model-validation' | 'model-initialization' | 'ocr-inference' | 'region-write' | 'parse-artifact-write';
 export type ResearchPdfStageObserver = (event: { stage: ResearchPdfStage; page: number | null; durationMs: number }) => void;
 
@@ -50,6 +95,17 @@ export type ResearchPdfPageRenderOptions = {
   text?: string;
   onStage?: ResearchPdfStageObserver;
 };
+
+export function measureResearchPdfPage(options: ResearchPdfPageLayoutOptions): ResearchPdfPageLayout {
+  const { page, pageNumber, pageCount, text, scale = DEFAULT_PARSE_SCALE, clampToPixelLimit = false, onStage } = options;
+  const startedAt = performance.now();
+  try {
+    const { width, height } = boundedPageViewport(page, scale, clampToPixelLimit);
+    return { page: pageNumber, pageCount, width, height, text };
+  } finally {
+    onStage?.({ stage: 'page-layout', page: pageNumber, durationMs: performance.now() - startedAt });
+  }
+}
 
 export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDFDocumentProxy) => Promise<T>): Promise<T> {
   const loadingTask = getDocument({
@@ -70,10 +126,14 @@ export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDF
   }
 }
 
-/** True when a page paints image or vector content beyond selectable PDF text. */
+/** Unknown/non-text operators or a failed inspection conservatively keep the source page image. */
 export async function researchPdfPageHasVisualContent(page: PDFPageProxy): Promise<boolean> {
-  const operatorList = await page.getOperatorList();
-  return operatorList.fnArray.some((operation) => NON_TEXT_VISUAL_OPERATIONS.has(operation));
+  try {
+    const operatorList = await page.getOperatorList();
+    return operatorList.fnArray.some((operation) => !SAFE_TEXT_PAGE_OPERATIONS.has(operation));
+  } catch {
+    return true;
+  }
 }
 
 export async function extractResearchPdfPageText(
@@ -105,18 +165,7 @@ export async function renderResearchPdfPage(
   options: ResearchPdfPageRenderOptions = {}
 ): Promise<ResearchPdfPageImage> {
   const text = options.text ?? await extractResearchPdfPageText(page, pageNumber, options.onStage);
-  let viewport = page.getViewport({ scale });
-  let pixels = viewport.width * viewport.height;
-  if (clampToPixelLimit && pixels > MAX_PAGE_PIXELS) {
-    const clampedScale = scale * Math.sqrt(MAX_PAGE_PIXELS / pixels);
-    viewport = page.getViewport({ scale: clampedScale });
-    pixels = viewport.width * viewport.height;
-  }
-  const width = Math.round(viewport.width);
-  const height = Math.round(viewport.height);
-  if (!Number.isFinite(pixels) || pixels <= 0 || pixels > MAX_PAGE_PIXELS || width <= 0 || height <= 0) {
-    researchJobError('research_pdf_page_too_large');
-  }
+  const { viewport, width, height } = boundedPageViewport(page, scale, clampToPixelLimit);
   const canvas = createCanvas(width, height);
   let startedAt = performance.now();
   await page.render({ canvasContext: canvas.getContext('2d'), viewport, canvas } as never).promise;
@@ -154,6 +203,22 @@ export async function renderResearchPdfPage(
     pngBytes,
     image
   };
+}
+
+function boundedPageViewport(page: PDFPageProxy, scale: number, clampToPixelLimit: boolean) {
+  let viewport = page.getViewport({ scale });
+  let pixels = viewport.width * viewport.height;
+  if (clampToPixelLimit && pixels > MAX_PAGE_PIXELS) {
+    const clampedScale = scale * Math.sqrt(MAX_PAGE_PIXELS / pixels);
+    viewport = page.getViewport({ scale: clampedScale });
+    pixels = viewport.width * viewport.height;
+  }
+  const width = Math.round(viewport.width);
+  const height = Math.round(viewport.height);
+  if (!Number.isFinite(pixels) || pixels <= 0 || pixels > MAX_PAGE_PIXELS || width <= 0 || height <= 0) {
+    researchJobError('research_pdf_page_too_large');
+  }
+  return { viewport, width, height };
 }
 
 export async function renderResearchPdf(input: {
