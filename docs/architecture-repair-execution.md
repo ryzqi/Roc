@@ -113,6 +113,30 @@ After these fixes, both benchmarks were rerun with the reviewed artifact paths l
 
 The first independent review found that a new path reported as `change` would otherwise be treated as content-only until TTL expiry. `FileService` now checks exact snapshot membership, invalidates unindexed paths, and a regression test covers the new-file `change` case. A follow-up subagent review found no additional issues.
 
+## Phase 2 — Croner adapter
+
+**Status:** Complete. The independent subagent review found no issues; this execution record is included in the Phase 2 commit.
+
+### Changes
+
+- Added `croner@10.0.1` as the calculation engine while leaving Roc's task repository, occurrence deduplication, restart recovery, missed-run policy, approvals, and run lifecycle unchanged. `ParsedCronExpression` had no external callers and is now module-private; `parseCronExpression` remains the strict grammar gate.
+- The adapter selects five-field mode, sets `domAndDow: true`, leaves Croner paused, and omits `timezone` so calculations follow the host's current local timezone without creating a timer. Invalid expressions keep `background_task_cron_invalid` and `Cron 表达式无效。`.
+- The old parser treats a numeric `start/step` segment as a singleton, while Croner expands it. The adapter normalizes only after strict Roc validation. Croner's DST-gap result is accepted only when `job.match(next)` confirms the requested local time; otherwise the search continues. The 366-day effective-minute boundary and six-hour offset sampling remain in place.
+- Added a 64-entry LRU of paused Cron jobs. Cache keys use the exact validated expression, so an invalid expression that normalizes to a valid pattern cannot bypass validation. Evicted jobs are stopped; measured retained heap for 64 jobs was 5.13 MiB.
+
+### Evidence
+
+| Check | Result |
+| :--- | :--- |
+| `node --test tests/unit/cron-parser-compatibility.test.mjs` | Pass: 6 tests, including grammar/error mapping, minute/date/day boundaries, leap years, cache-validation collision, dynamic local-timezone changes, Singapore, and New York DST |
+| Old/new differential | Pass: 800 generated cases across UTC, Asia/Singapore, America/New_York, Europe/Berlin, and Australia/Lord_Howe; 0 mismatches |
+| `pnpm typecheck` | Pass: `tsc --noEmit -p tsconfig.json` |
+| `git diff --check` | Pass |
+| Warm repeated computation | Daily: 3.50→1.83 µs; every 15 minutes: 4.17→1.68 µs; every minute: 5.21→2.56 µs; Feb 29: 108.90→68.08 µs |
+| 30-day missed-run recovery | 43,200 one-minute occurrences: 224.28 ms legacy vs 142.13 ms adapter; both ended at `2026-01-31T00:00:00.000Z` |
+
+The bounded cache matters because `resolveScheduledOccurrenceSchedule` advances missed occurrences inside `claimInCurrentTransaction`, which runs within SQLite transactions. Raw per-call Croner construction was 9–12× slower on common schedules; the warm bounded-cache path is faster than the old parser and uses no scheduled timer.
+
 ## Decisions
 
 - Keep native-text page PNG and both JSON artifact paths while their consumer contracts require them; optimize only after a compatible consumer migration and measured benefit.
@@ -123,7 +147,7 @@ The first independent review found that a new path reported as `change` would ot
 ## Later phases
 
 - Phase 1: Committed.
-- Phase 2: Pending.
+- Phase 2: Committed.
 - Phase 3: Pending.
 - Phase 4: Pending.
 - Phase 5: Pending.

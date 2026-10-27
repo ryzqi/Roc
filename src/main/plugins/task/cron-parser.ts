@@ -1,6 +1,7 @@
+import { Cron } from 'croner';
 import { RocDomainError } from '../../services/errors';
 
-export type ParsedCronExpression = {
+type ParsedCronExpression = {
   minutes: Set<number>;
   hours: Set<number>;
   daysOfMonth: Set<number>;
@@ -22,10 +23,9 @@ const fields: CronField[] = [
   { name: 'day_of_week', min: 0, max: 7 }
 ];
 const maxMinutesToScan = 366 * 24 * 60;
-// A local minute step can jump forward by the timezone offset increase at a fall-back transition.
-// Search a bounded margin, then count those jumps before accepting a candidate.
-const searchOffsetMarginMinutes = 4 * 24 * 60;
+const maxCachedCronJobs = 64;
 const timezoneOffsetSampleIntervalMs = 6 * 60 * 60 * 1000;
+const cronJobCache = new Map<string, Cron>();
 
 export function parseCronExpression(expression: string): ParsedCronExpression {
   const parts = expression.trim().split(/\s+/);
@@ -55,53 +55,73 @@ export function parseCronExpression(expression: string): ParsedCronExpression {
 }
 
 export function computeNextCronRunAt(expression: string, after: Date = new Date()): string {
-  const parsed = parseCronExpression(expression);
   const candidate = new Date(after.getTime());
   candidate.setSeconds(0, 0);
   candidate.setMinutes(candidate.getMinutes() + 1);
-  const searchHorizonMs = candidate.getTime() + (maxMinutesToScan - 1 + searchOffsetMarginMinutes) * 60_000;
-  const hours = [...parsed.hours].sort((left, right) => left - right);
-  const minutes = [...parsed.minutes].sort((left, right) => left - right);
-  const dayStart = new Date(candidate.getTime());
-  dayStart.setHours(0, 0, 0, 0);
 
-  for (let dayOffset = 0; dayStart.getTime() <= searchHorizonMs; dayOffset += 1) {
-    const base = dayOffset === 0 ? candidate : dayStart;
-    if (matchesDate(parsed, base)) {
-      for (const hour of hours) {
-        if (hour < base.getHours()) {
-          continue;
-        }
-        for (const minute of minutes) {
-          if (hour === base.getHours() && minute < base.getMinutes()) {
-            continue;
-          }
-
-          const next = new Date(base.getTime());
-          next.setHours(hour, minute, 0, 0);
-          if (
-            next >= candidate &&
-            next.getTime() <= searchHorizonMs &&
-            next.getHours() === hour &&
-            next.getMinutes() === minute &&
-            matchesDate(parsed, next)
-          ) {
-            const iterationOffset =
-              (next.getTime() - candidate.getTime()) / 60_000 - positiveTimezoneOffsetIncreaseMinutes(candidate, next);
-            if (iterationOffset >= maxMinutesToScan) {
-              throw invalidCron();
-            }
-            return next.toISOString();
-          }
-        }
+  try {
+    const job = getCronJob(expression);
+    let cursor = new Date(after.getTime());
+    while (true) {
+      const next = job.nextRun(cursor);
+      if (next === null) {
+        throw invalidCron();
       }
-    }
 
-    dayStart.setDate(dayStart.getDate() + 1);
-    dayStart.setHours(0, 0, 0, 0);
+      const iterationOffset =
+        (next.getTime() - candidate.getTime()) / 60_000 - positiveTimezoneOffsetIncreaseMinutes(candidate, next);
+      if (iterationOffset >= maxMinutesToScan) {
+        throw invalidCron();
+      }
+      if (job.match(next)) {
+        return next.toISOString();
+      }
+      cursor = next;
+    }
+  } catch (error) {
+    if (error instanceof RocDomainError) {
+      throw error;
+    }
+    throw invalidCron();
+  }
+}
+
+function getCronJob(expression: string): Cron {
+  const cachedJob = cronJobCache.get(expression);
+  if (cachedJob !== undefined) {
+    cronJobCache.delete(expression);
+    cronJobCache.set(expression, cachedJob);
+    return cachedJob;
   }
 
-  throw invalidCron();
+  parseCronExpression(expression);
+  // Omit timezone so Croner follows the host's current local timezone; paused prevents a scheduler timer.
+  const job = new Cron(normalizeCronerExpression(expression), {
+    mode: '5-part',
+    domAndDow: true,
+    paused: true
+  });
+  cronJobCache.set(expression, job);
+  if (cronJobCache.size > maxCachedCronJobs) {
+    const oldestExpression = cronJobCache.keys().next().value;
+    if (oldestExpression !== undefined) {
+      cronJobCache.get(oldestExpression)?.stop();
+      cronJobCache.delete(oldestExpression);
+    }
+  }
+  return job;
+}
+function normalizeCronerExpression(expression: string): string {
+  return expression.trim().split(/\s+/u).map((field) =>
+    field.split(',').map((segment) => {
+      const slashIndex = segment.indexOf('/');
+      if (slashIndex < 0) {
+        return segment;
+      }
+      const prefix = segment.slice(0, slashIndex);
+      return prefix !== '*' && !prefix.includes('-') ? prefix : segment;
+    }).join(',')
+  ).join(' ');
 }
 
 function parseField(raw: string, field: CronField, allowSevenForSunday: boolean): Set<number> {
@@ -167,14 +187,6 @@ function parseNumber(raw: string, field: CronField, allowSevenForSunday: boolean
     throw invalidCron();
   }
   return value;
-}
-
-function matchesDate(parsed: ParsedCronExpression, date: Date): boolean {
-  return (
-    parsed.daysOfMonth.has(date.getDate()) &&
-    parsed.months.has(date.getMonth() + 1) &&
-    parsed.daysOfWeek.has(date.getDay())
-  );
 }
 
 function positiveTimezoneOffsetIncreaseMinutes(start: Date, end: Date): number {

@@ -195,6 +195,9 @@ importers:
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
+      croner:
+        specifier: 10.0.1
+        version: 10.0.1
       csv-parse:
         specifier: 7.0.3
         version: 7.0.3
@@ -1238,6 +1241,10 @@ packages:
 
   crelt@1.0.7:
     resolution: {integrity: sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA==}
+
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -4277,6 +4284,8 @@ snapshots:
   core-util-is@1.0.3: {}
 
   crelt@1.0.7: {}
+
+  croner@10.0.1: {}
 
   cross-spawn@7.0.6:
     dependencies:
