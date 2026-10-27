@@ -73,6 +73,10 @@ import { ResearchProductionInputService } from './production-input-service';
 import { registerResearchProductionInputCapabilities, researchProductionInputCapabilities } from './production-input-capabilities';
 import { ResearchProductionEffectService } from './production-effects';
 import { ResearchWorkspaceFileService } from './workspace-files';
+import {
+  workspacePathStructureChangedEventType,
+  type WorkspacePathStructureChangeNotifier
+} from '../../services/workspace-path-structure-event';
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchManuscriptCapabilities, researchManuscriptCapabilities } from './manuscript-capabilities';
 import { registerResearchIdeaCapabilities, researchIdeaCapabilities } from './idea-capabilities';
@@ -194,7 +198,21 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
-      const researchTemplates = new ResearchTemplateService(researchRepository, toolchain);
+      const notifyWorkspacePathStructureChanged: WorkspacePathStructureChangeNotifier = (workspacePath, reason) => {
+        void context.eventBus.publish({
+          type: workspacePathStructureChangedEventType,
+          source: pluginId,
+          payload: { workspacePath, reason },
+          createdAt: new Date().toISOString()
+        }).catch((error: unknown) => {
+          context.logger.warn('Research workspace path structure event publish failed.', {
+            workspacePath,
+            reason,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      };
+      const researchTemplates = new ResearchTemplateService(researchRepository, toolchain, notifyWorkspacePathStructureChanged);
       templates = researchTemplates;
       registerResearchProductionCapabilities(context, researchTemplates, toolchain);
       const researchExports = new ResearchExportService(researchRepository,
@@ -237,7 +255,8 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       }
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
-      const effects = new ResearchProductionEffectService(researchRepository, new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString()),
+      const effects = new ResearchProductionEffectService(researchRepository,
+        new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
         researchExperiments, researchFigures, researchTemplates, researchExports);
       const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects);

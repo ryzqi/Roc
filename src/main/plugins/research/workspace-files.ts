@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { link, lstat, open, rename, rm, unlink } from 'node:fs/promises';
-import { dirname, extname, join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import type { Database } from 'better-sqlite3';
 import {
   researchWorkspaceFileContentSchema, researchWorkspaceFileSaveRequestSchema, researchWorkspaceFileSchema,
@@ -8,6 +8,7 @@ import {
 } from '../../../shared/schemas/research-experiments';
 import { createResearchDirectory, readResearchFile, researchAbsolutePath, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
+import type { WorkspacePathStructureChangeNotifier } from '../../services/workspace-path-structure-event';
 
 const editable = new Set(['.py', '.r', '.jl', '.csv', '.tsv', '.txt', '.md', '.json']);
 const blocked = new Set(['.roc-research', '.roc-build', '.git', '.venv', 'node_modules', '__MACOSX']);
@@ -15,7 +16,12 @@ const blocked = new Set(['.roc-research', '.roc-build', '.git', '.venv', 'node_m
 type Row = { path: string; sha256: string; size: number; revision: number; owner_run_id: string | null; updated_at: string };
 
 export class ResearchWorkspaceFileService {
-  constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
+  constructor(
+    private readonly db: Database,
+    private readonly research: ResearchRepository,
+    private readonly now: () => string,
+    private readonly onPathStructureChanged?: WorkspacePathStructureChangeNotifier
+  ) {}
 
   async read(projectId: string, path: string): Promise<ResearchWorkspaceFileContent> {
     const { root } = await this.context(projectId, false);
@@ -33,7 +39,7 @@ export class ResearchWorkspaceFileService {
 
   async save(request: ResearchWorkspaceFileSaveRequest, ownerRunId: string | null = null): Promise<ResearchWorkspaceFileContent> {
     const input = researchWorkspaceFileSaveRequestSchema.parse(request);
-    const { project, root } = await this.context(input.projectId, true);
+    const { project, root, workspacePath } = await this.context(input.projectId, true);
     if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, project.id);
     this.requireEditable(input.path);
     const bytes = Buffer.from(input.content, 'utf8');
@@ -51,6 +57,8 @@ export class ResearchWorkspaceFileService {
     const temporary = join(dirname(target), `.roc-edit-${randomUUID()}`);
     const handle = await open(temporary, 'wx', 0o600);
     let published = false;
+    let committed = false;
+    let saved: Omit<ResearchWorkspaceFileContent, 'content'>;
     try {
       try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
       if (input.expectedHash === null) await link(temporary, target);
@@ -63,12 +71,24 @@ export class ResearchWorkspaceFileService {
       published = true;
       await rm(temporary, { force: true });
       if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, project.id);
-      const saved = this.persist(project.id, input.path, researchContentHash(bytes), bytes.byteLength, ownerRunId, input.expectedHash);
-      return { ...saved, content: input.content };
+      saved = this.persist(project.id, input.path, researchContentHash(bytes), bytes.byteLength, ownerRunId, input.expectedHash);
+      committed = true;
     } catch (error) {
       if (published) await this.restore(root, input.path, researchContentHash(bytes), original);
       throw error;
-    } finally { await rm(temporary, { force: true }); }
+    } finally {
+      await rm(temporary, { force: true });
+      let reason: string;
+      if (committed) {
+        reason = input.expectedHash === null ? 'research.workspace-file.created' : 'research.workspace-file.atomic-save';
+      } else if (published) {
+        reason = input.expectedHash === null ? 'research.workspace-file.create-rollback' : 'research.workspace-file.update-rollback';
+      } else {
+        reason = 'research.workspace-file.save-aborted';
+      }
+      this.onPathStructureChanged?.(workspacePath, reason);
+    }
+    return { ...saved, content: input.content };
   }
 
   private persist(projectId: string, path: string, sha256: string, size: number, ownerRunId: string | null, expectedHash: string | null) {
@@ -110,7 +130,9 @@ export class ResearchWorkspaceFileService {
   private async context(projectId: string, writable: boolean) {
     const project = this.research.getProject(projectId);
     if (writable && project.status === 'archived') throw new Error('research_project_archived');
-    return { project, root: await researchWorkspace(project.workspacePath) };
+    if (project.workspacePath === null) throw new Error('research_project_workspace_required');
+    const workspacePath = resolve(project.workspacePath);
+    return { project, root: await researchWorkspace(workspacePath), workspacePath };
   }
 
   private row(projectId: string, path: string): Row | null {

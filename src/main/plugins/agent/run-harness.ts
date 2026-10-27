@@ -21,6 +21,7 @@ import type {
   Workspace
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
+import type { WorkspacePathStructureChangeNotifier } from '../../services/workspace-path-structure-event';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
 import { createRunSubagents } from '../../services/deep-agent/subagents';
 import { PreviewStore } from '../../services/forge-guardrails';
@@ -67,6 +68,7 @@ export type RunHarnessServices = {
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   paths: RocPaths;
+  onWorkspacePathStructureChanged?: WorkspacePathStructureChangeNotifier;
   selfConfigService?: SelfConfigService;
   sessionHistory: PreCompactionFlushRecorder;
   store: BaseStore;
@@ -161,6 +163,7 @@ export async function buildRunHarness(
     getMemorySettings: services.getMemorySettings,
     handle,
     paths: services.paths,
+    onWorkspacePathStructureChanged: services.onWorkspacePathStructureChanged,
     selectedSkills: request.snapshot.capabilityManifest.skills,
     store: services.store,
     workspace: runtimeWorkspace
@@ -714,6 +717,7 @@ function createRuntimeBackend(input: {
   getMemorySettings?: () => AppSettings['memory'];
   handle: LangChainChatModelHandle;
   paths: RocPaths;
+  onWorkspacePathStructureChanged?: WorkspacePathStructureChangeNotifier;
   selectedSkills: RunExecutionSnapshot['capabilityManifest']['skills'];
   store: BaseStore;
   workspace: Workspace | null;
@@ -731,6 +735,7 @@ function createRuntimeBackend(input: {
   return createBackend({
     workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
     paths: input.paths,
+    onWorkspacePathStructureChanged: input.onWorkspacePathStructureChanged,
     store: input.store,
     securityScan: new SecurityScanService(memorySettings.securityScan),
     capacity: new CapacityService(memorySettings.charLimits),

@@ -1,6 +1,7 @@
 import { type GrepResult } from 'deepagents';
 import { AtomicFilesystemBackend } from './atomic-filesystem-backend';
 import type { RipgrepService } from '../ripgrep-service';
+import type { WorkspacePathStructureChangeNotifier } from '../workspace-path-structure-event';
 
 /**
  * 让 Agent 的 `grep` 工具跑在 Roc 自带的 ripgrep 上。
@@ -36,9 +37,10 @@ export class RipgrepFilesystemBackend extends AtomicFilesystemBackend {
 
   constructor(
     private readonly ripgrep: RipgrepService,
-    options: RipgrepFilesystemBackendOptions
+    options: RipgrepFilesystemBackendOptions,
+    onWorkspacePathStructureChanged?: WorkspacePathStructureChangeNotifier
   ) {
-    super(options);
+    super(options, onWorkspacePathStructureChanged);
     // 上游的 `FilesystemBackend` 把 `maxFileSizeMb` 存成私有字段，只用于它的字面量扫描；
     // 走 ripgrep 时得自己带上，否则「同一后端两种文件大小上限」这件事没人会发现。
     this.grepMaxFileSizeBytes =

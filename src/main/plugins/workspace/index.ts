@@ -50,6 +50,10 @@ import { GitService } from '../../services/git-service';
 import { RocPaths } from '../../services/paths';
 import { TerminalSessionService } from '../../services/terminal-session-service';
 import { WorkspaceChangeWatcherService } from '../../services/workspace-change-watcher-service';
+import {
+  workspacePathStructureChangedEventType,
+  type WorkspacePathStructureChangedPayload
+} from '../../services/workspace-path-structure-event';
 import { WorkspaceService } from '../../services/workspace-service';
 import { registerFileCapabilities } from './file-capabilities';
 import { registerGitCapabilities } from './git-capabilities';
@@ -118,6 +122,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
   let workspaceChangeWatcher: WorkspaceChangeWatcherService | null = null;
   let unsubscribeTerminalOutput: EventSubscription | null = null;
   let unsubscribeTerminalExit: EventSubscription | null = null;
+  let unsubscribePathStructureChange: EventSubscription | null = null;
   return {
     manifest: {
       id: pluginId,
@@ -133,11 +138,14 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
       const workspaceService = options.workspaceService ?? new WorkspaceService();
-      const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
+      const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService, undefined, {
+        onPathSnapshotDiagnostic: (event) => context.logger.info('File name search path snapshot diagnostic.', { ...event })
+      });
       const gitService = new GitService(workspaceService);
       workspaceChangeWatcher = new WorkspaceChangeWatcherService({
         logger: context.logger,
-        onInvalidate: (workspacePath) => fileService.invalidateFileNameSnapshot(workspacePath),
+        onInvalidate: (workspacePath, reason) => fileService.invalidateFileNameSnapshot(workspacePath, reason),
+        isKnownSnapshotPath: (workspacePath, relativePath) => fileService.hasFileNamePathSnapshotEntry(workspacePath, relativePath),
         onChange: (event) =>
           context.eventBus.publish({
             type: workspaceChangedEventType,
@@ -148,6 +156,14 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       });
       const currentWorkspace = workspaceService.getCurrentWorkspace();
       workspaceChangeWatcher.setWorkspace(currentWorkspace === null ? null : currentWorkspace.path);
+      unsubscribePathStructureChange = context.eventBus.subscribe<unknown>(workspacePathStructureChangedEventType, (event) => {
+        const payload = parseWorkspacePathStructureChangedPayload(event.payload);
+        if (payload === null) {
+          context.logger.warn('Workspace path structure event payload rejected.');
+          return;
+        }
+        fileService.invalidateFileNameSnapshot(payload.workspacePath, payload.reason);
+      });
       terminalService = new TerminalSessionService(paths, workspaceService);
       unsubscribeTerminalOutput = terminalService.onOutput((payload) => {
         void context.eventBus.publish({
@@ -179,12 +195,15 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       );
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[1], async (input) => {
         const workspace = workspaceService.selectWorkspace((input as WorkspaceSelectRequest).path);
-        fileService.invalidateAllFileNameSnapshots();
+        fileService.invalidateAllFileNameSnapshots('workspace.selection');
         workspaceChangeWatcher?.setWorkspace(workspace.path);
         return workspace;
       });
       registerFileCapabilities(context, workspaceCapabilityDescriptors.slice(2, 8), fileService);
-      registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService, workspaceCapabilityDescriptors[26]);
+      registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService, {
+        cancelDescriptor: workspaceCapabilityDescriptors[26],
+        onWorkspacePathsChanged: (workspacePath, reason) => fileService.invalidateFileNameSnapshot(workspacePath, reason)
+      });
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
         await fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
@@ -200,8 +219,12 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       if (unsubscribeTerminalExit !== null) {
         unsubscribeTerminalExit();
       }
+      if (unsubscribePathStructureChange !== null) {
+        unsubscribePathStructureChange();
+      }
       unsubscribeTerminalOutput = null;
       unsubscribeTerminalExit = null;
+      unsubscribePathStructureChange = null;
       if (terminalService !== null) {
         terminalService.shutdown();
       }
@@ -213,6 +236,14 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
+}
+
+function parseWorkspacePathStructureChangedPayload(value: unknown): WorkspacePathStructureChangedPayload | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const payload = value as Partial<WorkspacePathStructureChangedPayload>;
+  if (typeof payload.workspacePath !== 'string' || payload.workspacePath.trim().length === 0
+      || typeof payload.reason !== 'string' || payload.reason.trim().length === 0) return null;
+  return { workspacePath: payload.workspacePath, reason: payload.reason };
 }
 
 function createFileDatabaseAdapter(context: RocPluginContext): FileRecoveryPointDatabase {

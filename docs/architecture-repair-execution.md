@@ -88,6 +88,31 @@ The independent reviewer found two measurement reliability issues, both fixed be
 
 After these fixes, both benchmarks were rerun with the reviewed artifact paths listed above. The focused 41-test contract command, IPC check, renderer chunk check, and performance smoke had already passed; the changed scripts also passed LSP diagnostics.
 
+## Phase 1 — Path snapshot invalidation
+
+**Status:** Complete. Phase 1 implementation, validation, review resolutions, and execution record are committed.
+
+### Changes
+
+- Known `change` events no longer invalidate the name snapshot when their filename is already present in the current snapshot; they still publish the debounced workspace content event. An unindexed filename reported as `change` invalidates with `watcher.unindexed-content-path`, so new files do not wait for the 60-second reconcile. `rename`, empty/unknown filenames, unknown event types, and watcher startup/runtime errors invalidate with a recorded reason. The 60-second reconciliation remains unchanged.
+- `FileService` records build attempts, duration, indexed count, truncation, build reason, whether a stale generation was committed, and invalidation reason. A single shared build promise retries when the generation changes, so concurrent invalidations during a traversal collapse into one follow-up scan for the latest generation. Workspace identity is checked before each scan and before results are returned.
+- Path-changing Roc operations now invalidate explicitly: creating/deleting files through `FileService`, Git discard/branch checkout, Agent atomic writes, and Research workspace/template atomic saves. Research writes invalidate after temporary-file cleanup on success, rollback, and aborted publication. The workspace plugin receives research/agent notifications through `workspace.path-structure-changed`. Plain `FileService` overwrite of an existing path does not invalidate because it does not rename or change the indexed path set.
+- Inventory confirmed `.roc-research` is traversed by file-name search, so Research template and workspace writers need notifications. Document/library storage, experiment run data, and other job/export staging use their configured feature roots rather than the selected workspace. Arbitrary shell/terminal commands remain observed by the filesystem watcher and 60-second reconciliation because their path effects are not available as typed application operations.
+- No runtime dependency was added. The only additional lint repair was documenting the existing Node/Web `ReadableStream` cast with its runtime invariant.
+
+### Evidence
+
+| Check | Result |
+| :--- | :--- |
+| `node --test tests/unit/agent-filesystem-path-invalidation.test.mjs tests/unit/file-name-search-snapshot.test.mjs tests/unit/research-workspace-files.test.mjs tests/unit/research-template-path-invalidation.test.mjs` | Pass: 23 tests, 0 failures |
+| `pnpm typecheck` | Pass: `tsc --noEmit -p tsconfig.json` |
+| `git diff --check` | Pass |
+| `node scripts/benchmark-file-name-search-watcher.mjs 100` before changes | 100 ordinary content events caused 101 builds and 100 invalidations; 12.313 ms |
+| `node scripts/benchmark-file-name-search-watcher.mjs 100` after changes | 100 ordinary content events caused 1 build and 0 invalidations; 13.947 ms |
+| LSP diagnostics | A broad scan confirmed 12/13 files, with `src/main/plugins/research/index.ts` timing out without a finding; final targeted diagnostics on `src/main/services/workspace-change-watcher-service.ts`, `src/main/services/file-service.ts`, and `src/main/plugins/workspace/index.ts` are clean. Full TypeScript check passed. |
+
+The first independent review found that a new path reported as `change` would otherwise be treated as content-only until TTL expiry. `FileService` now checks exact snapshot membership, invalidates unindexed paths, and a regression test covers the new-file `change` case. A follow-up subagent review found no additional issues.
+
 ## Decisions
 
 - Keep native-text page PNG and both JSON artifact paths while their consumer contracts require them; optimize only after a compatible consumer migration and measured benefit.
@@ -97,7 +122,7 @@ After these fixes, both benchmarks were rerun with the reviewed artifact paths l
 
 ## Later phases
 
-- Phase 1: Pending.
+- Phase 1: Committed.
 - Phase 2: Pending.
 - Phase 3: Pending.
 - Phase 4: Pending.

@@ -3,9 +3,17 @@ import { lstat, open, realpath, rename, unlink, chmod } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, relative, resolve, isAbsolute, posix } from 'node:path';
 import { FilesystemBackend, type EditResult, type WriteResult } from 'deepagents';
+import type { WorkspacePathStructureChangeNotifier } from '../workspace-path-structure-event';
 
 /** Keep upstream path/MIME handling for staging; publish complete bytes with a same-directory rename. */
 export class AtomicFilesystemBackend extends FilesystemBackend {
+  constructor(
+    options: ConstructorParameters<typeof FilesystemBackend>[0],
+    private readonly onWorkspacePathStructureChanged?: WorkspacePathStructureChangeNotifier
+  ) {
+    super(options);
+  }
+
   override async write(path: string, content: string): Promise<WriteResult> {
     const temporary = posix.join(posix.dirname(path), `.roc-${randomUUID()}-${posix.basename(path)}`);
     const staged = await super.write(temporary, content);
@@ -27,6 +35,11 @@ export class AtomicFilesystemBackend extends FilesystemBackend {
       const descriptor = await open(stagedPath, constants.O_RDONLY | constants.O_NOFOLLOW);
       try { await descriptor.sync(); } finally { await descriptor.close(); }
       await rename(stagedPath, target);
+      try {
+        this.onWorkspacePathStructureChanged?.(this.cwd, 'agent.atomic-write-published');
+      } catch {
+        // A diagnostic notification cannot turn an already-published filesystem write into a failure.
+      }
       const directory = await open(parent, constants.O_RDONLY);
       try { await directory.sync(); } finally { await directory.close(); }
       return { path, filesUpdate: null };

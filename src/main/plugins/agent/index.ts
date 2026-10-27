@@ -51,6 +51,7 @@ import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
 import type { RocPaths } from '../../services/paths';
 import type { SelfConfigService } from '../../services/self-config';
+import { workspacePathStructureChangedEventType } from '../../services/workspace-path-structure-event';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
@@ -257,7 +258,21 @@ function resolveDeepAgentExecutor(
     store: option.memoryStore,
     selfConfigService: option.selfConfigService,
     budgetLedger: new RunBudgetLedger(agentDb),
-    toolEffectStore: new AgentToolEffectStore(agentDb)
+    toolEffectStore: new AgentToolEffectStore(agentDb),
+    onWorkspacePathStructureChanged: (workspacePath, reason) => {
+      void context.eventBus.publish({
+        type: workspacePathStructureChangedEventType,
+        source: pluginId,
+        payload: { workspacePath, reason },
+        createdAt: new Date().toISOString()
+      }).catch((error: unknown) => {
+        context.logger.warn('Agent workspace path structure event publish failed.', {
+          workspacePath,
+          reason,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
   });
 }
 

@@ -20,9 +20,15 @@ function createWorkspace(name) {
 
 function createFileService(root, options = {}) {
   const workspace = { path: root, id: `workspace:${root}` };
-  const workspaceService = { getCurrentWorkspace: () => workspace, requireWorkspace: () => workspace };
+  const workspaceService = {
+    getCurrentWorkspace: () => workspace,
+    requireWorkspace: () => workspace,
+    resolveInsideWorkspace: (relativePath) => join(workspace.path, relativePath)
+  };
   const ripgrep = { isAvailable: () => false, search: async () => { throw new Error('unused'); } };
-  const service = new fileServiceModule.FileService({}, { db: null }, workspaceService, ripgrep, options);
+  const paths = { tasksDir: join(tempRoot, `recovery-${root.split('/').at(-1)}`) };
+  const database = { db: { prepare: () => ({ run() {} }) } };
+  const service = new fileServiceModule.FileService(paths, database, workspaceService, ripgrep, options);
   return { service, workspace };
 }
 
@@ -41,6 +47,30 @@ test('reuses the path snapshot until explicitly invalidated', async () => {
 
   service.invalidateFileNameSnapshot(root);
   assert.deepEqual(names(await service.searchByName({ query: 'second' })), [['second-report.md', 'second-report.md']]);
+});
+
+test('application file writes invalidate only when the indexed path set changes', async () => {
+  const root = createWorkspace('application-file-mutations');
+  const diagnostics = [];
+  const { service } = createFileService(root, { onPathSnapshotDiagnostic: (event) => diagnostics.push(event) });
+
+  assert.deepEqual(names(await service.searchByName({ query: 'created' })), []);
+  await service.writeTextFile({ relativePath: 'nested/created-file.md', content: 'first', source: 'test' });
+  assert.deepEqual(names(await service.searchByName({ query: 'created' })), [['created-file.md', 'nested/created-file.md']]);
+  await service.writeTextFile({ relativePath: 'nested/created-file.md', content: 'updated', source: 'test' });
+  assert.deepEqual(names(await service.searchByName({ query: 'created' })), [['created-file.md', 'nested/created-file.md']]);
+
+  await service.deleteFile('nested/created-file.md');
+  assert.deepEqual(names(await service.searchByName({ query: 'created' })), []);
+  assert.deepEqual(diagnostics.filter((event) => event.event === 'invalidation').map(({ reason }) => reason), [
+    'files.writeText.created',
+    'files.delete'
+  ]);
+  assert.deepEqual(diagnostics.filter((event) => event.event === 'build').map(({ buildCount, reason, committed }) => ({ buildCount, reason, committed })), [
+    { buildCount: 1, reason: 'initial', committed: true },
+    { buildCount: 2, reason: 'files.writeText.created', committed: true },
+    { buildCount: 3, reason: 'files.delete', committed: true }
+  ]);
 });
 
 test('concurrent first queries share one path traversal', async () => {
@@ -96,11 +126,14 @@ test('an invalidated in-flight build cannot replace the current snapshot generat
 
   const firstQuery = service.searchByName({ query: 'new' });
   writeFileSync(join(root, 'new-file.md'), '');
-  service.invalidateFileNameSnapshot(root);
+  service.invalidateFileNameSnapshot(root, 'watcher.path-structure');
+  service.invalidateFileNameSnapshot(root, 'watcher.path-structure');
+  service.invalidateFileNameSnapshot(root, 'watcher.path-structure');
   const currentQuery = service.searchByName({ query: 'new' });
-  assert.deepEqual(names(await currentQuery), [['new-file.md', 'new-file.md']]);
+  assert.equal(traversals, 1);
 
   releaseFirstTraversal();
+  assert.deepEqual(names(await currentQuery), [['new-file.md', 'new-file.md']]);
   assert.deepEqual(names(await firstQuery), [['new-file.md', 'new-file.md']]);
   assert.equal(traversals, 2);
 });
@@ -135,11 +168,12 @@ test('a stale search does not rebuild its previous workspace after selection cha
 test('a cached snapshot is periodically reconciled on the next query', async () => {
   const root = createWorkspace('reconcile');
   writeFileSync(join(root, 'before.md'), '');
-  const { service } = createFileService(root, { pathSnapshotReconcileMs: 1 });
+  const reconcileMs = 60_000;
+  const { service } = createFileService(root, { pathSnapshotReconcileMs: reconcileMs });
   await service.searchByName({ query: 'before' });
   writeFileSync(join(root, 'after.md'), '');
   assert.deepEqual(names(await service.searchByName({ query: 'after' })), []);
-  service.fileNamePathSnapshots.get(root).snapshot.builtAt -= 10;
+  service.fileNamePathSnapshots.get(root).snapshot.builtAt -= reconcileMs + 1;
 
   assert.deepEqual(names(await service.searchByName({ query: 'after' })), [['after.md', 'after.md']]);
 });
@@ -207,6 +241,84 @@ test('the path snapshot enforces the 20,000-file ceiling even when the query has
   assert.equal(visited, 20_001);
   assert.deepEqual(names(result), []);
   assert.equal(result.truncated, true);
+});
+
+test('known content changes publish events without rebuilding for each write', async () => {
+  const root = createWorkspace('watcher-content-changes');
+  const filePath = join(root, 'existing-file.md');
+  writeFileSync(filePath, 'initial');
+  const diagnostics = [];
+  const invalidations = [];
+  const published = [];
+  const { service } = createFileService(root, { onPathSnapshotDiagnostic: (event) => diagnostics.push(event) });
+  const visitFiles = service.visitFiles.bind(service);
+  let traversals = 0;
+  service.visitFiles = async (...args) => {
+    traversals += 1;
+    return await visitFiles(...args);
+  };
+  let changed;
+  const watcher = new watcherModule.WorkspaceChangeWatcherService({
+    debounceMs: 5,
+    logger: { warn() {} },
+    onInvalidate: (workspacePath, reason) => {
+      invalidations.push(reason);
+      service.invalidateFileNameSnapshot(workspacePath, reason);
+    },
+    isKnownSnapshotPath: (workspacePath, relativePath) => service.hasFileNamePathSnapshotEntry(workspacePath, relativePath),
+    onChange: (event) => { published.push(event); },
+    watch: (_path, _options, listener) => {
+      changed = listener;
+      return { close() {}, on() {} };
+    }
+  });
+  watcher.setWorkspace(root);
+  await service.searchByName({ query: 'existing' });
+
+  for (let index = 0; index < 100; index += 1) {
+    writeFileSync(filePath, `content-${index}`);
+    changed('change', 'existing-file.md');
+    await service.searchByName({ query: 'existing' });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(traversals, 1);
+  assert.deepEqual(invalidations, []);
+  assert.deepEqual(diagnostics.filter((event) => event.event === 'build').map(({ buildCount, durationMs, reason, committed }) => ({ buildCount, durationMs, reason, committed })), [
+    { buildCount: 1, durationMs: diagnostics.find((event) => event.event === 'build').durationMs, reason: 'initial', committed: true }
+  ]);
+  assert.equal(published.length, 1);
+  assert.deepEqual(published[0], { workspacePath: root, relativePath: 'existing-file.md', eventType: 'change' });
+  watcher.shutdown();
+});
+
+test('a new path reported as a content change invalidates the snapshot', async () => {
+  const root = createWorkspace('watcher-unindexed-content-path');
+  const { service } = createFileService(root);
+  await service.searchByName({ query: 'new-file' });
+  const invalidations = [];
+  let changed;
+  const watcher = new watcherModule.WorkspaceChangeWatcherService({
+    logger: { warn() {} },
+    isKnownSnapshotPath: (workspacePath, relativePath) => service.hasFileNamePathSnapshotEntry(workspacePath, relativePath),
+    onInvalidate: (workspacePath, reason) => {
+      invalidations.push(reason);
+      service.invalidateFileNameSnapshot(workspacePath, reason);
+    },
+    onChange() {},
+    watch: (_path, _options, listener) => {
+      changed = listener;
+      return { close() {}, on() {} };
+    }
+  });
+  watcher.setWorkspace(root);
+
+  writeFileSync(join(root, 'new-file.md'), '');
+  changed('change', 'new-file.md');
+
+  assert.deepEqual(invalidations, ['watcher.unindexed-content-path']);
+  assert.deepEqual(names(await service.searchByName({ query: 'new-file' })), [['new-file.md', 'new-file.md']]);
+  watcher.shutdown();
 });
 
 test('watcher events invalidate immediately, then publish the debounced workspace event', async () => {
@@ -313,10 +425,38 @@ test('watcher invalidates conservatively when the final path component names an 
   watcher.setWorkspace('/git-workspace');
 
   changed('change', '.git/index');
-  assert.deepEqual(invalidations, []);
   changed('change', '.git');
   changed('rename', 'docs/node_modules');
-  assert.deepEqual(invalidations, ['/git-workspace', '/git-workspace']);
+  assert.deepEqual(invalidations, ['/git-workspace']);
+  watcher.shutdown();
+});
+
+test('watcher invalidates unknown filenames and unknown event types conservatively', () => {
+  const invalidations = [];
+  let changed;
+  const watcher = new watcherModule.WorkspaceChangeWatcherService({
+    logger: { warn() {} },
+    isKnownSnapshotPath: (_workspacePath, relativePath) => relativePath === 'known.md',
+    onInvalidate: (workspacePath, reason) => invalidations.push([workspacePath, reason]),
+    onChange() {},
+    watch: (_path, _options, listener) => {
+      changed = listener;
+      return { close() {}, on() {} };
+    }
+  });
+  watcher.setWorkspace('/unknown-events');
+
+  changed('change', 'known.md');
+  changed('rename', null);
+  changed('change', Buffer.alloc(0));
+  changed('other', 'unknown-event.md');
+  changed('rename', 'known.md');
+  assert.deepEqual(invalidations, [
+    ['/unknown-events', 'watcher.unknown-filename'],
+    ['/unknown-events', 'watcher.unknown-filename'],
+    ['/unknown-events', 'watcher.unknown-event-type'],
+    ['/unknown-events', 'watcher.path-structure']
+  ]);
   watcher.shutdown();
 });
 
@@ -324,23 +464,26 @@ test('watcher startup and runtime failures invalidate snapshots for reconciliati
   const invalidations = [];
   const watcher = new watcherModule.WorkspaceChangeWatcherService({
     logger: { warn() {} },
-    onInvalidate: (workspacePath) => invalidations.push(workspacePath),
+    onInvalidate: (workspacePath, reason) => invalidations.push([workspacePath, reason]),
     onChange() {},
     watch: () => { throw new Error('watch_failed'); }
   });
   watcher.setWorkspace('/startup-failure');
-  assert.deepEqual(invalidations, ['/startup-failure']);
+  assert.deepEqual(invalidations, [['/startup-failure', 'watcher.start-failed']]);
 
   let onError;
   const running = new watcherModule.WorkspaceChangeWatcherService({
     logger: { warn() {} },
-    onInvalidate: (workspacePath) => invalidations.push(workspacePath),
+    onInvalidate: (workspacePath, reason) => invalidations.push([workspacePath, reason]),
     onChange() {},
     watch: () => ({ close() {}, on: (_event, listener) => { onError = listener; } })
   });
   running.setWorkspace('/runtime-failure');
   onError(new Error('watch_failed'));
-  assert.deepEqual(invalidations, ['/startup-failure', '/runtime-failure']);
+  assert.deepEqual(invalidations, [
+    ['/startup-failure', 'watcher.start-failed'],
+    ['/runtime-failure', 'watcher.runtime-failed']
+  ]);
   running.shutdown();
 });
 

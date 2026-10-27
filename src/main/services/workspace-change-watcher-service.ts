@@ -1,7 +1,7 @@
 import { watch as watchWorkspace } from 'node:fs';
 
 import type { WorkspaceChangedEvent } from '../../shared/types';
-import { hasIgnoredFileNameSearchParentDirectory } from './file-name-search-path-policy';
+import { hasIgnoredFileNameSearchParentDirectory, isIgnoredFileNameSearchDirectory } from './file-name-search-path-policy';
 
 type WorkspaceWatchHandle = {
   close(): void;
@@ -21,8 +21,10 @@ type WorkspaceChangeWatcherLogger = {
 type WorkspaceChangeWatcherOptions = {
   debounceMs?: number;
   logger: WorkspaceChangeWatcherLogger;
-  /** Called synchronously for file changes and watcher failures so caches cannot outlive the debounce. */
-  onInvalidate?: (workspacePath: string) => void;
+  /** Reports whether an event filename is represented in the current path snapshot. */
+  isKnownSnapshotPath?: (workspacePath: string, relativePath: string) => boolean;
+  /** Called synchronously for path-structure changes and watcher failures before debounce. */
+  onInvalidate?: (workspacePath: string, reason: string) => void;
   onChange: (event: WorkspaceChangedEvent) => Promise<void> | void;
   watch?: WorkspaceWatchFactory;
 };
@@ -76,7 +78,7 @@ export class WorkspaceChangeWatcherService {
         workspacePath,
         error: error instanceof Error ? error.message : String(error)
       });
-      this.invalidateSnapshot(workspacePath);
+      this.invalidateSnapshot(workspacePath, 'watcher.start-failed');
       this.closeWatcher();
       this.workspacePath = null;
     }
@@ -89,7 +91,7 @@ export class WorkspaceChangeWatcherService {
       error: error.message
     });
     this.closeWatcher();
-    this.invalidateSnapshot(workspacePath);
+    this.invalidateSnapshot(workspacePath, 'watcher.runtime-failed');
     this.workspacePath = null;
   }
 
@@ -121,11 +123,16 @@ export class WorkspaceChangeWatcherService {
       return;
     }
     const relativePath = normalizeWatchFilename(filename);
-    if (relativePath === null || !hasIgnoredFileNameSearchParentDirectory(relativePath)) {
-      this.invalidateSnapshot(workspacePath);
-    }
     if (relativePath !== null && shouldIgnoreRelativePath(relativePath)) {
       return;
+    }
+    if (relativePath === null || !hasIgnoredFileNameSearchParentDirectory(relativePath)) {
+      const reason = snapshotInvalidationReason(
+        eventType,
+        relativePath,
+        relativePath !== null && this.options.isKnownSnapshotPath?.(workspacePath, relativePath) === true
+      );
+      if (reason !== null) this.invalidateSnapshot(workspacePath, reason);
     }
     this.pendingEvent = {
       workspacePath,
@@ -135,9 +142,9 @@ export class WorkspaceChangeWatcherService {
     this.schedulePublish();
   }
 
-  private invalidateSnapshot(workspacePath: string): void {
+  private invalidateSnapshot(workspacePath: string, reason: string): void {
     try {
-      this.options.onInvalidate?.(workspacePath);
+      this.options.onInvalidate?.(workspacePath, reason);
     } catch (error) {
       this.options.logger.warn('Workspace path snapshot invalidation failed.', {
         workspacePath,
@@ -172,6 +179,20 @@ export class WorkspaceChangeWatcherService {
       });
     }
   }
+}
+
+function snapshotInvalidationReason(
+  eventType: string,
+  relativePath: string | null,
+  isKnownSnapshotPath: boolean
+): string | null {
+  if (relativePath === null) return 'watcher.unknown-filename';
+  if (eventType === 'rename') return 'watcher.path-structure';
+  if (eventType === 'change') {
+    const isIgnoredRootDirectory = !relativePath.includes('/') && isIgnoredFileNameSearchDirectory(relativePath);
+    return isKnownSnapshotPath || isIgnoredRootDirectory ? null : 'watcher.unindexed-content-path';
+  }
+  return 'watcher.unknown-event-type';
 }
 
 function normalizeWatchFilename(filename: string | Buffer | null): string | null {

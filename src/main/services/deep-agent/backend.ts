@@ -27,6 +27,7 @@ import {
 import { RipgrepFilesystemBackend } from './ripgrep-filesystem-backend';
 import { RocStoreMemoryBackend } from './store-memory-backend';
 import { RipgrepService } from '../ripgrep-service';
+import type { WorkspacePathStructureChangeNotifier } from '../workspace-path-structure-event';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
@@ -244,6 +245,8 @@ export type RocBackendInput = {
   securityScan: SecurityScanService;
   capacity: CapacityService;
   selectedSkills: readonly RunCapabilityManifestSkillV1[];
+  /** Notify the workspace plugin after atomic workspace-file publication. */
+  onWorkspacePathStructureChanged?: WorkspacePathStructureChangeNotifier;
   /** 可注入的 ripgrep 服务；缺省按随包二进制解析。 */
   ripgrep?: RipgrepService;
 };
@@ -292,10 +295,14 @@ export function createBackend(input: RocBackendInput): {
   if (workspace !== null) {
     // 工作区路由的 grep 走 Roc 自带的 ripgrep（`RipgrepFilesystemBackend` 里有取舍说明）；
     // 其余路由（skills / memory）文件量小，保持上游实现，不再引入第二个差异点。
-    routes[WORKSPACE_ROUTE] = new RipgrepFilesystemBackend(input.ripgrep ?? new RipgrepService(), {
-      rootDir: workspace.path,
-      virtualMode: true
-    });
+    routes[WORKSPACE_ROUTE] = new RipgrepFilesystemBackend(
+      input.ripgrep ?? new RipgrepService(),
+      {
+        rootDir: workspace.path,
+        virtualMode: true
+      },
+      input.onWorkspacePathStructureChanged
+    );
   }
 
   const routedBackend = new CompositeBackend(routeRejectingBackend, routes);

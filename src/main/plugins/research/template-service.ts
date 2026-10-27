@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { link, lstat, mkdtemp, open, rename, rm, unlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, extname, isAbsolute, join, relative } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchTemplate, ResearchTemplateCompileRequest, ResearchTemplateImportRequest } from '../../../shared/types';
 import type { researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema, researchTemplateFileSaveRequestSchema } from '../../../shared/schemas/research-production';
@@ -10,8 +10,9 @@ import { createResearchDirectory, readResearchFile, researchAbsolutePath, resear
 import { copyTemplateFiles, editableTemplateExtensions, listTemplateFiles, requireTemplateRoot, templateDigest, type TemplateFile } from './template-files';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
+import type { WorkspacePathStructureChangeNotifier } from '../../services/workspace-path-structure-event';
 
-type CompileState = { template: ResearchTemplate; workspace: string; root: string; job: string; source: string; runId: string; controller: AbortController; ownerRunId: string | null };
+type CompileState = { template: ResearchTemplate; workspace: string; workspacePath: string; root: string; job: string; source: string; runId: string; controller: AbortController; ownerRunId: string | null };
 
 export class ResearchTemplateService {
   private readonly operations = new Map<string, Promise<unknown>>();
@@ -20,7 +21,11 @@ export class ResearchTemplateService {
   private readonly completions = new Set<Promise<ResearchTemplate>>();
   private closed = false;
 
-  constructor(private readonly repository: ResearchRepository, private readonly tools: Pick<ResearchToolchain, 'compile' | 'extractTemplate'>) {}
+  constructor(
+    private readonly repository: ResearchRepository,
+    private readonly tools: Pick<ResearchToolchain, 'compile' | 'extractTemplate'>,
+    private readonly onPathStructureChanged?: WorkspacePathStructureChangeNotifier
+  ) {}
 
   async importTemplate(request: ResearchTemplateImportRequest): Promise<ResearchTemplate> {
     const controller = new AbortController();
@@ -33,7 +38,7 @@ export class ResearchTemplateService {
 
   private async importFiles(request: ResearchTemplateImportRequest, signal: AbortSignal): Promise<ResearchTemplate> {
     this.requireOpen();
-    const workspace = await this.workspace(request.projectId, true);
+    const { root: workspace, workspacePath } = await this.workspace(request.projectId, true);
     if (!isAbsolute(request.sourcePath)) throw new Error('research_absolute_path_required');
     const info = await lstat(request.sourcePath);
     if (info.isSymbolicLink()) throw new Error('research_template_symlink');
@@ -49,6 +54,7 @@ export class ResearchTemplateService {
         await writeFile(archive, bytes, { flag: 'wx' });
         source = join(job, 'extracted');
         await this.tools.extractTemplate({ projectRoot: workspace, sourcePath: archive, outputDir: source, jobDir: job, signal });
+        this.onPathStructureChanged?.(workspacePath, 'research.template-import-job-created');
       }
       const files = await listTemplateFiles(source);
       const entryPath = await discoverLatexEntry(source, files);
@@ -57,13 +63,18 @@ export class ResearchTemplateService {
       const target = join(parent, id);
       await copyTemplateFiles(source, target, files);
       destination = target;
+      this.onPathStructureChanged?.(workspacePath, 'research.template-imported');
       this.requireOpen();
       const template = this.repository.createTemplate({ id, projectId: request.projectId, rootPath: target, entryPath, sourceDigest: templateDigest(entryPath, files) });
       published = true;
       return template;
     } finally {
-      if (!published && destination !== null) await rm(destination, { recursive: true, force: true });
-      await rm(job, { recursive: true, force: true });
+      try {
+        if (!published && destination !== null) await rm(destination, { recursive: true, force: true });
+        await rm(job, { recursive: true, force: true });
+      } finally {
+        this.onPathStructureChanged?.(workspacePath, 'research.template-import-finished');
+      }
     }
   }
 
@@ -91,7 +102,7 @@ export class ResearchTemplateService {
     return await this.serial(request.templateId, async () => {
       this.requireOpen();
       if (ownerRunId !== null) this.repository.runs.requireActive(ownerRunId, request.projectId);
-      const { template, root } = await this.current(request, true);
+      const { template, root, workspacePath } = await this.current(request, true);
       this.requireEditablePath(request.path);
       const bytes = Buffer.from(request.content, 'utf8');
       if (bytes.byteLength > 1024 * 1024) throw new Error('research_template_file_too_large');
@@ -109,6 +120,7 @@ export class ResearchTemplateService {
       const temporary = join(dirname(target), `.roc-edit-${randomUUID()}`);
       const handle = await open(temporary, 'wx', 0o600);
       let published = false;
+      let committed = false;
       try {
         try { await handle.writeFile(bytes); await handle.sync(); }
         finally { await handle.close(); }
@@ -126,11 +138,23 @@ export class ResearchTemplateService {
         if (ownerRunId !== null) this.repository.runs.requireActive(ownerRunId, request.projectId);
         this.repository.saveTemplate({ ...template, revision: template.revision + 1, status: 'imported', activeCompileId: null,
           sourceDigest: templateDigest(template.entryPath, files), errors: [], diagnostics: [] }, template.revision);
+        committed = true;
         this.active.get(template.id)?.controller.abort();
       } catch (error) {
         if (published) await this.restoreFile(root, request.path, researchContentHash(bytes), original);
         throw error;
-      } finally { await rm(temporary, { force: true }); }
+      } finally {
+        await rm(temporary, { force: true });
+        let reason: string;
+        if (committed) {
+          reason = request.expectedHash === null ? 'research.template-file-created' : 'research.template-file.atomic-save';
+        } else if (published) {
+          reason = request.expectedHash === null ? 'research.template-file.create-rollback' : 'research.template-file.update-rollback';
+        } else {
+          reason = 'research.template-file.save-aborted';
+        }
+        this.onPathStructureChanged?.(workspacePath, reason);
+      }
       return { path: request.path, size: bytes.byteLength, sha256: researchContentHash(bytes), editable: true, content: request.content };
     });
   }
@@ -162,6 +186,7 @@ export class ResearchTemplateService {
       try {
         const source = join(job, 'source');
         await copyTemplateFiles(current.root, source, files);
+        this.onPathStructureChanged?.(current.workspacePath, 'research.template-compile-job-created');
         this.requireOpen();
         const runId = randomUUID();
         const controller = new AbortController();
@@ -171,6 +196,7 @@ export class ResearchTemplateService {
         return { ...current, template: running, job, source, runId, controller, ownerRunId };
       } catch (error) {
         await rm(job, { recursive: true, force: true });
+        this.onPathStructureChanged?.(current.workspacePath, 'research.template-compile-job-rolled-back');
         throw error;
       }
     });
@@ -220,7 +246,7 @@ export class ResearchTemplateService {
         let current = this.repository.getTemplate({ projectId: state.template.projectId, templateId: state.template.id });
         if (current.activeCompileId !== state.runId) return current;
         if (state.controller.signal.aborted) throw new ResearchProcessError('research_process_cancelled');
-        if (await this.workspace(current.projectId, false) !== state.workspace) throw new Error('research_project_workspace_changed');
+        if ((await this.workspace(current.projectId, false)).root !== state.workspace) throw new Error('research_project_workspace_changed');
         const files = await listTemplateFiles(state.root);
         current = this.refresh(current, templateDigest(current.entryPath, files));
         if (current.activeCompileId !== state.runId) return current;
@@ -244,7 +270,11 @@ export class ResearchTemplateService {
       });
     } finally {
       if (this.active.get(state.template.id)?.runId === state.runId) this.active.delete(state.template.id);
-      if (!published) await rm(state.job, { recursive: true, force: true });
+      try {
+        if (!published) await rm(state.job, { recursive: true, force: true });
+      } finally {
+        this.onPathStructureChanged?.(state.workspacePath, 'research.template-compile-finished');
+      }
     }
   }
 
@@ -276,16 +306,19 @@ export class ResearchTemplateService {
     } finally { await rm(temporary, { force: true }); }
   }
 
-  private async current(request: ResearchTemplateCompileRequest, writable = false): Promise<{ template: ResearchTemplate; workspace: string; root: string }> {
+  private async current(request: ResearchTemplateCompileRequest, writable = false): Promise<{ template: ResearchTemplate; workspace: string; workspacePath: string; root: string }> {
     const workspace = await this.workspace(request.projectId, writable);
     const template = this.repository.getTemplate(request);
-    return { template, workspace, root: await requireTemplateRoot(workspace, template.rootPath) };
+    return { template, workspace: workspace.root, workspacePath: workspace.workspacePath,
+      root: await requireTemplateRoot(workspace.root, template.rootPath) };
   }
 
-  private async workspace(projectId: string, writable: boolean): Promise<string> {
+  private async workspace(projectId: string, writable: boolean): Promise<{ root: string; workspacePath: string }> {
     const project = this.repository.getProject(projectId);
     if (writable && project.status === 'archived') throw new Error('research_project_archived');
-    return await researchWorkspace(project.workspacePath);
+    if (project.workspacePath === null) throw new Error('research_project_workspace_required');
+    const workspacePath = resolve(project.workspacePath);
+    return { root: await researchWorkspace(workspacePath), workspacePath };
   }
 
   private async job(workspace: string): Promise<string> {

@@ -3,6 +3,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
+import { performance } from 'node:perf_hooks';
 import { pipeline } from 'node:stream/promises';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
@@ -54,9 +55,42 @@ export type FileRecoveryPointDatabase = {
   readonly db: DatabaseConnection;
 };
 
+type FileNamePathSnapshotDiagnosticEvent =
+  | {
+      event: 'build';
+      workspacePath: string;
+      buildCount: number;
+      durationMs: number;
+      reason: string;
+      generation: number;
+      entryCount: number;
+      truncated: boolean;
+      committed: boolean;
+    }
+  | {
+      event: 'build-failed';
+      workspacePath: string;
+      buildCount: number;
+      durationMs: number;
+      reason: string;
+      generation: number;
+      error: string;
+      stale: boolean;
+    }
+  | {
+      event: 'invalidation';
+      workspacePath: string;
+      reason: string;
+      generation: number | null;
+      hadSnapshot: boolean;
+      buildInFlight: boolean;
+    };
+
 export type FileServiceOptions = {
   /** Reconcile cached paths after this many milliseconds, even without watcher events. */
   pathSnapshotReconcileMs?: number;
+  /** Reports path snapshot builds and invalidations without coupling the service to a logger. */
+  onPathSnapshotDiagnostic?: (event: FileNamePathSnapshotDiagnosticEvent) => void;
 };
 
 type FileNamePathSnapshotEntry = {
@@ -80,6 +114,8 @@ type FileNamePathSnapshotState = {
   generation: number;
   snapshot: CachedFileNamePathSnapshot | null;
   buildPromise: Promise<FileNamePathSnapshot> | null;
+  buildCount: number;
+  nextBuildReason: string;
 };
 
 export class FileService {
@@ -91,7 +127,7 @@ export class FileService {
     private readonly database: FileRecoveryPointDatabase,
     private readonly workspaceService: WorkspaceService,
     private readonly ripgrep = new RipgrepService(),
-    options: FileServiceOptions = {}
+    private readonly options: FileServiceOptions = {}
   ) {
     this.pathSnapshotReconcileMs = options.pathSnapshotReconcileMs ?? defaultNameSearchSnapshotReconcileMs;
     if (!Number.isSafeInteger(this.pathSnapshotReconcileMs) || this.pathSnapshotReconcileMs <= 0) {
@@ -285,21 +321,45 @@ export class FileService {
     };
   }
 
-  /** Invalidate one workspace's path list after a watcher event or watcher failure. */
-  invalidateFileNameSnapshot(workspacePath: string): void {
+  /** Invalidate cached paths after a known path-structure change or watcher failure. */
+  invalidateFileNameSnapshot(workspacePath: string, reason = 'external-path-change'): void {
     const state = this.fileNamePathSnapshots.get(workspacePath);
-    if (state === undefined) return;
+    if (state === undefined) {
+      this.options.onPathSnapshotDiagnostic?.({
+        event: 'invalidation',
+        workspacePath,
+        reason,
+        generation: null,
+        hadSnapshot: false,
+        buildInFlight: false
+      });
+      return;
+    }
+    const hadSnapshot = state.snapshot !== null;
+    const buildInFlight = state.buildPromise !== null;
     state.generation += 1;
     state.snapshot = null;
-    state.buildPromise = null;
+    state.nextBuildReason = reason;
+    this.options.onPathSnapshotDiagnostic?.({
+      event: 'invalidation',
+      workspacePath,
+      reason,
+      generation: state.generation,
+      hadSnapshot,
+      buildInFlight
+    });
+  }
+
+  /** Returns whether a path is part of the current cached snapshot for the supplied root. */
+  hasFileNamePathSnapshotEntry(workspacePath: string, relativePath: string): boolean {
+    const snapshot = this.fileNamePathSnapshots.get(workspacePath)?.snapshot?.snapshot;
+    return snapshot?.entries.some((entry) => entry.relativePath === relativePath) ?? false;
   }
 
   /** Drop all cached paths when the selected workspace changes. */
-  invalidateAllFileNameSnapshots(): void {
-    for (const state of this.fileNamePathSnapshots.values()) {
-      state.generation += 1;
-      state.snapshot = null;
-      state.buildPromise = null;
+  invalidateAllFileNameSnapshots(reason = 'workspace-selection-change'): void {
+    for (const workspacePath of this.fileNamePathSnapshots.keys()) {
+      this.invalidateFileNameSnapshot(workspacePath, reason);
     }
   }
 
@@ -313,11 +373,11 @@ export class FileService {
         this.touchFileNamePathSnapshot(workspacePath, state);
         return cached.snapshot;
       }
+      if (cached !== null) state.nextBuildReason = 'reconcile';
 
-      const generation = state.generation;
       let buildPromise = state.buildPromise;
       if (buildPromise === null) {
-        buildPromise = this.buildFileNamePathSnapshot(workspacePath);
+        buildPromise = this.buildStableFileNamePathSnapshot(workspacePath, workspaceId, state);
         state.buildPromise = buildPromise;
       }
 
@@ -325,25 +385,71 @@ export class FileService {
       try {
         snapshot = await buildPromise;
       } catch (error) {
-        if (state.generation !== generation || state.buildPromise !== buildPromise || this.fileNamePathSnapshots.get(workspacePath) !== state) {
+        if (state.buildPromise !== buildPromise || this.fileNamePathSnapshots.get(workspacePath) !== state) {
           continue;
         }
         state.buildPromise = null;
         throw error;
       }
 
-      if (
-        state.generation !== generation ||
-        state.buildPromise !== buildPromise ||
-        this.fileNamePathSnapshots.get(workspacePath) !== state
-      ) {
+      if (state.buildPromise !== buildPromise || this.fileNamePathSnapshots.get(workspacePath) !== state) {
         continue;
       }
       this.ensureWorkspaceSelection(workspaceId);
-      state.snapshot = { snapshot, builtAt: Date.now() };
+      if (state.snapshot === null || state.snapshot.snapshot !== snapshot) {
+        state.buildPromise = null;
+        continue;
+      }
       state.buildPromise = null;
       this.touchFileNamePathSnapshot(workspacePath, state);
       return snapshot;
+    }
+  }
+
+  private async buildStableFileNamePathSnapshot(
+    workspacePath: string,
+    workspaceId: string,
+    state: FileNamePathSnapshotState
+  ): Promise<FileNamePathSnapshot> {
+    while (true) {
+      this.ensureWorkspaceSelection(workspaceId);
+      const generation = state.generation;
+      const reason = state.nextBuildReason;
+      const buildCount = ++state.buildCount;
+      const startedAt = performance.now();
+      try {
+        const snapshot = await this.buildFileNamePathSnapshot(workspacePath);
+        const committed = state.generation === generation && this.fileNamePathSnapshots.get(workspacePath) === state;
+        if (committed) {
+          state.snapshot = { snapshot, builtAt: Date.now() };
+          state.nextBuildReason = 'reconcile';
+        }
+        this.options.onPathSnapshotDiagnostic?.({
+          event: 'build',
+          workspacePath,
+          buildCount,
+          durationMs: performance.now() - startedAt,
+          reason,
+          generation,
+          entryCount: snapshot.entries.length,
+          truncated: snapshot.truncated,
+          committed
+        });
+        if (committed) return snapshot;
+      } catch (error) {
+        const stale = state.generation !== generation || this.fileNamePathSnapshots.get(workspacePath) !== state;
+        this.options.onPathSnapshotDiagnostic?.({
+          event: 'build-failed',
+          workspacePath,
+          buildCount,
+          durationMs: performance.now() - startedAt,
+          reason,
+          generation,
+          error: error instanceof Error ? error.message : String(error),
+          stale
+        });
+        if (!stale) throw error;
+      }
     }
   }
 
@@ -359,7 +465,13 @@ export class FileService {
   }
 
   private createFileNamePathSnapshotState(workspacePath: string): FileNamePathSnapshotState {
-    const state: FileNamePathSnapshotState = { generation: 0, snapshot: null, buildPromise: null };
+    const state: FileNamePathSnapshotState = {
+      generation: 0,
+      snapshot: null,
+      buildPromise: null,
+      buildCount: 0,
+      nextBuildReason: 'initial'
+    };
     this.fileNamePathSnapshots.set(workspacePath, state);
     this.trimFileNamePathSnapshots(workspacePath);
     return state;
@@ -471,12 +583,14 @@ export class FileService {
   }
 
   async writeTextFile(request: FileWriteTextRequest): Promise<FileWriteResult> {
+    const workspacePath = this.workspaceService.requireWorkspace().path;
     const relativePath = this.normalizeRelativePath(request.relativePath);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
-    const recoveryPoint = await this.createRecoveryPoint(relativePath, absolutePath, request.source);
+    const { recoveryPoint, sourceExisted } = await this.createRecoveryPoint(relativePath, absolutePath, request.source);
 
     await mkdir(dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, request.content, 'utf8');
+    if (!sourceExisted) this.invalidateFileNameSnapshot(workspacePath, 'files.writeText.created');
 
     return {
       relativePath,
@@ -486,6 +600,7 @@ export class FileService {
   }
 
   async deleteFile(relativePathInput: string): Promise<FileDeleteResult> {
+    const workspacePath = this.workspaceService.requireWorkspace().path;
     const relativePath = this.normalizeRelativePath(relativePathInput);
     const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
     let fileStat;
@@ -515,16 +630,14 @@ export class FileService {
         });
       }
     }
-    const recoveryPoint = await this.createRecoveryPoint(relativePath, absolutePath, 'agent.delete_file');
+    const { recoveryPoint } = await this.createRecoveryPoint(relativePath, absolutePath, 'agent.delete_file');
     if (fileStat.isDirectory()) {
       await rmdir(absolutePath);
     } else {
       await unlink(absolutePath);
     }
-    return {
-      relativePath,
-      recoveryPoint
-    };
+    this.invalidateFileNameSnapshot(workspacePath, 'files.delete');
+    return { relativePath, recoveryPoint };
   }
 
   async readPdfWorkbenchPreview(request: FilesWorkbenchPdfPreviewRequest): Promise<FilesWorkbenchPdfPreviewResult> {
@@ -560,7 +673,7 @@ export class FileService {
     if (!fileStat.isFile()) {
       return new Response('Not found', { status: 404 });
     }
-    // Node 和 DOM 的 ReadableStream 类型声明不互通；Response 运行时接受这个 Web stream。
+    // SAFETY: Node's Readable.toWeb returns a Web ReadableStream accepted by Response at runtime; the Node and DOM declarations are incompatible.
     const stream = Readable.toWeb(createReadStream(absolutePath)) as unknown as BodyInit;
     return new Response(stream, {
       status: 200,
@@ -572,13 +685,16 @@ export class FileService {
   }
 
 
-  private async copyRecoverySnapshot(sourcePath: string, snapshotPath: string): Promise<string> {
+  private async copyRecoverySnapshot(
+    sourcePath: string,
+    snapshotPath: string
+  ): Promise<{ contentSha256: string; sourceExisted: boolean }> {
     try {
       await stat(sourcePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         await writeFile(snapshotPath, Buffer.alloc(0));
-        return createHash('sha256').update(Buffer.alloc(0)).digest('hex');
+        return { contentSha256: createHash('sha256').update(Buffer.alloc(0)).digest('hex'), sourceExisted: false };
       }
       throw error;
     }
@@ -594,16 +710,20 @@ export class FileService {
       },
       createWriteStream(snapshotPath)
     );
-    return hash.digest('hex');
+    return { contentSha256: hash.digest('hex'), sourceExisted: true };
   }
 
-  private async createRecoveryPoint(relativePath: string, absolutePath: string, source: string): Promise<RecoveryPoint> {
+  private async createRecoveryPoint(
+    relativePath: string,
+    absolutePath: string,
+    source: string
+  ): Promise<{ recoveryPoint: RecoveryPoint; sourceExisted: boolean }> {
     const createdAt = new Date().toISOString();
     const id = `recovery_${randomUUID()}`;
     const snapshotDir = join(this.paths.tasksDir, 'recovery', id);
     await mkdir(snapshotDir, { recursive: true });
     const snapshotPath = join(snapshotDir, 'original');
-    const contentSha256 = await this.copyRecoverySnapshot(absolutePath, snapshotPath);
+    const { contentSha256, sourceExisted } = await this.copyRecoverySnapshot(absolutePath, snapshotPath);
     const recoveryPoint: RecoveryPoint = {
       id,
       relativePath,
@@ -622,7 +742,7 @@ export class FileService {
       )
       .run(id, relativePath, snapshotPath, contentSha256, source, createdAt, 0);
 
-    return recoveryPoint;
+    return { recoveryPoint, sourceExisted };
   }
 
   private async visitFiles(root: string, visit: (absolutePath: string) => boolean | Promise<boolean>): Promise<boolean> {
