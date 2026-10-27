@@ -24,7 +24,7 @@ export class AgentActiveRunLifecycle {
   private readonly pendingRuns = new Map<string, Promise<void>>();
   private readonly scheduledRuns = new Set<NodeJS.Timeout>();
 
-  constructor(private readonly onPendingRunRejected: (error: unknown) => void) {}
+  constructor(private readonly onPendingRunRejected: (error: unknown, runId: string) => void) {}
 
   activate(input: ActiveRunRegistration): void {
     this.activeRuns.add(input.runId);
@@ -106,7 +106,7 @@ export class AgentActiveRunLifecycle {
       () => this.removePendingRun(runId, pendingRun),
       (error: unknown) => {
         this.removePendingRun(runId, pendingRun);
-        this.onPendingRunRejected(error);
+        this.onPendingRunRejected(error, runId);
       }
     );
   }

@@ -32,6 +32,7 @@ import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import { toRunFailure } from '../../services/deep-agent/error-mapping';
+import { redact } from '../../services/deep-agent/redaction';
 import { RocDomainError } from '../../services/errors';
 import type { RunFailure } from '../../services/deep-agent/types';
 import type { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
@@ -190,6 +191,37 @@ export type AgentPluginRuntimeOptions = {
   pilot?: PilotRunCoordinator;
 };
 
+async function bestEffort(
+  operation: () => Promise<void> | void,
+  onFailure: (error: unknown) => void
+): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    try {
+      onFailure(error);
+    } catch {
+      // Failure reporting is terminal best-effort work; it must not recurse.
+    }
+  }
+}
+
+function readNotificationRunId(value: unknown): string | undefined {
+  if (value === null || typeof value !== 'object' || !('runId' in value) || typeof value.runId !== 'string') {
+    return undefined;
+  }
+  return value.runId;
+}
+
+function summarizeNotificationError(error: unknown): string {
+  try {
+    const message = error instanceof Error ? error.message : String(error);
+    return redact(message).slice(0, 300);
+  } catch {
+    return 'notification_error_summary_unavailable';
+  }
+}
+
 export class AgentPluginRuntime {
   private readonly activeRunLifecycle: AgentActiveRunLifecycle;
   private readonly runTelemetry = new Map<string, AgentRunTelemetryAccumulator>();
@@ -197,9 +229,11 @@ export class AgentPluginRuntime {
 
   constructor(private readonly options: AgentPluginRuntimeOptions) {
     this.pluginId = options.pluginId === undefined ? '@roc/plugin-agent' : options.pluginId;
-    this.activeRunLifecycle = new AgentActiveRunLifecycle((error) => {
-      this.recordNotificationFailure('agent_pending_run_rejected');
-      console.error('[AgentPluginRuntime] Detached run execution rejected.', error);
+    this.activeRunLifecycle = new AgentActiveRunLifecycle((error, runId) => {
+      this.reportNotificationFailure('agent_pending_run_rejected', error, {
+        runId,
+        notificationType: 'detached_run_execution'
+      });
     });
   }
 
@@ -860,54 +894,85 @@ export class AgentPluginRuntime {
   }
 
   private async emitSessionEndBestEffort(input: Parameters<AgentLifecycleHookEmitter['emitSessionEnd']>[0]): Promise<void> {
-    if (this.options.lifecycleHooks === undefined) {
+    const lifecycleHooks = this.options.lifecycleHooks;
+    if (lifecycleHooks === undefined) {
       return;
     }
-    try {
-      await this.options.lifecycleHooks.emitSessionEnd(input);
-    } catch {
-      this.recordNotificationFailure('agent_session_end_notification_failed');
-    }
+    await bestEffort(
+      () => lifecycleHooks.emitSessionEnd(input),
+      error => this.reportNotificationFailure('agent_session_end_notification_failed', error, {
+        runId: readNotificationRunId(input),
+        notificationType: 'session_end'
+      })
+    );
   }
 
   private async publish<TPayload>(type: string, payload: TPayload): Promise<void> {
-    try {
-      await this.options.eventBus.publish({
+    await bestEffort(
+      () => this.options.eventBus.publish({
         type,
         source: this.pluginId,
         payload,
         createdAt: new Date().toISOString()
-      });
-    } catch {
-      this.recordNotificationFailure('agent_event_bus_notification_failed');
-    }
+      }),
+      error => this.reportNotificationFailure('agent_event_bus_notification_failed', error, {
+        runId: readNotificationRunId(payload),
+        notificationType: type
+      })
+    );
   }
 
   private async publishChatRunEvent(payload: ChatRunEvent): Promise<void> {
-    this.persistChatRunEvent(payload);
+    await this.persistChatRunEvent(payload);
     await this.publish(agentChatRunEventType, payload);
   }
 
   private async publishChatRunEventBestEffort(payload: ChatRunEvent, persist: boolean): Promise<void> {
     if (persist) {
-      this.persistChatRunEvent(payload);
+      await this.persistChatRunEvent(payload);
     }
     await this.publish(agentChatRunEventType, payload);
   }
 
-  private persistChatRunEvent(payload: ChatRunEvent): void {
-    try {
-      this.options.runEventLog?.recordRunEvent(payload);
-    } catch {
-      this.recordNotificationFailure('agent_run_event_replay_persist_failed');
-    }
+  private async persistChatRunEvent(payload: ChatRunEvent): Promise<void> {
+    await bestEffort(
+      () => {
+        this.options.runEventLog?.recordRunEvent(payload);
+      },
+      error => this.reportNotificationFailure('agent_run_event_replay_persist_failed', error, {
+        runId: payload.runId,
+        notificationType: payload.type
+      })
+    );
   }
 
-  private recordNotificationFailure(code: string): void {
+  private reportNotificationFailure(
+    code: string,
+    error: unknown,
+    context: { notificationType: string; runId?: string }
+  ): void {
+    const details = {
+      code,
+      notificationType: context.notificationType,
+      ...(context.runId === undefined ? {} : { runId: context.runId }),
+      error: summarizeNotificationError(error)
+    };
+    try {
+      console.warn('[AgentPluginRuntime] Noncritical notification failed.', details);
+    } catch {
+      // Logging is terminal best-effort work; it must not recurse into notification reporting.
+    }
     try {
       this.options.repository.recordNotificationFailure(code);
-    } catch {
-      console.warn('[AgentPluginRuntime] Notification metric persistence failed.');
+    } catch (metricError) {
+      try {
+        console.warn('[AgentPluginRuntime] Notification metric persistence failed.', {
+          code,
+          error: summarizeNotificationError(metricError)
+        });
+      } catch {
+        // Metric and log failures must not escape the notification boundary.
+      }
     }
   }
 
