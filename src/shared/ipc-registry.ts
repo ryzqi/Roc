@@ -576,19 +576,24 @@ type RequestEntry = IpcRequestEntry;
 type EventEntry = IpcEventEntry;
 type IpcDomain = RequestEntry['domain'] | EventEntry['domain'];
 
-export function parseIpcRequestArgs(channel: string, args: unknown[]): unknown[] {
-  const entry = ipcRegistry.requests.find((candidate) => candidate.channel === channel);
+const requestsByChannel = new Map<string, IpcRequestEntry>(
+  ipcRegistry.requests.map((entry) => [entry.channel, entry] as const)
+);
+
+function getRequestEntry(channel: string): IpcRequestEntry {
+  const entry = requestsByChannel.get(channel);
   if (entry === undefined) {
     throw new Error(`ipc_request_contract_not_found:${channel}`);
   }
-  return entry.contract.args.parse(args);
+  return entry;
+}
+
+export function parseIpcRequestArgs(channel: string, args: unknown[]): unknown[] {
+  return getRequestEntry(channel).contract.args.parse(args);
 }
 
 export function parseIpcResult(channel: string, result: unknown): IpcResult<unknown> {
-  const entry = ipcRegistry.requests.find((candidate) => candidate.channel === channel);
-  if (entry === undefined) {
-    throw new Error(`ipc_request_contract_not_found:${channel}`);
-  }
+  const entry = getRequestEntry(channel);
   return ipcResultSchema(entry.contract.result).parse(result);
 }
 
