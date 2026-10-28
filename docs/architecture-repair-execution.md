@@ -187,7 +187,7 @@ No model pack is available to measure model initialization or inference, so this
 
 ## Phase 5 — Renderer resource cache pilot
 
-**Status:** Phase 5 implementation and validation are complete. The initial Spec review found no issues; Standards found one P2: cached project results were hidden while SWR revalidated. The hook now keeps `ready` when cached data exists, and renderer regression coverage verifies results remain visible during refresh and after a failed refresh. The focused Standards follow-up review returned no findings; Phase 5 is ready to commit.
+**Status:** Phase 5 implementation and validation are complete. The initial Spec review found no issues; Standards found one P2: cached project results were hidden while SWR revalidated. The hook now keeps `ready` when cached data exists, and renderer regression coverage verifies results remain visible during refresh and after a failed refresh. The focused Standards follow-up review returned no findings; Phase 5 is committed as `03ed314`.
 
 ### Evidence and decisions
 
@@ -203,7 +203,7 @@ No model pack is available to measure model initialization or inference, so this
 - Changed-file LSP diagnostics reported 0 findings across 12 paths; post-fix checks for `use-project-list.ts` and the renderer lifecycle test also reported 0 findings. `git diff --check` is clean.
 - Initial review: Spec returned no findings; Standards found one P2 about cached results disappearing during list revalidation. The status mapping and a refresh-success/failure regression fixed it; targeted validation passed again.
 
-**Review:** Initial Spec review returned no findings. Initial Standards review found P2 at `src/renderer/project/use-project-list.ts:38`; fixed by preferring cached data for `ready` status and adding regression assertions for in-flight and failed revalidation. Focused Standards follow-up review returned no findings.
+**Review:** Initial Spec review returned no findings. Initial Standards review found P2 at `src/renderer/project/use-project-list.ts:38`; fixed by preferring cached data for `ready` status and adding regression assertions for in-flight and failed revalidation. Focused Standards follow-up review returned no findings; commit `03ed314`.
 
 ## Decisions
 
@@ -220,7 +220,7 @@ No model pack is available to measure model initialization or inference, so this
 - Phase 2: Committed.
 - Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
 - Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
-- Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; the focused Standards follow-up review returned no findings; commit pending.
+- Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
 - Phase 6: Pending.
 - Phase 7: Pending.
 - Phase 8: Pending.
