@@ -1150,6 +1150,34 @@ CREATE TABLE research_literature_imports (
   UNIQUE(owner, scope_project, request_id)
 );
 `
+  },
+  {
+    version: 5,
+    name: 'research_knowledge_chunk_fts',
+    sql: `
+CREATE VIRTUAL TABLE research_knowledge_chunks_fts USING fts5(
+  content,
+  content='research_knowledge_chunks',
+  content_rowid='rowid',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER research_knowledge_chunks_ai AFTER INSERT ON research_knowledge_chunks BEGIN
+  INSERT INTO research_knowledge_chunks_fts(rowid, content)
+    VALUES (new.rowid, new.content);
+END;
+CREATE TRIGGER research_knowledge_chunks_ad AFTER DELETE ON research_knowledge_chunks BEGIN
+  INSERT INTO research_knowledge_chunks_fts(research_knowledge_chunks_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+END;
+CREATE TRIGGER research_knowledge_chunks_au AFTER UPDATE ON research_knowledge_chunks BEGIN
+  INSERT INTO research_knowledge_chunks_fts(research_knowledge_chunks_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+  INSERT INTO research_knowledge_chunks_fts(rowid, content)
+    VALUES (new.rowid, new.content);
+END;
+INSERT INTO research_knowledge_chunks_fts(research_knowledge_chunks_fts)
+  VALUES ('rebuild');
+`
   }
 ];
 

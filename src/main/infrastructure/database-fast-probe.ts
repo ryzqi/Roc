@@ -121,6 +121,7 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'research_embedding_configs',
       'research_knowledge_documents',
       'research_knowledge_documents_fts',
+      'research_knowledge_chunks_fts',
       'research_knowledge_chunks',
       'research_knowledge_embeddings',
       'schema_migrations',

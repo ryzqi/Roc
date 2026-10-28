@@ -239,17 +239,46 @@ export class ResearchKnowledgeRepository {
       .map((term) => `"${term}"`)
       .join(' OR ');
     if (match.length === 0) return [];
-    const projectClause = projectId === null ? '' : 'AND (d.project_id = ? OR d.project_id IS NULL)';
-    const args = projectId === null ? [match, limit] : [match, projectId, limit];
+    const titleMatch = `title : (${match})`;
+    const args = [match, projectId, projectId, projectId, projectId, titleMatch, projectId, projectId, projectId, projectId, limit];
     const rows = this.db
       .prepare(
-        `SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
-                d.source_type, d.source_id
-         FROM research_knowledge_documents_fts f
-         JOIN research_knowledge_documents d ON d.rowid = f.rowid
-         JOIN research_knowledge_chunks c ON c.document_id = d.id
-         WHERE research_knowledge_documents_fts MATCH ? ${projectClause}
-         ORDER BY bm25(research_knowledge_documents_fts) ASC LIMIT ?`
+        `WITH content_hits AS MATERIALIZED (
+           SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
+                  d.source_type, d.source_id, c.chunk_index,
+                  bm25(research_knowledge_chunks_fts) AS match_rank,
+                  0 AS match_source
+           FROM research_knowledge_chunks_fts
+           JOIN research_knowledge_chunks c ON c.rowid = research_knowledge_chunks_fts.rowid
+           JOIN research_knowledge_documents d ON d.id = c.document_id
+           WHERE research_knowledge_chunks_fts MATCH ?
+             AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
+             AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
+         ),
+         title_hits AS MATERIALIZED (
+           SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
+                  d.source_type, d.source_id, c.chunk_index,
+                  bm25(research_knowledge_documents_fts, 5.0, 0.0) AS match_rank,
+                  1 AS match_source
+           FROM research_knowledge_documents_fts
+           JOIN research_knowledge_documents d ON d.rowid = research_knowledge_documents_fts.rowid
+           JOIN research_knowledge_chunks c ON c.document_id = d.id
+           WHERE research_knowledge_documents_fts MATCH ?
+             AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
+             AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
+         )
+         SELECT chunk_id, document_id, title, content, locator, source_type, source_id
+         FROM (
+           SELECT * FROM content_hits
+           UNION ALL
+           SELECT title_hits.*
+           FROM title_hits
+           WHERE NOT EXISTS (
+             SELECT 1 FROM content_hits WHERE content_hits.chunk_id = title_hits.chunk_id
+           )
+         )
+         ORDER BY match_source ASC, match_rank ASC, document_id ASC, chunk_index ASC
+         LIMIT ?`
       )
       .all(...args) as KnowledgeHitRow[];
     return rows.map((row) => toKnowledgeHit(row));
