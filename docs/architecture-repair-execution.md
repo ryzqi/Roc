@@ -257,7 +257,7 @@ Before the incompatibility was discovered, the experimental implementation passe
 
 ## Phase 8 — Ordinary process wrapper and substrate convergence
 
-**Status:** Execa is a no-go for production adoption. The isolated comparison and substrate decisions are recorded here; independent review is complete and its stale test-count finding has been corrected. Validation passes; commit remains.
+**Status:** Execa is a no-go for production adoption. The isolated comparison and substrate decisions are recorded here; independent review and validation are complete. The prototype and no-go record are committed as `db979a8e`.
 
 ### Execa evaluation
 
@@ -298,4 +298,4 @@ Before the incompatibility was discovered, the experimental implementation passe
 - Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
 - Phase 6: Tokenizer candidate rejected due to Unicode counting incompatibility; review findings addressed and final follow-up found no issues.
 - Phase 7: No-go decision and reproducible prototype are reviewed and committed as `7d1def8`; 12 prototype contracts and 16 focused recovery tests pass.
-- Phase 8: Execa no-go and retained substrate decisions are recorded; independent review and validation are complete, with commit pending.
+- Phase 8: Execa no-go and retained substrate decisions are recorded; independent review and validation are complete; committed as `db979a8e`.
