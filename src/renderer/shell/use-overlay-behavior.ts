@@ -63,6 +63,8 @@ export type OverlayBehaviorOptions = {
   layer?: OverlayLayer;
   /** Set false to leave the app accessible behind this overlay (non-modal). */
   inertBackground?: boolean;
+  /** Set false when an accessibility primitive owns focus trapping and Escape. */
+  manageFocus?: boolean;
 };
 
 export function useOverlayBehavior({
@@ -73,7 +75,8 @@ export function useOverlayBehavior({
   initialFocusRef,
   overlayId,
   layer = 'dialog',
-  inertBackground = true
+  inertBackground = true,
+  manageFocus = true
 }: OverlayBehaviorOptions): void {
   // Keep the latest callbacks reachable from a listener installed once per open.
   const closeRef = useRef(onRequestClose);
@@ -97,7 +100,7 @@ export function useOverlayBehavior({
     }
 
     const panel = panelRef.current;
-    if (panel !== null) {
+    if (manageFocus && panel !== null) {
       focusDialogInitialElement(panel, initialFocusRef?.current ?? null);
     }
 
@@ -126,16 +129,20 @@ export function useOverlayBehavior({
       trapDialogTabFocus(current, event);
     };
 
-    window.addEventListener('keydown', onKeyDown, true);
+    if (manageFocus) {
+      window.addEventListener('keydown', onKeyDown, true);
+    }
     return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
+      if (manageFocus) {
+        window.removeEventListener('keydown', onKeyDown, true);
+      }
       popOverlay(overlayId);
       // Only re-expose the app once no dialog is layered on it any more.
       if (inertBackground && !hasOpenDialog() && root !== null) {
         root.removeAttribute('aria-hidden');
       }
     };
-  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground]);
+  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground, manageFocus]);
 }
 
 /**

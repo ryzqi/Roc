@@ -16,8 +16,7 @@ import {
   Webhook,
   type LucideIcon
 } from 'lucide-react';
-import { ModalShell } from '../shell/ModalShell';
-import { ConfirmDialog } from '../shell/ConfirmDialog';
+import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
 import { EmptyState } from '../shell/EmptyState';
 import type { ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -275,7 +274,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
 
   return (
     <>
-      <ModalShell
+      <RadixSettingsDialogShell
         open={props.open}
         title="设置"
         onClose={props.onClose}
@@ -426,39 +425,39 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             </div>
           </div>
         </div>
-      </ModalShell>
 
-      <ConfirmDialog
-        open={closeConfirmOpen}
-        title="放弃未保存的设置？"
-        message={`有 ${dirtyCount} 项设置尚未保存。`}
-        detail="放弃后改动不会保存。"
-        confirmLabel="放弃修改"
-        cancelLabel="继续编辑"
-        tone="destructive"
-        testId="settings-discard"
-        onCancel={() => setCloseConfirmOpen(false)}
-        onConfirm={() => {
-          setCloseConfirmOpen(false);
-          store.discard();
-          setSaveAttempted(false);
-          props.onClose();
-        }}
-      />
+        <RadixSettingsConfirmDialog
+          open={closeConfirmOpen}
+          title="放弃未保存的设置？"
+          message={`有 ${dirtyCount} 项设置尚未保存。`}
+          detail="放弃后改动不会保存。"
+          confirmLabel="放弃修改"
+          cancelLabel="继续编辑"
+          tone="destructive"
+          testId="settings-discard"
+          onCancel={() => setCloseConfirmOpen(false)}
+          onConfirm={() => {
+            setCloseConfirmOpen(false);
+            store.discard();
+            setSaveAttempted(false);
+            props.onClose();
+          }}
+        />
 
-      <ConfirmDialog
-        open={impactOpen}
-        title="保存这些高影响设置？"
-        message="以下设置会影响到窗口之外的行为。"
-        detail={impacts.map((impact) => `${impact.title}：${impact.detail}`).join('\n')}
-        confirmLabel="保存设置"
-        testId="settings-impact-confirm"
-        onCancel={() => setImpactOpen(false)}
-        onConfirm={() => {
-          setImpactOpen(false);
-          persist();
-        }}
-      />
+        <RadixSettingsConfirmDialog
+          open={impactOpen}
+          title="保存这些高影响设置？"
+          message="以下设置会影响到窗口之外的行为。"
+          detail={impacts.map((impact) => `${impact.title}：${impact.detail}`).join('\n')}
+          confirmLabel="保存设置"
+          testId="settings-impact-confirm"
+          onCancel={() => setImpactOpen(false)}
+          onConfirm={() => {
+            setImpactOpen(false);
+            persist();
+          }}
+        />
+      </RadixSettingsDialogShell>
     </>
   );
 }
