@@ -1,0 +1,16 @@
+{
+  "name": "roc-phase-7-checkpointer-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test contract-comparison.test.mjs"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.20",
+    "@langchain/langgraph": "1.5.2",
+    "@langchain/langgraph-checkpoint": "1.2.1",
+    "@langchain/langgraph-checkpoint-sqlite": "1.1.0",
+    "better-sqlite3": "12.10.0"
+  }
+}

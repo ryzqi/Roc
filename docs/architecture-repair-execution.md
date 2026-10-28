@@ -234,6 +234,27 @@ Before the incompatibility was discovered, the experimental implementation passe
 
 **Review:** Independent review found Unicode counting and initialization-retry incompatibilities. A second reviewer identified missing counterexamples and incomplete historical benchmark provenance before its process ended with SIGTERM; the counterexamples and machine-readable rejection were added and historical provenance limits disclosed. A separate follow-up review of the final no-go state found no issues.
 
+## Phase 7 — SQLite Checkpointer compatibility prototype
+
+**Status:** No-go for adopting `@langchain/langgraph-checkpoint-sqlite@1.1.0`. The reproducible isolated comparison passes core Saver behavior but fails the migration and Electron packaging gates.
+
+### Evidence
+
+- `scripts/benchmarks/phase-7-checkpointer/package.json` pins the candidate 1.1.0 with LangGraph 1.5.2, Core 1.2.20, Checkpoint 1.2.1, and `better-sqlite3@12.10.0`. Roc uses driver 13.0.3. Candidate peer ranges match; its driver is a second native module.
+- Candidate's schema also violates Roc's exact migration inventory: after `SqliteSaver` creates `checkpoints` / `writes`, the next `applyDatabaseMigrations()` fails with `database_schema_rebuild_required`. The official saver has no Roc data importer, `restoreFrom`, retention, or integrity validator.
+- `electron-builder.yml` sets `npmRebuild: false` and unpacks only root `node_modules/better-sqlite3/**`. The isolated v12.10 driver loads under Node v26 but fails in Electron 45's Node v24 runtime: `was compiled against a different Node.js version using NODE_MODULE_VERSION 147. This version of Node.js requires NODE_MODULE_VERSION 150.` A checked-in test reproduces this mismatch.
+- The Roc/candidate comparison passed twelve isolated contracts: separate pinned drivers and Electron ABI reproduction; namespace, parallel pending writes/order, duplicate writes, metadata filtering/pagination and transaction rollback; exact migration schema rejection; retention truncation/integrity; SQLite backup/restore; interrupt → process exit → restart → resume; SIGKILL inside `putWrites` with rollback; RunControl drain/resume; AbortSignal cancellation; effect-store reuse; and a graph node replay through Roc's real tool-effect middleware after process restart under both savers. Command: `npm test --prefix scripts/benchmarks/phase-7-checkpointer` (12 passed, 0 failed).
+- Roc retention may delete a parent checkpoint which `validateCheckpointIntegrity` later treats as corruption. The experiments do not define a pruning boundary marker that distinguishes intentional truncation from damage. The candidate has no equivalent API.
+
+### Decision
+
+**No-go.** Existing recovery data and backups are unreadable across the candidate schema; the candidate omits Roc-specific recovery APIs; pruning semantics remain unresolved; and the second native driver fails under the current Electron packaging configuration. Do not migrate or dual-write. Keep `RocSqliteCheckpointer` and revisit only with a defined retention-boundary policy, offline migration/rollback design, and packaged Electron validation. No production dependency, source, or database changes were made.
+
+### Validation and review
+
+- `npm test --prefix scripts/benchmarks/phase-7-checkpointer`: 12 passed, 0 failed. The prototype includes a checked-in expected-failure Electron ABI probe.
+- Independent review initially found gaps in cancellation, side-effect replay, and Electron ABI reproducibility. Added AbortSignal cancellation under both savers, a process-restart graph test using Roc's real idempotency middleware, and the native ABI probe. A second review found one stale test count, which was corrected; the reviewer reran all twelve prototype tests successfully. Focused existing `checkpoint-write-order` and `operation-recovery` tests also pass (16/16); `git diff --check` is clean. Phase 7 is ready to commit.
+
 ## Decisions
 
 - Use contract v4 for page-image policy and retain v3 schema reads; omit page PNG only after a successful no-visual-content inspection on high-quality native text. The visual detector fails closed: any unknown PDF.js operator retains the image.
@@ -251,5 +272,5 @@ Before the incompatibility was discovered, the experimental implementation passe
 - Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
 - Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
 - Phase 6: Tokenizer candidate rejected due to Unicode counting incompatibility; review findings addressed and final follow-up found no issues.
-- Phase 7: Pending.
+- Phase 7: Official Checkpointer candidate rejected after isolated recovery/retention/backup/crash/cancellation/side-effect comparison and Electron ABI probe; independent review and commit are in progress.
 - Phase 8: Pending.
