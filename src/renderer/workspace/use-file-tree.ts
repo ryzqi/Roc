@@ -27,6 +27,9 @@ export type FileTreeRow = {
   entry: FileEntry;
   depth: number;
   expanded: boolean;
+  positionInSet: number;
+  /** -1 means the directory listing was truncated and the full sibling count is unknown. */
+  setSize: number;
 };
 
 /* ------------------------------------------------------------------ */
@@ -382,19 +385,20 @@ export function useFileTree(
 
     const walk = (directory: string, depth: number): void => {
       const entries = children.get(directory) ?? [];
-      for (const entry of entries) {
+      const setSize = truncated.get(directory) ? -1 : entries.length;
+      entries.forEach((entry, index) => {
         const isDirectory = entry.type === 'directory';
         const isExpanded = isDirectory && expanded.has(entry.relativePath);
-        output.push({ entry, depth, expanded: isExpanded });
+        output.push({ entry, depth, expanded: isExpanded, positionInSet: index + 1, setSize });
         if (isExpanded) {
           walk(entry.relativePath, depth + 1);
         }
-      }
+      });
     };
 
     walk('', 0);
     return output;
-  }, [children, expanded]);
+  }, [children, expanded, truncated]);
 
   return {
     rows,

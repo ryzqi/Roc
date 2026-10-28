@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useContentPreferences } from '../../app/use-content-preferences';
-import { fileTreeWindow } from './file-tree-window';
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
+import type { VirtuosoHandle } from 'react-virtuoso';
 import type { FileEntry } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { ErrorBar } from '../../shell/ErrorBar';
@@ -22,19 +22,17 @@ import {
  * `files.listTree` is one directory per call, so this is a lazy tree: expanding a
  * directory fetches it once. Expansion is persisted per project.
  *
- * **Windowing.** Beyond `VIRTUALISE_THRESHOLD` rows the list renders only the
- * visible slice (plus overscan) with spacer elements preserving scroll height.
- * Rows use 24px/28px for compact/comfortable density so the arithmetic is exact; the plan asks for
- * virtualisation past 200 rows and large repositories hit that immediately. The
- * focused row stays mounted as a separate pinned row when outside the viewport,
- * preserving roving focus without mounting every intervening row.
+ * **Windowing.** Beyond `VIRTUALISE_THRESHOLD` rows the list uses the existing
+ * `react-virtuoso` dependency through a lazy module. It measures real row heights
+ * (including directory errors) and keys rows by workspace-relative path. Smaller
+ * trees stay a plain list.
  *
  * **Keyboard model** (AGENTS.md "every important action must be keyboard
- * accessible"). This is the ARIA tree pattern with a roving `tabIndex`:
- * exactly one row is tabbable, ↑/↓ move, → expands or steps into a directory, ←
- * collapses or steps out to the parent, Home/End jump, and typing jumps to the
- * next row whose name starts with the typed prefix. Enter/Space are left to the
- * row button's native activation, so a keystroke cannot fire the action twice.
+ * accessible"). The tree is the single tab stop and keeps the current logical row
+ * in `aria-activedescendant`, so virtualization can unmount offscreen rows without
+ * dropping keyboard or screen-reader focus. ↑/↓ move, → expands or steps into a
+ * directory, ← collapses or steps out to the parent, Home/End jump, typing jumps
+ * to the next row whose name starts with the typed prefix, and Enter/Space activate.
  *
  * Interaction rules: rows are 24px/28px inside a 36-40px target
  * band, selection uses `--accent-soft`, hover uses `--overlay-hover`, there is no
@@ -45,6 +43,11 @@ const OVERSCAN = 8;
 const VIRTUALISE_THRESHOLD = 200;
 /** Typing this long after the previous character starts a new search prefix. */
 const TYPE_AHEAD_RESET_MS = 700;
+
+const LazyFileTreeVirtualizedRows = lazy(async () => {
+  const module = await import('./FileTreeVirtualizedRows');
+  return { default: module.FileTreeVirtualizedRows };
+});
 
 export type FileTreeViewProps = {
   client: RocClient;
@@ -151,69 +154,92 @@ export function FileTreeView({
   const { preferences } = useContentPreferences();
   const rowHeight = preferences.density === 'comfortable' ? 28 : 24;
   const tree = useFileTree(client, { workspacePathKey, projectId });
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(320);
-  /** The roving-focus anchor: the one row that is tabbable. */
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
+  const [virtualizerReady, setVirtualizerReady] = useState(false);
+  const [treeFocused, setTreeFocused] = useState(false);
+  /** Logical active item; the tree root remains the DOM focus target. */
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [pendingFocusPath, setPendingFocusPath] = useState<string | null>(null);
   const typeAhead = useRef({ prefix: '', at: 0 });
+  const treeId = useId();
 
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (element === null) {
-      return;
-    }
-    const observer = new ResizeObserver(() => setViewportHeight(element.clientHeight));
-    observer.observe(element);
-    setViewportHeight(element.clientHeight);
-    return () => observer.disconnect();
-  }, [workspacePathKey, tree.rows.length === 0]);
-
-  const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  }, []);
-
-  /**
-   * The focus anchor is clamped **at render time** (the F13 lesson): a collapse or
-   * a reload can remove the focused row, and every row would then be
-   * `tabIndex={-1}` — the whole tree unreachable by keyboard with no visible sign.
-   */
+  const virtualise = tree.rows.length > VIRTUALISE_THRESHOLD;
   const activePath = useMemo(() => {
     if (focusedPath !== null && tree.rows.some((row) => row.entry.relativePath === focusedPath)) {
       return focusedPath;
     }
     return tree.rows[0]?.entry.relativePath ?? null;
   }, [focusedPath, tree.rows]);
-
   const activeIndex = tree.rows.findIndex((row) => row.entry.relativePath === activePath);
+  const activeRow = activeIndex < 0 ? undefined : tree.rows[activeIndex];
+  const activeDescendantId = activeRow === undefined
+    ? undefined
+    : `${treeId}-active-${encodeURIComponent(activeRow.entry.relativePath)}`;
 
-  const virtualise = tree.rows.length > VIRTUALISE_THRESHOLD;
-  const windowStart = virtualise ? Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN) : 0;
-  const windowEnd = virtualise
-    ? Math.min(tree.rows.length, Math.ceil((scrollTop + viewportHeight) / rowHeight) + OVERSCAN)
-    : tree.rows.length;
-  const { indices, trailingRows } = fileTreeWindow(tree.rows.length, windowStart, windowEnd, activeIndex);
+  const registerRowRef = useCallback((relativePath: string, element: HTMLButtonElement | null): void => {
+    if (element === null) {
+      rowRefs.current.delete(relativePath);
+      return;
+    }
+    rowRefs.current.set(relativePath, element);
+  }, []);
+
+  const setScrollParentRef = useCallback((element: HTMLDivElement | null): void => {
+    treeRef.current = element;
+    setScrollParent((current) => current === element ? current : element);
+  }, []);
+
+  const setVirtuosoRef = useCallback((handle: VirtuosoHandle | null): void => {
+    if (virtuosoRef.current === handle) {
+      return;
+    }
+    virtuosoRef.current = handle;
+    setVirtualizerReady(handle !== null);
+  }, []);
+
+  const focusTree = useCallback((): void => {
+    treeRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const onTreeFocusCapture = useCallback((): void => setTreeFocused(true), []);
+  const onTreeBlurCapture = useCallback((event: React.FocusEvent<HTMLDivElement>): void => {
+    const nextTarget = event.relatedTarget;
+    if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+      setTreeFocused(false);
+    }
+  }, []);
+  const onRowFocused = useCallback((relativePath: string): void => {
+    setFocusedPath(relativePath);
+    focusTree();
+  }, [focusTree]);
 
   useEffect(() => {
     if (pendingFocusPath === null) {
       return;
     }
-    const element = rowRefs.current.get(pendingFocusPath);
-    if (element === undefined) {
-      // The row can be missing for two very different reasons: its listing is
-      // still in flight (wait — a reveal of a deep path needs it), or it is
-      // genuinely gone (a collapse or a reload). Give up only in the second case.
-      if (tree.loading.size === 0 && !tree.rows.some((row) => row.entry.relativePath === pendingFocusPath)) {
+    const index = tree.rows.findIndex((row) => row.entry.relativePath === pendingFocusPath);
+    if (index < 0) {
+      // A reveal may still be loading; a collapse or reload may have removed it.
+      if (tree.loading.size === 0) {
         setPendingFocusPath(null);
       }
       return;
     }
-    element.scrollIntoView({ block: 'nearest' });
-    element.focus();
+    if (virtualise) {
+      const virtuoso = virtuosoRef.current;
+      if (!virtualizerReady || scrollParent === null || virtuoso === null) {
+        return;
+      }
+      virtuoso.scrollToIndex({ index, align: 'center', behavior: 'auto' });
+    } else {
+      rowRefs.current.get(pendingFocusPath)?.scrollIntoView({ block: 'nearest' });
+    }
+    focusTree();
     setPendingFocusPath(null);
-  }, [pendingFocusPath, tree.loading, tree.rows]);
+  }, [focusTree, pendingFocusPath, scrollParent, tree.loading, tree.rows, virtualise, virtualizerReady]);
 
   const moveFocusTo = useCallback((index: number): void => {
     const row = tree.rows[index];
@@ -246,6 +272,18 @@ export function FileTreeView({
     setFocusedPath(revealPath);
     setPendingFocusPath(revealPath);
   }, [revealPath, tree]);
+
+  const activateRow = useCallback((row: FileTreeRow): void => {
+    const relativePath = row.entry.relativePath;
+    setFocusedPath(relativePath);
+    setPendingFocusPath(null);
+    focusTree();
+    if (row.entry.type === 'directory') {
+      tree.toggleDirectory(relativePath);
+      return;
+    }
+    onOpenFile(relativePath);
+  }, [focusTree, onOpenFile, tree.toggleDirectory]);
 
   const onTreeKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -304,8 +342,8 @@ export function FileTreeView({
         return;
       }
       if (event.key === 'Enter' || event.key === ' ') {
-        // Deliberately not handled: the row is a real <button>, so the browser
-        // activates it once. Handling it here as well would toggle twice.
+        event.preventDefault();
+        activateRow(row);
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -327,8 +365,25 @@ export function FileTreeView({
         moveFocusTo(matched);
       }
     },
-    [activeIndex, moveFocusTo, tree]
+    [activateRow, activeIndex, moveFocusTo, tree]
   );
+
+  const renderRow = useCallback((_index: number, row: FileTreeRow): React.JSX.Element => (
+    <TreeRow
+      key={row.entry.relativePath}
+      row={row}
+      busy={tree.loading.has(row.entry.relativePath)}
+      selected={row.entry.relativePath === selectedPath}
+      active={row.entry.relativePath === activePath}
+      treeFocused={treeFocused}
+      position={row.positionInSet}
+      setSize={row.setSize}
+      error={tree.errors.get(row.entry.relativePath)}
+      registerRef={registerRowRef}
+      onActivate={() => activateRow(row)}
+      onFocused={() => onRowFocused(row.entry.relativePath)}
+    />
+  ), [activePath, activateRow, onRowFocused, registerRowRef, selectedPath, tree.errors, tree.loading, tree.rows.length, treeFocused]);
 
   if (workspacePathKey === null) {
     return <EmptyState compact title="未选择工作区" description="绑定工作目录后才会显示文件树。" testId="file-tree-no-workspace" />;
@@ -409,50 +464,57 @@ export function FileTreeView({
       </div>
 
       <div
-        ref={scrollRef}
-        onScroll={onScroll}
+        ref={setScrollParentRef}
         onKeyDown={onTreeKeyDown}
+        onFocusCapture={onTreeFocusCapture}
+        onBlurCapture={onTreeBlurCapture}
         role="tree"
+        tabIndex={0}
         aria-label="文件树"
-        className="min-h-0 flex-1 overflow-y-auto py-1"
+        aria-activedescendant={activeDescendantId}
+        data-testid="file-tree-scroll"
+        className="min-h-0 flex-1 overflow-y-auto py-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
       >
-        {indices.map(({ index, gap }) => {
-          const row = tree.rows[index]!;
-          return <Fragment key={row.entry.relativePath}>
-            {gap > 0 ? <div aria-hidden="true" style={{ height: gap * rowHeight }} /> : null}
-          <TreeRow
-            key={row.entry.relativePath}
-            row={row}
-            busy={tree.loading.has(row.entry.relativePath)}
-            selected={row.entry.relativePath === selectedPath}
-            tabbable={row.entry.relativePath === activePath}
-            error={tree.errors.get(row.entry.relativePath)}
-            registerRef={(relativePath, element) => {
-              if (element === null) {
-                rowRefs.current.delete(relativePath);
-                return;
-              }
-              rowRefs.current.set(relativePath, element);
-            }}
-            onActivate={() => {
-              if (row.entry.type === 'directory') {
-                tree.toggleDirectory(row.entry.relativePath);
-                return;
-              }
-              onOpenFile(row.entry.relativePath);
-            }}
-            onFocused={() => {
-              // Keeps the roving anchor in sync when focus arrives from elsewhere
-              // (a click, or Tab back into the tree).
-              setFocusedPath(row.entry.relativePath);
-            }}
-          />
-          </Fragment>;
-        })}
-
-        {trailingRows > 0 ? (
-          <div aria-hidden="true" style={{ height: trailingRows * rowHeight }} />
-        ) : null}
+        {activeRow === undefined ? null : (
+          <div
+            id={activeDescendantId}
+            role="treeitem"
+            aria-level={activeRow.depth + 1}
+            aria-expanded={activeRow.entry.type === 'directory' ? activeRow.expanded : undefined}
+            aria-selected={activeRow.entry.relativePath === selectedPath}
+            aria-posinset={activeRow.positionInSet}
+            aria-setsize={activeRow.setSize}
+            className="sr-only"
+          >
+            {activeRow.entry.name}
+          </div>
+        )}
+        {virtualise ? (
+          scrollParent === null ? (
+            <p className="flex items-center gap-2 px-3 py-2 text-muted" role="status" data-testid="file-tree-virtualizer-loading">
+              <Loader2 size={13} aria-hidden="true" className="animate-spin" />
+              正在准备大型文件树…
+            </p>
+          ) : (
+            <Suspense fallback={
+              <p className="flex items-center gap-2 px-3 py-2 text-muted" role="status" data-testid="file-tree-virtualizer-loading">
+                <Loader2 size={13} aria-hidden="true" className="animate-spin" />
+                正在准备大型文件树…
+              </p>
+            }>
+              <LazyFileTreeVirtualizedRows
+                ref={setVirtuosoRef}
+                rows={tree.rows}
+                scrollParent={scrollParent}
+                rowHeight={rowHeight}
+                overscan={OVERSCAN}
+                renderRow={renderRow}
+              />
+            </Suspense>
+          )
+        ) : (
+          <div role="group">{tree.rows.map((row, index) => renderRow(index, row))}</div>
+        )}
       </div>
     </div>
   );
@@ -467,7 +529,10 @@ function TreeRow({
   row,
   busy,
   selected,
-  tabbable,
+  active,
+  treeFocused,
+  position,
+  setSize,
   error,
   registerRef,
   onActivate,
@@ -476,13 +541,19 @@ function TreeRow({
   row: FileTreeRow;
   busy: boolean;
   selected: boolean;
-  tabbable: boolean;
+  active: boolean;
+  treeFocused: boolean;
+  position: number;
+  setSize: number;
   error: string | undefined;
   registerRef: (relativePath: string, element: HTMLButtonElement | null) => void;
   onActivate: () => void;
   onFocused: () => void;
 }): React.JSX.Element {
   const directory = row.entry.type === 'directory';
+  const activeOutline = active && treeFocused
+    ? 'outline-2 outline-offset-[-2px] outline-accent'
+    : '';
   return (
     <div>
       <button
@@ -492,14 +563,18 @@ function TreeRow({
         aria-level={row.depth + 1}
         aria-expanded={directory ? row.expanded : undefined}
         aria-selected={selected}
-        tabIndex={tabbable ? 0 : -1}
+        aria-posinset={position}
+        aria-setsize={setSize}
+        aria-hidden={active ? true : undefined}
+        tabIndex={-1}
+        data-active={active ? 'true' : undefined}
         data-testid={`file-tree-row-${row.entry.relativePath}`}
         onClick={onActivate}
         onFocus={onFocused}
         className={
           selected
-            ? 'flex h-[var(--file-row-height)] w-full items-center gap-1 bg-accent-soft pr-2 text-left'
-            : 'flex h-[var(--file-row-height)] w-full items-center gap-1 pr-2 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
+            ? `flex h-[var(--file-row-height)] w-full items-center gap-1 bg-accent-soft pr-2 text-left ${activeOutline}`
+            : `flex h-[var(--file-row-height)] w-full items-center gap-1 pr-2 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] ${activeOutline}`
         }
         style={{ paddingLeft: 6 + row.depth * 12 }}
         title={row.entry.relativePath}
