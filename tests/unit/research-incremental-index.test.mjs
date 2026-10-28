@@ -48,3 +48,62 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     assert.deepEqual(repo.indexing.listFiles(project.id, '', false, 100).map(file => file.path), ['b.md']);
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('full scans honor aborts, skip symlink files, and enforce safety caps', async () => {
+  const dir = mkdtempSync(realpathSync(join(tmpdir())) + '/roc-index-scan-limits-');
+  try {
+    const outfile = join(dir, 'index-files.mjs');
+    await build({
+      entryPoints: ['src/main/plugins/research/index-files.ts'],
+      outfile,
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      packages: 'external'
+    });
+    const files = await import(outfile);
+    const options = { kinds: ['markdown'], include: ['**/*.md'], exclude: [] };
+    const storage = join(dir, 'storage');
+    mkdirSync(storage);
+
+    const root = join(dir, 'workspace');
+    mkdirSync(root);
+    const target = join(root, 'actual.md');
+    writeFileSync(target, 'content');
+    symlinkSync(target, join(root, 'linked.md'), 'file');
+    const signal = new AbortController().signal;
+    const scanned = await files.scanIndexFiles(root, options, storage, signal);
+    assert.deepEqual(scanned.map((file) => file.path), ['actual.md']);
+
+    const aborted = new AbortController();
+    aborted.abort();
+    await assert.rejects(
+      () => files.scanIndexFiles(root, options, storage, aborted.signal),
+      (error) => error?.name === 'AbortError'
+    );
+
+    const visitRoot = join(dir, 'visited-entries');
+    mkdirSync(visitRoot);
+    const seed = join(dir, 'symlink-target');
+    writeFileSync(seed, 'ignored');
+    for (let index = 0; index < 50_001; index += 1) {
+      symlinkSync(seed, join(visitRoot, `entry-${index}.link`), 'file');
+    }
+    await assert.rejects(
+      () => files.scanIndexFiles(visitRoot, options, storage, signal),
+      /research_index_directory_limit/
+    );
+
+    const fileRoot = join(dir, 'indexed-files');
+    mkdirSync(fileRoot);
+    for (let index = 0; index < 10_001; index += 1) {
+      writeFileSync(join(fileRoot, `file-${index}.md`), '');
+    }
+    await assert.rejects(
+      () => files.scanIndexFiles(fileRoot, options, storage, signal),
+      /research_index_file_limit/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
