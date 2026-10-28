@@ -18,6 +18,10 @@ before(async () => {
       import { createRoot } from 'react-dom/client';
       import { flushSync } from 'react-dom';
       import { useAsyncAction } from './src/renderer/app/use-async-resource';
+      import { SWRConfig } from 'swr';
+      import { APP_SWR_CONFIG } from './src/renderer/app/swr-config';
+      import { IpcResourceError } from './src/renderer/app/ipc-resource';
+      import { useInvalidateProjectList, useProjectList } from './src/renderer/project/use-project-list';
       import { useSettingsStore } from './src/renderer/settings/settings-scope';
       import { useMcp } from './src/renderer/management/use-mcp';
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
@@ -38,6 +42,27 @@ before(async () => {
         React.createElement(React.StrictMode, null, React.createElement(AsyncActionHarness, {operation}))
       ));
       window.clearAsyncAction = () => flushSync(() => actionRoot.render(null));
+      const projectListContainer = document.createElement('div');
+      document.body.appendChild(projectListContainer);
+      const projectListRoot = createRoot(projectListContainer);
+      function ProjectListPairHarness({client}) {
+        const portal = useProjectList(client);
+        const palette = useProjectList(client);
+        const invalidate = useInvalidateProjectList();
+        window.projectListResources = {portal, palette, invalidate};
+        return null;
+      }
+      window.mountProjectLists = client => flushSync(() => projectListRoot.render(
+        React.createElement(SWRConfig, {value: APP_SWR_CONFIG},
+          React.createElement(React.StrictMode, null, React.createElement(ProjectListPairHarness, {client}))
+        )
+      ));
+      window.clearProjectLists = () => flushSync(() => {
+        projectListRoot.render(null);
+        window.projectListResources = null;
+      });
+      window.createProjectListError = error => new IpcResourceError(error);
+      window.shouldRetryProjectListError = error => APP_SWR_CONFIG.shouldRetryOnError?.(error) ?? false;
       const root = createRoot(document.getElementById('root'));
       const hooks = {
         settings: p => useSettingsStore(p.client, p.projectId ?? null),
@@ -149,6 +174,119 @@ test('async action does not render after unmount while its operation settles', a
   });
   assert.deepEqual(await page.evaluate(() => actionRun), {ok: true, data: 'done'});
   assert.equal(await page.evaluate(() => actionRenderCount), await page.evaluate(() => actionRendersAtUnmount));
+});
+
+test('async action counts concurrent requests and keeps the latest error', async () => {
+  await page.evaluate(() => {
+    clearAsyncAction();
+    window.actionDeferreds = [deferred(), deferred()];
+    window.actionRunIndex = 0;
+    mountAsyncAction(() => actionDeferreds[actionRunIndex++].promise);
+    window.olderActionRun = latestAction.run();
+    window.newerActionRun = latestAction.run();
+  });
+  await page.waitForFunction(() => latestAction.pending);
+  await page.evaluate(() => actionDeferreds[1].resolve(fail('latest failure')));
+  assert.deepEqual(await page.evaluate(() => newerActionRun), {ok: false, error: 'latest failure'});
+  assert.deepEqual(await page.evaluate(() => ({pending: latestAction.pending, error: latestAction.error})), {
+    pending: true,
+    error: 'latest failure'
+  });
+  await page.evaluate(() => actionDeferreds[0].resolve(fail('stale failure')));
+  assert.deepEqual(await page.evaluate(() => olderActionRun), {ok: false, error: 'stale failure'});
+  await page.waitForFunction(() => !latestAction.pending);
+  assert.equal(await page.evaluate(() => latestAction.error), 'latest failure');
+});
+
+test('portal and palette share a project-list request and keep cached results during refresh', async () => {
+  await page.evaluate(() => {
+    clearProjectLists();
+    window.projectListCalls = 0;
+    window.projectListResponse = deferred();
+    const client = {api: {research: {listProjects: async () => {
+      window.projectListCalls++;
+      return projectListResponse.promise;
+    }}}};
+    window.mountProjectLists(client);
+  });
+  await page.waitForFunction(() => window.projectListCalls === 1);
+  await page.evaluate(() => projectListResponse.resolve(ok([
+    {id: 'p1', title: 'Shared project', status: 'active', workspacePath: null}
+  ])));
+  await page.waitForFunction(() => projectListResources?.portal.status === 'ready' && projectListResources?.palette.status === 'ready');
+  assert.equal(await page.evaluate(() => projectListCalls), 1);
+  assert.equal(await page.evaluate(() => projectListResources.portal.data[0].title), 'Shared project');
+  assert.equal(await page.evaluate(() => projectListResources.palette.data[0].title), 'Shared project');
+
+  await page.evaluate(() => {
+    projectListResponse = deferred();
+    projectListResources.invalidate();
+  });
+  await page.waitForFunction(() => window.projectListCalls === 2);
+  await page.evaluate(() => projectListResponse.resolve(ok([
+    {id: 'p1', title: 'Mutated project', status: 'active', workspacePath: null}
+  ])));
+  await page.waitForFunction(() => projectListResources?.palette.data?.[0]?.title === 'Mutated project');
+
+  await page.evaluate(() => {
+    projectListResponse = deferred();
+    projectListResources.portal.reload();
+  });
+  await page.waitForFunction(() => window.projectListCalls === 3);
+  assert.deepEqual(await page.evaluate(() => ({
+    status: projectListResources.portal.status,
+    title: projectListResources.portal.data?.[0]?.title,
+    error: projectListResources.portal.error
+  })), {status: 'ready', title: 'Mutated project', error: null});
+  await page.evaluate(() => projectListResponse.resolve(ok([
+    {id: 'p1', title: 'Updated project', status: 'active', workspacePath: null}
+  ])));
+  await page.waitForFunction(() => projectListResources?.palette.data?.[0]?.title === 'Updated project');
+  assert.equal(await page.evaluate(() => projectListCalls), 3);
+
+  await page.evaluate(() => {
+    projectListResponse = deferred();
+    projectListResources.palette.reload();
+  });
+  await page.waitForFunction(() => window.projectListCalls === 4);
+  await page.evaluate(() => projectListResponse.resolve({ok: false, error: {
+    code: 'temporarily_unavailable', message: 'Project list offline', category: 'system', retryable: false
+  }}));
+  await page.waitForFunction(() => projectListResources?.portal.error === 'Project list offline');
+  assert.deepEqual(await page.evaluate(() => ({
+    status: projectListResources.portal.status,
+    title: projectListResources.portal.data?.[0]?.title,
+    paletteStatus: projectListResources.palette.status
+  })), {status: 'ready', title: 'Updated project', paletteStatus: 'ready'});
+});
+
+test('non-retryable project-list failures preserve their RocError details', async () => {
+  await page.evaluate(() => {
+    clearProjectLists();
+    window.projectListCalls = 0;
+    const failure = {
+      code: 'permission_denied', message: 'Access denied', category: 'permission', retryable: false,
+      userAction: 'Check project access', auditEventId: 'audit-1'
+    };
+    const client = {api: {research: {listProjects: async () => {
+      window.projectListCalls++;
+      return {ok: false, error: failure};
+    }}}};
+    window.mountProjectLists(client);
+  });
+  await page.waitForFunction(() => projectListResources?.portal.status === 'error');
+  assert.equal(await page.evaluate(() => projectListCalls), 1);
+  assert.equal(await page.evaluate(() => projectListResources.portal.error), 'Access denied');
+  assert.deepEqual(await page.evaluate(() => projectListResources.portal.failure), {
+    code: 'permission_denied', message: 'Access denied', category: 'permission', retryable: false,
+    userAction: 'Check project access', auditEventId: 'audit-1'
+  });
+  assert.equal(await page.evaluate(() => window.shouldRetryProjectListError(
+    window.createProjectListError(projectListResources.portal.failure)
+  )), false);
+  assert.equal(await page.evaluate(() => window.shouldRetryProjectListError(window.createProjectListError({
+    code: 'temporarily_unavailable', message: 'Try again', category: 'system', retryable: true
+  }))), true);
 });
 
 async function settingsFixture(projectId = null) {

@@ -3,11 +3,11 @@ import type { ResearchProject } from '../../shared/types';
 import { useAsyncAction, useAsyncResource, type AsyncAction, type AsyncResource } from '../app/use-async-resource';
 import { readStarredProjectIds, writeStarredProjectIds } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
+import { useInvalidateProjectList, useProjectList, type ProjectListResource } from './use-project-list';
 import {
   createProject,
   deleteProject,
   getProject,
-  listProjects,
   updateProject,
   type ProjectCreateInput,
   type ProjectUpdateInput
@@ -16,9 +16,8 @@ import {
 /**
  * Project portal data hooks (P2/T2.1).
  *
- * Wraps `research.projects.*` in the shared async primitives: reads use
- * `useAsyncResource` (keyed, with a reload used by the error bar's retry), writes
- * use `useAsyncAction` (with the backend message passed straight through).
+ * Wraps project-list reads in the shared SWR resource and project writes in
+ * `useAsyncAction` (with the backend message passed straight through).
  *
  * Pinning is a local preference and lives in `ui-state.ts`; it is kept here so
  * components never touch `localStorage` directly.
@@ -37,33 +36,39 @@ export type WorkspacePickResult =
   | { status: 'failed'; message: string };
 
 export type ProjectsState = {
-  list: AsyncResource<ResearchProject[]>;
+  list: ProjectListResource;
   create: AsyncAction<[ProjectCreateInput], ResearchProject>;
   update: AsyncAction<[ProjectUpdateInput], ResearchProject>;
   remove: AsyncAction<[string], { deleted: true; id: string }>;
   pinnedIds: readonly string[];
   togglePin: (projectId: string) => void;
   pickWorkspace: () => Promise<WorkspacePickResult>;
-  /** Re-reads the list after a successful write. */
-  refresh: () => void;
 };
 
 export function useProjects(client: RocClient): ProjectsState {
-  const list = useAsyncResource<ResearchProject[]>('projects', () => listProjects(client), {
-    label: '读取科研项目'
-  });
-  const create = useAsyncAction<[ProjectCreateInput], ResearchProject>(
-    (input) => createProject(client, input),
-    { label: '创建科研项目' }
-  );
-  const update = useAsyncAction<[ProjectUpdateInput], ResearchProject>(
-    (input) => updateProject(client, input),
-    { label: '更新科研项目' }
-  );
-  const remove = useAsyncAction<[string], { deleted: true; id: string }>(
-    (id) => deleteProject(client, id),
-    { label: '删除科研项目' }
-  );
+  const list = useProjectList(client);
+  const invalidateProjectList = useInvalidateProjectList();
+  const create = useAsyncAction<[ProjectCreateInput], ResearchProject>(async (input) => {
+    const result = await createProject(client, input);
+    if (result.ok) {
+      invalidateProjectList();
+    }
+    return result;
+  }, { label: '创建科研项目' });
+  const update = useAsyncAction<[ProjectUpdateInput], ResearchProject>(async (input) => {
+    const result = await updateProject(client, input);
+    if (result.ok) {
+      invalidateProjectList();
+    }
+    return result;
+  }, { label: '更新科研项目' });
+  const remove = useAsyncAction<[string], { deleted: true; id: string }>(async (id) => {
+    const result = await deleteProject(client, id);
+    if (result.ok) {
+      invalidateProjectList();
+    }
+    return result;
+  }, { label: '删除科研项目' });
 
   const [pinnedIds, setPinnedIds] = useState<readonly string[]>(() => readStarredProjectIds());
 
@@ -92,15 +97,7 @@ export function useProjects(client: RocClient): ProjectsState {
     return { status: 'picked', path: result.data.path };
   }, [client]);
 
-  // `list.reload` is a stable callback, so this stays stable too. The resource
-  // objects are memoised inside `use-async-resource`, which is what keeps this
-  // chain from changing identity every render.
-  const reloadList = list.reload;
-  const refresh = useCallback(() => {
-    reloadList();
-  }, [reloadList]);
-
-  return { list, create, update, remove, pinnedIds, togglePin, pickWorkspace, refresh };
+  return { list, create, update, remove, pinnedIds, togglePin, pickWorkspace };
 }
 
 /**

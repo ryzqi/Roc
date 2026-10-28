@@ -20,6 +20,7 @@ export type ConfirmDialogProps = {
   /** Extra line for the part that cannot be undone (e.g. "不删除磁盘目录"). */
   detail?: string;
   confirmLabel: string;
+  confirmDisabled?: boolean;
   cancelLabel?: string;
   tone?: 'default' | 'destructive';
   onConfirm: () => void;
@@ -33,6 +34,7 @@ export function ConfirmDialog({
   message,
   detail,
   confirmLabel,
+  confirmDisabled = false,
   cancelLabel = '取消',
   tone = 'default',
   onConfirm,
@@ -64,11 +66,12 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
+            disabled={confirmDisabled}
             data-testid={`${testId}-confirm`}
             className={
               tone === 'destructive'
-                ? 'h-[var(--control-height)] rounded-control border border-[var(--st-bad-line)] px-3 text-[var(--st-bad)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
-                : 'h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)]'
+                ? 'h-[var(--control-height)] rounded-control border border-[var(--st-bad-line)] px-3 text-[var(--st-bad)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:pointer-events-none disabled:opacity-50'
+                : 'h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:pointer-events-none disabled:opacity-50'
             }
           >
             {confirmLabel}

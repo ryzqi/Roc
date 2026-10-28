@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { errorMessage, runIpcAction, type ActionOutcome, type IpcLikeResult } from './loaded-state';
 
 /**
@@ -118,12 +118,40 @@ export type AsyncAction<Args extends unknown[], Result> = {
   reset: () => void;
 };
 
+type AsyncActionState = {
+  pendingCount: number;
+  latestRequestId: number;
+  error: string | null;
+};
+
+type AsyncActionEvent =
+  | { type: 'start'; requestId: number }
+  | { type: 'finish'; requestId: number; error: string | null }
+  | { type: 'reset'; requestId: number };
+
+const INITIAL_ASYNC_ACTION_STATE: AsyncActionState = { pendingCount: 0, latestRequestId: 0, error: null };
+
+function reduceAsyncActionState(state: AsyncActionState, event: AsyncActionEvent): AsyncActionState {
+  switch (event.type) {
+    case 'start':
+      return { pendingCount: state.pendingCount + 1, latestRequestId: event.requestId, error: null };
+    case 'finish':
+      return {
+        pendingCount: Math.max(0, state.pendingCount - 1),
+        latestRequestId: state.latestRequestId,
+        error: event.requestId === state.latestRequestId ? event.error : state.error
+      };
+    case 'reset':
+      return { ...state, latestRequestId: event.requestId, error: null };
+  }
+}
+
 export function useAsyncAction<Args extends unknown[], Result>(
   action: (...args: Args) => Promise<IpcLikeResult<Result>>,
   _options: AsyncResourceOptions
 ): AsyncAction<Args, Result> {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(reduceAsyncActionState, INITIAL_ASYNC_ACTION_STATE);
+  const requestSequenceRef = useRef(0);
   const actionRef = useRef(action);
   actionRef.current = action;
   const mountedRef = useRef(true);
@@ -137,17 +165,14 @@ export function useAsyncAction<Args extends unknown[], Result>(
 
   const run = useCallback(
     async (...args: Args): Promise<ActionOutcome<Result>> => {
+      const requestId = ++requestSequenceRef.current;
       if (mountedRef.current) {
-        setPending(true);
-        setError(null);
+        dispatch({ type: 'start', requestId });
       }
 
       const result = await runIpcAction(() => actionRef.current(...args));
       if (mountedRef.current) {
-        if (!result.ok) {
-          setError(result.error);
-        }
-        setPending(false);
+        dispatch({ type: 'finish', requestId, error: result.ok ? null : result.error });
       }
       return result;
     },
@@ -155,9 +180,12 @@ export function useAsyncAction<Args extends unknown[], Result>(
   );
 
   const reset = useCallback(() => {
-    setError(null);
+    const requestId = ++requestSequenceRef.current;
+    if (mountedRef.current) {
+      dispatch({ type: 'reset', requestId });
+    }
   }, []);
 
-  // Memoised for the same reason as `useAsyncResource`.
-  return useMemo(() => ({ pending, error, run, reset }), [pending, error, run, reset]);
+  const pending = state.pendingCount > 0;
+  return useMemo(() => ({ pending, error: state.error, run, reset }), [pending, state.error, run, reset]);
 }

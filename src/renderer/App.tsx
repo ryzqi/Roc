@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { SWRConfig } from 'swr';
+import { APP_SWR_CONFIG } from './app/swr-config';
 import { AppShell } from './app/AppShell';
 import { errorMessage } from './app/loaded-state';
 import { createRocClient, type RocClient } from './shared/roc-client';
@@ -30,5 +32,9 @@ export function App(): React.JSX.Element {
     return <StartupFailure title="Roc 无法连接本地后端" message={result.message} />;
   }
 
-  return <AppShell client={result.client} />;
+  return (
+    <SWRConfig value={APP_SWR_CONFIG}>
+      <AppShell client={result.client} />
+    </SWRConfig>
+  );
 }

@@ -135,7 +135,6 @@ export function ProjectPortalView({
       return;
     }
     closeCreate();
-    projects.refresh();
     onOpenProject(created.data.id);
   };
 
@@ -161,7 +160,6 @@ export function ProjectPortalView({
       return;
     }
     setEditing(null);
-    projects.refresh();
   };
 
   return (
@@ -308,6 +306,7 @@ export function ProjectPortalView({
                   archived={isProjectArchived(project)}
                   focused={index === safeFocusedIndex}
                   showStatus
+                  actionsDisabled={busy}
                   onFocus={() => setFocusedIndex(index)}
                   onOpen={() => onOpenProject(project.id)}
                   onTogglePin={() => projects.togglePin(project.id)}
@@ -364,6 +363,7 @@ export function ProjectPortalView({
         }
         detail={archiving !== null && isProjectArchived(archiving) ? '恢复后可继续推进阶段。' : '恢复项目即可重新写入。'}
         confirmLabel={archiving !== null && isProjectArchived(archiving) ? '恢复' : '归档'}
+        confirmDisabled={busy}
         tone="default"
         testId="portal-archive-confirm"
         onCancel={() => setArchiving(null)}
@@ -374,13 +374,10 @@ export function ProjectPortalView({
             return;
           }
           void (async () => {
-            const updated = await projects.update.run({
+            await projects.update.run({
               id: target.id,
               status: isProjectArchived(target) ? 'active' : 'archived'
             });
-            if (updated.ok) {
-              projects.refresh();
-            }
           })();
         }}
       />
@@ -391,6 +388,7 @@ export function ProjectPortalView({
         message={deleting === null ? '' : `将删除 Roc 中的项目记录「${deleting.title}」。`}
         detail="只删除 Roc 中的项目记录，不删除磁盘上的工作目录。此操作不可撤销。"
         confirmLabel="删除记录"
+        confirmDisabled={busy}
         tone="destructive"
         testId="portal-delete-confirm"
         onCancel={() => setDeleting(null)}
@@ -401,10 +399,7 @@ export function ProjectPortalView({
             return;
           }
           void (async () => {
-            const removed = await projects.remove.run(target.id);
-            if (removed.ok) {
-              projects.refresh();
-            }
+            await projects.remove.run(target.id);
           })();
         }}
       />

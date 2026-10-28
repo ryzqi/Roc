@@ -185,13 +185,33 @@ No model pack is available to measure model initialization or inference, so this
 
 **Review:** The initial Spec findings (distinct JSON path compatibility, unknown operator handling, and repeated/main-thread-blocking measurements) were fixed. Follow-up Spec review found that PDF.js inspection failures could still escape; the visual helper now conservatively retains the image. Follow-up Standards review found artifact version bumps could rotate the index parser key; `researchParserIdentityPayload` keeps the existing v2/generation-3 key stable. Both fixes have regression coverage. Final Standards and Spec reviews returned no findings.
 
+## Phase 5 — Renderer resource cache pilot
+
+**Status:** Phase 5 implementation and validation are complete. The initial Spec review found no issues; Standards found one P2: cached project results were hidden while SWR revalidated. The hook now keeps `ready` when cached data exists, and renderer regression coverage verifies results remain visible during refresh and after a failed refresh. The focused Standards follow-up review returned no findings; Phase 5 is ready to commit.
+
+### Evidence and decisions
+
+- `AppShell` mounts `useSearchGroups`, and `ProjectPortalView` mounts when no project is selected. Both read the same unfiltered `research.listProjects()` resource on startup using independent local hooks. The renderer lifecycle test mounts both consumers under one provider and verifies one IPC request.
+- Project-list search and portal filters are local; the SWR key is `['research', 'projects', 'list', { scope: 'all', query: null }]`. A per-renderer-window provider in `App.tsx` scopes the cache. Focus, reconnect, and periodic refresh are disabled; 2-second dedupe is retained; only structured IPC errors marked `retryable` retry.
+- `IpcResourceError` preserves code, category, retryability, user action, and audit event ID. The portal, command palette, project create/update/delete actions, and workspace binding share the list; successful writes invalidate its key. Command-palette-open revalidation remains to catch main-process idea promotions, which have no renderer list-change event.
+- `useAsyncAction` now counts all in-flight requests and lets only the latest invocation publish its error. Project-row writes and confirmation actions disable while a project mutation is pending; workspace directory selection is single-flight.
+
+### Validation
+
+- `pnpm typecheck`, `pnpm test:unit` (468/468), and `pnpm test:renderer` (29/29) pass.
+- `pnpm build` passes. After the build, `pnpm check:renderer-chunks` reports `1,117,304` eager JS bytes across 6 files, `40,395` above the Phase4 `1,076,909`-byte baseline and below the `1,700,000`-byte project limit.
+- Changed-file LSP diagnostics reported 0 findings across 12 paths; post-fix checks for `use-project-list.ts` and the renderer lifecycle test also reported 0 findings. `git diff --check` is clean.
+- Initial review: Spec returned no findings; Standards found one P2 about cached results disappearing during list revalidation. The status mapping and a refresh-success/failure regression fixed it; targeted validation passed again.
+
+**Review:** Initial Spec review returned no findings. Initial Standards review found P2 at `src/renderer/project/use-project-list.ts:38`; fixed by preferring cached data for `ready` status and adding regression assertions for in-flight and failed revalidation. Focused Standards follow-up review returned no findings.
+
 ## Decisions
 
 - Use contract v4 for page-image policy and retain v3 schema reads; omit page PNG only after a successful no-visual-content inspection on high-quality native text. The visual detector fails closed: any unknown PDF.js operator retains the image.
 - Keep both `artifacts/middle.json` and `artifacts/structured.json` as distinct files in v4. Both returned paths were part of the earlier contract, so preserve the visible path shape even though payloads are identical.
 - Keep `researchDerivationGenerationVersion` at 3 and `researchParserVersion` at `roc-research-parser/2` while output contract advances to 4; `ResearchToolchain.identity()` hashes the same v2/generation-3 payload as before, preventing a corpus-wide reparse for artifact-only changes.
 - Do not claim scanned/mixed OCR inference gains from the no-model baseline. Use a real user-installed model pack for any later OCR performance claim; until available, restrict phase 4 to changes whose evidence does not require inference.
-- Treat project list plus command-palette search as the phase 5 cache candidate because both call the same unfiltered `listProjects` IPC resource; first prove simultaneous consumers and invalidate the shared key after successful writes.
+- Adopt SWR for only the global project-list resource: two consumers issue identical initial IPC reads; query/filtering is local, so `scope: all, query: null` is the stable key and successful renderer writes invalidate it. The per-renderer provider, manual palette-open revalidation, retry policy, and eager chunk budget preserve required boundaries.
 - Keep each phase's evidence and adopt/no-go decision in this file so every requested phase has a reviewable, committed outcome.
 
 ## Later phases
@@ -200,7 +220,7 @@ No model pack is available to measure model initialization or inference, so this
 - Phase 2: Committed.
 - Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
 - Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
-- Phase 5: Pending.
+- Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; the focused Standards follow-up review returned no findings; commit pending.
 - Phase 6: Pending.
 - Phase 7: Pending.
 - Phase 8: Pending.

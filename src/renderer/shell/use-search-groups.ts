@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { DrawerSectionId } from '../../shared/surfaces';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
 import type { RocClient } from '../shared/roc-client';
+import { useProjectList } from '../project/use-project-list';
 import { useFileSearchGroups } from '../workspace/use-file-search';
 import type { SearchGroup } from './SearchPaletteModal';
 
@@ -136,10 +137,13 @@ export function useSearchGroups({
     () => client.api.sessions.search({ query: sessionQuery, workspaceScope: 'all', limit: SESSION_GROUP_LIMIT }),
     { label: '搜索会话' }
   );
-  /** Projects come from the portal's own capability; the list is small and unfiltered by the backend. */
-  const projectList = useAsyncResource(`search-projects:${searchToken}`, () => client.api.research.listProjects(), {
-    label: '读取项目'
-  });
+  /** Projects are globally listed; filters stay local to the portal and palette. */
+  const projectList = useProjectList(client);
+  useEffect(() => {
+    if (searchToken > 0) {
+      projectList.reload();
+    }
+  }, [projectList.reload, searchToken]);
   /**
    * Skills (`skills.list`, no arguments) — filtered here because the capability has no query.
    *

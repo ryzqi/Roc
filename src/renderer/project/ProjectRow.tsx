@@ -16,10 +16,11 @@ export type ProjectRowProps = {
   onEdit: () => void;
   onToggleArchive: () => void;
   onDelete: () => void;
+  actionsDisabled?: boolean;
 };
 
 const ROW_ACTION =
-  'flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50';
 
 export function ProjectRow({
   project,
@@ -33,7 +34,8 @@ export function ProjectRow({
   onTogglePin,
   onEdit,
   onToggleArchive,
-  onDelete
+  onDelete,
+  actionsDisabled = false
 }: ProjectRowProps): React.JSX.Element {
   const workspaceName =
     project.workspacePath === null
@@ -112,6 +114,7 @@ export function ProjectRow({
         <button
           type="button"
           onClick={onEdit}
+          disabled={actionsDisabled}
           aria-label={`编辑 ${project.title}`}
           title="编辑"
           data-testid={`portal-card-edit-${project.id}`}
@@ -122,6 +125,7 @@ export function ProjectRow({
         <button
           type="button"
           onClick={onToggleArchive}
+          disabled={actionsDisabled}
           aria-label={archived ? `恢复 ${project.title}` : `归档 ${project.title}`}
           title={archived ? '恢复' : '归档'}
           data-testid={`portal-card-archive-${project.id}`}
@@ -132,10 +136,11 @@ export function ProjectRow({
         <button
           type="button"
           onClick={onDelete}
+          disabled={actionsDisabled}
           aria-label={`删除 ${project.title}`}
           title="删除"
           data-testid={`portal-card-delete-${project.id}`}
-          className="flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-[var(--st-bad)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-[var(--st-bad)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50"
         >
           <Trash2 size={14} aria-hidden="true" />
         </button>
