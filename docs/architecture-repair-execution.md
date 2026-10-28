@@ -253,7 +253,32 @@ Before the incompatibility was discovered, the experimental implementation passe
 ### Validation and review
 
 - `npm test --prefix scripts/benchmarks/phase-7-checkpointer`: 12 passed, 0 failed. The prototype includes a checked-in expected-failure Electron ABI probe.
-- Independent review initially found gaps in cancellation, side-effect replay, and Electron ABI reproducibility. Added AbortSignal cancellation under both savers, a process-restart graph test using Roc's real idempotency middleware, and the native ABI probe. A second review found one stale test count, which was corrected; the reviewer reran all twelve prototype tests successfully. Focused existing `checkpoint-write-order` and `operation-recovery` tests also pass (16/16); `git diff --check` is clean. Phase 7 is ready to commit.
+- Independent review initially found gaps in cancellation, side-effect replay, and Electron ABI reproducibility. Added AbortSignal cancellation under both savers, a process-restart graph test using Roc's real idempotency middleware, and the native ABI probe. A second review found one stale test count, which was corrected; the reviewer reran all twelve prototype tests successfully. Focused existing `checkpoint-write-order` and `operation-recovery` tests also pass (16/16); `git diff --check` is clean. Phase 7 prototype commit is `7d1def8`; execution-record closeout is `d7204b8`.
+
+## Phase 8 — Ordinary process wrapper and substrate convergence
+
+**Status:** Execa is a no-go for production adoption. The isolated comparison and substrate decisions are recorded here; independent review is complete and its stale test-count finding has been corrected. Validation passes; commit remains.
+
+### Execa evaluation
+
+- The isolated workspace `scripts/benchmarks/phase-8-execa/` pins Execa 10.2.1. Its seven tests exercise output equality, error-to-empty behavior, final newline preservation, output cap, timeout escalation, cancellation, descendant handling, and parent-exit cleanup.
+- The initial Darwin arm64 probe logged 408 bytes; a current rerun logged 436. The count is not stable across runs, so each trial compares Node `execFile` and Execa against the same live `/usr/sbin/scutil --proxy` output; both runs matched byte-for-byte with a trailing newline. The probe reports only byte count, newline presence and equality, not configuration content. Execa's default strips the newline, so the compatible call requires `stripFinalNewline: false`. Node `execFile`'s default output cap is 1 MiB; Execa defaults to 100 MiB, so matching requires `maxBuffer: 1024 * 1024`. Both paths use UTF-8 and a 1000ms timeout; errors map to an empty string.
+- `readSystemProxyText()` is 11 lines. An equivalent Execa adapter is 12 lines plus the `execa` import because it keeps the fallback and must state the timeout, 1 MiB cap, and newline option; there is no code reduction. The existing app already resolves Execa 5.1.1 through `shell-env@4.0.3`. Execa 10.2.1 has 12 runtime dependencies; its isolated installation added 18 packages and would create a second Execa major line.
+- Context7's `/sindresorhus/execa` API/termination/output docs (indexed v10.0.1; trial package v10.2.1) document a 5000ms default `forceKillAfterDelay`, `cleanup: true`, and `killDescendants: false`. Enabling descendant cleanup uses a Unix process group, is best-effort, and changes terminal SIGINT forwarding. The trial confirms TERM→KILL escalation and cancellation, but `scutil` does not spawn descendants, so these features add no value at this call site. The package's Node >=22 engine supports Electron 45's Node 24.
+- `npm test --prefix scripts/benchmarks/phase-8-execa`: 7 passed, 0 failed. The test output records only byte count, newline presence and equality; no proxy configuration is printed. Independent review found one stale test count in this record; it was corrected, and the Standards reviewer found no further issues.
+
+### Existing substrate decisions
+
+- **Markdown:** Keep Streamdown for active streaming and memoized `react-markdown` + `remark-gfm` for settled messages/history. `tests/renderer/markdown-renderers.test.mjs` records expected differences on GFM, incomplete syntax, and links/images/HTML; checks unsafe content; and measures DOM, height, and scroll-anchor transitions over a 96-paragraph answer. Changing parsers would need a new compatibility review.
+- **CSV:** Do not remove `csv-parse`, `csv-stringify`, or `d3-dsv` by package-name similarity. They have no application imports, but `ResearchToolchain.typescriptRuntime()` resolves them for user-authored TypeScript experiments and records their paths/versions in runtime identity. `experiment-native-probes.ts` has a separate narrow parser for native probe output.
+- **BibTeX:** Keep `@retorquere/bibtex-parser`; `bibliography-codec.ts` uses verbatim and normalized parses plus custom preamble, duplicate-field, structure, creator, and error-code validation. Citation.js would need the same contracts before comparison or replacement.
+- **ZIP:** Keep yazl and yauzl separately. `export-archive.ts` streams deterministic archives with sorted paths, fixed metadata, hashing, cancellation and 64/512/600 MiB file/total/archive limits. `template-archive.ts` validates extraction paths, UTF-8, member/file/total budgets, CRC and streamed sizes, cancellation, and close errors.
+- **Logging and retry:** Keep `PinoJsonlBackend`'s recursive secret redaction and 8 MiB bounded JSONL destination. Keep the p-retry provider adapter's three retries, 1–4s delays, timeout/error classification, abort signal and metrics.
+- Git's async `execFile` wrapper and research `process-runner` sandbox, process-group management, output limits, and cancellation remain Roc-owned.
+
+### Decision
+
+**Do not adopt Execa.** A contract-preserving adapter removes no code and adds a second major dependency line; the tested defaults also require explicit compatibility settings. Keep the Markdown, experiment CSV, BibTeX, ZIP, Pino, p-retry, Git, and research-runner boundaries documented above. No production dependency, application source, user data, or renderer chunk changed.
 
 ## Decisions
 
@@ -273,4 +298,4 @@ Before the incompatibility was discovered, the experimental implementation passe
 - Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
 - Phase 6: Tokenizer candidate rejected due to Unicode counting incompatibility; review findings addressed and final follow-up found no issues.
 - Phase 7: No-go decision and reproducible prototype are reviewed and committed as `7d1def8`; 12 prototype contracts and 16 focused recovery tests pass.
-- Phase 8: Pending.
+- Phase 8: Execa no-go and retained substrate decisions are recorded; independent review and validation are complete, with commit pending.

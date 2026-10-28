@@ -1,0 +1,12 @@
+{
+  "name": "roc-phase-8-execa-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test contract-comparison.test.mjs"
+  },
+  "dependencies": {
+    "execa": "10.2.1"
+  }
+}
