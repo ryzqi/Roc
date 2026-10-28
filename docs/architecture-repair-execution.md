@@ -272,5 +272,5 @@ Before the incompatibility was discovered, the experimental implementation passe
 - Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
 - Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
 - Phase 6: Tokenizer candidate rejected due to Unicode counting incompatibility; review findings addressed and final follow-up found no issues.
-- Phase 7: Official Checkpointer candidate rejected after isolated recovery/retention/backup/crash/cancellation/side-effect comparison and Electron ABI probe; independent review and commit are in progress.
+- Phase 7: No-go decision and reproducible prototype are reviewed and committed as `7d1def8`; 12 prototype contracts and 16 focused recovery tests pass.
 - Phase 8: Pending.
