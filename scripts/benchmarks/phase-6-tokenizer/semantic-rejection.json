@@ -1,0 +1,133 @@
+{
+  "decision": "no-go",
+  "model": "gpt2",
+  "baselineRef": "5f80ed9cc81fc11c26bc536e5ec0a33289e49308",
+  "baselineSourceSha256": "6a716034e1ac792ad38d4aeae5b81ef4822ae525a88dbf355abae938195a5be3",
+  "baselineLockfileSha256": "b6d1356a4e3efd39a065c5fa774e6aee913b2faf77af8be064dbf6482a680a19",
+  "workingLockfileSha256": "b6d1356a4e3efd39a065c5fa774e6aee913b2faf77af8be064dbf6482a680a19",
+  "benchmarkSha256": "86654fc8c5c2bee143c31f55242180e64c8cb82dce11429508aa6e5fc65c8dfe",
+  "corpusSha256": "3a2b306e404a413613e3e8e21c22081425bde575c3efdc35eceb5ddf4d4dfa09",
+  "candidatePackageSha256": "ac1808a5b5b23e268bde3ae3ab28b421ebd1d489cf14bd4515de4702cc626708",
+  "baselinePackageSha256": "5040ae37366971233fd53ef33360bc8d94159fa55c0c541f5663980b53b6b3b3",
+  "mergeCache": "off",
+  "environment": {
+    "node": "v24.22.0",
+    "electron": "45.0.0"
+  },
+  "baselineCounts": {
+    "paperEnglish": {
+      "estimated": false,
+      "tokens": 212
+    },
+    "chinese": {
+      "estimated": false,
+      "tokens": 205
+    },
+    "code": {
+      "estimated": false,
+      "tokens": 1361
+    },
+    "jsonSchema": {
+      "estimated": false,
+      "tokens": 247
+    },
+    "toolOutput": {
+      "estimated": false,
+      "tokens": 354
+    },
+    "unicode": {
+      "estimated": false,
+      "tokens": 83
+    },
+    "empty": {
+      "estimated": false,
+      "tokens": 0
+    },
+    "specialOnly": {
+      "estimated": false,
+      "tokens": 36
+    },
+    "loneSurrogate": {
+      "estimated": false,
+      "tokens": 5
+    },
+    "emoji": {
+      "estimated": false,
+      "tokens": 33
+    },
+    "mixed": {
+      "estimated": false,
+      "tokens": 16
+    },
+    "bomAfterSpace": {
+      "estimated": false,
+      "tokens": 5
+    },
+    "bomAfterTab": {
+      "estimated": false,
+      "tokens": 5
+    },
+    "repeatedBom": {
+      "estimated": false,
+      "tokens": 5000
+    }
+  },
+  "candidateCounts": {
+    "paperEnglish": {
+      "estimated": false,
+      "tokens": 212
+    },
+    "chinese": {
+      "estimated": false,
+      "tokens": 205
+    },
+    "code": {
+      "estimated": false,
+      "tokens": 1361
+    },
+    "jsonSchema": {
+      "estimated": false,
+      "tokens": 247
+    },
+    "toolOutput": {
+      "estimated": false,
+      "tokens": 354
+    },
+    "unicode": {
+      "estimated": false,
+      "tokens": 83
+    },
+    "empty": {
+      "estimated": false,
+      "tokens": 0
+    },
+    "specialOnly": {
+      "estimated": false,
+      "tokens": 36
+    },
+    "loneSurrogate": {
+      "estimated": false,
+      "tokens": 5
+    },
+    "emoji": {
+      "estimated": false,
+      "tokens": 33
+    },
+    "mixed": {
+      "estimated": false,
+      "tokens": 16
+    },
+    "bomAfterSpace": {
+      "estimated": false,
+      "tokens": 4
+    },
+    "bomAfterTab": {
+      "estimated": false,
+      "tokens": 5
+    },
+    "repeatedBom": {
+      "estimated": false,
+      "tokens": 4000
+    }
+  }
+}

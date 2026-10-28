@@ -100,6 +100,15 @@ test('concurrent first counts across counters return exact cl100k text counts', 
   assert.equal(new Set(results.map((result) => result.tokens)).size, 1);
 });
 
+test('official counters preserve whitespace-sensitive exact counts', async () => {
+  for (const modelId of ['gpt-3.5-turbo', 'gpt-4o']) {
+    const instance = counter({ modelId });
+    assert.deepEqual(await instance.countText(' \uFEFFa'), { estimated: false, tokens: 3 });
+    assert.deepEqual(await instance.countText(' \t\uFEFF'), { estimated: false, tokens: 2 });
+    assert.deepEqual(await instance.countText(' \uFEFFa'.repeat(1000)), { estimated: false, tokens: 3000 });
+  }
+});
+
 test('a failed lazy ranks import can be retried with the same counter', () => {
   const loaderPath = join(directory, 'fail-one-rank-load.mjs');
   const runnerPath = join(directory, 'retry-rank-load.mjs');

@@ -205,6 +205,35 @@ No model pack is available to measure model initialization or inference, so this
 
 **Review:** Initial Spec review returned no findings. Initial Standards review found P2 at `src/renderer/project/use-project-list.ts:38`; fixed by preferring cached data for `ready` status and adding regression assertions for in-flight and failed revalidation. Focused Standards follow-up review returned no findings; commit `03ed314`.
 
+## Phase 6 — Tokenizer comparison
+
+**Status:** No-go for production adoption: independent review found exact-count incompatibilities. The existing `js-tiktoken` implementation and dependency are retained; the final follow-up review found no issues.
+
+The exploratory comparison preserved Roc's `js-tiktoken/lite` model-to-encoding mapping and substituted a hand-built candidate loader. It tested six encodings with special-token strings, malformed UTF-16, multilingual text, tool JSON, published Chinese and English abstracts, and a synthetic long tool result. The sampled inputs agreed, but that corpus omitted important Unicode whitespace. The benchmark assembled the candidate from the baseline source and a replacement loader rather than measuring the final production source, so the performance measurements below are exploratory rather than evidence of real production-path gains.
+
+Independent review found that `gpt-tokenizer@4.1.0` differs from `js-tiktoken@1.0.21` for U+FEFF: for both `cl100k_base` and `o200k_base`, `" \uFEFFa"` counts as 3 tokens with the current implementation and 2 with the candidate; repeating it 1,000 times yields 3,000 versus 2,000. Conversely, `" \t\uFEFF"` produces 2 versus 3. These differences can change compaction decisions while being reported as exact. `scripts/benchmarks/phase-6-tokenizer/incompatibility.mjs` reproduces the discrepancies in Electron, and the retained production counter now has a regression test for these inputs. The candidate is removed from production dependencies. The temporary candidate's global merge cache was disabled during the comparison because it retains input fragments across independent counters.
+
+The candidate has no additional runtime dependencies and occupies 30,544 KiB installed on this machine; `js-tiktoken` occupies 22,008 KiB. These are installed-package sizes, not measurements of the packaged application.
+
+### Measurements and validation
+
+The comparison ran on Apple M1 Pro, macOS arm64, Electron 45.0.0 (Node v24.22.0), with ten fresh processes per implementation and model and twelve warm iterations per process. Its fixed source baseline is `5f80ed9cc81fc11c26bc536e5ec0a33289e49308`; corpus SHA-256 is `487744bd6e00c710efc258a41cc401e2f268053b1c9342a3b45d8546bfe74fce`. All six encodings agreed on the listed inputs, 256 generated Unicode/special-token cases per encoding, message totals and budget profiles. This is bounded evidence, not a proof of equivalence for all strings.
+
+| Exploratory candidate cache: disabled | Baseline p50/p95 | Candidate p50/p95 |
+| :--- | :--- | :--- |
+| GPT-3.5 cold first text | 110.589 / 110.965 ms | 36.205 / 36.703 ms |
+| GPT-3.5 first message set | 563.808 / 576.364 ms | 87.856 / 89.659 ms |
+| GPT-3.5 peak RSS | 242,864 / 244,208 KiB | 211,504 / 213,168 KiB |
+| GPT-4o cold first text | 222.954 / 227.568 ms | 64.509 / 65.866 ms |
+| GPT-4o first message set | 624.453 / 642.901 ms | 106.320 / 107.337 ms |
+| GPT-4o peak RSS | 282,880 / 283,456 KiB | 225,600 / 226,656 KiB |
+
+The first message set includes a generated, repetitive 613,293-byte tool result; it is deliberately above Roc's 131,072-byte cache limit and is not representative of the actual compaction path, which can externalize large tool results. The GPT-4o first-message timer-delay p50/p95 was 624.542/642.987 ms baseline versus 106.395/107.413 ms candidate. The cached short-message p50 was 0.028 ms versus 0.027 ms. With the candidate's default global merge cache enabled, GPT-4o first-message p50 was 30.443 ms, but that cache retains input fragments globally. Both modes and raw process samples are recorded in `scripts/benchmarks/phase-6-tokenizer/results-*.json`; the recorded source and lockfile hashes refer to the baseline, and the historical results lack a benchmark-script hash and installed dependency graph. They are therefore not fully reproducible evidence and cannot justify adoption. The updated comparison includes the counterexamples, exits nonzero on mismatch, and produces a machine-readable rejection; a separate probe verifies the two common encodings.
+
+Before the incompatibility was discovered, the experimental implementation passed `pnpm test:unit` (470/470), `pnpm test:renderer` (29/29), `pnpm check:ipc`, `pnpm build`, `pnpm check:renderer-chunks` (1,117,304 eager bytes), `pnpm smoke:performance`, `pnpm smoke:electron` (62/62 assertions), `pnpm package:dir`, and `pnpm verify:native-packaging`. The experimental arm64 app's packaged Electron loaded all six candidate encodings; these successful checks did not establish semantic equivalence. Final validation of the retained implementation passed `pnpm test:unit` (469/469), `pnpm typecheck`, `pnpm build`, and `pnpm check:renderer-chunks` (1,117,304 eager bytes). The independent Electron reproducer confirmed all six listed mismatch assertions.
+
+**Review:** Independent review found Unicode counting and initialization-retry incompatibilities. A second reviewer identified missing counterexamples and incomplete historical benchmark provenance before its process ended with SIGTERM; the counterexamples and machine-readable rejection were added and historical provenance limits disclosed. A separate follow-up review of the final no-go state found no issues.
+
 ## Decisions
 
 - Use contract v4 for page-image policy and retain v3 schema reads; omit page PNG only after a successful no-visual-content inspection on high-quality native text. The visual detector fails closed: any unknown PDF.js operator retains the image.
@@ -221,6 +250,6 @@ No model pack is available to measure model initialization or inference, so this
 - Phase 3: Fuzzysort evaluation is a no-go for production adoption because its quality gain comes with material latency and memory regressions against the observed baseline; final review passed.
 - Phase 4: Implementation and validation complete; all original and follow-up review findings are fixed; final Standards and Spec reviews returned no findings; committed as `65c87c7`.
 - Phase 5: Implementation and validation complete; initial Spec review found no issues; the one Standards P2 about cached-list visibility is fixed and revalidated; focused Standards follow-up found no findings; committed as `03ed314`.
-- Phase 6: Pending.
+- Phase 6: Tokenizer candidate rejected due to Unicode counting incompatibility; review findings addressed and final follow-up found no issues.
 - Phase 7: Pending.
 - Phase 8: Pending.
