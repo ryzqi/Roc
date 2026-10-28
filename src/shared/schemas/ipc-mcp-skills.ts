@@ -16,6 +16,64 @@ export const mcpServerConfigSchema = z
   })
   .strict();
 
+export const mcpServerTransportFieldsSchema = z
+  .object({
+    transport: mcpServerConfigSchema.shape.transport,
+    url: z.string().optional(),
+    command: z.string().optional()
+  })
+  .superRefine((server, context) => {
+    if (server.transport === 'stdio' && !server.command?.trim()) {
+      context.addIssue({ code: 'custom', path: ['command'], message: '请填写本地服务的启动命令。' });
+    }
+    if ((server.transport === 'http' || server.transport === 'sse') && !server.url?.trim()) {
+      context.addIssue({ code: 'custom', path: ['url'], message: '请填写服务地址。' });
+    }
+  });
+
+const mcpServerEditorIdSchema = z.string().superRefine((value, context) => {
+  if (value.trim().length === 0) {
+    context.addIssue({ code: 'custom', message: 'id 不能为空。' });
+  } else if (!/^[A-Za-z0-9._-]+$/u.test(value.trim())) {
+    context.addIssue({ code: 'custom', message: 'id 只允许字母、数字、点、下划线和短横线。' });
+  }
+});
+
+export const mcpServerEditorFieldsSchema = z
+  .object({
+    id: mcpServerEditorIdSchema,
+    name: z.string().refine((value) => value.trim().length > 0, { error: '名称不能为空。' }),
+    enabled: z.boolean(),
+    transport: mcpServerConfigSchema.shape.transport,
+    riskLevel: mcpServerConfigSchema.shape.riskLevel,
+    url: z.string(),
+    command: z.string(),
+    allowedTools: z.array(z.string().min(1))
+  })
+  .superRefine((server, context) => {
+    const transportResult = mcpServerTransportFieldsSchema.safeParse(server);
+    if (!transportResult.success) {
+      for (const issue of transportResult.error.issues) {
+        context.addIssue({ code: 'custom', path: issue.path, message: issue.message });
+      }
+    }
+
+    if (server.transport !== 'stdio' && server.url.trim().length > 0) {
+      try {
+        const parsed = new URL(server.url.trim());
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          context.addIssue({ code: 'custom', path: ['url'], message: 'URL 必须是 http 或 https。' });
+        }
+      } catch {
+        context.addIssue({ code: 'custom', path: ['url'], message: 'URL 不是合法的绝对地址。' });
+      }
+    }
+
+    if (new Set(server.allowedTools).size !== server.allowedTools.length) {
+      context.addIssue({ code: 'custom', path: ['allowedTools'], message: '允许的工具名有重复项。' });
+    }
+  });
+
 export const mcpServerSnapshotSchema = z
   .object({
     id: z.string(),

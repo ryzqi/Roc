@@ -1,5 +1,6 @@
 import {
   mcpServerConfigSchema,
+  mcpServerTransportFieldsSchema,
   mcpServersConfigSchema
 } from '../../shared/schemas/ipc-mcp-skills';
 import type { ApprovalMode, McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
@@ -121,16 +122,15 @@ export class McpService {
     }
 
     const checked = server.transport === 'stdio' ? ['id', 'name', 'transport', 'command'] : ['id', 'name', 'transport', 'url'];
-    const missingTransportField =
-      (server.transport === 'stdio' && server.command === undefined) ||
-      ((server.transport === 'http' || server.transport === 'sse') && server.url === undefined);
-    if (missingTransportField) {
-      return {
-        serverId,
-        status: 'invalid',
-        checked,
-        error: server.transport === 'stdio' ? 'stdio MCP server 缺少 command。' : 'HTTP/SSE MCP server 缺少 url。'
-      };
+    const missingTransportField = this.missingTransportField(server);
+    if (missingTransportField !== null) {
+      let error: string;
+      if (missingTransportField === 'command') {
+        error = 'stdio MCP server 缺少 command。';
+      } else {
+        error = 'HTTP/SSE MCP server 缺少 url。';
+      }
+      return { serverId, status: 'invalid', checked, error };
     }
 
     return {
@@ -150,8 +150,15 @@ export class McpService {
     this.configService.saveMcpConfig(parsed);
   }
 
+  private missingTransportField(server: McpServerConfig): 'command' | 'url' | null {
+    const result = mcpServerTransportFieldsSchema.safeParse(server);
+    if (result.success) return null;
+    return result.error.issues[0]?.path[0] === 'command' ? 'command' : 'url';
+  }
+
   private validateTransportFields(server: McpServerConfig): void {
-    if (server.transport === 'stdio' && server.command === undefined) {
+    const missingField = this.missingTransportField(server);
+    if (missingField === 'command') {
       throw new RocDomainError({
         code: 'mcp_stdio_command_missing',
         message: 'stdio MCP server 必须配置 command。',
@@ -160,7 +167,7 @@ export class McpService {
         userAction: '请填写本地 MCP server 启动命令。'
       });
     }
-    if ((server.transport === 'http' || server.transport === 'sse') && server.url === undefined) {
+    if (missingField === 'url') {
       throw new RocDomainError({
         code: 'mcp_url_missing',
         message: 'HTTP/SSE MCP server 必须配置 url。',

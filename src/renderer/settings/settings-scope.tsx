@@ -11,12 +11,12 @@ import {
   cloneDraft,
   diffDraft,
   draftFromSnapshot,
-  validateDraft,
   type DraftDiff,
   type DraftIssue,
   type SettingsDraft,
   type SettingsSectionId
 } from './settings-rules';
+import { validateDraft } from './settings-validation';
 
 /**
  * The settings draft (P8/T8.2–T8.4).

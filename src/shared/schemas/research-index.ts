@@ -2,12 +2,21 @@ import { z } from 'zod';
 
 const identifier = z.string().min(1);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
-const pattern = z.string().min(1).max(1000).refine((value) => !value.startsWith('/') && !/[\\\u0000-\u001f]/u.test(value) && !value.split('/').includes('..'), 'Index patterns must be relative.');
+const pattern = z.string().min(1).max(1000).refine((value) => !value.startsWith('/') && !/[\\\u0000-\u001f]/u.test(value) && !value.split('/').includes('..'), '索引模式必须是相对路径。');
 export const researchIndexKindSchema = z.enum(['markdown', 'latex', 'bibliography', 'csv', 'pdf', 'image', 'html']);
 export const researchIndexOptionsSchema = z.object({
-  kinds: z.array(researchIndexKindSchema).min(1).refine((values) => new Set(values).size === values.length),
-  include: z.array(pattern).min(1).max(100), exclude: z.array(pattern).max(100),
-  watch: z.boolean(), paused: z.boolean(), embeddingConfigId: identifier.nullable()
+  kinds: z.array(researchIndexKindSchema).min(1, { error: '至少选择一种索引文件类型。' }).refine(
+    (values) => new Set(values).size === values.length,
+    { error: '索引文件类型不能重复。' }
+  ),
+  include: z.array(pattern).min(1, { error: '包含模式至少要有 1 条。' }).max(100, { error: '包含/排除模式各最多 100 条。' }),
+  exclude: z.array(pattern).max(100, { error: '包含/排除模式各最多 100 条。' }),
+  watch: z.boolean(),
+  paused: z.boolean(),
+  embeddingConfigId: z.string().refine(
+    (value) => value.trim().length > 0,
+    { error: '嵌入配置引用不能是空字符串。' }
+  ).nullable()
 }).strict();
 export const defaultResearchIndexOptions: z.infer<typeof researchIndexOptionsSchema> = {
   kinds: ['markdown', 'latex', 'bibliography', 'csv', 'pdf', 'image'], include: ['**/*'],

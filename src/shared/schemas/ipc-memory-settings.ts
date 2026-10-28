@@ -410,6 +410,17 @@ export const providerConnectionOptionsSchema = z
   })
   .strict();
 
+function findDuplicateModelIds(models: readonly { id: string }[], skipBlank = false): Array<{ index: number; id: string }> {
+  const seen = new Set<string>();
+  const duplicates: Array<{ index: number; id: string }> = [];
+  models.forEach((model, index) => {
+    if (skipBlank && model.id.trim().length === 0) return;
+    if (seen.has(model.id)) duplicates.push({ index, id: model.id });
+    seen.add(model.id);
+  });
+  return duplicates;
+}
+
 export const providerConfigSchema = z
   .object({
     id: z.string().min(1),
@@ -437,18 +448,56 @@ export const providerConfigSchema = z
   })
   .strict()
   .superRefine((provider, context) => {
-    const seenModelIds = new Set<string>();
-    provider.models.forEach((model, index) => {
-      if (seenModelIds.has(model.id)) {
-        context.addIssue({
-          code: 'custom',
-          path: ['models', index, 'id'],
-          message: `Provider model ID must be unique: ${model.id}`
-        });
-      }
-      seenModelIds.add(model.id);
-    });
+    for (const duplicate of findDuplicateModelIds(provider.models)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['models', duplicate.index, 'id'],
+        message: `Provider model ID must be unique: ${duplicate.id}`
+      });
+    }
   });
+
+const nonBlankProviderField = (message: string) =>
+  z.string().refine((value) => value.trim().length > 0, { error: message });
+
+const providerModelSaveSchema = providerModelSchema.safeExtend({
+  id: nonBlankProviderField('模型标识不能为空。'),
+  displayName: nonBlankProviderField('模型显示名不能为空。')
+});
+
+export const providerConfigSaveSchema = z
+  .object({
+    ...providerConfigSchema.shape,
+    id: nonBlankProviderField('提供商标识不能为空。'),
+    name: nonBlankProviderField('供应商名称不能为空。'),
+    endpoint: nonBlankProviderField('接入地址不能为空。'),
+    models: z.array(providerModelSaveSchema)
+  })
+  .strict()
+  .superRefine((provider, context) => {
+    for (const duplicate of findDuplicateModelIds(provider.models, true)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['models', duplicate.index, 'id'],
+        message: `同一供应商下模型标识重复：${duplicate.id}`
+      });
+    }
+  });
+
+export const providersSaveSchema = z.array(providerConfigSaveSchema).superRefine((providers, context) => {
+  const providerIds = new Set<string>();
+  providers.forEach((provider, index) => {
+    if (provider.id.trim().length === 0) return;
+    if (providerIds.has(provider.id)) {
+      context.addIssue({
+        code: 'custom',
+        path: [index, 'id'],
+        message: `提供商标识重复：${provider.id}`
+      });
+    }
+    providerIds.add(provider.id);
+  });
+});
 
 export const providerTestResultSchema = z
   .object({
@@ -485,7 +534,7 @@ export const shortcutsConfigSchema = z
 export const settingsSaveRequestSchema = z
   .object({
     settings: appSettingsSchema,
-    providers: z.array(providerConfigSchema),
+    providers: providersSaveSchema,
     defaultModelId: z.string().nullable(),
     permissions: permissionsConfigSchema
   })

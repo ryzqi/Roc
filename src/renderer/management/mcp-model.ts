@@ -4,6 +4,7 @@ import type {
   McpServerConfig,
   McpServersConfig
 } from '../../shared/types';
+import { mcpServerEditorFieldsSchema } from '../../shared/schemas/ipc-mcp-skills';
 
 /**
  * MCP projections (P9/T9.3).
@@ -51,8 +52,6 @@ export const mcpApprovalModeLabels: Readonly<Record<McpServersConfig['approvalMo
  * slash in it would produce a tool the model cannot name reliably. This is a UI-level rule and
  * is registered as such (F24) — it is stricter than the schema, never looser.
  */
-const SERVER_ID_PATTERN = /^[A-Za-z0-9._-]+$/u;
-
 export type McpDraft = {
   id: string;
   name: string;
@@ -101,48 +100,40 @@ export function linesToList(text: string): string[] {
 export type McpDraftIssue = { field: keyof McpDraft | 'allowedToolsText'; message: string };
 
 /**
- * Mirrors `McpService.validateTransportFields` (stdio → command, http/sse → url) and adds two
- * stricter, purely client-side checks: the id pattern above, and a parseable URL (the schema
- * only checks presence, so a typo would surface as a connect failure instead of a field error).
+ * Uses the shared editor schema so field errors and transport constraints stay aligned with Main.
  */
 export function validateMcpDraft(draft: McpDraft): McpDraftIssue[] {
-  const issues: McpDraftIssue[] = [];
-  const id = draft.id.trim();
-  if (id.length === 0) {
-    issues.push({ field: 'id', message: 'id 不能为空。' });
-  } else if (!SERVER_ID_PATTERN.test(id)) {
-    issues.push({
-      field: 'id',
-      message: 'id 只允许字母、数字、点、下划线和短横线。'
-    });
-  }
-  if (draft.name.trim().length === 0) {
-    issues.push({ field: 'name', message: '名称不能为空。' });
-  }
-  if (draft.transport === 'stdio') {
-    if (draft.command.trim().length === 0) {
-      issues.push({ field: 'command', message: '请填写本地服务的启动命令。' });
+  const result = mcpServerEditorFieldsSchema.safeParse({
+    id: draft.id,
+    name: draft.name,
+    enabled: draft.enabled,
+    transport: draft.transport,
+    riskLevel: draft.riskLevel,
+    url: draft.url,
+    command: draft.command,
+    allowedTools: linesToList(draft.allowedToolsText)
+  });
+  if (result.success) return [];
+
+  return result.error.issues.flatMap((issue): McpDraftIssue[] => {
+    const field = issue.path[0];
+    if (field === 'allowedTools') {
+      return [{ field: 'allowedToolsText', message: issue.message }];
     }
-  } else {
-    const url = draft.url.trim();
-    if (url.length === 0) {
-      issues.push({ field: 'url', message: '请填写服务地址。' });
-    } else {
-      try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          issues.push({ field: 'url', message: 'URL 必须是 http 或 https。' });
-        }
-      } catch {
-        issues.push({ field: 'url', message: 'URL 不是合法的绝对地址。' });
-      }
+    if (
+      field === 'id' ||
+      field === 'name' ||
+      field === 'enabled' ||
+      field === 'transport' ||
+      field === 'riskLevel' ||
+      field === 'url' ||
+      field === 'command' ||
+      field === 'allowedToolsText'
+    ) {
+      return [{ field, message: issue.message }];
     }
-  }
-  const duplicates = linesToList(draft.allowedToolsText);
-  if (new Set(duplicates).size !== duplicates.length) {
-    issues.push({ field: 'allowedToolsText', message: '允许的工具名有重复项。' });
-  }
-  return issues;
+    return [];
+  });
 }
 
 export function issueFor(issues: readonly McpDraftIssue[], field: McpDraftIssue['field']): string | null {
