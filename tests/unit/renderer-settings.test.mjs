@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import * as esbuild from 'esbuild';
 
 /**
- * Unit tests for the settings centre's pure rules (P8/T8.1–T8.4).
+ * Unit tests for the settings centre's pure rules and shared-schema validation (P8/T8.1–T8.4).
  *
  * Same discipline as P6/P7: every rule the surface obeys is a function of the real
  * contract, and each test pins a *contract* subtlety a component would otherwise
@@ -22,25 +22,37 @@ import * as esbuild from 'esbuild';
  *     trip export → import reproduces the document.
  *
  * `settings-rules.ts` imports only types plus the dependency-free `provider-model-key`
- * helper, so esbuild yields a bundle with no zod and no React.
+ * helper, so esbuild yields a bundle with no zod and no React. `settings-validation.ts`
+ * is bundled separately so validation tests exercise the shared schemas used by Renderer.
  */
 
 let rules;
+let validation;
 let tempDir;
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'roc-settings-rules-'));
-  const outfile = join(tempDir, 'settings-rules.mjs');
-  await esbuild.build({
-    entryPoints: ['src/renderer/settings/settings-rules.ts'],
-    outfile,
+  const rulesOutfile = join(tempDir, 'settings-rules.mjs');
+  const validationOutfile = join(tempDir, 'settings-validation.mjs');
+  const buildOptions = {
     bundle: true,
     format: 'esm',
     platform: 'neutral',
     target: 'node22',
     logLevel: 'silent'
+  };
+  await esbuild.build({
+    ...buildOptions,
+    entryPoints: ['src/renderer/settings/settings-rules.ts'],
+    outfile: rulesOutfile
   });
-  rules = await import(outfile);
+  await esbuild.build({
+    ...buildOptions,
+    entryPoints: ['src/renderer/settings/settings-validation.ts'],
+    outfile: validationOutfile
+  });
+  rules = await import(rulesOutfile);
+  validation = await import(validationOutfile);
 });
 
 after(() => {
@@ -177,28 +189,28 @@ test('every section id in the normative order is addressable', () => {
 test('a duplicate model id inside one provider is flagged before the backend rejects it', () => {
   const next = draft();
   next.providers[0].models = [model('same'), model('same')];
-  const issues = rules.validateDraft(next);
+  const issues = validation.validateDraft(next);
   assert.ok(issues.some((issue) => issue.path === 'providers.0.models.1.id' && issue.message.includes('重复')));
 });
 
 test('a thinking budget that reaches maxTokens is flagged (backend superRefine)', () => {
   const next = draft();
   next.providers[0].models[0].options = { maxTokens: 2048, anthropicThinking: { mode: 'enabled', budgetTokens: 2048 } };
-  const issues = rules.validateDraft(next);
+  const issues = validation.validateDraft(next);
   assert.ok(issues.some((issue) => issue.path.includes('anthropicThinking.budgetTokens')));
 });
 
 test('a default model whose provider is disabled is flagged, because the backend nulls it', () => {
   const next = draft();
   next.providers[0].enabled = false;
-  const issues = rules.validateDraft(next);
+  const issues = validation.validateDraft(next);
   assert.ok(issues.some((issue) => issue.path === 'defaultModelId'));
 });
 
 test('a default model whose model is disabled is flagged too', () => {
   const next = draft();
   next.providers[0].models[0].enabled = false;
-  assert.ok(rules.validateDraft(next).some((issue) => issue.path === 'defaultModelId'));
+  assert.ok(validation.validateDraft(next).some((issue) => issue.path === 'defaultModelId'));
 });
 
 test('index options must keep at least one kind and one include pattern', () => {
@@ -214,7 +226,7 @@ test('index options must keep at least one kind and one include pattern', () => 
       embeddingConfigId: null
     }
   });
-  const issues = rules.validateDraft(next);
+  const issues = validation.validateDraft(next);
   assert.ok(issues.some((issue) => issue.path === 'index.kinds'));
   assert.ok(issues.some((issue) => issue.path === 'index.include'));
 });
@@ -224,14 +236,14 @@ test('an empty endpoint / name / model display name are field errors, not opaque
   next.providers[0].endpoint = '   ';
   next.providers[0].name = '';
   next.providers[0].models[0].displayName = '';
-  const paths = rules.validateDraft(next).map((issue) => issue.path);
+  const paths = validation.validateDraft(next).map((issue) => issue.path);
   assert.ok(paths.includes('providers.0.endpoint'));
   assert.ok(paths.includes('providers.0.name'));
   assert.ok(paths.includes('providers.0.models.0.displayName'));
 });
 
 test('a clean draft has no issues', () => {
-  assert.deepEqual(rules.validateDraft(draft()), []);
+  assert.deepEqual(validation.validateDraft(draft()), []);
 });
 
 /* ------------------------------------------------------------------ */
@@ -388,7 +400,9 @@ test('a new provider gets a unique id and a credential ref pointing at its own s
   // A freshly created provider has an empty name, which the field validation flags before it
   // can reach the backend's stricter schema.
   assert.ok(
-    rules.validateDraft(draft({ providers: [first], defaultModelId: null })).some((issue) => issue.path === 'providers.0.name')
+    validation
+      .validateDraft(draft({ providers: [first], defaultModelId: null }))
+      .some((issue) => issue.path === 'providers.0.name')
   );
 });
 
