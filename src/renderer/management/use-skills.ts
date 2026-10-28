@@ -1,3 +1,4 @@
+import useSWR from 'swr';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   BuiltinSkillsStatus,
@@ -7,9 +8,11 @@ import type {
 } from '../../shared/types';
 import type { AsyncStatus } from '../app/use-async-resource';
 import { errorMessage } from '../app/loaded-state';
+import { IpcResourceError } from '../app/ipc-resource';
 import type { RocClient } from '../shared/roc-client';
 import { notifySettingsChanged } from '../shared/settings-events';
 import { sortEntries } from './skill-model';
+import { SKILLS_LIST_RESOURCE_KEY, loadSkillsList } from './skills-resource';
 import { useOptimisticFlags } from './use-optimistic-flags';
 import {
   checkBuiltinSkills,
@@ -17,7 +20,6 @@ import {
   getBuiltinSkillsStatus,
   importSkill,
   listSkillFiles,
-  listSkills,
   readSkillFile,
   restoreBuiltinSkillSource,
   setBuiltinSkillsAutoUpdate,
@@ -103,10 +105,23 @@ export type SkillsStore = {
 };
 
 export function useSkills(client: RocClient): SkillsStore {
-  const [skills, setSkills] = useState<SkillSnapshot[]>([]);
-  const [status, setStatus] = useState<AsyncStatus>('loading');
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
+  const skillsResource = useSWR<SkillSnapshot[], IpcResourceError>(
+    SKILLS_LIST_RESOURCE_KEY,
+    () => loadSkillsList(client),
+    { keepPreviousData: false, shouldRetryOnError: false }
+  );
+  const skills = skillsResource.data ?? [];
+  let status: AsyncStatus;
+  if (skillsResource.isValidating) {
+    status = 'loading';
+  } else if (skillsResource.error !== undefined) {
+    status = 'error';
+  } else if (skillsResource.data !== undefined) {
+    status = 'ready';
+  } else {
+    status = 'idle';
+  }
+  const error = skillsResource.isValidating ? null : skillsResource.error?.message ?? null;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirPath, setDirPathState] = useState('');
@@ -121,8 +136,8 @@ export function useSkills(client: RocClient): SkillsStore {
   const [previewStatus, setPreviewStatus] = useState<AsyncStatus>('idle');
   const [previewError, setPreviewError] = useState<string | null>(null);
 
-  // Destructured so the load effect can depend on `clearFlags` (stable) instead of the whole object
-  // (whose identity changes whenever a flag moves) — depending on the object re-ran the read.
+  // Keep `clearFlags` stable for the list-snapshot effect; list data changes clear flags without
+  // tying the effect to the whole flags object.
   const { valueFor: flagValueFor, set: setFlag, clear: clearFlags } = useOptimisticFlags();
   const [togglePending, setTogglePending] = useState(false);
   const [importPending, setImportPending] = useState(false);
@@ -142,39 +157,15 @@ export function useSkills(client: RocClient): SkillsStore {
   const [builtinRestoreSourceId, setBuiltinRestoreSourceId] = useState<string | null>(null);
 
   const reload = useCallback(() => {
-    setNonce((current) => current + 1);
-  }, []);
+    void skillsResource.mutate().catch(() => undefined);
+  }, [skillsResource.mutate]);
 
   useEffect(() => {
-    let cancelled = false;
-    setStatus('loading');
-    void (async () => {
-      try {
-        const result = await listSkills(client);
-        if (cancelled) {
-          return;
-        }
-        if (!result.ok) {
-          setStatus('error');
-          setError(result.error.message);
-          return;
-        }
-        setSkills(result.data);
-        // A fresh read is the authority again: drop any pending toggle intent.
-        clearFlags();
-        setStatus('ready');
-        setError(null);
-      } catch (caught) {
-        if (!cancelled) {
-          setStatus('error');
-          setError(errorMessage(caught));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [client, nonce, clearFlags]);
+    if (skillsResource.data !== undefined) {
+      // A fresh list is the authority again: drop any pending toggle intent.
+      clearFlags();
+    }
+  }, [skillsResource.data, clearFlags]);
 
   /** Keep a valid selection when the list changes underneath (a delete, or a failed import). */
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
 import type {
   ResearchBibliographyFormat,
   ResearchClaim,
@@ -12,6 +13,7 @@ import type {
 } from '../../shared/types';
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
+import { IpcResourceError, unwrapIpcResource } from '../app/ipc-resource';
 import type { IpcLikeResult } from '../app/loaded-state';
 import { runIpcAction } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -229,18 +231,35 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
 
-  const listKey = projectId === null ? null : `literature:${projectId}:${debouncedQuery}:${includeArchived ? '1' : '0'}`;
-  const list = useAsyncResource(
+  const listKey = projectId === null ? null : [
+    'research',
+    'library',
+    projectId,
+    debouncedQuery,
+    includeArchived,
+    LIBRARY_PAGE_LIMIT
+  ] as const;
+  const list = useSWR<ResearchLibraryItem[], IpcResourceError>(
     listKey,
-    () =>
-      listLibrary(client, {
-        projectId,
-        query: debouncedQuery,
-        includeArchived,
-        limit: LIBRARY_PAGE_LIMIT
-      }),
-    { label: '读取文献库' }
+    async () => unwrapIpcResource(await listLibrary(client, {
+      projectId: projectId ?? '',
+      query: debouncedQuery,
+      includeArchived,
+      limit: LIBRARY_PAGE_LIMIT
+    })),
+    { keepPreviousData: false, shouldRetryOnError: false }
   );
+  let listStatus: AsyncStatus;
+  if (list.isValidating) {
+    listStatus = 'loading';
+  } else if (list.error !== undefined) {
+    listStatus = 'error';
+  } else if (list.data !== undefined) {
+    listStatus = 'ready';
+  } else {
+    listStatus = 'idle';
+  }
+  const listError = list.isValidating ? null : list.error?.message ?? null;
   const items = useMemo(() => list.data ?? [], [list.data]);
 
   // A different project is a different library: drop the selection rather than
@@ -283,7 +302,11 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
 
   const reloadDocuments = documents.reload;
-  const reloadList = list.reload;
+  const reloadList = useCallback(() => {
+    if (projectId !== null) {
+      void list.mutate().catch(() => undefined);
+    }
+  }, [list.mutate, projectId]);
 
   useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -698,8 +721,8 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   return {
     client,
     projectId,
-    status: list.status,
-    error: list.error,
+    status: listStatus,
+    error: listError,
     items,
     query,
     setQuery,

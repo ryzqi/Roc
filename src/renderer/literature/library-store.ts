@@ -21,6 +21,7 @@ import type {
   ResearchLiterature,
   ResearchParseTier
 } from '../../shared/types';
+import type { IpcResult } from '../../shared/types/common';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 
@@ -47,7 +48,7 @@ import type { RocClient } from '../shared/roc-client';
 export function listLibrary(
   client: RocClient,
   request: ResearchLibraryListRequest
-): Promise<IpcLikeResult<ResearchLibraryItem[]>> {
+): Promise<IpcResult<ResearchLibraryItem[]>> {
   return client.api.research.listLibrary(request);
 }
 

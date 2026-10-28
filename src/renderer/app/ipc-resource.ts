@@ -1,4 +1,4 @@
-import type { RocError } from '../../shared/types/common';
+import type { IpcResult, RocError } from '../../shared/types/common';
 
 /** Preserves the structured IPC failure while exposing a normal Error to SWR. */
 export class IpcResourceError extends Error {
@@ -17,6 +17,13 @@ export class IpcResourceError extends Error {
     this.userAction = rocError.userAction;
     this.auditEventId = rocError.auditEventId;
   }
+}
+
+export function unwrapIpcResource<T>(result: IpcResult<T>): T {
+  if (!result.ok) {
+    throw new IpcResourceError(result.error);
+  }
+  return result.data;
 }
 
 export function isRetryableIpcResourceError(error: unknown): error is IpcResourceError {

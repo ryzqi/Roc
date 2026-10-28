@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
 import type {
   AgentCapabilityPreview,
   McpServerConfig,
@@ -8,6 +9,7 @@ import type {
 } from '../../shared/types';
 import type { AsyncStatus } from '../app/use-async-resource';
 import { errorMessage } from '../app/loaded-state';
+import { IpcResourceError, unwrapIpcResource } from '../app/ipc-resource';
 import type { RocClient } from '../shared/roc-client';
 import { notifySettingsChanged, useSettingsRevision } from '../shared/settings-events';
 import { projectMcpRows, type McpRow } from '../shared/mcp-state';
@@ -81,15 +83,63 @@ export type McpStore = {
   reloadPreview: () => void;
 };
 
+type McpResourceSnapshot = {
+  config: McpServersConfig;
+  servers: McpServerSnapshot[];
+  runtimeError: string | null;
+};
+
+const MCP_RESOURCE_KEY = ['management', 'mcp', 'snapshot'] as const;
+
+function upsertServerInMcpSnapshot(
+  snapshot: McpResourceSnapshot | undefined,
+  server: McpServerConfig
+): McpResourceSnapshot | undefined {
+  if (snapshot === undefined) {
+    return snapshot;
+  }
+  const servers = [...snapshot.config.servers];
+  const existingIndex = servers.findIndex((item) => item.id === server.id);
+  if (existingIndex === -1) {
+    servers.push(server);
+  } else {
+    servers[existingIndex] = server;
+  }
+  return { ...snapshot, config: { ...snapshot.config, servers } };
+}
+
 export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | null): McpStore {
   const settingsRevision = useSettingsRevision();
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const resource = useSWR<McpResourceSnapshot, IpcResourceError>(
+    MCP_RESOURCE_KEY,
+    async () => {
+      const [configResult, serversResult] = await Promise.all([getMcpConfig(client), listMcpServers(client)]);
+      const config = unwrapIpcResource(configResult);
+      return {
+        config,
+        servers: serversResult.ok ? serversResult.data : [],
+        runtimeError: serversResult.ok ? null : serversResult.error.message
+      };
+    },
+    { keepPreviousData: false, shouldRetryOnError: false }
+  );
+  let status: AsyncStatus;
+  if (resource.isValidating) {
+    status = 'loading';
+  } else if (resource.error !== undefined) {
+    status = 'error';
+  } else if (resource.data !== undefined) {
+    status = 'ready';
+  } else {
+    status = 'idle';
+  }
+  const error = resource.isValidating ? null : resource.error?.message ?? null;
+  const config = resource.data?.config ?? null;
+  const servers = resource.data?.servers ?? [];
+  const runtimeError = resource.data?.runtimeError ?? null;
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const settingsRevisionRef = useRef(settingsRevision);
   const [approvalPending, setApprovalPending] = useState(false);
-  const [config, setConfig] = useState<McpServersConfig | null>(null);
-  const [servers, setServers] = useState<McpServerSnapshot[]>([]);
-  const [status, setStatus] = useState<AsyncStatus>('loading');
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraftState] = useState<McpDraft | null>(null);
@@ -103,43 +153,27 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
   const [presetPending, setPresetPending] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, McpServerTestResult>>({});
 
+  const refreshResource = useCallback(() => {
+    void resource.mutate().catch(() => undefined);
+  }, [resource.mutate]);
   const reload = useCallback(() => {
-    setNonce((current) => current + 1);
-  }, []);
+    setReloadNonce((current) => current + 1);
+    refreshResource();
+  }, [refreshResource]);
 
   useEffect(() => {
-    let cancelled = false;
-    setStatus('loading');
-    void (async () => {
-      try {
-        const [configResult, serversResult] = await Promise.all([getMcpConfig(client), listMcpServers(client)]);
-        if (cancelled) {
-          return;
-        }
-        if (!configResult.ok) {
-          setStatus('error');
-          setError(configResult.error.message);
-          return;
-        }
-        setConfig(configResult.data);
-        // The runtime snapshot may fail on its own (a broken adapter); the config is still usable.
-        setServers(serversResult.ok ? serversResult.data : []);
-        setRuntimeError(serversResult.ok ? null : serversResult.error.message);
-        // A fresh config read is the authority again: drop any pending toggle intent.
-        clearFlags();
-        setStatus('ready');
-        setError(null);
-      } catch (caught) {
-        if (!cancelled) {
-          setStatus('error');
-          setError(errorMessage(caught));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [client, nonce, settingsRevision, clearFlags]);
+    if (settingsRevisionRef.current !== settingsRevision) {
+      settingsRevisionRef.current = settingsRevision;
+      refreshResource();
+    }
+  }, [refreshResource, settingsRevision]);
+
+  useEffect(() => {
+    if (resource.data !== undefined) {
+      // A fresh config read is the authority again: drop any pending toggle intent.
+      clearFlags();
+    }
+  }, [resource.data, clearFlags]);
 
   /* -------------------------------------------------------------- */
   /* Capability preview (per-server tool names)                      */
@@ -155,7 +189,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
     return ids;
   }, [config]);
   // Include authored fields, not just enabled ids: editing a command or allow-list changes tools.
-  const previewKey = JSON.stringify([config, enabledSkillIds, nonce, settingsRevision]);
+  const previewKey = JSON.stringify([config, enabledSkillIds, reloadNonce, settingsRevision]);
   const [previewData, setPreview] = useState<AgentCapabilityPreview | null>(null);
   const [previewDataKey, setPreviewDataKey] = useState<string | null>(null);
   const [loadedPreviewStatus, setPreviewStatus] = useState<AsyncStatus>('loading');
@@ -256,12 +290,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         setMutationError(result.error.message);
         return false;
       }
-      setConfig((current) => current === null ? current : {
-        ...current,
-        servers: current.servers.some((server) => server.id === result.data.id)
-          ? current.servers.map((server) => server.id === result.data.id ? result.data : server)
-          : [...current.servers, result.data]
-      });
+      await resource.mutate((current) => upsertServerInMcpSnapshot(current, result.data), { revalidate: false });
       setEditingId(result.data.id);
       setDraftState(draftFromServer(result.data));
       setTestResults((current) => {
@@ -269,7 +298,6 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         delete next[result.data.id];
         return next;
       });
-      reload();
       reloadPreview();
       // `settings.get()` carries `mcpServers`, so a consumer's cached configuration is stale now.
       notifySettingsChanged();
@@ -280,7 +308,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
     } finally {
       setPending(false);
     }
-  }, [client, config, draft, editingId, issues.length, reload, reloadPreview]);
+  }, [client, config, draft, editingId, issues.length, reloadPreview, resource.mutate]);
 
   const remove = useCallback(
     async (serverId: string): Promise<boolean> => {
@@ -296,7 +324,6 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
           setEditingId(null);
           setDraftState(null);
         }
-        reload();
         notifySettingsChanged();
         return true;
       } catch (caught) {
@@ -306,7 +333,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         setRemovePending(false);
       }
     },
-    [client, editingId, reload]
+    [client, editingId]
   );
 
   const toggle = useCallback(
@@ -323,7 +350,6 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
           clearFlags();
           return false;
         }
-        reload();
         reloadPreview();
         notifySettingsChanged();
         return true;
@@ -335,7 +361,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         setTogglePending(false);
       }
     },
-    [client, setFlag, clearFlags, reload, reloadPreview]
+    [client, setFlag, clearFlags, reloadPreview]
   );
 
   const test = useCallback(
@@ -372,7 +398,6 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
       }
       setEditingId(result.data.id);
       setDraftState(draftFromServer(result.data));
-      reload();
       // `settings.get()` carries `mcpServers`, so a consumer's cached configuration is stale now.
       notifySettingsChanged();
       return true;
@@ -382,7 +407,7 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
     } finally {
       setPresetPending(false);
     }
-  }, [client, reload]);
+  }, [client]);
 
   const approvalMode = useCallback(async (mode: McpServersConfig['approvalMode']): Promise<boolean> => {
     setApprovalPending(true);
@@ -390,14 +415,13 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
     try {
       const result = await setMcpApprovalMode(client, mode);
       if (!result.ok) { setMutationError(result.error.message); return false; }
-      reload();
       notifySettingsChanged();
       return true;
     } catch (caught) {
       setMutationError(errorMessage(caught));
       return false;
     } finally { setApprovalPending(false); }
-  }, [client, reload]);
+  }, [client]);
 
   const previewCurrent = status === 'ready' && previewDataKey === previewKey
     && !togglePending && !pending && !removePending && !presetPending && !approvalPending;

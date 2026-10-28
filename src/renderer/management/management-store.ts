@@ -15,6 +15,7 @@ import type {
   SkillImportRequest,
   SkillSnapshot
 } from '../../shared/types';
+import type { IpcResult } from '../../shared/types/common';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 
@@ -93,7 +94,7 @@ export function searchSessionMessages(
 /* 技能 (T9.2)                                                         */
 /* ------------------------------------------------------------------ */
 
-export function listSkills(client: RocClient): Promise<IpcLikeResult<SkillSnapshot[]>> {
+export function listSkills(client: RocClient): Promise<IpcResult<SkillSnapshot[]>> {
   return client.api.skills.list();
 }
 

@@ -1,11 +1,14 @@
 import { useEffect, useMemo } from 'react';
+import useSWR from 'swr';
 import type { DrawerSectionId } from '../../shared/surfaces';
-import type { ResearchLibraryItem } from '../../shared/types';
-import { useAsyncResource } from '../app/use-async-resource';
+import type { ResearchLibraryItem, SkillSnapshot } from '../../shared/types';
+import { IpcResourceError } from '../app/ipc-resource';
+import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
 import { useDebouncedValue } from '../app/use-debounced-value';
 import type { RocClient } from '../shared/roc-client';
 import { useProjectList } from '../project/use-project-list';
 import { useFileSearchGroups } from '../workspace/use-file-search';
+import { SKILLS_LIST_RESOURCE_KEY, loadSkillsList } from '../management/skills-resource';
 import type { SearchGroup } from './SearchPaletteModal';
 
 /**
@@ -145,14 +148,34 @@ export function useSearchGroups({
     }
   }, [projectList.reload, searchToken]);
   /**
-   * Skills (`skills.list`, no arguments) — filtered here because the capability has no query.
-   *
-   * Keyed on `searchToken` so a skill imported while the palette was closed is findable on the next
-   * open: the same "read once and never again" trap P4's session list and P5's project group hit.
+   * Skills (`skills.list`, no arguments) are shared with the management panel and filtered locally.
+   * Refresh on palette open so changes made while it was closed appear in search.
    */
-  const skillList = useAsyncResource(`search-skills:${searchToken}`, () => client.api.skills.list(), {
-    label: '读取技能'
-  });
+  const skillResource = useSWR<SkillSnapshot[], IpcResourceError>(
+    SKILLS_LIST_RESOURCE_KEY,
+    () => loadSkillsList(client),
+    { keepPreviousData: false, shouldRetryOnError: false }
+  );
+  let skillStatus: AsyncStatus;
+  if (skillResource.isValidating) {
+    skillStatus = 'loading';
+  } else if (skillResource.error !== undefined) {
+    skillStatus = 'error';
+  } else if (skillResource.data !== undefined) {
+    skillStatus = 'ready';
+  } else {
+    skillStatus = 'idle';
+  }
+  const skillList = {
+    status: skillStatus,
+    data: skillResource.data ?? null,
+    error: skillResource.isValidating ? null : skillResource.error?.message ?? null
+  };
+  useEffect(() => {
+    if (searchToken > 0) {
+      void skillResource.mutate().catch(() => undefined);
+    }
+  }, [searchToken, skillResource.mutate]);
 
   return useMemo(() => {
     /**
@@ -316,7 +339,6 @@ export function useSearchGroups({
     skillList.error,
     skillList.status,
     query,
-    searchToken,
     sessions.data,
     sessions.error,
     sessions.status,

@@ -1,4 +1,5 @@
 import type { McpServerConfig, McpServerSnapshot, McpServersConfig, McpServerTestResult } from '../../shared/types';
+import type { IpcResult } from '../../shared/types/common';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from './roc-client';
 
@@ -22,11 +23,11 @@ import type { RocClient } from './roc-client';
  *     so a surface that wants the whole truth merges them by id.
  */
 
-export function listMcpServers(client: RocClient): Promise<IpcLikeResult<McpServerSnapshot[]>> {
+export function listMcpServers(client: RocClient): Promise<IpcResult<McpServerSnapshot[]>> {
   return client.api.mcp.listServers();
 }
 
-export function getMcpConfig(client: RocClient): Promise<IpcLikeResult<McpServersConfig>> {
+export function getMcpConfig(client: RocClient): Promise<IpcResult<McpServersConfig>> {
   return client.api.mcp.getConfig();
 }
 
