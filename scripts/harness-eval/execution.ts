@@ -65,19 +65,37 @@ export async function runExecutionScenario(name: string, directory: string, endp
 
 export async function runIsolationScenario(directory: string): Promise<unknown> {
   const { MacOsIsolatedEnvironment } = await import('../../src/main/services/execution-environment');
-  const { mkdirSync, symlinkSync, existsSync } = await import('node:fs');
+  const { mkdirSync, symlinkSync, existsSync, renameSync, rmSync } = await import('node:fs');
   const { createServer } = await import('node:http');
   const root = join(directory, 'isolated');
   mkdirSync(root);
   const outside = join(directory, 'outside.txt');
   writeFileSync(outside, 'synthetic outside value');
   const environment = new MacOsIsolatedEnvironment(root);
+  try {
   await environment.writeFile('result.txt', '42');
   assert.equal(await environment.readFile('result.txt'), '42');
+  const readOnly = new MacOsIsolatedEnvironment(root, 'isolated_read');
+  try {
+    await assert.rejects(readOnly.writeFile('read-only.txt', 'blocked'), /isolated_environment_read_only/u);
+    const attemptedWrite = await readOnly.execute({
+      file: '/bin/sh',
+      args: ['-c', 'echo forbidden > "$1"', 'probe', join(root, 'read-only.txt')]
+    });
+    assert.notEqual(attemptedWrite.exitCode, 0);
+    assert.equal(existsSync(join(root, 'read-only.txt')), false);
+  } finally {
+    readOnly.dispose();
+  }
   await assert.rejects(environment.readFile('../outside.txt'), /path_outside/);
   assert.notEqual((await environment.execute({ file: '/bin/cat', args: [outside] })).exitCode, 0);
   symlinkSync(outside, join(root, 'external.txt'));
   await assert.rejects(environment.readFile('external.txt'), /read_failed/);
+  const userManagedSystemPath = '/usr/local';
+  if (existsSync(userManagedSystemPath)) {
+    const userManagedRead = await environment.execute({ file: '/bin/ls', args: ['-A', userManagedSystemPath] });
+    assert.notEqual(userManagedRead.exitCode, 0);
+  }
   const denied = await environment.execute({ file: '/bin/sh', args: ['-c', 'echo forbidden > "$1"', 'probe', outside] });
   assert.notEqual(denied.exitCode, 0);
   assert.equal(readFileSync(outside, 'utf8'), 'synthetic outside value');
@@ -104,7 +122,44 @@ export async function runIsolationScenario(directory: string): Promise<unknown> 
   assert.equal(existsSync(join(root, 'after-setsid.txt')), false);
   assert.equal(existsSync(join(root, 'after-cancel.txt')), false);
   assert.equal(existsSync(join(root, 'after-exit.txt')), false);
-  const evidence = { profile: environment.profile, outsideReadWrite: 'denied', symlink: 'denied', requests, output: 'bounded', deadline: 'enforced', backgroundEffects: 0 };
+  const outsideDirectory = join(directory, 'renamed-outside');
+  mkdirSync(outsideDirectory);
+  const renamedWorkspace = join(directory, 'renamed-workspace');
+  const raceMarker = join(root, 'rename-race-started');
+  const raceEscape = join(root, 'rename-race-escape.txt');
+  const raceController = new AbortController();
+  const pendingRenameRace = environment.execute({
+    file: '/bin/sh',
+    args: ['-c', 'touch "$1"; sleep 0.2; printf forbidden > "$2"', 'probe', raceMarker, raceEscape],
+    timeoutMs: 2_000,
+    signal: raceController.signal
+  });
+  let workspaceRenamed = false;
+  let workspaceSymlinked = false;
+  try {
+    for (let attempt = 0; attempt < 100 && !existsSync(raceMarker); attempt += 1) await delay(5);
+    assert.equal(existsSync(raceMarker), true);
+    renameSync(root, renamedWorkspace);
+    workspaceRenamed = true;
+    symlinkSync(outsideDirectory, root);
+    workspaceSymlinked = true;
+    const renameRace = await pendingRenameRace;
+    assert.notEqual(renameRace.exitCode, 0);
+    assert.equal(existsSync(join(outsideDirectory, 'rename-race-escape.txt')), false);
+  } finally {
+    raceController.abort();
+    try {
+      await pendingRenameRace;
+    } catch {
+      // Cleanup aborts the race command if an earlier assertion fails.
+    }
+    if (workspaceSymlinked) rmSync(root, { recursive: true, force: true });
+    if (workspaceRenamed) renameSync(renamedWorkspace, root);
+  }
+  const evidence = { profile: environment.profile, outsideReadWrite: 'denied', symlink: 'denied', userManagedSystemPath: existsSync(userManagedSystemPath) ? 'denied' : 'not_present', pathSwapRace: 'denied', requests, output: 'bounded', deadline: 'enforced', backgroundEffects: 0 };
   writeFileSync(join(directory, 'isolation.json'), JSON.stringify(evidence, null, 2));
   return evidence;
+  } finally {
+    environment.dispose();
+  }
 }

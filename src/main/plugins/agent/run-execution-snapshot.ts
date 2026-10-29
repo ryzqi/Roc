@@ -1,10 +1,12 @@
+import { realpathSync, statSync } from 'node:fs';
 import type { ChatRunMode, ChatStartRunRequest, RunExecutionSnapshot, TaskRun, WorkflowHint } from '../../../shared/types';
+import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
 import { runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
 import { isRunCapabilityManifestIntegrityValid } from './run-capability-manifest';
 
 export { runExecutionSnapshotSchema };
 
-export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshot, 'runId' | 'threadId' | 'inputMessageId'>;
+export type RunExecutionSnapshotSeed = Omit<Extract<RunExecutionSnapshot, { schemaVersion: 8 }>, 'runId' | 'threadId' | 'inputMessageId' | 'workspaceIdentity'>;
 
 export function toRunExecutionMode(mode: ChatRunMode): RunExecutionSnapshot['mode'] {
   return mode === 'chat' ? 'run' : mode;
@@ -20,8 +22,12 @@ export function createRunExecutionSnapshot(input: {
   inputMessageId: string;
   snapshot: RunExecutionSnapshotSeed;
 }): RunExecutionSnapshot {
+  const workspaceIdentity = input.snapshot.workspace === null
+    ? null
+    : captureWorkspaceIdentity(input.snapshot.workspace.path);
   return parseRunExecutionSnapshot({
     ...input.snapshot,
+    workspaceIdentity,
     runId: input.runId,
     threadId: input.threadId,
     inputMessageId: input.inputMessageId
@@ -34,6 +40,13 @@ export function parseRunExecutionSnapshot(value: unknown): RunExecutionSnapshot 
     throw new Error('run_execution_snapshot_manifest_hash_invalid');
   }
   return snapshot;
+}
+
+function captureWorkspaceIdentity(path: string): { path: string; dev: string; ino: string } {
+  const canonicalPath = realpathSync(path);
+  const stat = statSync(canonicalPath);
+  if (!stat.isDirectory()) throw new Error('run_execution_workspace_not_directory');
+  return { path: canonicalPath, dev: String(stat.dev), ino: String(stat.ino) };
 }
 
 export function createRunBudget(input: {
@@ -74,10 +87,9 @@ export function createChatStartRunRequestFromSnapshot(
   if (snapshot.researchProjectId !== undefined && snapshot.researchProjectId !== null) {
     request.researchProjectId = snapshot.researchProjectId;
   }
-  if (snapshot.runOrigin === 'background_schedule') {
-    request.taskSource = 'background_schedule';
-  } else if (snapshot.runOrigin === 'workbench_creation' || snapshot.mode === 'task') {
-    request.taskSource = 'workbench';
+  const taskSource = taskSourceFromRunSnapshot(snapshot);
+  if (taskSource !== null) {
+    request.taskSource = taskSource;
   }
   if (snapshot.explicitSkillIds.length > 0) {
     request.explicitSkillIds = snapshot.explicitSkillIds;

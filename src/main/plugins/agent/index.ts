@@ -51,6 +51,7 @@ import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
 import type { RocPaths } from '../../services/paths';
 import type { SelfConfigService } from '../../services/self-config';
+import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import { workspacePathStructureChangedEventType } from '../../services/workspace-path-structure-event';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
@@ -95,6 +96,7 @@ const agentCapabilityDescriptors = [
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type AgentPluginOptions = {
+  executionGrantBroker?: ExecutionGrantBroker;
   capabilityPreview?: {
     deleteFileApprovalModeProvider: () => ApprovalMode;
     mcpApprovalModeProvider: () => ApprovalMode;
@@ -135,14 +137,15 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const runEventLog = new AgentRunEventLog(db);
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
-      const budgetLedger = new RunBudgetLedger(db);
+          const budgetLedger = new RunBudgetLedger(db);
       budgetLedger.reconcileStartup();
       // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
       // capability reports that instead of pretending a gate exists.
       const pilot = createPilotCoordinator(options, budgetLedger);
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
-        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository),
+        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository, options.executionGrantBroker),
+        executionGrantBroker: options.executionGrantBroker,
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
         modelFactory,
@@ -208,7 +211,7 @@ function createCapabilityPreviewProvider(
   }
   const capabilityPreviewOptions = options.capabilityPreview;
   const selfConfigAvailable = isSelfConfigAvailable(options.deepAgentExecutor);
-  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, workflowHint, researchProjectId }) =>
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, trustedHostAvailable, workflowHint, researchProjectId }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
       explicitSkillIds,
@@ -218,6 +221,7 @@ function createCapabilityPreviewProvider(
       requestedCapabilities,
       selfConfigAvailable,
       shellAllowedCommands,
+      trustedHostAvailable,
       runtimeStatus,
       skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
       workflowHint,
@@ -236,7 +240,8 @@ function isSelfConfigAvailable(option: AgentPluginOptions['deepAgentExecutor']):
 function resolveDeepAgentExecutor(
   context: RocPluginContext,
   option: AgentPluginOptions['deepAgentExecutor'],
-  repository: AgentSessionRepository
+  repository: AgentSessionRepository,
+  executionGrantBroker: ExecutionGrantBroker | undefined
 ): AgentDeepAgentExecutor | undefined {
   if (option === undefined) {
     return undefined;
@@ -257,6 +262,7 @@ function resolveDeepAgentExecutor(
     sessionHistory: repository,
     store: option.memoryStore,
     selfConfigService: option.selfConfigService,
+    executionGrantBroker,
     budgetLedger: new RunBudgetLedger(agentDb),
     toolEffectStore: new AgentToolEffectStore(agentDb),
     onWorkspacePathStructureChanged: (workspacePath, reason) => {
@@ -417,7 +423,8 @@ function registerAgentCapabilities(
         requestedCapabilities: {
           mcpServers: request.mcpServers,
           skills: request.skills
-        }
+        },
+        trustedHostAvailable: request.mode !== 'plan'
       });
     });
   }

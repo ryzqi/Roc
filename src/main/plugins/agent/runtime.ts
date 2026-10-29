@@ -28,6 +28,7 @@ import type {
   RunCapabilityManifestV1
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
+import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
@@ -81,6 +82,7 @@ export type AgentCapabilityPreviewProvider = (input: {
   mode: ChatStartRunRequest['mode'];
   requestedCapabilities: EnabledCapabilities;
   shellAllowedCommands?: readonly string[];
+  trustedHostAvailable?: boolean;
   runtimeStatus: AgentRuntimeStatus;
   workflowHint: WorkflowHint;
   researchProjectId?: string | null;
@@ -175,6 +177,7 @@ type ExecuteRunInput = {
 
 export type AgentPluginRuntimeOptions = {
   repository: AgentSessionRepository;
+  executionGrantBroker?: ExecutionGrantBroker;
   eventBus: RocEventBus;
   modelFactory: AgentModelFactoryAdapter;
   deepAgentExecutor?: AgentDeepAgentExecutor;
@@ -252,6 +255,7 @@ export class AgentPluginRuntime {
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
     shellAllowedCommands?: readonly string[];
+    trustedHostAvailable?: boolean;
     workflowHint?: WorkflowHint;
     researchProjectId?: string | null;
   }): Promise<AgentCapabilityPreview> {
@@ -263,6 +267,7 @@ export class AgentPluginRuntime {
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
       shellAllowedCommands: input.shellAllowedCommands,
+      trustedHostAvailable: input.trustedHostAvailable,
       runtimeStatus: this.getStatus(),
       workflowHint: input.workflowHint === undefined ? null : input.workflowHint,
       researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
@@ -292,6 +297,7 @@ export class AgentPluginRuntime {
       mode: request.mode,
       requestedCapabilities: request.enabledCapabilities,
       shellAllowedCommands,
+      trustedHostAvailable: request.taskSource !== 'background_schedule' && request.workflowHint == null && request.mode !== 'plan',
       workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
       modelHandle,
       researchProjectId: request.researchProjectId === undefined ? null : request.researchProjectId
@@ -500,10 +506,12 @@ export class AgentPluginRuntime {
         telemetry: telemetry.snapshot()
       });
     } catch (error) {
+      this.revokeExecutionGrantsBestEffort(input.runId);
       this.runTelemetry.delete(input.runId);
       this.activeRunLifecycle.finish(input.runId);
       throw error;
     }
+    this.revokeExecutionGrantsBestEffort(input.runId);
     this.runTelemetry.delete(input.runId);
     this.activeRunLifecycle.finish(input.runId);
     // A cancellation is not a pilot failure: the breaker only opens on exhaustion or real failures.
@@ -837,6 +845,7 @@ export class AgentPluginRuntime {
       taskAcceptance,
       workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
+    this.revokeExecutionGrantsBestEffort(input.runId);
     const run = terminal.run;
     this.activeRunLifecycle.finish(input.runId);
     this.options.pilot?.recordOutcome({ runId: input.runId, status: 'completed', errorCode: null });
@@ -1187,6 +1196,17 @@ export class AgentPluginRuntime {
     }
   }
 
+  private revokeExecutionGrantsBestEffort(runId: string): void {
+    try {
+      this.options.executionGrantBroker?.revokeRun(runId);
+    } catch (error) {
+      this.reportNotificationFailure('agent_execution_grant_revoke_failed', error, {
+        runId,
+        notificationType: 'execution_grant_revocation'
+      });
+    }
+  }
+
   private async failRun(input: {
     input: ExecuteRunInput;
     failure: RunFailure;
@@ -1212,6 +1232,7 @@ export class AgentPluginRuntime {
       suggestion: input.failure.suggestion,
       telemetry: input.telemetry.snapshot()
     });
+    this.revokeExecutionGrantsBestEffort(input.input.runId);
     this.options.pilot?.recordOutcome({ runId: input.input.runId, status: 'failed', errorCode: input.failure.code });
     const snapshot = this.options.repository.getRunExecutionSnapshot(input.input.runId);
     const failureReport = await this.options.repository.taskContracts.verify(input.input.runId, this.createTaskVerificationContext({
@@ -1420,6 +1441,7 @@ export class AgentPluginRuntime {
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
     shellAllowedCommands?: readonly string[];
+    trustedHostAvailable?: boolean;
     workflowHint: WorkflowHint;
     modelHandle: AgentModelHandle;
     researchProjectId?: string | null;
@@ -1430,6 +1452,7 @@ export class AgentPluginRuntime {
         mode: input.mode,
         requestedCapabilities: input.requestedCapabilities,
         shellAllowedCommands: input.shellAllowedCommands,
+        trustedHostAvailable: input.trustedHostAvailable,
         workflowHint: input.workflowHint,
         researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
       });
@@ -1449,6 +1472,7 @@ export class AgentPluginRuntime {
       // 该回退路径只装配内置工具，不宣称 roc_self_config。
       selfConfigAvailable: false,
       shellAllowedCommands: input.shellAllowedCommands,
+      trustedHostAvailable: input.trustedHostAvailable,
       skills: [],
       workflowHint: input.workflowHint,
       researchProjectId: input.researchProjectId === undefined ? null : input.researchProjectId
@@ -1490,6 +1514,7 @@ export class AgentPluginRuntime {
   }): Promise<void> {
     const interrupted = this.options.repository.markRunInterrupted({
       interrupts: input.interrupts,
+      revokePendingExecutionGrants: () => this.options.executionGrantBroker?.revokePendingRunGrants(input.runId),
       runId: input.runId,
       telemetry: input.telemetry,
       threadId: input.threadId
@@ -1575,7 +1600,7 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     submissionHash: hashToolInput(input.request),
     taskContract: createTaskContract(input.request),
     runOrigin: resolveRunOrigin(input.request),

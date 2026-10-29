@@ -170,16 +170,47 @@ test('待应用的迁移跑完对不上清单时整体回滚', () => {
   assert.deepEqual(columnNames(db, 'widgets'), ['id', 'label']);
 });
 
-test('真实的 agent 库：v5 就地升到 v6，checkpoint writes 多出 task_path', () => {
+
+
+test('real agent v5 upgrades to v6 and adds checkpoint task_path', () => {
   const db = new Database(':memory:');
   const beforeTaskPath = agentMigrations.filter((entry) => entry.version <= 5);
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: beforeTaskPath });
-  assert.equal(
-    columnNames(db, 'langgraph_checkpoint_writes').includes('task_path'),
-    false
-  );
+  assert.equal(columnNames(db, 'langgraph_checkpoint_writes').includes('task_path'), false);
+
+  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations.filter((entry) => entry.version <= 6) });
+  assert.equal(columnNames(db, 'langgraph_checkpoint_writes').includes('task_path'), true);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 6);
+  db.close();
+});
+
+test('real agent v6 upgrades to v7 grant and approval tables', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  applyDatabaseMigrations(db, {
+    dbName: 'agent',
+    migrations: agentMigrations.filter((entry) => entry.version <= 6)
+  });
+  const before = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%'").pluck().all();
+  assert.deepEqual(before, []);
 
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
-  assert.equal(columnNames(db, 'langgraph_checkpoint_writes').includes('task_path'), true);
-  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, agentMigrations.length);
+  const after = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%' ORDER BY name").pluck().all();
+  assert.deepEqual(after, ['agent_execution_approvals', 'agent_execution_grants', 'agent_execution_run_fences']);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 7);
+  for (const table of ['agent_execution_approvals', 'agent_execution_grants']) {
+    const columns = columnNames(db, table);
+    assert.ok(columns.includes('schema_version'), `${table} stores a grant version`);
+    const createSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").pluck().get(table);
+    assert.match(createSql, /schema_version INTEGER NOT NULL CHECK\(schema_version = 1\)/u);
+    const indexes = db.prepare(`PRAGMA index_list(${table})`).all();
+    const activeCallIndex = indexes.find((entry) => entry.name === `idx_${table}_run_call_live`);
+    assert.equal(activeCallIndex?.partial, 1, `${table} call id uniqueness must be partial`);
+    const indexSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?").pluck().get(`idx_${table}_run_call_live`);
+    assert.match(indexSql, /WHERE status IN \('issued','consumed'\)/u);
+  }
+  const grantForeignKeys = db.prepare('PRAGMA foreign_key_list(agent_execution_grants)').all();
+  assert.ok(grantForeignKeys.some((entry) => entry.table === 'agent_runs'));
+  assert.ok(grantForeignKeys.some((entry) => entry.table === 'agent_threads'));
+  db.close();
 });

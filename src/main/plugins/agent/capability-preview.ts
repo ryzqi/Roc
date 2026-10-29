@@ -20,6 +20,7 @@ export function buildAgentCapabilityPreview(input: {
   requestedCapabilities: EnabledCapabilities;
   selfConfigAvailable?: boolean;
   shellAllowedCommands?: readonly string[];
+  trustedHostAvailable?: boolean;
   runtimeStatus: AgentRuntimeStatus;
   skills: SkillSnapshot[];
   mode: ChatRunMode;

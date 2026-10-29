@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
-import type { DrawerSectionId } from '../../shared/surfaces';
 import { schedulerStatusWord } from './background-task-model';
 import { skillSummary } from './skill-model';
 import type { ManagementScope } from './management-scope';
-import { useBackgroundTasks, type BackgroundTasksStore } from './use-background-tasks';
-import { useMcp, type McpStore } from './use-mcp';
+import { useBackgroundTasks } from './use-background-tasks';
+import { useMcp } from './use-mcp';
 import { useMemoryFiles, type MemoryFilesStore } from './use-memory';
-import { useSkills, type SkillsStore } from './use-skills';
+import { useSkills } from './use-skills';
+import type { ManagementStores, ManagementTabId } from './management-stores-types';
+export type { ManagementStores, ManagementTabId } from './management-stores-types';
 
 /**
  * The four management datasets, created once per active management scope (P9/T9.5).
@@ -20,34 +21,6 @@ import { useSkills, type SkillsStore } from './use-skills';
  * own state), and the summaries are only honest if they come from the data. Sections select their
  * own slice so unrelated updates do not invalidate the whole management surface.
  */
-
-/**
- * 管理抽屉的分区。
- *
- * 别名到面表（`src/shared/surfaces.ts`），不再是一份手抄的字面量联合。好处很具体：加一个分区时，
- * `summaries` 的 `Record<ManagementTabId, string>` 会立刻报缺项，而不是静默渲染一个空摘要。
- */
-export type ManagementTabId = DrawerSectionId;
-
-export type ManagementStores = {
-  memory: MemoryFilesStore;
-  skills: SkillsStore;
-  mcp: McpStore;
-  tasks: BackgroundTasksStore;
-  summaries: Record<ManagementTabId, string>;
-};
-
-
-function memorySummary(memory: MemoryFilesStore): string {
-  const parts = ['查看助手记住的项目背景与个人偏好'];
-  if (memory.dirtyCount > 0) {
-    parts.push(`未保存 ${memory.dirtyCount}`);
-  }
-  if (memory.memory !== null && memory.memory.workspaceHash === null) {
-    parts.push('打开项目后可查看项目记忆');
-  }
-  return parts.join(' · ');
-}
 
 export function useManagementStoresSource(scope: ManagementScope): ManagementStores {
   const memory = useMemoryFiles(scope.client);
@@ -71,4 +44,15 @@ export function useManagementStoresSource(scope: ManagementScope): ManagementSto
     () => ({ memory, skills, mcp, tasks, summaries }),
     [memory, skills, mcp, tasks, summaries]
   );
+}
+
+function memorySummary(memory: MemoryFilesStore): string {
+  const parts = ['查看助手记住的项目背景与个人偏好'];
+  if (memory.dirtyCount > 0) {
+    parts.push(`未保存 ${memory.dirtyCount}`);
+  }
+  if (memory.memory !== null && memory.memory.workspaceHash === null) {
+    parts.push('打开项目后可查看项目记忆');
+  }
+  return parts.join(' · ');
 }

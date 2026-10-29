@@ -1,11 +1,12 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
-import { createStore, type StoreApi } from 'zustand/vanilla';
+import { createStore } from 'zustand/vanilla';
+import type { ManagementStores, ManagementStoresApi, ManagementStoresSnapshot } from './management-stores-types';
 import type { ManagementScope } from './management-scope';
-import { useManagementStoresSource, type ManagementStores } from './use-management-stores';
 
-type ManagementStoresSnapshot = ManagementStores | null;
-type ManagementStoresApi = StoreApi<ManagementStoresSnapshot>;
+const ManagementStoresSource = lazy(async () => ({
+  default: (await import('./management-stores-source')).ManagementStoresSource
+}));
 
 type ManagementStoresRegistration = {
   scopeKey: string;
@@ -43,30 +44,14 @@ export function ManagementStoresProvider({
 
   return (
     <ManagementStoresContext.Provider value={store}>
-      {enabled ? <ManagementStoresSource key={scopeKey} scope={scope} scopeKey={scopeKey} onReady={register} /> : null}
+      {enabled ? (
+        <Suspense fallback={null}>
+          <ManagementStoresSource key={scopeKey} scope={scope} scopeKey={scopeKey} onReady={register} />
+        </Suspense>
+      ) : null}
       {children}
     </ManagementStoresContext.Provider>
   );
-}
-
-function ManagementStoresSource({
-  scope,
-  scopeKey,
-  onReady
-}: {
-  scope: ManagementScope;
-  scopeKey: string;
-  onReady: (scopeKey: string, store: ManagementStoresApi) => void;
-}): null {
-  const snapshot = useManagementStoresSource(scope);
-  const [store] = useState<ManagementStoresApi>(() => createStore<ManagementStoresSnapshot>()(() => snapshot));
-
-  useLayoutEffect(() => {
-    store.setState(snapshot, true);
-    onReady(scopeKey, store);
-  }, [onReady, scopeKey, snapshot, store]);
-
-  return null;
 }
 
 /** Selects a stable slice from the current project's shared management store. */

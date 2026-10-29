@@ -54,6 +54,7 @@ import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
+import type { ExecutionGrantBroker, ExecutionGrantBinding, ExecutionGrantProfile } from '../../services/deep-agent/execution-grant-broker';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
@@ -73,6 +74,7 @@ export type RunHarnessServices = {
   sessionHistory: PreCompactionFlushRecorder;
   store: BaseStore;
   toolEffectStore: AgentToolEffectStore;
+  executionGrantBroker?: ExecutionGrantBroker;
 };
 
 export type RunHarnessRequest = {
@@ -126,13 +128,16 @@ export async function buildRunHarness(
     workflowHint
   };
   const shellAllowedCommands = request.snapshot.shellAllowedCommands;
-  const shellExecutionService = createShellExecutionAdapter({
+  const shellExecutionAdapter = createShellExecutionAdapter({
     capabilities: services.capabilities,
     defaultCwd: runtimeWorkspace === null ? null : runtimeWorkspace.path,
     allowedCommands: shellAllowedCommands,
     abortSignal: request.abortSignal,
     runId: request.run.id,
-    threadId: request.run.threadId
+    threadId: request.run.threadId,
+    workspacePath: runtimeWorkspace?.path ?? null,
+    manifest: request.snapshot.capabilityManifest,
+    executionGrantBroker: services.executionGrantBroker
   });
   const tools = await createExecutorTools({
     threadId: request.run.threadId,
@@ -142,7 +147,7 @@ export async function buildRunHarness(
     enabledCapabilities: request.snapshot.capabilityManifest.resolvedCapabilities,
     runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
     selfConfigService: services.selfConfigService,
-    shellExecutionService,
+    shellExecutionAdapter,
     shellAllowedCommands,
     mode,
     abortSignal: request.abortSignal,
@@ -398,7 +403,7 @@ async function createExecutorTools(input: {
   enabledCapabilities: TaskRun['enabledCapabilities'];
   runtimeWorkspacePath: string | null;
   selfConfigService?: SelfConfigService;
-  shellExecutionService: AgentExecuteAdapter;
+  shellExecutionAdapter?: AgentExecuteAdapter;
   shellAllowedCommands?: readonly string[];
   mode: RunExecutionSnapshot['mode'];
   abortSignal: AbortSignal;
@@ -411,10 +416,16 @@ async function createExecutorTools(input: {
     return { runTools: [webReadTool, askUserTool, ...mcpTools], webReadTool };
   }
   const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
-  const shellTools = manifestToolNames.has('run_shell_command')
-    && (input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0)
-    ? [createRocCommandTool(input.shellExecutionService)]
-    : [];
+  const shellProfiles: readonly { name: 'run_shell_command' | 'run_isolated_read_command' | 'run_trusted_host_command'; profile: ExecutionGrantProfile; description: string }[] = [
+    { name: 'run_shell_command', profile: 'isolated_write', description: 'Run a command in a network-isolated sandbox with write access limited to this workspace.' },
+    { name: 'run_isolated_read_command', profile: 'isolated_read', description: 'Run a command in a network-isolated sandbox with read-only workspace access.' },
+    { name: 'run_trusted_host_command', profile: 'trusted_host', description: 'Request explicit approval, then run one command with host user permissions.' }
+  ];
+  const shellTools = input.shellExecutionAdapter === undefined
+    ? []
+    : shellProfiles
+        .filter(({ name }) => manifestToolNames.has(name))
+        .map((profile) => createRocCommandTool(input.shellExecutionAdapter!, profile));
   const selfConfigTools = manifestToolNames.has('roc_self_config')
     ? [createSelfConfigTool({
         capabilities: input.capabilities,
@@ -751,25 +762,62 @@ function createShellExecutionAdapter(input: {
   abortSignal: AbortSignal;
   runId: string;
   threadId: string;
-}): AgentExecuteAdapter {
+  workspacePath: string | null;
+  manifest: RunCapabilityManifestV1;
+  executionGrantBroker?: ExecutionGrantBroker;
+}): AgentExecuteAdapter | undefined {
+  const broker = input.executionGrantBroker;
+  const workspacePath = input.workspacePath;
+  if (broker === undefined || workspacePath === null) return undefined;
   return {
-    executeAgentCommand: async ({ command, cwd }) => {
-      const requestCwd = cwd === undefined ? input.defaultCwd : cwd;
-      if (requestCwd === null) {
-        throw new Error('agent_workspace_required_for_shell');
-      }
-      const result = await input.capabilities.invoke<
-        import('../../../shared/types').ShellExecutionRequest,
-        import('../../../shared/types').ShellExecutionResult
-      >('shell.execute', {
-        command,
-        cwd: requestCwd,
-        source: 'agent',
-        signal: input.abortSignal,
+    executeAgentCommand: async ({ command, cwd, toolCallId, profile }) => {
+      const toolNameByProfile: Record<ExecutionGrantProfile, string> = {
+        isolated_write: 'run_shell_command',
+        isolated_read: 'run_isolated_read_command',
+        trusted_host: 'run_trusted_host_command'
+      };
+      const toolName = toolNameByProfile[profile];
+      const binding: ExecutionGrantBinding = {
         runId: input.runId,
         threadId: input.threadId,
-        allowedCommands: input.allowedCommands === undefined ? undefined : [...input.allowedCommands]
-      });
+        toolCallId,
+        toolName,
+        profile,
+        workspacePath,
+        command,
+        cwd: cwd ?? input.defaultCwd ?? undefined,
+        manifest: input.manifest,
+        allowedCommands: input.allowedCommands
+      };
+      let approvalReference: string | undefined;
+      if (profile === 'trusted_host') {
+        const approval = await input.capabilities.invoke<
+          { binding: ExecutionGrantBinding; confirmation: ShellConfirmationRequest },
+          { confirmed: boolean; approvalReference?: string }
+        >('shell.approveTrustedHost', {
+          binding,
+          confirmation: {
+            title: 'Approve trusted-host command',
+            message: `The agent requests this command with your macOS user permissions:\n\n${command}\n\nWorking directory:\n${binding.cwd ?? workspacePath}`,
+            confirmLabel: 'Run command',
+            cancelLabel: 'Cancel'
+          }
+        });
+        if (!approval.confirmed || approval.approvalReference === undefined) {
+          throw new Error('trusted_host_approval_rejected');
+        }
+        approvalReference = approval.approvalReference;
+      }
+      if (input.abortSignal.aborted) throw new Error('shell_execution_aborted');
+      const grantBinding: ExecutionGrantBinding = {
+        ...binding,
+        ...(approvalReference === undefined ? {} : { approvalReference })
+      };
+      const grantId = broker.issue(grantBinding);
+      const result = await input.capabilities.invoke<
+        { grantId: string; binding: ExecutionGrantBinding; signal: AbortSignal },
+        import('../../../shared/types').ShellExecutionResult
+      >('shell.executeAgent', { grantId, binding: grantBinding, signal: input.abortSignal });
       return {
         command: result.command,
         cwd: result.cwd,

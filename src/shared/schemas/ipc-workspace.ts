@@ -285,6 +285,9 @@ export const shellExecutionRequestSchema = z
 
 // AbortSignal and host allowlists are main-process controls, never renderer authority.
 export const shellExecutionIpcRequestSchema = shellExecutionRequestSchema.omit({
+  source: true,
+  threadId: true,
+  runId: true,
   signal: true,
   allowedCommands: true
 });

@@ -8,11 +8,10 @@ import type {
   SubagentStatus,
   TaskEvent
 } from '../../shared/types';
-import {
-  taskEventSchema,
-  type GuardrailTaskEventPayload as GuardrailPayload,
-  type MessageTaskEvent,
-  type SubagentTaskEventPayload as SubagentEventRecord
+import type {
+  GuardrailTaskEventPayload as GuardrailPayload,
+  MessageTaskEvent,
+  SubagentTaskEventPayload as SubagentEventRecord
 } from '../../shared/schemas/task-event';
 import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentBlock, ChatRunSubagentNode } from './run-state';
 import { applyPendingInterruptProjection, readPersistedInterruptProjection } from './interrupt-projection';
@@ -494,15 +493,11 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
   const drafts = new Map<string, AssistantDraft>();
   const userOccurrences = new Map<string, number>();
 
-  for (const candidate of recentEvents
+  // The main process validates persisted events against taskEventSchema before IPC; use the typed event contract here.
+  for (const event of recentEvents
     .filter((candidate) => candidate.threadId === threadId)
     .slice()
     .sort(compareTaskEventsAscending)) {
-    const parsedEvent = taskEventSchema.safeParse(candidate);
-    if (!parsedEvent.success) {
-      continue;
-    }
-    const event = parsedEvent.data;
     if (event.type === 'message') {
       if (event.payload.role === 'user') {
         const occurrence = (userOccurrences.get(event.runId) ?? 0) + 1;

@@ -39,6 +39,7 @@ import { RocPaths } from './services/paths';
 import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
 import { SelfConfigService } from './services/self-config';
+import { openExecutionGrantBroker } from './services/deep-agent/execution-grant-broker';
 import { WorkspaceService } from './services/workspace-service';
 
 export type MainKernelBootstrapOptions = {
@@ -200,6 +201,8 @@ function createDefaultMainKernelPlugins(input: {
 }): readonly RocPlugin[] {
   input.paths.ensureTree();
   const configService = input.configService;
+  const agentDatabase = input.databasePool.getConnection('@roc/plugin-agent');
+  const executionGrantBroker = openExecutionGrantBroker(agentDatabase);
   // One binding, two readers. `workspace.select` writes this instance (the workspace plugin owns
   // the capability) and the memory plugin reads it, so the two project memory slots
   // (`/memory/workspaces/current/{AGENTS,MEMORY}.md`) resolve against the directory the shell
@@ -223,6 +226,7 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createAgentPlugin({
+      executionGrantBroker,
       capabilityPreview: {
         deleteFileApprovalModeProvider: () => {
           configService.reloadSettingsDocument();
@@ -253,7 +257,7 @@ function createDefaultMainKernelPlugins(input: {
     createMemoryPlugin({
       // `memory.status` reports session rows and full-text-index health, both of which live in the
       // agent database — the memory plugin only owns the memory database.
-      agentFacts: new AgentMemoryStatsContract(input.databasePool.getConnection('@roc/plugin-agent')),
+      agentFacts: new AgentMemoryStatsContract(agentDatabase),
       getWorkspace: () => {
         const workspace = workspaceService.getCurrentWorkspace();
         return workspace === null ? null : { path: workspace.path, label: workspace.displayName };
@@ -264,7 +268,7 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createTaskPlugin({
-      agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
+      agentTaskHistory: new AgentTaskHistoryContract(agentDatabase)
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
     createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
@@ -275,6 +279,7 @@ function createDefaultMainKernelPlugins(input: {
     createSkillsPlugin({ rootDir: input.paths.root, bundledRoot: input.builtinSkillsRoot }),
     createRuntimeToolsPlugin({
       confirmShellRequest: input.confirmShellRequest,
+      executionGrantBroker,
       rootDir: input.paths.root,
       // Same instance the shell binds: `shell.execute` without an explicit `cwd` must resolve the
       // bound directory instead of throwing `workspace_not_selected`.

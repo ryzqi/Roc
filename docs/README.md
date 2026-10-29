@@ -12,7 +12,8 @@
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [architecture-repair-plan.md](architecture-repair-plan.md) | 架构收敛审计结果与逐项修复计划 |
-| [agent-harness-pr00-baseline.md](agent-harness-pr00-baseline.md) | Agent harness 执行边界、基线检查、恢复顺序与 PR-01 验收入口 |
+| [agent-harness-pr00-baseline.md](agent-harness-pr00-baseline.md) | PR-00 基线、执行边界清单与遗留风险 |
+| [agent-harness-pr01-execution-boundary.md](agent-harness-pr01-execution-boundary.md) | PR-01 agent shell 授权、隔离策略与目标主机验证 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)

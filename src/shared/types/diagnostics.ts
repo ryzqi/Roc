@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-import {
+import type {
   diagnosticCheckSchema,
   diagnosticPackageRequestSchema,
   diagnosticPackageSchema,

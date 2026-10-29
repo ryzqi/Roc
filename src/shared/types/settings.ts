@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 
-import { defaultModelStateSchema } from '../schemas/agent';
-import {
+import type { defaultModelStateSchema } from '../schemas/agent';
+import type {
   appSettingsSchema,
   hostIntegrationStatusSchema,
   permissionsConfigSchema,
@@ -27,7 +27,7 @@ import {
   settingsTrustHookRequestSchema,
   shortcutsConfigSchema
 } from '../schemas/ipc-memory-settings';
-import { approvalModeSchema, mcpServersConfigSchema } from '../schemas/ipc-mcp-skills';
+import type { approvalModeSchema, mcpServersConfigSchema } from '../schemas/ipc-mcp-skills';
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export type MemoryCharLimits = AppSettings['memory']['charLimits'];

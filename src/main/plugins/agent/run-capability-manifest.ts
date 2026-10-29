@@ -43,6 +43,7 @@ export function compileRunCapabilityManifest(input: {
   explicitSkillIds?: readonly string[];
   selfConfigAvailable?: boolean;
   shellAllowedCommands?: readonly string[];
+  trustedHostAvailable?: boolean;
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
   researchProjectId?: string | null;
@@ -113,8 +114,8 @@ export function compileRunCapabilityManifest(input: {
     mcpApprovalMode: input.mcpApprovalMode,
     mcpServers: input.mcpServers,
     selfConfigAvailable: input.selfConfigAvailable ?? false,
-    shellAllowedCommands: input.shellAllowedCommands
-  });
+    shellAllowedCommands: input.shellAllowedCommands,
+    trustedHostAvailable: input.trustedHostAvailable === true  });
 
   const interruptOn = createInterruptPolicy({
     deleteFileApprovalMode: input.deleteFileApprovalMode,
@@ -364,14 +365,17 @@ function resolveProvenance(card: AgentCapabilityCard): RunCapabilityManifestTool
 }
 
 function resolveExecutionScopes(card: AgentCapabilityCard): RunCapabilityManifestToolV1['executionScopes'] {
-  if (card.id === selfConfigCardId) {
+  if (card.id === selfConfigCardId || card.id === 'builtin:run_trusted_host_command') {
     return ['main'];
   }
   return ['main', 'subagent'];
 }
 
 function resolveEffectClass(card: AgentCapabilityCard): RunCapabilityEffectClassV1 {
-  if (card.id === 'builtin:run_shell_command' || card.id === selfConfigCardId) {
+  if (card.id === 'builtin:run_shell_command' || card.id === 'builtin:run_isolated_read_command') {
+    return 'isolated_execution';
+  }
+  if (card.id === 'builtin:run_trusted_host_command' || card.id === selfConfigCardId) {
     return 'host_execution';
   }
   if (card.id === 'builtin:delete_file') {
@@ -387,6 +391,9 @@ function resolveEffectClass(card: AgentCapabilityCard): RunCapabilityEffectClass
 }
 
 function resolveApprovalPolicy(name: string, interruptOn: AgentInterruptPolicy): RunCapabilityApprovalPolicyV1 {
+  if (name === 'run_trusted_host_command') {
+    return { kind: 'native_dialog' };
+  }
   const policy = interruptOn[name];
   if (policy === undefined) {
     return { kind: 'none' };

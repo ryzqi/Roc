@@ -61,6 +61,26 @@ test('plan cards exclude local execution, deletion and self configuration', () =
   assert.equal(chat.toolCards.find(card => card.name === 'delete_file').requiresApproval, true);
 });
 
+test('execution profiles split isolated read/write from main-only trusted host approval', () => {
+  const compiled = api.compileRunCapabilityManifest(input({ trustedHostAvailable: true }));
+  const names = compiled.toolCards.map((card) => card.name);
+  assert.ok(names.includes('run_isolated_read_command'));
+  assert.ok(names.includes('run_shell_command'));
+  assert.ok(names.includes('run_trusted_host_command'));
+  const readTool = compiled.manifest.tools.find((tool) => tool.modelVisibleName === 'run_isolated_read_command');
+  const writeTool = compiled.manifest.tools.find((tool) => tool.modelVisibleName === 'run_shell_command');
+  const hostTool = compiled.manifest.tools.find((tool) => tool.modelVisibleName === 'run_trusted_host_command');
+  assert.equal(readTool.effectClass, 'isolated_execution');
+  assert.equal(writeTool.effectClass, 'isolated_execution');
+  assert.equal(hostTool.effectClass, 'host_execution');
+  assert.deepEqual(hostTool.executionScopes, ['main']);
+  assert.deepEqual(hostTool.approvalPolicy, { kind: 'native_dialog' });
+  assert.equal(compiled.interruptOn.run_trusted_host_command, undefined);
+
+  const backgroundPreview = api.compileRunCapabilityManifest(input({ trustedHostAvailable: false }));
+  assert.equal(backgroundPreview.toolCards.some((card) => card.name === 'run_trusted_host_command'), false);
+});
+
 test('MCP selection preserves disabled and missing reasons and rejects reserved tool names', () => {
   const compiled = api.compileRunCapabilityManifest(input({
     mcpServers: [server, { ...server, id: 'disabled', enabled: false }],

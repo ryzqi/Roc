@@ -37,9 +37,10 @@ import { ModelPicker } from './model-picker';
  *
  * 联网搜索 and 深度思考 switches are not portable: `chatStartRunRequestSchema` has no
  * thinking or web-search field — the run
- * request carries `input` / `mode` / `threadId` / `workflowHint` / `taskSource` /
- * `workspacePath` / `shellAllowedCommands` / `attachments` / `explicitSkillIds` and nothing
- * else. A switch that never reaches the backend is a control that lies, so the row carries
+ * request carries `input` / `mode` / `threadId` / `workflowHint` / `researchProjectId` /
+ * `attachments` / `explicitSkillIds` and nothing else. Main resolves workspace and execution
+ * authority from trusted context, so the renderer has no control for those fields. A switch
+ * that never reaches the backend is a control that lies, so the row carries
  * the one run-shape choice the contract does have (`mode`: 对话 / 任务) instead, and
  * capability stays where it is actually enforced — `enabledCapabilities` on the request and
  * the run's own manifest (with the approval cards as the surface that shows it).

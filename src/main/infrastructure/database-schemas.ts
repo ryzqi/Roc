@@ -429,6 +429,78 @@ CREATE INDEX idx_agent_pilot_runs_created ON agent_pilot_runs(created_at DESC);`
     // 旧行落成空字符串（就是根任务的路径），读回时按 task_id/idx 重新排序——升级前是按插入顺序，
     // 那一点不再保留（上游契约要求排序键）。
     sql: `ALTER TABLE langgraph_checkpoint_writes ADD COLUMN task_path TEXT NOT NULL DEFAULT '';`
+  },
+  {
+    version: 7,
+    name: 'durable_execution_grants',
+    sql: `
+CREATE TABLE agent_execution_run_fences (
+      run_id TEXT PRIMARY KEY,
+      revoked_at TEXT NOT NULL,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    );
+CREATE TABLE agent_execution_approvals (
+      approval_reference TEXT PRIMARY KEY,
+      schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+      run_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      tool_call_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      workspace_path TEXT NOT NULL,
+      workspace_dev TEXT NOT NULL,
+      workspace_ino TEXT NOT NULL,
+      cwd TEXT NOT NULL,
+      command_hash TEXT NOT NULL,
+      resource_scope_hash TEXT NOT NULL,
+      manifest_hash TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('issued','consumed','revoked','expired')),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      revoked_at TEXT,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY(thread_id) REFERENCES agent_threads(id) ON DELETE CASCADE
+    );
+CREATE UNIQUE INDEX idx_agent_execution_approvals_run_call_live
+      ON agent_execution_approvals(run_id, tool_call_id) WHERE status IN ('issued','consumed');
+CREATE INDEX idx_agent_execution_approvals_run_status
+      ON agent_execution_approvals(run_id, status, expires_at);
+CREATE TABLE agent_execution_grants (
+      id TEXT PRIMARY KEY,
+      schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+      run_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      tool_call_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      profile TEXT NOT NULL CHECK(profile IN ('isolated_read','isolated_write','trusted_host')),
+      workspace_path TEXT NOT NULL,
+      workspace_dev TEXT NOT NULL,
+      workspace_ino TEXT NOT NULL,
+      cwd TEXT NOT NULL,
+      command_hash TEXT NOT NULL,
+      resource_scope_hash TEXT NOT NULL,
+      manifest_hash TEXT NOT NULL,
+      network_policy TEXT NOT NULL CHECK(network_policy IN ('deny','inherit')),
+      max_duration_ms INTEGER NOT NULL CHECK(max_duration_ms > 0 AND max_duration_ms <= 120000),
+      max_output_bytes INTEGER NOT NULL CHECK(max_output_bytes > 0 AND max_output_bytes <= 1048576),
+      approval_reference TEXT,
+      status TEXT NOT NULL CHECK(status IN ('issued','consumed','revoked','expired')),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      revoked_at TEXT,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY(thread_id) REFERENCES agent_threads(id) ON DELETE CASCADE,
+      FOREIGN KEY(approval_reference) REFERENCES agent_execution_approvals(approval_reference)
+    );
+CREATE UNIQUE INDEX idx_agent_execution_grants_run_call_live
+      ON agent_execution_grants(run_id, tool_call_id) WHERE status IN ('issued','consumed');
+CREATE INDEX idx_agent_execution_grants_run_status
+      ON agent_execution_grants(run_id, status, expires_at);
+CREATE INDEX idx_agent_execution_grants_expiry
+      ON agent_execution_grants(status, expires_at);
+`
   }
 ];
 

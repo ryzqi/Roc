@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-import {
+import type {
   activeTaskItemSchema,
   backgroundTaskPreviewRequestSchema,
   backgroundTaskPreviewSchema,
@@ -23,7 +23,7 @@ import {
   traySummarySchema,
   updateBackgroundTaskRequestSchema
 } from '../schemas/ipc-core';
-import {
+import type {
   guardrailTaskEventPayloadSchema,
   persistedTaskEventSchema,
   taskEventSchema

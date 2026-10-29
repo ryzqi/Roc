@@ -1,11 +1,11 @@
 import type { z } from 'zod';
 
-import {
+import type {
   sessionMessageSchema,
   sessionMessageSearchRequestSchema,
   sessionMessageSearchResultSchema
 } from '../schemas/agent';
-import {
+import type {
   memoryFileWriteOutcomeSchema,
   memoryFileWriteRequestSchema,
   memoryKindSchema,

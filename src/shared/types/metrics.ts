@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-import { metricFilterSchema, metricsSnapshotSchema } from '../schemas/ipc-core';
+import type { metricFilterSchema, metricsSnapshotSchema } from '../schemas/ipc-core';
 
 export type MetricsSnapshot = z.infer<typeof metricsSnapshotSchema>;
 export type Metric = MetricsSnapshot['metrics'][number];

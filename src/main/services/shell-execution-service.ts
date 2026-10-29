@@ -3,18 +3,18 @@ import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
-import { evaluateShellPolicy, normalizeShellCommand } from './deep-agent/shell-policy';
-import type { RtkExecutionMetadata, RtkService } from './rtk-service';
+import { assertConsumedExecutionGrant, isConsumedExecutionGrant, type ConsumedExecutionGrant } from './deep-agent/execution-grant-broker';
+import { normalizeShellCommand } from './deep-agent/shell-policy';
+import { redact } from './deep-agent/redaction';
+import type { RtkService } from './rtk-service';
 import {
   buildAgentExecutePayload,
   buildRtkEnvironment,
   combineOutput,
-  resolveRtkRoute,
-  resolveRtkRouteAsync,
   toText
 } from './shell-execution-helpers';
 import type { WorkspaceService } from './workspace-service';
-import { terminateProcessTree } from './process-tree';
+import { terminateProcessTreeWithRetry } from './process-tree';
 
 type ExecutedShellCommand = {
   stdout: string;
@@ -43,7 +43,7 @@ const shellEnvironmentKeys = [
 ] as const;
 
 export type ShellTaskEventRecorder = {
-  recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): unknown;
+  recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): void;
 };
 
 export class ShellExecutionService {
@@ -54,20 +54,13 @@ export class ShellExecutionService {
   ) {}
 
   execute(request: ShellExecutionRequest): ShellExecutionResult {
+    if (request.source !== 'terminal') throw new Error('shell_agent_grant_required');
     const normalizedCommand = normalizeShellCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
-    const execution =
-      request.source === 'agent'
-        ? (this.rejectAgentShellPolicy({
-            command: request.command,
-            cwd,
-            defaultCwd: this.readFallbackCwd(),
-            allowedCommands: request.allowedCommands
-          }) ?? this.runAgentCommand(request.command, cwd))
-        : this.executeTerminalCommand(request.command, cwd);
+    const execution = this.executeTerminalCommand(request.command, cwd);
     const cappedExecution = this.capExecutionOutput(execution);
-    const result: ShellExecutionResult = {
+    return {
       command: request.command,
       normalizedCommand,
       cwd,
@@ -80,46 +73,17 @@ export class ShellExecutionService {
       truncated: cappedExecution.truncated,
       ...(cappedExecution.teePath === undefined ? {} : { teePath: cappedExecution.teePath })
     };
-
-    if (request.source === 'agent' && request.threadId !== undefined && request.runId !== undefined) {
-      this.taskService.recordEvent({
-        threadId: request.threadId,
-        runId: request.runId,
-        type: 'agent_execute',
-        payload: buildAgentExecutePayload({
-          command: result.command,
-          normalizedCommand: result.normalizedCommand,
-          cwd: result.cwd,
-          exitCode: result.exitCode,
-          durationMs: result.durationMs,
-          usedRtk: result.usedRtk,
-          bypassReason: result.bypassReason,
-          output: combineOutput(result.stdout, result.stderr)
-        })
-      });
-    }
-
-    return result;
   }
 
   async executeAsync(request: ShellExecutionRequest): Promise<ShellExecutionResult> {
-    if (request.signal?.aborted) {
-      throw new Error('shell_execution_aborted');
-    }
+    if (request.signal?.aborted) throw new Error('shell_execution_aborted');
+    if (request.source !== 'terminal') throw new Error('shell_agent_grant_required');
     const normalizedCommand = normalizeShellCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
-    const execution =
-      request.source === 'agent'
-        ? (this.rejectAgentShellPolicy({
-            command: request.command,
-            cwd,
-            defaultCwd: this.readFallbackCwd(),
-            allowedCommands: request.allowedCommands
-          }) ?? (await this.runAgentCommandAsync(request.command, cwd, request.signal)))
-        : await this.executeTerminalCommandAsync(request.command, cwd, request.signal);
+    const execution = await this.executeTerminalCommandAsync(request.command, cwd, request.signal);
     const cappedExecution = this.capExecutionOutput(execution);
-    const result: ShellExecutionResult = {
+    return {
       command: request.command,
       normalizedCommand,
       cwd,
@@ -132,117 +96,70 @@ export class ShellExecutionService {
       truncated: cappedExecution.truncated,
       ...(cappedExecution.teePath === undefined ? {} : { teePath: cappedExecution.teePath })
     };
+  }
 
-    if (request.source === 'agent' && request.threadId !== undefined && request.runId !== undefined) {
-      this.taskService.recordEvent({
-        threadId: request.threadId,
-        runId: request.runId,
-        type: 'agent_execute',
-        payload: buildAgentExecutePayload({
-          command: result.command,
-          normalizedCommand: result.normalizedCommand,
-          cwd: result.cwd,
-          exitCode: result.exitCode,
-          durationMs: result.durationMs,
-          usedRtk: result.usedRtk,
-          bypassReason: result.bypassReason,
-          output: combineOutput(result.stdout, result.stderr)
-        })
+  async executeGrantedAgentAsync(input: {
+    command: string;
+    signal?: AbortSignal;
+    grant: ConsumedExecutionGrant;
+  }): Promise<ShellExecutionResult> {
+    const { grant } = input;
+    const startedAt = Date.now();
+    let recorded = false;
+    try {
+      assertConsumedExecutionGrant(grant, {
+        command: input.command,
+        cwd: grant.cwd,
+        profile: 'trusted_host',
+        workspacePath: grant.workspacePath
       });
+      if (input.signal?.aborted) throw new Error('shell_execution_aborted');
+      const execution = await this.executeSystemShellAsync(input.command, grant.cwd, input.signal, false, {
+        maxDurationMs: grant.maxDurationMs,
+        maxOutputBytes: grant.maxOutputBytes,
+        captureArtifact: false
+      });
+      const result: ShellExecutionResult = {
+        command: input.command,
+        normalizedCommand: normalizeShellCommand(input.command),
+        cwd: grant.cwd,
+        stdout: execution.stdout,
+        stderr: execution.stderr,
+        exitCode: execution.exitCode,
+        durationMs: Date.now() - startedAt,
+        usedRtk: false,
+        truncated: execution.truncated === true
+      };
+      recorded = true;
+      this.recordGrantedAgentExecution(grant, result);
+      return result;
+    } catch (error) {
+      if (!recorded) {
+        recorded = true;
+        this.recordGrantedAgentExecution(grant, {
+          command: input.command,
+          normalizedCommand: normalizeShellCommand(input.command),
+          cwd: grant.cwd,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+          durationMs: Date.now() - startedAt,
+          usedRtk: false,
+          truncated: false
+        }, error instanceof Error ? error.message : String(error));
+      }
+      throw error;
     }
-
-    return result;
   }
 
-  private runAgentCommand(command: string, cwd: string): ExecutedShellCommand {
-    const rtk = this.rtkService.getExecutionMetadata();
-    if (rtk.resourceState !== 'ready') {
-      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
-      if (policyDenial !== null) {
-        return policyDenial;
-      }
-      const fallback = this.executeSystemShell(command, cwd);
-      return {
-        ...fallback,
-        usedRtk: false,
-        bypassReason: rtk.bypassReason
-      };
-    }
-
-    const rtkRoute = resolveRtkRoute(command);
-    if (rtkRoute.kind === 'fallback') {
-      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
-      if (policyDenial !== null) {
-        return policyDenial;
-      }
-      const fallback = this.executeSystemShell(command, cwd);
-      return {
-        ...fallback,
-        usedRtk: false,
-        bypassReason: rtkRoute.bypassReason
-      };
-    }
-
-    const policyDenial = this.rejectFinalAgentCommand(formatRtkPolicyCommand(rtkRoute.args), cwd);
-    if (policyDenial !== null) {
-      return policyDenial;
-    }
-    const execution = this.executeRtk(rtkRoute.args, cwd, rtk);
-    return {
-      ...execution,
-      usedRtk: true
-    };
-  }
-
-  private async runAgentCommandAsync(command: string, cwd: string, signal?: AbortSignal): Promise<ExecutedShellCommand> {
-    const rtk = this.rtkService.getExecutionMetadata();
-    if (rtk.resourceState !== 'ready') {
-      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
-      if (policyDenial !== null) {
-        return policyDenial;
-      }
-      const fallback = await this.executeSystemShellAsync(command, cwd, signal);
-      return {
-        ...fallback,
-        usedRtk: false,
-        bypassReason: rtk.bypassReason
-      };
-    }
-
-    if (signal?.aborted) {
-      throw new Error('shell_execution_aborted');
-    }
-    const rtkRoute = await resolveRtkRouteAsync(
-      command,
-      rtk,
-      signal,
-      buildShellEnvironment(buildRtkEnvironment(rtk), false)
-    );
-    if (signal?.aborted) {
-      throw new Error('shell_execution_aborted');
-    }
-    if (rtkRoute.kind === 'fallback') {
-      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
-      if (policyDenial !== null) {
-        return policyDenial;
-      }
-      const fallback = await this.executeSystemShellAsync(command, cwd, signal);
-      return {
-        ...fallback,
-        usedRtk: false,
-        bypassReason: rtkRoute.bypassReason
-      };
-    }
-
-    const policyDenial = this.rejectFinalAgentCommand(formatRtkPolicyCommand(rtkRoute.args), cwd);
-    if (policyDenial !== null) {
-      return policyDenial;
-    }
-    const execution = await this.executeRtkAsync(rtkRoute.args, cwd, rtk, signal);
-    return {
-      ...execution,
-      usedRtk: true
-    };
+  recordGrantedAgentExecution(grant: ConsumedExecutionGrant, result: ShellExecutionResult, executionError?: string): void {
+    if (!isConsumedExecutionGrant(grant)) throw new Error('execution_grant_not_consumed');
+    this.taskService.recordEvent({
+      threadId: grant.threadId,
+      runId: grant.runId,
+      type: 'agent_execute',
+      payload: buildGrantedAgentExecutePayload(grant, result, executionError)
+    });
   }
 
   private executeTerminalCommand(command: string, cwd: string): ExecutedShellCommand {
@@ -263,27 +180,6 @@ export class ShellExecutionService {
     };
   }
 
-  private executeRtk(
-    args: string[],
-    cwd: string,
-    metadata: RtkExecutionMetadata
-  ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
-    return this.execFile(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata));
-  }
-
-  private async executeRtkAsync(
-    args: string[],
-    cwd: string,
-    metadata: RtkExecutionMetadata,
-    signal?: AbortSignal
-  ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
-    return await this.execFileAsync(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata), signal);
-  }
-
-  private executeSystemShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
-    return this.executeSystemShellWithEnvironment(command, cwd, false);
-  }
-
   private executeSystemShellWithEnvironment(
     command: string,
     cwd: string,
@@ -297,12 +193,12 @@ export class ShellExecutionService {
     command: string,
     cwd: string,
     signal?: AbortSignal,
-    inheritEnvironment = false
+    inheritEnvironment = false,
+    limits?: { maxOutputBytes: number; maxDurationMs: number; captureArtifact: boolean }
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
     const shell = resolveCommandShell(command);
-    return await this.execFileAsync(shell.file, shell.args, cwd, inheritEnvironment ? {} : this.agentShellEnvironment(), signal, inheritEnvironment);
+    return this.execFileAsync(shell.file, shell.args, cwd, inheritEnvironment ? {} : this.agentShellEnvironment(), signal, inheritEnvironment, limits);
   }
-
   private agentShellEnvironment(): Record<string, string> {
     const metadata = this.rtkService.getExecutionMetadata();
     if (metadata.resourceState !== 'ready') {
@@ -351,21 +247,50 @@ export class ShellExecutionService {
     cwd: string,
     extraEnv: Record<string, string> = {},
     signal?: AbortSignal,
-    inheritEnvironment = false
+    inheritEnvironment = false,
+    limits?: { maxOutputBytes: number; maxDurationMs: number; captureArtifact: boolean }
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
-    return await new Promise((resolve, reject) => {
-      const metadata = this.rtkService.getExecutionMetadata();
-      mkdirSync(metadata.teeDir, { recursive: true });
-      const artifactPath = join(metadata.teeDir, `shell-${Date.now()}-${randomUUID()}.log`);
-      const artifact = createWriteStream(artifactPath, { encoding: 'utf8' });
-      let stdout = '';
-      let stderr = '';
+    const outputLimit = limits?.maxOutputBytes ?? maxOutputBytes;
+    const artifactLimit = 1024 * 1024;
+    const maxDurationMs = limits?.maxDurationMs ?? shellDeadlineMs;
+    if (!Number.isInteger(outputLimit) || outputLimit <= 0 || outputLimit > 1024 * 1024) {
+      throw new Error('shell_execution_output_limit_invalid');
+    }
+    if (!Number.isInteger(maxDurationMs) || maxDurationMs <= 0 || maxDurationMs > 120000) {
+      throw new Error('shell_execution_deadline_invalid');
+    }
+    const metadata = this.rtkService.getExecutionMetadata();
+    const captureArtifact = limits?.captureArtifact ?? true;
+    if (captureArtifact) mkdirSync(metadata.teeDir, { recursive: true });
+    const artifactPath = captureArtifact ? join(metadata.teeDir, `shell-${Date.now()}-${randomUUID()}.log`) : undefined;
+    const artifact = artifactPath === undefined ? null : createWriteStream(artifactPath, { encoding: 'utf8' });
+    return new Promise((resolve, reject) => {
+      let stdout: Buffer = Buffer.alloc(0);
+      let stderr: Buffer = Buffer.alloc(0);
       let stdoutTruncated = false;
       let stderrTruncated = false;
       let settled = false;
-      const append = (current: string, chunk: Buffer | string): { value: string; truncated: boolean } => {
-        const result = capText(`${current}${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`, maxOutputBytes);
+      let capturedOutputBytes = 0;
+      let artifactBytes = 0;
+      let artifactTruncated = false;
+      const append = (current: Buffer, chunk: Buffer | string): { value: Buffer; truncated: boolean } => {
+        const remainingBytes = Math.max(0, outputLimit - capturedOutputBytes);
+        const result = appendBounded(current, chunk, current.byteLength + remainingBytes);
+        capturedOutputBytes += result.value.byteLength - current.byteLength;
         return result;
+      };
+      const appendArtifact = (stream: 'STDOUT' | 'STDERR', chunk: Buffer | string): void => {
+        if (artifact === null || artifactTruncated) return;
+        const output = Buffer.concat([Buffer.from(`${stream}\n`), Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
+        const remaining = artifactLimit - artifactBytes;
+        if (remaining <= 0) {
+          artifactTruncated = true;
+          return;
+        }
+        const slice = output.subarray(0, remaining);
+        artifact.write(slice);
+        artifactBytes += slice.length;
+        if (slice.length < output.length) artifactTruncated = true;
       };
       const child = spawn(file, args, {
         cwd,
@@ -378,45 +303,34 @@ export class ShellExecutionService {
         signal?.removeEventListener('abort', abort);
       };
       const finishArtifact = (truncated: boolean) => {
+        if (artifact === null || artifactPath === undefined) return;
         artifact.end(() => {
-          if (!truncated) {
-            rmSync(artifactPath, { force: true });
-          }
+          if (!truncated && !artifactTruncated) rmSync(artifactPath, { force: true });
         });
       };
-      const terminate = (message: string): Error => {
+      const terminate = async (message: string): Promise<Error> => {
         try {
-          terminateProcessTree(child);
+          await terminateProcessTreeWithRetry(child);
           return new Error(message);
         } catch (error) {
           return new Error(message, { cause: error });
         }
       };
-      const abort = () => {
-        if (settled) {
-          return;
-        }
+      const stopWithError = async (message: string): Promise<void> => {
+        if (settled) return;
         settled = true;
-        const failure = terminate('shell_execution_aborted');
         cleanup();
+        const failure = await terminate(message);
         finishArtifact(false);
         reject(failure);
       };
-      const deadline = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        const failure = terminate('shell_execution_deadline_exceeded');
-        cleanup();
-        finishArtifact(false);
-        reject(failure);
-      }, shellDeadlineMs);
+      const abort = () => { void stopWithError('shell_execution_aborted'); };
+      const deadline = setTimeout(() => { void stopWithError('shell_execution_deadline_exceeded'); }, maxDurationMs);
       child.stdout.on('data', (chunk: Buffer | string) => {
         if (settled) {
           return;
         }
-        artifact.write(`STDOUT\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
+        appendArtifact('STDOUT', chunk);
         const result = append(stdout, chunk);
         stdout = result.value;
         stdoutTruncated = stdoutTruncated || result.truncated;
@@ -425,7 +339,7 @@ export class ShellExecutionService {
         if (settled) {
           return;
         }
-        artifact.write(`STDERR\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
+        appendArtifact('STDERR', chunk);
         const result = append(stderr, chunk);
         stderr = result.value;
         stderrTruncated = stderrTruncated || result.truncated;
@@ -437,7 +351,8 @@ export class ShellExecutionService {
         settled = true;
         cleanup();
         finishArtifact(false);
-        resolve({ stdout, stderr: `${stderr}${stderr.length === 0 ? '' : '\n'}${error.message}`, exitCode: 1 });
+        const stderrText = stderr.toString('utf8');
+        resolve({ stdout: stdout.toString('utf8'), stderr: `${stderrText}${stderrText.length === 0 ? '' : '\n'}${error.message}`, exitCode: 1 });
       });
       child.on('close', (code) => {
         if (settled) {
@@ -445,14 +360,14 @@ export class ShellExecutionService {
         }
         settled = true;
         cleanup();
-        const truncated = stdoutTruncated || stderrTruncated;
+        const truncated = stdoutTruncated || stderrTruncated || artifactTruncated;
         finishArtifact(truncated);
         resolve({
-          stdout,
-          stderr,
+          stdout: stdout.toString('utf8'),
+          stderr: stderr.toString('utf8'),
           exitCode: code === null ? 1 : code,
           truncated,
-          ...(truncated ? { teePath: artifactPath } : {})
+          ...(truncated && artifactPath !== undefined ? { teePath: artifactPath } : {})
         });
       });
       if (signal?.aborted) {
@@ -492,38 +407,27 @@ export class ShellExecutionService {
     return this.workspaceService.requireWorkspace().path;
   }
 
-  private rejectFinalAgentCommand(command: string, cwd: string): ExecutedShellCommand | null {
-    // RTK routing may rewrite the command. The host-execution boundary checks that final representation too.
-    return this.rejectAgentShellPolicy({ command, cwd, defaultCwd: this.readFallbackCwd() });
-  }
-
-  private rejectAgentShellPolicy(input: {
-    command: string;
-    cwd: string;
-    defaultCwd: string;
-    allowedCommands?: readonly string[];
-  }): ExecutedShellCommand | null {
-    const verdict = evaluateShellPolicy(input);
-    if (verdict.verdict === 'allow') {
-      return null;
-    }
-    return {
-      stdout: '',
-      exitCode: 1,
-      stderr: verdict.message,
-      usedRtk: false,
-      bypassReason: verdict.reason
-    };
-  }
-
-  private readFallbackCwd(): string {
-    return this.workspaceService.getCurrentWorkspace()?.path ?? 'selected workspace root';
-  }
-
 }
 
-function formatRtkPolicyCommand(args: readonly string[]): string {
-  return `rtk ${args.join(' ')}`;
+export function buildGrantedAgentExecutePayload(grant: ConsumedExecutionGrant, result: ShellExecutionResult, executionError?: string): Record<string, unknown> {
+  return {
+    ...buildAgentExecutePayload({
+      command: result.command,
+      normalizedCommand: result.normalizedCommand,
+      cwd: result.cwd,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      usedRtk: result.usedRtk,
+      bypassReason: result.bypassReason,
+      output: combineOutput(result.stdout, result.stderr)
+    }),
+    grantId: grant.grantId,
+    grantSchemaVersion: grant.schemaVersion,
+    toolCallId: grant.toolCallId,
+    profile: grant.profile,
+    approvalReference: grant.approvalReference ?? null,
+    executionError: executionError === undefined ? null : redact(executionError).slice(0, 512)
+  };
 }
 
 function resolveCommandShell(command: string): { file: string; args: string[] } {
@@ -545,6 +449,15 @@ function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessE
     environment[key] = value;
   }
   return environment;
+}
+
+function appendBounded(current: Buffer, chunk: Buffer | string, maxBytes: number): { value: Buffer; truncated: boolean } {
+  const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  const remaining = Math.max(0, maxBytes - current.byteLength);
+  if (chunkBuffer.byteLength <= remaining) {
+    return { value: Buffer.concat([current, chunkBuffer]), truncated: false };
+  }
+  return { value: Buffer.concat([current, chunkBuffer.subarray(0, remaining)]), truncated: true };
 }
 
 function capText(value: string, maxBytes: number): { value: string; truncated: boolean } {

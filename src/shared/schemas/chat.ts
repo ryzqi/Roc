@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { chatImageAttachmentMediaTypes } from '../constants/chat';
 import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
 
 import {
@@ -23,8 +24,6 @@ import {
 const identifierSchema = z.string().trim().min(1);
 
 export const chatRunModeSchema = z.enum(['chat', 'task', 'plan']);
-
-export const chatImageAttachmentMediaTypes = ['image/png', 'image/jpeg', 'image/webp'] as const;
 
 export const chatImageAttachmentMediaTypeSchema = z.enum(chatImageAttachmentMediaTypes);
 
@@ -322,9 +321,10 @@ export const chatStartRunRequestSchema = z
   })
   .strict();
 
-// shellAllowedCommands is authorized and injected by main, never selected by renderer IPC.
 export const chatStartRunIpcRequestSchema = chatStartRunRequestSchema.omit({
-  shellAllowedCommands: true
+  shellAllowedCommands: true,
+  taskSource: true,
+  workspacePath: true
 });
 
 export const chatStartRunResultSchema = z

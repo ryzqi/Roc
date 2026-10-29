@@ -19,6 +19,7 @@ import type {
   TaskRun,
   TaskStatus
 } from '../../../shared/types';
+import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
 import {
   approvalDecisionPayloadSchema,
   humanQuestionAnsweredPayloadSchema,
@@ -268,7 +269,7 @@ export class AgentSessionRepository {
             snapshot.model.modelId,
             enabledCapabilitiesJson,
             snapshot.workspace === null ? null : snapshot.workspace.path,
-            snapshot.runOrigin === 'workbench_creation' ? 'workbench' : null,
+            taskSourceFromRunSnapshot(snapshot),
             snapshot.workflowHint,
             JSON.stringify(snapshot),
             snapshot.schemaVersion,
@@ -414,7 +415,7 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_version !== 7) {
+    if (row.snapshot_version !== 7 && row.snapshot_version !== 8) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
       throw new Error('run_execution_snapshot_unsupported_version');
     }
@@ -431,6 +432,9 @@ export class AgentSessionRepository {
     }
     try {
       const snapshot = parseRunExecutionSnapshot(storedSnapshot);
+      if (snapshot.schemaVersion !== row.snapshot_version) {
+        throw new Error('run_execution_snapshot_version_mismatch');
+      }
       if (snapshot.runId !== row.id || snapshot.threadId !== row.thread_id) {
         throw new Error('run_execution_snapshot_identity_mismatch');
       }
@@ -773,6 +777,7 @@ export class AgentSessionRepository {
   markRunInterrupted(input: {
     interrupts: readonly PendingInterrupt[];
     runId: string;
+    revokePendingExecutionGrants?: () => void;
     telemetry: AgentRunTelemetryV1;
     threadId: string;
   }): { events: TaskEvent[]; run: TaskRun } {
@@ -818,6 +823,7 @@ export class AgentSessionRepository {
       for (const event of events) {
         this.insertEvent(event);
       }
+      input.revokePendingExecutionGrants?.();
       return {
         events,
         run: transition.run

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { rocHookEventNames } from '../constants/hooks';
 
 import {
   sessionListInputSchema,
@@ -193,14 +194,7 @@ export const memoryStatusSchema = z
 
 export const memorySnapshotPreviewSchema = z.object({ text: z.string() }).strict();
 
-export const rocHookEventNameSchema = z.enum([
-  'SessionStart',
-  'UserPromptSubmit',
-  'PreToolUse',
-  'PostToolUse',
-  'Stop',
-  'SessionEnd'
-]);
+export const rocHookEventNameSchema = z.enum(rocHookEventNames);
 
 const rocHookCommandHandlerSchema = z
   .object({

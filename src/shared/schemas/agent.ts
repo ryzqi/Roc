@@ -85,9 +85,10 @@ export const runCapabilityManifestToolSchema = z
     ]),
     executionScopes: z.array(z.enum(['main', 'subagent'])),
     riskLevel: agentCapabilityRiskSchema,
-    effectClass: z.enum(['external_call', 'host_execution', 'network_read', 'none', 'workspace_mutation']),
+    effectClass: z.enum(['external_call', 'host_execution', 'isolated_execution', 'network_read', 'none', 'workspace_mutation']),
     approvalPolicy: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('none') }).strict(),
+      z.object({ kind: z.literal('native_dialog') }).strict(),
       z
         .object({
           kind: z.literal('required'),
@@ -206,7 +207,15 @@ const runExecutionSnapshotShape = {
   researchProjectId: identifierSchema.nullable().optional()
 } as const;
 
-export const runExecutionSnapshotSchema = z
+export const workspaceFileIdentitySchema = z
+  .object({
+    path: identifierSchema,
+    dev: z.string().min(1).max(128),
+    ino: z.string().min(1).max(128)
+  })
+  .strict();
+
+const runExecutionSnapshotV7Schema = z
   .object({
     schemaVersion: z.literal(7),
     ...runExecutionSnapshotShape,
@@ -214,6 +223,21 @@ export const runExecutionSnapshotSchema = z
     shellAllowedCommands: z.array(identifierSchema).optional()
   })
   .strict();
+
+const runExecutionSnapshotV8Schema = z
+  .object({
+    schemaVersion: z.literal(8),
+    ...runExecutionSnapshotShape,
+    workspaceIdentity: workspaceFileIdentitySchema.nullable(),
+    budget: runBudgetSchema,
+    shellAllowedCommands: z.array(identifierSchema).optional()
+  })
+  .strict();
+
+export const runExecutionSnapshotSchema = z.discriminatedUnion('schemaVersion', [
+  runExecutionSnapshotV7Schema,
+  runExecutionSnapshotV8Schema
+]);
 
 export const defaultModelStateSchema = z
   .object({

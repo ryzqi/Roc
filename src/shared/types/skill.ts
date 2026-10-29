@@ -1,13 +1,13 @@
 import type { z } from 'zod';
 
-import {
+import type {
   builtinSkillSourceStatusSchema,
   builtinSkillsAutoUpdateRequestSchema,
   builtinSkillsCheckRequestSchema,
   builtinSkillsCheckResultSchema,
   builtinSkillsStatusSchema
 } from '../schemas/builtin-skills';
-import {
+import type {
   skillFilePreviewRequestSchema,
   skillFilePreviewResultSchema,
   skillFileTreeRequestSchema,

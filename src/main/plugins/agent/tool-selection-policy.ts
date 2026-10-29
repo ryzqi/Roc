@@ -13,13 +13,18 @@ export type ToolSelectionContext = {
   mcpServers: McpServerSnapshot[];
   selfConfigAvailable: boolean;
   shellAllowedCommands: readonly string[] | undefined;
+  trustedHostAvailable: boolean;
 };
 
 export function selectToolCards(context: ToolSelectionContext): AgentCapabilityCard[] {
   const cards: AgentCapabilityCard[] = [];
 
-  if (context.shellAllowedCommands === undefined || context.shellAllowedCommands.length > 0) {
+  if (context.mode !== 'plan' && (context.shellAllowedCommands === undefined || context.shellAllowedCommands.length > 0)) {
     cards.push(createRunShellCommandCard());
+    cards.push(createIsolatedReadCommandCard());
+  }
+  if (context.mode !== 'plan' && context.trustedHostAvailable) {
+    cards.push(createTrustedHostCommandCard());
   }
 
   cards.push(createWebReadCard());
@@ -48,14 +53,52 @@ function createRunShellCommandCard(): AgentCapabilityCard {
     id: 'builtin:run_shell_command',
     name: 'run_shell_command',
     capabilityType: 'terminal_tool',
-    description: '以当前 macOS 用户权限执行 zsh；由 Roc 统一处理 RTK、审计、取消和输出限制。',
+    description: '在隔离工作区内执行 zsh；写入权限仅限当前工作区，网络默认禁止，时限和输出受限。文件读写优先使用 Roc 文件工具。',
     requiredInput: 'zsh command',
-    scope: 'external',
-    dependencies: ['ShellExecutionService', 'RtkService'],
-    sideEffects: ['host_code_execution', 'task_trace_audit'],
+    scope: 'workspace',
+    dependencies: ['ExecutionGrantBroker', 'MacOsIsolatedEnvironment'],
+    sideEffects: ['isolated_code_execution', 'workspace_mutation'],
     requiresApproval: false,
     supportsLongTermGrant: false,
-    revokeGrantHint: 'run_shell_command 由 Roc 内置工具提供，不创建长期授权。',
+    revokeGrantHint: 'run_shell_command 的每次执行都使用短时单次工作区隔离授权。',
+    riskLevel: 'critical',
+    auditCategory: 'agent_execute',
+    untrustedContext: false
+  };
+}
+
+function createIsolatedReadCommandCard(): AgentCapabilityCard {
+  return {
+    id: 'builtin:run_isolated_read_command',
+    name: 'run_isolated_read_command',
+    capabilityType: 'terminal_tool',
+    description: '在工作区只读、网络禁止的隔离环境中执行 zsh；临时输出和时限受限。',
+    requiredInput: 'zsh command',
+    scope: 'workspace',
+    dependencies: ['ExecutionGrantBroker', 'MacOsIsolatedEnvironment'],
+    sideEffects: ['isolated_code_execution'],
+    requiresApproval: false,
+    supportsLongTermGrant: false,
+    revokeGrantHint: 'run_isolated_read_command 的每次执行都使用短时单次授权。',
+    riskLevel: 'medium',
+    auditCategory: 'agent_execute',
+    untrustedContext: false
+  };
+}
+
+function createTrustedHostCommandCard(): AgentCapabilityCard {
+  return {
+    id: 'builtin:run_trusted_host_command',
+    name: 'run_trusted_host_command',
+    capabilityType: 'terminal_tool',
+    description: '请求一次本机 shell 执行。运行前会显示完整命令和工作目录，并等待明确确认。',
+    requiredInput: 'zsh command',
+    scope: 'external',
+    dependencies: ['ExecutionGrantBroker', 'native confirmation dialog'],
+    sideEffects: ['host_code_execution', 'task_trace_audit'],
+    requiresApproval: true,
+    supportsLongTermGrant: false,
+    revokeGrantHint: '每次调用都需要新的明确确认。',
     riskLevel: 'critical',
     auditCategory: 'agent_execute',
     untrustedContext: false
@@ -186,6 +229,8 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
     'resolve_background_task_time',
     'roc_self_config',
     'run_shell_command',
+    'run_isolated_read_command',
+    'run_trusted_host_command',
     'schedule_background_task',
     'session_search',
     'task',

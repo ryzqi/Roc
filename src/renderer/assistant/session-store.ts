@@ -37,7 +37,6 @@ export type StartRunInput = {
   threadId: string | null;
   enabledCapabilities: { mcpServers: string[]; skills: string[] };
   workflowHint?: WorkflowHint;
-  workspacePath?: string | null;
   researchProjectId?: string;
   attachments?: ChatImageAttachment[];
   explicitSkillIds?: string[];

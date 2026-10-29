@@ -573,7 +573,11 @@ export function McpSection({
                         {tool.name}
                       </span>
                       <span className="shrink-0 text-[var(--font-meta-size)] text-muted">
-                        {tool.approval === 'required' ? '需要审批' : '免审批'}
+                        {tool.approval === 'native_dialog'
+                          ? '系统对话框确认'
+                          : tool.approval === 'required'
+                            ? '需要审批'
+                            : '免审批'}
                       </span>
                     </li>
                   )

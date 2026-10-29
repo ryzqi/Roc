@@ -98,7 +98,6 @@ export function useChatSession(input: {
           mode: sendInput.mode,
           threadId,
           enabledCapabilities: { mcpServers: [], skills: sendInput.skillIds },
-          ...(workspacePath === null ? {} : { workspacePath }),
           ...(projectId === null ? {} : { researchProjectId: projectId }),
           ...(sendInput.attachments.length === 0 ? {} : { attachments: sendInput.attachments }),
           ...(sendInput.skillIds.length === 0 ? {} : { explicitSkillIds: sendInput.skillIds })

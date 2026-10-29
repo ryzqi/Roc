@@ -1,16 +1,17 @@
 import type { z } from 'zod';
 
-import { chatRunEventSchema } from '../schemas/chat';
-import {
+import { rocHookEventNames } from '../constants/hooks';
+import type { chatRunEventSchema } from '../schemas/chat';
+import type {
   rocHookConfigSchema,
   rocHookConfigSnapshotSchema,
   rocHookEventNameSchema,
   settingsSaveHookConfigRequestSchema,
   settingsTrustHookRequestSchema
 } from '../schemas/ipc-memory-settings';
-import { hookRunSummarySchema } from '../schemas/task-event';
+import type { hookRunSummarySchema } from '../schemas/task-event';
 
-export const rocHookEventNames = rocHookEventNameSchema.options;
+export { rocHookEventNames };
 
 export type RocHookEventName = z.infer<typeof rocHookEventNameSchema>;
 export type RocHookConfig = z.infer<typeof rocHookConfigSchema>;

@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-import { performanceSampleSchema } from '../schemas/ipc-core';
+import type { performanceSampleSchema } from '../schemas/ipc-core';
 
 type PerformanceSample = z.infer<typeof performanceSampleSchema>;
 

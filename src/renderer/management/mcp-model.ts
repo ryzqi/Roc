@@ -171,7 +171,7 @@ export function toServerConfig(draft: McpDraft, existing: McpServerConfig | null
 export type ServerToolLine = {
   name: string;
   riskLevel: string;
-  approval: 'none' | 'required';
+  approval: 'none' | 'required' | 'native_dialog';
   executionScopes: string[];
   effectClass: string;
 };
