@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { ModalShell } from '../shell/ModalShell';
 import { useManagement } from './management-scope';
-import { MANAGEMENT_TABS, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
-import { useManagementStores, type ManagementTabId } from './use-management-stores';
+import { MANAGEMENT_LOADING_SUMMARIES, MANAGEMENT_TABS, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
+import type { ManagementTabId } from './use-management-stores';
+import { useManagementStores } from './management-stores-provider';
 
 /**
  * Management drawer (P1 shell, P9 content).
@@ -43,20 +44,20 @@ export function ManagementPanel({
   onTabChange
 }: ManagementPanelProps): React.JSX.Element {
   const scope = useManagement();
-  const stores = useManagementStores(scope);
+  const summaries = useManagementStores((stores) => stores.summaries);
+  const memory = useManagementStores((stores) => stores.memory);
+  const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
   const tab = MANAGEMENT_TABS.some((entry) => entry.id === activeTab) ? activeTab : 'memory';
   const [discardOpen, setDiscardOpen] = useState(false);
 
   /**
    * Unsaved memory drafts are never dropped silently.
    *
-   * The drawer keeps its stores while closed (the mount latch is what makes reopening instant), so
-   * a draft *would* survive; but the same panels are also mounted as canvas views, and two editors
-   * holding the same slot is how one save silently overwrites the other. So leaving with edits asks
-   * first — and discarding on the way out is what keeps "one draft at a time" true.
+   * The drawer and canvas now share one scope-owned memory draft store. Leaving the drawer with
+   * edits still asks first, and discarding clears the same draft both surfaces display.
    */
   const beforeClose = (): boolean => {
-    if (stores.memory.dirtyCount === 0) {
+    if (memory === null || memory.dirtyCount === 0) {
       return true;
     }
     setDiscardOpen(true);
@@ -78,23 +79,23 @@ export function ManagementPanel({
         <ManagementTabStrip
           activeTab={tab}
           onTabChange={onTabChange}
-          summaries={stores.summaries}
+          summaries={visibleSummaries}
           idPrefix="mgmt-drawer"
           testIdPrefix="mgmt"
         />
 
         <p className="shrink-0 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-summary">
-          {managementSummary(tab, stores.summaries)}
+          {managementSummary(tab, visibleSummaries)}
         </p>
 
-        <ManagementSectionBody tab={tab} scope={scope} stores={stores} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
+        <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
       </div>
     </ModalShell>
 
     <ConfirmDialog
       open={discardOpen}
       title="放弃未保存的记忆改动？"
-      message={`有 ${stores.memory.dirtyCount} 份记忆文件尚未保存。`}
+      message={`有 ${memory?.dirtyCount ?? 0} 份记忆文件尚未保存。`}
       detail="放弃后改动不会保存。"
       confirmLabel="放弃修改"
       cancelLabel="继续编辑"
@@ -103,7 +104,7 @@ export function ManagementPanel({
       onCancel={() => setDiscardOpen(false)}
       onConfirm={() => {
         setDiscardOpen(false);
-        stores.memory.discardAll();
+        memory?.discardAll();
         onClose();
       }}
     />

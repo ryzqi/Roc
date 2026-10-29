@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { drawerSectionForCanvasView } from '../../shared/surfaces';
 import type { ViewProps } from '../app/view-registry';
 import { useManagement } from './management-scope';
-import { ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
-import { useManagementStores, type ManagementTabId } from './use-management-stores';
+import { MANAGEMENT_LOADING_SUMMARIES, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
+import { useManagementStores } from './management-stores-provider';
+import type { ManagementTabId } from './use-management-stores';
 
 /**
  * Management as a canvas view (P9/T9.5).
@@ -22,7 +23,8 @@ import { useManagementStores, type ManagementTabId } from './use-management-stor
 
 export function ManagementView({ view }: ViewProps): React.JSX.Element {
   const scope = useManagement();
-  const stores = useManagementStores(scope);
+  const summaries = useManagementStores((stores) => stores.summaries);
+  const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
   const [tab, setTab] = useState<ManagementTabId>(() => viewForInitialTab(view));
 
   return (
@@ -34,15 +36,15 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
         <ManagementTabStrip
           activeTab={tab}
           onTabChange={setTab}
-          summaries={stores.summaries}
+          summaries={visibleSummaries}
           idPrefix="mgmt-view"
           testIdPrefix="mgmt-view"
         />
       </div>
       <p className="shrink-0 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-view-summary">
-        {managementSummary(tab, stores.summaries)}
+        {managementSummary(tab, visibleSummaries)}
       </p>
-      <ManagementSectionBody tab={tab} scope={scope} stores={stores} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />
+      <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';
-import { canvasViewForDrawerSection, isCanvasTabId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
+import { canvasViewForDrawerSection, isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
 import { errorMessage } from './loaded-state';
 import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
@@ -15,6 +15,7 @@ import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
 import { clearAssistantComposerDraft } from '../assistant/composer-draft';
 import type { ManagementTabId } from '../management/use-management-stores';
 import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
+import { ManagementStoresProvider } from '../management/management-stores-provider';
 import { ProjectPortalView } from '../project/ProjectPortalView';
 import { useCurrentProject } from '../project/use-projects';
 import { useProjectWorkspace } from '../project/use-project-workspace';
@@ -379,6 +380,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     }),
     [client, route.projectId, boundWorkspace.path, navigate, openManagementSection]
   );
+  const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
+  const managementStoresEnabled =
+    managementMounted ||
+    (isDrawerSectionId(route.view) && canvasViewForDrawerSection(route.view) !== null);
 
   /**
    * Concept rows for the ⌘K 概念 group.
@@ -541,6 +546,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
   return (
     <ManagementScopeProvider value={managementScope}>
+      <ManagementStoresProvider
+        enabled={managementStoresEnabled}
+        scope={managementScope}
+        scopeKey={managementStoresScopeKey}
+      >
     <div
       className="app-shell flex h-full w-full flex-col bg-bg text-ink"
       data-testid="roc-app"
@@ -784,6 +794,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         </Suspense>
       </ModalShell>
     </div>
+      </ManagementStoresProvider>
     </ManagementScopeProvider>
   );
 }

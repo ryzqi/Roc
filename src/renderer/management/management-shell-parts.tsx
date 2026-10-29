@@ -5,7 +5,8 @@ import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
 import { McpSection } from './sections/McpSection';
 import { MemorySection } from './sections/MemorySection';
 import { SkillsSection } from './sections/SkillsSection';
-import type { ManagementStores, ManagementTabId } from './use-management-stores';
+import type { ManagementTabId } from './use-management-stores';
+import { useManagementStores } from './management-stores-provider';
 
 /**
  * The parts both management shells share (P9/T9.5).
@@ -33,6 +34,13 @@ export const MANAGEMENT_TABS: ReadonlyArray<{
   { id: 'mcp', label: 'MCP', icon: Cpu, iconClass: 'text-[var(--icon-mcp)]' },
   { id: 'tasks', label: '任务', icon: Clock, iconClass: 'text-[var(--icon-task)]' }
 ];
+
+export const MANAGEMENT_LOADING_SUMMARIES: Record<ManagementTabId, string> = {
+  memory: '正在加载…',
+  skills: '正在加载…',
+  mcp: '正在加载…',
+  tasks: '正在加载…'
+};
 
 export function ManagementTabStrip({
   activeTab,
@@ -118,20 +126,33 @@ export function managementSummary(tab: ManagementTabId, summaries: Record<Manage
   return summaries[tab];
 }
 
-/** The body switch. One place decides which store a section gets. */
 export function ManagementSectionBody({
   tab,
   scope,
-  stores,
   idPrefix,
   testIdPrefix
 }: {
   tab: ManagementTabId;
   scope: ManagementScope;
-  stores: ManagementStores;
   idPrefix: string;
   testIdPrefix: string;
 }): ReactNode {
+  let section: ReactNode;
+  switch (tab) {
+    case 'memory':
+      section = <MemorySectionContent scope={scope} />;
+      break;
+    case 'skills':
+      section = <SkillsSectionContent />;
+      break;
+    case 'mcp':
+      section = <McpSectionContent scope={scope} />;
+      break;
+    case 'tasks':
+      section = <TasksSectionContent />;
+      break;
+  }
+
   return (
     <div
       role="tabpanel"
@@ -141,10 +162,35 @@ export function ManagementSectionBody({
       className="min-h-0 flex-1 overflow-y-auto"
       data-testid={`${testIdPrefix}-panel-${tab}`}
     >
-      {tab === 'memory' ? <MemorySection scope={scope} store={stores.memory} /> : null}
-      {tab === 'skills' ? <SkillsSection store={stores.skills} /> : null}
-      {tab === 'mcp' ? <McpSection scope={scope} store={stores.mcp} /> : null}
-      {tab === 'tasks' ? <BackgroundTasksSection store={stores.tasks} /> : null}
+      {section}
     </div>
+  );
+}
+
+function MemorySectionContent({ scope }: { scope: ManagementScope }): ReactNode {
+  const store = useManagementStores((stores) => stores.memory);
+  return store === null ? <ManagementSectionLoading /> : <MemorySection scope={scope} store={store} />;
+}
+
+function SkillsSectionContent(): ReactNode {
+  const store = useManagementStores((stores) => stores.skills);
+  return store === null ? <ManagementSectionLoading /> : <SkillsSection store={store} />;
+}
+
+function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
+  const store = useManagementStores((stores) => stores.mcp);
+  return store === null ? <ManagementSectionLoading /> : <McpSection scope={scope} store={store} />;
+}
+
+function TasksSectionContent(): ReactNode {
+  const store = useManagementStores((stores) => stores.tasks);
+  return store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />;
+}
+
+function ManagementSectionLoading(): React.JSX.Element {
+  return (
+    <p role="status" className="p-3 text-muted">
+      正在加载管理数据…
+    </p>
   );
 }

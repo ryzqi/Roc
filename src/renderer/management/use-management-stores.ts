@@ -9,17 +9,16 @@ import { useMemoryFiles, type MemoryFilesStore } from './use-memory';
 import { useSkills, type SkillsStore } from './use-skills';
 
 /**
- * The four management datasets, created once per shell (P9/T9.5).
+ * The four management datasets, created once per active management scope (P9/T9.5).
  *
- * Both shells — the drawer and the three canvas views — need the same four stores, and the tab
- * strip needs a **real** one-line summary per tab (a static string would be the placeholder P1
- * shipped). Loading all four on open is deliberate: every read is local (`memory.status` is a
- * SQLite read, `skills.list` a directory scan, `mcp.*` a JSON config, `tasks.*` a list plus the
- * scheduler's own state), and the summaries are only honest if they come from the data.
+ * The drawer and canvas can be mounted together. Their previous independent hook instances held
+ * separate memory drafts, allowing a stale save to overwrite newer edits. The source hooks now live
+ * in one lazy scope owner; a Zustand snapshot store publishes stable slices to both shells.
  *
- * The sections stay presentational: they receive their store, so a shell cannot end up with two
- * instances of the same hook (two `tasks.onUpdated` subscriptions, two capability previews) just
- * because it rendered the same section in two places.
+ * Loading all four on open remains deliberate: every read is local (`memory.status` is a SQLite
+ * read, `skills.list` a directory scan, `mcp.*` a JSON config, `tasks.*` a list plus the scheduler's
+ * own state), and the summaries are only honest if they come from the data. Sections select their
+ * own slice so unrelated updates do not invalidate the whole management surface.
  */
 
 /**
@@ -38,6 +37,7 @@ export type ManagementStores = {
   summaries: Record<ManagementTabId, string>;
 };
 
+
 function memorySummary(memory: MemoryFilesStore): string {
   const parts = ['查看助手记住的项目背景与个人偏好'];
   if (memory.dirtyCount > 0) {
@@ -49,7 +49,7 @@ function memorySummary(memory: MemoryFilesStore): string {
   return parts.join(' · ');
 }
 
-export function useManagementStores(scope: ManagementScope): ManagementStores {
+export function useManagementStoresSource(scope: ManagementScope): ManagementStores {
   const memory = useMemoryFiles(scope.client);
   const skills = useSkills(scope.client);
   // The MCP assembly preview claims "what the next run can call", so it must be given the same
