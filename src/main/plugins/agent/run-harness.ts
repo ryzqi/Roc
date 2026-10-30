@@ -54,6 +54,7 @@ import { memoryApplicability } from '../../services/deep-agent/harness-revision'
 import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import type { ToolAdmissionObserver } from '../../services/deep-agent/tool-resource-coordinator';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
 import type { ExecutionGrantBroker, ExecutionGrantBinding, ExecutionGrantProfile } from '../../services/deep-agent/execution-grant-broker';
 import type { HookRuntime } from '../../services/hooks';
@@ -82,6 +83,7 @@ export type RunHarnessRequest = {
   abortSignal: AbortSignal;
   /** harness 装配期间产生的事件（hook 事件、上下文维护事件）由调用方的事件通道接走。 */
   emitRuntimeEvent: (event: ChatRunEvent) => void;
+  observeToolAdmission?: ToolAdmissionObserver;
   modelHandle: { langChainHandle?: LangChainChatModelHandle; modelId: string };
   run: TaskRun;
   snapshot: RunExecutionSnapshot;
@@ -257,6 +259,7 @@ export async function buildRunHarness(
       tokenCounter: contextTokenCounter
     },
     toolEffectStore: services.toolEffectStore,
+    observeToolAdmission: request.observeToolAdmission,
     hookMiddleware:
       services.hookRuntime === undefined
         ? undefined

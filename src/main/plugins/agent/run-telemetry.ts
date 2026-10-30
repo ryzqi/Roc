@@ -3,8 +3,31 @@ import { z } from 'zod';
 
 import type { ChatAssistantBlock, ChatRunEvent, RunExecutionSnapshot, TaskRun, TokenUsage } from '../../../shared/types';
 import { tokenUsageSchema } from '../../../shared/schemas/token-usage';
+import {
+  TOOL_ADMISSION_RESOURCE_KINDS,
+  type ToolAdmissionObservation,
+  type ToolAdmissionResourceKind
+} from '../../services/deep-agent/tool-resource-coordinator';
 
 const nullableCountSchema = z.number().int().nonnegative().nullable();
+const telemetryCountSchema = z.number().int().nonnegative();
+const admissionLatencySchema = z.object({
+  count: telemetryCountSchema,
+  totalMs: telemetryCountSchema,
+  maxMs: telemetryCountSchema
+}).strict();
+const admissionConflictCountsSchema = z.record(z.enum(TOOL_ADMISSION_RESOURCE_KINDS), telemetryCountSchema);
+const emptyAdmissionConflictCounts = (): Record<ToolAdmissionResourceKind, number> =>
+  Object.fromEntries(TOOL_ADMISSION_RESOURCE_KINDS.map(kind => [kind, 0])) as Record<ToolAdmissionResourceKind, number>;
+const createEmptyToolAdmissionSummary = () => ({
+  acquisitionCount: 0,
+  cancellationCount: 0,
+  contendedCount: 0,
+  fallbackCount: 0,
+  wait: { count: 0, totalMs: 0, maxMs: 0 },
+  hold: { count: 0, totalMs: 0, maxMs: 0 },
+  conflicts: emptyAdmissionConflictCounts()
+});
 
 const runTelemetrySchema = z
   .object({
@@ -61,6 +84,15 @@ const runTelemetrySchema = z
         recoveryCount: z.number().int().nonnegative()
       })
       .strict(),
+    toolAdmission: z.object({
+      acquisitionCount: telemetryCountSchema,
+      cancellationCount: telemetryCountSchema,
+      contendedCount: telemetryCountSchema,
+      fallbackCount: telemetryCountSchema,
+      wait: admissionLatencySchema,
+      hold: admissionLatencySchema,
+      conflicts: admissionConflictCountsSchema
+    }).strict().default(createEmptyToolAdmissionSummary),
     terminal: z
       .object({
         status: z.enum(['cancelled', 'completed', 'failed', 'interrupted']).nullable(),
@@ -207,6 +239,25 @@ export class AgentRunTelemetryAccumulator {
     );
   }
 
+  observeToolAdmission(observation: ToolAdmissionObservation): void {
+    requireNonNegativeInteger(observation.waitMs, 'agent_run_telemetry_admission_wait_invalid');
+    this.telemetry.toolAdmission.wait = addDurationSample(this.telemetry.toolAdmission.wait, observation.waitMs);
+    if (observation.conflictKinds.length > 0) this.telemetry.toolAdmission.contendedCount += 1;
+    for (const kind of new Set(observation.conflictKinds)) {
+      this.telemetry.toolAdmission.conflicts[kind] += 1;
+    }
+    if (observation.status === 'cancelled') {
+      if (observation.holdMs !== null) throw new Error('agent_run_telemetry_admission_hold_invalid');
+      this.telemetry.toolAdmission.cancellationCount += 1;
+      return;
+    }
+    if (observation.holdMs === null) throw new Error('agent_run_telemetry_admission_hold_invalid');
+    requireNonNegativeInteger(observation.holdMs, 'agent_run_telemetry_admission_hold_invalid');
+    this.telemetry.toolAdmission.acquisitionCount += 1;
+    this.telemetry.toolAdmission.hold = addDurationSample(this.telemetry.toolAdmission.hold, observation.holdMs);
+    if (observation.resourceKinds.includes('global_fallback')) this.telemetry.toolAdmission.fallbackCount += 1;
+  }
+
   recordRecovery(): void {
     this.telemetry.runtime.recoveryCount += 1;
   }
@@ -348,6 +399,7 @@ function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshot): Age
       totalDurationMs: 0,
       recoveryCount: 0
     },
+    toolAdmission: createEmptyToolAdmissionSummary(),
     terminal: {
       status: null,
       errorCode: null,
@@ -390,6 +442,17 @@ export function calculateAgentRunTelemetryDurationMs(startedAt: string, endedAt:
     throw new Error('agent_run_telemetry_clock_invalid');
   }
   return durationMs;
+}
+
+function addDurationSample(
+  aggregate: AgentRunTelemetryV1['toolAdmission']['wait'],
+  durationMs: number
+): AgentRunTelemetryV1['toolAdmission']['wait'] {
+  return {
+    count: aggregate.count + 1,
+    totalMs: aggregate.totalMs + durationMs,
+    maxMs: Math.max(aggregate.maxMs, durationMs)
+  };
 }
 
 function addNullableCount(previous: number | null, next: number | null): number | null {

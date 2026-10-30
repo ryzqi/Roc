@@ -43,6 +43,7 @@ import { RocDomainError } from '../../services/errors';
 import type { RunFailure } from '../../services/deep-agent/types';
 import type { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
 import type { PilotDecision } from '../../services/deep-agent/pilot-gate';
+import type { ToolAdmissionObservation } from '../../services/deep-agent/tool-resource-coordinator';
 import type { PilotOptInRequest, PilotStatus } from '../../../shared/schemas/harness-pilot';
 import { derivePilotRequest, restrictManifestForPilot } from './pilot-profile';
 import { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
@@ -161,6 +162,7 @@ export type AgentDeepAgentExecutor = {
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
     observeModelUsage: (usage: AgentModelUsageTelemetry) => void;
+    observeToolAdmission?: (observation: ToolAdmissionObservation) => void;
     validatedAttachments?: ChatValidatedImageAttachment[];
   }): AgentDeepAgentExecution | Promise<AgentDeepAgentExecution>;
 };
@@ -657,6 +659,7 @@ export class AgentPluginRuntime {
               abortSignal: abortController.signal,
               modelHandle,
               observeModelUsage: usage => telemetry.observeModelUsage(usage),
+              observeToolAdmission: observation => telemetry.observeToolAdmission(observation),
               resumePayload,
               run: dispatchedRun,
               snapshot
@@ -757,6 +760,7 @@ export class AgentPluginRuntime {
           abortSignal: abortController.signal,
           modelHandle,
           observeModelUsage: usage => telemetry.observeModelUsage(usage),
+          observeToolAdmission: observation => telemetry.observeToolAdmission(observation),
           resumeFromCheckpoint: true,
           run: dispatchedRun,
           snapshot
@@ -1336,6 +1340,7 @@ export class AgentPluginRuntime {
             await this.options.deepAgentExecutor!.execute({
               abortSignal: input.abortSignal,
               observeModelUsage: usage => input.telemetry.observeModelUsage(usage),
+              observeToolAdmission: observation => input.telemetry.observeToolAdmission(observation),
               modelHandle: input.modelHandle,
               run: input.run,
               snapshot: input.snapshot,

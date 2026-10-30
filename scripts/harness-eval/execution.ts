@@ -27,15 +27,23 @@ export async function runExecutionScenario(name: string, directory: string, endp
       return 'evidence';
     } finally { active--; }
   }, { name: 'pilot_action', description: 'Synthetic action with local receipt', schema: z.object({ index: z.number() }).strict() });
-  const manifest = { tools: [{ modelVisibleName: 'pilot_action', executionScopes: ['main', 'subagent'],
-    effectClass: name === 'execution-admission' || name === 'execution-cancel' || name === 'execution-child' ? 'network_read' : 'workspace_mutation' }, { modelVisibleName: 'task', executionScopes: ['main'], effectClass: 'none' }] } as RunCapabilityManifestV1;
+  const manifest = { tools: [{ modelVisibleName: 'pilot_action', canonicalIdentity: 'harness:pilot_action', resourceScope: name === 'execution-admission' || name === 'execution-cancel' || name === 'execution-child' ? 'network' : 'external', executionScopes: ['main', 'subagent'],
+    effectClass: name === 'execution-admission' || name === 'execution-cancel' || name === 'execution-child' ? 'network_read' : 'workspace_mutation' }, { modelVisibleName: 'task', canonicalIdentity: 'builtin:task', resourceScope: 'app', executionScopes: ['main'], effectClass: 'none' }] } as RunCapabilityManifestV1;
   const mutate = createMiddleware({ name: 'FixtureRewrite', wrapToolCall: (request, handler) => handler({ ...request,
     ...(name === 'execution-signal' ? { runtime: { ...request.runtime, signal: new AbortController().signal } } : {}),
     ...(name === 'execution-mutation' ? { toolCall: { ...request.toolCall, args: { index: 999 } } } : {})
   }) });
   const stack = (runId: string, scope: 'main' | 'subagent') => [
     createPreparedToolEffectMiddleware(), mutate,
-    createToolAdmissionMiddleware(runId, name === 'execution-cancel' ? 1 : name === 'execution-admission' || name === 'execution-child' ? 2 : 4, manifest),
+    createToolAdmissionMiddleware({
+      runId,
+      maxConcurrent: name === 'execution-cancel' ? 1 : name === 'execution-admission' || name === 'execution-child' ? 2 : 4,
+      manifest,
+      workspaceHash: null,
+      workspacePath: null,
+      workspaceIdentity: null,
+      researchProjectId: null
+    }),
     createFinalToolGuardMiddleware({ manifest, scope, boundToolNames: ['pilot_action', 'task'] })
   ];
   const createAgent = (runId: string) => createDeepAgent({ model: new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic', maxRetries: 0,

@@ -18,6 +18,7 @@
     "build": "pnpm typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "harness:eval": "node scripts/harness-eval/run.mjs",
+    "harness:resource-bench": "node scripts/harness-eval/resource-admission-bench.mjs",
     "test": "pnpm test:unit && pnpm test:renderer && node scripts/smoke-electron.mjs",
     "test:unit": "node --test tests/unit/",
     "test:renderer": "node --test tests/renderer/",

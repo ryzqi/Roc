@@ -2,7 +2,7 @@ import { createDeepAgent } from 'deepagents';
 import { toolRetryMiddleware, todoListMiddleware } from 'langchain';
 
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionMode } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionMode, RunExecutionSnapshot } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
@@ -43,6 +43,7 @@ import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-
 import { createToolProtocolMiddleware } from './tool-protocol';
 
 import { createPreparedToolEffectMiddleware, createFinalToolGuardMiddleware, createToolAdmissionMiddleware } from './prepared-tool-effect';
+import type { ToolAdmissionObserver } from './tool-resource-coordinator';
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
 
@@ -68,6 +69,8 @@ export type MiddlewareStackPolicy = {
   threadId: string;
   workspaceHash: string | null;
   workspacePath: string | null;
+  workspaceIdentity: RunExecutionSnapshot['workspaceIdentity'];
+  researchProjectId: RunExecutionSnapshot['researchProjectId'];
 };
 
 export type MiddlewareStackContext = {
@@ -86,6 +89,7 @@ export type MiddlewareStackContext = {
   memorySources: readonly string[];
   model: BaseChatModel;
   policy: MiddlewareStackPolicy;
+  observeToolAdmission?: ToolAdmissionObserver;
   toolEffectStore: AgentToolEffectStore | undefined;
   taskContract: TaskContract;
 };
@@ -257,7 +261,16 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
   },
   {
     name: 'RocToolAdmissionMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
-    create: context => createToolAdmissionMiddleware(context.policy.runId, context.budgetLimits.maxConcurrentToolCalls, context.policy.capabilityManifest)
+    create: context => createToolAdmissionMiddleware({
+      runId: context.policy.runId,
+      maxConcurrent: context.budgetLimits.maxConcurrentToolCalls,
+      manifest: context.policy.capabilityManifest,
+      workspaceHash: context.policy.workspaceHash,
+      workspacePath: context.policy.workspacePath,
+      workspaceIdentity: context.policy.workspaceIdentity,
+      researchProjectId: context.policy.researchProjectId,
+      observeAdmission: context.observeToolAdmission
+    })
   },
   {
     name: 'RocRunBudgetMiddleware',

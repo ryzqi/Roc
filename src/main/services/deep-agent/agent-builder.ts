@@ -41,6 +41,7 @@ import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunBudgetLedger } from './run-budget-ledger';
 import type { RunBudgetObserver } from './run-budget-observer';
+import type { ToolAdmissionObserver } from './tool-resource-coordinator';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
@@ -58,6 +59,7 @@ export type DeepAgentBuildInput = {
   checkpointer: BaseCheckpointSaver | undefined;
   hookMiddleware?: RocHookMiddlewareOptions;
   toolEffectStore?: AgentToolEffectStore;
+  observeToolAdmission?: ToolAdmissionObserver;
   contextCompaction: ContextCompactionWiring;
 };
 
@@ -82,6 +84,8 @@ type DeepAgentBuildPolicy = {
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   workspaceHash: string | null;
   workspacePath: string | null;
+  workspaceIdentity: RunExecutionSnapshot['workspaceIdentity'];
+  researchProjectId: RunExecutionSnapshot['researchProjectId'];
 };
 
 /**
@@ -116,7 +120,9 @@ function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuild
       : createRocFilesystemPermissions(),
     interruptOn: compileInterruptPolicy(snapshot),
     workspaceHash: snapshot.workspace === null ? null : snapshot.workspace.hash,
-    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path
+    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
+    workspaceIdentity: snapshot.workspaceIdentity,
+    researchProjectId: snapshot.researchProjectId ?? null
   };
 }
 
@@ -210,6 +216,7 @@ function createMiddlewareStackContext(
     memorySources: input.memorySources,
     model: input.model,
     policy,
+    observeToolAdmission: input.observeToolAdmission,
     toolEffectStore: input.toolEffectStore,
     taskContract: input.snapshot.taskContract
   };

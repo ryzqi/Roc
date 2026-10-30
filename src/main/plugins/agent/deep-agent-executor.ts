@@ -128,6 +128,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const harness = await buildRunHarness(options, {
         abortSignal: executionAbortController.signal,
         emitRuntimeEvent,
+        observeToolAdmission: input.observeToolAdmission,
         modelHandle: input.modelHandle,
         run: input.run,
         snapshot: input.snapshot
