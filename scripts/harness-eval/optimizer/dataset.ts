@@ -177,7 +177,8 @@ function score(value: number | null): number {
 }
 
 export function wilsonInterval(successes: number, total: number, z = 1.959964): Interval {
-  if (total <= 0) throw new Error('optimizer_interval_invalid');
+  if (!Number.isSafeInteger(total) || total <= 0 || !Number.isSafeInteger(successes) || successes < 0 || successes > total
+    || !Number.isFinite(z) || z <= 0) throw new Error('optimizer_interval_invalid');
   const p = successes / total;
   const denominator = 1 + (z * z) / total;
   const centre = p + (z * z) / (2 * total);
@@ -212,6 +213,40 @@ function quantile(sorted: readonly number[], fraction: number): number {
  */
 export function pairedClusterSummary(observations: readonly PairedObservation[], options: { iterations?: number; seed?: number } = {}): PairedSummary {
   if (observations.length === 0) throw new Error('optimizer_pairs_empty');
+  const iterations = options.iterations ?? 2000;
+  const seed = options.seed ?? 20261021;
+  if (!Number.isSafeInteger(iterations) || iterations < 100 || iterations > 100000) {
+    throw new Error('optimizer_bootstrap_iterations_invalid');
+  }
+  if (!Number.isSafeInteger(seed) || seed < 0) throw new Error('optimizer_bootstrap_seed_invalid');
+  const scenarioIds = new Set<string>();
+  const clusterByScenario = new Map<string, string>();
+  const clusterIds = new Set<string>();
+  for (const observation of observations) {
+    if (typeof observation.scenarioId !== 'string' || observation.scenarioId.trim().length === 0
+      || typeof observation.clusterId !== 'string' || observation.clusterId.trim().length === 0) {
+      throw new Error('optimizer_pair_identity_invalid');
+    }
+    if (scenarioIds.has(observation.scenarioId)) throw new Error(`optimizer_pair_duplicate:${observation.scenarioId}`);
+    scenarioIds.add(observation.scenarioId);
+    const priorCluster = clusterByScenario.get(observation.scenarioId);
+    if (priorCluster !== undefined && priorCluster !== observation.clusterId) {
+      throw new Error(`optimizer_pair_cluster_mismatch:${observation.scenarioId}`);
+    }
+    clusterByScenario.set(observation.scenarioId, observation.clusterId);
+    clusterIds.add(observation.clusterId);
+    for (const [arm, value] of [['base', observation.base], ['candidate', observation.candidate]] as const) {
+      if (value !== null && (!Number.isFinite(value) || value < 0 || value > 1)) {
+        throw new Error(`optimizer_pair_score_invalid:${observation.scenarioId}:${arm}`);
+      }
+    }
+    for (const [arm, duration] of [['base', observation.baseDurationMs], ['candidate', observation.candidateDurationMs]] as const) {
+      if (duration !== undefined && (!Number.isFinite(duration) || duration < 0)) {
+        throw new Error(`optimizer_pair_duration_invalid:${observation.scenarioId}:${arm}`);
+      }
+    }
+  }
+  if (clusterIds.size < 2) throw new Error('optimizer_pairs_need_two_clusters');
   const sorted = [...observations].sort((left, right) => (left.scenarioId < right.scenarioId ? -1 : left.scenarioId > right.scenarioId ? 1 : 0));
   const clusters = new Map<string, number[]>();
   for (const observation of sorted) {
@@ -220,8 +255,7 @@ export function pairedClusterSummary(observations: readonly PairedObservation[],
     clusters.set(observation.clusterId, list);
   }
   const clusterMeans = [...clusters.entries()].sort(([left], [right]) => (left < right ? -1 : 1)).map(([, values]) => mean(values));
-  const iterations = options.iterations ?? 2000;
-  const random = lcg(options.seed ?? 20261021);
+  const random = lcg(seed);
   const sampled: number[] = [];
   for (let iteration = 0; iteration < iterations; iteration++) {
     const draw: number[] = [];

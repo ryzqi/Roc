@@ -120,3 +120,11 @@ path, the pilot does not start a candidate search (P5's numbers are fixture evid
 the disclosed microusd ceiling is never metered (no price table, so cost stays `unknown`;
 only model calls, tool calls and tokens are metered). P6-02 (real transfer conditions)
 therefore remains in progress.
+
+## PR-06 quality-evaluation pilot
+
+The L1 quality-evaluation contract adds one harness case, `quality-evaluation-contract`, bringing the deterministic harness to 94 cases. It checks a frozen 16-task pilot (two per task family), dataset hashing, the hidden-reference boundary, the 200-case family quotas, protocol authorization gates, and paired-statistics behavior. L1 still has `externalCalls: 0`, `costUsd: null`, no provider credential, and no real-model quality claim.
+
+The pilot source excerpts have Europe PMC `cc by` metadata with attribution; the metadata does not state a license version. Task-specific truth and deterministic validators live in `scripts/harness-eval/quality-evaluation/Task.md`, `data.ts`, and `validators.ts`. Agent input omits expected facts, validators, source registry ids, cluster ids, and split labels. Submitted TypeScript is parsed and structurally validated; it is never executed. The pilot is deliberately marked insufficient: all current research tasks use one source cluster and the operational families use two independent synthetic clusters, below the minimum five clusters per family.
+
+The preregistered target is 200 tasks across the eight listed quotas, three paired repeats, 2,000 seeded cluster-bootstrap resamples, 95% intervals, and a 0.05 non-inferiority margin. Family comparisons are exploratory and unadjusted; a family regression blocks an overall gain claim. Underfilled evidence returns uncertain. L2 remains gated on isolated credentials, a locked protocol, fixed tools/environment, and finite hard spend caps; L3 also requires explicit approval and a rollback plan. No real-provider run has been made, and fixtures do not establish model quality or provider cost.

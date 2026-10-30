@@ -283,6 +283,9 @@ importers:
         specifier: 5.0.12
         version: 5.0.12(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
     devDependencies:
+      '@babel/parser':
+        specifier: 7.29.8
+        version: 7.29.8
       '@codemirror/commands':
         specifier: 6.11.1
         version: 6.11.1

@@ -9,7 +9,7 @@ import { createInventory, hash } from './inventory.mjs';
 import { scenarios } from './scenarios.mjs';
 
 const directory = resolve('.artifacts/harness-eval', new Date().toISOString().replaceAll(':', '-') + `-${process.pid}`);
-const expectedCaseCount = 93;
+const expectedCaseCount = 94;
 mkdirSync(directory, { recursive: true });
 const save = (name, value) => writeFileSync(join(directory, name), JSON.stringify(value, null, 2));
 const report = { schemaVersion: 1, kind: 'deterministic-pilot', directory,
@@ -148,6 +148,13 @@ try {
     const dir = join(directory, name);
     mkdirSync(dir);
     try { report.results.push({ id: name, passed: true, evidence: await runtime.verifyP6(name, dir) }); }
+    catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
+  }
+  {
+    const name = 'quality-evaluation-contract';
+    const dir = join(directory, name);
+    mkdirSync(dir);
+    try { report.results.push({ id: name, passed: true, evidence: runtime.verifyQualityEvaluation() }); }
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
   for (const name of ['memory-versions', 'skills-pinning']) {

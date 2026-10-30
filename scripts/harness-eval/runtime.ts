@@ -3,6 +3,7 @@ export { verifyOptimizer } from './optimizer/optimizer';
 export { verifyTaskContracts } from './task-contract';
 export { runExecutionScenario, runIsolationScenario } from './execution';
 export { verifyP6 } from './p6-experience';
+export { verifyQualityEvaluation } from './quality-evaluation';
 import assert from 'node:assert/strict';
 import { verifyMemorySkills } from './memory-skills';
 import { verifyContext } from './context';
