@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { BaseStore } from '@langchain/langgraph';
@@ -7,6 +8,8 @@ import type {
   AppSettings,
   ApprovalMode,
   McpServerSnapshot,
+  McpToolContractV1,
+  RunCapabilityManifestV1,
   ResearchProject,
   SkillSnapshot,
   Workspace
@@ -57,7 +60,7 @@ import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capa
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
 import { AgentRunEventLog } from './run-event-log';
-import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
+import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor, AgentMcpContractDiscoveryProvider } from './runtime';
 import { AgentPluginRuntime } from './runtime';
 import type { AgentLifecycleHookEmitter } from './runtime-types';
 import { AgentSessionRepository } from './session-repository';
@@ -144,6 +147,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const pilot = createPilotCoordinator(options, budgetLedger);
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
+        mcpContractDiscoveryProvider: createMcpContractDiscoveryProvider(context),
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository, options.executionGrantBroker),
         executionGrantBroker: options.executionGrantBroker,
         eventBus: context.eventBus,
@@ -235,6 +239,30 @@ function isSelfConfigAvailable(option: AgentPluginOptions['deepAgentExecutor']):
     return false;
   }
   return option.selfConfigService !== undefined;
+}
+
+function createMcpContractDiscoveryProvider(context: RocPluginContext): AgentMcpContractDiscoveryProvider {
+  return async ({ manifest }) => {
+    const selectedServerIds = new Set<string>();
+    for (const tool of manifest.tools) {
+      if (tool.provenance.kind === 'mcp') selectedServerIds.add(tool.provenance.serverId);
+    }
+    const servers = manifest.mcpServers.filter((server) => selectedServerIds.has(server.id));
+    if (servers.length === 0) return [];
+    const runId = `mcp-contract-discovery-${randomUUID()}`;
+    try {
+      return await context.capabilities.invoke<
+        { runId: string; servers: RunCapabilityManifestV1['mcpServers']; signal: AbortSignal },
+        McpToolContractV1[]
+      >('mcp.tools.contracts.get', {
+        runId,
+        servers,
+        signal: AbortSignal.timeout(15_000)
+      });
+    } finally {
+      await context.capabilities.invoke<{ runId: string }, { released: true }>('mcp.tools.release', { runId });
+    }
+  };
 }
 
 function resolveDeepAgentExecutor(

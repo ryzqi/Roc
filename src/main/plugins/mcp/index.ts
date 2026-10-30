@@ -7,7 +7,8 @@ import {
   mcpServerEnabledRequestSchema,
   mcpServerSnapshotSchema,
   mcpServerTestResultSchema,
-  mcpServersConfigSchema
+  mcpServersConfigSchema,
+  mcpToolContractSchema
 } from '../../../shared/schemas/ipc-mcp-skills';
 import type {
   ApprovalMode,
@@ -18,6 +19,7 @@ import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../ke
 import { defaultMcpConfig } from '../../services/config/defaults';
 import { McpService, type McpConfigService } from '../../services/mcp-service';
 import { createMcpClientAdapter, type McpClientAdapter } from './mcp-client-adapter';
+import { readMcpToolContractMetadata } from './mcp-tool-contract';
 
 const pluginId = '@roc/plugin-mcp';
 const capabilityVersion = '1.0.0';
@@ -37,6 +39,7 @@ const mcpCapabilityDescriptors = [
   descriptor('mcp.getConfig', emptyInputSchema, mcpServersConfigSchema),
   descriptor('mcp.setApprovalMode', mcpApprovalModeRequestSchema, mcpServersConfigSchema),
   descriptor('mcp.tools.get', z.object({ runId: z.string().min(1), servers: z.array(mcpServerConfigSchema), signal: z.instanceof(AbortSignal) }).strict(), z.array(z.unknown())),
+  descriptor('mcp.tools.contracts.get', z.object({ runId: z.string().min(1), servers: z.array(mcpServerConfigSchema), signal: z.instanceof(AbortSignal) }).strict(), z.array(mcpToolContractSchema)),
   descriptor('mcp.tools.release', z.object({ runId: z.string().min(1) }).strict(), z.object({ released: z.literal(true) }).strict())
 ] as const satisfies readonly CapabilityDescriptor[];
 
@@ -88,6 +91,11 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
         return clientAdapter.loadTools(request.runId, request.servers, request.signal);
       });
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[9], async input => {
+        const request = input as { runId: string; servers: McpServerConfig[]; signal: AbortSignal };
+        const tools = await clientAdapter.loadTools(request.runId, request.servers, request.signal);
+        return tools.map(readMcpToolContractMetadata);
+      });
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[10], async input => {
         await clientAdapter.release((input as { runId: string }).runId);
         return { released: true as const };
       });

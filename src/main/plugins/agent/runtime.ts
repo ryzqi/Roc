@@ -25,7 +25,8 @@ import type {
   RunExecutionSnapshot,
   ResearchStage,
   TaskAcceptance,
-  RunCapabilityManifestV1
+  RunCapabilityManifestV1,
+  McpToolContractV1
 } from '../../../shared/types';
 import {
   DEFAULT_RUN_MODEL_OUTPUT_TOKENS
@@ -50,7 +51,7 @@ import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory
 import type { AgentDeepAgentExecution, RunOutcome } from './agent-execution';
 import { createRunInterruptedEvents, type PendingInterrupt } from './interrupt-projection';
 import type { AgentRunEventLog } from './run-event-log';
-import { compileRunCapabilityManifest } from './run-capability-manifest';
+import { bindMcpToolContracts, compileRunCapabilityManifest } from './run-capability-manifest';
 import {
   createChatStartRunRequestFromSnapshot,
   createRunBudget,
@@ -91,7 +92,12 @@ export type AgentCapabilityPreviewProvider = (input: {
   researchProjectId?: string | null;
 }) => Promise<AgentCapabilityPreview>;
 
+export type AgentMcpContractDiscoveryProvider = (input: {
+  manifest: RunCapabilityManifestV1;
+}) => Promise<readonly McpToolContractV1[]>;
+
 type AgentResumeValue = HITLResponse | { answer: string };
+
 type AgentResumePayload = Record<string, AgentResumeValue>;
 type HitlDecision = HITLResponse['decisions'][number];
 
@@ -186,6 +192,7 @@ export type AgentPluginRuntimeOptions = {
   deepAgentExecutor?: AgentDeepAgentExecutor;
   lifecycleHooks?: AgentLifecycleHookEmitter;
   capabilityPreviewProvider?: AgentCapabilityPreviewProvider;
+  mcpContractDiscoveryProvider?: AgentMcpContractDiscoveryProvider;
   pluginId?: string;
   runEventLog?: AgentRunEventLog;
   status?: AgentRuntimeStatus;
@@ -277,6 +284,21 @@ export class AgentPluginRuntime {
     });
   }
 
+  private async bindMcpContracts(preview: AgentCapabilityPreview): Promise<AgentCapabilityPreview> {
+    if (!preview.manifest.tools.some((tool) => tool.provenance.kind === 'mcp')) {
+      return preview;
+    }
+    const discover = this.options.mcpContractDiscoveryProvider;
+    if (discover === undefined) {
+      throw new Error('mcp_contract_discovery_unavailable');
+    }
+    const contracts = await discover({ manifest: preview.manifest });
+    return {
+      ...preview,
+      manifest: bindMcpToolContracts(preview.manifest, contracts)
+    };
+  }
+
   async startRun(request: ChatStartRunRequest): Promise<ChatStartRunResult> {
     const input = request.input.trim();
     if (input.length === 0) {
@@ -311,9 +333,10 @@ export class AgentPluginRuntime {
     // the submission hash, so the same request always lands in the same deterministic bucket.
     const submissionHash = hashToolInput(request);
     const pilot = this.planPilotRun(submissionHash, capabilityPreview.manifest);
-    const effectivePreview = pilot === null
+    const narrowedPreview = pilot === null
       ? capabilityPreview
       : narrowPreviewForPilot(capabilityPreview, pilot.manifest, pilot.removedTools);
+    const effectivePreview = await this.bindMcpContracts(narrowedPreview);
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
     const workspace = await this.resolveRunWorkspace(request);
     const explicitSkillIds = normalizeExplicitSkillIds(request.explicitSkillIds, effectivePreview.manifest);

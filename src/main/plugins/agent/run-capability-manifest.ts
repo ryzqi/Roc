@@ -1,3 +1,4 @@
+import { runCapabilityManifestSchema } from '../../../shared/schemas/agent';
 import { mcpServerConfigSchema } from '../../../shared/schemas/ipc-mcp-skills';
 import { readSkillRevision } from '../../services/skill-revision';
 import { createHash } from 'node:crypto';
@@ -11,6 +12,7 @@ import type {
   EnabledCapabilities,
   InterruptDecisionType,
   McpServerSnapshot,
+  McpToolContractV1,
   RunCapabilityApprovalPolicyV1,
   RunCapabilityEffectClassV1,
   RunCapabilityManifestToolV1,
@@ -167,6 +169,50 @@ export function compileRunCapabilityManifest(input: {
 export function isRunCapabilityManifestIntegrityValid(manifest: RunCapabilityManifestV1): boolean {
   const { manifestHash, ...withoutHash } = manifest;
   return manifestHash === createRunCapabilityManifestHash(withoutHash);
+}
+
+export function bindMcpToolContracts(
+  manifest: RunCapabilityManifestV1,
+  contracts: readonly McpToolContractV1[]
+): RunCapabilityManifestV1 {
+  const usedRuntimeNames = new Set<string>();
+  const tools = manifest.tools.map((tool) => {
+    if (tool.provenance.kind !== 'mcp') return tool;
+    const serverId = tool.provenance.serverId;
+    const candidates = contracts.filter((contract) => contract.serverId === serverId);
+    let contract: McpToolContractV1 | undefined;
+    if (serverId === 'exa-hosted' && tool.modelVisibleName === 'web_search') {
+      if (candidates.length === 1) contract = candidates[0];
+    } else {
+      contract = candidates.find((item) => item.remoteToolName === tool.modelVisibleName);
+    }
+    if (contract === undefined) {
+      throw new Error(`mcp_tool_contract_missing_or_ambiguous:${serverId}:${tool.modelVisibleName}`);
+    }
+    if (contract.runtimeToolName !== `${contract.serverId}_${contract.remoteToolName}`) {
+      throw new Error(`mcp_tool_contract_runtime_name_invalid:${contract.runtimeToolName}`);
+    }
+    if (usedRuntimeNames.has(contract.runtimeToolName)) {
+      throw new Error(`mcp_tool_contract_duplicate:${contract.runtimeToolName}`);
+    }
+    usedRuntimeNames.add(contract.runtimeToolName);
+    return {
+      ...tool,
+      toolVersion: `mcp-contract-v1:${contract.schemaHash}:${contract.descriptionHash}`,
+      mcpContract: contract
+    };
+  });
+  const unusedContract = contracts.find((contract) => !usedRuntimeNames.has(contract.runtimeToolName));
+  if (unusedContract !== undefined) {
+    throw new Error(`mcp_tool_contract_unbound:${unusedContract.runtimeToolName}`);
+  }
+  const { manifestHash: _manifestHash, ...withoutHash } = manifest;
+  const enrichedWithoutHash = { ...withoutHash, tools };
+  const normalizedWithoutHash = runCapabilityManifestSchema.omit({ manifestHash: true }).parse(enrichedWithoutHash);
+  return runCapabilityManifestSchema.parse({
+    ...normalizedWithoutHash,
+    manifestHash: createRunCapabilityManifestHash(normalizedWithoutHash)
+  });
 }
 
 export function createRunCapabilityManifestHash(input: Omit<RunCapabilityManifestV1, 'manifestHash'>): string {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { taskContractSchema } from './task-acceptance';
 
-import { mcpServerConfigSchema } from './ipc-mcp-skills';
+import { mcpServerConfigSchema, mcpToolContractSchema } from './ipc-mcp-skills';
 import { hitlDecisionTypeSchema } from './hitl';
 
 const identifierSchema = z.string().trim().min(1);
@@ -79,6 +79,7 @@ export const runCapabilityManifestToolSchema = z
   .object({
     canonicalIdentity: z.string(),
     toolVersion: z.string().trim().min(1).optional(),
+    mcpContract: mcpToolContractSchema.optional(),
     modelVisibleName: z.string(),
     provenance: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('builtin'), source: z.literal('roc') }).strict(),
@@ -379,6 +380,7 @@ export type SkippedCapability = z.infer<typeof skippedCapabilitySchema>;
 export type AgentSubagentPreview = z.infer<typeof agentSubagentPreviewSchema>;
 export type AgentCapabilityPreview = z.infer<typeof agentCapabilityPreviewSchema>;
 export type RunCapabilityExecutionScopeV1 = z.infer<typeof runCapabilityManifestToolSchema>['executionScopes'][number];
+export type McpToolContractV1 = z.infer<typeof mcpToolContractSchema>;
 export type RunCapabilityProvenanceV1 = z.infer<typeof runCapabilityManifestToolSchema>['provenance'];
 export type RunCapabilityEffectClassV1 = z.infer<typeof runCapabilityManifestToolSchema>['effectClass'];
 export type RunCapabilityApprovalPolicyV1 = z.infer<typeof runCapabilityManifestToolSchema>['approvalPolicy'];

@@ -2,6 +2,22 @@ import { z } from 'zod';
 
 export const approvalModeSchema = z.enum(['fully_automatic', 'default']);
 
+export const mcpToolContractSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    canonicalizationVersion: z.literal(1),
+    serverId: z.string().trim().min(1),
+    remoteToolName: z.string().trim().min(1),
+    runtimeToolName: z.string().trim().min(1),
+    transport: z.enum(['http', 'sse', 'stdio']),
+    schemaHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    descriptionHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    maxInputBytes: z.number().int().positive(),
+    maxOutputBytes: z.number().int().positive(),
+    maxInboundMessageBytes: z.number().int().positive()
+  })
+  .strict();
+
 export const mcpServerConfigSchema = z
   .object({
     id: z.string().min(1),

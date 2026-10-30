@@ -36,6 +36,7 @@ import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import { toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocCommandTool } from '../../services/deep-agent/command-tool';
 import { createResearchTools } from './research-tools';
+import { assertMcpToolContractMatches, readMcpToolContractMetadata } from '../mcp/mcp-tool-contract';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import type {
@@ -561,14 +562,28 @@ async function loadSelectedMcpTools(
   if (selectedTools.length === 0) {
     return [];
   }
+  for (const expected of selectedTools) {
+    if (expected.mcpContract === undefined) {
+      throw new Error(`mcp_manifest_contract_missing:${expected.modelVisibleName}`);
+    }
+  }
   const tools = await capabilities.invoke<{ runId: string; servers: RunCapabilityManifestV1['mcpServers']; signal: AbortSignal }, unknown[]>('mcp.tools.get', { runId, servers: capabilityManifest.mcpServers, signal });
   const selected = new Map<string, ClientTool>();
   for (const tool of tools) {
     if (!isClientTool(tool)) throw new Error('mcp_runtime_tool_contract_invalid');
-    const name = resolveManifestMcpToolName(tool.name, selectedTools);
-    if (name === null || selected.has(name)) continue;
-    tool.name = name;
-    selected.set(name, tool);
+    const expected = resolveManifestMcpTool(tool.name, selectedTools);
+    if (expected === null) continue;
+    const expectedContract = expected.mcpContract;
+    if (expectedContract === undefined) {
+      throw new Error(`mcp_manifest_contract_missing:${expected.modelVisibleName}`);
+    }
+    const actualContract = readMcpToolContractMetadata(tool);
+    assertMcpToolContractMatches(expectedContract, actualContract, expected.modelVisibleName);
+    if (selected.has(expected.modelVisibleName)) {
+      throw new Error(`mcp_manifest_tool_duplicate:${expected.modelVisibleName}`);
+    }
+    tool.name = expected.modelVisibleName;
+    selected.set(expected.modelVisibleName, tool);
   }
   for (const expected of selectedTools) {
     if (!selected.has(expected.modelVisibleName)) throw new Error(`mcp_manifest_tool_unavailable:${expected.modelVisibleName}`);
@@ -593,35 +608,15 @@ function isClientTool(value: unknown): value is ClientTool {
   return typeof value === 'object' && value !== null && typeof (value as { name?: unknown }).name === 'string';
 }
 
-function resolveManifestMcpToolName(
+function resolveManifestMcpTool(
   runtimeName: string,
   selectedTools: RunCapabilityManifestV1['tools']
-): string | null {
-  for (const tool of selectedTools) {
-    if (tool.provenance.kind !== 'mcp') {
-      continue;
-    }
-    if (tool.provenance.serverId === 'exa-hosted' && isExaHostedWebSearchName(runtimeName)) {
-      return tool.modelVisibleName === 'web_search' ? tool.modelVisibleName : null;
-    }
-    if (isMcpRuntimeToolName(runtimeName, tool.provenance.serverId, tool.modelVisibleName)) {
-      return tool.modelVisibleName;
-    }
-  }
-  return null;
+): RunCapabilityManifestV1['tools'][number] | null {
+  return selectedTools.find((tool) =>
+    tool.provenance.kind === 'mcp' && tool.mcpContract?.runtimeToolName === runtimeName
+  ) ?? null;
 }
 
-/** Installed mcp-adapters 2.x prefixes tool names with server_tool. */
-function isMcpRuntimeToolName(runtimeName: string, serverId: string, modelVisibleName: string): boolean {
-  return runtimeName === `${serverId}_${modelVisibleName}`;
-}
-
-function isExaHostedWebSearchName(name: string): boolean {
-  return (
-    name === 'exa-hosted_web_search_exa' ||
-    name === 'exa-hosted_web_search_advanced_exa'
-  );
-}
 
 function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {
   const schema = webReadToolSchema;

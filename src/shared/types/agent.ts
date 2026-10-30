@@ -14,6 +14,7 @@ export type {
   InterruptDecisionType,
   RunBudget,
   RunBudgetStatus,
+  McpToolContractV1,
   RunCapabilityApprovalPolicyV1,
   RunCapabilityEffectClassV1,
   RunCapabilityExecutionScopeV1,
