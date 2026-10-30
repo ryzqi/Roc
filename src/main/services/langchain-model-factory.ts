@@ -3,6 +3,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
 import { type ChatOpenAIFields } from '@langchain/openai';
 import { DEFAULT_CONTEXT_BUDGET_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { DEFAULT_RUN_MODEL_OUTPUT_TOKENS, resolveRunModelOutputTokens } from '../../shared/run-budget-policy';
 import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import { toTypedProviderConfig } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
@@ -35,6 +36,7 @@ type LangChainModelRuntime = {
   streaming: boolean;
   modelKwargs: Record<string, unknown>;
   contextBudgetTokens: number;
+  maxOutputTokens: number;
 };
 
 export type LangChainChatModelHandle = {
@@ -46,6 +48,7 @@ export type LangChainChatModelHandle = {
 
 type CreateModelOptions = {
   streaming?: boolean;
+  maxOutputTokens?: number;
 };
 
 type AnthropicClientOptions = NonNullable<ChatAnthropicInput['clientOptions']>;
@@ -184,9 +187,6 @@ export class LangChainModelFactory {
     if (options.temperature !== undefined) {
       config.temperature = options.temperature;
     }
-    if (options.maxTokens !== undefined) {
-      config.maxTokens = options.maxTokens;
-    }
     if (options.topP !== undefined) {
       config.topP = options.topP;
     }
@@ -206,6 +206,7 @@ export class LangChainModelFactory {
     options: {
       streaming: boolean;
       contextBudgetTokens: number;
+      maxOutputTokens: number;
       requestTimeoutMs: number;
     }
   ): LangChainChatModelHandle {
@@ -218,6 +219,7 @@ export class LangChainModelFactory {
       streaming: options.streaming,
       maxRetries: 0,
       streamUsage: resolveStreamUsage(provider, modelOptions, options.streaming),
+      maxTokens: Math.min(modelOptions.maxTokens ?? options.maxOutputTokens, options.maxOutputTokens),
       clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
     };
     this.applyAnthropicSamplingParams(config, providerOptions);
@@ -235,7 +237,8 @@ export class LangChainModelFactory {
         baseUrl,
         streaming: options.streaming,
         modelKwargs: {},
-        contextBudgetTokens: options.contextBudgetTokens
+        contextBudgetTokens: options.contextBudgetTokens,
+        maxOutputTokens: options.maxOutputTokens
       },
       model
     };
@@ -277,17 +280,25 @@ export class LangChainModelFactory {
       provider.type === 'llama_cpp'
         ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
         : modelOptions.temperature;
-    const maxTokens = modelOptions.maxTokens;
+    const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS;
+    if (!Number.isSafeInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens <= 0) {
+      throw new Error('run_budget_output_limit_invalid');
+    }
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
     const contextBudgetTokens =
       llamaCppParams?.contextBudgetTokens ?? modelOptions.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
+    const maxTokens = resolveRunModelOutputTokens(
+      contextBudgetTokens,
+      Math.min(modelOptions.maxTokens ?? requestedMaxOutputTokens, requestedMaxOutputTokens)
+    );
 
     if (provider.type === 'anthropic_compatible') {
       return this.createAnthropicModel(provider, modelId, modelOptions, apiKey, {
         streaming,
         contextBudgetTokens,
+        maxOutputTokens: maxTokens,
         requestTimeoutMs
       });
     }
@@ -393,7 +404,8 @@ export class LangChainModelFactory {
         baseUrl,
         streaming,
         modelKwargs,
-        contextBudgetTokens
+        contextBudgetTokens,
+        maxOutputTokens: maxTokens
       },
       model: chatModel
     };

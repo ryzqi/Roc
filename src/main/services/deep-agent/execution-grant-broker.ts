@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type { RunCapabilityManifestV1 } from '../../../shared/types';
 import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
-import { runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
+import { runExecutionSnapshotAnySchema } from '../../../shared/schemas/agent';
 import { evaluateShellPolicy } from './shell-policy';
 
 export type ExecutionGrantProfile = 'isolated_read' | 'isolated_write' | 'trusted_host';
@@ -311,13 +311,15 @@ export class ExecutionGrantBroker {
     const fence = this.db.prepare('SELECT 1 FROM agent_execution_run_fences WHERE run_id = ?').get(binding.runId);
     if (fence !== undefined) throw new Error('execution_grant_run_revoked');
     if (run.workspace_path === null || run.snapshot_json === null) throw new Error('execution_grant_run_snapshot_missing');
-    let snapshot: ReturnType<typeof runExecutionSnapshotSchema.parse>;
+    let snapshot: ReturnType<typeof runExecutionSnapshotAnySchema.parse>;
     try {
-      snapshot = runExecutionSnapshotSchema.parse(JSON.parse(run.snapshot_json) as unknown);
+      snapshot = runExecutionSnapshotAnySchema.parse(JSON.parse(run.snapshot_json) as unknown);
     } catch (error) {
       throw new Error('execution_grant_run_snapshot_invalid', { cause: error });
     }
-    if (snapshot.schemaVersion !== 8 || run.snapshot_version !== 8) throw new Error('execution_grant_workspace_identity_missing');
+    if ((snapshot.schemaVersion !== 8 && snapshot.schemaVersion !== 9) || run.snapshot_version !== snapshot.schemaVersion) {
+      throw new Error('execution_grant_workspace_identity_missing');
+    }
     const workspaceIdentity = snapshot.workspaceIdentity;
     if (workspaceIdentity === null) throw new Error('execution_grant_workspace_identity_missing');
     const { manifestHash, ...manifestContent } = snapshot.capabilityManifest;

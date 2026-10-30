@@ -2,7 +2,9 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
 
+import type { RunnableConfig } from '@langchain/core/runnables';
 import { createContextDigestMessage } from '../../forge-guardrails/context-digest';
+import { readStructuredModelResponse, type RunBudgetObserver } from '../run-budget-observer';
 
 export const contextSummarySchema = z.object({
   goal: z.string(),
@@ -32,6 +34,8 @@ type ContextSummaryModel = Pick<BaseChatModel, 'invoke'> & {
 
 export type SummarizeWithCurrentModelInput = ContextSummaryInput & {
   model: ContextSummaryModel;
+  callbacks?: RunnableConfig['callbacks'];
+  budgetObserver?: RunBudgetObserver;
 };
 
 const contextSummaryInvokeConfig = {
@@ -43,11 +47,11 @@ const contextSummaryInvokeConfig = {
 
 export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModelInput): Promise<ContextSummary> {
   const messages = buildContextSummaryModelMessages(input);
-  const structuredSummary = await summarizeWithStructuredOutput(input.model, messages);
+  const structuredSummary = await summarizeWithStructuredOutput(input.model, messages, input.callbacks, input.budgetObserver);
   if (structuredSummary !== null) {
     return structuredSummary;
   }
-  const first = await invokeSummaryModel(input.model, messages);
+  const first = await invokeSummaryModel(input.model, messages, input.callbacks, input.budgetObserver);
   try {
     return parseContextSummary(first);
   } catch {
@@ -57,7 +61,9 @@ export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModel
 
 async function summarizeWithStructuredOutput(
   model: ContextSummaryModel,
-  messages: BaseMessage[]
+  messages: BaseMessage[],
+  callbacks: RunnableConfig['callbacks'],
+  budgetObserver: RunBudgetObserver | undefined
 ): Promise<ContextSummary | null> {
   const withStructuredOutput = model.withStructuredOutput;
   if (withStructuredOutput === undefined) {
@@ -67,7 +73,8 @@ async function summarizeWithStructuredOutput(
   let structuredModel: ReturnType<BaseChatModel['withStructuredOutput']>;
   try {
     structuredModel = withStructuredOutput.call(model, contextSummarySchema, {
-      name: 'roc_context_summary'
+      name: 'roc_context_summary',
+      includeRaw: true
     });
   } catch (error) {
     if (isStructuredOutputUnavailable(error)) {
@@ -78,7 +85,17 @@ async function summarizeWithStructuredOutput(
 
   let summary: unknown;
   try {
-    summary = await structuredModel.invoke(messages, contextSummaryInvokeConfig);
+    const invoke = () => structuredModel.invoke(messages, { ...contextSummaryInvokeConfig, callbacks });
+    const response = budgetObserver === undefined
+      ? await invoke()
+      : await budgetObserver.invoke({
+          messages,
+          purpose: 'summary',
+          responseMessage: (result) => readStructuredModelResponse(result)?.raw ?? null,
+          invoke
+        });
+    const structuredResponse = readStructuredModelResponse(response);
+    summary = structuredResponse === null ? response : structuredResponse.parsed;
   } catch (error) {
     if (isStructuredOutputUnavailable(error)) {
       return null;
@@ -164,8 +181,21 @@ export function contextSummaryToDigestMessage(summary: ContextSummary): AIMessag
   });
 }
 
-async function invokeSummaryModel(model: Pick<BaseChatModel, 'invoke'>, messages: BaseMessage[]): Promise<string> {
-  const response = await model.invoke(messages, contextSummaryInvokeConfig);
+async function invokeSummaryModel(
+  model: Pick<BaseChatModel, 'invoke'>,
+  messages: BaseMessage[],
+  callbacks: RunnableConfig['callbacks'],
+  budgetObserver: RunBudgetObserver | undefined
+): Promise<string> {
+  const invoke = () => model.invoke(messages, { ...contextSummaryInvokeConfig, callbacks });
+  const response = budgetObserver === undefined
+    ? await invoke()
+    : await budgetObserver.invoke({
+        messages,
+        purpose: 'summary',
+        responseMessage: (result) => result,
+        invoke
+      });
   if (typeof response.content === 'string') {
     return response.content;
   }

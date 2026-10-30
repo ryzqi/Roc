@@ -163,7 +163,7 @@ export const deepAgentConfigPreviewSchema = z
 
 export const runExecutionModeSchema = z.enum(['plan', 'run', 'task']);
 
-export const runBudgetSchema = z
+const legacyRunBudgetSchema = z
   .object({
     contextWindowTokens: z.number().int().positive().nullable(),
     maxTotalTokens: z.number().int().positive().nullable(),
@@ -175,6 +175,53 @@ export const runBudgetSchema = z
     maxConcurrentModelCalls: z.number().int().positive(),
     maxConcurrentToolCalls: z.number().int().positive(),
     deadlineAt: z.string().datetime().nullable()
+  })
+  .strict();
+
+const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+
+export const runBudgetSchema = z
+  .object({
+    policyVersion: z.literal(1),
+    contextWindowTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    maxOutputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    maxCallTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    maxTotalTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    maxCostMicrousd: safeInteger.nullable(),
+    pricingCatalogVersion: identifierSchema,
+    maxModelCalls: z.number().int().positive(),
+    maxToolCalls: z.number().int().positive(),
+    maxChildTasks: z.number().int().positive(),
+    maxConcurrentChildTasks: z.number().int().positive(),
+    maxConcurrentModelCalls: z.number().int().positive(),
+    maxConcurrentToolCalls: z.number().int().positive(),
+    deadlineAt: z.string().datetime()
+  })
+  .strict();
+
+export const runBudgetStatusSchema = z
+  .object({
+    tokens: z.object({
+      limit: z.number().int().positive(),
+      settled: safeInteger,
+      unknown: safeInteger,
+      reserved: safeInteger,
+      remaining: safeInteger
+    }).strict(),
+    calls: z.object({
+      models: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict(),
+      tools: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict(),
+      children: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict()
+    }).strict(),
+    cost: z.object({
+      state: z.enum(['known', 'unknown']),
+      limitMicrousd: safeInteger.nullable(),
+      settledMicrousd: safeInteger.nullable(),
+      reservedMicrousd: safeInteger.nullable()
+    }).strict(),
+    pricingCatalogVersion: identifierSchema,
+    deadlineAt: z.string().datetime(),
+    stopReason: z.string().max(128).nullable()
   })
   .strict();
 
@@ -219,7 +266,7 @@ const runExecutionSnapshotV7Schema = z
   .object({
     schemaVersion: z.literal(7),
     ...runExecutionSnapshotShape,
-    budget: runBudgetSchema,
+    budget: legacyRunBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()
   })
   .strict();
@@ -229,15 +276,33 @@ const runExecutionSnapshotV8Schema = z
     schemaVersion: z.literal(8),
     ...runExecutionSnapshotShape,
     workspaceIdentity: workspaceFileIdentitySchema.nullable(),
+    budget: legacyRunBudgetSchema,
+    shellAllowedCommands: z.array(identifierSchema).optional()
+  })
+  .strict();
+
+const runExecutionSnapshotV9Schema = z
+  .object({
+    schemaVersion: z.literal(9),
+    ...runExecutionSnapshotShape,
+    workspaceIdentity: workspaceFileIdentitySchema.nullable(),
     budget: runBudgetSchema,
     shellAllowedCommands: z.array(identifierSchema).optional()
   })
   .strict();
 
-export const runExecutionSnapshotSchema = z.discriminatedUnion('schemaVersion', [
+export const legacyRunExecutionSnapshotSchema = z.discriminatedUnion('schemaVersion', [
   runExecutionSnapshotV7Schema,
   runExecutionSnapshotV8Schema
 ]);
+
+export const runExecutionSnapshotAnySchema = z.discriminatedUnion('schemaVersion', [
+  runExecutionSnapshotV7Schema,
+  runExecutionSnapshotV8Schema,
+  runExecutionSnapshotV9Schema
+]);
+
+export const runExecutionSnapshotSchema = runExecutionSnapshotV9Schema;
 
 export const defaultModelStateSchema = z
   .object({
@@ -321,6 +386,7 @@ export type RunCapabilityManifestToolV1 = z.infer<typeof runCapabilityManifestTo
 export type RunCapabilityManifestSkillV1 = z.infer<typeof runCapabilityManifestSkillSchema>;
 export type RunCapabilityManifestV1 = z.infer<typeof runCapabilityManifestSchema>;
 export type RunBudget = z.infer<typeof runBudgetSchema>;
+export type RunBudgetStatus = z.infer<typeof runBudgetStatusSchema>;
 export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
 export type RunExecutionSnapshot = z.infer<typeof runExecutionSnapshotSchema>;
 export type AgentRuntimeStatus = z.infer<typeof agentRuntimeStatusSchema>;

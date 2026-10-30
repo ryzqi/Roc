@@ -38,6 +38,7 @@ import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunBudgetLedger, RunLimits } from './run-budget-ledger';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
+import type { RunBudgetObserver } from './run-budget-observer';
 import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-budget-middleware';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
@@ -51,6 +52,8 @@ export type ContextCompactionWiring = {
   artifactStore: ContextArtifactStore;
   artifactRecoveryEnabled?: boolean;
   budgetProfile: ContextBudgetProfile;
+  callbacks?: RocContextCompactionOptions['callbacks'];
+  budgetObserver: RunBudgetObserver;
   emitEvent: RocContextCompactionOptions['emitEvent'];
   sessionHistory: PreCompactionFlushRecorder;
   tokenCounter: ContextTokenCounter;
@@ -70,6 +73,7 @@ export type MiddlewareStackPolicy = {
 export type MiddlewareStackContext = {
   budgetLedger: RunBudgetLedger;
   budgetLimits: RunLimits;
+  budgetObserver: RunBudgetObserver;
   backend: RocCompositeBackend;
   contextCompaction: ContextCompactionWiring;
   executionScope: RunCapabilityExecutionScopeV1;
@@ -219,6 +223,8 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       readControlState: () => context.budgetLedger.readContextControlState(context.policy.runId),
       artifactRecoveryEnabled: context.contextCompaction.artifactRecoveryEnabled,
       budgetProfile: context.contextCompaction.budgetProfile,
+      callbacks: context.contextCompaction.callbacks,
+      budgetObserver: context.budgetObserver,
       emitEvent: context.contextCompaction.emitEvent,
       mode: context.policy.mode,
       model: context.model,
@@ -257,7 +263,14 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     name: 'RocRunBudgetMiddleware',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
-    create: context => createRunBudgetMiddleware(context.budgetLedger, context.policy.runId, context.budgetLimits, context.toolEffectStore, context.taskContract)
+    create: context => createRunBudgetMiddleware(
+      context.budgetLedger,
+      context.policy.runId,
+      context.budgetLimits,
+      context.budgetObserver,
+      context.toolEffectStore,
+      context.taskContract
+    )
   },
   {
     name: 'RocToolRuntimeErrorMiddleware',

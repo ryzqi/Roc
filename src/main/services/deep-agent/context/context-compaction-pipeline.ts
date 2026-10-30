@@ -1,10 +1,13 @@
 import { AIMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { RunnableConfig } from '@langchain/core/runnables';
 import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
+import { z } from 'zod';
 
 import { collectUserConstraints, isContextContract, pinContextContract, type ContextControlState } from './context-contract';
 import type { RunExecutionSnapshot } from '../../../../shared/types';
+import type { RunBudgetObserver } from '../run-budget-observer';
 
 import { classifyProviderRequestFailure, isRetryableProviderHttpStatus } from '../../provider-request-retry';
 import {
@@ -80,6 +83,8 @@ export type RocContextCompactionOptions = {
   readControlState: () => ContextControlState;
   artifactRecoveryEnabled?: boolean;
   budgetProfile: ContextBudgetProfile;
+  callbacks?: RunnableConfig['callbacks'];
+  budgetObserver?: RunBudgetObserver;
   emitEvent: (event: ContextMaintenanceEvent) => void;
   mode: ContextCompactionMode;
   model: Pick<BaseChatModel, 'invoke'> & Partial<Pick<BaseChatModel, 'getNumTokens'>>;
@@ -125,7 +130,11 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
           return count.tokens;
         },
         countTokensEstimated: () => estimated || tokenCounter.wasEstimated(),
-        summarize: async (input) => await summarizeWithCurrentModel({ ...input, model: options.model })
+        summarize: async (input) => await summarizeWithCurrentModel({
+          ...input,
+          model: options.model,
+          callbacks: options.callbacks
+        })
       });
       if (sameMessageSequence(originalMessages, compactedMessages)) {
         return undefined;
@@ -136,8 +145,8 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
     },
     wrapModelCall: async (request, handler) => {
       const tools = request.tools.map((tool) => {
-        const name = Reflect.get(tool, 'name');
-        const description = Reflect.get(tool, 'description');
+        const name = tool.name;
+        const description = tool.description;
         if (typeof name !== 'string') {
           throw new Error('agent_tool_name_missing');
         }
@@ -147,7 +156,7 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
         return {
           name,
           description,
-          schema: Reflect.get(tool, 'schema')
+          schema: tool.schema
         };
       });
       const profile = await deriveContextBudgetProfile({
@@ -394,7 +403,11 @@ async function summarizeContext(
 ): Promise<ContextSummary> {
   const summarize =
     input.summarize === undefined
-      ? async (summaryInput: ContextSummaryInput) => await summarizeWithCurrentModel({ ...summaryInput, model: input.model })
+      ? async (summaryInput: ContextSummaryInput) => await summarizeWithCurrentModel({
+          ...summaryInput,
+          model: input.model,
+          budgetObserver: input.budgetObserver
+        })
       : input.summarize;
   return await summarize(summaryInput);
 }
@@ -453,11 +466,7 @@ function createSummaryInput(
 
 async function countSummaryInput(input: RunCompactionInput, summaryInput: ContextSummaryInput): Promise<number> {
   const messageTokens = await input.countTokens(buildContextSummaryModelMessages(summaryInput));
-  const schema = Reflect.get(contextSummarySchema, 'toJSONSchema');
-  if (typeof schema !== 'function') {
-    throw new Error('context_summary_schema_serializer_missing');
-  }
-  const schemaText = JSON.stringify(schema.call(contextSummarySchema));
+  const schemaText = JSON.stringify(z.toJSONSchema(contextSummarySchema));
   if (schemaText === undefined) {
     throw new Error('context_summary_schema_unserializable');
   }

@@ -3,6 +3,7 @@ import { HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
 import { RunBudgetLedger, type RunLimits } from './run-budget-ledger';
+import type { RunBudgetObserver } from './run-budget-observer';
 import { hashToolInput, type AgentToolEffectStore } from './tool-effect-store';
 import { childTaskEnvelopeSchema } from '../../../shared/schemas/task-acceptance';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
@@ -11,11 +12,22 @@ export function createRunBudgetMiddleware(
   ledger: RunBudgetLedger,
   runId: string,
   limits: RunLimits,
+  budgetObserver: RunBudgetObserver,
   effects?: AgentToolEffectStore,
   taskContract?: TaskContract
 ) {
   return createMiddleware({
     name: 'RocRunBudgetMiddleware',
+    wrapModelCall: async (request, handler) => {
+      request.runtime.signal?.throwIfAborted();
+      if (budgetObserver === undefined) throw new Error('run_model_budget_executor_missing');
+      return await budgetObserver.invoke({
+        messages: [request.systemMessage, ...request.messages],
+        purpose: 'agent',
+        responseMessage: (result: unknown) => result,
+        invoke: async () => await handler(request)
+      });
+    },
     wrapToolCall: async (request, handler) => {
       const identity = readDeepAgentsExecutionIdentity(request.runtime?.configurable);
       request.runtime.signal?.throwIfAborted();

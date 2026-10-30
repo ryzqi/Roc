@@ -44,6 +44,17 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
         events.splice(0, nextEventIndex);
         nextEventIndex = 0;
       }
+      if (event.type === 'run_budget') {
+        let queuedBudgetIndex = -1;
+        for (let index = events.length - 1; index >= nextEventIndex; index -= 1) {
+          const queued = events[index];
+          if (queued?.type === 'run_budget' && queued.runId === event.runId) {
+            queuedBudgetIndex = index;
+            break;
+          }
+        }
+        if (queuedBudgetIndex >= nextEventIndex) events.splice(queuedBudgetIndex, 1);
+      }
       const last = events.at(-1);
       const coalesced = last === undefined ? null : coalesceTextDelta(last, event, maxCoalescedChars);
       if (coalesced !== null) {

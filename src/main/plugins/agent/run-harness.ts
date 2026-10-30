@@ -92,7 +92,7 @@ export type RunHarness =
   | {
       kind: 'ready';
       agent: ReturnType<typeof buildDeepAgent>['agent'];
-      callbacks: RunBudgetObserver[];
+      callbacks: never[];
       /** 指标与事件按来源分流：后台任务与主聊天分开统计。 */
       source: 'chat' | 'background_task';
       workspaceHash: string | null;
@@ -217,8 +217,25 @@ export async function buildRunHarness(
   if (initialHookContexts.kind === 'blocked') {
     return initialHookContexts;
   }
+  const budgetObserver = new RunBudgetObserver(
+    services.budgetLedger,
+    request.run.id,
+    request.snapshot.budget,
+    'pending',
+    {
+      providerId: request.snapshot.model.providerId,
+      modelId: request.snapshot.model.modelId,
+      onStatus: (budget) => request.emitRuntimeEvent({
+        type: 'run_budget',
+        runId: request.run.id,
+        threadId: request.run.threadId,
+        budget
+      })
+    }
+  );
   const { agent, revision } = buildDeepAgent({
     budgetLedger: services.budgetLedger,
+    budgetObserver,
     snapshot: request.snapshot,
     model: handle.model,
     systemPrompt: contextHarness.systemPrompt,
@@ -233,6 +250,7 @@ export async function buildRunHarness(
       artifactStore: services.contextArtifactStore,
       artifactRecoveryEnabled: mainManifestToolNames.includes('read_context_artifact'),
       budgetProfile: contextBudgetProfile,
+      budgetObserver,
       emitEvent: (event) => emitContextMaintenanceEvent(request, mode, event),
       sessionHistory: services.sessionHistory,
       tokenCounter: contextTokenCounter
@@ -249,10 +267,12 @@ export async function buildRunHarness(
             signal: request.abortSignal
           }
   });
+  budgetObserver.setRevision(revision);
+  budgetObserver.emitStatus();
   return {
     kind: 'ready',
     agent,
-    callbacks: [new RunBudgetObserver(services.budgetLedger, request.run.id, request.snapshot.budget, revision)],
+    callbacks: [],
     source,
     workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
   };

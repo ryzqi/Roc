@@ -37,6 +37,7 @@ import { AgentInterruptProjection, assertPendingInterrupts } from './interrupt-p
 import { mapTaskRun, type TaskRunRow } from './task-run-mapper';
 import {
   createRunExecutionSnapshot,
+  migrateLegacyRunExecutionSnapshot,
   parseRunExecutionSnapshot,
   type RunExecutionSnapshotSeed
 } from './run-execution-snapshot';
@@ -395,7 +396,7 @@ export class AgentSessionRepository {
     const row = this.db
       .prepare(
         `SELECT id, thread_id, status, state_version, provider_id, model_id,
-                snapshot_json, snapshot_version, snapshot_error_code
+                snapshot_json, snapshot_version, snapshot_error_code, started_at
          FROM agent_runs
          WHERE id = ?`
       )
@@ -410,12 +411,13 @@ export class AgentSessionRepository {
           snapshot_json: string | null;
           snapshot_version: number | null;
           snapshot_error_code: string | null;
+          started_at: string;
         }
       | undefined;
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_version !== 7 && row.snapshot_version !== 8) {
+    if (row.snapshot_version !== 7 && row.snapshot_version !== 8 && row.snapshot_version !== 9) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
       throw new Error('run_execution_snapshot_unsupported_version');
     }
@@ -431,17 +433,31 @@ export class AgentSessionRepository {
       throw new Error('run_execution_snapshot_json_invalid');
     }
     try {
-      const snapshot = parseRunExecutionSnapshot(storedSnapshot);
-      if (snapshot.schemaVersion !== row.snapshot_version) {
+      const snapshotVersion = (storedSnapshot as { schemaVersion?: unknown } | null)?.schemaVersion;
+      if (snapshotVersion !== row.snapshot_version) {
         throw new Error('run_execution_snapshot_version_mismatch');
       }
+      const snapshot = row.snapshot_version === 9
+        ? parseRunExecutionSnapshot(storedSnapshot)
+        : migrateLegacyRunExecutionSnapshot(storedSnapshot, row.started_at);
       if (snapshot.runId !== row.id || snapshot.threadId !== row.thread_id) {
         throw new Error('run_execution_snapshot_identity_mismatch');
       }
+      if (row.snapshot_version !== 9) {
+        const updated = this.db.prepare(
+          'UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 9 WHERE id = ? AND snapshot_version = ?'
+        ).run(JSON.stringify(snapshot), row.id, row.snapshot_version);
+        if (updated.changes !== 1) return this.getRunExecutionSnapshot(runId);
+      }
       return snapshot;
     } catch (error) {
-      const code = error instanceof Error && error.message === 'run_execution_snapshot_identity_mismatch'
-        ? 'run_execution_snapshot_identity_mismatch'
+      const errorMessage = error instanceof Error ? error.message : '';
+      const code = [
+        'run_execution_snapshot_identity_mismatch',
+        'run_execution_snapshot_legacy_workspace_identity_missing',
+        'run_execution_snapshot_legacy_context_budget_missing'
+      ].includes(errorMessage)
+        ? errorMessage
         : 'run_execution_snapshot_corrupt';
       this.quarantineRunSnapshot(row, code);
       throw new Error(code);

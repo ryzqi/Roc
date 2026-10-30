@@ -17,6 +17,7 @@ import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-l
 import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
 import { AgentSessionRepository } from '../../src/main/plugins/agent/session-repository';
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
+import { createRunBudget } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../src/main/plugins/agent/runtime';
 import { EventBus } from '../../src/main/kernel/event-bus';
 import {
@@ -551,9 +552,10 @@ function verifyPilotProductPath(directory: string): Record<string, unknown> {
     }
     const ledger = new RunBudgetLedger(db);
     const limits = (overrides: Partial<RunBudgetLedgerLimits> = {}): RunBudgetLedgerLimits => ({
-      contextWindowTokens: 1000, maxTotalTokens: null, maxCostUsd: null, maxModelCalls: 1, maxToolCalls: 1,
-      maxChildTasks: 1, maxConcurrentChildTasks: 1, maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4,
-      deadlineAt: null, ...overrides
+      ...createRunBudget({ contextBudgetTokens: 1000 }),
+      maxModelCalls: 1,
+      maxToolCalls: 1,
+      ...overrides
     });
     const reserve = (runId: string, id: string, kind: 'model' | 'tool', tokens: number, budget = limits()): void => {
       ledger.reserve(runId, budget, { id, kind, tokens, inputHash: hex(`${runId}:${id}`), envelope: { id } });

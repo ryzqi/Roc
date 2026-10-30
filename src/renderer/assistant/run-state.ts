@@ -3,6 +3,7 @@ import type {
   ChatPendingInterrupt,
   ChatRunEvent,
   ChatTodoItem,
+  RunBudgetStatus,
   RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
@@ -78,6 +79,7 @@ export type ChatRunState = {
   errorMessage: string | null;
   recoveryAttempt: number | null;
   retryable: boolean;
+  budget: RunBudgetStatus | null;
   pendingInterrupts: ChatPendingInterrupt[];
   resumeBusy: boolean;
   todos: ChatTodoItem[];
@@ -101,6 +103,7 @@ export function createEmptyChatRunState(): ChatRunState {
     errorMessage: null,
     recoveryAttempt: null,
     retryable: false,
+    budget: null,
     pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
@@ -126,6 +129,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       errorMessage: null,
       recoveryAttempt: null,
       retryable: false,
+      budget: null,
       pendingInterrupts: [],
       resumeBusy: false,
       todos: [],
@@ -135,6 +139,13 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
 
   if (state.runId !== event.runId) {
     return state;
+  }
+
+  if (event.type === 'run_budget') {
+    return {
+      ...state,
+      budget: event.budget
+    };
   }
 
   if (event.type === 'assistant_block') {

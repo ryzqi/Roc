@@ -5,6 +5,7 @@ import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
 import {
   enabledCapabilitiesSchema,
   runExecutionModeSchema,
+  runBudgetStatusSchema,
   workflowHintSchema
 } from './agent';
 import {
@@ -140,6 +141,12 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       createdAt: z.string()
     })
     .strict(),
+  z.object({
+    type: z.literal('run_budget'),
+    runId: z.string(),
+    threadId: z.string().nullable(),
+    budget: runBudgetStatusSchema
+  }).strict(),
   z.object({ type: z.literal('assistant_block'), runId: z.string(), block: chatAssistantBlockSchema }).strict(),
   z
     .object({

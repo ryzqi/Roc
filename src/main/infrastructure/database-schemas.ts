@@ -501,6 +501,17 @@ CREATE INDEX idx_agent_execution_grants_run_status
 CREATE INDEX idx_agent_execution_grants_expiry
       ON agent_execution_grants(status, expires_at);
 `
+  },
+  {
+    version: 8,
+    name: 'versioned_run_budget_costs',
+    sql: `
+ALTER TABLE agent_budget_calls ADD COLUMN reserved_cost_microusd INTEGER CHECK(reserved_cost_microusd IS NULL OR reserved_cost_microusd >= 0);
+ALTER TABLE agent_budget_calls ADD COLUMN actual_cost_microusd INTEGER CHECK(actual_cost_microusd IS NULL OR actual_cost_microusd >= 0);
+ALTER TABLE agent_budget_calls ADD COLUMN pricing_version TEXT;
+ALTER TABLE agent_runs ADD COLUMN budget_stop_reason TEXT;
+CREATE INDEX idx_agent_budget_calls_run_kind_state ON agent_budget_calls(run_id, kind, state);
+`
   }
 ];
 

@@ -23,7 +23,7 @@ after(() => {
   if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
 });
 
-function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 8 } = {}) {
+function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 9 } = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations });
@@ -49,12 +49,12 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
     workflowHint: null,
     researchProjectId: null
   }).manifest;
-  const snapshotV8 = api.createRunExecutionSnapshot({
+  const snapshotV9 = api.createRunExecutionSnapshot({
     runId,
     threadId,
     inputMessageId: 'message-1',
     snapshot: {
-      schemaVersion: 8,
+      schemaVersion: 9,
       submissionHash: 'f'.repeat(64),
       taskContract: {
         contractVersion: 1,
@@ -75,11 +75,19 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
       budget: api.createRunBudget({ contextBudgetTokens: null })
     }
   });
-  let snapshot = snapshotV8;
-  if (schemaVersion === 7) {
-    const legacySnapshot = { ...snapshotV8, schemaVersion: 7 };
-    delete legacySnapshot.workspaceIdentity;
-    snapshot = api.parseRunExecutionSnapshot(legacySnapshot);
+  let snapshot = snapshotV9;
+  if (schemaVersion === 7 || schemaVersion === 8) {
+    const legacyBudget = { ...snapshotV9.budget };
+    const maxCostUsd = legacyBudget.maxCostMicrousd === null ? null : legacyBudget.maxCostMicrousd / 1_000_000;
+    delete legacyBudget.policyVersion;
+    delete legacyBudget.maxOutputTokens;
+    delete legacyBudget.maxCallTokens;
+    delete legacyBudget.maxCostMicrousd;
+    delete legacyBudget.pricingCatalogVersion;
+    legacyBudget.maxCostUsd = maxCostUsd;
+    const legacySnapshot = { ...snapshotV9, schemaVersion, budget: legacyBudget };
+    if (schemaVersion === 7) delete legacySnapshot.workspaceIdentity;
+    snapshot = legacySnapshot;
   }
   db.prepare(`
     INSERT INTO agent_runs (
@@ -88,7 +96,7 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
     ) VALUES (?, ?, 1, 'Fixture', 'running', ?, '{}', ?, ?, ?, ?, ?)
   `).run(runId, threadId, createdAt, workspacePath, taskSource, runOrigin, JSON.stringify(snapshot), schemaVersion);
   const broker = new api.ExecutionGrantBroker(db);
-  return { db, broker, workspacePath, runId, threadId, manifest, snapshot };
+  return { db, broker, workspacePath, runId, threadId, manifest, snapshot, createdAt };
 }
 
 function binding(fixture, overrides = {}) {
@@ -113,20 +121,24 @@ function binding(fixture, overrides = {}) {
   };
 }
 
-test('new snapshots pin workspace device and inode while legacy snapshots remain readable without grants', () => {
+test('new v9 snapshots pin workspace device and inode while legacy snapshots require safe migration before grants', () => {
   const fixture = createFixture();
   const identity = fixture.snapshot.workspaceIdentity;
   const stat = statSync(realpathSync(fixture.workspacePath));
-  assert.equal(fixture.snapshot.schemaVersion, 8);
+  assert.equal(fixture.snapshot.schemaVersion, 9);
   assert.equal(identity.path, realpathSync(fixture.workspacePath));
   assert.equal(identity.dev, String(stat.dev));
   assert.equal(identity.ino, String(stat.ino));
 
-  const legacy = createFixture({ schemaVersion: 7 });
-  assert.equal(legacy.snapshot.schemaVersion, 7);
-  assert.equal(api.parseRunExecutionSnapshot(legacy.snapshot).schemaVersion, 7);
-  assert.equal('workspaceIdentity' in legacy.snapshot, false);
-  assert.throws(() => legacy.broker.issue(binding(legacy)), /execution_grant_workspace_identity_missing/u);
+  const legacyV8 = createFixture({ schemaVersion: 8 });
+  const migratedV8 = api.migrateLegacyRunExecutionSnapshot(legacyV8.snapshot, legacyV8.createdAt);
+  assert.equal(migratedV8.schemaVersion, 9);
+  assert.deepEqual(migratedV8.workspaceIdentity, legacyV8.snapshot.workspaceIdentity);
+
+  const legacyV7 = createFixture({ schemaVersion: 7 });
+  assert.equal(legacyV7.snapshot.schemaVersion, 7);
+  assert.throws(() => api.migrateLegacyRunExecutionSnapshot(legacyV7.snapshot, legacyV7.createdAt), /run_execution_snapshot_legacy_workspace_identity_missing/u);
+  assert.throws(() => legacyV7.broker.issue(binding(legacyV7)), /execution_grant_workspace_identity_missing/u);
 });
 
 test('isolated grant is bound to the exact tool call and can be consumed only once', () => {

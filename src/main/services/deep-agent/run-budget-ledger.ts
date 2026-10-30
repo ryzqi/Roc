@@ -1,11 +1,19 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
-import type { RunExecutionSnapshot } from '../../../shared/types';
+import type { RunBudgetStatus, RunExecutionSnapshot } from '../../../shared/types';
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { hashToolInput } from './tool-effect-store';
 
 export type RunLimits = RunExecutionSnapshot['budget'];
-type Reservation = { id: string; kind: 'model' | 'tool' | 'child'; tokens: number; inputHash: string; envelope: unknown };
+type Reservation = {
+  id: string;
+  kind: 'model' | 'tool' | 'child';
+  tokens: number;
+  inputHash: string;
+  envelope: unknown;
+  costMicrousd?: number | null;
+  pricingVersion?: string | null;
+};
 
 /** The durable pilot grant for one run, plus what it has spent so far. */
 export type PilotRunRow = {
@@ -62,7 +70,7 @@ export class RunBudgetLedger {
 
   private reserveWithinTransaction(runId: string, limits: RunLimits, input: Reservation): void {
     this.db.transaction(() => {
-      if (limits.deadlineAt !== null && Date.now() >= Date.parse(limits.deadlineAt)) throw new Error('run_deadline_exhausted');
+      if (Date.now() >= Date.parse(limits.deadlineAt)) throw new Error('run_deadline_exhausted');
       const existing = this.db.prepare('SELECT input_hash FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
         .get(runId, input.id) as { input_hash: string } | undefined;
       if (existing !== undefined) {
@@ -76,10 +84,12 @@ export class RunBudgetLedger {
         COALESCE(SUM(CASE WHEN kind = 'model' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_models,
         COALESCE(SUM(CASE WHEN kind = 'tool' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_tools,
         COALESCE(SUM(CASE WHEN kind = 'child' THEN 1 ELSE 0 END), 0) child_calls,
-        COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_children
+        COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_children,
+        COALESCE(SUM(COALESCE(actual_cost_microusd, reserved_cost_microusd)), 0) cost_microusd,
+        COALESCE(SUM(CASE WHEN kind = 'model' AND actual_cost_microusd IS NULL AND reserved_cost_microusd IS NULL THEN 1 ELSE 0 END), 0) unknown_cost_calls
         FROM agent_budget_calls WHERE run_id = ?`).get(runId) as {
           model_calls: number; tool_calls: number; tokens: number; active_models: number; active_tools: number;
-          child_calls: number; active_children: number;
+          child_calls: number; active_children: number; cost_microusd: number; unknown_cost_calls: number;
         };
       if (input.kind === 'model' && totals.active_models >= limits.maxConcurrentModelCalls) throw new Error('run_model_concurrency_exhausted');
       if (input.kind === 'tool' && totals.active_tools >= limits.maxConcurrentToolCalls) throw new Error('run_tool_concurrency_exhausted');
@@ -94,20 +104,30 @@ export class RunBudgetLedger {
       if (input.kind !== 'model' && totals.tool_calls >= limits.maxToolCalls) {
         this.consumePilotAllowance(runId, 'tool', 0, 'run_tool_call_budget_exhausted');
       }
-      if (limits.maxTotalTokens !== null && totals.tokens + input.tokens > limits.maxTotalTokens) {
+      if (input.kind === 'model' && input.tokens > limits.maxCallTokens) {
+        throw new Error('run_model_call_token_reservation_exhausted');
+      }
+      if (totals.tokens + input.tokens > limits.maxTotalTokens) {
         this.consumePilotAllowance(runId, 'token', input.tokens, 'run_total_token_budget_exhausted');
       }
-      // No price table is configured yet. A cost limit must fail closed rather than count unknown as zero.
-      if (input.kind === 'model' && limits.maxCostUsd !== null) throw new Error('run_cost_estimate_unavailable');
+      if (input.kind === 'model' && limits.maxCostMicrousd !== null) {
+        if (input.costMicrousd === null || input.costMicrousd === undefined || totals.unknown_cost_calls > 0) {
+          throw new Error('run_cost_estimate_unavailable');
+        }
+        if (totals.cost_microusd + input.costMicrousd > limits.maxCostMicrousd) {
+          throw new Error('run_cost_budget_exhausted');
+        }
+      }
       this.db.prepare(`INSERT INTO agent_budget_calls
-        (run_id, call_id, kind, input_hash, reserved_tokens, state, envelope_json, created_at)
-        VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?)`)
-        .run(runId, input.id, input.kind, input.inputHash, input.tokens, JSON.stringify(input.envelope), new Date().toISOString());
+        (run_id, call_id, kind, input_hash, reserved_tokens, reserved_cost_microusd, pricing_version, state, envelope_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)`).run(
+        runId, input.id, input.kind, input.inputHash, input.tokens, input.costMicrousd ?? null,
+        input.pricingVersion ?? null, JSON.stringify(input.envelope), new Date().toISOString());
     }).immediate();
   }
 
   settle(runId: string, callId: string, tokens: number | null, state: 'settled' | 'unknown', outcomeHash?: string,
-    outcome: Record<string, unknown> = {}): void {
+    outcome: Record<string, unknown> = {}, costMicrousd: number | null = null, pricingVersion: string | null = null): void {
     const existing = this.db.prepare('SELECT envelope_json FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
       .get(runId, callId) as { envelope_json: string } | undefined;
     if (existing === undefined) throw new Error('run_budget_settlement_invalid');
@@ -116,10 +136,65 @@ export class RunBudgetLedger {
       ...(outcomeHash === undefined ? {} : { outcomeHash }),
       ...outcome
     });
-    const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, state = ?,
-      envelope_json = ?
-      WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(tokens, state, envelope, runId, callId);
+    const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, actual_cost_microusd = ?,
+      pricing_version = COALESCE(?, pricing_version), state = ?, envelope_json = ?
+      WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(
+      tokens, costMicrousd, pricingVersion, state, envelope, runId, callId);
     if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
+  }
+
+  recordStopReason(runId: string, reason: string): void {
+    this.db.prepare('UPDATE agent_runs SET budget_stop_reason = COALESCE(budget_stop_reason, ?) WHERE id = ?')
+      .run(reason.slice(0, 128), runId);
+  }
+
+  readBudgetStatus(runId: string, limits: RunLimits, modelPricingKnown: boolean): RunBudgetStatus {
+    const totals = this.db.prepare(`SELECT
+      COALESCE(SUM(COALESCE(actual_tokens, reserved_tokens)), 0) total_tokens,
+      COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_tokens ELSE 0 END), 0) settled_tokens,
+      COALESCE(SUM(CASE WHEN state = 'unknown' THEN reserved_tokens ELSE 0 END), 0) unknown_tokens,
+      COALESCE(SUM(CASE WHEN state = 'reserved' THEN reserved_tokens ELSE 0 END), 0) reserved_tokens,
+      COALESCE(SUM(CASE WHEN kind = 'model' THEN 1 ELSE 0 END), 0) model_calls,
+      COALESCE(SUM(CASE WHEN kind = 'model' AND state = 'reserved' THEN 1 ELSE 0 END), 0) reserved_models,
+      COALESCE(SUM(CASE WHEN kind IN ('tool','child') THEN 1 ELSE 0 END), 0) tool_calls,
+      COALESCE(SUM(CASE WHEN kind IN ('tool','child') AND state = 'reserved' THEN 1 ELSE 0 END), 0) reserved_tools,
+      COALESCE(SUM(CASE WHEN kind = 'child' THEN 1 ELSE 0 END), 0) child_calls,
+      COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) reserved_children,
+      COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_cost_microusd ELSE 0 END), 0) settled_cost,
+      COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN COALESCE(actual_cost_microusd,reserved_cost_microusd,0) ELSE 0 END), 0) reserved_cost,
+      COALESCE(SUM(CASE WHEN kind = 'model' AND (state = 'unknown' OR COALESCE(actual_cost_microusd,reserved_cost_microusd) IS NULL) THEN 1 ELSE 0 END), 0) unknown_cost_calls
+      FROM agent_budget_calls WHERE run_id = ?`).get(runId) as {
+        total_tokens: number; settled_tokens: number; unknown_tokens: number; reserved_tokens: number;
+        model_calls: number; reserved_models: number; tool_calls: number; reserved_tools: number;
+        child_calls: number; reserved_children: number; settled_cost: number; reserved_cost: number;
+        unknown_cost_calls: number;
+      };
+    const row = this.db.prepare('SELECT budget_stop_reason FROM agent_runs WHERE id = ?').get(runId) as
+      { budget_stop_reason: string | null } | undefined;
+    if (row === undefined) throw new Error('task_run_not_found');
+    return {
+      tokens: {
+        limit: limits.maxTotalTokens,
+        settled: totals.settled_tokens,
+        unknown: totals.unknown_tokens,
+        reserved: totals.reserved_tokens,
+        remaining: Math.max(0, limits.maxTotalTokens - totals.total_tokens)
+      },
+      calls: {
+        models: { limit: limits.maxModelCalls, total: totals.model_calls, reserved: totals.reserved_models },
+        tools: { limit: limits.maxToolCalls, total: totals.tool_calls, reserved: totals.reserved_tools },
+        children: { limit: limits.maxChildTasks, total: totals.child_calls, reserved: totals.reserved_children }
+      },
+      cost: {
+        state: !modelPricingKnown || totals.unknown_cost_calls > 0 ? 'unknown' : 'known',
+        limitMicrousd: limits.maxCostMicrousd,
+        settledMicrousd: totals.settled_cost,
+        reservedMicrousd: totals.reserved_cost
+      },
+      pricingCatalogVersion: limits.pricingCatalogVersion,
+      deadlineAt: limits.deadlineAt,
+      stopReason: row.budget_stop_reason
+    };
   }
 
   // --- P6-04 pilot allowance -----------------------------------------------------------------

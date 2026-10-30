@@ -14,11 +14,13 @@ import { ChatOpenAI } from '@langchain/openai';
 import { createDeepAgent } from 'deepagents';
 import { toolRetryMiddleware } from 'langchain';
 import { tool } from '@langchain/core/tools';
+import { HumanMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { AgentToolEffectStore, hashToolInput } from '../../src/main/services/deep-agent/tool-effect-store';
 import { RocSqliteCheckpointer } from '../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
+import { createRunBudget } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { createChatRunEventQueue } from '../../src/main/plugins/agent/chat-run-event-queue';
 import { createUsageAccumulator, updateUsageAccumulator } from '../../src/main/services/deep-agent/stream-usage-accumulator';
 import { validateRunTokenBudget } from '../../src/main/services/deep-agent/runtime-state-validator';
@@ -146,20 +148,30 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
       return JSON.stringify(result);
     }, { name: 'pilot_action', description: 'Execute synthetic pilot case', schema: z.object({}).strict() });
     const ledger = new RunBudgetLedger(db);
-    const limits = { contextWindowTokens: 100000, maxTotalTokens: null, maxCostUsd: null,
-      maxModelCalls: 100, maxToolCalls: 500, maxChildTasks: 8, maxConcurrentChildTasks: 2,
-      maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null };
+    const limits = {
+      ...createRunBudget({ contextBudgetTokens: 100_000 }),
+      maxTotalTokens: 100_000 * 4,
+      maxModelCalls: 100,
+      maxToolCalls: 500,
+      maxChildTasks: 8,
+      maxConcurrentChildTasks: 2,
+      maxConcurrentModelCalls: 4,
+      maxConcurrentToolCalls: 4
+    };
     const revision = ledger.freezeRevision('run', { kind: 'pilot', id: scenario.id });
-    const callbacks = [new RunBudgetObserver(ledger, 'run', limits, revision)];
+    const observer = new RunBudgetObserver(ledger, 'run', limits, revision);
     const buildAgent = () => createDeepAgent({
-      middleware: [createRunCorrectionMiddleware(ledger, 'run'), createRunBudgetMiddleware(ledger, 'run', limits)],
+      middleware: [
+        createRunCorrectionMiddleware(ledger, 'run'),
+        createRunBudgetMiddleware(ledger, 'run', limits, observer)
+      ],
       model: new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic-fixture',
-        configuration: { baseURL: endpoint }, maxRetries: 0, timeout: 10000 }),
+        configuration: { baseURL: endpoint }, maxRetries: 0, maxTokens: limits.maxOutputTokens, timeout: 10000 }),
       tools: [action], checkpointer: new RocSqliteCheckpointer(db),
       systemPrompt: `Run pilot_action once, then return its exact result. Case ${scenario.id}`
     });
     const agent = buildAgent();
-    const config = { configurable: { thread_id: 'thread' }, recursionLimit: 12, callbacks };
+    const config = { configurable: { thread_id: 'thread' }, recursionLimit: 12 };
     let result = await agent.invoke({ messages: [{ role: 'user', content: scenario.id }] }, config)
       .catch(error => { throw Object.assign(error, { failureClass: error.failureClass ?? 'provider' }); });
     const turns = scenario.family === 'long' ? (scenario.variant === 'three-turns' ? 3 : 2) : 1;
@@ -372,16 +384,21 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
 export async function runBudgetScenario(name: string, directory: string, endpoint: string): Promise<Record<string, unknown>> {
   let db = openDatabase(join(directory, 'agent.sqlite'));
   let ledger = new RunBudgetLedger(db);
-  const limits = { contextWindowTokens: 100000, maxTotalTokens: null as number | null, maxCostUsd: null as number | null,
+  const limits = {
+    ...createRunBudget({ contextBudgetTokens: 100_000 }),
     maxModelCalls: name === 'budget-model' || name === 'budget-restart' ? 1 : 100,
-    maxToolCalls: 100, maxChildTasks: 8, maxConcurrentChildTasks: 2,
-    maxConcurrentModelCalls: 4, maxConcurrentToolCalls: 4, deadlineAt: null as string | null };
+    maxToolCalls: 100,
+    maxChildTasks: 8,
+    maxConcurrentChildTasks: 2,
+    maxConcurrentModelCalls: 4,
+    maxConcurrentToolCalls: 4
+  };
   if (name === 'budget-retry') limits.maxToolCalls = 1;
   if (name === 'budget-concurrency') limits.maxConcurrentModelCalls = 1;
   if (name === 'budget-child-tools') limits.maxConcurrentToolCalls = 1;
   if (name === 'budget-child-tools') limits.maxChildTasks = 1;
-  if (name === 'budget-token' || name === 'budget-unknown') limits.maxTotalTokens = 100040;
-  if (name === 'budget-cost') limits.maxCostUsd = 1;
+  if (name === 'budget-token' || name === 'budget-unknown') limits.maxTotalTokens = limits.maxCallTokens + 1;
+  if (name === 'budget-cost') limits.maxCostMicrousd = 1;
   if (name === 'budget-deadline') limits.deadlineAt = '2020-01-01T00:00:00.000Z';
   const expected = name === 'budget-retry' ? 'run_tool_call_budget_exhausted' : name === 'budget-loop' ? 'tool_call_loop_detected'
     : name === 'budget-token' || name === 'budget-unknown' ? 'run_total_token_budget_exhausted'
@@ -397,19 +414,24 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
     criteria: [{ id: 'A-01', description: 'Use the expected artifact.',
       check: { kind: 'artifact_sha256' as const, path: 'result.txt', sha256: 'a'.repeat(64) } }]
   };
-  const budgetMiddleware = () => createRunBudgetMiddleware(ledger, 'run', limits, undefined, taskContract);
+  const budgetMiddleware = (observer: RunBudgetObserver) =>
+    createRunBudgetMiddleware(ledger, 'run', limits, observer, undefined, taskContract);
   const execute = async () => {
     const revision = ledger.freezeRevision('run', { name, version: 1 });
     const model = new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic', maxRetries: 0,
-      timeout: 10000, configuration: { baseURL: endpoint } });
+      maxTokens: limits.maxOutputTokens, timeout: 10000, configuration: { baseURL: endpoint } });
     const observer = new RunBudgetObserver(ledger, 'run', limits, revision);
     const action = tool(async () => {
       effects++;
       if (name === 'budget-child-tools') ledger.enqueueCorrection('run', 'during-child', 'budget-child-tools: preserve correction');
       if (name === 'budget-retry') throw new Error('fixture_retry');
       if (name === 'budget-concurrency') {
-        const results = await Promise.allSettled([1, 2].map(child => model.invoke(`budget-concurrency-child-${child}`,
-          { callbacks: [observer] })));
+        const results = await Promise.allSettled([1, 2].map(child => observer.invoke({
+          messages: [new HumanMessage(`budget-concurrency-child-${child}`)],
+          purpose: 'agent',
+          responseMessage: (result) => result,
+          invoke: async () => await model.invoke(`budget-concurrency-child-${child}`)
+        })));
         assert.equal(results.filter(result => result.status === 'rejected').length, 1);
         childBlocked = results.some(result => result.status === 'rejected' && String(result.reason).includes('run_model_concurrency_exhausted'));
       }
@@ -419,13 +441,12 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
     const agent = createDeepAgent({ model, tools: [action],
       ...(name === 'budget-child-tools' ? { subagents: [{ name: 'pilot-child', description: 'Pilot child',
         systemPrompt: 'Call pilot_action then return result.', tools: [action],
-        middleware: [budgetMiddleware()] }] } : {}),
+        middleware: [budgetMiddleware(observer)] }] } : {}),
       middleware: [createRunCorrectionMiddleware(ledger, 'run'), ...(name === 'budget-retry' ? [toolRetryMiddleware({ tools: ['pilot_action'], maxRetries: 2,
         initialDelayMs: 0, retryOn: error => error.message.includes('fixture_retry'), onFailure: 'error' })] : []),
-        budgetMiddleware()], checkpointer: new RocSqliteCheckpointer(db) });
+        budgetMiddleware(observer)], checkpointer: new RocSqliteCheckpointer(db) });
     return await agent.invoke({ messages: [{ role: 'user', content: name }] }, {
-      configurable: { thread_id: 'thread' }, recursionLimit: 12,
-      callbacks: [observer]
+      configurable: { thread_id: 'thread' }, recursionLimit: 12
     });
   };
   try {

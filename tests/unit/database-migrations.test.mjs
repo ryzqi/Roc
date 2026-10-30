@@ -184,7 +184,7 @@ test('real agent v5 upgrades to v6 and adds checkpoint task_path', () => {
   db.close();
 });
 
-test('real agent v6 upgrades to v7 grant and approval tables', () => {
+test('real agent v6 upgrades through v7 grants and v8 budget cost tables', () => {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   applyDatabaseMigrations(db, {
@@ -197,7 +197,13 @@ test('real agent v6 upgrades to v7 grant and approval tables', () => {
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
   const after = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%' ORDER BY name").pluck().all();
   assert.deepEqual(after, ['agent_execution_approvals', 'agent_execution_grants', 'agent_execution_run_fences']);
-  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 7);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 8);
+  assert.ok(columnNames(db, 'agent_budget_calls').includes('reserved_cost_microusd'));
+  assert.ok(columnNames(db, 'agent_budget_calls').includes('actual_cost_microusd'));
+  assert.ok(columnNames(db, 'agent_budget_calls').includes('pricing_version'));
+  assert.ok(columnNames(db, 'agent_runs').includes('budget_stop_reason'));
+  const budgetIndexes = db.prepare('PRAGMA index_list(agent_budget_calls)').all();
+  assert.ok(budgetIndexes.some((entry) => entry.name === 'idx_agent_budget_calls_run_kind_state'));
   for (const table of ['agent_execution_approvals', 'agent_execution_grants']) {
     const columns = columnNames(db, table);
     assert.ok(columns.includes('schema_version'), `${table} stores a grant version`);

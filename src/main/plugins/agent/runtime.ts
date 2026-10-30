@@ -27,6 +27,9 @@ import type {
   TaskAcceptance,
   RunCapabilityManifestV1
 } from '../../../shared/types';
+import {
+  DEFAULT_RUN_MODEL_OUTPUT_TOKENS
+} from '../../../shared/run-budget-policy';
 import type { RocEventBus } from '../../kernel/types';
 import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
@@ -286,7 +289,9 @@ export class AgentPluginRuntime {
         return toExistingRunStartResult(this.options.repository, existingRun, request);
       }
     }
-    const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
+    const modelHandle = await this.options.modelFactory.createDefaultModelHandle({
+      maxOutputTokens: DEFAULT_RUN_MODEL_OUTPUT_TOKENS
+    });
     const shellAllowedCommands = parseShellAllowedCommands({
       commands: request.shellAllowedCommands,
       mode: request.mode,
@@ -579,7 +584,8 @@ export class AgentPluginRuntime {
     this.options.repository.taskContracts.assertHandoffCanResume(run.id, request.threadId, request.interruptId);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
-      modelId: snapshot.model.modelId
+      modelId: snapshot.model.modelId,
+      maxOutputTokens: snapshot.budget.maxOutputTokens
     });
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
@@ -709,7 +715,8 @@ export class AgentPluginRuntime {
     this.options.repository.taskContracts.enqueueCheckpointContinuation(run.id, continuation);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
-      modelId: snapshot.model.modelId
+      modelId: snapshot.model.modelId,
+      maxOutputTokens: snapshot.budget.maxOutputTokens
     });
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
@@ -1600,7 +1607,7 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     submissionHash: hashToolInput(input.request),
     taskContract: createTaskContract(input.request),
     runOrigin: resolveRunOrigin(input.request),
@@ -1613,11 +1620,9 @@ function createRunExecutionSnapshotSeed(input: {
     capabilityManifest: input.capabilityPreview.manifest,
     shellAllowedCommands: input.shellAllowedCommands === undefined ? undefined : [...input.shellAllowedCommands],
     budget: createRunBudget({
-        contextBudgetTokens:
-          input.modelHandle.langChainHandle === undefined
-            ? null
-            : input.modelHandle.langChainHandle.runtime.contextBudgetTokens
-      }),
+      contextBudgetTokens: input.modelHandle.langChainHandle?.runtime.contextBudgetTokens ?? null,
+      maxOutputTokens: input.modelHandle.langChainHandle?.runtime.maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS
+    }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,
     dispatchKey: input.dispatchKey,

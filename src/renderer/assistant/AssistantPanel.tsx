@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
-import type { ChatRunMode, SettingsSnapshot } from '../../shared/types';
+import type { ChatRunMode, RunBudgetStatus, SettingsSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useSettingsRevision, notifySettingsChanged } from '../shared/settings-events';
@@ -56,6 +56,27 @@ import { useChatSession } from './use-chat-session';
  * one project's conversation, and carrying it across projects would be exactly the leak gate 6
  * is about.
  */
+function formatBudgetCount(value: number): string {
+  return new Intl.NumberFormat('zh-CN').format(value);
+}
+
+function formatMicroUsd(value: number): string {
+  return `$${(value / 1_000_000).toFixed(6)}`;
+}
+
+function formatRunBudgetStatus(status: RunBudgetStatus): string {
+  return [
+    `Tokens ${status.tokens.settled} known`,
+    `${status.tokens.unknown} unknown`,
+    `${status.tokens.reserved} reserved`,
+    `${status.tokens.remaining} remaining`,
+    `Models ${status.calls.models.total}/${status.calls.models.limit}`,
+    `Tools ${status.calls.tools.total}/${status.calls.tools.limit}`,
+    status.cost.state === 'unknown' ? 'Cost unknown' : `Cost ${formatMicroUsd(status.cost.settledMicrousd ?? 0)} settled`,
+    status.stopReason === null ? null : `Stopped: ${status.stopReason}`
+  ].filter((part): part is string => part !== null).join('; ');
+}
+
 export type AssistantPanelProps = {
   client: RocClient;
   projectId: string | null;
@@ -322,6 +343,24 @@ export function AssistantPanel({
           {session.messages.length} 条
         </span>
       </div>
+      {session.runState.budget === null ? null : (
+        <div
+          className="grid min-w-0 gap-0.5 text-subtle text-[var(--font-micro-size)]"
+          data-testid="assistant-budget-status"
+          title={session.runState.budget.stopReason ?? undefined}
+          aria-label={formatRunBudgetStatus(session.runState.budget)}
+        >
+          <span className="truncate">
+            Tokens: {formatBudgetCount(session.runState.budget.tokens.settled)} known · {formatBudgetCount(session.runState.budget.tokens.unknown)} unknown · {formatBudgetCount(session.runState.budget.tokens.reserved)} reserved · {formatBudgetCount(session.runState.budget.tokens.remaining)} remaining
+          </span>
+          <span className="truncate">
+            Models {session.runState.budget.calls.models.total}/{session.runState.budget.calls.models.limit} · Tools {session.runState.budget.calls.tools.total}/{session.runState.budget.calls.tools.limit} · {session.runState.budget.cost.state === 'unknown'
+              ? 'Cost unknown'
+              : `Cost ${formatMicroUsd(session.runState.budget.cost.settledMicrousd ?? 0)} settled · ${formatMicroUsd(session.runState.budget.cost.reservedMicrousd ?? 0)} reserved`}
+            {session.runState.budget.stopReason === null ? '' : ` · Stopped: ${session.runState.budget.stopReason}`}
+          </span>
+        </div>
+      )}
     </div>
   );
 

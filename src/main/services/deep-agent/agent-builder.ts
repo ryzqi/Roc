@@ -40,11 +40,13 @@ import {
 import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunBudgetLedger } from './run-budget-ledger';
+import type { RunBudgetObserver } from './run-budget-observer';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
   snapshot: RunExecutionSnapshot;
   budgetLedger: RunBudgetLedger;
+  budgetObserver: RunBudgetObserver;
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -200,6 +202,7 @@ function createMiddlewareStackContext(
     backend: input.backend,
     budgetLedger: input.budgetLedger,
     budgetLimits: input.snapshot.budget,
+    budgetObserver: input.budgetObserver,
     contextCompaction: input.contextCompaction,
     executionScope,
     hookMiddleware: input.hookMiddleware,

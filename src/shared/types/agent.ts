@@ -13,6 +13,7 @@ export type {
   EnabledCapabilities,
   InterruptDecisionType,
   RunBudget,
+  RunBudgetStatus,
   RunCapabilityApprovalPolicyV1,
   RunCapabilityEffectClassV1,
   RunCapabilityExecutionScopeV1,
