@@ -184,7 +184,7 @@ test('real agent v5 upgrades to v6 and adds checkpoint task_path', () => {
   db.close();
 });
 
-test('real agent v6 upgrades through v9 grant, budget and operation-lease tables', () => {
+test('real agent v6 upgrades through v10 grant, budget and operation-lease tables', () => {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   applyDatabaseMigrations(db, {
@@ -197,7 +197,7 @@ test('real agent v6 upgrades through v9 grant, budget and operation-lease tables
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
   const after = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%' ORDER BY name").pluck().all();
   assert.deepEqual(after, ['agent_execution_approvals', 'agent_execution_grants', 'agent_execution_run_fences']);
-  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 9);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 10);
   assert.ok(columnNames(db, 'agent_budget_calls').includes('reserved_cost_microusd'));
   assert.ok(columnNames(db, 'agent_budget_calls').includes('actual_cost_microusd'));
   assert.ok(columnNames(db, 'agent_budget_calls').includes('pricing_version'));
@@ -276,7 +276,7 @@ test('real agent v8 effect rows migrate conservatively and preserve reconciliati
   );
 
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
-  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 9);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 10);
   assert.deepEqual(
     db.prepare('SELECT run_id, status FROM agent_tool_effects ORDER BY run_id').all(),
     [

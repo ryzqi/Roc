@@ -8,6 +8,7 @@ import type {
   ChatCancelRunResult,
   ChatRunEventsReplayRequest,
   ChatRunEventsReplayResult,
+  ChatRunEventsReplayPage,
   ChatRunEvent,
   ChatResumeRunRequest,
   ChatResumeRunResult,
@@ -810,28 +811,37 @@ export class AgentPluginRuntime {
   }
 
   async listRunEvents(request: ChatRunEventsReplayRequest): Promise<ChatRunEventsReplayResult> {
-    if (this.options.runEventLog === undefined) {
-      throw new Error('agent_run_event_log_unavailable');
-    }
-    const previous = this.options.repository.taskContracts.readReport(request.runId);
-    if (previous !== null) {
-      const snapshot = this.options.repository.getRunExecutionSnapshot(request.runId);
-      this.options.repository.taskContracts.assertMatchesSnapshot(request.runId, snapshot.taskContract);
-      const refreshed = await this.options.repository.taskContracts.refreshReport(request.runId, this.createTaskVerificationContext({
-        response: this.options.repository.listSessionMessages({ threadId: snapshot.threadId, limit: 200 })
-          .filter((message) => message.role === 'assistant')
-          .at(-1)?.content ?? null,
-        workspacePath: snapshot.workspace?.path ?? null,
-        researchProjectId: snapshot.researchProjectId ?? null
-      }));
-      if (refreshed !== null && hashToolInput(refreshed) !== hashToolInput(previous)) {
-        await this.publishTaskAcceptance(refreshed);
-      }
-    }
+    const runEventLog = this.options.runEventLog;
+    if (runEventLog === undefined) throw new Error('agent_run_event_log_unavailable');
+    await this.refreshTaskAcceptanceForRun(request.runId);
     return {
       runId: request.runId,
-      events: this.options.runEventLog.listRunEvents(request)
+      events: runEventLog.listRunEvents(request)
     };
+  }
+
+  async replayRunEvents(request: ChatRunEventsReplayRequest): Promise<ChatRunEventsReplayPage> {
+    const runEventLog = this.options.runEventLog;
+    if (runEventLog === undefined) throw new Error('agent_run_event_log_unavailable');
+    await this.refreshTaskAcceptanceForRun(request.runId);
+    return runEventLog.replayRunEvents(request);
+  }
+
+  private async refreshTaskAcceptanceForRun(runId: string): Promise<void> {
+    const previous = this.options.repository.taskContracts.readReport(runId);
+    if (previous === null) return;
+    const snapshot = this.options.repository.getRunExecutionSnapshot(runId);
+    this.options.repository.taskContracts.assertMatchesSnapshot(runId, snapshot.taskContract);
+    const refreshed = await this.options.repository.taskContracts.refreshReport(runId, this.createTaskVerificationContext({
+      response: this.options.repository.listSessionMessages({ threadId: snapshot.threadId, limit: 200 })
+        .filter((message) => message.role === 'assistant')
+        .at(-1)?.content ?? null,
+      workspacePath: snapshot.workspace?.path ?? null,
+      researchProjectId: snapshot.researchProjectId ?? null
+    }));
+    if (refreshed !== null && hashToolInput(refreshed) !== hashToolInput(previous)) {
+      await this.publishTaskAcceptance(refreshed);
+    }
   }
 
   getActiveRun(input: { threadId: string }): ActiveChatRun | null {
@@ -974,15 +984,17 @@ export class AgentPluginRuntime {
   }
 
   private async persistChatRunEvent(payload: ChatRunEvent): Promise<void> {
-    await bestEffort(
-      () => {
-        this.options.runEventLog?.recordRunEvent(payload);
-      },
-      error => this.reportNotificationFailure('agent_run_event_replay_persist_failed', error, {
+    const runEventLog = this.options.runEventLog;
+    if (runEventLog === undefined) throw new Error('agent_run_event_log_unavailable');
+    try {
+      runEventLog.recordRunEvent(payload);
+    } catch (error) {
+      this.reportNotificationFailure('agent_run_event_replay_persist_failed', error, {
         runId: payload.runId,
         notificationType: payload.type
-      })
-    );
+      });
+      throw error;
+    }
   }
 
   private reportNotificationFailure(

@@ -3,6 +3,7 @@ import type {
   ChatImageAttachment,
   ChatResumeDecision,
   ChatRunMode,
+  ChatRunEventsReplayPage,
   ChatStartRunIpcRequest,
   ChatStartRunResult,
   SequencedChatRunEvent,
@@ -101,6 +102,37 @@ export async function getRunEvents(
     afterSequence = last.sequence;
   }
   return { ok: true, data: { runId: input.runId, events } };
+}
+
+export async function getRunEventsReplay(
+  client: RocClient,
+  input: { runId: string; afterSequence: number }
+): Promise<IpcLikeResult<ChatRunEventsReplayPage>> {
+  const events: SequencedChatRunEvent[] = [];
+  let replayGap: Extract<ChatRunEventsReplayPage, { kind: 'replay_gap' }> | null = null;
+  let afterSequence = input.afterSequence;
+  // The durable log exposes at most 10,000 retained plus 128 pending events.
+  while (events.length < 10_128) {
+    const page = await client.api.chat.replayRunEvents({ ...input, afterSequence, limit: 500 });
+    if (!page.ok) return page;
+    if (page.data.runId !== input.runId) throw new Error('chat_replay_run_id_mismatch');
+    if (page.data.kind === 'replay_gap') {
+      replayGap = { ...page.data, events: [] };
+      events.length = 0;
+      afterSequence = page.data.snapshot.throughSequence;
+    }
+    events.push(...page.data.events);
+    const last = page.data.events.at(-1);
+    if (last === undefined || page.data.events.length < 500) break;
+    if (last.sequence <= afterSequence) throw new Error('chat_replay_cursor_not_advanced');
+    afterSequence = last.sequence;
+  }
+  return {
+    ok: true,
+    data: replayGap === null
+      ? { kind: 'events', runId: input.runId, events }
+      : { ...replayGap, events }
+  };
 }
 
 /** Every thread the backend knows about; the caller filters by `kind`. */

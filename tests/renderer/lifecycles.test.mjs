@@ -417,7 +417,7 @@ async function chatFixture() {
       window: {onHidden: () => () => {}},
       chat: {onRunEvent: cb => {live = cb; return () => {live = null;};},
         getActiveRun: async ({threadId}) => threadId === 'a' ? activeA.promise : ok(null),
-        getRunEvents: async request => {replayCalls.push(request); return replayA.promise;}
+        replayRunEvents: async request => {replayCalls.push(request); return replayA.promise;}
       },
       tasks: {getThreadMessages: async () => ok({items: [], hasMoreBefore: false, hasMoreAfter: false, oldestSequence: null, newestSequence: null})}
     }};
@@ -452,7 +452,7 @@ async function persistedHistoryFixture({
       chat: {
         onRunEvent: cb => { live = cb; return () => { live = null; }; },
         getActiveRun: async () => ok(null),
-        getRunEvents: async () => ok({events: []})
+        replayRunEvents: async () => ok({kind:'events', runId:'ra', events: []})
       },
       tasks: {
         getThreadMessages: async request => {
@@ -797,7 +797,7 @@ test('switching conversations ignores replay already in flight', async () => {
   await page.waitForFunction(() => replayCalls.length === 1);
   await page.evaluate(() => {
     mount('chat', {...props, threadId: 'b'});
-    replayA.resolve(ok({events: [{runId:'ra', sequence:1, createdAt:'now', event:{type:'run_started', runId:'ra', threadId:'a', providerId:'p', modelId:'m', mode:'chat', createdAt:'now'}}]}));
+    replayA.resolve(ok({kind:'events', runId:'ra', events: [{runId:'ra', sequence:1, createdAt:'now', event:{type:'run_started', runId:'ra', threadId:'a', providerId:'p', modelId:'m', mode:'chat', createdAt:'now'}}]}));
   });
   await page.waitForFunction(() => latest.history.threadId === 'b');
   assert.equal(await page.evaluate(() => latest.runState.status), 'idle');
@@ -847,9 +847,33 @@ test('replay drains buffered live events before applying its deduplicated tail',
     window.first = {runId:'ra', sequence:2, createdAt:'now', event:{type:'assistant_block', runId:'ra', block:{kind:'text', blockId:'t', phase:'delta', text:'a'}}};
     live(started); live(first);
     activeA.resolve(ok({runId:'ra'}));
-    replayA.resolve(ok({runId:'ra', events:[started, first, {runId:'ra', sequence:3, createdAt:'now', event:{type:'assistant_block', runId:'ra', block:{kind:'text', blockId:'t', phase:'delta', text:'b'}}}]}));
+    replayA.resolve(ok({kind:'events', runId:'ra', events:[started, first, {runId:'ra', sequence:3, createdAt:'now', event:{type:'assistant_block', runId:'ra', block:{kind:'text', blockId:'t', phase:'delta', text:'b'}}}]}));
   });
   await page.waitForFunction(() => latest.runState.assistantMessage === 'ab');
+});
+
+test('replay snapshot rebases a complete live projection when its sequence is newer', async () => {
+  await chatFixture();
+  await page.evaluate(() => {
+    const started = {runId:'ra', sequence:1, createdAt:'now', event:{type:'run_started', runId:'ra', threadId:'a', providerId:'p', modelId:'m', mode:'chat', createdAt:'now'}};
+    const first = {runId:'ra', sequence:2, createdAt:'now', event:{type:'assistant_block', runId:'ra', block:{kind:'text', blockId:'t', phase:'delta', text:'live'}}};
+    activeA.resolve(ok({runId:'ra'}));
+    live(started);
+    live(first);
+  });
+  await page.waitForFunction(() => replayCalls.length === 1 && latest.runState.assistantMessage === 'live');
+  await page.evaluate(() => {
+    const state = { ...latest.runState, historyComplete: true, assistantMessage: 'snapshot-through-four' };
+    replayA.resolve(ok({
+      kind:'replay_gap',
+      runId:'ra',
+      requestedAfterSequence:0,
+      firstAvailableSequence:5,
+      snapshot:{version:1, runId:'ra', throughSequence:4, historyComplete:true, state},
+      events:[{runId:'ra', sequence:5, createdAt:'now', event:{type:'assistant_block', runId:'ra', block:{kind:'text', blockId:'t', phase:'delta', text:'-five'}}}]
+    }));
+  });
+  await page.waitForFunction(() => latest.runState.assistantMessage === 'snapshot-through-four-five');
 });
 
 test('checkpoint continuation cannot replay into a different conversation', async () => {

@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import type {
+  ChatRunActivityBlock,
+  ChatRunState,
+  ChatRunSubagentBlock,
+  ChatRunSubagentNode
+} from '../chat-run-state';
 import { chatImageAttachmentMediaTypes } from '../constants/chat';
 import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
 
@@ -288,6 +294,129 @@ export const chatRunEventsReplayResultSchema = z
   })
   .strict();
 
+const chatRunActivityBlockSchema: z.ZodType<ChatRunActivityBlock> = z.discriminatedUnion('kind', [
+  z.object({ id: z.string(), kind: z.literal('reasoning'), content: z.string() }).strict(),
+  z
+    .object({
+      id: z.string(),
+      kind: z.literal('tool_call'),
+      callId: z.string(),
+      name: z.string(),
+      status: z.enum(['start', 'progress', 'end', 'error']),
+      input: z.json(),
+      output: z.json(),
+      error: z.json()
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      kind: z.literal('hook_call'),
+      event: hookRunSummarySchema.shape.event,
+      handlerId: z.string(),
+      status: hookRunSummarySchema.shape.status,
+      durationMs: z.number().nullable(),
+      message: z.string().nullable(),
+      additionalContext: z.string().nullable(),
+      requestContinue: z.string().nullable(),
+      commandDisplay: z.string()
+    })
+    .strict(),
+  z.object({ id: z.string(), kind: z.literal('task_acceptance'), report: taskAcceptanceSchema }).strict()
+]);
+
+const chatRunSubagentBlockSchema: z.ZodType<ChatRunSubagentBlock> = z.discriminatedUnion('kind', [
+  z.object({ id: z.string(), kind: z.literal('text'), content: z.string() }).strict(),
+  z.object({ id: z.string(), kind: z.literal('reasoning'), content: z.string() }).strict(),
+  z
+    .object({
+      id: z.string(),
+      kind: z.literal('tool_call'),
+      callId: z.string(),
+      name: z.string(),
+      status: z.enum(['start', 'progress', 'end', 'error']),
+      input: z.json(),
+      output: z.json(),
+      error: z.json()
+    })
+    .strict()
+]);
+
+const chatRunSubagentNodeSchema: z.ZodType<ChatRunSubagentNode> = z.lazy(() =>
+  z
+    .object({
+      identity: subagentIdentitySchema,
+      status: z.enum(['started', 'running', 'completed', 'failed', 'cancelled']),
+      summary: z.string().nullable(),
+      error: z.string().nullable(),
+      blocks: z.array(chatRunSubagentBlockSchema),
+      children: z.array(chatRunSubagentNodeSchema)
+    })
+    .strict()
+);
+
+export const chatRunStateSnapshotSchema: z.ZodType<ChatRunState> = z
+  .object({
+    runId: z.string().nullable(),
+    mode: runExecutionModeSchema.nullable(),
+    threadId: z.string().nullable(),
+    providerId: z.string().nullable(),
+    modelId: z.string().nullable(),
+    createdAt: z.string().nullable(),
+    status: z.enum(['idle', 'running', 'recovering', 'waiting_user', 'completed', 'cancelled', 'failed']),
+    historyComplete: z.boolean(),
+    assistantMessage: z.string(),
+    activityBlocks: z.array(chatRunActivityBlockSchema),
+    durationMs: z.number().nullable(),
+    summary: z.string().nullable(),
+    errorCode: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    recoveryAttempt: z.number().int().nonnegative().nullable(),
+    retryable: z.boolean(),
+    budget: runBudgetStatusSchema.nullable(),
+    pendingInterrupts: z.array(chatPendingInterruptSchema),
+    resumeBusy: z.boolean(),
+    todos: z.array(chatTodoItemSchema),
+    subagents: z.array(chatRunSubagentNodeSchema)
+  })
+  .strict();
+
+export const chatRunEventsSnapshotSchema = z
+  .object({
+    version: z.literal(1),
+    runId: identifierSchema,
+    throughSequence: z.number().int().nonnegative(),
+    historyComplete: z.boolean(),
+    state: chatRunStateSnapshotSchema
+  })
+  .strict()
+  .refine((snapshot) => snapshot.state.runId === snapshot.runId, 'Snapshot run id must match its state.')
+  .refine((snapshot) => snapshot.state.historyComplete === snapshot.historyComplete, 'Snapshot completeness must match state.');
+
+const chatRunEventsReplayEventsPageSchema = z
+  .object({
+    kind: z.literal('events'),
+    runId: z.string(),
+    events: z.array(sequencedChatRunEventSchema)
+  })
+  .strict();
+
+const chatRunEventsReplayGapPageSchema = z
+  .object({
+    kind: z.literal('replay_gap'),
+    runId: z.string(),
+    requestedAfterSequence: z.number().int().nonnegative(),
+    firstAvailableSequence: z.number().int().positive(),
+    snapshot: chatRunEventsSnapshotSchema,
+    events: z.array(sequencedChatRunEventSchema)
+  })
+  .strict();
+
+export const chatRunEventsReplayPageSchema = z.discriminatedUnion('kind', [
+  chatRunEventsReplayEventsPageSchema,
+  chatRunEventsReplayGapPageSchema
+]);
+
 export const activeChatRunSchema = z
   .object({
     runId: z.string(),
@@ -376,6 +505,9 @@ export type ChatRunEvent = z.infer<typeof chatRunEventSchema>;
 export type SequencedChatRunEvent = z.infer<typeof sequencedChatRunEventSchema>;
 export type ChatRunEventsReplayRequest = z.infer<typeof chatRunEventsReplayRequestSchema>;
 export type ChatRunEventsReplayResult = z.infer<typeof chatRunEventsReplayResultSchema>;
+export type ChatRunStateSnapshot = z.infer<typeof chatRunStateSnapshotSchema>;
+export type ChatRunEventsSnapshot = z.infer<typeof chatRunEventsSnapshotSchema>;
+export type ChatRunEventsReplayPage = z.infer<typeof chatRunEventsReplayPageSchema>;
 export type ActiveChatRun = z.infer<typeof activeChatRunSchema>;
 export type ChatStartRunRequest = z.infer<typeof chatStartRunRequestSchema>;
 export type ChatStartRunIpcRequest = z.infer<typeof chatStartRunIpcRequestSchema>;

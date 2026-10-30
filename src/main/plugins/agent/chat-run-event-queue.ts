@@ -1,30 +1,55 @@
+import { Buffer } from 'node:buffer';
+
 import type { ChatRunEvent } from '../../../shared/types';
 
 const defaultMaxEvents = 1_000;
+const defaultMaxBytes = 8 * 1024 * 1024;
+const defaultMaxEventBytes = 1 * 1024 * 1024;
 const defaultCoalesceDelayMs = 16;
 export const chatRunEventQueueMaxCoalescedChars = 8_192;
 
-export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCoalescedChars?: number; maxEvents?: number } = {}): AsyncIterable<ChatRunEvent> & {
+export function createChatRunEventQueue(input: {
+  coalesceDelayMs?: number;
+  maxCoalescedChars?: number;
+  maxEvents?: number;
+  maxBytes?: number;
+  maxEventBytes?: number;
+} = {}): AsyncIterable<ChatRunEvent> & {
   close: () => void;
   fail: (error: unknown) => void;
   push: (event: ChatRunEvent) => boolean;
-  stats: () => { highWaterMark: number; queuedEventCount: number; maxEvents: number };
+  stats: () => {
+    highWaterMark: number;
+    highWaterBytes: number;
+    queuedEventCount: number;
+    queuedBytes: number;
+    maxEvents: number;
+    maxBytes: number;
+  };
 } {
-  const maxEvents = input.maxEvents === undefined ? defaultMaxEvents : input.maxEvents;
-  if (!Number.isInteger(maxEvents) || maxEvents <= 0) {
-    throw new Error('chat_run_event_queue_max_events_invalid');
+  const maxEvents = input.maxEvents ?? defaultMaxEvents;
+  const maxBytes = input.maxBytes ?? defaultMaxBytes;
+  const maxEventBytes = input.maxEventBytes ?? defaultMaxEventBytes;
+  const maxCoalescedChars = input.maxCoalescedChars ?? chatRunEventQueueMaxCoalescedChars;
+  const coalesceDelayMs = input.coalesceDelayMs ?? defaultCoalesceDelayMs;
+  if (!Number.isInteger(maxEvents) || maxEvents <= 0) throw new Error('chat_run_event_queue_max_events_invalid');
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) throw new Error('chat_run_event_queue_max_bytes_invalid');
+  if (!Number.isInteger(maxEventBytes) || maxEventBytes <= 0 || maxEventBytes > maxBytes) {
+    throw new Error('chat_run_event_queue_max_event_bytes_invalid');
   }
-  const maxCoalescedChars = input.maxCoalescedChars === undefined ? chatRunEventQueueMaxCoalescedChars : input.maxCoalescedChars;
   if (!Number.isInteger(maxCoalescedChars) || maxCoalescedChars <= 0) {
     throw new Error('chat_run_event_queue_max_coalesced_chars_invalid');
   }
-  const coalesceDelayMs = input.coalesceDelayMs === undefined ? defaultCoalesceDelayMs : input.coalesceDelayMs;
   if (!Number.isInteger(coalesceDelayMs) || coalesceDelayMs <= 0) {
     throw new Error('chat_run_event_queue_coalesce_delay_invalid');
   }
+
   const events: ChatRunEvent[] = [];
+  const eventBytes: number[] = [];
   let nextEventIndex = 0;
+  let queuedBytes = 0;
   let highWaterMark = 0;
+  let highWaterBytes = 0;
   let closed = false;
   let failure: unknown = null;
   let deliveryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -37,40 +62,62 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
 
   const queue = {
     push: (event: ChatRunEvent): boolean => {
-      if (closed || failure !== null) {
+      if (closed || failure !== null) return false;
+      const serialized = serializeEvent(event);
+      if (serialized === null) {
+        queue.fail(new Error('chat_run_event_queue_event_not_serializable'));
+        return false;
+      }
+      const bytes = Buffer.byteLength(serialized, 'utf8');
+      if (bytes > maxEventBytes) {
+        queue.fail(new Error('chat_run_event_queue_event_too_large'));
         return false;
       }
       if (nextEventIndex > 0) {
         events.splice(0, nextEventIndex);
+        eventBytes.splice(0, nextEventIndex);
         nextEventIndex = 0;
       }
       if (event.type === 'run_budget') {
-        let queuedBudgetIndex = -1;
-        for (let index = events.length - 1; index >= nextEventIndex; index -= 1) {
-          const queued = events[index];
-          if (queued?.type === 'run_budget' && queued.runId === event.runId) {
-            queuedBudgetIndex = index;
-            break;
-          }
-        }
-        if (queuedBudgetIndex >= nextEventIndex) events.splice(queuedBudgetIndex, 1);
+        const queuedBudgetIndex = findQueuedBudgetIndex(events, nextEventIndex, event.runId);
+        if (queuedBudgetIndex >= nextEventIndex) removeQueuedEvent(queuedBudgetIndex);
       }
-      const last = events.at(-1);
+      const lastIndex = events.length - 1;
+      const last = lastIndex < nextEventIndex ? undefined : events[lastIndex];
       const coalesced = last === undefined ? null : coalesceTextDelta(last, event, maxCoalescedChars);
       if (coalesced !== null) {
-        events[events.length - 1] = coalesced;
+        const coalescedBytes = serializedBytes(coalesced);
+        if (coalescedBytes === null || coalescedBytes > maxEventBytes) {
+          queue.fail(new Error('chat_run_event_queue_event_too_large'));
+          return false;
+        }
+        const previousBytes = eventBytes[lastIndex] ?? 0;
+        if (queuedBytes - previousBytes + coalescedBytes > maxBytes) {
+          queue.fail(new Error('chat_run_event_queue_byte_overflow'));
+          return false;
+        }
+        events[lastIndex] = coalesced;
+        eventBytes[lastIndex] = coalescedBytes;
+        queuedBytes += coalescedBytes - previousBytes;
+        highWaterBytes = Math.max(highWaterBytes, queuedBytes);
         return true;
       }
-      if (events.length === maxEvents) {
+      if (events.length - nextEventIndex >= maxEvents) {
         queue.fail(new Error('chat_run_event_queue_overflow'));
         return false;
       }
+      if (queuedBytes + bytes > maxBytes) {
+        queue.fail(new Error('chat_run_event_queue_byte_overflow'));
+        return false;
+      }
       events.push(event);
-      highWaterMark = Math.max(highWaterMark, events.length);
+      eventBytes.push(bytes);
+      queuedBytes += bytes;
+      highWaterMark = Math.max(highWaterMark, events.length - nextEventIndex);
+      highWaterBytes = Math.max(highWaterBytes, queuedBytes);
       if (waiting !== null) {
-        if (isCoalescibleTextDelta(event)) {
-          scheduleDelayedDelivery();
-        } else {
+        if (isCoalescibleTextDelta(event)) scheduleDelayedDelivery();
+        else {
           clearDelayedDelivery();
           resolveWaitingEvent();
         }
@@ -78,19 +125,13 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
       return true;
     },
     close: (): void => {
-      if (closed || failure !== null) {
-        return;
-      }
+      if (closed || failure !== null) return;
       closed = true;
       clearDelayedDelivery();
-      if (waiting !== null) {
-        resolveWaitingEvent();
-      }
+      if (waiting !== null) resolveWaitingEvent();
     },
     fail: (error: unknown): void => {
-      if (closed || failure !== null) {
-        return;
-      }
+      if (closed || failure !== null) return;
       failure = error;
       clearDelayedDelivery();
       if (waiting !== null) {
@@ -101,39 +142,35 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
     },
     stats: () => ({
       highWaterMark,
+      highWaterBytes,
       queuedEventCount: events.length - nextEventIndex,
-      maxEvents
+      queuedBytes,
+      maxEvents,
+      maxBytes
     }),
     [Symbol.asyncIterator](): AsyncIterator<ChatRunEvent> {
       return {
         next: async (): Promise<IteratorResult<ChatRunEvent>> => {
-          if (nextEventIndex < events.length) {
-            return takeNextEvent();
-          }
-          if (failure !== null) {
-            throw failure;
-          }
-          if (closed) {
-            return {
-              done: true,
-              value: undefined
-            };
-          }
-          return await new Promise<IteratorResult<ChatRunEvent>>((resolve, reject) => {
-            waiting = {
-              resolve,
-              reject
-            };
+          if (nextEventIndex < events.length) return takeNextEvent();
+          if (failure !== null) throw failure;
+          if (closed) return { done: true, value: undefined };
+          return new Promise<IteratorResult<ChatRunEvent>>((resolve, reject) => {
+            waiting = { resolve, reject };
           });
         }
       };
     }
   };
 
+  function removeQueuedEvent(index: number): void {
+    const removedBytes = eventBytes[index] ?? 0;
+    events.splice(index, 1);
+    eventBytes.splice(index, 1);
+    queuedBytes -= removedBytes;
+  }
+
   function scheduleDelayedDelivery(): void {
-    if (deliveryTimer !== null) {
-      return;
-    }
+    if (deliveryTimer !== null) return;
     deliveryTimer = setTimeout(() => {
       deliveryTimer = null;
       resolveWaitingEvent();
@@ -141,17 +178,13 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
   }
 
   function clearDelayedDelivery(): void {
-    if (deliveryTimer === null) {
-      return;
-    }
+    if (deliveryTimer === null) return;
     clearTimeout(deliveryTimer);
     deliveryTimer = null;
   }
 
   function resolveWaitingEvent(): void {
-    if (waiting === null) {
-      return;
-    }
+    if (waiting === null) return;
     const current = waiting;
     waiting = null;
     if (nextEventIndex < events.length) {
@@ -171,21 +204,39 @@ export function createChatRunEventQueue(input: { coalesceDelayMs?: number; maxCo
 
   function takeNextEvent(): IteratorResult<ChatRunEvent> {
     const event = events[nextEventIndex];
-    if (event === undefined) {
-      throw new Error('chat_run_event_queue_empty');
-    }
+    if (event === undefined) throw new Error('chat_run_event_queue_empty');
+    queuedBytes -= eventBytes[nextEventIndex] ?? 0;
     nextEventIndex += 1;
     if (nextEventIndex === events.length) {
       events.length = 0;
+      eventBytes.length = 0;
       nextEventIndex = 0;
     }
-    return {
-      done: false,
-      value: event
-    };
+    return { done: false, value: event };
   }
 
   return queue;
+}
+
+function serializeEvent(event: ChatRunEvent): string | null {
+  try {
+    return JSON.stringify(event) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function serializedBytes(event: ChatRunEvent): number | null {
+  const serialized = serializeEvent(event);
+  return serialized === null ? null : Buffer.byteLength(serialized, 'utf8');
+}
+
+function findQueuedBudgetIndex(events: readonly ChatRunEvent[], from: number, runId: string): number {
+  for (let index = events.length - 1; index >= from; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'run_budget' && event.runId === runId) return index;
+  }
+  return -1;
 }
 
 function isCoalescibleTextDelta(event: ChatRunEvent): boolean {
@@ -216,4 +267,3 @@ function coalesceTextDelta(left: ChatRunEvent, right: ChatRunEvent, maxCoalesced
   }
   return null;
 }
-

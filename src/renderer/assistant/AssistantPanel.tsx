@@ -377,6 +377,16 @@ export function AssistantPanel({
     <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="assistant-panel">
       {header}
 
+      {!session.runState.historyComplete ? (
+        <div
+          className="shrink-0 border-b border-line bg-[var(--tool-st-progress-bg)] px-3 py-2 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]"
+          data-testid="assistant-history-gap"
+          role="status"
+        >
+          部分较早的运行记录不可用。当前状态已从保存的快照恢复。
+        </div>
+      ) : null}
+
       {errorMessages.length === 0 ? null : (
         <div className="shrink-0 px-2 pt-2" data-testid="assistant-errors">
           <ErrorBar error={{ level: 'page', message: errorMessages[0] ?? '', retry: session.retryRecovery }} />

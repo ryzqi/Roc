@@ -6,7 +6,7 @@ import { createChatTranscriptProjector, type ChatTranscriptMessage } from './tra
 import { useChatRun } from './use-chat-run';
 import { usePersistedThreadHistory, type PersistedThreadHistory } from './use-persisted-thread-history';
 import type { ChatRunState } from './run-state';
-import { cancelRun, getActiveRun, getRunEvents, resumeApproval, resumeCheckpoint as resumeCheckpointRequest, resumeQuestion, startRun } from './session-store';
+import { cancelRun, getActiveRun, getRunEventsReplay, resumeApproval, resumeCheckpoint as resumeCheckpointRequest, resumeQuestion, startRun } from './session-store';
 
 /**
  * The assistant's run wiring (T4.2/T4.3).
@@ -186,13 +186,13 @@ export function useChatSession(input: {
       run.setError(result.error.message);
       return false;
     }
-    const replayed = await getRunEvents(client, { runId, afterSequence: 0 });
+    const replayed = await getRunEventsReplay(client, { runId, afterSequence: 0 });
     if (!isCurrent()) return false;
     if (!replayed.ok) {
       run.setError(replayed.error.message);
       return false;
     }
-    run.applyReplay(replayed.data.events);
+    run.applyReplay(replayed.data, 0);
     return true;
   }, [client, run, threadId]);
 
@@ -217,10 +217,10 @@ export function useChatSession(input: {
           if (!isCurrent()) return;
           if (!active.ok) { setError(active.error.message); return; }
           if (active.data === null) return;
-          const replayed = await getRunEvents(client, { runId: active.data.runId, afterSequence: 0 });
+          const replayed = await getRunEventsReplay(client, { runId: active.data.runId, afterSequence: 0 });
           if (!isCurrent()) return;
           if (!replayed.ok) { setError(replayed.error.message); return; }
-          applyReplay(replayed.data.events);
+          applyReplay(replayed.data, 0);
         } catch (caught) {
           if (isCurrent()) setError(errorMessage(caught));
         }

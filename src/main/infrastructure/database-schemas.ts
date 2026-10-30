@@ -547,6 +547,36 @@ CREATE UNIQUE INDEX idx_agent_tool_effects_operation_id
 CREATE INDEX idx_agent_tool_effects_run_lease
   ON agent_tool_effects(run_id, status, lease_generation);
 `
+  },
+  {
+    version: 10,
+    name: 'bounded_chat_run_event_journal',
+    sql: `
+ALTER TABLE agent_run_events ADD COLUMN event_bytes INTEGER NOT NULL DEFAULT 0 CHECK(event_bytes >= 0);
+ALTER TABLE agent_run_event_cursors ADD COLUMN retained_count INTEGER NOT NULL DEFAULT 0 CHECK(retained_count >= 0);
+ALTER TABLE agent_run_event_cursors ADD COLUMN retained_bytes INTEGER NOT NULL DEFAULT 0 CHECK(retained_bytes >= 0);
+ALTER TABLE agent_run_event_cursors ADD COLUMN pending_count INTEGER NOT NULL DEFAULT 0 CHECK(pending_count >= 0);
+ALTER TABLE agent_run_event_cursors ADD COLUMN pending_bytes INTEGER NOT NULL DEFAULT 0 CHECK(pending_bytes >= 0);
+UPDATE agent_run_events SET event_bytes = length(CAST(event_json AS BLOB));
+UPDATE agent_run_event_cursors
+SET retained_count = (SELECT COUNT(*) FROM agent_run_events WHERE agent_run_events.run_id = agent_run_event_cursors.run_id),
+    retained_bytes = (SELECT COALESCE(SUM(event_bytes), 0) FROM agent_run_events WHERE agent_run_events.run_id = agent_run_event_cursors.run_id);
+CREATE TABLE agent_run_event_snapshots (
+        run_id TEXT PRIMARY KEY,
+        through_sequence INTEGER NOT NULL CHECK(through_sequence >= 0),
+        snapshot_json TEXT NOT NULL,
+        snapshot_bytes INTEGER NOT NULL CHECK(snapshot_bytes >= 0),
+        updated_at TEXT NOT NULL
+      );
+CREATE TABLE agent_run_event_snapshot_pending (
+        run_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK(sequence >= 0),
+        event_json TEXT NOT NULL,
+        event_bytes INTEGER NOT NULL CHECK(event_bytes > 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(run_id, sequence)
+      );
+`
   }
 ];
 

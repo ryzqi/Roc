@@ -250,6 +250,7 @@ export const rocApi: RocPreloadApi = {
     correctRun: (...args) => ipcRenderer.invoke(ipcChannels.chatCorrectRun, ...args),
     resumeRun: (...args) => ipcRenderer.invoke(ipcChannels.chatResumeRun, ...args),
     getRunEvents: (...args) => ipcRenderer.invoke(ipcChannels.chatGetRunEvents, ...args),
+    replayRunEvents: (...args) => ipcRenderer.invoke(ipcChannels.chatReplayRunEvents, ...args),
     getActiveRun: (...args) => ipcRenderer.invoke(ipcChannels.chatGetActiveRun, ...args),
     onRunEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);

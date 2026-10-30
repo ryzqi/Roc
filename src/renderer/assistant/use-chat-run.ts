@@ -4,7 +4,8 @@ import {
   createEmptyChatRunState,
   type ChatRunState
 } from './run-state';
-import type { ChatRunEvent, SequencedChatRunEvent } from '../../shared/types';
+import type { ChatRunEventsReplayPage, ChatRunEvent, SequencedChatRunEvent } from '../../shared/types';
+import { getRunEventsReplay } from './session-store';
 import type { RocClient } from '../shared/roc-client';
 
 export function applyChatRunEventBatch(state: ChatRunState, events: ChatRunEvent[]): ChatRunState {
@@ -63,6 +64,17 @@ export function shouldApplySequencedRunEvent(
       break;
     }
     seen.delete(oldest);
+  }
+  return true;
+}
+
+export function areReplayEventsContiguous(events: readonly SequencedChatRunEvent[], afterSequence: number): boolean {
+  if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return false;
+  let expectedSequence = afterSequence + 1;
+  for (const event of events) {
+    if (event.sequence < expectedSequence) continue;
+    if (event.sequence !== expectedSequence) return false;
+    expectedSequence += 1;
   }
   return true;
 }
@@ -134,6 +146,34 @@ type PendingChatRunEventsRef = {
 
 // 窗口隐藏时 requestAnimationFrame 不会刷新。只 push 会让整段运行的增量事件留在 renderer。
 export const maxPendingChatRunEvents = 64;
+const maxLiveReplayTailEvents = 10_000;
+const maxLiveReplayTailBytes = 8 * 1024 * 1024;
+
+type LiveReplayTail = {
+  events: SequencedChatRunEvent[];
+  bytes: number;
+  droppedThroughSequence: number;
+};
+
+function rememberLiveReplayEvent(tails: Map<string, LiveReplayTail>, event: SequencedChatRunEvent): void {
+  const eventBytes = new TextEncoder().encode(JSON.stringify(event)).byteLength;
+  const tail = tails.get(event.runId) ?? { events: [], bytes: 0, droppedThroughSequence: 0 };
+  tail.events.push(event);
+  tail.bytes += eventBytes;
+  while (tail.events.length > maxLiveReplayTailEvents || tail.bytes > maxLiveReplayTailBytes) {
+    const dropped = tail.events.shift();
+    if (dropped === undefined) break;
+    tail.bytes -= new TextEncoder().encode(JSON.stringify(dropped)).byteLength;
+    tail.droppedThroughSequence = Math.max(tail.droppedThroughSequence, dropped.sequence);
+  }
+  tails.delete(event.runId);
+  tails.set(event.runId, tail);
+  while (tails.size > maxSeenRunSequences) {
+    const oldestRunId = tails.keys().next().value;
+    if (oldestRunId === undefined || oldestRunId === event.runId) break;
+    tails.delete(oldestRunId);
+  }
+}
 
 export function appendCoalescedChatRunEvent(pending: readonly ChatRunEvent[], event: ChatRunEvent): ChatRunEvent[] {
   const last = pending.at(-1);
@@ -178,7 +218,7 @@ export type ChatRunController = {
    * those events. It goes through the same sequence de-duplication as live events, so a
    * replay that overlaps what the live stream already delivered cannot double-apply.
    */
-  applyReplay: (events: readonly SequencedChatRunEvent[]) => void;
+  applyReplay: (page: ChatRunEventsReplayPage | readonly SequencedChatRunEvent[], afterSequence?: number) => void;
 };
 
 export function useChatRun(client: RocClient, scope: {
@@ -191,20 +231,31 @@ export function useChatRun(client: RocClient, scope: {
   const accepts = (event: ChatRunEvent): boolean => {
     if ('threadId' in event) {
       const current = scopeRef.current;
-      if (current.threadId !== null ? event.threadId !== current.threadId
-        : !current.acceptUnboundEvents && !acceptedRunIds.current.has(event.runId)) return false;
-      acceptedRunIds.current.add(event.runId);
+      const isAccepted = current.threadId === null
+        ? current.acceptUnboundEvents || acceptedRunIds.current.has(event.runId)
+        : event.threadId === current.threadId;
+      if (isAccepted) {
+        acceptedRunIds.current.add(event.runId);
+      } else {
+        return false;
+      }
     }
     return acceptedRunIds.current.has(event.runId);
   };
   const acceptsRef = useRef(accepts);
   acceptsRef.current = accepts;
   const [state, setState] = useState<ChatRunState>(() => createEmptyChatRunState());
+  const stateRef = useRef(state);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const pendingEventsRef = useRef<ChatRunEvent[]>([]);
   const rafHandleRef = useRef<number | null>(null);
   const hiddenRef = useRef(false);
   const seenSequenceByRunIdRef = useRef<Map<string, number>>(new Map());
+  const liveReplayTailByRunIdRef = useRef<Map<string, LiveReplayTail>>(new Map());
+  const replayingRunIdsRef = useRef(new Set<string>());
+  const recoverableSequenceGapRunIdsRef = useRef(new Set<string>());
+  const applyReplayRef = useRef<ChatRunController['applyReplay'] | null>(null);
+  const generationRef = useRef(0);
 
   useEffect(() => {
     function flush(): void {
@@ -214,8 +265,10 @@ export function useChatRun(client: RocClient, scope: {
         return;
       }
       pendingEventsRef.current = [];
+      const next = applyChatRunEventBatch(stateRef.current, buffered);
+      stateRef.current = next;
       startTransition(() => {
-        setState((current) => applyChatRunEventBatch(current, buffered));
+        setState(next);
       });
     }
 
@@ -224,6 +277,29 @@ export function useChatRun(client: RocClient, scope: {
         return;
       }
       rafHandleRef.current = requestAnimationFrame(flush);
+    }
+
+    function recoverMissingEvents(runId: string, afterSequence: number): void {
+      if (replayingRunIdsRef.current.has(runId)) return;
+      replayingRunIdsRef.current.add(runId);
+      const generation = generationRef.current;
+      void getRunEventsReplay(client, { runId, afterSequence })
+        .then((result) => {
+          if (generation !== generationRef.current) return;
+          if (!result.ok) {
+            setErrorMessage(result.error.message);
+            return;
+          }
+          applyReplayRef.current?.(result.data, afterSequence);
+        })
+        .catch((caught: unknown) => {
+          if (generation === generationRef.current) {
+            setErrorMessage(caught instanceof Error ? caught.message : String(caught));
+          }
+        })
+        .finally(() => {
+          if (generation === generationRef.current) replayingRunIdsRef.current.delete(runId);
+        });
     }
 
     const unsubscribeHidden = client.api.window.onHidden((snapshot) => {
@@ -239,13 +315,34 @@ export function useChatRun(client: RocClient, scope: {
     });
 
     const unsubscribe = client.api.chat.onRunEvent((rawEvent) => {
-      if (!acceptsRef.current(normalizeSequencedChatRunEvent(rawEvent))) return;
+      const event = normalizeSequencedChatRunEvent(rawEvent);
+      if (!acceptsRef.current(event)) return;
       if (isSequencedChatRunEvent(rawEvent)) {
-        if (!shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, rawEvent)) {
+        const previousSequence = seenSequenceByRunIdRef.current.get(rawEvent.runId);
+        if (previousSequence !== undefined && rawEvent.sequence <= previousSequence) return;
+        rememberLiveReplayEvent(liveReplayTailByRunIdRef.current, rawEvent);
+        let replayAfterSequence: number | null = null;
+        if (previousSequence === undefined && rawEvent.sequence > 1) {
+          const current = stateRef.current;
+          const base = current.runId === rawEvent.runId ? current : createEmptyChatRunState();
+          stateRef.current = { ...base, runId: rawEvent.runId, historyComplete: false };
+          startTransition(() => setState(stateRef.current));
+          replayAfterSequence = 0;
+        } else if (previousSequence !== undefined && rawEvent.sequence > previousSequence + 1) {
+          const current = stateRef.current;
+          if (current.runId === rawEvent.runId && current.historyComplete) {
+            stateRef.current = { ...current, historyComplete: false };
+            recoverableSequenceGapRunIdsRef.current.add(rawEvent.runId);
+            startTransition(() => setState(stateRef.current));
+          }
+          replayAfterSequence = previousSequence;
+        }
+        if (replayAfterSequence !== null) {
+          recoverMissingEvents(rawEvent.runId, replayAfterSequence);
           return;
         }
+        if (!shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, rawEvent)) return;
       }
-      const event = normalizeSequencedChatRunEvent(rawEvent);
       pendingEventsRef.current = appendCoalescedChatRunEvent(pendingEventsRef.current, event);
 
       if (event.type === 'run_started' || event.type === 'run_continued' || event.type === 'run_resumed') {
@@ -270,14 +367,21 @@ export function useChatRun(client: RocClient, scope: {
       unsubscribeHidden();
       unsubscribe();
       clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
+      generationRef.current += 1;
+      replayingRunIdsRef.current.clear();
     };
   }, [client]);
 
   const reset = useCallback((): void => {
+    generationRef.current += 1;
+    replayingRunIdsRef.current.clear();
+    recoverableSequenceGapRunIdsRef.current.clear();
     acceptedRunIds.current.clear();
     clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     seenSequenceByRunIdRef.current.clear();
-    setState(createEmptyChatRunState());
+    liveReplayTailByRunIdRef.current.clear();
+    stateRef.current = createEmptyChatRunState();
+    setState(stateRef.current);
     setErrorMessage(null);
   }, []);
 
@@ -285,32 +389,101 @@ export function useChatRun(client: RocClient, scope: {
     setErrorMessage(message);
   }, []);
 
-  const applyReplay = useCallback((events: readonly SequencedChatRunEvent[]): void => {
-    // Live events may already be deduplicated but still wait for an animation frame.
-    // Apply them before the replay tail so a buffered run_started cannot erase that tail.
-    const accepted = coalesceChatRunEvents(pendingEventsRef.current);
+  const applyReplay = useCallback((
+    replay: ChatRunEventsReplayPage | readonly SequencedChatRunEvent[],
+    afterSequence?: number
+  ): void => {
+    const page = Array.isArray(replay) ? null : replay as ChatRunEventsReplayPage;
+    const replayEvents = page === null ? replay as readonly SequencedChatRunEvent[] : page.events;
+    const pending = coalesceChatRunEvents(pendingEventsRef.current);
     clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
-    for (const event of events) {
-      if (!acceptsRef.current(event.event)) continue;
-      if (shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, event)) {
-        accepted.push(normalizeSequencedChatRunEvent(event));
+    let baseState = stateRef.current;
+    let rebased = false;
+    let stateChanged = false;
+    const accepted: ChatRunEvent[] = [];
+
+    if (page) {
+      const replayAfterSequence = afterSequence ?? 0;
+      const isSnapshotGap = page.kind === 'replay_gap';
+      const shouldRebase = page.kind === 'replay_gap' && (
+        baseState.runId !== page.runId ||
+        !baseState.historyComplete ||
+        page.snapshot.throughSequence > (seenSequenceByRunIdRef.current.get(page.runId) ?? 0)
+      );
+      const tail = liveReplayTailByRunIdRef.current.get(page.runId);
+      const serverThrough = page.events.at(-1)?.sequence ?? (isSnapshotGap ? page.snapshot.throughSequence : replayAfterSequence);
+      if (tail !== undefined && tail.droppedThroughSequence > serverThrough && (shouldRebase || !baseState.historyComplete)) {
+        const incomplete = { ...baseState, historyComplete: false };
+        stateRef.current = incomplete;
+        startTransition(() => setState(incomplete));
+        setErrorMessage('Run history changed during recovery. Reopen the session to load the latest activity.');
+        return;
+      }
+
+      let eventFloor = replayAfterSequence;
+      if (shouldRebase && page.kind === 'replay_gap') {
+        baseState = page.snapshot.state;
+        eventFloor = page.snapshot.throughSequence;
+        rebased = true;
+        stateChanged = true;
+        seenSequenceByRunIdRef.current.delete(page.runId);
+        seenSequenceByRunIdRef.current.set(page.runId, page.snapshot.throughSequence);
+        recoverableSequenceGapRunIdsRef.current.delete(page.runId);
+        setErrorMessage(baseState.errorMessage);
+      } else if (isSnapshotGap && page.kind === 'replay_gap') {
+        eventFloor = page.snapshot.throughSequence;
+      }
+
+      const candidates = new Map<number, SequencedChatRunEvent>();
+      for (const event of page.events) {
+        if (event.sequence > eventFloor) candidates.set(event.sequence, event);
+      }
+      for (const event of tail?.events ?? []) {
+        if (event.sequence > eventFloor) candidates.set(event.sequence, event);
+      }
+      const orderedEvents = [...candidates.values()].sort((left, right) => left.sequence - right.sequence);
+      const replayIsContiguous = areReplayEventsContiguous(orderedEvents, replayAfterSequence);
+      const canRestoreCompleteHistory = page.kind === 'events' && orderedEvents.length > 0 && replayIsContiguous &&
+        ((replayAfterSequence === 0 && orderedEvents[0]?.sequence === 1) ||
+          recoverableSequenceGapRunIdsRef.current.has(page.runId));
+      if (canRestoreCompleteHistory) {
+        baseState = { ...baseState, historyComplete: true };
+        stateChanged = true;
+        recoverableSequenceGapRunIdsRef.current.delete(page.runId);
+      }
+      if (!rebased) accepted.push(...pending);
+      for (const event of orderedEvents) {
+        if (!acceptsRef.current(event.event)) continue;
+        if (shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, event)) accepted.push(event.event);
+      }
+    } else {
+      accepted.push(...pending);
+      for (const event of replayEvents) {
+        if (!acceptsRef.current(event.event)) continue;
+        if (shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, event)) accepted.push(event.event);
       }
     }
-    if (accepted.length === 0) {
-      return;
+
+    if (accepted.length === 0 && !stateChanged) return;
+    let latestErrorTransition: ChatRunEvent | undefined;
+    for (let index = accepted.length - 1; index >= 0; index -= 1) {
+      const event = accepted[index];
+      if (event !== undefined && (event.type === 'run_failed' || event.type === 'run_started' || event.type === 'run_continued' || event.type === 'run_resumed')) {
+        latestErrorTransition = event;
+        break;
+      }
     }
-    const latestErrorTransition = [...accepted].reverse().find((event) =>
-      event.type === 'run_failed' || event.type === 'run_started' || event.type === 'run_continued' || event.type === 'run_resumed'
-    );
     if (latestErrorTransition?.type === 'run_failed') {
       setErrorMessage(latestErrorTransition.message);
     } else if (latestErrorTransition !== undefined) {
       setErrorMessage(null);
     }
-    startTransition(() => {
-      setState((current) => applyChatRunEventBatch(current, accepted));
-    });
+    const next = applyChatRunEventBatch(baseState, accepted);
+    stateRef.current = next;
+    startTransition(() => setState(next));
   }, []);
+
+  applyReplayRef.current = applyReplay;
 
   return {
     state,

@@ -19,6 +19,8 @@ import * as esbuild from 'esbuild';
  */
 
 let chatRun;
+let chatSchemas;
+let chatState;
 let syntax;
 let imageAttachments;
 let slash;
@@ -41,6 +43,8 @@ before(async () => {
     return import(outfile);
   };
   chatRun = await build('src/renderer/assistant/use-chat-run.ts', 'use-chat-run.mjs');
+  chatSchemas = await build('src/shared/schemas/chat.ts', 'chat-schemas.mjs');
+  chatState = await build('src/shared/chat-run-state.ts', 'chat-state.mjs');
   syntax = await build('src/renderer/assistant/syntax-highlight.ts', 'syntax.mjs');
   imageAttachments = await build('src/renderer/assistant/image-attachments.ts', 'image.mjs');
   slash = await build('src/renderer/assistant/slash-skill-command.ts', 'slash.mjs');
@@ -50,6 +54,22 @@ after(() => {
   if (tempDir !== undefined) {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test('run event snapshots reject a state from a different run', () => {
+  const state = { ...chatState.createEmptyChatRunState(), runId: 'run-1', status: 'running' };
+  const snapshot = {
+    version: 1,
+    runId: 'run-1',
+    throughSequence: 4,
+    historyComplete: true,
+    state
+  };
+  assert.deepEqual(chatSchemas.chatRunEventsSnapshotSchema.parse(snapshot), snapshot);
+  assert.throws(
+    () => chatSchemas.chatRunEventsSnapshotSchema.parse({ ...snapshot, state: { ...state, runId: 'run-2' } }),
+    /Snapshot run id must match its state/u
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -103,6 +123,15 @@ test('the sequence guard rejects replays and keeps the newest window bounded', (
     chatRun.shouldApplySequencedRunEvent(bounded, { runId: `run-${index}`, sequence: 1, event: {} });
   }
   assert.ok(bounded.size <= chatRun.maxSeenRunSequences);
+});
+
+test('replay event sequences must be contiguous after the supplied cursor', () => {
+  const event = (sequence) => ({ runId: 'run-1', sequence, event: { type: 'run_started', runId: 'run-1' } });
+  assert.equal(chatRun.areReplayEventsContiguous([event(1), event(2)], 0), true);
+  assert.equal(chatRun.areReplayEventsContiguous([event(1), event(3)], 0), false);
+  assert.equal(chatRun.areReplayEventsContiguous([], 4), true);
+  assert.equal(chatRun.areReplayEventsContiguous([event(5), event(6)], 4), true);
+  assert.equal(chatRun.areReplayEventsContiguous([event(6), event(7)], 4), false);
 });
 
 /* ------------------------------------------------------------------ */

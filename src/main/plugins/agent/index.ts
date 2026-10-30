@@ -40,6 +40,7 @@ import {
   chatResumeRunResultSchema,
   chatRunEventsReplayRequestSchema,
   chatRunEventsReplayResultSchema,
+  chatRunEventsReplayPageSchema,
   chatStartRunRequestSchema,
   chatStartRunResultSchema
 } from '../../../shared/schemas/chat';
@@ -79,6 +80,7 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.correct', chatCorrectRunRequestSchema, chatCorrectRunResultSchema),
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
+  descriptor('agent.run.events.replay', chatRunEventsReplayRequestSchema, chatRunEventsReplayPageSchema),
   descriptor('agent.pilot.status', emptyInputSchema, pilotStatusSchema),
   descriptor('agent.pilot.enable', pilotOptInRequestSchema, pilotStatusSchema),
   descriptor('agent.pilot.rollback', emptyInputSchema, pilotStatusSchema),
@@ -424,6 +426,9 @@ function registerAgentCapabilities(
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.run.events.list'), async (input) =>
     runtime.listRunEvents(chatRunEventsReplayRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.events.replay'), async (input) =>
+    runtime.replayRunEvents(chatRunEventsReplayRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.pilot.status'), async () =>
     runtime.getPilotStatus()
