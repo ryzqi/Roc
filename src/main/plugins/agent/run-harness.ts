@@ -51,7 +51,7 @@ import type { ContextBudgetProfile, ContextToolDefinition } from '../../services
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
 import { memoryApplicability } from '../../services/deep-agent/harness-revision';
-import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
+import { RunBudgetObserver, type ModelInvocationObservation } from '../../services/deep-agent/run-budget-observer';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { ToolAdmissionObserver } from '../../services/deep-agent/tool-resource-coordinator';
@@ -84,6 +84,7 @@ export type RunHarnessRequest = {
   /** harness 装配期间产生的事件（hook 事件、上下文维护事件）由调用方的事件通道接走。 */
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   observeToolAdmission?: ToolAdmissionObserver;
+  observeModelInvocation?: (observation: ModelInvocationObservation) => void;
   modelHandle: { langChainHandle?: LangChainChatModelHandle; modelId: string };
   run: TaskRun;
   snapshot: RunExecutionSnapshot;
@@ -228,6 +229,7 @@ export async function buildRunHarness(
     {
       providerId: request.snapshot.model.providerId,
       modelId: request.snapshot.model.modelId,
+      onInvocation: request.observeModelInvocation,
       onStatus: (budget) => request.emitRuntimeEvent({
         type: 'run_budget',
         runId: request.run.id,
@@ -298,7 +300,9 @@ function emitContextMaintenanceEvent(
     ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars }),
     ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
     ...(event.budgetTokens === undefined ? {} : { budgetTokens: event.budgetTokens }),
-    ...(event.estimated === undefined ? {} : { estimated: event.estimated })
+    ...(event.estimated === undefined ? {} : { estimated: event.estimated }),
+    ...(event.cycleId === undefined ? {} : { cycleId: event.cycleId }),
+    ...(event.contractAudit === undefined ? {} : { contractAudit: event.contractAudit })
   });
 }
 

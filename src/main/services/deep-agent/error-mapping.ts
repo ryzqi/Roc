@@ -96,6 +96,13 @@ export function toRunFailure(error: unknown): RunFailure {
 }
 
 function readContextBudgetFailure(error: Error): RunFailure | null {
+  if (error.message === 'context_contract_required_data_lost') {
+    return {
+      code: 'context_contract_required_data_lost',
+      message: '上下文压缩无法保留必要约束或证据，已停止本轮执行。请缩小任务范围后重试。',
+      retryable: false
+    };
+  }
   if (error.message === 'context_budget_exhausted') {
     return {
       code: 'context_budget_exhausted',

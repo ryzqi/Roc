@@ -152,6 +152,30 @@ export function formatContextArtifactReference(artifact: PersistedContextArtifac
   ].join('\n');
 }
 
+export function isValidContextArtifactLocator(locator: string): boolean {
+  const lines = locator.split('\n');
+  if (lines.length !== 10 || lines[0] !== '<roc_context_artifact>' || lines[9] !== '</roc_context_artifact>') {
+    return false;
+  }
+  const fields = [
+    ['artifactId: ', /^ctx_artifact_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u],
+    ['sha256: ', /^[a-f0-9]{64}$/u],
+    ['originalChars: ', /^[1-9][0-9]*$/u],
+    ['threadId: ', /^.+$/u],
+    ['workspaceHash: ', /^(?:none|[A-Za-z0-9_-]{1,128})$/u],
+    ['expiresAt: ', /^.+$/u],
+    ['source: ', /^.+$/u]
+  ] as const;
+  for (const [index, [prefix, pattern]] of fields.entries()) {
+    const line = lines[index + 1];
+    if (line === undefined || !line.startsWith(prefix) || !pattern.test(line.slice(prefix.length))) {
+      return false;
+    }
+  }
+  return lines[8] === 'retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit' &&
+    Number.isFinite(Date.parse(lines[6]!.slice('expiresAt: '.length)));
+}
+
 export function formatContextArtifactLocator(artifact: PersistedContextArtifact): string {
   return [
     ...createContextArtifactLocatorLines(artifact),

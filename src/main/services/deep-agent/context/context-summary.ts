@@ -26,6 +26,8 @@ export type ContextSummaryInput = {
   recentMessages: readonly BaseMessage[];
   userConstraints: readonly string[];
   workspacePath: string | null;
+  estimatedInputTokens?: number | null;
+  estimateApproximate?: boolean | null;
 };
 
 type ContextSummaryModel = Pick<BaseChatModel, 'invoke'> & {
@@ -47,11 +49,25 @@ const contextSummaryInvokeConfig = {
 
 export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModelInput): Promise<ContextSummary> {
   const messages = buildContextSummaryModelMessages(input);
-  const structuredSummary = await summarizeWithStructuredOutput(input.model, messages, input.callbacks, input.budgetObserver);
+  const structuredSummary = await summarizeWithStructuredOutput(
+    input.model,
+    messages,
+    input.callbacks,
+    input.budgetObserver,
+    input.estimatedInputTokens ?? null,
+    input.estimateApproximate ?? null
+  );
   if (structuredSummary !== null) {
     return structuredSummary;
   }
-  const first = await invokeSummaryModel(input.model, messages, input.callbacks, input.budgetObserver);
+  const first = await invokeSummaryModel(
+    input.model,
+    messages,
+    input.callbacks,
+    input.budgetObserver,
+    input.estimatedInputTokens ?? null,
+    input.estimateApproximate ?? null
+  );
   try {
     return parseContextSummary(first);
   } catch {
@@ -63,7 +79,9 @@ async function summarizeWithStructuredOutput(
   model: ContextSummaryModel,
   messages: BaseMessage[],
   callbacks: RunnableConfig['callbacks'],
-  budgetObserver: RunBudgetObserver | undefined
+  budgetObserver: RunBudgetObserver | undefined,
+  estimatedInputTokens: number | null,
+  estimateApproximate: boolean | null
 ): Promise<ContextSummary | null> {
   const withStructuredOutput = model.withStructuredOutput;
   if (withStructuredOutput === undefined) {
@@ -91,6 +109,8 @@ async function summarizeWithStructuredOutput(
       : await budgetObserver.invoke({
           messages,
           purpose: 'summary',
+          estimatedInputTokens,
+          estimateApproximate,
           responseMessage: (result) => readStructuredModelResponse(result)?.raw ?? null,
           invoke
         });
@@ -185,7 +205,9 @@ async function invokeSummaryModel(
   model: Pick<BaseChatModel, 'invoke'>,
   messages: BaseMessage[],
   callbacks: RunnableConfig['callbacks'],
-  budgetObserver: RunBudgetObserver | undefined
+  budgetObserver: RunBudgetObserver | undefined,
+  estimatedInputTokens: number | null,
+  estimateApproximate: boolean | null
 ): Promise<string> {
   const invoke = () => model.invoke(messages, { ...contextSummaryInvokeConfig, callbacks });
   const response = budgetObserver === undefined
@@ -193,6 +215,8 @@ async function invokeSummaryModel(
     : await budgetObserver.invoke({
         messages,
         purpose: 'summary',
+        estimatedInputTokens,
+        estimateApproximate,
         responseMessage: (result) => result,
         invoke
       });

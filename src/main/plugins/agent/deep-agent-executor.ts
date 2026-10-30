@@ -106,6 +106,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         input.abortSignal.addEventListener('abort', abortFromParent, { once: true });
       }
       const emitRuntimeEvent = (event: ChatRunEvent): void => {
+        input.observeRuntimeEvent?.(event);
         collectOutcomeProjection({
           event,
           hookDisplayTexts,
@@ -129,6 +130,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         abortSignal: executionAbortController.signal,
         emitRuntimeEvent,
         observeToolAdmission: input.observeToolAdmission,
+        observeModelInvocation: input.observeModelInvocation,
         modelHandle: input.modelHandle,
         run: input.run,
         snapshot: input.snapshot

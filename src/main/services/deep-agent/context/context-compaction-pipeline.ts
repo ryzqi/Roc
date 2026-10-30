@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AIMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { RunnableConfig } from '@langchain/core/runnables';
@@ -5,7 +6,8 @@ import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 import { z } from 'zod';
 
-import { collectUserConstraints, isContextContract, pinContextContract, type ContextControlState } from './context-contract';
+import { collectContextRequirements, isContextContract, pinContextContractWithAudit, type ContextControlState } from './context-contract';
+import { createEmptyContextContractAudit, type ContextContractAudit } from '../../../../shared/schemas/run-diagnostics';
 import type { RunExecutionSnapshot } from '../../../../shared/types';
 import type { RunBudgetObserver } from '../run-budget-observer';
 
@@ -63,6 +65,8 @@ export type ContextMaintenanceEvent = {
   inputTokens?: number;
   budgetTokens?: number;
   estimated?: boolean;
+  cycleId?: string;
+  contractAudit?: ContextContractAudit;
 };
 
 /**
@@ -133,7 +137,8 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
         summarize: async (input) => await summarizeWithCurrentModel({
           ...input,
           model: options.model,
-          callbacks: options.callbacks
+          callbacks: options.callbacks,
+          budgetObserver: options.budgetObserver
         })
       });
       if (sameMessageSequence(originalMessages, compactedMessages)) {
@@ -175,7 +180,16 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
 }
 
 export async function runContextCompaction(input: RunCompactionInput): Promise<BaseMessage[]> {
+  const emitEvent = input.emitEvent;
+  const cycleId = randomUUID();
+  input = { ...input, emitEvent: event => emitEvent({ ...event, cycleId }) };
+  return input.budgetObserver === undefined ? await runContextCompactionStages(input) :
+    await input.budgetObserver.withContextCycle(cycleId, () => runContextCompactionStages(input));
+}
+
+async function runContextCompactionStages(input: RunCompactionInput): Promise<BaseMessage[]> {
   let stage: ContextMaintenanceStage = 'persist';
+  let contractAudit = createEmptyContextContractAudit();
   try {
     input.emitEvent(createEvent(input, 'context_compaction_started', stage));
     const persisted = persistLargeToolResults(input);
@@ -189,7 +203,15 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       await runDeterministicCompaction(input, beforeDeterministicMessages),
       toolPairs
     );
-    messages = pinContextContract(messages, input.messages, input.readControlState(), artifacts.map(formatContextArtifactLocator));
+    const deterministicContract = pinContextContractWithAudit(
+      messages,
+      input.messages,
+      input.readControlState(),
+      artifacts.map(formatContextArtifactLocator),
+      input.workspaceHash
+    );
+    messages = deterministicContract.messages;
+    contractAudit = deterministicContract.audit;
     const afterDeterministicChars = measureMessages(messages);
     const deterministicTokens = await input.countTokens(messages);
     input.emitEvent({
@@ -197,12 +219,17 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       removedChars: Math.max(0, beforeDeterministicChars - afterDeterministicChars),
       inputTokens: deterministicTokens,
       budgetTokens: input.budgetProfile.modelInputTokens,
-      estimated: input.countTokensEstimated?.() === true
+      estimated: input.countTokensEstimated?.() === true,
+      contractAudit
     });
+    requirePreservedContract(contractAudit);
 
     const tokensAfterDeterministic = deterministicTokens;
     if (tokensAfterDeterministic < input.budgetProfile.modelInputTokens * SUMMARY_THRESHOLD) {
-      input.emitEvent(createEvent(input, 'context_summary_skipped', 'summary'));
+      input.emitEvent({
+        ...createEvent(input, 'context_summary_skipped', 'summary'),
+        contractAudit
+      });
       return messages;
     }
 
@@ -215,18 +242,38 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       beforeDeterministicMessages
     );
     if (preparedSummary.summaryInput === null) {
-      messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
-      messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
-      messages = await enforceHardContextLimit(input, messages);
-      input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
+      const pinned = pinContextContractWithAudit(
+        compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators),
+        input.messages,
+        input.readControlState(),
+        preparedSummary.artifactLocators,
+        input.workspaceHash
+      );
+      contractAudit = pinned.audit;
+      requirePreservedContract(contractAudit);
+      messages = await enforceHardContextLimit(input, pinned.messages);
+      input.emitEvent({
+        ...createEvent(input, 'context_compaction_failed', 'summary'),
+        contractAudit
+      });
       return messages;
     }
     const summary = await summarizeContextOrSkip(input, preparedSummary.summaryInput);
     if (summary === null) {
-      messages = compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators);
-      messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
-      messages = await enforceHardContextLimit(input, messages);
-      input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
+      const pinned = pinContextContractWithAudit(
+        compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators),
+        input.messages,
+        input.readControlState(),
+        preparedSummary.artifactLocators,
+        input.workspaceHash
+      );
+      contractAudit = pinned.audit;
+      requirePreservedContract(contractAudit);
+      messages = await enforceHardContextLimit(input, pinned.messages);
+      input.emitEvent({
+        ...createEvent(input, 'context_compaction_failed', 'summary'),
+        contractAudit
+      });
       return messages;
     }
     const digestMessage = contextSummaryToDigestMessage({
@@ -234,7 +281,16 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       toolEvidence: [...new Set([...summary.toolEvidence, ...preparedSummary.artifactLocators])]
     });
     messages = compactToSummaryTail(messages, digestMessage);
-    messages = pinContextContract(messages, input.messages, input.readControlState(), preparedSummary.artifactLocators);
+    const pinned = pinContextContractWithAudit(
+      messages,
+      input.messages,
+      input.readControlState(),
+      preparedSummary.artifactLocators,
+      input.workspaceHash
+    );
+    contractAudit = pinned.audit;
+    requirePreservedContract(contractAudit);
+    messages = pinned.messages;
     input.sessionHistory.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
       threadId: input.threadId,
@@ -246,13 +302,24 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
       ...createEvent(input, 'context_summary_completed', stage),
       inputTokens: await input.countTokens(messages),
       budgetTokens: input.budgetProfile.modelInputTokens,
-      estimated: input.countTokensEstimated?.() === true
+      estimated: input.countTokensEstimated?.() === true,
+      contractAudit
     });
     return messages;
   } catch (error) {
-    input.emitEvent(createEvent(input, 'context_compaction_failed', stage));
+    input.emitEvent({
+      ...createEvent(input, 'context_compaction_failed', stage),
+      contractAudit
+    });
     throw error;
   }
+}
+
+function requirePreservedContract(audit: ContextContractAudit): void {
+  const lost = audit.missingConstraintCount + audit.missingAcceptanceConditionCount +
+    audit.missingPendingEffectCount + audit.missingPendingApprovalCount + audit.missingPendingCorrectionCount +
+    audit.missingEvidenceLocatorCount;
+  if (lost > 0) throw new Error('context_contract_required_data_lost');
 }
 
 async function summarizeContextOrSkip(
@@ -422,8 +489,9 @@ async function prepareSummaryInput(
   const references = artifacts.map(formatContextArtifactLocator);
   const artifactLocators = artifacts.map(formatContextArtifactLocator);
   let summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
-  if (await countSummaryInput(input, summaryInput) <= input.budgetProfile.summaryInputTokens) {
-    return { artifactLocators, summaryInput };
+  const measured = await countSummaryInput(input, summaryInput);
+  if (measured.tokens <= input.budgetProfile.summaryInputTokens) {
+    return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measured) };
   }
 
   if (workingMessages.length > 0 && input.artifactRecoveryEnabled !== false) {
@@ -441,8 +509,9 @@ async function prepareSummaryInput(
   while (workingMessages.length > 0) {
     removeMessageGroup(workingMessages, 0);
     summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
-    if (await countSummaryInput(input, summaryInput) <= input.budgetProfile.summaryInputTokens) {
-      return { artifactLocators, summaryInput };
+    const measurement = await countSummaryInput(input, summaryInput);
+    if (measurement.tokens <= input.budgetProfile.summaryInputTokens) {
+      return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measurement) };
     }
   }
   return { artifactLocators, summaryInput: null };
@@ -459,19 +528,38 @@ function createSummaryInput(
     goal: inferGoal(allMessages),
     messages,
     recentMessages: [],
-    userConstraints: collectUserConstraints(allMessages),
+    userConstraints: collectContextRequirements(allMessages, input.readControlState()),
     workspacePath: input.workspacePath
   };
 }
 
-async function countSummaryInput(input: RunCompactionInput, summaryInput: ContextSummaryInput): Promise<number> {
+async function countSummaryInput(
+  input: RunCompactionInput,
+  summaryInput: ContextSummaryInput
+): Promise<{ tokens: number; estimated: boolean }> {
   const messageTokens = await input.countTokens(buildContextSummaryModelMessages(summaryInput));
+  const messagesEstimated = input.countTokensEstimated?.() === true;
   const schemaText = JSON.stringify(z.toJSONSchema(contextSummarySchema));
   if (schemaText === undefined) {
     throw new Error('context_summary_schema_unserializable');
   }
   const schemaCount = await input.tokenCounter.countText(schemaText);
-  return messageTokens + schemaCount.tokens;
+  return {
+    tokens: messageTokens + schemaCount.tokens,
+    estimated: messagesEstimated || schemaCount.estimated
+  };
+}
+
+function addSummaryEstimate(
+  input: ContextSummaryInput,
+  measurement: { tokens: number; estimated: boolean }
+): ContextSummaryInput {
+  return {
+    ...input,
+    estimatedInputTokens: measurement.tokens,
+    // Structured-output/tool encoding and provider framing are not exact text tokenization.
+    estimateApproximate: true
+  };
 }
 
 function isRecoverableSummaryFailure(error: unknown): boolean {

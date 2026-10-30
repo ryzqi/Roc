@@ -7,6 +7,7 @@ import type { RunBudgetObserver } from './run-budget-observer';
 import { hashToolInput, type AgentToolEffectStore } from './tool-effect-store';
 import { childTaskEnvelopeSchema } from '../../../shared/schemas/task-acceptance';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
+import { deriveContextBudgetProfile, type ContextTokenCounter } from './context/context-token-budget';
 
 export function createRunBudgetMiddleware(
   ledger: RunBudgetLedger,
@@ -14,16 +15,33 @@ export function createRunBudgetMiddleware(
   limits: RunLimits,
   budgetObserver: RunBudgetObserver,
   effects?: AgentToolEffectStore,
-  taskContract?: TaskContract
+  taskContract?: TaskContract,
+  tokenCounter?: ContextTokenCounter
 ) {
   return createMiddleware({
     name: 'RocRunBudgetMiddleware',
     wrapModelCall: async (request, handler) => {
       request.runtime.signal?.throwIfAborted();
       if (budgetObserver === undefined) throw new Error('run_model_budget_executor_missing');
+      const count = tokenCounter === undefined ? null : await tokenCounter.countMessages(request.messages);
+      const profile = tokenCounter === undefined ? null : await deriveContextBudgetProfile({
+        contextWindowTokens: limits.contextWindowTokens ?? limits.maxCallTokens,
+        counter: tokenCounter,
+        systemPrompt: typeof request.systemMessage.content === 'string' ? request.systemMessage.content :
+          JSON.stringify(request.systemMessage.content),
+        tools: request.tools.map(tool => {
+          if (typeof tool.name !== 'string' || typeof tool.description !== 'string') {
+            throw new Error('context_tool_definition_invalid');
+          }
+          return { name: tool.name, description: tool.description, schema: tool.schema };
+        })
+      });
       return await budgetObserver.invoke({
         messages: [request.systemMessage, ...request.messages],
         purpose: 'agent',
+        estimatedInputTokens: count === null || profile === null ? null : count.tokens + profile.systemToolOverheadTokens,
+        // Provider framing and tool encoding are estimated even when text tokenization is exact.
+        estimateApproximate: tokenCounter === undefined ? null : true,
         responseMessage: (result: unknown) => result,
         invoke: async () => await handler(request)
       });

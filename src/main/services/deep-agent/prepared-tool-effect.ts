@@ -80,7 +80,7 @@ export function createToolAdmissionMiddleware(options: {
       releaseResources = await resourceCoordinator.acquire(
         resourceRequest.claims,
         signal,
-        options.observeAdmission
+        observation => options.observeAdmission?.({ ...observation, toolCallId: request.toolCall.id })
       );
       await resourceRequest.verifyWorkspaceIdentity();
       signal?.throwIfAborted();

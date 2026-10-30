@@ -173,6 +173,7 @@ export class AgentSessionRepository {
     this.checkpointer = dependencies.checkpointer ?? new RocSqliteCheckpointer(db);
     this.runEventLog = dependencies.runEventLog ?? new AgentRunEventLog(db);
     this.runTelemetryRepository = new AgentRunTelemetryRepository(db);
+    this.runTelemetryRepository.pruneExpired(new Date().toISOString());
     this.toolEffectStore = dependencies.toolEffectStore ?? new AgentToolEffectStore(db);
     this.taskContracts = new TaskContractStore(db);
     this.interruptProjection =
@@ -360,12 +361,22 @@ export class AgentSessionRepository {
   }
 
   getRunTelemetry(runId: string): AgentRunTelemetryV1 | null {
+    this.runTelemetryRepository.pruneExpired(new Date().toISOString());
     const telemetry = this.runTelemetryRepository.get(runId);
     if (telemetry === null) {
       return null;
     }
     assertAgentRunTelemetryIdentity(telemetry, this.getRun(runId), this.getRunExecutionSnapshot(runId));
     return telemetry;
+  }
+
+  saveLiveRunTelemetry(telemetry: AgentRunTelemetryV1, updatedAt: string): void {
+    this.db.transaction(() => {
+      const run = this.getRun(telemetry.correlation.runId);
+      // Terminal transitions own their atomic telemetry write; late callbacks cannot overwrite it.
+      if (isTerminalRunStatus(run.status) || telemetry.terminal.status !== null) return;
+      this.saveTelemetryForRunState(telemetry, run, updatedAt);
+    })();
   }
 
   findRunByDispatchKey(dispatchKey: string): TaskRun | null {

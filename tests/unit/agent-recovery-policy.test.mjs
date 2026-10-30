@@ -98,6 +98,16 @@ test('context budget exhaustion fails without retry', () => {
   assert.equal(decision.finalFailure.retryable, false);
 });
 
+test('required context loss stays a non-retryable context failure, not a provider failure', () => {
+  const failure = new Error('context_contract_required_data_lost');
+  const structured = classifyFailure(failure);
+  assert.equal(structured.code, 'context_contract_required_data_lost');
+  assert.equal(structured.category, 'system');
+  assert.equal(structured.telemetryTags.subsystem, 'context');
+  assert.equal(structured.retryable, false);
+  assert.equal(decide(failure).action, 'fail');
+});
+
 test('non-Error values become standard non-retryable execution failures', () => {
   const structured = classifyFailure({ reason: 'unexpected value' });
   assert.equal(structured.code, 'provider_execution_failed');

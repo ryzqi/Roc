@@ -3,6 +3,7 @@ import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportS
   literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
 
 import { menuPages } from './surfaces';
+import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
 
 import {
   agentCapabilityPreviewRequestSchema,
@@ -515,6 +516,7 @@ export const ipcRegistry = {
     request({ key: 'researchIndexJobs', channel: 'roc:research:index-jobs', domain: 'research', method: 'listIndexJobs', kind: 'plugin', capabilityName: 'research.index.jobs', inputTransform: first, contract: methodContract(oneArg(researchIndexJobsRequestSchema), researchIndexJobSchema.array()) }),
     request({ key: 'researchIndexEvidenceSource', channel: 'roc:research:index-evidence-source', domain: 'research', method: 'getEvidenceIndexSource', kind: 'plugin', capabilityName: 'research.index.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchIndexEvidenceSourceRequestSchema), researchIndexedSourceSchema.nullable()) }),
     request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
+    request({ key: 'agentGetRunDiagnostics', channel: 'roc:agent:get-run-diagnostics', domain: 'agent', method: 'getRunDiagnostics', kind: 'plugin', capabilityName: 'agent.run.diagnostics.get', inputTransform: first, contract: methodContract(oneArg(runDiagnosticsRequestSchema), runDiagnosticsSchema.nullable()) }),
     request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
     request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),
     request({ key: 'agentPilotStatus', channel: 'roc:agent:pilot-status', domain: 'agent', method: 'getPilotStatus', kind: 'plugin', capabilityName: 'agent.pilot.status', inputTransform: none, contract: methodContract(noArgs, pilotStatusSchema) }),

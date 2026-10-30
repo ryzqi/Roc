@@ -60,7 +60,13 @@ function createFixture({
   artifactRecoveryEnabled,
   toolResultPersistChars,
   summaryInputTokens = 1000,
-  controlState = {acceptanceIds: [], pendingEffects: [], pendingApprovals: []}
+  controlState = {
+    acceptanceIds: [],
+    acceptanceConditions: [],
+    pendingEffects: [],
+    pendingApprovals: [],
+    pendingCorrections: []
+  }
 } = {}) {
   const events = [];
   const flushes = [];
@@ -70,7 +76,7 @@ function createFixture({
   const artifactStore = {
     persistArtifact(input) {
       persisted.push(input);
-      const artifactId = 'artifact-' + persisted.length;
+      const artifactId = 'ctx_artifact_00000000-0000-0000-0000-' + String(persisted.length).padStart(12, '0');
       const artifact = {
         artifactId,
         content: input.content,
@@ -192,7 +198,8 @@ test('deterministic edits restore a removed tool result and leave caller message
   assert.notEqual(callIndex, -1);
   assert.strictEqual(compacted[callIndex + 1], toolResult);
   assert.equal(compacted.some(message => message.id === 'tool-result'), true);
-  assert.equal(compacted.some(message => message.id === 'roc-context-contract'), false);
+  const contract = compacted.find(message => message.id === 'roc-context-contract');
+  assert.deepEqual(JSON.parse(String(contract.content)).workspaceVersions, ['workspace-hash']);
   assert.deepEqual(messages, originalMessages);
   assert.equal(hasEvent(fixture.events, 'context_summary_skipped'), true);
 });
@@ -233,7 +240,7 @@ test('recoverable summary failure falls back to persisted artifact locators', as
   assert.equal(fixture.persisted[0].kind, 'tool_result');
   assert.equal(fixture.persisted[0].toolCallId, 'call-large');
   assert.equal(summaryInput.artifactReferences.length, 1);
-  assert.match(output, /artifact-1/u);
+  assert.ok(output.includes(fixture.persistedArtifacts[0].artifactId));
   assert.equal(output.includes(largeResult), false);
   assert.match(output, /preview:/u);
   const readArtifact = artifactToolApi.createContextArtifactReadTool({
@@ -299,8 +306,10 @@ test('summary pins old user constraints and runtime facts while enforcing the ha
   ];
   const controlState = {
     acceptanceIds: ['acceptance-7'],
+    acceptanceConditions: [{ id: 'acceptance-7', description: 'Keep the final report within the approved scope.' }],
     pendingEffects: ['effect-3'],
-    pendingApprovals: ['approval-2']
+    pendingApprovals: ['approval-2'],
+    pendingCorrections: [{ id: 'correction-4', content: 'Use the corrected workspace root.' }]
   };
   const fixture = createFixture({
     messages,
@@ -316,8 +325,15 @@ test('summary pins old user constraints and runtime facts while enforcing the ha
   const contractData = JSON.parse(String(contract.content));
   assert.deepEqual(contractData.userConstraints, ['Preserve the original data format.']);
   assert.deepEqual(contractData.acceptanceIds, ['acceptance-7']);
+  assert.deepEqual(contractData.acceptanceConditions, [{ id: 'acceptance-7', description: 'Keep the final report within the approved scope.' }]);
   assert.deepEqual(contractData.pendingEffects, ['effect-3']);
   assert.deepEqual(contractData.pendingApprovals, ['approval-2']);
+  assert.deepEqual(contractData.pendingCorrections, [{ id: 'correction-4', content: 'Use the corrected workspace root.' }]);
+  assert.deepEqual(contractData.workspaceVersions, ['workspace-hash']);
+  const compactedEvent = fixture.events.find(event => event.type === 'context_summary_completed');
+  assert.equal(compactedEvent.contractAudit.acceptanceConditionCount, 1);
+  assert.equal(compactedEvent.contractAudit.pendingCorrectionCount, 1);
+  assert.equal(JSON.stringify(fixture.events).includes('Use the corrected workspace root.'), false);
   assert.ok(compacted.includes(firstConstraint));
   assert.ok(compacted.some(message => message.id === 'roc-context-contract'));
   assert.ok(compacted.length <= 5, 'the hard limit should remove unprotected history');
@@ -331,7 +347,13 @@ test('protected context that alone exceeds the hard budget fails explicitly', as
   const fixture = createFixture({
     messages: [new SystemMessage('Protected system context.'), new HumanMessage('Protected user request.')],
     countTokens: async inputMessages => inputMessages.some(message => message.id === 'roc-context-contract') ? 200 : 90,
-    controlState: {acceptanceIds: ['acceptance-9'], pendingEffects: [], pendingApprovals: []}
+    controlState: {
+      acceptanceIds: ['acceptance-9'],
+      acceptanceConditions: [{ id: 'acceptance-9', description: 'Preserve the required contract.' }],
+      pendingEffects: [],
+      pendingApprovals: [],
+      pendingCorrections: []
+    }
   });
   await assert.rejects(api.runContextCompaction(fixture.input), /context_budget_exhausted/u);
   assert.equal(hasEvent(fixture.events, 'context_compaction_failed'), true);
@@ -347,4 +369,40 @@ test('non-recoverable summary errors remain visible to the caller', async () => 
   assert.equal(hasEvent(fixture.events, 'context_compaction_failed'), true);
   assert.equal(hasEvent(fixture.events, 'context_summary_completed'), false);
   assert.equal(fixture.flushes.length, 0);
+});
+
+test('lossy summary rejects bounded-contract overflow instead of dropping required user constraints', async () => {
+  const messages = [
+    new HumanMessage({ id: 'goal', content: 'Complete the bounded task without dropping requirements.' }),
+    ...Array.from({ length: 140 }, (_, index) => new HumanMessage({
+      id: `required-${index}`,
+      content: `Required user constraint ${index}.`
+    })),
+    ...Array.from({ length: 6 }, (_, index) => new AIMessage({
+      id: `recent-${index}`,
+      content: 'Recent unprotected assistant notes.'
+    }))
+  ];
+  const originalMessages = [...messages];
+  let summaryCalls = 0;
+  const fixture = createFixture({
+    messages,
+    countTokens: async () => 90,
+    summarize: async () => {
+      summaryCalls++;
+      return summary({ facts: [], decisions: [], verification: [], nextActions: [] });
+    }
+  });
+
+  await assert.rejects(api.runContextCompaction(fixture.input), /context_contract_required_data_lost/u);
+  assert.equal(summaryCalls, 1);
+  const deterministicEvent = fixture.events.find(event => event.type === 'context_deterministic_compacted');
+  assert.equal(deterministicEvent.contractAudit.missingConstraintCount, 0);
+  const failureEvent = fixture.events.find(event => event.type === 'context_compaction_failed');
+  assert.ok(failureEvent, 'contract loss must emit a failure diagnostic');
+  assert.equal(failureEvent.stage, 'summary');
+  assert.equal(failureEvent.contractAudit.missingConstraintCount, 11);
+  assert.equal(hasEvent(fixture.events, 'context_summary_completed'), false);
+  assert.equal(fixture.flushes.length, 0);
+  assert.deepEqual(messages, originalMessages);
 });

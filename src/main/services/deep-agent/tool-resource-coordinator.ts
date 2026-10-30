@@ -31,6 +31,9 @@ export type ToolAdmissionObservation = Readonly<{
   holdMs: number | null;
   resourceKinds: readonly ToolAdmissionResourceKind[];
   conflictKinds: readonly ToolAdmissionResourceKind[];
+  /** Private correlation only; telemetry replaces caller identifiers with local span aliases. */
+  toolCallId?: string;
+  endOffsetMs?: number;
 }>;
 
 export type ToolAdmissionObserver = (observation: ToolAdmissionObservation) => void;

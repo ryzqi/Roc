@@ -44,6 +44,8 @@ import type { RunFailure } from '../../services/deep-agent/types';
 import type { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
 import type { PilotDecision } from '../../services/deep-agent/pilot-gate';
 import type { ToolAdmissionObservation } from '../../services/deep-agent/tool-resource-coordinator';
+import type { ModelInvocationObservation } from '../../services/deep-agent/run-budget-observer';
+import { runDiagnosticsSchema, type RunDiagnostics, type RunDiagnosticsRequest } from '../../../shared/schemas/run-diagnostics';
 import type { PilotOptInRequest, PilotStatus } from '../../../shared/schemas/harness-pilot';
 import { derivePilotRequest, restrictManifestForPilot } from './pilot-profile';
 import { RetryTelemetry } from '../../services/deep-agent/retry-telemetry';
@@ -64,6 +66,7 @@ import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
 import type { AgentSessionRepository, ResumeDispatchAudit } from './session-repository';
 import {
   AgentRunTelemetryAccumulator,
+  assertAgentRunTelemetryIdentity,
   calculateAgentRunTelemetryDurationMs,
   type AgentModelUsageTelemetry,
   type AgentRunTelemetryV1
@@ -163,6 +166,8 @@ export type AgentDeepAgentExecutor = {
     abortSignal: AbortSignal;
     observeModelUsage: (usage: AgentModelUsageTelemetry) => void;
     observeToolAdmission?: (observation: ToolAdmissionObservation) => void;
+    observeModelInvocation?: (observation: ModelInvocationObservation) => void;
+    observeRuntimeEvent?: (event: ChatRunEvent) => void;
     validatedAttachments?: ChatValidatedImageAttachment[];
   }): AgentDeepAgentExecution | Promise<AgentDeepAgentExecution>;
 };
@@ -659,7 +664,12 @@ export class AgentPluginRuntime {
               abortSignal: abortController.signal,
               modelHandle,
               observeModelUsage: usage => telemetry.observeModelUsage(usage),
-              observeToolAdmission: observation => telemetry.observeToolAdmission(observation),
+              observeToolAdmission: observation => telemetry.observeToolAdmission({ ...observation,
+                endOffsetMs: Math.max(0, Date.now() - Date.parse(run.startedAt)) }),
+              observeModelInvocation: observation => telemetry.observeModelInvocation(observation,
+                Math.max(0, Date.now() - Date.parse(run.startedAt))),
+              observeRuntimeEvent: event => telemetry.observeEvent(event,
+                Math.max(0, Date.now() - Date.parse(run.startedAt))),
               resumePayload,
               run: dispatchedRun,
               snapshot
@@ -760,7 +770,12 @@ export class AgentPluginRuntime {
           abortSignal: abortController.signal,
           modelHandle,
           observeModelUsage: usage => telemetry.observeModelUsage(usage),
-          observeToolAdmission: observation => telemetry.observeToolAdmission(observation),
+          observeToolAdmission: observation => telemetry.observeToolAdmission({ ...observation,
+            endOffsetMs: Math.max(0, Date.now() - Date.parse(run.startedAt)) }),
+          observeModelInvocation: observation => telemetry.observeModelInvocation(observation,
+            Math.max(0, Date.now() - Date.parse(run.startedAt))),
+          observeRuntimeEvent: event => telemetry.observeEvent(event,
+            Math.max(0, Date.now() - Date.parse(run.startedAt))),
           resumeFromCheckpoint: true,
           run: dispatchedRun,
           snapshot
@@ -846,6 +861,22 @@ export class AgentPluginRuntime {
     if (refreshed !== null && hashToolInput(refreshed) !== hashToolInput(previous)) {
       await this.publishTaskAcceptance(refreshed);
     }
+  }
+
+  getRunDiagnostics(input: RunDiagnosticsRequest): RunDiagnostics | null {
+    const run = this.options.repository.getRun(input.runId);
+    if (run.threadId !== input.threadId) throw new Error('agent_run_diagnostics_thread_mismatch');
+    const telemetry = this.runTelemetry.get(run.id)?.snapshot() ?? this.options.repository.getRunTelemetry(run.id);
+    if (telemetry === null) return null;
+    assertAgentRunTelemetryIdentity(telemetry, run, this.options.repository.getRunExecutionSnapshot(run.id));
+    const { reportedCostUsd: _cost, ...model } = telemetry.model;
+    return runDiagnosticsSchema.parse({
+      runId: run.id, threadId: run.threadId,
+      providerId: telemetry.correlation.providerId, modelId: telemetry.correlation.modelId,
+      totalDurationMs: run.endedAt === null ? Math.max(0, Date.now() - Date.parse(run.startedAt)) : telemetry.runtime.totalDurationMs,
+      model, tool: telemetry.tool, subagent: telemetry.subagent, context: telemetry.context,
+      toolAdmission: telemetry.toolAdmission, trace: telemetry.trace, terminalStatus: telemetry.terminal.status
+    });
   }
 
   getActiveRun(input: { threadId: string }): ActiveChatRun | null {
@@ -976,6 +1007,11 @@ export class AgentPluginRuntime {
   }
 
   private async publishChatRunEvent(payload: ChatRunEvent): Promise<void> {
+    const telemetry = this.runTelemetry.get(payload.runId);
+    if (telemetry !== undefined) {
+      const run = this.options.repository.getRun(payload.runId);
+      telemetry.observeEvent(payload, Math.max(0, Date.now() - Date.parse(run.startedAt)));
+    }
     await this.persistChatRunEvent(payload);
     await this.publish(agentChatRunEventType, payload);
   }
@@ -992,6 +1028,12 @@ export class AgentPluginRuntime {
     if (runEventLog === undefined) throw new Error('agent_run_event_log_unavailable');
     try {
       runEventLog.recordRunEvent(payload);
+      const telemetry = this.runTelemetry.get(payload.runId);
+      const isTextDelta = payload.type === 'assistant_block' && payload.block.phase === 'delta' ||
+        payload.type === 'subagent_event' && payload.event.kind === 'assistant_block' && payload.event.block.phase === 'delta';
+      if (telemetry !== undefined && !isTextDelta) {
+        this.options.repository.saveLiveRunTelemetry(telemetry.snapshot(), new Date().toISOString());
+      }
     } catch (error) {
       this.reportNotificationFailure('agent_run_event_replay_persist_failed', error, {
         runId: payload.runId,
@@ -1340,7 +1382,12 @@ export class AgentPluginRuntime {
             await this.options.deepAgentExecutor!.execute({
               abortSignal: input.abortSignal,
               observeModelUsage: usage => input.telemetry.observeModelUsage(usage),
-              observeToolAdmission: observation => input.telemetry.observeToolAdmission(observation),
+              observeToolAdmission: observation => input.telemetry.observeToolAdmission({ ...observation,
+                endOffsetMs: Math.max(0, Date.now() - input.runStartedAtMs) }),
+              observeModelInvocation: observation => input.telemetry.observeModelInvocation(observation,
+                Math.max(0, Date.now() - input.runStartedAtMs)),
+              observeRuntimeEvent: event => input.telemetry.observeEvent(event,
+                Math.max(0, Date.now() - input.runStartedAtMs)),
               modelHandle: input.modelHandle,
               run: input.run,
               snapshot: input.snapshot,

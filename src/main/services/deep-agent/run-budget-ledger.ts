@@ -260,18 +260,28 @@ export class RunBudgetLedger {
       updated_at = ? WHERE run_id = ?`).run(spentModel, spentTools, spentTokens, new Date().toISOString(), runId);
   }
 
-  readContextControlState(runId: string): { acceptanceIds: string[]; pendingEffects: string[]; pendingApprovals: string[] } {
+  readContextControlState(runId: string): {
+    acceptanceIds: string[];
+    acceptanceConditions: { id: string; description: string }[];
+    pendingEffects: string[];
+    pendingApprovals: string[];
+    pendingCorrections: { id: string; content: string }[];
+  } {
     const contractRow = this.db.prepare('SELECT contract_json FROM agent_task_contracts WHERE run_id = ?')
       .get(runId) as { contract_json: string } | undefined;
     if (contractRow === undefined) throw new Error('task_contract_missing');
-    const acceptanceIds = parseStoredJson(contractRow.contract_json, taskContractSchema, 'task_contract_corrupt')
-      .criteria.map((criterion) => criterion.id);
+    const criteria = parseStoredJson(contractRow.contract_json, taskContractSchema, 'task_contract_corrupt').criteria;
     const effects = this.db.prepare(`SELECT tool_call_id FROM agent_tool_effects
       WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') ORDER BY tool_call_id`).all(runId) as { tool_call_id: string }[];
     const approvals = this.db.prepare(`SELECT interrupt_id FROM agent_pending_interrupts
       WHERE run_id = ? ORDER BY position`).all(runId) as { interrupt_id: string }[];
-    return { acceptanceIds, pendingEffects: effects.map(row => row.tool_call_id),
-      pendingApprovals: approvals.map(row => row.interrupt_id) };
+    return {
+      acceptanceIds: criteria.map(criterion => criterion.id),
+      acceptanceConditions: criteria.map(({ id, description }) => ({ id, description })),
+      pendingEffects: effects.map(row => row.tool_call_id),
+      pendingApprovals: approvals.map(row => row.interrupt_id),
+      pendingCorrections: this.pendingCorrections(runId).map(({ submission_id, content }) => ({ id: submission_id, content }))
+    };
   }
 
   enqueueCorrection(runId: string, submissionId: string, content: string): number {

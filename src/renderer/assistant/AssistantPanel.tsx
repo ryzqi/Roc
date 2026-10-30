@@ -17,6 +17,7 @@ import {
 import { isImageInputSupported, type ImageSupportSnapshot } from './image-attachments';
 import { ChatTranscriptPanel } from './transcript-panel';
 import { useChatSession } from './use-chat-session';
+import { RunDiagnostics } from './RunDiagnostics';
 
 /**
  * The assistant panel (T4.2–T4.6).
@@ -256,6 +257,11 @@ export function AssistantPanel({
   );
 
   const runStatus = session.runState.status;
+  const latestHistoryEvent = session.history.events.at(-1);
+  const diagnosticsRunId = threadId === null ? null :
+    session.runState.threadId === threadId && session.runState.runId !== null
+      ? session.runState.runId
+      : latestHistoryEvent?.threadId === threadId ? latestHistoryEvent.runId : null;
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
   const pendingQuestion = session.runState.pendingInterrupts.find((interrupt) => interrupt.kind === 'question') ?? null;
   const replyMode = pendingQuestion !== null;
@@ -360,6 +366,15 @@ export function AssistantPanel({
             {session.runState.budget.stopReason === null ? '' : ` · Stopped: ${session.runState.budget.stopReason}`}
           </span>
         </div>
+      )}
+      {diagnosticsRunId === null || threadId === null ? null : (
+        <RunDiagnostics
+          key={`${threadId}:${diagnosticsRunId}`}
+          client={client}
+          runId={diagnosticsRunId}
+          threadId={threadId}
+          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'}
+        />
       )}
     </div>
   );

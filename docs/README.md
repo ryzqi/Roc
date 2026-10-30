@@ -17,6 +17,7 @@
 | [agent-harness-pr02-budget.md](agent-harness-pr02-budget.md) | PR-02 运行预算、用量结算、费用边界与恢复 |
 | [agent-harness-pr03-tool-effects.md](agent-harness-pr03-tool-effects.md) | PR-03 工具副作用身份、租约、收据与恢复 |
 | [agent-harness-pr04-mcp-gateway.md](agent-harness-pr04-mcp-gateway.md) | PR-04 MCP 工具契约冻结、传输上限与漂移拒绝 |
+| [agent-harness-pr08-diagnostics.md](agent-harness-pr08-diagnostics.md) | PR-08 本地 trace、上下文保留审计、运行诊断与固定长任务回归 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)

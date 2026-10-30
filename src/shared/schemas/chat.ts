@@ -7,6 +7,7 @@ import type {
 } from '../chat-run-state';
 import { chatImageAttachmentMediaTypes } from '../constants/chat';
 import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
+import { contextContractAuditSchema } from './run-diagnostics';
 
 import {
   enabledCapabilitiesSchema,
@@ -223,7 +224,9 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       removedChars: z.number().optional(),
       inputTokens: z.number().optional(),
       budgetTokens: z.number().optional(),
-      estimated: z.boolean().optional()
+      estimated: z.boolean().optional(),
+      cycleId: z.string().uuid().optional(),
+      contractAudit: contextContractAuditSchema.optional()
     })
     .strict(),
   z.object({ type: z.literal('task_acceptance'), runId: z.string(), report: taskAcceptanceSchema }).strict(),

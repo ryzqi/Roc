@@ -282,7 +282,8 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       context.budgetLimits,
       context.budgetObserver,
       context.toolEffectStore,
-      context.taskContract
+      context.taskContract,
+      context.contextCompaction.tokenCounter
     )
   },
   {

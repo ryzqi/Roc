@@ -13,6 +13,7 @@ import { createContextTokenCounter, deriveContextBudgetProfile } from '../../src
 import { BlockStability, buildPromptBlocks } from '../../src/main/services/deep-agent/context/prompt-blocks';
 import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
 import { decodeJson } from '../lib/decode-json';
+import { verifyFixedLongTaskComparisons } from './context-long-task';
 
 export async function verifyContext(name: string, directory: string, db: Database.Database): Promise<unknown> {
   const artifacts = new ContextArtifactStore(db);
@@ -113,7 +114,16 @@ export async function verifyContext(name: string, directory: string, db: Databas
       return { goal: 'Lossy summary', facts: [], decisions: [], filesTouched: [], toolEvidence: [], verification: [], openQuestions: [], nextActions: [] };
     }
   };
-  const seeded = pinContextContract(messages, messages, { acceptanceIds: ['A-01', 'A-02'], pendingEffects: [], pendingApprovals: [] }, []);
+  const seeded = pinContextContract(messages, messages, {
+    acceptanceIds: ['A-01', 'A-02'],
+    acceptanceConditions: [
+      { id: 'A-01', description: 'Preserve the first acceptance condition.' },
+      { id: 'A-02', description: 'Preserve the second acceptance condition.' }
+    ],
+    pendingEffects: [],
+    pendingApprovals: [],
+    pendingCorrections: []
+  }, [], 'workspace');
   let compacted = await runContextCompaction({ ...input, messages: seeded });
   writeFileSync(join(directory, 'compaction-events.json'), JSON.stringify(events, null, 2));
   assert.deepEqual(new Set(collectUserConstraints(compacted)), expected);
@@ -137,5 +147,7 @@ export async function verifyContext(name: string, directory: string, db: Databas
   assert.ok(await countTokens(compacted) <= input.budgetProfile.modelInputTokens);
   writeFileSync(join(directory, 'compaction-events.json'), JSON.stringify(events, null, 2));
   writeFileSync(join(directory, 'compacted.json'), JSON.stringify(compacted, null, 2));
-  return { summaries, constraints: expected.size, acceptanceIds: ['A-01', 'A-02'], checkpoint: checkpoint.id, summaryFailure: name === 'context-summary-failure' };
+  const fixedLongTasks = await verifyFixedLongTaskComparisons(artifacts, directory, name === 'context-summary-failure');
+  return { summaries, constraints: expected.size, acceptanceIds: ['A-01', 'A-02'], checkpoint: checkpoint.id,
+    summaryFailure: name === 'context-summary-failure', fixedLongTasks };
 }

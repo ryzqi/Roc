@@ -29,6 +29,7 @@ import {
   pilotOptInRequestSchema,
   pilotStatusSchema
 } from '../../../shared/schemas/harness-pilot';
+import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from '../../../shared/schemas/run-diagnostics';
 import {
   activeChatRunSchema,
   chatActiveRunRequestSchema,
@@ -81,6 +82,7 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
   descriptor('agent.run.events.replay', chatRunEventsReplayRequestSchema, chatRunEventsReplayPageSchema),
+  descriptor('agent.run.diagnostics.get', runDiagnosticsRequestSchema, runDiagnosticsSchema.nullable()),
   descriptor('agent.pilot.status', emptyInputSchema, pilotStatusSchema),
   descriptor('agent.pilot.enable', pilotOptInRequestSchema, pilotStatusSchema),
   descriptor('agent.pilot.rollback', emptyInputSchema, pilotStatusSchema),
@@ -429,6 +431,9 @@ function registerAgentCapabilities(
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.run.events.replay'), async (input) =>
     runtime.replayRunEvents(chatRunEventsReplayRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.diagnostics.get'), async (input) =>
+    runtime.getRunDiagnostics(runDiagnosticsRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseDescriptor('agent.pilot.status'), async () =>
     runtime.getPilotStatus()
