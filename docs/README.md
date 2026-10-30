@@ -14,6 +14,8 @@
 | [architecture-repair-plan.md](architecture-repair-plan.md) | 架构收敛审计结果与逐项修复计划 |
 | [agent-harness-pr00-baseline.md](agent-harness-pr00-baseline.md) | PR-00 基线、执行边界清单与遗留风险 |
 | [agent-harness-pr01-execution-boundary.md](agent-harness-pr01-execution-boundary.md) | PR-01 agent shell 授权、隔离策略与目标主机验证 |
+| [agent-harness-pr02-budget.md](agent-harness-pr02-budget.md) | PR-02 运行预算、用量结算、费用边界与恢复 |
+| [agent-harness-pr03-tool-effects.md](agent-harness-pr03-tool-effects.md) | PR-03 工具副作用身份、租约、收据与恢复 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)

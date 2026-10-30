@@ -1,3 +1,4 @@
+import type { CapabilityOperationContext } from './capability-operation-context';
 import type {
   CapabilityDescriptor,
   RocCapabilityRegistry,
@@ -139,7 +140,11 @@ class ScopedCapabilityRegistry implements RocCapabilityRegistry {
     this.options.root.declare(pluginId, descriptor);
   }
 
-  register(pluginId: string, descriptor: CapabilityDescriptor, handler: (input: unknown) => Promise<unknown>): void {
+  register(
+    pluginId: string,
+    descriptor: CapabilityDescriptor,
+    handler: (input: unknown, operationContext?: CapabilityOperationContext) => Promise<unknown>
+  ): void {
     if (pluginId !== this.options.plugin.manifest.id) {
       throw new Error('capability_plugin_mismatch');
     }

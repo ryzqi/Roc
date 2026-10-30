@@ -512,6 +512,41 @@ ALTER TABLE agent_budget_calls ADD COLUMN pricing_version TEXT;
 ALTER TABLE agent_runs ADD COLUMN budget_stop_reason TEXT;
 CREATE INDEX idx_agent_budget_calls_run_kind_state ON agent_budget_calls(run_id, kind, state);
 `
+  },
+  {
+    version: 9,
+    name: 'lease_fenced_tool_effect_operations',
+    sql: `
+ALTER TABLE agent_tool_effects ADD COLUMN identity_version INTEGER NOT NULL DEFAULT 0 CHECK(identity_version >= 0);
+ALTER TABLE agent_tool_effects ADD COLUMN canonical_tool_identity TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN canonicalization_version TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN tool_version TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN operation_id TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN idempotency_key TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN attempt_id TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN lease_generation INTEGER NOT NULL DEFAULT 0 CHECK(lease_generation >= 0);
+ALTER TABLE agent_tool_effects ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0);
+ALTER TABLE agent_tool_effects ADD COLUMN receipt_sequence INTEGER NOT NULL DEFAULT 0 CHECK(receipt_sequence >= 0);
+ALTER TABLE agent_tool_effects ADD COLUMN receipt_json TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN receipt_hash TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN expected_version TEXT;
+ALTER TABLE agent_tool_effects ADD COLUMN result_hash TEXT;
+ALTER TABLE agent_tool_effect_reconciliations ADD COLUMN operation_id TEXT;
+ALTER TABLE agent_tool_effect_reconciliations ADD COLUMN identity_version INTEGER NOT NULL DEFAULT 0 CHECK(identity_version >= 0);
+ALTER TABLE agent_tool_effect_reconciliations ADD COLUMN lease_generation INTEGER NOT NULL DEFAULT 0 CHECK(lease_generation >= 0);
+ALTER TABLE agent_tool_effect_reconciliations ADD COLUMN receipt_json TEXT;
+ALTER TABLE agent_tool_effect_reconciliations ADD COLUMN receipt_hash TEXT;
+UPDATE agent_tool_effects
+SET status = 'failed_retryable', error_json = COALESCE(error_json, '{"code":"agent_tool_effect_not_dispatched_at_migration"}')
+WHERE status = 'reserved';
+UPDATE agent_tool_effects
+SET status = 'unknown', error_json = COALESCE(error_json, '{"code":"agent_tool_effect_interrupted_at_migration"}')
+WHERE status = 'in_progress' OR (status = 'failed_retryable' AND reconcile_strategy = 'manual_confirmation');
+CREATE UNIQUE INDEX idx_agent_tool_effects_operation_id
+  ON agent_tool_effects(operation_id) WHERE operation_id IS NOT NULL;
+CREATE INDEX idx_agent_tool_effects_run_lease
+  ON agent_tool_effects(run_id, status, lease_generation);
+`
   }
 ];
 

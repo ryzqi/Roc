@@ -184,7 +184,7 @@ test('real agent v5 upgrades to v6 and adds checkpoint task_path', () => {
   db.close();
 });
 
-test('real agent v6 upgrades through v7 grants and v8 budget cost tables', () => {
+test('real agent v6 upgrades through v9 grant, budget and operation-lease tables', () => {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   applyDatabaseMigrations(db, {
@@ -197,13 +197,23 @@ test('real agent v6 upgrades through v7 grants and v8 budget cost tables', () =>
   applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
   const after = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%' ORDER BY name").pluck().all();
   assert.deepEqual(after, ['agent_execution_approvals', 'agent_execution_grants', 'agent_execution_run_fences']);
-  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 8);
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 9);
   assert.ok(columnNames(db, 'agent_budget_calls').includes('reserved_cost_microusd'));
   assert.ok(columnNames(db, 'agent_budget_calls').includes('actual_cost_microusd'));
   assert.ok(columnNames(db, 'agent_budget_calls').includes('pricing_version'));
   assert.ok(columnNames(db, 'agent_runs').includes('budget_stop_reason'));
   const budgetIndexes = db.prepare('PRAGMA index_list(agent_budget_calls)').all();
   assert.ok(budgetIndexes.some((entry) => entry.name === 'idx_agent_budget_calls_run_kind_state'));
+  const effectColumns = columnNames(db, 'agent_tool_effects');
+  for (const column of ['identity_version', 'operation_id', 'attempt_id', 'lease_generation', 'receipt_json', 'receipt_hash', 'expected_version', 'result_hash']) {
+    assert.ok(effectColumns.includes(column), `agent_tool_effects stores ${column}`);
+  }
+  const effectIndexes = db.prepare('PRAGMA index_list(agent_tool_effects)').all();
+  assert.ok(effectIndexes.some((entry) => entry.name === 'idx_agent_tool_effects_operation_id' && entry.unique === 1 && entry.partial === 1));
+  assert.ok(effectIndexes.some((entry) => entry.name === 'idx_agent_tool_effects_run_lease'));
+  const reconciliationColumns = columnNames(db, 'agent_tool_effect_reconciliations');
+  assert.ok(reconciliationColumns.includes('receipt_json'));
+  assert.ok(reconciliationColumns.includes('receipt_hash'));
   for (const table of ['agent_execution_approvals', 'agent_execution_grants']) {
     const columns = columnNames(db, table);
     assert.ok(columns.includes('schema_version'), `${table} stores a grant version`);
@@ -218,5 +228,65 @@ test('real agent v6 upgrades through v7 grants and v8 budget cost tables', () =>
   const grantForeignKeys = db.prepare('PRAGMA foreign_key_list(agent_execution_grants)').all();
   assert.ok(grantForeignKeys.some((entry) => entry.table === 'agent_runs'));
   assert.ok(grantForeignKeys.some((entry) => entry.table === 'agent_threads'));
+  db.close();
+});
+
+test('real agent v8 effect rows migrate conservatively and preserve reconciliation history', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  const versionEight = agentMigrations.filter((entry) => entry.version <= 8);
+  applyDatabaseMigrations(db, { dbName: 'agent', migrations: versionEight });
+
+  const insertEffect = db.prepare(`INSERT INTO agent_tool_effects (
+    run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+    effect_class, reconcile_strategy, status, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const [runId, strategy, status] of [
+    ['run-in-progress', 'retry_safe', 'in_progress'],
+    ['run-manual-retry', 'manual_confirmation', 'failed_retryable'],
+    ['run-reserved', 'retry_safe', 'reserved'],
+    ['run-succeeded', 'retry_safe', 'succeeded']
+  ]) {
+    insertEffect.run(
+      runId,
+      `thread-${runId}`,
+      'main',
+      'checkpoint-1',
+      `call-${runId}`,
+      'write_file',
+      `hash-${runId}`,
+      'workspace_mutation',
+      strategy,
+      status,
+      '2026-10-30T00:00:00.000Z',
+      '2026-10-30T00:00:00.000Z'
+    );
+  }
+  db.prepare(`INSERT INTO agent_tool_effect_reconciliations (
+    run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    'run-in-progress',
+    'main',
+    'checkpoint-1',
+    'call-run-in-progress',
+    'hash-run-in-progress',
+    'operator inspected remote receipt',
+    'not_applied',
+    '2026-10-30T00:00:00.000Z'
+  );
+
+  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
+  assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 9);
+  assert.deepEqual(
+    db.prepare('SELECT run_id, status FROM agent_tool_effects ORDER BY run_id').all(),
+    [
+      { run_id: 'run-in-progress', status: 'unknown' },
+      { run_id: 'run-manual-retry', status: 'unknown' },
+      { run_id: 'run-reserved', status: 'failed_retryable' },
+      { run_id: 'run-succeeded', status: 'succeeded' }
+    ]
+  );
+  assert.equal(db.prepare('SELECT identity_version FROM agent_tool_effects WHERE run_id = ?').pluck().get('run-in-progress'), 0);
+  assert.equal(db.prepare('SELECT count(*) FROM agent_tool_effect_reconciliations').pluck().get(), 1);
   db.close();
 });

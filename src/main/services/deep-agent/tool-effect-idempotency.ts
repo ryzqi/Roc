@@ -10,8 +10,13 @@ import type {
 import { RocToolResolutionError } from '../forge-guardrails/errors';
 import { unwrapMiddlewareError } from '../forge-guardrails/middleware/middleware-error';
 import { toRunFailure } from './error-mapping';
+import type { CapabilityOperationReceipt } from '../../kernel/capability-operation-context';
+import {
+  createCapabilityOperationContext,
+  runWithCapabilityOperationContext
+} from '../../kernel/capability-operation-context';
 import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
-import { AgentToolEffectStore, hashToolInput, type ToolEffectKey } from './tool-effect-store';
+import { AgentToolEffectStore, type ToolEffectKey } from './tool-effect-store';
 
 type ToolEffectIdempotencyOptions = {
   runId: string;
@@ -52,7 +57,7 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
         throw new Error(`agent_tool_effect_manifest_tool_missing:${typedRequest.toolCall.name}`);
       }
       if (policy.idempotencyStrategy === 'none') {
-        return await handler(request);
+        return handler(request);
       }
 
       const toolCallId = readToolCallId(typedRequest);
@@ -70,59 +75,61 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
         executionPath: executionIdentity.executionPath,
         checkpointId: executionIdentity.checkpointId
       };
-      const inputHash = hashToolInput({
-        args: typedRequest.toolCall.args,
-        name: typedRequest.toolCall.name
-      });
-      const reusable = options.store.readReusable({ ...key, inputHash });
-      if (reusable !== null) {
-        return deserializeToolResult(reusable.result);
-      }
-
-      options.store.reserve({
+      const toolVersion = policy.toolVersion ?? `legacy-manifest-v1:${options.capabilityManifest.manifestHash}`;
+      const operation = options.store.beginOperation({
         ...key,
         threadId: options.threadId,
         toolName: typedRequest.toolCall.name,
-        inputHash,
+        canonicalToolIdentity: policy.canonicalIdentity,
+        toolVersion,
+        args: typedRequest.toolCall.args,
         effectClass: effectPolicy.effectClass,
         reconcileStrategy: effectPolicy.reconcileStrategy
       });
+      if (operation.kind === 'replay') {
+        return deserializeToolResult(operation.result);
+      }
+
+      const lease = operation.lease;
+      const operationContext = createCapabilityOperationContext({
+        operationId: lease.operationId,
+        idempotencyKey: lease.idempotencyKey,
+        toolCallId: lease.toolCallId,
+        toolName: lease.toolName,
+        canonicalToolIdentity: lease.canonicalToolIdentity,
+        toolVersion: lease.toolVersion,
+        attemptId: lease.attemptId,
+        leaseGeneration: lease.leaseGeneration,
+        recordReceipt: (receipt: CapabilityOperationReceipt) => options.store.recordReceipt(lease, receipt)
+      });
+      options.store.markStarted(lease);
       try {
-        options.store.markStarted(key);
-        const result = await handler(request);
+        const result = await runWithCapabilityOperationContext(operationContext, () => handler(request));
         if (!ToolMessage.isInstance(result)) {
           throw new Error('agent_tool_effect_result_not_tool_message');
         }
         const storedResult = serializeToolResult(result);
         if (result.status === 'error') {
-          options.store.finishError({
-            ...key,
-            error: createToolMessageFailure(result),
-            retryable: false
-          });
+          const error = createToolMessageFailure(result);
+          if (operationContext.hasPublishedSideEffect()) {
+            options.store.finishUnknown(lease, error);
+          } else {
+            options.store.finishError(lease, error, false);
+          }
           return result;
         }
-        options.store.finishSuccess({
-          ...key,
-          result: storedResult
-        });
+        options.store.finishSuccess(lease, storedResult);
         return result;
       } catch (error) {
         const toolError = unwrapMiddlewareError(error);
-        if (toolError instanceof RocToolResolutionError) {
-          options.store.finishError({
-            ...key,
-            error: toolError,
-            retryable: false
-          });
-        } else if (effectPolicy.reconcileStrategy === 'manual_confirmation') {
-          options.store.finishUnknown({ ...key, error });
+        if (operationContext.hasPublishedSideEffect() || effectPolicy.reconcileStrategy === 'manual_confirmation') {
+          options.store.finishUnknown(lease, toolError);
         } else {
-          options.store.finishError({
-            ...key,
-            error,
-            retryable: toRunFailure(error).retryable
-          });
+          options.store.finishError(
+            lease,
+            toolError,
+            !(toolError instanceof RocToolResolutionError) && toRunFailure(toolError).retryable
+          );
         }
         throw error;
       }
@@ -211,7 +218,7 @@ function readToolCallId(request: ToolCallRequest): string | null {
 }
 
 function readToolMessageName(message: ToolMessage): string {
-  const name = Reflect.get(message, 'name');
+  const name = message.name;
   if (typeof name !== 'string' || name.length === 0) {
     throw new Error('agent_tool_effect_result_name_missing');
   }

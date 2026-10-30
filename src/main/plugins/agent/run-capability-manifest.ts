@@ -230,6 +230,7 @@ function compileManifestTools(
     const effectClass = resolveEffectClass(card);
     return {
       canonicalIdentity: card.id,
+      toolVersion: card.capabilityType === 'mcp_tool' ? 'roc-mcp-adapter-v1' : 'roc-agent-tool-v1',
       modelVisibleName: card.name,
       provenance: resolveProvenance(card),
       executionScopes: resolveExecutionScopes(card),
@@ -256,6 +257,7 @@ function createResearchManifestTools(input: {
   }
   return RESEARCH_TOOL_DESCRIPTORS.map((descriptor) => ({
     canonicalIdentity: `research:${descriptor.name}`,
+    toolVersion: 'roc-research-tool-v1',
     modelVisibleName: descriptor.name,
     provenance: { kind: 'builtin' as const, source: 'roc' as const },
     executionScopes: [...descriptor.executionScopes],
@@ -320,6 +322,7 @@ function createRuntimeManifestTool(
 ): RunCapabilityManifestToolV1 {
   return {
     canonicalIdentity: `builtin:${modelVisibleName}`,
+    toolVersion: 'roc-runtime-tool-v1',
     modelVisibleName,
     provenance: { kind: 'builtin', source: 'roc' },
     executionScopes,

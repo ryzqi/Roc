@@ -73,6 +73,16 @@ function insertRun(db, id, threadId, status, startedAt) {
   ).run(id, threadId, status, startedAt, status === 'running' ? null : startedAt);
 }
 
+function insertToolEffect(db, { runId, threadId, status = 'unknown', reconcileStrategy = 'retry_safe' }) {
+  db.prepare(
+    `INSERT INTO agent_tool_effects
+       (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, created_at, updated_at)
+     VALUES (?, ?, 'main', 'checkpoint-1', ?, 'write_file', 'input-hash',
+        'workspace_mutation', ?, ?, ?, ?)`
+  ).run(runId, threadId, `call-${runId}`, reconcileStrategy, status, isoDaysAgo(200), isoDaysAgo(200));
+}
+
 function countMessages(db) {
   return db.prepare('SELECT COUNT(*) FROM session_messages').pluck().get();
 }
@@ -149,6 +159,24 @@ test('a live run protects its thread transcript, an idle one does not', () => {
   assert.equal(result.deleted.sessionMessages, 1);
   const remaining = agent.prepare('SELECT id FROM session_messages ORDER BY id').pluck().all();
   assert.deepEqual(remaining, ['msg-live'], 'the running thread keeps its history');
+  agent.close();
+  memory.close();
+});
+
+test('an unresolved tool effect protects its old run, effect receipt and transcript', () => {
+  const { agent, memory } = EMPTY_DBS();
+  insertThread(agent, 'thread-unknown');
+  insertRun(agent, 'run-unknown', 'thread-unknown', 'completed', isoDaysAgo(200));
+  insertToolEffect(agent, { runId: 'run-unknown', threadId: 'thread-unknown', status: 'unknown' });
+  insertMessage(agent, 'msg-unknown', 'thread-unknown', isoDaysAgo(200));
+
+  const result = retention.runDatabaseRetention({ agentDb: agent, memoryDb: memory, policy, now });
+
+  assert.equal(result.deleted.sessionMessages, 0);
+  assert.equal(result.deleted.toolEffects, 0);
+  assert.equal(agent.prepare('SELECT count(*) FROM agent_runs WHERE id = ?').pluck().get('run-unknown'), 1);
+  assert.equal(agent.prepare('SELECT count(*) FROM agent_tool_effects WHERE run_id = ?').pluck().get('run-unknown'), 1);
+  assert.deepEqual(agent.prepare('SELECT id FROM session_messages WHERE thread_id = ?').pluck().all('thread-unknown'), ['msg-unknown']);
   agent.close();
   memory.close();
 });

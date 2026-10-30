@@ -1,6 +1,14 @@
+import {
+  bindCapabilityOperationContext,
+  getCapabilityOperationContext,
+  type CapabilityOperationContext
+} from './capability-operation-context';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from './types';
 
-type CapabilityHandler = (input: unknown) => Promise<unknown>;
+type CapabilityHandler = (
+  input: unknown,
+  operationContext?: CapabilityOperationContext
+) => Promise<unknown>;
 
 type CapabilityRecord = {
   pluginId: string;
@@ -49,7 +57,25 @@ export class CapabilityRegistry implements RocCapabilityRegistry {
       throw new Error('capability_not_ready');
     }
     const parsedInput = record.descriptor.inputSchema.parse(input);
-    const output = await record.handler(parsedInput);
+    const operationContext = bindCapabilityOperationContext(
+      getCapabilityOperationContext(),
+      name,
+      record.descriptor.version
+    );
+    if (operationContext !== undefined) {
+      operationContext.recordReceipt({
+        schemaVersion: 1,
+        kind: 'capability',
+        phase: 'request_sent',
+        capabilityName: name,
+        capabilityVersion: record.descriptor.version,
+        idempotencyKey: operationContext.idempotencyKey,
+        providerReceiptId: null,
+        evidenceHash: null
+      });
+      operationContext.markSideEffectPublished();
+    }
+    const output = await record.handler(parsedInput, operationContext);
     return record.descriptor.outputSchema.parse(output) as TOutput;
   }
 

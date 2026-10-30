@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection, RunResult } from 'better-sqlite3';
 import type { RunCapabilityEffectClassV1, RunCapabilityReconcileStrategyV1 } from '../../../shared/types';
+import type { CapabilityOperationReceipt } from '../../kernel/capability-operation-context';
 
 export type ToolEffectStatus =
   | 'reserved'
@@ -18,14 +19,64 @@ export type ToolEffectKey = {
   toolCallId: string;
 };
 
-type ToolEffectRow = {
-  input_hash: string;
-  status: Exclude<ToolEffectStatus, 'not_started'>;
-  result_json: string | null;
-  reconcile_strategy: Exclude<RunCapabilityReconcileStrategyV1, 'none'>;
+export type ToolEffectOperationInput = ToolEffectKey & {
+  threadId: string;
+  toolName: string;
+  canonicalToolIdentity: string;
+  toolVersion: string;
+  args: unknown;
+  effectClass: Exclude<RunCapabilityEffectClassV1, 'none'>;
+  reconcileStrategy: Exclude<RunCapabilityReconcileStrategyV1, 'none'>;
 };
 
-type StoredToolEffectRow = {
+export type ToolEffectIdentityV1 = Readonly<{
+  identityVersion: 1;
+  canonicalizationVersion: 'roc-json-sort-v1';
+  operationId: string;
+  idempotencyKey: string;
+  parameterHash: string;
+}>;
+
+export type ToolEffectLease = ToolEffectKey & ToolEffectIdentityV1 & {
+  threadId: string;
+  toolName: string;
+  canonicalToolIdentity: string;
+  toolVersion: string;
+  attemptId: string;
+  leaseGeneration: number;
+};
+
+export type ToolEffectStartResult =
+  | { kind: 'execute'; lease: ToolEffectLease }
+  | { kind: 'replay'; result: JsonValue; operationId: string };
+
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export type ToolEffectResolutionReceiptV1 = Readonly<{
+  schemaVersion: 1;
+  kind: 'resolution';
+  source: 'operator' | 'provider' | 'filesystem_verifier';
+  outcome: 'applied' | 'not_applied';
+  operationId: string;
+  reference: string;
+  evidenceHash: string;
+  recordedAt: string;
+}>;
+
+export type ToolEffectState = Readonly<{
+  status: ToolEffectStatus;
+  identityVersion: number;
+  operationId: string | null;
+  attemptId: string | null;
+  leaseGeneration: number;
+  attemptCount: number;
+  receipt: CapabilityOperationReceipt | ToolEffectResolutionReceiptV1 | null;
+  receiptHash: string | null;
+  expectedVersion: string | null;
+  resultHash: string | null;
+}>;
+
+type ToolEffectRow = {
   run_id: string;
   thread_id: string;
   execution_path: string;
@@ -35,144 +86,337 @@ type StoredToolEffectRow = {
   input_hash: string;
   effect_class: string;
   reconcile_strategy: string;
-  status: string;
+  status: Exclude<ToolEffectStatus, 'not_started'>;
   result_json: string | null;
   error_json: string | null;
   created_at: string;
   updated_at: string;
+  identity_version: number;
+  canonical_tool_identity: string | null;
+  canonicalization_version: string | null;
+  tool_version: string | null;
+  operation_id: string | null;
+  idempotency_key: string | null;
+  attempt_id: string | null;
+  lease_generation: number;
+  attempt_count: number;
+  receipt_sequence: number;
+  receipt_json: string | null;
+  receipt_hash: string | null;
+  expected_version: string | null;
+  result_hash: string | null;
 };
 
+type ReconciliationRow = {
+  sequence: number;
+  run_id: string;
+  execution_path: string;
+  checkpoint_id: string;
+  tool_call_id: string;
+  input_hash: string;
+  evidence: string;
+  outcome: 'applied' | 'not_applied';
+  created_at: string;
+  operation_id: string | null;
+  identity_version: number;
+  lease_generation: number;
+  receipt_json: string | null;
+  receipt_hash: string | null;
+};
 
-export type ReusableToolEffect = { status: 'succeeded'; result: unknown };
+const IDENTITY_VERSION = 1 as const;
+const CANONICALIZATION_VERSION = 'roc-json-sort-v1' as const;
+const HEX_SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 
 export class AgentToolEffectStore {
   constructor(private readonly db: DatabaseConnection) {}
 
-  reserve(input: ToolEffectKey & {
-    threadId: string;
-    toolName: string;
-    inputHash: string;
-    effectClass: Exclude<RunCapabilityEffectClassV1, 'none' | 'network_read'> | 'network_read';
-    reconcileStrategy: Exclude<RunCapabilityReconcileStrategyV1, 'none'>;
-  }): void {
-    validateEffectInput(input);
+  beginOperation(input: ToolEffectOperationInput): ToolEffectStartResult {
+    validateOperationInput(input);
+    const identity = createToolEffectIdentity(input);
     const now = new Date().toISOString();
-    const result = this.db
-      .prepare(
-        `INSERT OR IGNORE INTO agent_tool_effects
-         (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-          effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', NULL, NULL, ?, ?)`
-      )
-      .run(
-        input.runId,
-        input.threadId,
-        input.executionPath,
-        input.checkpointId,
-        input.toolCallId,
-        input.toolName,
-        input.inputHash,
-        input.effectClass,
-        input.reconcileStrategy,
-        now,
-        now
-      ) as RunResult;
-    if (result.changes === 1) {
-      return;
-    }
+    const newAttemptId = randomUUID();
 
-    const state = this.readRow(input);
-    assertInputHash(state, input.inputHash);
-    if (state.status === 'failed_retryable') {
-      const retry = this.db
-        .prepare(
-          `UPDATE agent_tool_effects
-           SET status = 'reserved', result_json = NULL, error_json = NULL, updated_at = ?
-           WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
-             AND status = 'failed_retryable'`
-        )
-        .run(now, input.runId, input.executionPath, input.checkpointId, input.toolCallId) as RunResult;
-      if (retry.changes === 1) {
-        return;
+    return this.db.transaction((): ToolEffectStartResult => {
+      let row = this.findRow(input);
+      if (row === undefined) {
+        this.db.prepare(
+          `INSERT INTO agent_tool_effects (
+            run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+            effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at,
+            identity_version, canonical_tool_identity, canonicalization_version, tool_version,
+            operation_id, idempotency_key, attempt_id, lease_generation, attempt_count,
+            receipt_sequence, receipt_json, receipt_hash, expected_version, result_hash
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, NULL, NULL, NULL, NULL)`
+        ).run(
+          input.runId,
+          input.threadId,
+          input.executionPath,
+          input.checkpointId,
+          input.toolCallId,
+          input.toolName,
+          identity.parameterHash,
+          input.effectClass,
+          input.reconcileStrategy,
+          now,
+          now,
+          identity.identityVersion,
+          input.canonicalToolIdentity,
+          identity.canonicalizationVersion,
+          input.toolVersion,
+          identity.operationId,
+          identity.idempotencyKey,
+          newAttemptId
+        );
+        return { kind: 'execute', lease: createLease(input, identity, newAttemptId, 1) };
       }
-    }
-    if (state.status === 'succeeded') {
-      throw new Error('agent_tool_effect_already_completed');
-    }
-    throwEffectUnavailable(state);
-  }
 
-  markStarted(input: ToolEffectKey): void {
-    validateKey(input);
-    const result = this.db.prepare(`UPDATE agent_tool_effects SET status = 'in_progress', updated_at = ?
-      WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ? AND status = 'reserved'`)
-      .run(new Date().toISOString(), input.runId, input.executionPath, input.checkpointId, input.toolCallId);
-    if (result.changes !== 1) throw new Error('agent_tool_effect_dispatch_not_reserved');
-  }
+      assertOperationMetadata(row, input, identity);
+      if (row.identity_version === 0 && (row.status === 'succeeded' || row.status === 'failed_retryable')) {
+        this.promoteLegacyIdentity(input, identity, row.status);
+        row = this.readRow(input);
+      }
+      assertStoredIdentity(row, identity);
 
-  /** Main-process reconciliation requires an explicit receipt; never inferred from a model's claim. */
-  reconcile(input: ToolEffectKey & { inputHash: string; evidence: string; outcome: 'applied' | 'not_applied'; result?: unknown }): void {
-    if (input.evidence.trim().length === 0 || input.evidence.length > 4000) throw new Error('agent_tool_effect_receipt_required');
-    if (input.outcome === 'applied' && input.result === undefined) throw new Error('agent_tool_effect_receipt_result_required');
-    this.db.transaction(() => {
-      const row = this.readRow(input);
-      assertInputHash(row, input.inputHash);
-      if (row.status !== 'unknown') throw new Error('agent_tool_effect_reconcile_not_unknown');
-      this.db.prepare(`UPDATE agent_tool_effects SET status = ?, result_json = ?, updated_at = ?
-        WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?`)
-        .run(input.outcome === 'applied' ? 'succeeded' : 'failed_retryable', input.outcome === 'applied' ? JSON.stringify(input.result) : null,
-          new Date().toISOString(), input.runId, input.executionPath, input.checkpointId, input.toolCallId);
-      this.db.prepare(`INSERT INTO agent_tool_effect_reconciliations
-        (run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(input.runId, input.executionPath, input.checkpointId, input.toolCallId, input.inputHash, input.evidence, input.outcome, new Date().toISOString());
+      if (row.status === 'succeeded') {
+        if (row.result_json === null) {
+          throw new Error('agent_tool_effect_result_missing');
+        }
+        return { kind: 'replay', result: parseJsonValue(row.result_json), operationId: identity.operationId };
+      }
+      if (row.status === 'failed_retryable') {
+        const nextGeneration = row.lease_generation + 1;
+        const result = this.db.prepare(
+          `UPDATE agent_tool_effects
+           SET status = 'reserved', result_json = NULL, error_json = NULL, attempt_id = ?,
+               lease_generation = ?, attempt_count = attempt_count + 1, updated_at = ?
+           WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+             AND operation_id = ? AND lease_generation = ? AND status = 'failed_retryable'`
+        ).run(
+          newAttemptId,
+          nextGeneration,
+          now,
+          input.runId,
+          input.executionPath,
+          input.checkpointId,
+          input.toolCallId,
+          identity.operationId,
+          row.lease_generation
+        ) as RunResult;
+        if (result.changes === 1) {
+          return { kind: 'execute', lease: createLease(input, identity, newAttemptId, nextGeneration) };
+        }
+        throw new Error('agent_tool_effect_lease_lost');
+      }
+      throwEffectUnavailable(row);
     }).immediate();
   }
 
-  readReusable(input: ToolEffectKey & { inputHash: string }): ReusableToolEffect | null {
-    validateKey(input);
-    requireToolEffectKey(input.inputHash, 'agent_tool_effect_input_hash_missing');
-    const row = this.findRow(input);
-    if (row === undefined) {
-      return null;
+  markStarted(lease: ToolEffectLease): void {
+    validateLease(lease);
+    const result = this.db.prepare(
+      `UPDATE agent_tool_effects SET status = 'in_progress', updated_at = ?
+       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+         AND operation_id = ? AND attempt_id = ? AND lease_generation = ? AND status = 'reserved'`
+    ).run(
+      new Date().toISOString(),
+      lease.runId,
+      lease.executionPath,
+      lease.checkpointId,
+      lease.toolCallId,
+      lease.operationId,
+      lease.attemptId,
+      lease.leaseGeneration
+    ) as RunResult;
+    if (result.changes !== 1) {
+      throw new Error('agent_tool_effect_lease_lost');
     }
-    assertInputHash(row, input.inputHash);
-    if (row.status === 'succeeded') {
-      if (row.result_json === null) {
-        throw new Error('agent_tool_effect_result_missing');
-      }
-      return {
-        status: 'succeeded',
-        result: JSON.parse(row.result_json) as unknown
-      };
-    }
-    if (row.status === 'failed_retryable') {
-      return null;
-    }
-    throwEffectUnavailable(row);
   }
 
-  readState(input: ToolEffectKey): { status: ToolEffectStatus } {
+  recordReceipt(lease: ToolEffectLease, receiptInput: CapabilityOperationReceipt): void {
+    validateLease(lease);
+    const receipt = parseCapabilityOperationReceipt(receiptInput);
+    if (receipt.kind === 'capability' && receipt.idempotencyKey !== lease.idempotencyKey) {
+      throw new Error('agent_tool_effect_receipt_mismatch');
+    }
+    const receiptJson = stableStringify(receipt);
+    const receiptHash = hashToolInput(receipt);
+    const expectedVersion = receipt.kind === 'workspace_write' ? receipt.expectedVersion : null;
+    const resultHash = receipt.kind === 'workspace_write' ? receipt.resultHash : null;
+    const result = this.db.prepare(
+      `UPDATE agent_tool_effects
+       SET receipt_sequence = receipt_sequence + 1, receipt_json = ?, receipt_hash = ?,
+           expected_version = ?, result_hash = ?, updated_at = ?
+       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+         AND operation_id = ? AND attempt_id = ? AND lease_generation = ? AND status = 'in_progress'`
+    ).run(
+      receiptJson,
+      receiptHash,
+      expectedVersion,
+      resultHash,
+      new Date().toISOString(),
+      lease.runId,
+      lease.executionPath,
+      lease.checkpointId,
+      lease.toolCallId,
+      lease.operationId,
+      lease.attemptId,
+      lease.leaseGeneration
+    ) as RunResult;
+    if (result.changes !== 1) {
+      throw new Error('agent_tool_effect_lease_lost');
+    }
+  }
+
+  reconcile(input: {
+    operation: ToolEffectOperationInput;
+    expectedLeaseGeneration: number;
+    receipt: ToolEffectResolutionReceiptV1;
+    result?: unknown;
+  }): void {
+    validateOperationInput(input.operation);
+    parseResolutionReceipt(input.receipt);
+    if (!Number.isSafeInteger(input.expectedLeaseGeneration) || input.expectedLeaseGeneration < 0) {
+      throw new Error('agent_tool_effect_reconcile_generation_invalid');
+    }
+    const identity = createToolEffectIdentity(input.operation);
+    if (input.receipt.operationId !== identity.operationId) {
+      throw new Error('agent_tool_effect_receipt_mismatch');
+    }
+    if (input.receipt.outcome === 'applied' && input.result === undefined) {
+      throw new Error('agent_tool_effect_receipt_result_required');
+    }
+
+    this.db.transaction(() => {
+      const row = this.readRow(input.operation);
+      assertOperationMetadata(row, input.operation, identity);
+      if (row.identity_version > 0) {
+        assertStoredIdentity(row, identity);
+      } else if (row.status !== 'unknown') {
+        throw new Error('agent_tool_effect_legacy_identity_unverified');
+      }
+      if (row.status !== 'unknown') {
+        throw new Error('agent_tool_effect_reconcile_not_unknown');
+      }
+      if (row.lease_generation !== input.expectedLeaseGeneration) {
+        throw new Error('agent_tool_effect_reconcile_generation_drift');
+      }
+
+      const receiptJson = stableStringify(input.receipt);
+      const receiptHash = hashToolInput(input.receipt);
+      const now = new Date().toISOString();
+      const nextStatus = input.receipt.outcome === 'applied' ? 'succeeded' : 'failed_retryable';
+      const resultJson = input.receipt.outcome === 'applied' ? stableStringify(input.result) : null;
+      const resultHash = input.receipt.outcome === 'applied' ? hashToolInput(input.result) : null;
+      const updated = this.db.prepare(
+        `UPDATE agent_tool_effects
+         SET identity_version = ?, canonical_tool_identity = ?, canonicalization_version = ?, tool_version = ?,
+             operation_id = ?, idempotency_key = ?, status = ?, result_json = ?, error_json = NULL,
+             attempt_id = NULL, lease_generation = lease_generation + 1,
+             receipt_sequence = receipt_sequence + 1, receipt_json = ?, receipt_hash = ?,
+             result_hash = ?, updated_at = ?
+         WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+           AND lease_generation = ? AND status = 'unknown'`
+      ).run(
+        identity.identityVersion,
+        input.operation.canonicalToolIdentity,
+        identity.canonicalizationVersion,
+        input.operation.toolVersion,
+        identity.operationId,
+        identity.idempotencyKey,
+        nextStatus,
+        resultJson,
+        receiptJson,
+        receiptHash,
+        resultHash,
+        now,
+        input.operation.runId,
+        input.operation.executionPath,
+        input.operation.checkpointId,
+        input.operation.toolCallId,
+        input.expectedLeaseGeneration
+      ) as RunResult;
+      if (updated.changes !== 1) {
+        throw new Error('agent_tool_effect_reconcile_generation_drift');
+      }
+      this.db.prepare(
+        `INSERT INTO agent_tool_effect_reconciliations (
+           run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at,
+           operation_id, identity_version, lease_generation, receipt_json, receipt_hash
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        input.operation.runId,
+        input.operation.executionPath,
+        input.operation.checkpointId,
+        input.operation.toolCallId,
+        identity.parameterHash,
+        receiptJson,
+        input.receipt.outcome,
+        now,
+        identity.operationId,
+        identity.identityVersion,
+        input.expectedLeaseGeneration,
+        receiptJson,
+        receiptHash
+      );
+    }).immediate();
+  }
+
+  readState(input: ToolEffectKey): ToolEffectState {
     validateKey(input);
     const row = this.findRow(input);
-    return { status: row === undefined ? 'not_started' : row.status };
+    if (row === undefined) {
+      return {
+        status: 'not_started',
+        identityVersion: 0,
+        operationId: null,
+        attemptId: null,
+        leaseGeneration: 0,
+        attemptCount: 0,
+        receipt: null,
+        receiptHash: null,
+        expectedVersion: null,
+        resultHash: null
+      };
+    }
+    return {
+      status: row.status,
+      identityVersion: row.identity_version,
+      operationId: row.operation_id,
+      attemptId: row.attempt_id,
+      leaseGeneration: row.lease_generation,
+      attemptCount: row.attempt_count,
+      receipt: row.receipt_json === null ? null : parseStoredReceipt(row.receipt_json, row.receipt_hash),
+      receiptHash: row.receipt_hash,
+      expectedVersion: row.expected_version,
+      resultHash: row.result_hash
+    };
   }
 
   markRestartedUnknown(runId: string): void {
+    requireToolEffectKey(runId, 'agent_tool_effect_run_id_missing');
     const now = new Date().toISOString();
-    this.db.prepare("UPDATE agent_tool_effects SET status = 'failed_retryable', updated_at = ? WHERE run_id = ? AND status = 'reserved'").run(now, runId);
-    this.db
-      .prepare(
+    this.db.transaction(() => {
+      this.db.prepare(
         `UPDATE agent_tool_effects
-         SET status = 'unknown', updated_at = ?
-         WHERE run_id = ? AND status = 'in_progress'`
-      )
-      .run(now, runId);
+         SET status = 'unknown', attempt_id = NULL, lease_generation = lease_generation + 1,
+             error_json = COALESCE(error_json, ?), updated_at = ?
+         WHERE run_id = ? AND (status = 'in_progress' OR (status = 'failed_retryable' AND reconcile_strategy = 'manual_confirmation'))`
+      ).run(JSON.stringify({ code: 'agent_tool_effect_interrupted_at_restart' }), now, runId);
+      this.db.prepare(
+        `UPDATE agent_tool_effects
+         SET status = 'failed_retryable', attempt_id = NULL, lease_generation = lease_generation + 1,
+             error_json = COALESCE(error_json, ?), updated_at = ?
+         WHERE run_id = ? AND status = 'reserved'`
+      ).run(JSON.stringify({ code: 'agent_tool_effect_not_dispatched_at_restart' }), now, runId);
+    }).immediate();
   }
 
   hasUnknown(runId: string): boolean {
+    requireToolEffectKey(runId, 'agent_tool_effect_run_id_missing');
     const row = this.db
-      .prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status = 'unknown' LIMIT 1")
-      .get(runId) as { 1: number } | undefined;
+      .prepare("SELECT 1 AS found FROM agent_tool_effects WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') LIMIT 1")
+      .get(runId) as { found: number } | undefined;
     return row !== undefined;
   }
 
@@ -180,26 +424,30 @@ export class AgentToolEffectStore {
     if (source === null) {
       return;
     }
-    const columns = readSourceRows<{ name: string }>(source, 'PRAGMA table_info(agent_tool_effects)');
-    if (columns.length === 0) {
+    const effectColumns = readSourceTableColumns(source, 'effects');
+    if (effectColumns.size === 0) {
       return;
     }
-    const rows = readSourceRows<StoredToolEffectRow>(
-      source,
-      `SELECT run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-         effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-       FROM agent_tool_effects`
-    );
-    const insert = this.db.prepare(
-      `INSERT OR IGNORE INTO agent_tool_effects (
-        run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-      )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const row of rows) {
-      try {
-        insert.run(
+    const effectRows = readEffectSourceRows(source);
+    const reconciliationColumns = readSourceTableColumns(source, 'reconciliations');
+    const reconciliationRows = reconciliationColumns.size === 0 ? [] : readReconciliationSourceRows(source);
+
+    this.db.transaction(() => {
+      const insertEffect = this.db.prepare(
+        `INSERT OR IGNORE INTO agent_tool_effects (
+          run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+          effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at,
+          identity_version, canonical_tool_identity, canonicalization_version, tool_version,
+          operation_id, idempotency_key, attempt_id, lease_generation, attempt_count,
+          receipt_sequence, receipt_json, receipt_hash, expected_version, result_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const row of effectRows) {
+        const status = normalizeRestoredStatus(row.status, row.reconcile_strategy);
+        const leaseGeneration = row.lease_generation + 1;
+        const attemptId = null;
+        const errorJson = status === row.status ? row.error_json : JSON.stringify({ code: 'agent_tool_effect_restored_unresolved' });
+        insertEffect.run(
           row.run_id,
           row.thread_id,
           row.execution_path,
@@ -209,102 +457,182 @@ export class AgentToolEffectStore {
           row.input_hash,
           row.effect_class,
           row.reconcile_strategy,
-          row.status,
+          status,
           row.result_json,
-          row.error_json,
+          errorJson,
           row.created_at,
-          row.updated_at
+          row.updated_at,
+          row.identity_version,
+          row.canonical_tool_identity,
+          row.canonicalization_version,
+          row.tool_version,
+          row.operation_id,
+          row.idempotency_key,
+          attemptId,
+          leaseGeneration,
+          row.attempt_count,
+          row.receipt_sequence,
+          row.receipt_json,
+          row.receipt_hash,
+          row.expected_version,
+          row.result_hash
         );
-      } catch {
-        continue;
       }
-    }
+
+      const insertReconciliation = this.db.prepare(
+        `INSERT OR IGNORE INTO agent_tool_effect_reconciliations (
+          sequence, run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at,
+          operation_id, identity_version, lease_generation, receipt_json, receipt_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const row of reconciliationRows) {
+        insertReconciliation.run(
+          row.sequence,
+          row.run_id,
+          row.execution_path,
+          row.checkpoint_id,
+          row.tool_call_id,
+          row.input_hash,
+          row.evidence,
+          row.outcome,
+          row.created_at,
+          row.operation_id,
+          row.identity_version,
+          row.lease_generation,
+          row.receipt_json,
+          row.receipt_hash
+        );
+      }
+    }).immediate();
   }
 
   deleteForRunIds(runIds: readonly string[]): number {
-    const statement = this.db.prepare('DELETE FROM agent_tool_effects WHERE run_id = ?');
-    const receipts = this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id = ?');
+    const uniqueRunIds = [...new Set(runIds)];
+    if (uniqueRunIds.length === 0) {
+      return 0;
+    }
     return this.db.transaction(() => {
       let deleted = 0;
-      for (const runId of runIds) {
-        receipts.run(runId);
-        deleted += statement.run(runId).changes;
+      for (const runId of uniqueRunIds) {
+        this.assertNoUnresolvedRun(runId);
+        this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id = ?').run(runId);
+        deleted += this.db.prepare('DELETE FROM agent_tool_effects WHERE run_id = ?').run(runId).changes;
       }
       return deleted;
-    })();
+    }).immediate();
   }
 
   deleteForThread(threadId: string): number {
     requireToolEffectKey(threadId, 'agent_tool_effect_thread_id_missing');
     return this.db.transaction(() => {
+      this.assertNoUnresolvedThread(threadId);
       this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id IN (SELECT run_id FROM agent_tool_effects WHERE thread_id = ?)').run(threadId);
       return this.db.prepare('DELETE FROM agent_tool_effects WHERE thread_id = ?').run(threadId).changes;
-    })();
+    }).immediate();
   }
 
-  finishSuccess(input: ToolEffectKey & { result: unknown }): void {
-    this.finish({
-      ...input,
-      status: 'succeeded',
-      resultJson: JSON.stringify(input.result),
-      errorJson: null
-    });
+  finishSuccess(lease: ToolEffectLease, result: unknown): void {
+    this.finish(lease, 'succeeded', stableStringify(result), null);
   }
 
-  finishError(input: ToolEffectKey & { error: unknown; retryable: boolean }): void {
-    this.finish({
-      ...input,
-      status: input.retryable ? 'failed_retryable' : 'failed_final',
-      resultJson: null,
-      errorJson: JSON.stringify(serializeError(input.error))
-    });
+  finishError(lease: ToolEffectLease, error: unknown, retryable: boolean): void {
+    validateLease(lease);
+    const row = this.readRow(lease);
+    let status: 'unknown' | 'failed_retryable' | 'failed_final';
+    if (!retryable) {
+      status = 'failed_final';
+    } else if (row.reconcile_strategy === 'manual_confirmation') {
+      status = 'unknown';
+    } else {
+      status = 'failed_retryable';
+    }
+    this.finish(lease, status, null, stableStringify(serializeError(error)));
   }
 
-  finishUnknown(input: ToolEffectKey & { error: unknown }): void {
-    this.finish({
-      ...input,
-      status: 'unknown',
-      resultJson: null,
-      errorJson: JSON.stringify(serializeError(input.error))
-    });
+  finishUnknown(lease: ToolEffectLease, error: unknown): void {
+    this.finish(lease, 'unknown', null, stableStringify(serializeError(error)));
   }
 
-  private finish(input: ToolEffectKey & {
-    status: 'succeeded' | 'failed_retryable' | 'failed_final' | 'unknown';
-    resultJson: string | null;
-    errorJson: string | null;
-  }): void {
-    validateKey(input);
-    const result = this.db
-      .prepare(
-        `UPDATE agent_tool_effects
-         SET status = ?, result_json = ?, error_json = ?, updated_at = ?
-         WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
-           AND status = 'in_progress'`
-      )
-      .run(
-        input.status,
-        input.resultJson,
-        input.errorJson,
-        new Date().toISOString(),
-        input.runId,
-        input.executionPath,
-        input.checkpointId,
-        input.toolCallId
-      ) as RunResult;
+  private finish(
+    lease: ToolEffectLease,
+    status: 'succeeded' | 'failed_retryable' | 'failed_final' | 'unknown',
+    resultJson: string | null,
+    errorJson: string | null
+  ): void {
+    validateLease(lease);
+    const result = this.db.prepare(
+      `UPDATE agent_tool_effects
+       SET status = ?, result_json = ?, error_json = ?, attempt_id = NULL, updated_at = ?
+       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+         AND operation_id = ? AND attempt_id = ? AND lease_generation = ? AND status = 'in_progress'`
+    ).run(
+      status,
+      resultJson,
+      errorJson,
+      new Date().toISOString(),
+      lease.runId,
+      lease.executionPath,
+      lease.checkpointId,
+      lease.toolCallId,
+      lease.operationId,
+      lease.attemptId,
+      lease.leaseGeneration
+    ) as RunResult;
     if (result.changes !== 1) {
-      throw new Error('agent_tool_effect_transition_invalid');
+      throw new Error('agent_tool_effect_lease_lost');
+    }
+  }
+
+  private assertNoUnresolvedRun(runId: string): void {
+    const row = this.db.prepare("SELECT 1 AS found FROM agent_tool_effects WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') LIMIT 1").get(runId);
+    if (row !== undefined) {
+      throw new Error('agent_tool_effect_pending_reconciliation');
+    }
+  }
+
+  private assertNoUnresolvedThread(threadId: string): void {
+    const row = this.db.prepare("SELECT 1 AS found FROM agent_tool_effects WHERE thread_id = ? AND status IN ('reserved','in_progress','unknown') LIMIT 1").get(threadId);
+    if (row !== undefined) {
+      throw new Error('agent_tool_effect_pending_reconciliation');
+    }
+  }
+
+  private promoteLegacyIdentity(input: ToolEffectOperationInput, identity: ToolEffectIdentityV1, status: string): void {
+    const updated = this.db.prepare(
+      `UPDATE agent_tool_effects
+       SET identity_version = ?, canonical_tool_identity = ?, canonicalization_version = ?, tool_version = ?,
+           operation_id = ?, idempotency_key = ?, updated_at = ?
+       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
+         AND identity_version = 0 AND status = ?`
+    ).run(
+      identity.identityVersion,
+      input.canonicalToolIdentity,
+      identity.canonicalizationVersion,
+      input.toolVersion,
+      identity.operationId,
+      identity.idempotencyKey,
+      new Date().toISOString(),
+      input.runId,
+      input.executionPath,
+      input.checkpointId,
+      input.toolCallId,
+      status
+    ) as RunResult;
+    if (updated.changes !== 1) {
+      throw new Error('agent_tool_effect_identity_drift');
     }
   }
 
   private findRow(input: ToolEffectKey): ToolEffectRow | undefined {
-    return this.db
-      .prepare(
-        `SELECT input_hash, status, result_json, reconcile_strategy
-         FROM agent_tool_effects
-         WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?`
-      )
-      .get(input.runId, input.executionPath, input.checkpointId, input.toolCallId) as ToolEffectRow | undefined;
+    return this.db.prepare(
+      `SELECT run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+              effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at,
+              identity_version, canonical_tool_identity, canonicalization_version, tool_version,
+              operation_id, idempotency_key, attempt_id, lease_generation, attempt_count,
+              receipt_sequence, receipt_json, receipt_hash, expected_version, result_hash
+       FROM agent_tool_effects
+       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?`
+    ).get(input.runId, input.executionPath, input.checkpointId, input.toolCallId) as ToolEffectRow | undefined;
   }
 
   private readRow(input: ToolEffectKey): ToolEffectRow {
@@ -316,15 +644,86 @@ export class AgentToolEffectStore {
   }
 }
 
+export function createToolEffectIdentity(input: ToolEffectOperationInput): ToolEffectIdentityV1 {
+  const parameterHash = hashToolInput({ args: input.args, name: input.toolName });
+  const operationId = hashToolInput({
+    identityVersion: IDENTITY_VERSION,
+    canonicalizationVersion: CANONICALIZATION_VERSION,
+    runId: input.runId,
+    threadId: input.threadId,
+    executionPath: input.executionPath,
+    checkpointId: input.checkpointId,
+    toolCallId: input.toolCallId,
+    canonicalToolIdentity: input.canonicalToolIdentity,
+    toolVersion: input.toolVersion,
+    parameterHash
+  });
+  return Object.freeze({
+    identityVersion: IDENTITY_VERSION,
+    canonicalizationVersion: CANONICALIZATION_VERSION,
+    operationId,
+    idempotencyKey: `roc-tool-effect-v${IDENTITY_VERSION}:${operationId}`,
+    parameterHash
+  });
+}
+
 export function hashToolInput(input: unknown): string {
   return createHash('sha256').update(stableStringify(input)).digest('hex');
 }
 
-function validateEffectInput(input: Parameters<AgentToolEffectStore['reserve']>[0]): void {
+function createLease(
+  input: ToolEffectOperationInput,
+  identity: ToolEffectIdentityV1,
+  attemptId: string,
+  leaseGeneration: number
+): ToolEffectLease {
+  return Object.freeze({
+    runId: input.runId,
+    threadId: input.threadId,
+    executionPath: input.executionPath,
+    checkpointId: input.checkpointId,
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    canonicalToolIdentity: input.canonicalToolIdentity,
+    toolVersion: input.toolVersion,
+    ...identity,
+    attemptId,
+    leaseGeneration
+  });
+}
+
+function assertOperationMetadata(row: ToolEffectRow, input: ToolEffectOperationInput, identity: ToolEffectIdentityV1): void {
+  if (row.thread_id !== input.threadId || row.tool_name !== input.toolName || row.input_hash !== identity.parameterHash) {
+    throw new Error('agent_tool_effect_input_drift');
+  }
+  if (row.effect_class !== input.effectClass || row.reconcile_strategy !== input.reconcileStrategy) {
+    throw new Error('agent_tool_effect_identity_drift');
+  }
+}
+
+function assertStoredIdentity(row: ToolEffectRow, identity: ToolEffectIdentityV1): void {
+  if (row.identity_version !== identity.identityVersion || row.operation_id !== identity.operationId ||
+      row.idempotency_key !== identity.idempotencyKey || row.canonicalization_version !== identity.canonicalizationVersion) {
+    throw new Error('agent_tool_effect_identity_drift');
+  }
+}
+
+function validateOperationInput(input: ToolEffectOperationInput): void {
   validateKey(input);
   requireToolEffectKey(input.threadId, 'agent_tool_effect_thread_id_missing');
   requireToolEffectKey(input.toolName, 'agent_tool_effect_tool_name_missing');
-  requireToolEffectKey(input.inputHash, 'agent_tool_effect_input_hash_missing');
+  requireToolEffectKey(input.canonicalToolIdentity, 'agent_tool_effect_canonical_identity_missing');
+  requireToolEffectKey(input.toolVersion, 'agent_tool_effect_tool_version_missing');
+}
+
+function validateLease(lease: ToolEffectLease): void {
+  validateKey(lease);
+  requireToolEffectKey(lease.operationId, 'agent_tool_effect_operation_id_missing');
+  requireToolEffectKey(lease.idempotencyKey, 'agent_tool_effect_idempotency_key_missing');
+  requireToolEffectKey(lease.attemptId, 'agent_tool_effect_attempt_id_missing');
+  if (!Number.isSafeInteger(lease.leaseGeneration) || lease.leaseGeneration < 1) {
+    throw new Error('agent_tool_effect_lease_generation_invalid');
+  }
 }
 
 function validateKey(input: ToolEffectKey): void {
@@ -334,18 +733,15 @@ function validateKey(input: ToolEffectKey): void {
   requireToolEffectKey(input.toolCallId, 'agent_tool_effect_call_id_missing');
 }
 
-function assertInputHash(row: ToolEffectRow, inputHash: string): void {
-  if (row.input_hash !== inputHash) {
-    throw new Error('agent_tool_effect_input_drift');
-  }
-}
-
 function throwEffectUnavailable(row: ToolEffectRow): never {
-  if (row.status === 'in_progress') {
+  if (row.status === 'reserved' || row.status === 'in_progress') {
     throw new Error('agent_tool_effect_in_progress');
   }
   if (row.status === 'unknown') {
     throw new Error(`agent_tool_effect_unknown_${row.reconcile_strategy}`);
+  }
+  if (row.status === 'succeeded') {
+    throw new Error('agent_tool_effect_already_completed');
   }
   if (row.status === 'failed_final') {
     throw new Error('agent_tool_effect_failed_final');
@@ -353,22 +749,145 @@ function throwEffectUnavailable(row: ToolEffectRow): never {
   throw new Error('agent_tool_effect_unavailable');
 }
 
-function stableStringify(value: unknown): string {
-  return JSON.stringify(sortJsonValue(value));
+function parseCapabilityOperationReceipt(input: unknown): CapabilityOperationReceipt {
+  if (!isRecord(input) || input.schemaVersion !== 1) {
+    throw new Error('agent_tool_effect_receipt_invalid');
+  }
+  if (input.kind === 'workspace_write' &&
+      (input.phase === 'prepared' || input.phase === 'published' || input.phase === 'durable') &&
+      typeof input.path === 'string' && input.path.length > 0 && input.path.length <= 4096 &&
+      (input.expectedVersion === null || isSha256(input.expectedVersion)) && isSha256(input.resultHash)) {
+    return {
+      schemaVersion: 1,
+      kind: 'workspace_write',
+      phase: input.phase,
+      path: input.path,
+      expectedVersion: input.expectedVersion,
+      resultHash: input.resultHash
+    };
+  }
+  if (input.kind === 'capability' &&
+      (input.phase === 'request_sent' || input.phase === 'provider_confirmed') &&
+      typeof input.capabilityName === 'string' && input.capabilityName.length > 0 &&
+      typeof input.capabilityVersion === 'string' && input.capabilityVersion.length > 0 &&
+      typeof input.idempotencyKey === 'string' && input.idempotencyKey.length > 0 &&
+      (input.providerReceiptId === null || typeof input.providerReceiptId === 'string') &&
+      (input.evidenceHash === null || isSha256(input.evidenceHash))) {
+    return {
+      schemaVersion: 1,
+      kind: 'capability',
+      phase: input.phase,
+      capabilityName: input.capabilityName,
+      capabilityVersion: input.capabilityVersion,
+      idempotencyKey: input.idempotencyKey,
+      providerReceiptId: input.providerReceiptId,
+      evidenceHash: input.evidenceHash
+    };
+  }
+  throw new Error('agent_tool_effect_receipt_invalid');
 }
 
-function sortJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortJsonValue);
+function parseResolutionReceipt(input: unknown): ToolEffectResolutionReceiptV1 {
+  if (!isRecord(input) || input.schemaVersion !== 1 || input.kind !== 'resolution' ||
+      (input.source !== 'operator' && input.source !== 'provider' && input.source !== 'filesystem_verifier') ||
+      (input.outcome !== 'applied' && input.outcome !== 'not_applied') ||
+      !isSha256(input.operationId) || typeof input.reference !== 'string' || input.reference.trim().length === 0 || input.reference.length > 4000 ||
+      !isSha256(input.evidenceHash) || typeof input.recordedAt !== 'string' || Number.isNaN(Date.parse(input.recordedAt))) {
+    throw new Error('agent_tool_effect_receipt_invalid');
   }
-  if (!isRecord(value)) {
+  return {
+    schemaVersion: 1,
+    kind: 'resolution',
+    source: input.source,
+    outcome: input.outcome,
+    operationId: input.operationId,
+    reference: input.reference,
+    evidenceHash: input.evidenceHash,
+    recordedAt: input.recordedAt
+  };
+}
+
+function parseStoredReceipt(receiptJson: string, expectedHash: string | null): CapabilityOperationReceipt | ToolEffectResolutionReceiptV1 {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(receiptJson) as unknown;
+  } catch {
+    throw new Error('agent_tool_effect_receipt_corrupt');
+  }
+  if (expectedHash !== null && hashToolInput(parsed) !== expectedHash) {
+    throw new Error('agent_tool_effect_receipt_corrupt');
+  }
+  return isRecord(parsed) && parsed.kind === 'resolution'
+    ? parseResolutionReceipt(parsed)
+    : parseCapabilityOperationReceipt(parsed);
+}
+
+function parseJsonValue(json: string): JsonValue {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json) as unknown;
+  } catch {
+    throw new Error('agent_tool_effect_result_corrupt');
+  }
+  try {
+    return sortJsonValue(parsed);
+  } catch {
+    throw new Error('agent_tool_effect_result_corrupt');
+  }
+}
+
+
+function isSha256(value: unknown): value is string {
+  return typeof value === 'string' && HEX_SHA256_PATTERN.test(value);
+}
+
+function normalizeRestoredStatus(status: string, reconcileStrategy: string): ToolEffectRow['status'] {
+  if (status === 'reserved') {
+    return 'failed_retryable';
+  }
+  if (status === 'in_progress' || (status === 'failed_retryable' && reconcileStrategy === 'manual_confirmation')) {
+    return 'unknown';
+  }
+  if (['succeeded', 'failed_retryable', 'failed_final', 'unknown'].includes(status)) {
+    return status as ToolEffectRow['status'];
+  }
+  throw new Error('agent_tool_effect_restore_status_invalid');
+}
+
+function stableStringify(value: unknown): string {
+  const serialized = JSON.stringify(sortJsonValue(value));
+  if (serialized === undefined) {
+    throw new Error('agent_tool_effect_value_not_serializable');
+  }
+  return serialized;
+}
+
+function sortJsonValue(value: unknown): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
     return value;
   }
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    sorted[key] = sortJsonValue(value[key]);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('agent_tool_effect_value_not_serializable');
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => entry === undefined ? null : sortJsonValue(entry));
+  }
+  if (!isRecord(value)) {
+    throw new Error('agent_tool_effect_value_not_serializable');
+  }
+  const sorted: Record<string, JsonValue> = {};
+  for (const key of Object.keys(value).sort(compareCanonicalKeys)) {
+    const entry: unknown = value[key];
+    if (entry !== undefined) sorted[key] = sortJsonValue(entry);
   }
   return sorted;
+}
+
+function compareCanonicalKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 function requireToolEffectKey(value: unknown, code: string): string {
@@ -378,22 +897,136 @@ function requireToolEffectKey(value: unknown, code: string): string {
   return value;
 }
 
-function serializeError(error: unknown): unknown {
+function serializeError(error: unknown): JsonValue {
   if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message
-    };
+    return { name: error.name, message: error.message };
   }
-  return error;
+  try {
+    return sortJsonValue(error);
+  } catch {
+    return String(error);
+  }
 }
 
-function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
-  try {
-    return source.prepare(sql).all() as TRow[];
-  } catch {
-    return [];
+function readSourceTableColumns(source: DatabaseConnection, table: 'effects' | 'reconciliations'): Set<string> {
+  const rows = (table === 'effects'
+    ? source.prepare('PRAGMA table_info(agent_tool_effects)')
+    : source.prepare('PRAGMA table_info(agent_tool_effect_reconciliations)')).all();
+  return new Set(rows.map((row: unknown) => {
+    if (!isRecord(row) || typeof row.name !== 'string') {
+      throw new Error('agent_tool_effect_restore_schema_invalid');
+    }
+    return row.name;
+  }));
+}
+
+function readEffectSourceRows(source: DatabaseConnection): ToolEffectRow[] {
+  const rows = readSourceRows(source, 'effects');
+  return rows.map((row) => ({
+    run_id: readRequiredString(row, 'run_id'),
+    thread_id: readRequiredString(row, 'thread_id'),
+    execution_path: readRequiredString(row, 'execution_path'),
+    checkpoint_id: readRequiredString(row, 'checkpoint_id'),
+    tool_call_id: readRequiredString(row, 'tool_call_id'),
+    tool_name: readRequiredString(row, 'tool_name'),
+    input_hash: readRequiredString(row, 'input_hash'),
+    effect_class: readRequiredString(row, 'effect_class'),
+    reconcile_strategy: readRequiredString(row, 'reconcile_strategy'),
+    status: readStoredStatus(readRequiredString(row, 'status')),
+    result_json: readNullableString(row, 'result_json'),
+    error_json: readNullableString(row, 'error_json'),
+    created_at: readRequiredString(row, 'created_at'),
+    updated_at: readRequiredString(row, 'updated_at'),
+    identity_version: readInteger(row, 'identity_version', 0),
+    canonical_tool_identity: readNullableString(row, 'canonical_tool_identity'),
+    canonicalization_version: readNullableString(row, 'canonicalization_version'),
+    tool_version: readNullableString(row, 'tool_version'),
+    operation_id: readNullableString(row, 'operation_id'),
+    idempotency_key: readNullableString(row, 'idempotency_key'),
+    attempt_id: readNullableString(row, 'attempt_id'),
+    lease_generation: readInteger(row, 'lease_generation', 0),
+    attempt_count: readInteger(row, 'attempt_count', 0),
+    receipt_sequence: readInteger(row, 'receipt_sequence', 0),
+    receipt_json: readNullableString(row, 'receipt_json'),
+    receipt_hash: readNullableString(row, 'receipt_hash'),
+    expected_version: readNullableString(row, 'expected_version'),
+    result_hash: readNullableString(row, 'result_hash')
+  }));
+}
+
+function readReconciliationSourceRows(source: DatabaseConnection): ReconciliationRow[] {
+  const rows = readSourceRows(source, 'reconciliations');
+  return rows.map((row) => {
+    const outcome = readRequiredString(row, 'outcome');
+    if (outcome !== 'applied' && outcome !== 'not_applied') {
+      throw new Error('agent_tool_effect_restore_outcome_invalid');
+    }
+    return {
+      sequence: readInteger(row, 'sequence', 0),
+      run_id: readRequiredString(row, 'run_id'),
+      execution_path: readRequiredString(row, 'execution_path'),
+      checkpoint_id: readRequiredString(row, 'checkpoint_id'),
+      tool_call_id: readRequiredString(row, 'tool_call_id'),
+      input_hash: readRequiredString(row, 'input_hash'),
+      evidence: readRequiredString(row, 'evidence'),
+      outcome,
+      created_at: readRequiredString(row, 'created_at'),
+      operation_id: readNullableString(row, 'operation_id'),
+      identity_version: readInteger(row, 'identity_version', 0),
+      lease_generation: readInteger(row, 'lease_generation', 0),
+      receipt_json: readNullableString(row, 'receipt_json'),
+      receipt_hash: readNullableString(row, 'receipt_hash')
+    };
+  });
+}
+
+function readSourceRows(source: DatabaseConnection, table: 'effects' | 'reconciliations'): Record<string, unknown>[] {
+  const rows = (table === 'effects'
+    ? source.prepare('SELECT * FROM agent_tool_effects')
+    : source.prepare('SELECT * FROM agent_tool_effect_reconciliations')).all();
+  return rows.map((row: unknown) => {
+    if (!isRecord(row)) {
+      throw new Error('agent_tool_effect_restore_row_invalid');
+    }
+    return row;
+  });
+}
+
+function readRequiredString(row: Record<string, unknown>, name: string): string {
+  const value = row[name];
+  if (typeof value !== 'string') {
+    throw new Error('agent_tool_effect_restore_row_invalid');
   }
+  return value;
+}
+
+function readNullableString(row: Record<string, unknown>, name: string): string | null {
+  const value = row[name];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new Error('agent_tool_effect_restore_row_invalid');
+  }
+  return value;
+}
+
+function readInteger(row: Record<string, unknown>, name: string, fallback: number): number {
+  const value = row[name];
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error('agent_tool_effect_restore_row_invalid');
+  }
+  return value;
+}
+
+function readStoredStatus(value: string): ToolEffectRow['status'] {
+  if (value === 'reserved' || value === 'in_progress' || value === 'succeeded' || value === 'failed_retryable' || value === 'failed_final' || value === 'unknown') {
+    return value;
+  }
+  throw new Error('agent_tool_effect_restore_status_invalid');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

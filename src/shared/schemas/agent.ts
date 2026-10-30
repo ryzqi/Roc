@@ -78,6 +78,7 @@ export const agentSubagentPreviewSchema = z
 export const runCapabilityManifestToolSchema = z
   .object({
     canonicalIdentity: z.string(),
+    toolVersion: z.string().trim().min(1).optional(),
     modelVisibleName: z.string(),
     provenance: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('builtin'), source: z.literal('roc') }).strict(),

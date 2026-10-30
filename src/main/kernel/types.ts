@@ -1,3 +1,4 @@
+import type { CapabilityOperationContext } from './capability-operation-context';
 import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
 
@@ -44,7 +45,11 @@ export type RocEventBus = {
 
 export type RocCapabilityRegistry = {
   declare(pluginId: string, descriptor: CapabilityDescriptor): void;
-  register(pluginId: string, descriptor: CapabilityDescriptor, handler: (input: unknown) => Promise<unknown>): void;
+  register(
+    pluginId: string,
+    descriptor: CapabilityDescriptor,
+    handler: (input: unknown, operationContext?: CapabilityOperationContext) => Promise<unknown>
+  ): void;
   unregister(pluginId: string): void;
   invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
   list(): readonly CapabilityDescriptor[];

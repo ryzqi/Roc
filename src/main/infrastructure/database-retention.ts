@@ -140,7 +140,12 @@ function createProtectedThreadTempTable(agentDb: DatabaseConnection, terminalCut
           OR COALESCE(ended_at, started_at) >= ?
        UNION
        SELECT DISTINCT thread_id
-       FROM agent_pending_interrupts`
+       FROM agent_pending_interrupts
+       UNION
+       SELECT DISTINCT thread_id
+       FROM agent_tool_effects
+       WHERE status IN ('reserved','in_progress','unknown')`
+
     )
     .run(terminalCutoff);
 }
