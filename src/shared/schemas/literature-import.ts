@@ -39,7 +39,7 @@ export const literatureProviderGovernanceSchema = z.object({
   lastSuccessAt: z.string().nullable(), lastFailureAt: z.string().nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(5), ranking: literatureRankingSchema,
+  schemaVersion: z.literal(6), ranking: literatureRankingSchema, executionId: z.string().min(1),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'timeout', 'rate_limited', 'error']),

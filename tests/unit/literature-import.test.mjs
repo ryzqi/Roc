@@ -16,7 +16,7 @@ before(async () => {
   const outfile = join(directory, 'fixture.mjs');
   await esbuild.build({ stdin: { contents: `
     export { ResearchRepository } from './src/main/plugins/research/repository';
-    export { applyResearchDatabaseSchema, agentMigrations } from './src/main/infrastructure/database-schemas';
+    export { applyResearchDatabaseSchema, agentMigrations, researchMigrations } from './src/main/infrastructure/database-schemas';
     export { applyDatabaseMigrations } from './src/main/infrastructure/database-migrations';
     export { ResearchTaskRepository } from './src/main/plugins/research/research-task-repository';
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
@@ -24,6 +24,7 @@ before(async () => {
     export { fuseLiterature, literatureRanking } from './src/main/plugins/research/literature-fusion';
     export { LiteratureResponseCache } from './src/main/plugins/research/literature-response-cache';
     export { LiteratureProviderGovernor, createLiteratureProviderGovernor } from './src/main/plugins/research/literature-provider-governor';
+    export { LiteratureSearchLedger } from './src/main/plugins/research/literature-search-ledger';
     export { ResearchStageRuntime } from './src/main/plugins/research/stage-runtime';
     export { shutdownResearchPlugin } from './src/main/plugins/research/research-plugin-lifecycle';
     export { withLiteratureContext } from './src/main/services/literature-context';
@@ -112,7 +113,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 5);
+    assert.equal(result.schemaVersion, 6);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -372,7 +373,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 5);
+    assert.equal(result.schemaVersion, 6);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -725,12 +726,180 @@ test('cached responses cannot clear failures and caller cancellation cannot pois
   } finally { await search.shutdown(); }
 });
 
+test('owned search cancellation preserves dispatch receipts and scope before a candidate snapshot exists', async () => {
+  let startedResolve;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const search = new api.LiteratureSearchService(async (_url, init) => {
+    startedResolve();
+    return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true}));
+  });
+  const f = setup({search});
+  const controller = new AbortController();
+  const pending = f.run(() => f.service.search({query: 'cancelled original query', sources: ['crossref'], limit: 5}),
+    {signal: controller.signal});
+  const rejection = assert.rejects(pending, /cancelled_search/u);
+  try {
+    await started;
+    const execution = f.db.prepare('SELECT * FROM research_literature_search_executions').get();
+    assert.equal(execution.status, 'running');
+    assert.equal(execution.owner, f.scope.owner);
+    assert.equal(execution.project_id, f.project.id);
+    assert.equal(execution.run_id, f.scope.runId);
+    assert.equal(JSON.parse(execution.request_json).query, 'cancelled original query');
+    const active = f.db.prepare('SELECT * FROM research_literature_request_receipts WHERE execution_id=?').get(execution.id);
+    assert.equal(active.state, 'dispatched');
+    assert.equal(JSON.parse(active.receipt_json).endedAt, null);
+    controller.abort(new Error('cancelled_search'));
+    await rejection;
+    const completed = f.db.prepare('SELECT * FROM research_literature_search_executions WHERE id=?').get(execution.id);
+    assert.equal(completed.status, 'cancelled');
+    assert.equal(completed.search_id, null);
+    const receipt = JSON.parse(f.db.prepare('SELECT receipt_json FROM research_literature_request_receipts WHERE execution_id=?')
+      .pluck().get(execution.id));
+    assert.equal(receipt.status, null);
+    assert.equal(receipt.errorCode, 'literature_provider_cancelled');
+    assert.ok(receipt.endedAt);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
+  } finally {
+    controller.abort(new Error('cancelled_search'));
+    await Promise.allSettled([pending, rejection]);
+    await search.shutdown();
+    f.close();
+  }
+});
+
+test('audit persistence failures stop dispatch or publication and retain unknown transport state', async () => {
+  for (const phase of ['started', 'finished', 'snapshot']) {
+    let calls = 0;
+    const search = new api.LiteratureSearchService(async () => {
+      calls++;
+      return Response.json({message: {items: []}});
+    });
+    const f = setup({search});
+    try {
+      const trigger = phase === 'started' ? `BEFORE INSERT ON research_literature_request_receipts` :
+        phase === 'finished' ? `BEFORE UPDATE OF receipt_json ON research_literature_request_receipts` :
+          `BEFORE INSERT ON research_literature_searches`;
+      f.db.exec(`CREATE TRIGGER fixture_receipt_failure ${trigger} BEGIN SELECT RAISE(ABORT, 'fixture_receipt_write_failed'); END`);
+      await assert.rejects(f.run(() => f.service.search({query: `audit failure ${phase}`, sources: ['crossref'], limit: 5})),
+        phase === 'snapshot' ? /fixture_receipt_write_failed/u : /literature_request_audit_failed/u);
+      assert.equal(calls, phase === 'started' ? 0 : 1);
+      const execution = f.db.prepare('SELECT * FROM research_literature_search_executions').get();
+      assert.equal(execution.status, 'failed');
+      assert.equal(execution.search_id, null);
+      assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
+      const receipt = f.db.prepare('SELECT * FROM research_literature_request_receipts').get();
+      if (phase === 'started') assert.equal(receipt, undefined);
+      if (phase === 'finished') {
+        assert.equal(receipt.state, 'unknown');
+        assert.equal(JSON.parse(receipt.receipt_json).status, null);
+        assert.equal(JSON.parse(receipt.receipt_json).endedAt, null);
+      }
+      if (phase === 'snapshot') {
+        assert.equal(receipt.state, 'received');
+        assert.equal(JSON.parse(receipt.receipt_json).status, 200);
+      }
+    } finally { await search.shutdown(); f.close(); }
+  }
+});
+
+test('restart marks dispatched receipts unknown without inventing completion and fences late outcomes', async () => {
+  const f = setup();
+  try {
+    const ledger = new api.LiteratureSearchLedger(f.db, () => timestamp);
+    const id = ledger.begin(f.scope, {query: 'interrupted search', sources: ['crossref'], limit: 5, projectId: f.project.id});
+    const receipt = {attempt: 1, method: 'GET', url: 'https://api.crossref.org/works?query=interrupted',
+      startedAt: timestamp, endedAt: null, status: null, retryAfterMs: null, responseHash: null, errorCode: null};
+    const audit = ledger.audit(id);
+    audit('started', 'crossref', receipt);
+    f.make().recover();
+    const execution = f.db.prepare('SELECT * FROM research_literature_search_executions WHERE id=?').get(id);
+    assert.equal(execution.status, 'interrupted');
+    assert.equal(execution.error_code, 'literature_search_interrupted');
+    assert.equal(execution.run_id, f.scope.runId);
+    const interrupted = f.db.prepare('SELECT * FROM research_literature_request_receipts WHERE execution_id=?').get(id);
+    assert.equal(interrupted.state, 'unknown');
+    assert.deepEqual(JSON.parse(interrupted.receipt_json), receipt);
+    assert.throws(() => audit('finished', 'crossref', {...receipt, endedAt: timestamp, status: 200}), /literature_request_audit_failed/u);
+    assert.throws(() => ledger.finish(id, 'complete', 'invented', null), /literature_search_execution_not_active/u);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_literature_request_receipts WHERE execution_id=?').get(id), interrupted);
+    f.make().recover();
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_literature_search_executions WHERE id=?').get(id), execution);
+  } finally { f.close(); }
+});
+
+test('research v6 upgrade adds receipt tables without fabricating executions or rewriting old candidates', () => {
+  const db = new Database(':memory:');
+  try {
+    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations.filter(entry => entry.version <= 6)});
+    const old = JSON.stringify({schemaVersion: 5, searchId: 'old-search', candidates: []});
+    db.prepare(`INSERT INTO research_literature_searches VALUES ('old-search','thread:old',NULL,'{}',?,'2030-01-01')`).run(old);
+    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations});
+    assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_search_executions').pluck().get(), 0);
+    assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts').pluck().get(), 0);
+    assert.equal(db.prepare('SELECT result_json FROM research_literature_searches').pluck().get(), old);
+  } finally { db.close(); }
+});
+
+test('candidate expiry removes only the preview and preserves the linked execution and original request hash', async () => {
+  const search = new api.LiteratureSearchService(async () => Response.json({message: {items: []}}));
+  const f = setup({search});
+  try {
+    const first = await f.run(() => f.service.search({query: 'retained retrieval', sources: ['crossref'], limit: 5}));
+    const receipt = f.db.prepare('SELECT * FROM research_literature_request_receipts WHERE execution_id=?').get(first.executionId);
+    const execution = f.db.prepare('SELECT * FROM research_literature_search_executions WHERE id=?').get(first.executionId);
+    assert.equal(execution.search_id, first.searchId);
+    assert.equal(execution.status, 'complete');
+    f.setTime('2026-11-20T00:00:00.000Z');
+    await f.run(() => f.service.search({query: 'new retrieval', sources: ['crossref'], limit: 5}));
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches WHERE id=?').pluck().get(first.searchId), 0);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_literature_search_executions WHERE id=?').get(first.executionId), execution);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_literature_request_receipts WHERE execution_id=?').get(first.executionId), receipt);
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('import shutdown drains every source receipt before closing an interrupted search', async () => {
+  let startedResolve, lateResolve, calls = 0;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const late = new Promise(resolve => { lateResolve = resolve; });
+  const search = new api.LiteratureSearchService(async (url, init) => {
+    calls++;
+    if (calls === 2) startedResolve();
+    if (url.includes('openalex')) return late;
+    return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true}));
+  });
+  const f = setup({search});
+  const pending = f.run(() => f.service.search({query: 'shutdown receipts', sources: ['crossref', 'openalex'], limit: 5}));
+  const rejection = assert.rejects(pending, /literature_service_closed/u);
+  let shutdownFinished = false;
+  try {
+    await started;
+    const shutdown = f.service.shutdown().then(() => { shutdownFinished = true; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(shutdownFinished, false);
+    assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions').pluck().get(), 'running');
+    lateResolve(Response.json({results: []}));
+    await shutdown;
+    await rejection;
+    assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions').pluck().get(), 'interrupted');
+    const receipts = f.db.prepare('SELECT state,receipt_json FROM research_literature_request_receipts').all();
+    assert.equal(receipts.length, 2);
+    assert.ok(receipts.every(row => row.state === 'received' && JSON.parse(row.receipt_json).endedAt !== null));
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
+  } finally {
+    lateResolve(Response.json({results: []}));
+    await Promise.allSettled([pending, rejection]);
+    await search.shutdown();
+    f.close();
+  }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 5, ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 6, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);

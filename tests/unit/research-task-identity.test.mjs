@@ -203,7 +203,7 @@ test('migration preserves old stage snapshots as explicitly unlinked without inv
   const f = fixture();
   const old = new Database(':memory:');
   try {
-    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations.slice(0, -1) });
+    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations.filter(entry => entry.version < 6) });
     const projectRow = f.db.prepare('SELECT * FROM research_projects WHERE id = ?').get(f.project.id);
     const columns = Object.keys(projectRow);
     old.prepare(`INSERT INTO research_projects (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`)

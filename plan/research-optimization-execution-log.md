@@ -970,3 +970,47 @@ Newest official Crossref July21,2026 list-query guidance and arXiv API ToU were 
 on2026-11-03. Docs link both and distinguish stale generic Crossref limits. No live search,
 paid model, account email or external write. Logs:
 `.artifacts/research-optimization/pr04-governance-*.log`.
+
+## PR-04.2D — durable owned-search execution and request receipts
+
+Status: `Verified passing` for persisted cancellation, restart, write failures and native
+consumers. Paging, strong aliases, candidate metadata UI and independent quality metrics
+remain pending. Inspector/read surfaces for this backend ledger are also subsequent scope.
+
+Research migration7 adds trusted owner/project/run-scoped search executions and original
+transport receipts. Executions are saved before search; dispatched receipts are saved
+before HTTP; local outcomes become received. Unknown HTTP status is never invented.
+Snapshot v6 requires executionId, and candidate publication shares the transaction that
+finishes its execution. Cancelled/interrupted searches retain chronology without a
+candidate. Preview expiry leaves execution and receipt history intact.
+
+Receipt write failures propagate: before dispatch they prevent HTTP; after dispatch they
+prevent candidate publication and retain unknown transport state. Restart marks unfinished
+requests unknown without inventing end times/hashes/status, terminates execution and fences
+late receipt writes. Search drains every source promise; import shutdown awaits all search
+audits. Existing old-stage migration test now pins its actual <6 baseline instead of a
+moving slice. Migration does not fabricate executions for old candidates.
+
+Changed: database-schemas.ts, literature-search-ledger.ts, literature-service.ts,
+literature-import-service.ts, search result schema, literature and identity regressions,
+fusion documentation. No dependency or renderer change.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='owned search cancellation' tests/unit/literature-import.test.mjs` | Red: no durable execution/receipt table |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/research-task-identity.test.mjs` | Initial 36/36 passed before five final persistence/upgrade/shutdown cases |
+| `pnpm typecheck` | Passed; final included in fresh build |
+| `pnpm test:unit` | Final 666/666 passed, including all final cases |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Current generated contracts |
+| `pnpm test:research-p0` | Fresh production build/typecheck and 12/12 native cases passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12 passed, zero renderer errors, exit 0 |
+| `git diff --check` | Passed |
+
+Read-only SQLite inspection of retained native standard-workflow backup confirmed one
+complete owned search, one received hashed request and one atomically linked candidate
+snapshot. The figure-only scenario correctly has none. Evidence:
+`.artifacts/research-optimization/pr04-durable-native-ledger.log`; full logs:
+`.artifacts/research-optimization/pr04-durable-*.log`.

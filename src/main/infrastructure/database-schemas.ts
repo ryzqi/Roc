@@ -1493,6 +1493,27 @@ UPDATE research_stage_runs SET snapshot_json = json_set(snapshot_json, '$.taskId
 `
 });
 
+researchMigrations.push({
+  version: 7,
+  name: 'literature_search_execution_receipts',
+  sql: `
+CREATE TABLE research_literature_search_executions (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, run_id TEXT,
+  request_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('running','complete','partial','failed','cancelled','interrupted')),
+  search_id TEXT, error_code TEXT, created_at TEXT NOT NULL, ended_at TEXT
+);
+CREATE INDEX research_literature_execution_scope ON research_literature_search_executions(owner, project_id, created_at);
+CREATE INDEX research_literature_execution_run ON research_literature_search_executions(run_id);
+CREATE TABLE research_literature_request_receipts (
+  execution_id TEXT NOT NULL REFERENCES research_literature_search_executions(id) ON DELETE CASCADE,
+  source TEXT NOT NULL, attempt INTEGER NOT NULL CHECK (attempt > 0),
+  state TEXT NOT NULL CHECK (state IN ('dispatched','received','unknown')),
+  receipt_json TEXT NOT NULL, PRIMARY KEY (execution_id,source,attempt)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

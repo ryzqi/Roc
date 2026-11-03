@@ -10,6 +10,7 @@ import { assertLiteratureActive, literatureContext, type LiteratureExecutionCont
 import { betterBibtexKey } from './cite-key';
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import { fuseLiterature, literatureRanking } from './literature-fusion';
+import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literature-search-ledger';
 import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
@@ -26,40 +27,68 @@ const terminal = (result: LiteratureImportResult): boolean => !['queued', 'runni
 /** Bounded metadata import ledger. No provider or bibliography worker runs inside a transaction. */
 export class LiteratureImportService {
   private readonly active = new Map<string, { controller: AbortController; promise: Promise<LiteratureImportResult> }>();
+  private readonly searches = new Set<Promise<LiteratureSearchResult>>();
+  private readonly lifetime = new AbortController();
+  private readonly searchLedger: LiteratureSearchLedger;
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
     private readonly searchService: LiteratureSearchService, private readonly prepare: Pick<ResearchLibraryService, 'prepareDoi' | 'prepareRecord'>,
-    private readonly changed: (result: LiteratureImportResult) => Promise<void>, private readonly now: () => string = () => new Date().toISOString()) {}
+    private readonly changed: (result: LiteratureImportResult) => Promise<void>, private readonly now: () => string = () => new Date().toISOString()) {
+    this.searchLedger = new LiteratureSearchLedger(db, now);
+  }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
+    const pending = this.executeSearch(input);
+    this.searches.add(pending);
+    try { return await pending; }
+    finally { this.searches.delete(pending); }
+  }
+
+  private async executeSearch(input: unknown): Promise<LiteratureSearchResult> {
     const request = literatureSearchInputSchema.parse(input);
     const context = literatureContext();
     this.requireActive(context);
     this.library.validateDestination(context.projectId);
     const scopedRequest = {...request, projectId: context.projectId};
-    const found = await this.searchService.searchDetailed(scopedRequest, context.signal);
-    this.requireActive(context);
-    const createdAt = this.now();
-    let unknownYear = false;
-    const grouped = fuseLiterature(found.records).filter(candidate => {
-      if (request.yearFrom === undefined && request.yearTo === undefined) return true;
-      if (candidate.record.publishedYear === null) { unknownYear = true; return false; }
-      return (request.yearFrom === undefined || candidate.record.publishedYear >= request.yearFrom)
-        && (request.yearTo === undefined || candidate.record.publishedYear <= request.yearTo);
-    });
-    const candidates: LiteratureCandidate[] = grouped.slice(0, request.limit).map(candidate => {
-      const match = this.library.findByIdentity(candidate.identity);
-      return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
-        missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
-    });
-    const result: LiteratureSearchResult = { schemaVersion: 5, ranking: literatureRanking(request.sources),
-      searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
-      status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
-      warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
-    this.db.prepare('DELETE FROM research_literature_searches WHERE expires_at <= ?').run(createdAt);
-    this.db.prepare('INSERT INTO research_literature_searches (id,owner,project_id,request_json,result_json,expires_at) VALUES (?,?,?,?,?,?)')
-      .run(result.searchId, context.owner, context.projectId, JSON.stringify(scopedRequest), JSON.stringify(result), result.expiresAt);
-    return result;
+    const executionId = this.searchLedger.begin(context, scopedRequest);
+    try {
+      const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+      const found = await this.searchService.searchDetailed(scopedRequest, signal, this.searchLedger.audit(executionId));
+      this.requireActive(context);
+      const createdAt = this.now();
+      let unknownYear = false;
+      const grouped = fuseLiterature(found.records).filter(candidate => {
+        if (request.yearFrom === undefined && request.yearTo === undefined) return true;
+        if (candidate.record.publishedYear === null) { unknownYear = true; return false; }
+        return (request.yearFrom === undefined || candidate.record.publishedYear >= request.yearFrom)
+          && (request.yearTo === undefined || candidate.record.publishedYear <= request.yearTo);
+      });
+      const candidates: LiteratureCandidate[] = grouped.slice(0, request.limit).map(candidate => {
+        const match = this.library.findByIdentity(candidate.identity);
+        return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
+          missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
+      });
+      const result: LiteratureSearchResult = { schemaVersion: 6, ranking: literatureRanking(request.sources), executionId,
+        searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
+        status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
+        warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
+      this.db.transaction(() => {
+        this.db.prepare('DELETE FROM research_literature_searches WHERE expires_at <= ?').run(createdAt);
+        this.db.prepare('INSERT INTO research_literature_searches (id,owner,project_id,request_json,result_json,expires_at) VALUES (?,?,?,?,?,?)')
+          .run(result.searchId, context.owner, context.projectId, JSON.stringify(scopedRequest), JSON.stringify(result), result.expiresAt);
+        this.searchLedger.finish(executionId, result.status, result.searchId, null);
+      })();
+      return result;
+    } catch (error) {
+      const interrupted = this.closed || error instanceof Error &&
+        ['literature_service_closed', 'research_run_interrupted_by_shutdown'].includes(error.message);
+      const status = interrupted ? 'interrupted' : context.signal?.aborted ? 'cancelled' : 'failed';
+      const errorCode = interrupted ? 'literature_search_interrupted' : status === 'cancelled' ? 'literature_search_cancelled' :
+        error instanceof LiteratureRequestAuditError ? error.message : 'literature_search_failed';
+      try { this.searchLedger.finish(executionId, status, null, errorCode); }
+      catch (ledgerError) { throw new AggregateError([error, ledgerError], 'literature_search_record_failed'); }
+      throw error;
+    }
   }
 
   readSearch(input: unknown): LiteratureSearchResult {
@@ -135,6 +164,7 @@ export class LiteratureImportService {
 
   /** A restart cannot prove a former run is still authorized. Preserve commits and terminate remaining items. */
   recover(): void {
+    this.searchLedger.recover();
     const rows = this.db.prepare('SELECT * FROM research_literature_imports').all() as OperationRow[];
     for (const row of rows) {
       const result = this.result(row);
@@ -148,8 +178,9 @@ export class LiteratureImportService {
 
   async shutdown(): Promise<void> {
     this.closed = true;
+    this.lifetime.abort(new Error('literature_service_closed'));
     for (const task of this.active.values()) task.controller.abort();
-    await Promise.allSettled([...this.active.values()].map((task) => task.promise));
+    await Promise.allSettled([...this.searches, ...[...this.active.values()].map((task) => task.promise)]);
   }
 
   private async execute(context: LiteratureExecutionContext, signal: AbortSignal, result: LiteratureImportResult, frozen: FrozenEntry[]): Promise<LiteratureImportResult> {
