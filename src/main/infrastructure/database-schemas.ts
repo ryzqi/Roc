@@ -4,6 +4,7 @@ import { applyDatabaseMigrations, type RocDatabaseMigration } from './database-m
 import type { RocLogicalDatabaseName } from './database-pragmas';
 import { migrateLiteratureIdentity } from '../plugins/research/literature-identity-migration';
 import { migrateLiteratureAliases } from '../plugins/research/literature-alias-migration';
+import {migrateHistoricalEvidenceRelationsV21} from '../plugins/research/evidence-relations-migration-v21';
 
 type Clock = () => string;
 
@@ -1734,6 +1735,29 @@ CREATE TABLE research_evidence_source_locators (
   captured_at TEXT NOT NULL
 );
 `
+});
+
+researchMigrations.push({
+  version: 21, name: 'versioned_claim_evidence_relations',
+  sql: `
+CREATE TABLE research_evidence_relations (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  claim_id TEXT NOT NULL REFERENCES research_claims(id) ON DELETE CASCADE,
+  evidence_id TEXT NOT NULL REFERENCES research_evidence(id),
+  claim_version INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('supports','contradicts','qualifies','depends_on','supersedes','historical')),
+  status TEXT NOT NULL CHECK(status IN ('proposed','confirmed','rejected','invalidated','historical')),
+  version INTEGER NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_research_evidence_relations_claim ON research_evidence_relations(project_id,claim_id,status);
+CREATE INDEX idx_research_evidence_relations_source ON research_evidence_relations(evidence_id,status);
+CREATE TABLE research_evidence_relation_revisions (
+  relation_id TEXT NOT NULL REFERENCES research_evidence_relations(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  PRIMARY KEY(relation_id,version)
+);
+`,
+  data: {dataVersion: 'historical-evidence-associations-v21/1', migrate: migrateHistoricalEvidenceRelationsV21}
 });
 
 function applySchema(

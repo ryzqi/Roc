@@ -95,7 +95,8 @@ export class ResearchRepository {
     this.projectLanguageReady = this.db.prepare("SELECT 1 FROM pragma_table_info('research_projects') WHERE name = 'language'").get() !== undefined;
     this.evidence = new ResearchEvidenceRepository(db, {
       get: (id) => this.getArtifact(id),
-      requireEditable: (id) => this.requireEditableArtifact(id)
+      requireEditable: (id) => this.requireEditableArtifact(id),
+      requireReviewable: (id) => this.requireRelationReviewableArtifact(id)
     }, now);
     this.manuscripts = new ResearchManuscriptRepository(db, {
       get: (id) => this.getArtifact(id),
@@ -322,7 +323,8 @@ export class ResearchRepository {
       if (artifact.kind === 'export_package') production = {kind: 'export', execution: this.exports.forArtifact(artifact)};
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
-        stage, content, origin, claims, evidence, production, provenance: rows.map(toProvenance), availableActions
+        stage, content, origin, claims, evidence, relations: this.evidence.relations.forArtifact(artifact.id, project.id),
+        production, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({
@@ -424,6 +426,19 @@ export class ResearchRepository {
     const artifact = this.getArtifact(id);
     if (artifact.status !== 'draft') throw new Error('research_artifact_immutable');
     this.requireEditableStage(artifact.projectId, artifact.stage);
+    return artifact;
+  }
+
+  /** Human relation decisions append review metadata while a draft waits at its original gate. */
+  requireRelationReviewableArtifact(id: string): ResearchArtifact {
+    const artifact = this.getArtifact(id);
+    if (artifact.status !== 'draft') throw new Error('research_artifact_immutable');
+    const project = this.getProject(artifact.projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    if (project.currentStage !== artifact.stage) throw new Error('research_artifact_stage_inactive');
+    const stage = this.readStage(project.id, artifact.stage);
+    this.requireStatus(stage, ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'], 'research_relation_stage_not_reviewable');
+    if (!stage.artifactIds.includes(artifact.id)) throw new Error('research_relation_artifact_inactive');
     return artifact;
   }
 

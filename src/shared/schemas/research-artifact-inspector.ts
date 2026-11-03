@@ -1,9 +1,10 @@
 import {z} from 'zod';
 import {researchArtifactSchema, researchStageStateSchema, researchProvenanceSchema, researchProjectSchema} from './research';
 import {researchArtifactContentSchema, researchStageRunSchema} from './research-runs';
-import {researchClaimSchema, researchEvidenceSchema} from './research-evidence';
+import {researchClaimSchema} from './research-evidence';
 import {researchProductionInputSchema} from './research-production-inputs';
-import {researchSourceLocatorSchema} from './research-source-locator';
+import {researchInspectedEvidenceSchema} from './research-evidence-source';
+import {researchEvidenceRelationSchema} from './research-evidence-relations';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
@@ -14,10 +15,6 @@ export const researchArtifactLinkSchema = researchArtifactInspectRequestSchema.e
 });
 export const researchArtifactLinksSchema = researchArtifactLinkSchema.array().min(1).refine(
   links => new Set(links.map(link => link.artifactId)).size === links.length, 'Artifact links must be unique.');
-export const researchInspectedEvidenceSchema = z.object({
-  evidence: researchEvidenceSchema, referenceStatus: z.enum(['recorded', 'superseded']),
-  invalidatedAt: z.string().nullable(), sourceLocator: researchSourceLocatorSchema.nullable()
-}).strict();
 export const researchArtifactOriginSchema = researchStageRunSchema.pick({
   id: true, taskId: true, stage: true, status: true, providerId: true, modelId: true,
   modelVersion: true, skillHash: true, inputArtifactIds: true
@@ -27,6 +24,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   currentStage: researchStageStateSchema.shape.stage, stage: researchStageStateSchema,
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
+  relations: researchEvidenceRelationSchema.array(),
   production: researchProductionInputSchema.shape.source.nullable(),
   provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task', 'review_gate']).array().max(2)
 }).strict();
@@ -36,4 +34,3 @@ export const researchArtifactInspectResultSchema = z.object({
 }).strict();
 export type ResearchArtifactInspectRequest = z.infer<typeof researchArtifactInspectRequestSchema>;
 export type ResearchArtifactInspectResult = z.infer<typeof researchArtifactInspectResultSchema>;
-export type ResearchInspectedEvidence = z.infer<typeof researchInspectedEvidenceSchema>;

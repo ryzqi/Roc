@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
-import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-artifact-inspector';
+import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
 import {captureEvidenceSourceLocator, inspectEvidenceSourceLocator} from './evidence-source-locator';
+import {ResearchEvidenceRelationRepository} from './evidence-relation-repository';
 
 import {
   researchClaimCreateRequestSchema,
@@ -22,6 +23,7 @@ import type {
 type ArtifactAccess = {
   get(id: string): ResearchArtifact;
   requireEditable(id: string): ResearchArtifact;
+  requireReviewable(id: string): ResearchArtifact;
 };
 
 const evidenceColumns = `id, project_id AS projectId, document_id AS documentId, chunk_id AS chunkId,
@@ -31,11 +33,12 @@ const claimColumns = `id, project_id AS projectId, artifact_id AS artifactId, su
   content, status, evidence_ids_json, version, created_at AS createdAt, updated_at AS updatedAt`;
 
 export class ResearchEvidenceRepository {
+  readonly relations: ResearchEvidenceRelationRepository;
   constructor(
     private readonly db: Database,
     private readonly artifacts: ArtifactAccess,
     private readonly now: () => string
-  ) {}
+  ) {this.relations = new ResearchEvidenceRelationRepository(db, this, artifacts, now);}
 
   capture(request: ResearchEvidenceCaptureRequest): ResearchEvidence {
     this.requireProject(request.projectId);
@@ -128,6 +131,7 @@ export class ResearchEvidenceRepository {
     this.db.transaction(() => {
       this.db.prepare('UPDATE research_claims SET content = ?, status = ?, evidence_ids_json = ?, version = ?, updated_at = ? WHERE id = ?')
         .run(claim.content, claim.status, JSON.stringify(claim.evidenceIds), claim.version, claim.updatedAt, claim.id);
+      this.relations.invalidateClaim(claim.id);
       this.recordClaimRevision(claim);
       this.recordClaimProvenance(claim);
       this.recordChange(artifact, claim.id, 'claim_updated', claim.updatedAt);
@@ -209,8 +213,14 @@ export class ResearchEvidenceRepository {
    * 调用方（删块的那几个点）在删除之前调这里，语义就是“这批块即将消失”。
    */
   invalidateChunksOf(knowledgeDocumentId: string): number {
-    return this.db.prepare('UPDATE research_evidence SET invalidated_at = ?\n      WHERE invalidated_at IS NULL AND chunk_id LIKE ?')
-      .run(this.now(), `${knowledgeDocumentId}:chunk:%`).changes;
+    return this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT id FROM research_evidence WHERE invalidated_at IS NULL AND chunk_id LIKE ?')
+        .all(`${knowledgeDocumentId}:chunk:%`) as Array<{id: string}>;
+      const changes = this.db.prepare('UPDATE research_evidence SET invalidated_at = ?\n      WHERE invalidated_at IS NULL AND chunk_id LIKE ?')
+        .run(this.now(), `${knowledgeDocumentId}:chunk:%`).changes;
+      for (const row of rows) this.relations.invalidateEvidence(row.id);
+      return changes;
+    })();
   }
 
   private validateSupport(claim: Pick<ResearchClaim, 'projectId' | 'status' | 'evidenceIds'>): void {

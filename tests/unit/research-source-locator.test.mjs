@@ -139,9 +139,11 @@ test('changed source block or parse identity rolls back capture; existing captur
 
 test('19 to 20 migration preserves historical raw evidence claim state and absence of captured document coordinates',()=>{
   const db=new Database(':memory:');db.pragma('foreign_keys=ON');
+  const agentDb=new Database(':memory:');
   try {
     api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=19)});
-    const repository=new api.ResearchRepository(db,()=>timestamp);
+    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
+    const repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
     const project=repository.createProject({title:'Historical locator',description:'Migration fixture',workspacePath:'/tmp/locator-migration'});
     const artifact=repository.createArtifact({projectId:project.id,stage:'discovery',kind:'search_strategy',title:'Historical claim',path:null});
     db.prepare(`INSERT INTO research_evidence (id,project_id,document_id,chunk_id,source_type,source_id,source_version,title,locator,excerpt,content_hash,created_at)
@@ -150,13 +152,14 @@ test('19 to 20 migration preserves historical raw evidence claim state and absen
     db.prepare(`INSERT INTO research_claims (id,project_id,artifact_id,subject_type,content,status,evidence_ids_json,version,created_at,updated_at)
       VALUES ('historical-claim',?,?,'claim','Old saved claim','supported','[\"historical-evidence\"]',1,?,?)`)
       .run(project.id,artifact.id,timestamp,timestamp);
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    const locatorMigrations=api.researchMigrations.filter(m=>m.version<=20);
+    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:locatorMigrations,now:()=>timestamp});
     const inspected=repository.evidence.inspectEvidence('historical-evidence',project.id);
     assert.equal(inspected.evidence.locator,'p1');assert.equal(inspected.sourceLocator,null);
     assert.equal(repository.evidence.getClaim('historical-claim').status,'supported');
     assert.equal(db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),0);
     const changes=db.prepare('SELECT total_changes()').pluck().get();
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:locatorMigrations,now:()=>timestamp});
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
-  }finally{db.close();}
+  }finally{db.close();agentDb.close();}
 });

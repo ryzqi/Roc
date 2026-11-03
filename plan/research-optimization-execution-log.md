@@ -2525,3 +2525,38 @@ Three older literature migration tests expected final DB19 while applying all mi
 updated final version to20 retaining every data/provenance assertion. No frozen fixture, live
 query/client, paid model or remote write. Coordinate projection/preview belongs to PR-07.
 Next PR-06 semantic relation proposal/review/history and consumers/UI; whole plan unfinished.
+
+## ROC-PR-06A2 — versioned relation proposals, human decisions and history
+
+DB21 stores complete claim/source snapshots and supports/contradicts/qualifies/depends_on/
+supersedes proposals. User-only reviews bind relation/claim/source versions; confirmed
+supersession invalidates the prior relation atomically. Claim/source writers invalidate active
+relations in their existing transaction and retain original reviewers plus system reasons.
+History-write failure rolls back every affected change. Historical evidenceIds migrate without
+invented semantic reviews or changed claim status; invalid endpoints roll back to DB20.
+Required inspector relations participate artifact SHA and stale the original gate capture.
+User metadata review works at the current waiting gate; content editing remains stage locked.
+
+Verification from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm typecheck` |Final2 passed |
+| `pnpm test:unit` |Final2 841/841 passed |
+| `pnpm harness:eval` |94/94 passed; subsequent change only adds waiting-gate user review boundary |
+| `pnpm test:research-p0` |Final2 fresh build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/` |Clean96/96 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Clean12/12; zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs pr06-relations-*.log. Native actual parsed PDF writing claim records explicit synthetic
+local-user repository proposed→confirmed seam and retained evidence-relation-history.json;
+old gate approval refuses without writes, then explicit new versions allow the original gate.
+Model transport, strict semantic consumers and matrix UI remain next; PR-06 is not complete.
+Two early full renderer runs timed out on the unchanged settings second Escape. Standalone1,
+preceding pair4, prefix53, instrumented96 and final original clean96 passed. Temporary tagged
+traces removed; settings source/test unchanged; intermittent cause not established or claimed
+fixed. Name-filtered directory probe hung in an unmatched before hook and was terminated;
+not counted as verification. Frozen research-workflow fixtures remain untouched. No remote
+writes, paid models or live literature requests.

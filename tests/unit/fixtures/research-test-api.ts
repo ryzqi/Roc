@@ -55,3 +55,5 @@ export {ResearchProductionInputService} from '../../../src/main/plugins/research
 export {registerResearchProductionInputCapabilities} from '../../../src/main/plugins/research/production-input-capabilities';
 export {researchProductionInputSchema, researchProductionInputContentSchema} from '../../../src/shared/schemas/research-production-inputs';
 export {researchSourceLocatorSchema} from '../../../src/shared/schemas/research-source-locator';
+export {relationSourceDigest, relationClaimHash} from '../../../src/main/plugins/research/evidence-relation-repository';
+export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema} from '../../../src/shared/schemas/research-evidence-relations';
