@@ -14,6 +14,7 @@ import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchRepository } from './repository';
 import type { ResearchExecutionContext } from './run-repository';
 import { requireConfirmedSearchStrategy } from './search-strategy';
+import {relationSourceDigest} from './evidence-relation-repository';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -41,6 +42,27 @@ export function createResearchRoleTools(input: {
   };
   const after = <T>(value: T): T => { assertActive(); return value; };
   const factories: Record<string, () => StructuredToolInterface> = {
+    inspect_evidence_source: () => tool(async ({evidenceId, offset, limit}) => {
+      assertActive();
+      const source = input.repository.evidence.inspectEvidence(evidenceId, input.run.projectId);
+      return {evidenceId, sourceDigest: relationSourceDigest(source), referenceStatus: source.referenceStatus,
+        ...page(JSON.stringify(source), offset, limit)};
+    }, {name: 'inspect_evidence_source', description: '分页读取当前项目的固定证据原文、parse/source版本、定位及校验。superseded来源只能核查历史，不能当作当前支持。',
+      schema: z.object({evidenceId: z.string().min(1), offset: z.number().int().nonnegative(),
+        limit: z.number().int().min(1).max(8000)}).strict()}),
+    list_evidence_relations: () => tool(async ({claimId, offset, limit}) => {
+      assertActive();
+      const relations = input.repository.evidence.relations.list({projectId: input.run.projectId, claimId});
+      return {total: relations.length, items: relations.slice(offset, offset + limit).map(relation => ({
+        id: relation.id, claimId: relation.claimId, claimVersion: relation.claimVersion,
+        evidenceId: relation.evidenceId, kind: relation.kind, status: relation.status, condition: relation.condition,
+        version: relation.version, sourceDigest: relation.sourceDigest, proposer: relation.proposer,
+        reviewer: relation.reviewer, reviewedAt: relation.reviewedAt, invalidatedReason: relation.invalidatedReason,
+        excerpt: relation.source.evidence.excerpt.slice(0, 2000), excerptChars: relation.source.evidence.excerpt.length
+      }))};
+    }, {name: 'list_evidence_relations', description: '分页读取本项目真实主张关系。proposed是推断，historical未经语义审核，confirmed仅表示所列用户审核了捕获版本；不能把关联或模型解释当作人工确认。',
+      schema: z.object({claimId: z.string().min(1).nullable(), offset: z.number().int().nonnegative(),
+        limit: z.number().int().min(1).max(20)}).strict()}),
     inspect_production_input: () => tool(async ({ artifactId, section, offset, limit }) => {
       requireInput(artifactId);
       const result = researchProductionInputSchema.parse(await input.capabilities.invoke('research.artifacts.inspectProduction', {

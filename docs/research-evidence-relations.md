@@ -31,7 +31,7 @@ digest。confirm/reject 追加审核人、时间、说明及不可替换的修�
 supersedes 仅在用户确认时撤销旧关系；拒绝或未审核提议不改变旧关系。
 仓库接受可信 main 调用者提供的 actor。用户 IPC 的 actor 由 main 从实际
 sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核人。
-模型提议工具仍属于后续增量；检查器已经接通用户提议与审核按钮。
+模型 supported 产出已经接通 proposed supports；检查器提供用户提议与审核按钮。
 
 主张修改和证据失效在原写入事务中撤销 proposed/confirmed/historical 关系，
 保留原始来源和审核人，追加 system 原因。修订写入失败时，原主张/证据更新及
@@ -93,6 +93,25 @@ hypothesis 状态。缺少当前权限、旧工件或失效来源不能审核或
 current source inspector 也包含关系的真实 evidence 端点，不能只枚举旧
 evidenceIds。矩阵跳转聚焦详情组；原生 summary 保持独立键盘展开。
 
+## 模型产出与只读角色工具
+
+阶段输出中的 supported 是模型的支持性声明。main 在保存真实 Claim 后，
+为每个声明的真实 evidenceId 保存 proposed supports，绑定实际阶段 run、
+claim version/hash 和完整来源/digest；审核人、审核时间、审核说明为空。
+hypothesis/pending 的来源关联不自动转换成支持关系，也不升级主张状态。
+产出保存与提议/历史使用原事务，关系历史失败回滚工件、主张、正文及 run
+completion；重复完成、结束或非当前阶段的 agent 不能再提出关系。
+
+角色通过 `inspect_evidence_source` 分页读取固定原文与 source digest，
+通过 `list_evidence_relations` 区分 proposed/confirmed/historical/invalidated。
+工具的项目来自 main 绑定，要求真实 active run；来源失效可核查旧原文，
+取消后的工具拒绝读取。列表明确标原文截取长度，完整来源通过分页读取。
+角色没有用户确认能力；写入 reviewer 仍只能走可信窗口上下文。
+
+本增量模型产出直接表达 supports，其他关系类型仍由用户显式提议。
+批准和当前导出的严格关系准入仍属于下一增量，不能把此模型提议当作已经
+通过科学语义审核。
+
 ## 已验证范围
 
 来源定位增量 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
@@ -109,6 +128,6 @@ repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域�
 ## 后续验收
 
 `evidenceIds` 是来源关联，不表示已经人工确认科学支持。明确关系、版本绑定、
-人工审核、修订历史与 UI 已实现；模型产出提议、严格语义消费者准入、定位迁移
-候选及历史导出仍待接通。来源完整性、科学语义和人工审核分别报告，PR-06
+人工审核、修订历史、模型支持提议与 UI 已实现；严格语义消费者准入、定位
+迁移候选及历史导出仍待接通。来源完整性、科学语义和人工审核分别报告，PR-06
 整体尚未完成。

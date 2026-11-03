@@ -20,6 +20,7 @@ import { getResearchStageRoleProfile, researchCapabilityToolNames } from './role
 import { getResearchSkillInstructions } from './research-skills';
 import { researchReviewRoles } from './review-repository';
 import { requireConfirmedSearchStrategy, searchPlanReviewMarkdown } from './search-strategy';
+import {relationSourceDigest} from './evidence-relation-repository';
 
 const executionContextSchema = z.object({
   project: researchProjectSchema,
@@ -425,6 +426,16 @@ export class ResearchRunRepository {
 
   private attachOutput(run: ResearchStageRun, artifact: ResearchArtifact, output: ResearchStageOutput, timestamp: string): void {
     const claims = output.claims.map((claim) => this.research.evidence.createClaim({ ...claim, projectId: run.projectId, artifactId: artifact.id }));
+    // Model "supported" is a semantic proposal, never a recorded human confirmation.
+    for (const claim of claims) {
+      if (claim.status !== 'supported') continue;
+      for (const evidenceId of claim.evidenceIds) {
+        const source = this.research.evidence.inspectEvidence(evidenceId, run.projectId);
+        this.research.evidence.relations.propose({projectId: run.projectId, claimId: claim.id,
+          expectedClaimVersion: claim.version, evidenceId, expectedSourceDigest: relationSourceDigest(source),
+          kind: 'supports', condition: null, supersedesRelationId: null}, {kind: 'agent', id: run.id});
+      }
+    }
     if (run.outputKind === 'manuscript') {
       this.research.manuscripts.saveManuscript({
         artifactId: artifact.id,

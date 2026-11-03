@@ -42,8 +42,11 @@ export class ResearchEvidenceRelationRepository {
       const artifact = proposer.kind === 'agent' ? this.artifacts.requireEditable(claim.artifactId) :
         this.artifacts.requireReviewable(claim.artifactId);
       if (artifact.projectId !== request.projectId) throw new Error('research_relation_project_mismatch');
-      if (proposer.kind === 'agent' && this.db.prepare('SELECT id FROM research_stage_runs WHERE id=? AND project_id=?')
-        .get(proposer.id, request.projectId) === undefined) throw new Error('research_relation_proposer_invalid');
+      if (proposer.kind === 'agent' && this.db.prepare(`SELECT r.id FROM research_stage_runs r
+        JOIN research_stage_states s ON s.project_id=r.project_id AND s.stage=r.stage
+        WHERE r.id=? AND r.project_id=? AND r.stage=? AND r.status='running' AND s.status='running'
+          AND s.active_run_id=COALESCE(json_extract(r.snapshot_json,'$.parentRunId'),r.id)`)
+        .get(proposer.id, request.projectId, artifact.stage) === undefined) throw new Error('research_relation_proposer_invalid');
       if (claim.version !== request.expectedClaimVersion) throw new Error('research_relation_claim_changed');
       const source = this.evidence.inspectEvidence(request.evidenceId, request.projectId);
       if (source.referenceStatus !== 'recorded') throw new Error('research_relation_source_invalidated');

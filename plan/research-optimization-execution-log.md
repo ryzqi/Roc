@@ -2634,3 +2634,35 @@ visible focus; test controls wait for visibility and assert actual focus before 
 probe had no saved location/restore callbacks; reading restoration code unchanged. Temporary
 probes removed, original assertions/timeouts preserved. Model proposals, strict semantic
 consumers, migration candidates and historical exports remain next; PR-06 is incomplete.
+
+## ROC-PR-06A3C — bound model support proposals and readonly role facts
+
+Actual stage completion records model supported declarations as proposed supports per real
+evidenceId, inside the original artifact/claim/content/run transaction. Proposer is the actual
+running stage/active lineage. Hypothesis/pending associations remain nonsemantic and their
+status is unchanged. History failure rolls back the whole output; duplicate completion or
+completed/foreign producer cannot write another proposal. No output schema aliases or frozen
+fixture edits. Role tools expose paginated fixed source/digest and relation facts under bound
+project/active-run checks; no human review tool. User-reviewed snapshots remain distinct.
+
+Verification from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm typecheck` |Initial and final fresh build passed |
+| `node --test tests/unit/research-model-relation-proposals.test.mjs tests/unit/research-evidence-relations.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs tests/unit/research-search-plan.test.mjs tests/unit/research-figure-owned.test.mjs` |33/33 passed |
+| `pnpm test:unit` |Final849/849 passed |
+| `pnpm harness:eval` |Final94/94 passed |
+| `pnpm test:research-p0` |Final fresh build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs` |Final27/27 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs pr06-model-relations-*.log. Actual native PDF/stage model output saves
+model-relation-proposals.json alongside human evidence-relation-history.json. Inspected two
+actual writing-run proposed supports, null reviewers/times, one fixed native PDF locator and
+one actual unmanaged experiment source. Native gate version changes still refuse old captures.
+No paid/live model query, remote writes or fixture changes. Existing scientific quality and
+actual Zotero-client limitations remain. Strict semantic approval/export consumers, invalidation
+seals, source-migration candidates and historical exports are next; PR-06 remains incomplete.
