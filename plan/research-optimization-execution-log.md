@@ -682,3 +682,25 @@ No product implementation changed in this increment. Runner supports Node test s
 flags. Unknown usage produces call_unknown instead of a successful settlement event; the
 fixture now asserts that actual event. No check was weakened, no paid calls or remote writes.
 Logs: `.artifacts/research-optimization/p0-fault-*.log`.
+
+## P0.5 — native experiment and figure restart recovery
+
+Status: `Verified passing` for two offline restart scenarios. Hostile PDF and MCP
+unknown-side-effect integration remain pending. Live L2 prerequisites are unchanged.
+
+The suite waits for a real sandboxed experiment output marker or native figure render
+marker, backs up both databases while the job and stage are running, and shuts down the
+owned native process. Reopening those running snapshots exercises the actual startup
+budget, dispatch-grant, stage, experiment and figure recovery methods. Running executions
+become interrupted, their ownership and task identities survive, an outstanding model
+reservation remains unknown, issued grants are revoked, and late publication refuses.
+No new stage or Provider request is automatically dispatched. Graceful cleanup cancels
+the original owned job; the reopened crash snapshot correctly records it as interrupted.
+This is persisted crash-state recovery with real child cleanup, not an OS process-kill test.
+
+Command from `/Users/Apple_501/Desktop/Roc/Roc`:
+`node scripts/run-research-p0.mjs '--test-name-pattern=restart during'` passed 2/2.
+`git diff --check` passed. No product code changed, so no rebuild was needed.
+Log: `.artifacts/research-optimization/p0-restart.log`. Before/after DB snapshots,
+original running identities, recovered file/hash lists, diagnostics and events are retained
+under `.artifacts/research-optimization/p0-production/<taskId>/`.

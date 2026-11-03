@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { setTimeout as wait } from 'node:timers/promises';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import Database from 'better-sqlite3';
 import { createResearchFixture, loadResearchWorkerTestApi } from '../unit/fixtures/research-test-kit.mjs';
 
 let api;
@@ -86,6 +87,17 @@ async function runScenario(stages, fault = null) {
   for (const name of ['experiment.mts', 'measurements.csv']) {
     await copyFile(`tests/fixtures/research-workflow/${name}`, join(workspace, name));
   }
+  if (fault === 'experiment_restart') await writeFile(join(workspace, 'experiment.mts'), `
+export async function run(context) {
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    await context.files.writeText('started.txt', 'native experiment started');
+    await new Promise((resolve, reject) => {
+      context.signal.addEventListener('abort', () => reject(context.signal.reason), {once: true});
+    });
+  } finally { clearInterval(keepAlive); }
+}
+`);
   const f = createResearchFixture(api, stages[0], workspace);
   const persistenceErrors = [];
   const logger = {error: (...args) => persistenceErrors.push(args), warn: (...args) => persistenceErrors.push(args)};
@@ -238,6 +250,7 @@ async function runScenario(stages, fault = null) {
               label: 'Original synthetic group means', sourcePath: 'experiment.mts', sourceVersion: 1,
               inputPaths: ['measurements.csv'], parameters: {}, timeoutMs: 15000, network: 'disabled'
             });
+            produced.experimentRunId = started.experimentId;
             await until(() => !['preparing', 'running'].includes(f.repository.experiments.get(f.project.id, started.experimentId).status));
             const status = await tool('get_experiment').invoke({experimentId: started.experimentId});
             const stderr = await experiments.read({projectId: f.project.id, runId: started.experimentId, area: 'log', path: 'stderr.txt'});
@@ -257,7 +270,7 @@ async function runScenario(stages, fault = null) {
             let values = produced.means.bytes.toString().split('\n').slice(1).map(line => {
               const [group, mean] = line.split(','); return {group, mean: Number(mean)};
             });
-            if (fault === 'figure_cancel') {
+            if (fault === 'figure_cancel' || fault === 'figure_restart') {
               const original = values;
               values = Array.from({length: 30000}, (_, index) => original[index % original.length]);
             }
@@ -350,6 +363,80 @@ async function runScenario(stages, fault = null) {
       let run = runtime.start(request, chat.broker.consumeResearchDispatch(token, request));
       taskId ??= run.taskId;
       assert.equal(run.taskId, taskId);
+      if (fault === `${stage}_restart`) {
+        const domainId = stage === 'experiment' ? 'experimentRunId' : 'figureRunId';
+        const runs = stage === 'experiment' ? f.repository.experiments : f.repository.figureRuns;
+        const marker = stage === 'experiment' ? 'output/started.txt' : 'scratch/render-output';
+        await until(() => produced[domainId] !== undefined &&
+          runs.get(f.project.id, produced[domainId]).status === 'running' &&
+          existsSync(join(runs.root(f.project.id, produced[domainId]), marker)));
+        const pendingRequest = {...request, requestId: 'pending-before-restart'};
+        const pendingGrant = chat.broker.issueResearchDispatch({
+          runId: 'chat', threadId: 'thread', manifest: chat.manifest, request: pendingRequest
+        });
+        // Snapshot the running database before stopping the real process. Startup sees
+        // the same durable state as an abrupt crash, while no child leaks from the test.
+        ledger.reserve(run.id, budget, {id: 'dispatch-before-restart', kind: 'model',
+          tokens: 100, inputHash: 'restart-fixture', envelope: {}});
+        const artifactRoot = join(process.cwd(), '.artifacts/research-optimization/p0-production', taskId);
+        await mkdir(artifactRoot, {recursive: true});
+        await f.db.backup(join(artifactRoot, 'before-restart-research.db'));
+        await f.agentDb.backup(join(artifactRoot, 'before-restart-agent.db'));
+        await runtime.shutdown();
+        await until(() => finishedExecutions.has(run.id));
+        assert.equal(f.repository.runs.get(run.id, f.project.id).status, 'interrupted');
+        assert.equal(runs.get(f.project.id, produced[domainId]).status, 'cancelled');
+        const restartedDb = new Database(join(artifactRoot, 'before-restart-research.db'));
+        const restartedAgentDb = new Database(join(artifactRoot, 'before-restart-agent.db'));
+        const restartedTasks = new api.ResearchTaskRepository(restartedAgentDb);
+        const restartedRepository = new api.ResearchRepository(restartedDb, restartedTasks);
+        const restartedLedger = new api.RunBudgetLedger(restartedAgentDb);
+        const restartedBroker = new api.ExecutionGrantBroker(restartedAgentDb);
+        const restartedExperiments = new api.ResearchExperimentService(restartedRepository, environments, root, logger);
+        const restartedFigures = new api.ResearchFigureService(restartedRepository, tools, root, logger);
+        try {
+          restartedLedger.reconcileStartup();
+          restartedBroker.reconcileStartupState();
+          restartedRepository.runs.recoverInterrupted();
+          restartedExperiments.recover();
+          restartedFigures.recover();
+          const recovered = stage === 'experiment' ?
+            restartedRepository.experiments.get(f.project.id, produced[domainId]) :
+            restartedFigures.getRun(f.project.id, produced[domainId]);
+          assert.equal(recovered.status, 'interrupted');
+          assert.equal(recovered.ownerRunId, run.id);
+          assert.equal(restartedTasks.get(taskId, f.project.id).status, 'interrupted');
+          assert.equal(restartedTasks.get(taskId, f.project.id).statusReason, 'research_task_interrupted_by_restart');
+          assert.equal(restartedRepository.runs.get(run.id, f.project.id).status, 'interrupted');
+          assert.equal(restartedAgentDb.prepare("SELECT state FROM agent_budget_calls WHERE call_id='dispatch-before-restart'")
+            .pluck().get(), 'unknown');
+          assert.throws(() => restartedBroker.consumeResearchDispatch(pendingGrant, pendingRequest),
+            /research_dispatch_grant_unavailable/u);
+          await assert.rejects(stage === 'experiment' ?
+            restartedExperiments.publish(f.project.id, recovered.id) :
+            restartedFigures.publish(f.project.id, recovered.id, null),
+          new RegExp(`research_${stage}_completed_required`, 'u'));
+          assert.equal(restartedRepository.runs.list({projectId: f.project.id, limit: 100}).length,
+            f.repository.runs.list({projectId: f.project.id, limit: 100}).length);
+          assert.equal(providerAttempts, stage === 'experiment' ? 1 : 2);
+          assert.equal(restartedRepository.figures.list(f.project.id, 20).length, 0);
+          await writeFile(join(artifactRoot, `${fault}.json`), JSON.stringify({
+            taskId, fault, providerAttempts, recovered,
+            diagnostics: new api.ResearchTaskDiagnosticsService(restartedRepository, restartedLedger)
+              .get({projectId: f.project.id, taskId}),
+            events: restartedTasks.events({projectId: f.project.id, taskId, afterSequence: 0, limit: 200}).events
+          }, null, 2));
+          await restartedDb.backup(join(artifactRoot, 'after-restart-research.db'));
+          await restartedAgentDb.backup(join(artifactRoot, 'after-restart-agent.db'));
+        } finally {
+          await restartedExperiments.shutdown();
+          await restartedFigures.shutdown();
+          restartedDb.close();
+          restartedAgentDb.close();
+        }
+        assert.deepEqual(persistenceErrors, []);
+        return;
+      }
       if (stage === 'figure' && fault === 'figure_cancel') {
         await until(() => produced.figureRunId !== undefined &&
           figures.getRun(f.project.id, produced.figureRunId).status === 'running' &&
@@ -568,3 +655,9 @@ test('cancelling a task during native figure rendering terminates the owned job 
 
 test('a source PDF reparse during human approval refuses superseded evidence and retains the changed source identity',
   () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure'], 'stale_approval'));
+
+test('restart during a real experiment preserves interrupted ownership and refuses automatic work and late publication',
+  () => runScenario(['experiment'], 'experiment_restart'));
+
+test('restart during native figure rendering preserves interrupted ownership and refuses automatic work and late publication',
+  () => runScenario(['experiment', 'figure'], 'figure_restart'));
