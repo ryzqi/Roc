@@ -1,12 +1,13 @@
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import type {z} from 'zod';
+import {z} from 'zod';
 import {
   zoteroServerIdSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupSchema,
   zoteroPageRequestSchema, zoteroItemsRequestSchema, zoteroItemSchema, zoteroCollectionSchema,
   zoteroScopeSchema, zoteroItemKeySchema,
   type ZoteroScope
 } from '../../../shared/schemas/research-zotero';
+import type {ZoteroObjectRead} from '../../../shared/schemas/research-zotero-source-state';
 
 type ZoteroFetch = (url: string, init: RequestInit) => Promise<Response>;
 const base = 'http://127.0.0.1:23119/api/';
@@ -82,6 +83,21 @@ export class ZoteroAdapter {
     return this.page(request, `${prefix(request)}/${path}?${query}`, zoteroItemSchema, signal);
   }
 
+  /** Single-item headers report object versions. A verified 404 is an observation, not transport failure. */
+  async inspectObject(scopeInput: unknown, keyInput: unknown, signal?: AbortSignal): Promise<ZoteroObjectRead> {
+    const scope = zoteroScopeSchema.parse(scopeInput), key = zoteroItemKeySchema.parse(keyInput);
+    const response = await this.request(`${prefix(scope)}/items/${key}?format=json&include=data`, scope.serverId, signal, true);
+    const common = {scope, responseHash: response.hash, checkedAt: response.fetchedAt};
+    if (response.status === 404) return {...common, status: 'not_found', item: null, objectVersion: null};
+    const item = this.parse(response.text, zoteroItemSchema);
+    if (item.key !== key || integer(response.headers.get('Last-Modified-Version')) !== item.version) {
+      throw new Error('zotero_response_invalid');
+    }
+    const deletion = z.boolean().optional().safeParse(item.data.deleted);
+    if (!deletion.success) throw new Error('zotero_response_invalid');
+    return {...common, status: deletion.data === true ? 'trashed' : 'present', item, objectVersion: item.version};
+  }
+
   /** A path reference is not filesystem authorization; the import boundary must validate access. */
   async attachmentPath(scopeInput: unknown, keyInput: unknown, signal?: AbortSignal): Promise<string> {
     const scope = zoteroScopeSchema.parse(scopeInput);
@@ -129,19 +145,19 @@ export class ZoteroAdapter {
     catch (cause) { throw new Error('zotero_response_invalid', {cause}); }
   }
 
-  private async request(path: string, serverId: string | null, signal?: AbortSignal): Promise<{
-    serverId: string; schemaVersion: number; headers: Headers; text: string; hash: string; fetchedAt: string
+  private async request(path: string, serverId: string | null, signal?: AbortSignal, accept404 = false): Promise<{
+    status: number; serverId: string; schemaVersion: number; headers: Headers; text: string; hash: string; fetchedAt: string
   }> {
     if (this.lifetime.signal.aborted) throw new Error('zotero_closed');
     if (signal?.aborted) throw new Error('zotero_cancelled');
-    const pending = this.read(path, serverId, signal);
+    const pending = this.read(path, serverId, signal, accept404);
     this.active.add(pending);
     try { return await pending; }
     finally { this.active.delete(pending); }
   }
 
-  private async read(path: string, serverId: string | null, parentSignal?: AbortSignal): Promise<{
-    serverId: string; schemaVersion: number; headers: Headers; text: string; hash: string; fetchedAt: string
+  private async read(path: string, serverId: string | null, parentSignal?: AbortSignal, accept404 = false): Promise<{
+    status: number; serverId: string; schemaVersion: number; headers: Headers; text: string; hash: string; fetchedAt: string
   }> {
     const signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(10_000),
       ...(parentSignal === undefined ? [] : [parentSignal])]);
@@ -162,7 +178,7 @@ export class ZoteroAdapter {
       if (response.status === 403) throw new Error('zotero_api_disabled');
       if (response.status === 412) throw new Error('zotero_server_changed');
       if (response.status === 501) throw new Error('zotero_api_unsupported');
-      if (response.status !== 200) throw new Error(`zotero_http_${response.status}`);
+      if (response.status !== 200 && !(accept404 && response.status === 404)) throw new Error(`zotero_http_${response.status}`);
       if (response.headers.get('Zotero-API-Version') !== '3' || response.headers.get('Zotero-Server-ID') === null) {
         throw new Error('zotero_api_unsupported');
       }
@@ -186,7 +202,7 @@ export class ZoteroAdapter {
       } finally { await reader.cancel(); }
       if (signal.aborted) throw new Error(abortedCode());
       const bytes = Buffer.concat(chunks);
-      return {serverId: observedId, schemaVersion, headers: response.headers, text: bytes.toString('utf8'),
+      return {status: response.status, serverId: observedId, schemaVersion, headers: response.headers, text: bytes.toString('utf8'),
         hash: createHash('sha256').update(bytes).digest('hex'), fetchedAt: this.now()};
     } catch (cause) {
       if (signal.aborted) throw new Error(abortedCode(), {cause});

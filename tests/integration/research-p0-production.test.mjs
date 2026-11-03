@@ -35,9 +35,10 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
   const zotero = new api.ZoteroAdapter(async (url, init) => {
     requests++;
     assert.equal(init.method, 'GET');
-    assert.equal(new URL(url).searchParams.get('include'), 'data,csljson');
-    return Response.json([original], {headers: {'Zotero-API-Version': '3', 'Zotero-Schema-Version': '40',
-      'Zotero-Server-ID': 'native-fixture', 'Last-Modified-Version': '9', 'Total-Results': '1'}});
+    const single = new URL(url).pathname.endsWith('/items/' + key);
+    assert.equal(new URL(url).searchParams.get('include'), single ? 'data' : 'data,csljson');
+    return Response.json(single ? original : [original], {headers: {'Zotero-API-Version': '3', 'Zotero-Schema-Version': '40',
+      'Zotero-Server-ID': 'native-fixture', 'Last-Modified-Version': single ? '8' : '9', 'Total-Results': '1'}});
   });
   const imports = new api.LiteratureImportService(f.db, f.repository.library, {}, library, async () => {});
   const run = operation => api.withLiteratureContext({owner: 'thread:native-zotero', projectId: f.project.id}, operation);
@@ -102,6 +103,21 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     await f.db.backup(join(syncEvidence, 'research.sqlite'));
     await writeFile(join(syncEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
       electron: process.versions.electron, captured, pause, resumed, syncImport, completed, requests}, null, 2) + '\n');
+    const sourceInput = {serverId: 'native-fixture', library: {kind: 'user', id: 0}, operationId: result.operationId,
+      itemKey: key, collectionKey: null};
+    const sourceState = await run(() => imports.observeZoteroSource(sourceInput, zotero));
+    assert.equal(sourceState.remote.status, 'present');
+    assert.equal(sourceState.remote.objectVersion, 8);
+    assert.equal(sourceState.versionState, 'unchanged');
+    assert.equal(sourceState.membership, 'not_requested');
+    assert.equal(requests, 3);
+    assert.deepEqual(run(() => imports.readZoteroSourceState(sourceInput)), sourceState);
+    assert.equal(f.repository.library.get(saved.id).revision, saved.revision);
+    const stateEvidence = join(process.cwd(), '.artifacts/research-optimization/pr05-source-state-native-csl');
+    await mkdir(stateEvidence, {recursive: true});
+    await f.db.backup(join(stateEvidence, 'research.sqlite'));
+    await writeFile(join(stateEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
+      electron: process.versions.electron, sourceState, requests}, null, 2) + '\n');
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();
     await rm(root, {recursive: true, force: true});

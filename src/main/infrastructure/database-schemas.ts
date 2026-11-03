@@ -1668,6 +1668,23 @@ CREATE TABLE research_zotero_sync_seen (
 `
 });
 
+researchMigrations.push({
+  version: 16, name: 'zotero_owned_source_state_observations',
+  sql: `
+CREATE TABLE research_zotero_source_states (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, scope_project TEXT NOT NULL,
+  operation_id TEXT NOT NULL REFERENCES research_literature_imports(id),
+  server_id TEXT NOT NULL, library_kind TEXT NOT NULL CHECK(library_kind IN ('user','group')), library_id INTEGER NOT NULL,
+  item_key TEXT NOT NULL, collection_key TEXT,
+  state_json TEXT NOT NULL, recorded_at TEXT NOT NULL,
+  FOREIGN KEY(operation_id,server_id,library_kind,library_id,item_key)
+    REFERENCES research_zotero_import_observations(operation_id,server_id,library_kind,library_id,item_key)
+);
+CREATE INDEX idx_research_zotero_source_states_scope ON research_zotero_source_states
+  (owner,scope_project,operation_id,server_id,library_kind,library_id,item_key,collection_key);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

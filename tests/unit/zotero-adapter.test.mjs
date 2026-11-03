@@ -190,7 +190,8 @@ test('registered read-only capability and generated IPC contracts expose actual 
     handlers.set(descriptor.name, handler);
   }}}, adapter(), imports);
   assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.getPreview',
-    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review', 'research.zotero.sources', 'research.zotero.status',
+    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review',
+    'research.zotero.sourceObserve', 'research.zotero.sourceState', 'research.zotero.sources', 'research.zotero.status',
     'research.zotero.syncAcknowledge', 'research.zotero.syncControl', 'research.zotero.syncFind', 'research.zotero.syncPage',
     'research.zotero.syncRead', 'research.zotero.syncReadPage', 'research.zotero.syncStart']);
   assert.equal((await handlers.get('research.zotero.probe')({})).status, 'connected');
@@ -206,6 +207,37 @@ test('registered read-only capability and generated IPC contracts expose actual 
   for (const descriptor of api.zoteroCapabilities) {
     assert.equal(api.ipcRegistry.requests.some(entry => entry.capabilityName === descriptor.name), true);
   }
+});
+
+test('single object inspection binds instance, exact item and object version, retaining trash and authenticated404', async () => {
+  const request = input();
+  const scope = {serverId: request.serverId, library: request.library};
+  const row = structuredClone(item);
+  row.data.deleted = true;
+  const calls = [];
+  const single = new api.ZoteroAdapter(async (url, init) => {
+    calls.push({url, init});
+    return Response.json(row, {headers: {...headers, 'Last-Modified-Version': String(row.version)}});
+  });
+  const observed = await single.inspectObject({serverId: scope.serverId, library: scope.library}, item.key);
+  assert.equal(observed.status, 'trashed');
+  assert.equal(observed.objectVersion, item.version);
+  assert.equal('libraryVersion' in observed, false);
+  assert.deepEqual(observed.item, row);
+  assert.equal(calls[0].init.method, 'GET');
+  assert.match(new URL(calls[0].url).pathname, new RegExp('/items/'+item.key+'$','u'));
+  assert.equal(new URL(calls[0].url).searchParams.get('include'), 'data');
+  const missing = new api.ZoteroAdapter(async () => new Response('Not found', {status: 404, headers}));
+  assert.equal((await missing.inspectObject(scope, item.key)).status, 'not_found');
+  const foreign = new api.ZoteroAdapter(async () => new Response('Not found', {status: 404, headers: {...headers, 'Zotero-Server-ID': 'foreign'}}));
+  await assert.rejects(foreign.inspectObject(scope, item.key), /zotero_server_changed/u);
+  const invalid = new api.ZoteroAdapter(async () => new Response('Not found', {status: 404}));
+  await assert.rejects(invalid.inspectObject(scope, item.key), /zotero_api_unsupported/u);
+  await assert.rejects(single.inspectObject(scope, '../escape'));
+  assert.equal(calls.length, 1);
+  const wrongVersion = new api.ZoteroAdapter(async () => Response.json(row, {headers: {...headers, 'Last-Modified-Version': String(row.version+1)}}));
+  await assert.rejects(wrongVersion.inspectObject(scope, item.key), /zotero_response_invalid/u);
+  await single.shutdown(); await missing.shutdown(); await foreign.shutdown(); await invalid.shutdown(); await wrongVersion.shutdown();
 });
 
 test('installation detection checks application executables without inferring state from transport', async () => {

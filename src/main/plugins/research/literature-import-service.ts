@@ -26,6 +26,8 @@ import {ZoteroPreviewStore} from './zotero-preview-store';
 import {ZoteroObjectStore, freezeZoteroObject} from './zotero-object-store';
 import {ZoteroSyncStore} from './zotero-sync-store';
 import {zoteroSyncPageSchema, type ZoteroSync, type ZoteroSyncCapturedPage} from '../../../shared/schemas/research-zotero-sync';
+import {ZoteroSourceStateStore} from './zotero-source-state-store';
+import {zoteroSourceStateRequestSchema, type ZoteroSourceState} from '../../../shared/schemas/research-zotero-source-state';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -50,6 +52,8 @@ export class LiteratureImportService {
   private readonly zoteroSyncs: ZoteroSyncStore;
   private readonly syncJobs = new Set<Promise<ZoteroSyncCapturedPage>>();
   private readonly syncReads = new Map<string, AbortController>();
+  private readonly zoteroSourceStates: ZoteroSourceStateStore;
+  private readonly sourceStateJobs = new Set<Promise<ZoteroSourceState>>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -59,6 +63,7 @@ export class LiteratureImportService {
     this.zoteroPreviews = new ZoteroPreviewStore(db, now);
     this.zoteroObjects = new ZoteroObjectStore(db, now);
     this.zoteroSyncs = new ZoteroSyncStore(db, this.zoteroPreviews, now);
+    this.zoteroSourceStates = new ZoteroSourceStateStore(db, this.zoteroObjects, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -201,6 +206,28 @@ export class LiteratureImportService {
     this.syncJobs.add(pending);
     try {return await pending;}
     finally {this.syncJobs.delete(pending); this.syncReads.delete(request.syncId);}
+  }
+
+  readZoteroSourceState(input: unknown): ZoteroSourceState | null {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroSourceStates.read(context, input);
+  }
+
+  async observeZoteroSource(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroSourceState> {
+    const request = zoteroSourceStateRequestSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    const original = this.zoteroObjects.imported(context, request);
+    const pending = (async (): Promise<ZoteroSourceState> => {
+      const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+      const remote = await adapter.inspectObject(original.scope, original.itemKey, signal);
+      this.requireActive(context);
+      return this.zoteroSourceStates.record(context, request, original, remote);
+    })();
+    this.sourceStateJobs.add(pending);
+    try {return await pending;}
+    finally {this.sourceStateJobs.delete(pending);}
   }
 
   private async executeSearch(input: unknown): Promise<LiteratureSearchResult> {
@@ -396,7 +423,8 @@ export class LiteratureImportService {
     this.closed = true;
     this.lifetime.abort(new Error('literature_service_closed'));
     for (const task of this.active.values()) task.controller.abort();
-    await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...[...this.active.values()].map((task) => task.promise)]);
+    await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs,
+      ...[...this.active.values()].map((task) => task.promise)]);
   }
 
   private async execute(context: LiteratureExecutionContext, signal: AbortSignal, result: LiteratureImportResult, frozen: FrozenEntry[]): Promise<LiteratureImportResult> {

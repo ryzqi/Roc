@@ -40,6 +40,8 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.getPreview | research.getZoteroPreview | 按预览 ID 读取已冻结的来源对象 |
 | research.zotero.sources | research.getZoteroSources | 指定文献在当前会话/项目中的 Zotero 收录回执及原始对象 |
 | research.zotero.review | research.reviewZotero | 冻结来源与当前文库字段、对象版本及范围内原始来源的只读核对 |
+| research.zotero.sourceObserve | research.observeZoteroSource | 校验本范围原始收录回执后，显式读取当前对象并保存来源状态观察 |
+| research.zotero.sourceState | research.readZoteroSourceState | 只读同原始收录回执与集合范围的最后有效观察 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -110,8 +112,8 @@ CSL 走现有原生书目 worker，不使用只含题名/作者的临时书目�
 对象 key/version/hash。文献归档和预览审查有效期结束后，已收录回执仍可读。
 多个新请求使用相同对象版本，会有独立回执；这不表示文献或原始版本重复。
 
-对象版本记录是后续增量同步的依据；目前尚未自动读取 since、推进整库检查点
-或处理远端删除。实例变化及版本回退仍需人工核对，不能凭失败结果伪造同步完成。
+对象版本记录用于下文的显式逐页增量核对与来源状态观察。
+实例变化及版本回退仍需人工核对，不能凭失败结果伪造同步完成。
 
 ## 附件与取消
 
@@ -134,8 +136,8 @@ HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机�
 末页损坏、有效期、数据库拒绝写入、迟到取消与 DB12→13 保留历史原文。
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
-整库版本检查点、冲突审查 UI 与远端删除
-状态、附件输入授权以及真实客户端验收仍待后续增量。V1 没有任何 Zotero
+逐页检查点、冲突审查 UI 与来源状态后端已实现，详见下文。
+来源状态 UI、附件输入授权以及真实客户端验收仍待后续增量。V1 没有任何 Zotero
 写请求，V3 写回继续另行授权。
 
 对象收录增量最终验证：单测 761/761、对象相关 26/26、Harness 94/94、原生 P0
@@ -229,7 +231,7 @@ Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 
 
 单测769/769、Harness94/94、实际原生P0 13/13、最终 build/typecheck、
 新界面6/6及原候选3/3、启动12/12、IPC/chunks通过。日志 `pr05-review-*.log`。
-实际 Zotero 客户端、整库增量检查点和附件授权仍待后续验收。
+实际 Zotero 客户端与附件授权仍待后续验收；逐页检查点见下文。
 
 ## 可恢复的逐页核对检查点
 
@@ -261,7 +263,7 @@ UI按当前范围查找并恢复，见下一节。
 官方固定源码再次核对于2026-11-04：since按本地clientVersion筛选，
 format=versions返回对象本地版本；includeTrashed=1和items/trash可报告软删除，
 源码没有/deleted接口。增量结果中缺席不能证明永久删除或集合移除；本阶段不标记
-这种推测，也不删除本地题录、证据或附件。删除/集合状态和附件授权仍待后续实现。
+这种推测，也不删除本地题录、证据或附件。单对象状态观察见下文，附件授权仍待实现。
 依据仍为本文固定官方源码，新增读件hash保存在`pr05-zotero-primary-contract.json`。
 
 最终unit780/780、相关37/37、Harness94/94、生产build/typecheck、
@@ -297,4 +299,34 @@ reset_required状态提供「按当前来源重新建立检查点」，明确按
 实际UI12/12（Zotero9、原候选3）、最终键盘/暗色1099恢复1/1、启动12/12、
 IPC/chunks通过。截图`sync-paused`、`sync-paused-dark-1099`、`sync-complete`
 和光暗1100/1099/800长内容审计保留，cut0/hidden0。日志`pr05-sync-ui-*.log`。
-实际Zotero客户端、远端删除/集合成员状态、附件路径/访问授权仍待后续实现与验收。
+实际Zotero客户端、来源状态UI及附件路径/访问授权仍待后续实现与验收。
+
+## 原始收录回执对应的来源状态
+
+Research DB16 追加不可变的 `research_zotero_source_states`，保留 DB15 数据与已应用
+迁移 SQL/name/checksum。输入显式携带 projectId、实例/库、真实收录 operationId、
+itemKey 与 nullable collectionKey。主进程先验证原始回执归属及 hash，再请求 Zotero；
+其他会话/项目/作业不能触发来源读取。复合外键指向实际对象收录观察。
+
+单对象 GET 固定读取 `items/<key>?format=json&include=data`，仅使用原回执的实例/库。
+该响应的 Last-Modified-Version 是对象版本，绝不推进文库检查点。present/trashed 来自
+实际对象及 deleted 布尔值；404 必须先通过 API/schema/实例头验证，才记为 not_found。
+not_found 表示本次来源未找到，不能证明永久删除。网络、解析、写入失败保留为失败，
+不会替代最后有效观察。初始化、恢复、只读观察均不自动发 HTTP。
+
+顶层对象的 collections 明确证明 listed/not_listed；子对象省略集合列表时为 unknown。
+顶层缺失或非法集合数据显式失败。未请求集合为 not_requested，回收站/未找到的集合
+成员状态为 unknown。版本状态为 missing/regressed/unchanged/newer/version_conflict；
+同版本仅比较 data 的结构内容，键顺序及未请求的 CSL 导出不造成冲突。
+
+每条观察保留原始收录对象版本、规范文献 ID、当前原文、响应 hash、检查/记录时间及
+内容 SHA-256。读回验证来源/ID/hash 与原回执链接；过期预览不使正式收录回执失效。
+关闭服务中止实际 HTTP，等待退出并拒绝迟到观察写入。本能力不修改规范题录、
+对象映射、证据或附件。本增量仅提供后端/API，来源详情 UI 下一步接入。
+
+最终相关46/46、unit789/789、Harness94/94、fresh build/typecheck/native13/13、
+现有UI12/12、启动12/12、IPC/chunks及diff通过。日志
+`.artifacts/research-optimization/pr05-source-state-*-complete.log`；真实 native CSL
+收录后保存/只读重放来源观察且题录修订不变，数据库/回执保留于
+`pr05-source-state-native-csl/`。固定官方源码的本地 API、Item、DataObject 合同与
+hash 保留于 `pr05-zotero-primary-contract.json`。未运行真实 Zotero 客户端互操作。

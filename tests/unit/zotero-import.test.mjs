@@ -17,7 +17,7 @@ before(async () => {
   await esbuild.build({stdin: {contents: `
     export {ResearchRepository} from './src/main/plugins/research/repository';
     export {ResearchTaskRepository} from './src/main/plugins/research/research-task-repository';
-    export {applyResearchDatabaseSchema, agentMigrations} from './src/main/infrastructure/database-schemas';
+    export {applyResearchDatabaseSchema, agentMigrations, researchMigrations} from './src/main/infrastructure/database-schemas';
     export {applyDatabaseMigrations} from './src/main/infrastructure/database-migrations';
     export {LiteratureImportService} from './src/main/plugins/research/literature-import-service';
     export {ResearchLibraryService} from './src/main/plugins/research/library-service';
@@ -42,13 +42,20 @@ function item(key, overrides = {}) {
     creators: [{creatorType: 'author', name: 'Synthetic Author'}], tags: [{tag: 'external-tag'}],
     collections: ['COLL2345'], unknownFutureField: {retained: true}}, csljson: JSON.stringify([csl])};
 }
-function fixture(initial) {
-  const f = createResearchFixture(api);
+function fixture(initial, schemaApi = api) {
+  const f = createResearchFixture(schemaApi);
   let source = initial, time = timestamp, workerCalls = 0;
   const urls = [], events = [];
   const adapter = new api.ZoteroAdapter(async (url, init) => {
     urls.push(url);
     assert.equal(init.method, 'GET');
+    const key = new URL(url).pathname.match(/\/items\/([A-Z0-9]{8})$/u)?.[1];
+    if (key !== undefined) {
+      const found = source.find(item => item.key === key);
+      const headers = {'Zotero-API-Version': '3', 'Zotero-Server-ID': request.serverId, 'Zotero-Schema-Version': '40'};
+      return found === undefined ? new Response('Not found', {status: 404, headers}) :
+        Response.json(found, {headers: {...headers, 'Last-Modified-Version': String(found.version)}});
+    }
     return Response.json(source, {headers: {'Zotero-API-Version': '3', 'Zotero-Server-ID': request.serverId,
       'Zotero-Schema-Version': '40', 'Last-Modified-Version': '20', 'Total-Results': String(source.length)}});
   }, () => time);
@@ -110,6 +117,187 @@ test('same DOI objects have independent mappings; real CSL codec preserves journ
     assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_object_versions').pluck().get(), 2);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
   } finally {await f.dispose();}
+});
+
+test('owned remote observations report present, collection changes, trash and not-found without deleting or rewriting local data', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const preview = await f.preview();
+    const imported = await f.add(preview, [original.key], 'source-state-import');
+    const input = {...preview.sourcePage, operationId: imported.operationId, itemKey: original.key, collectionKey: 'COLL2345'};
+    const source = {serverId: input.serverId, library: input.library, operationId: input.operationId,
+      itemKey: input.itemKey, collectionKey: input.collectionKey};
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    const mappings = f.db.prepare('SELECT * FROM research_zotero_objects').all();
+    assert.equal(f.run(() => f.service.readZoteroSourceState(source)), null);
+    const first = await f.run(() => f.service.observeZoteroSource(source, f.adapter));
+    assert.equal(first.remote.status, 'present');
+    assert.equal(first.remote.objectVersion, 8);
+    assert.equal('libraryVersion' in first.remote, false);
+    assert.equal(first.membership, 'listed');
+    assert.equal(first.versionState, 'unchanged');
+    assert.deepEqual(f.run(() => f.service.readZoteroSourceState(source)), first);
+    const updated = item(original.key, {version: 9});
+    updated.data.collections = [];
+    f.setSource([updated]);
+    const removed = await f.run(() => f.service.observeZoteroSource(source, f.adapter));
+    assert.equal(removed.membership, 'not_listed');
+    assert.equal(removed.versionState, 'newer');
+    updated.data.deleted = true;
+    f.setSource([updated]);
+    const trash = await f.run(() => f.service.observeZoteroSource(source, f.adapter));
+    assert.equal(trash.remote.status, 'trashed');
+    assert.equal(trash.membership, 'unknown');
+    f.setSource([]);
+    f.setTime('2026-11-12T00:00:00.000Z');
+    const missing = await f.run(() => f.service.observeZoteroSource(source, f.adapter));
+    assert.equal(missing.remote.status, 'not_found');
+    assert.equal(missing.remote.objectVersion, null);
+    assert.equal(missing.versionState, 'missing');
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_objects').all(), mappings);
+    assert.equal(f.workerCalls(), 1);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), 4);
+    assert.deepEqual(f.run(() => f.service.readZoteroSourceState(source)), missing);
+    const changes = f.db.prepare('SELECT total_changes()').pluck().get();
+    f.run(() => f.service.readZoteroSourceState(source));
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), changes);
+  } finally {await f.dispose();}
+});
+
+test('source observations retain version regression and same-version field conflict; child membership stays unknown and invalid fields fail', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const preview = await f.preview();
+    const imported = await f.add(preview, [original.key], 'source-versions');
+    const source = {serverId: request.serverId, library: request.library, operationId: imported.operationId,
+      itemKey: original.key, collectionKey: 'COLL2345'};
+    const reversed = structuredClone(original);
+    reversed.data = Object.fromEntries(Object.entries(reversed.data).reverse());
+    f.setSource([reversed]);
+    assert.equal((await f.run(() => f.service.observeZoteroSource(source, f.adapter))).versionState, 'unchanged');
+    f.setSource([item(original.key, {title: 'Different same version'})]);
+    assert.equal((await f.run(() => f.service.observeZoteroSource(source, f.adapter))).versionState, 'version_conflict');
+    f.setSource([item(original.key, {version: 7})]);
+    assert.equal((await f.run(() => f.service.observeZoteroSource(source, f.adapter))).versionState, 'regressed');
+    const child = item(original.key, {version: 9});
+    child.data.itemType = 'attachment'; child.data.parentItem = 'PARENT00'; delete child.data.collections;
+    f.setSource([child]);
+    assert.equal((await f.run(() => f.service.observeZoteroSource(source, f.adapter))).membership, 'unknown');
+    const malformed = item(original.key, {version: 9});
+    malformed.data.collections = 'invalid';
+    f.setSource([malformed]);
+    const count = f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get();
+    await assert.rejects(f.run(() => f.service.observeZoteroSource(source, f.adapter)), /zotero_response_invalid/u);
+    delete malformed.data.collections;
+    await assert.rejects(f.run(() => f.service.observeZoteroSource(source, f.adapter)), /zotero_response_invalid/u);
+    malformed.data.deleted = 1;
+    await assert.rejects(f.run(() => f.service.observeZoteroSource(source, f.adapter)), /zotero_response_invalid/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), count);
+    assert.equal(f.workerCalls(), 1);
+  } finally {await f.dispose();}
+});
+
+test('source state bridge requires owned import receipts before HTTP and rejects damaged stored observations', async () => {
+  const f = fixture([item('ITEM2345')]);
+  try {
+    const handlers = new Map();
+    const context = {pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {handlers.set(descriptor.name, handler);}}};
+    api.registerZoteroCapabilities(context, f.adapter, f.service);
+    api.registerLiteratureImportCapabilities(context, f.service);
+    const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
+    const preview = (await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 9)).data;
+    const imported = (await bridge.invoke('research.addLiterature', [{projectId: f.project.id, requestId: 'source-bridge',
+      entries: [{kind: 'zotero', previewId: preview.previewId, itemKey: 'ITEM2345'}]}], 9)).data;
+    const source = {serverId: request.serverId, library: request.library, operationId: imported.operationId,
+      itemKey: 'ITEM2345', collectionKey: null, projectId: f.project.id};
+    const observed = await bridge.invoke('research.observeZoteroSource', [source], 9);
+    assert.equal(observed.ok, true, JSON.stringify(observed));
+    const calls = f.urls.length;
+    for (const [input, windowId] of [[source, 10], [{...source, projectId: null}, 9], [{...source, operationId: 'missing'}, 9]]) {
+      const refusal = await bridge.invoke('research.observeZoteroSource', [input], windowId);
+      assert.equal(refusal.error.code, 'zotero_source_observation_not_found');
+    }
+    assert.equal(f.urls.length, calls);
+    const read = await bridge.invoke('research.readZoteroSourceState', [source], 9);
+    assert.deepEqual(read, observed);
+    assert.equal(f.urls.length, calls);
+    const corrupt = {...observed.data, versionState: 'regressed'};
+    f.db.prepare('UPDATE research_zotero_source_states SET state_json=? WHERE id=?')
+      .run(JSON.stringify(corrupt), observed.data.stateId);
+    const damaged = await bridge.invoke('research.readZoteroSourceState', [source], 9);
+    assert.equal(damaged.error.code, 'zotero_source_state_storage_invalid');
+    assert.equal(damaged.error.retryable, false);
+  } finally {await f.dispose();}
+});
+
+test('DB15 to16 preserves actual import provenance and migration receipts without inventing source state', async () => {
+  const prior = {...api, applyResearchDatabaseSchema(db, now) {
+    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 15), now});
+  }};
+  const f = fixture([item('ITEM2345')], prior);
+  try {
+    const preview = await f.preview();
+    const imported = await f.add(preview, ['ITEM2345'], 'pre-state-migration');
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    const versions = f.db.prepare('SELECT * FROM research_zotero_object_versions').all();
+    const receipts = f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
+    api.applyResearchDatabaseSchema(f.db, () => '2026-11-12T00:00:00.000Z');
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_object_versions').all(), versions);
+    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=15 ORDER BY version').all('plugin:@roc/plugin-research'), receipts);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), 0);
+    const input = {serverId: request.serverId, library: request.library, operationId: imported.operationId, itemKey: 'ITEM2345', collectionKey: null};
+    assert.equal((await f.run(() => f.service.observeZoteroSource(input, f.adapter))).remote.status, 'present');
+  } finally {await f.dispose();}
+});
+
+test('transport and observation-write failures never become not-found or replace the last valid state', async () => {
+  const f = fixture([item('ITEM2345')]);
+  const lost = new api.ZoteroAdapter(async () => {throw new Error('Synthetic lost transport');});
+  try {
+    const preview = await f.preview();
+    const imported = await f.add(preview, ['ITEM2345'], 'state-failures');
+    const source = {serverId: request.serverId, library: request.library, operationId: imported.operationId,
+      itemKey: 'ITEM2345', collectionKey: null};
+    const first = await f.run(() => f.service.observeZoteroSource(source, f.adapter));
+    await assert.rejects(f.run(() => f.service.observeZoteroSource(source, lost)), /zotero_unreachable/u);
+    assert.deepEqual(f.run(() => f.service.readZoteroSourceState(source)), first);
+    f.db.exec(`CREATE TRIGGER refuse_source_state BEFORE INSERT ON research_zotero_source_states
+      BEGIN SELECT RAISE(ABORT,'synthetic source state failure'); END;`);
+    await assert.rejects(f.run(() => f.service.observeZoteroSource(source, f.adapter)), /synthetic source state failure/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), 1);
+    assert.deepEqual(f.run(() => f.service.readZoteroSourceState(source)), first);
+    f.db.exec('DROP TRIGGER refuse_source_state');
+  } finally {await lost.shutdown(); await f.dispose();}
+});
+
+test('shutdown cancels a pending source response and forbids late observation publication', async () => {
+  const f = fixture([item('ITEM2345')]);
+  let entered;
+  const started = new Promise(resolve => {entered = resolve;});
+  const streaming = new api.ZoteroAdapter(async (_url, init) => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{'));
+      init.signal.addEventListener('abort', () => controller.error(new Error('Synthetic aborted body')), {once: true});
+      entered();
+    }
+  }), {headers: {'Zotero-API-Version': '3', 'Zotero-Server-ID': request.serverId,
+    'Zotero-Schema-Version': '40', 'Last-Modified-Version': '8'}}));
+  try {
+    const preview = await f.preview();
+    const imported = await f.add(preview, ['ITEM2345'], 'state-shutdown');
+    const source = {serverId: request.serverId, library: request.library, operationId: imported.operationId,
+      itemKey: 'ITEM2345', collectionKey: null};
+    const pending = f.run(() => f.service.observeZoteroSource(source, streaming));
+    const refused = assert.rejects(pending, /zotero_cancelled/u);
+    await started;
+    await f.service.shutdown();
+    await refused;
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), 0);
+  } finally {await streaming.shutdown(); await f.dispose();}
 });
 
 test('actual preload bridge imports a scoped preview and reads durable sources only for the same sender/project', async () => {

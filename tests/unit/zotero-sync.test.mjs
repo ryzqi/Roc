@@ -381,7 +381,7 @@ test('migration14 to15 preserves existing preview and applied migration receipts
     db.prepare('INSERT INTO research_zotero_previews VALUES (?,?,?,?,?,?,?)')
       .run('old-preview','old-owner',null,null,at,'2026-11-11T00:00:00.000Z','{"original":true}');
     const old=db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all(dbName);
-    api.applyResearchDatabaseSchema(db,()=>at);
+    api.applyDatabaseMigrations(db,{dbName,migrations:api.researchMigrations.filter(m=>m.version<=15),now:()=>at});
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=14 ORDER BY version').all(dbName),old);
     assert.equal(db.prepare('SELECT snapshot_json FROM research_zotero_previews').pluck().get(),'{"original":true}');
     assert.equal(db.prepare('SELECT count(*) FROM research_zotero_sync_checkpoints').pluck().get(),0);

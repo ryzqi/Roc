@@ -1891,3 +1891,45 @@ No real Zotero user library/client, new live literature query, paid model, remot
 frozen workflow-fixture changes. Next: truthful remote trash/membership state and attachment
 path/access grants; actual client interoperability and independent scientific/L2 acceptance
 remain externally blocked.
+
+## PR-05E3A — owned current-source observations
+
+Status: `Verified passing` for this backend/API increment. Research DB16 appends
+immutable observations linked by composite FK to the actual owned import receipt.
+Applied migration SQL/name/checksum and existing library/evidence/attachment data stay intact.
+Full PR-05 and overall plan remain in progress; source-state UI and attachment grants follow.
+
+Explicit sourceObserve validates owner/project/operation and original object hash before HTTP.
+Single-item GET binds the original instance/library/key and validates its object version.
+Present/trash come from actual data; only API/schema/instance-validated404 yields not_found,
+which does not prove permanent deletion. Current top-level collections prove membership;
+child omitted collections remain unknown. Same-version data equality ignores key order and
+unrequested CSL. Immutable raw/hash/timestamp/version observations survive preview expiry.
+Readonly replay verifies linkage/hash; transport/write failures preserve prior valid state.
+Shutdown aborts actual HTTP and refuses late publication. No automatic source read or deletion.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-sync.test.mjs` | Final46/46 passed |
+| `pnpm test:unit` | Final789/789 passed |
+| `pnpm harness:eval` | Final94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |12/12 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-source-state-*-complete.log`, `pr05-source-state-native-csl/` DB and receipt.
+Regressions include native15→16 history preservation, owned refusal before HTTP,
+validated404/key/version/deleted/collections, ordered present→membership removal→trash→missing
+history, regressed/conflicting versions, expired-preview receipt access, damaged stored
+observations, transport/write failure and shutdown abort. Native CSL proves actual stored
+observation version8, readonly replay and unchanged paper revision.
+
+Pinned official commit1ca9d58c9aa9aeca1032d3966f3765d4d40ab7b2 read via Agent Reach/Jina
+on2026-11-04 verifies single-item object clientVersion, authenticated404 headers, top-level
+collections/child omission and boolean deleted. Contract/read hashes retained. No actual
+Zotero user library/client, new live literature query, paid model, remote write or frozen
+workflow-fixture changes.

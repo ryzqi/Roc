@@ -15,10 +15,13 @@ import {
   zoteroSyncStartIpcSchema, zoteroSyncReadIpcSchema, zoteroSyncPageIpcSchema,
   zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema, zoteroSyncFindIpcSchema
 } from '../../../shared/schemas/research-zotero-sync';
+import {zoteroSourceStateIpcSchema, zoteroSourceStateSchema} from '../../../shared/schemas/research-zotero-source-state';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
+  sourceObserve: descriptor('research.zotero.sourceObserve', zoteroSourceStateIpcSchema, zoteroSourceStateSchema),
+  sourceState: descriptor('research.zotero.sourceState', zoteroSourceStateIpcSchema, zoteroSourceStateSchema.nullable()),
   syncStart: descriptor('research.zotero.syncStart', zoteroSyncStartIpcSchema, zoteroSyncSchema),
   syncRead: descriptor('research.zotero.syncRead', zoteroSyncReadIpcSchema, zoteroSyncSchema),
   syncFind: descriptor('research.zotero.syncFind', zoteroSyncFindIpcSchema, zoteroSyncSchema.nullable()),
@@ -41,12 +44,20 @@ export const zoteroCapabilities = Object.values(capabilities);
 export function registerZoteroCapabilities(context: RocPluginContext, adapter: ZoteroAdapter,
   imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero' |
     'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync' |
-    'findZoteroSync' | 'readZoteroSyncPage'>): void {
+    'findZoteroSync' | 'readZoteroSyncPage' | 'observeZoteroSource' | 'readZoteroSourceState'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
         const code = error instanceof Error ? error.message : '';
+        if (code === 'zotero_source_observation_not_found') {
+          throw new RocDomainError({code, message: '来源收录回执不存在，或不属于当前会话与项目。',
+            category: 'not_found', retryable: false});
+        }
+        if (code === 'zotero_source_state_storage_invalid') {
+          throw new RocDomainError({code, message: '已保存的来源状态观察损坏，无法读取。',
+            category: 'degraded', retryable: false});
+        }
         if (code === 'zotero_sync_not_found') {
           throw new RocDomainError({code, message: '同步记录不存在，或不属于当前会话与项目。',
             category: 'not_found', retryable: false});
@@ -110,4 +121,6 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.syncPage, ({projectId: _scope, ...input}) => imports.captureZoteroSyncPage(input, adapter));
   register(capabilities.syncControl, async ({projectId: _scope, ...input}) => imports.controlZoteroSync(input));
   register(capabilities.syncAcknowledge, async ({projectId: _scope, ...input}) => imports.acknowledgeZoteroSync(input));
+  register(capabilities.sourceObserve, ({projectId: _scope, ...input}) => imports.observeZoteroSource(input, adapter));
+  register(capabilities.sourceState, async ({projectId: _scope, ...input}) => imports.readZoteroSourceState(input));
 }

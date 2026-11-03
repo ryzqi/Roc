@@ -5,6 +5,7 @@ import {zoteroFrozenObjectSchema, zoteroSourcesRequestSchema, zoteroImportedObje
   type zoteroSourcesPageSchema, type ZoteroFrozenObject, type ZoteroPreview} from '../../../shared/schemas/research-zotero';
 import {normalizeResearchDoi} from './literature-identity';
 import type {LiteratureExecutionContext} from '../../services/literature-context';
+import {zoteroSourceStateRequestSchema} from '../../../shared/schemas/research-zotero-source-state';
 
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 type Row = {item_id: string; object_version: number; item_hash: string};
@@ -56,6 +57,34 @@ export class ZoteroObjectStore {
     const row = this.db.prepare(`SELECT item_id,object_version,item_hash FROM research_zotero_objects
       WHERE server_id=? AND library_kind=? AND library_id=? AND item_key=?`).get(...this.key(frozen)) as Row | undefined;
     return row ?? null;
+  }
+
+  imported(context: LiteratureExecutionContext, input: unknown): z.infer<typeof zoteroImportedObjectSchema> {
+    const request = zoteroSourceStateRequestSchema.parse(input);
+    const row = this.db.prepare(`SELECT v.item_id,v.item_hash,v.item_json,v.object_version,
+      o.library_version,o.preview_id,o.captured_at,o.imported_at
+      FROM research_zotero_object_versions v JOIN research_zotero_import_observations o
+      ON o.server_id=v.server_id AND o.library_kind=v.library_kind AND o.library_id=v.library_id
+      AND o.item_key=v.item_key AND o.object_version=v.object_version
+      JOIN research_zotero_previews p ON p.id=o.preview_id
+      WHERE o.operation_id=? AND v.server_id=? AND v.library_kind=? AND v.library_id=? AND v.item_key=?
+      AND p.owner=? AND p.project_id IS ?`)
+      .get(request.operationId, request.serverId, request.library.kind, request.library.id, request.itemKey,
+        context.owner, context.projectId) as {
+          item_id: string; item_hash: string; item_json: string; object_version: number;
+          library_version: number; preview_id: string; captured_at: string; imported_at: string
+        } | undefined;
+    if (row === undefined) throw new Error('zotero_source_observation_not_found');
+    try {
+      const record = zoteroImportedObjectSchema.parse({scope: {serverId: request.serverId, library: request.library},
+        operationId: request.operationId, itemKey: request.itemKey, version: row.object_version,
+        libraryItemId: row.item_id, itemHash: row.item_hash, item: JSON.parse(row.item_json),
+        libraryVersion: row.library_version, previewId: row.preview_id, capturedAt: row.captured_at, importedAt: row.imported_at});
+      if (record.item.key !== record.itemKey || record.item.version !== record.version || hash(record.item) !== record.itemHash) {
+        throw new Error('zotero_object_integrity_invalid');
+      }
+      return record;
+    } catch (cause) {throw new Error('zotero_object_storage_invalid', {cause});}
   }
 
   /** Prior originals are visible only in the owner/project that observed them. */
