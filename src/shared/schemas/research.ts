@@ -131,7 +131,8 @@ const researchWorkflowTransitionBaseSchema = z.object({
 export const researchWorkflowTransitionRequestSchema = z.discriminatedUnion('action', [
   researchWorkflowTransitionBaseSchema.extend({
     action: z.enum(['start', 'pause', 'resume', 'complete', 'approve', 'reject']),
-    reviewDecision: z.enum(['accept', 'revise']).optional()
+    reviewDecision: z.enum(['accept', 'revise']).optional(),
+    expectedSearchPlanHash: z.string().regex(/^[a-f0-9]{64}$/u).optional()
   }).strict(),
   researchWorkflowTransitionBaseSchema.extend({
     action: z.literal('move'),
@@ -141,7 +142,11 @@ export const researchWorkflowTransitionRequestSchema = z.discriminatedUnion('act
   if (request.action === 'move') return true;
   if (request.action === 'approve' && request.expectedStage === 'review') return request.reviewDecision !== undefined;
   return request.reviewDecision === undefined;
-}, 'A review approval must explicitly accept the manuscript or request revision.');
+}, 'A review approval must explicitly accept the manuscript or request revision.').refine(request => {
+  if (request.action === 'move') return true;
+  return request.action === 'approve' && request.expectedStage === 'discovery'
+    ? request.expectedSearchPlanHash !== undefined : request.expectedSearchPlanHash === undefined;
+}, 'research_search_plan_approval_hash_required');
 
 export const researchWorkflowEventSchema = z.object({
   id: z.string(),

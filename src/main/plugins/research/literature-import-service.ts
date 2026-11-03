@@ -49,11 +49,27 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     this.library.validateDestination(context.projectId);
+    let strategy: LiteratureSearchResult['strategy'] = null;
+    if (context.searchStrategy !== undefined) {
+      if (context.queryIndex === undefined) throw new Error('research_search_query_index_required');
+      const query = context.searchStrategy.plan.queries[context.queryIndex];
+      if (query === undefined) throw new Error('research_search_query_index_invalid');
+      const {projectId: _projectId, ...parameters} = request;
+      if (JSON.stringify(parameters) !== JSON.stringify(query)) throw new Error('research_search_query_changed');
+      strategy = {artifactId: context.searchStrategy.artifactId, contentHash: context.searchStrategy.contentHash,
+        approvedAt: context.searchStrategy.approvedAt, researchQuestion: context.searchStrategy.plan.researchQuestion, queryIndex: context.queryIndex};
+    }
     const scopedRequest = {...request, projectId: context.projectId};
-    const executionId = this.searchLedger.begin(context, scopedRequest);
+    const executionId = this.searchLedger.begin(context, scopedRequest, strategy);
     try {
       const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
-      const found = await this.searchService.searchDetailed(scopedRequest, signal, this.searchLedger.audit(executionId));
+      const audit = this.searchLedger.audit(executionId);
+      const found = await this.searchService.searchDetailed(scopedRequest, signal, (phase, source, receipt) => {
+        if (phase === 'started') {
+          try { this.requireActive(context); } catch (cause) { throw new LiteratureRequestAuditError(cause); }
+        }
+        audit(phase, source, receipt);
+      });
       this.requireActive(context);
       const createdAt = this.now();
       let unknownYear = false;
@@ -68,7 +84,7 @@ export class LiteratureImportService {
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 8, ranking: literatureRanking(request.sources), executionId,
+      const result: LiteratureSearchResult = { schemaVersion: 9, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };

@@ -1,6 +1,7 @@
 export { ResearchRepository } from '../../../src/main/plugins/research/repository';
 export { ResearchProductionEffectService } from '../../../src/main/plugins/research/production-effects';
 export { createResearchRoleTools } from '../../../src/main/plugins/research/role-tools';
+export { createResearchTools } from '../../../src/main/plugins/agent/research-tools';
 export { getResearchStageRoleProfile } from '../../../src/main/plugins/research/role-profiles';
 export { applyResearchDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 export { ResearchFigureService } from '../../../src/main/plugins/research/figure-service';
@@ -38,6 +39,8 @@ export { ResearchExportSourceService } from '../../../src/main/plugins/research/
 export { ResearchExportService } from '../../../src/main/plugins/research/export-service';
 export { LiteratureSearchService } from '../../../src/main/plugins/research/literature-service';
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
+export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../../src/main/plugins/research/search-strategy';
+export { withLiteratureContext } from '../../../src/main/services/literature-context';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
 export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { ResearchSearchPlan } from '../../shared/schemas/research-search-plan';
 
 /** Only main-process callers establish this scope; it never comes from model/tool arguments. */
 export type LiteratureExecutionContext = {
@@ -7,6 +8,8 @@ export type LiteratureExecutionContext = {
   runId?: string;
   signal?: AbortSignal;
   assertActive?: () => void;
+  searchStrategy?: {plan: ResearchSearchPlan; artifactId: string; contentHash: string; approvedAt: string; assertCurrent: () => void};
+  queryIndex?: number;
 };
 const contexts = new AsyncLocalStorage<LiteratureExecutionContext>();
 export function withLiteratureContext<T>(context: LiteratureExecutionContext, action: () => T): T {
@@ -20,4 +23,5 @@ export function literatureContext(): LiteratureExecutionContext {
 export function assertLiteratureActive(context: LiteratureExecutionContext): void {
   context.signal?.throwIfAborted();
   context.assertActive?.();
+  context.searchStrategy?.assertCurrent();
 }

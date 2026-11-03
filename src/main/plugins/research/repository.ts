@@ -63,19 +63,6 @@ export const researchStages = [
 
 type Clock = () => string;
 
-const stageGateRequired = new Set<(typeof researchStages)[number]>([
-  'retrieval',
-  'reading',
-  'ideation',
-  'planning',
-  'experiment',
-  'figure',
-  'writing',
-  'review',
-  'revision',
-  'export'
-]);
-
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly manuscripts: ResearchManuscriptRepository;
@@ -208,7 +195,7 @@ export class ResearchRepository {
           stage,
           index === 0 ? 'ready' : 'locked',
           index === 0 ? timestamp : null,
-          stageGateRequired.has(stage) ? 1 : 0
+          1
         );
       });
       this.runs.initializeProject(id);
@@ -582,19 +569,10 @@ export class ResearchRepository {
         case 'complete':
           this.requireStatus(current, ['running'], 'research_stage_not_running');
           if (current.activeRunId !== null) throw new Error('research_stage_run_active');
-          if (current.gateRequired) {
-            this.requireStageArtifacts(request.projectId, current);
-            this.updateStage(request.projectId, current.stage, { status: 'waiting_approval' });
-            this.appendEvent(request.projectId, current.stage, 'approval_requested', '阶段产物等待用户审核。', request, timestamp);
-          } else {
-            if (current.artifactIds.length > 0) {
-              this.requireStageArtifacts(request.projectId, current);
-              for (const id of current.artifactIds) {
-                this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, id);
-              }
-            }
-            this.completeStage(request.projectId, current.stage, timestamp);
-          }
+          this.requireStageArtifacts(request.projectId, current);
+          this.db.prepare('UPDATE research_stage_states SET gate_required=1 WHERE project_id=? AND stage=?').run(request.projectId, current.stage);
+          this.updateStage(request.projectId, current.stage, { status: 'waiting_approval' });
+          this.appendEvent(request.projectId, current.stage, 'approval_requested', '阶段产物等待用户审核。', request, timestamp);
           break;
         case 'approve':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');

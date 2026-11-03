@@ -1,6 +1,7 @@
 import type { ResearchStageState } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
+import { requireSearchPlanContent } from './search-strategy';
 
 export function assertResearchStageArtifacts(
   repository: ResearchRepository,
@@ -8,7 +9,6 @@ export function assertResearchStageArtifacts(
   state: ResearchStageState,
   allowedStatuses: readonly ('draft' | 'approved')[] = ['draft']
 ): void {
-  if (!state.gateRequired && state.artifactIds.length === 0) return;
   if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
   for (const id of state.artifactIds) {
     const artifact = repository.getArtifact(id);
@@ -17,6 +17,7 @@ export function assertResearchStageArtifacts(
       throw new Error('research_stage_artifact_invalid');
     }
     repository.evidence.assertPublishable(artifact);
+    if (artifact.kind === 'search_strategy') requireSearchPlanContent(repository, artifact);
     if (artifact.kind === 'manuscript') repository.manuscripts.assertPublishable(artifact);
     if (artifact.kind === 'idea_canvas') repository.ideas.assertPublishable(artifact);
     if (artifact.kind === 'experiment_run') repository.experiments.forArtifact(artifact);

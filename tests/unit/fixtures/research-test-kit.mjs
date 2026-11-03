@@ -30,6 +30,14 @@ async function loadApi(productionWorkers) {
 export function loadResearchTestApi() { return loadApi(false); }
 export function loadResearchWorkerTestApi() { return loadApi(true); }
 
+export function researchSearchPlanFixture(researchQuestion, queries = [
+  {query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}
+]) {
+  return {researchQuestion, refinedQuestion: 'What are the fixed synthetic group means?',
+    keywords: ['synthetic', 'reproducibility'], synonyms: [{term: 'reproducibility', alternatives: ['replication']}],
+    domain: 'Synthetic engineering fixture', excludedTerms: [], queries};
+}
+
 export function createResearchFixture(api, stage = 'figure', workspacePath = '/tmp/roc-research-fixture') {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');

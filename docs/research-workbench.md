@@ -84,6 +84,9 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
   **对话代理调用的内部工具**，不是并列的第二种执行入口。
 - 人工闸门没有取消：`research_approve_gate` 用 LangGraph `interrupt` 在对话里发出批准 / 退回卡片，
   用户决定后才调用 `research.workflow.transition`（含图稿 / 导出校验）。
+- discovery 也等待人工闸门。审批卡展示原始研究指令、模型提出的结构化检索计划和固定查询范围；
+  批准携带所见版本的内容 hash。retrieval 只执行已批准计划的查询编号，不能自行扩大检索范围。
+  合同与失败语义见 [学术检索融合](research-literature-fusion.md)。
 - 论文正文的真身是项目工作目录里的 `.tex` / `.bib` 文件；对话代理用文件工具改、用 shell 编译。
   LaTeX 画布 tab 编辑的是同一批工作区文件（保存走 `files.writeText`，留 recovery point）。
 

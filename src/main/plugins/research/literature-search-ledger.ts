@@ -12,11 +12,11 @@ export class LiteratureRequestAuditError extends Error {
 export class LiteratureSearchLedger {
   constructor(private readonly db: Database, private readonly now: () => string) {}
 
-  begin(context: LiteratureExecutionContext, request: LiteratureSearchInput): string {
+  begin(context: LiteratureExecutionContext, request: LiteratureSearchInput, strategy: LiteratureSearchResult['strategy']): string {
     const id = `search_exec_${randomUUID()}`;
     this.db.prepare(`INSERT INTO research_literature_search_executions
       (id,owner,project_id,run_id,request_json,status,created_at) VALUES (?,?,?,?,?,'running',?)`)
-      .run(id, context.owner, context.projectId, context.runId ?? null, JSON.stringify(request), this.now());
+      .run(id, context.owner, context.projectId, context.runId ?? null, JSON.stringify({request, strategy}), this.now());
     return id;
   }
 

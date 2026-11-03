@@ -19,6 +19,7 @@ import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile, researchCapabilityToolNames } from './role-profiles';
 import { getResearchSkillInstructions } from './research-skills';
 import { researchReviewRoles } from './review-repository';
+import { requireConfirmedSearchStrategy, searchPlanReviewMarkdown } from './search-strategy';
 
 const executionContextSchema = z.object({
   project: researchProjectSchema,
@@ -94,6 +95,7 @@ export class ResearchRunRepository {
       const policy = retryOf?.policy ?? this.listPolicies(request.projectId).find((entry) => entry.stage === stage.stage);
       if (policy === undefined) throw new Error('research_stage_policy_missing');
       const context = retryOf === undefined ? this.captureContext(request.projectId, stage.stage) : this.getContext(retryOf.id);
+      if (stage.stage === 'retrieval') requireConfirmedSearchStrategy(this.research, context);
       for (const input of context.inputs) {
         if (this.research.getArtifact(input.artifact.id).status !== 'approved') throw new Error('research_stage_inputs_stale');
       }
@@ -269,10 +271,15 @@ export class ResearchRunRepository {
   }
 
   complete(id: string, projectId: string, value: unknown): ResearchStageRun {
-    const output = researchStageOutputSchema.parse(value);
+    let output = researchStageOutputSchema.parse(value);
     return this.db.transaction(() => {
       const run = this.requireActive(id, projectId);
       if (run.status !== 'running') throw new Error('research_run_not_started');
+      if (run.stage === 'discovery') {
+        if (output.searchPlan === undefined) throw new Error('research_search_plan_required');
+        if (output.searchPlan.researchQuestion !== run.instruction) throw new Error('research_search_question_changed');
+        output = researchStageOutputSchema.parse({...output, markdown: output.markdown + searchPlanReviewMarkdown(output.searchPlan)});
+      } else if (output.searchPlan !== undefined) throw new Error('research_search_plan_stage_invalid');
       const artifacts = this.outputArtifacts(run, output);
       const timestamp = this.now();
       for (const artifact of artifacts) this.attachOutput(run, artifact, output, timestamp);

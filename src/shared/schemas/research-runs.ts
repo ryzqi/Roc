@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { researchArtifactKindSchema, researchStageSchema } from './research';
 import { researchIdeaCanvasContentSchema } from './research-ideas';
+import { researchSearchPlanSchema } from './research-search-plan';
 
 const id = z.string().trim().min(1);
 export const researchModelSelectionSchema = z.discriminatedUnion('kind', [
@@ -42,6 +43,7 @@ export const researchStageOutputSchema = z.object({
     claimIndexes: z.array(z.number().int().nonnegative()).min(1).max(200)
   }).strict()).max(100),
   ideaCanvas: researchIdeaCanvasContentSchema.optional(),
+  searchPlan: researchSearchPlanSchema.optional(),
   verdict: z.enum(['ready', 'revise', 'uncertain'])
 }).strict();
 

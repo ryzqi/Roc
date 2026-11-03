@@ -6,6 +6,8 @@ import { z } from 'zod';
 
 import { createLiteratureTools } from './literature-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
+import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
+import { searchPlanApprovalHash } from '../research/search-strategy';
 import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
 import type {
   ResearchArtifact,
@@ -227,6 +229,15 @@ export function createResearchTools(input: {
         }
         const isReview = current.stage === 'review';
         const artifacts = await invoke<ResearchArtifact[]>('research.artifacts.list', { projectId, stage: current.stage });
+        let searchPlanReview: {searchPlan: z.infer<typeof researchSearchPlanSchema>; searchPlanHash: string} | null = null;
+        if (current.stage === 'discovery') {
+          if (current.artifactIds.length !== 1) throw new Error('research_search_plan_required');
+          const artifactId = current.artifactIds[0];
+          const content = await invoke<ResearchArtifactContent | null>('research.artifacts.content', {projectId, artifactId});
+          if (content === null) throw new Error('research_search_plan_required');
+          searchPlanReview = {searchPlan: researchSearchPlanSchema.parse(content.output.searchPlan),
+            searchPlanHash: searchPlanApprovalHash(projectId, artifactId, content.output)};
+        }
         const resume = interrupt({
           kind: 'approval',
           request: {
@@ -236,6 +247,7 @@ export function createResearchTools(input: {
                 projectId,
                 stage: current.stage,
                 artifactTitles: artifacts.map((artifact) => artifact.title),
+                ...(searchPlanReview === null ? {} : searchPlanReview),
                 summary: isReview
                   ? '确认审稿结论：接受正文则进入导出，要求修订则回到修订阶段，退回则重跑本阶段。'
                   : '确认本阶段产物是否可以进入下一阶段。'
@@ -248,15 +260,20 @@ export function createResearchTools(input: {
               allowedDecisions: isReview ? ['approve', 'revise', 'reject'] : ['approve', 'reject']
             }]
           }
-        }) as { decisions?: Array<{ type?: unknown; message?: unknown }> };
+        }) as { decisions?: Array<{ type?: unknown; message?: unknown; reviewedSearchPlanHash?: unknown }> };
         const decision = resume.decisions?.[0];
         const type = decision?.type;
         const decisionNote = typeof decision?.message === 'string' ? decision.message : note;
         if (type === 'approve') {
+          if ((searchPlanReview !== null && decision?.reviewedSearchPlanHash !== searchPlanReview.searchPlanHash) ||
+              (searchPlanReview === null && decision?.reviewedSearchPlanHash !== undefined)) {
+            throw new Error('research_search_plan_approval_changed');
+          }
           const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
             projectId,
             expectedStage: current.stage,
             action: 'approve',
+            ...(searchPlanReview === null ? {} : {expectedSearchPlanHash: searchPlanReview.searchPlanHash}),
             ...(isReview ? { reviewDecision: 'accept' as const } : {})
           });
           return summarizeGateOutcome('approve', transitioned);

@@ -11,6 +11,10 @@ export const literatureSearchToolSchema = z.object({
   yearTo: z.number().int().min(1000).max(9999).optional()
 }).strict().refine((input) => input.yearFrom === undefined || input.yearTo === undefined || input.yearFrom <= input.yearTo, 'literature_year_range_invalid');
 export const literatureSearchInputSchema = literatureSearchToolSchema.safeExtend({ projectId: z.string().min(1).nullable().optional() });
+export const literatureSearchStrategyReceiptSchema = z.object({
+  artifactId: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  approvedAt: z.string(), researchQuestion: z.string().min(1), queryIndex: z.number().int().min(0).max(2)
+}).strict();
 export const literatureCandidateSchema = z.object({
   candidateId: z.string(), identity: z.string(), record: researchLiteratureSchema,
   score: z.number().nonnegative(),
@@ -54,7 +58,8 @@ export const literatureProviderCoverageSchema = z.object({
   nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(8), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(9), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  strategy: literatureSearchStrategyReceiptSchema.nullable(),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'partial', 'timeout', 'rate_limited', 'error']),

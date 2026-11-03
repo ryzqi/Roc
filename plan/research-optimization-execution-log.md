@@ -1104,3 +1104,60 @@ cleanup boundary. No timeout or existing safety assertion was weakened. Native b
 ran after fullunit, avoiding the unrelated archive deadline contention. No new live
 Provider/model call; current official contracts were verified in PR-04.3A.
 Evidence: `.artifacts/research-optimization/pr04-paging-*.log`.
+
+## PR-04.3C — original question and human-confirmed search strategy
+
+Status: `Verified passing` for typed proposals, actual human review, fixed query execution
+and durable plan provenance. Identity aliases, candidate review metadata/UI and independently
+reviewed retrieval metrics remain subsequent PR-04 work.
+
+Discovery preserves its exact stored instruction as researchQuestion, separately from the
+model's refinedQuestion, keywords, synonyms, domain, excludedTerms and up to3 fixed queries.
+Queries freeze sources, year range, page/count limits and total candidates<=60. Original
+stage instruction is preserved; it is not labelled as a missing verbatim original chat.
+Excluded terms are screening criteria, not invented API filtering. Invalid/missing proposals,
+question changes and searchPlan in other stages fail before publication.
+
+All stages now require real artifacts and the existing human gate; the old automatic-approval
+branch and artifact-free shortcut are removed. Discovery displays the complete typed plan
+in the assistant's existing approval card. Keyboard approval submits the hash of the displayed
+artifact content. Actual LangGraph resume re-reads the plan and refuses changed content or
+missing hashes; the human capability gate also requires expectedSearchPlanHash. No new
+approval service, shell, route, credentials, dependency or database migration.
+
+Retrieval starts only with one typed, human-approved search_strategy. Its model tool accepts
+queryIndex only; the main process supplies and verifies exact frozen parameters. Before every
+HTTP audit start, it checks that the approved plan/current run still applies. Supersession
+stops the next attempt, preserves original receipts and prevents a candidate snapshot.
+Snapshot9 and durable execution request JSON retain artifact ID/content hash, original
+question, approvedAt and query index. Ad hoc searches retain strategy:null; old data is not
+reinterpreted as an independently confirmed plan. Research DB7 and agent DB15 stay unchanged.
+
+Changed: search-plan schema/strategy helper, discovery/retrieval skills and prompts,
+run/artifact/human-gate/search/tool consumers, shared HITL/workflow contracts, existing
+assistant approval card, fixtures/regressions and scoped docs.
+
+Commands from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/research-search-plan.test.mjs` | Red: untyped discovery output published |
+| `node --test tests/unit/research-search-plan.test.mjs tests/unit/literature-import.test.mjs` | Initial52/52 passed |
+| `node --test tests/unit/research-search-plan.test.mjs` | Final7/7, including actual interrupt/resume and candidate budget contract |
+| `pnpm test:unit` | Final686/686 passed after obsolete automatic approval removal |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Generated contracts current |
+| `pnpm test:research-p0` | Final fresh production build/typecheck and12/12 native cases passed |
+| `node --test tests/renderer/research-search-plan.test.mjs` | Actual Electron approval display/keyboard/invalid/long-layout3/3 passed; no renderer errors |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual search action1/1 passed |
+| `pnpm check:renderer-chunks` | Passed, eager JS1131076 bytes/6 files |
+| `git diff --check` | Passed |
+
+Inspected actual plan-review/light and long-plan/dark1099 screenshots. Light/dark at1100,
+1099 and800px retained native keyboard scrolling, visible focus and no horizontal overflow.
+Six shadow audits had cut0/hidden0. Evidence:
+`.artifacts/research-optimization/search-plan-ui/` and `pr04-plan-*.log`.
+Current official LangChain structured-output and LangGraph interrupt docs were checked via
+Context7; installed packages remain pinned. Tests execute deterministic local tools and real
+native workers, with no paid model or new live provider request. Reviewed200-task/L2 blockers
+remain unchanged; no scientific-quality claim follows from these engineering tests.

@@ -1,5 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
 import type { ChatPendingApproval, ChatResumeDecision } from '../../../shared/types';
+import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
 
 /**
  * Approval (HITL) cards (T4.4).
@@ -196,10 +197,17 @@ export function ResearchGateApprovalCard({
   const rejectNote = readString(args, 'rejectNote');
   const decisionLabel = readString(args, 'decisionLabel');
   const isReview = stage === 'review';
+  const isDiscovery = stage === 'discovery';
+  const plan = isDiscovery ? researchSearchPlanSchema.safeParse(args !== null && typeof args === 'object' ? args.searchPlan : undefined) : null;
+  const planHash = readString(args, 'searchPlanHash');
+  const canApprovePlan = !isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash);
   const approveLabel = decisionLabel === '' ? defaultApproveLabel(isReview) : decisionLabel;
   const rejectLabel = rejectNote === '' ? defaultRejectLabel(isReview) : rejectNote;
   const decide = (type: GateDecisionType): void => {
-    onApprovalDecision?.(approval.interruptId, [{ type }]);
+    if (type === 'approve') {
+      if (!canApprovePlan) return;
+      onApprovalDecision?.(approval.interruptId, [{type, ...(isDiscovery ? {reviewedSearchPlanHash: planHash} : {})}]);
+    } else onApprovalDecision?.(approval.interruptId, [{ type }]);
   };
   const decisions =
     approval.reviewConfigs.find((config) => config.actionName === RESEARCH_GATE_TOOL_NAME)?.allowedDecisions ?? [
@@ -232,17 +240,39 @@ export function ResearchGateApprovalCard({
         <ul className="mt-1.5 flex flex-col gap-0.5" data-testid="assistant-gate-artifacts">
           {artifactTitles.map((title) => (
             <li key={title} className="text-ink text-[var(--font-meta-size)]">
-              · {title}
+              {title}
             </li>
           ))}
         </ul>
       )}
+      {isDiscovery ? plan?.success && canApprovePlan ? (
+        <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+          tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+            <dt className="text-muted">原始研究指令</dt><dd>{plan.data.researchQuestion}</dd>
+            <dt className="text-muted">建议研究问题</dt><dd>{plan.data.refinedQuestion}</dd>
+            <dt className="text-muted">领域</dt><dd>{plan.data.domain}</dd>
+            <dt className="text-muted">关键词</dt><dd>{plan.data.keywords.join('、')}</dd>
+            <dt className="text-muted">同义词</dt><dd>{plan.data.synonyms.length === 0 ? '无' : plan.data.synonyms.map(entry => `${entry.term}：${entry.alternatives.join('、')}`).join('；')}</dd>
+            <dt className="text-muted">筛选排除项</dt><dd>{plan.data.excludedTerms.length === 0 ? '无' : plan.data.excludedTerms.join('、')}</dd>
+          </dl>
+          <ol className="mt-2 flex flex-col gap-2">
+            {plan.data.queries.map((query, index) => (
+              <li key={index} className="border-t-[0.5px] border-line pt-2">
+                <p className="font-medium">查询 {index + 1}：{query.query}</p>
+                <p className="text-muted">{query.sources.join('、')}，{query.yearFrom ?? '不限'} 至 {query.yearTo ?? '不限'}，每来源最多 {query.maxPages} 页，每页 {query.limit} 条，最终最多 {query.limit} 篇</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : <p role="alert" className="mt-2 text-[var(--st-bad)]">检索计划缺失或无效，请退回重做。</p> : null}
       <div className="mt-2 flex items-center gap-2">
         {decisions.includes('approve') ? (
           <button
             type="button"
             data-testid="assistant-gate-approve"
-            className={approvalButtonClass('approve')}
+            disabled={!canApprovePlan}
+            className={`${approvalButtonClass('approve')} disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => decide('approve')}
           >
             {approveLabel}

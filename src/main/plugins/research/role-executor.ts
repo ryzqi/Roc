@@ -69,6 +69,9 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
                 '完成本阶段前必须发布真实导出作业。结构化输出会记录到已发布的交付工件。'
               ] : []),
               '输出 title、markdown、claims、sections、verdict。无内容的数组使用 []。正文 sections 用 claimIndexes 引用本次 claims 中受证据支持的段落。',
+              ...(input.run.stage === 'discovery' ? [
+                '必须输出 searchPlan。researchQuestion 逐字复制本次 instruction；refinedQuestion、keywords、synonyms、domain、excludedTerms 是模型建议。queries 给出最多3组明确查询、来源、limit、maxPages 和需要的 yearFrom/yearTo。原始问题与建议不得混写；用户批准此工件后检索只执行这些固定查询。'
+              ] : []),
               ...(input.run.outputKind === 'idea_canvas' ? [
                 '构思阶段必须同时输出 ideaCanvas。分别填写 problem、hypothesis、novelty、supportingEvidence、counterevidence、experiment、risks、priority、rationale 和对应 fields。支持性字段引用真实 evidenceIds；假设或待验证字段不得标成 supported。'
               ] : []),

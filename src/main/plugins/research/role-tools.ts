@@ -13,6 +13,7 @@ import type { RocCapabilityRegistry } from '../../kernel/types';
 import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchRepository } from './repository';
 import type { ResearchExecutionContext } from './run-repository';
+import { requireConfirmedSearchStrategy } from './search-strategy';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -169,7 +170,8 @@ export function createResearchRoleTools(input: {
       schema: z.object({ exportId: z.string().min(1), replacesExportId: z.string().min(1).nullable() }).strict() })
   };
   const literatureTools = createLiteratureTools(input.capabilities, {
-    owner: `stage:${input.run.id}`, projectId: input.run.projectId, runId: input.run.id, signal: input.signal, assertActive
+    owner: `stage:${input.run.id}`, projectId: input.run.projectId, runId: input.run.id, signal: input.signal, assertActive,
+    ...(input.run.stage === 'retrieval' ? {searchStrategy: requireConfirmedSearchStrategy(input.repository, input.context)} : {})
   }, { search: 'search_literature', read: 'read_literature_search', add: 'add_literature', get: 'get_literature_import', cancel: 'cancel_literature_import' });
   for (const entry of literatureTools) factories[entry.name] = () => entry;
   return input.run.toolNames.map((name) => {

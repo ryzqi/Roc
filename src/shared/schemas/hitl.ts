@@ -32,7 +32,7 @@ export const hitlRequestSchema = z
   .strict();
 
 export const hitlResumeDecisionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('approve') }).strict(),
+  z.object({ type: z.literal('approve'), reviewedSearchPlanHash: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict(),
   z
     .object({
       type: z.literal('reject'),

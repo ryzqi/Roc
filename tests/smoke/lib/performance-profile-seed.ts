@@ -126,8 +126,9 @@ function seedResearchProject(pool: DatabasePool, dataRoot: string, eventCount: n
      VALUES (?, ?, ?, ?, 'active', 'discovery', ?, ?, 'zh')`
   ).run(projectId, `Performance Profile ${eventCount}`, 'performance profile project', workspacePath, timestamp, timestamp);
 
-  // 与 `ResearchRepository.createProject` 的 stageGateRequired 一致（除 discovery 外全部需要人工闸门）。
+  // 与 `ResearchRepository.createProject` 一致：全部阶段需要人工闸门。
   const gateRequired = new Set<string>([
+    'discovery',
     'retrieval',
     'reading',
     'ideation',

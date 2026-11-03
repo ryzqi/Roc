@@ -1,5 +1,6 @@
 import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
+import { requireSearchPlanContent, searchPlanApprovalHash } from './search-strategy';
 
 export type ResearchProductionVerifier = {
   verifyStage(projectId: string): Promise<void>;
@@ -23,6 +24,14 @@ export function createResearchHumanGate(input: {
     if (workflow.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
     const current = workflow.stages.find((stage) => stage.stage === workflow.currentStage);
     if (current === undefined) throw new Error('research_stage_not_found');
+    if (request.action === 'approve' && current.stage === 'discovery') {
+      if (current.artifactIds.length !== 1) throw new Error('research_search_plan_required');
+      const artifact = input.repository.getArtifact(current.artifactIds[0]);
+      const output = requireSearchPlanContent(input.repository, artifact);
+      if (request.expectedSearchPlanHash !== searchPlanApprovalHash(request.projectId, artifact.id, output)) {
+        throw new Error('research_search_plan_approval_changed');
+      }
+    }
     if (current.stage === 'figure' || current.stage === 'export') {
       if (input.production === undefined) throw new Error(current.stage === 'figure' ? 'research_figure_verify_unavailable' : 'research_export_verify_unavailable');
       const signature = current.stage === 'figure'
