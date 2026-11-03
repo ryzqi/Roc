@@ -49,6 +49,14 @@ before(async () => {
       const snapshots = new Map();
       const imported = new Map();
       const observations = new Map();
+      const inspections = new Map();
+      const grants = new Map();
+      const children = Array.from({length:23},(_,i)=>{
+        const key='ATTACH'+String(i).padStart(2,'0');
+        const linkMode=['imported_file','linked_file','imported_url','linked_url','embedded_image'][i] || 'imported_file';
+        return {key,version:9,data:{key,version:9,parentItem:'ITEM0000',itemType:i<11 ? 'attachment' : 'note',
+          title:'Synthetic child '+i,linkMode}};
+      });
       function observation(input, options={}) {
         const status=options.status || 'present';
         const version=options.version === undefined ? 8 : options.version;
@@ -64,6 +72,60 @@ before(async () => {
       let sync = null;
       const call = (method,input,work) => {window.calls.push({method,input});return work();};
       const client = {api:{research:{
+        getZoteroChildren: input => call('children',input,async()=>{
+          if(scenario.childrenError) return fail('Synthetic child source disconnected');
+          const parent={scope:{serverId:input.serverId,library:input.library},itemKey:input.itemKey,
+            operationId:input.operationId,version:7,libraryVersion:19,libraryItemId:'local-paper',itemHash:'f'.repeat(64),
+            previewId:'prior-preview',capturedAt:at,importedAt:at,item:originals[0]};
+          const {projectId,...request}=input;
+          const output={parent,request,page:{serverId:input.serverId,library:input.library,libraryVersion:20,
+            offset:input.offset,total:23,nextOffset:input.offset===0 ? 20 : null,responseHash:'a'.repeat(64),fetchedAt:at,
+            records:children.slice(input.offset,input.offset+input.limit)}};
+          if(scenario.childrenDeferred) return new Promise(resolve=>window.finishChildren=()=>resolve(ok(output)));
+          return ok(output);
+        }),
+        inspectZoteroAttachment: input => call('attachmentInspect',input,async()=>{
+          if(scenario.attachmentInspectError) return fail('Synthetic attachment inspection failed');
+          const child=children.find(item=>item.key===input.attachmentKey),i=children.indexOf(child);
+          const referencePath=scenario.longPath ? '/synthetic/'+('long-file-reference/'.repeat(20))+'file.pdf' : '/synthetic/file.pdf';
+          const status=i===9 ? 'trashed' : i===10 ? 'not_found' : 'present';
+          const fileStatus=['ready','ready','ready',null,null,'missing','denied','invalid','unsupported_format'][i];
+          const file=status!=='present' || i===3 || i===4 ? {status:'not_requested',reason:status==='not_found' ? 'source_not_found' : status==='trashed' ? 'trashed' : child.data.linkMode} :
+            fileStatus==='ready' ? {status:'ready',referencePath,resolvedPath:referencePath,identity:{device:1,inode:2,size:3,modifiedMs:0,changedMs:0}} :
+              {status:fileStatus,referencePath,resolvedPath:null,errorCode:'synthetic_file_'+fileStatus};
+          const {projectId,...source}=input;
+          const inspection={inspectionId:'inspection-'+window.calls.length,source,libraryItemId:'local-paper',importedObjectVersion:7,
+            linkMode:status==='not_found' ? null : child.data.linkMode,file,
+            remote:{status,scope:{serverId:input.serverId,library:input.library},item:status==='not_found' ? null : child,
+              objectVersion:status==='not_found' ? null : 9,responseHash:'a'.repeat(64),checkedAt:at},recordedAt:at,contentHash:'b'.repeat(64)};
+          inspections.set(inspection.inspectionId,inspection);
+          return ok(inspection);
+        }),
+        grantZoteroAttachment: input => call('attachmentGrant',input,async()=>{
+          if(scenario.attachmentGrantError) return fail('Synthetic selected file differs');
+          if(scenario.grantCancelOnce && window.calls.filter(call=>call.method==='attachmentGrant').length===1) return ok({status:'cancelled',grant:null});
+          const inspection=inspections.get(input.inspectionId);
+          const grant={grantId:'grant-'+window.calls.length,inspectionId:input.inspectionId,requestId:input.requestId,
+            permission:'read_one_file',selectedPath:inspection.file.resolvedPath,identity:inspection.file.identity,
+            inspectionHash:inspection.contentHash,grantedAt:at,contentHash:'c'.repeat(64)};
+          grants.set(grant.grantId,grant);
+          if(scenario.grantDeferred) return new Promise(resolve=>window.finishGrant=()=>resolve(ok({status:'granted',grant})));
+          return ok({status:'granted',grant});
+        }),
+        importZoteroAttachment: input => call('attachmentImport',input,async()=>{
+          if(scenario.attachmentImportFailOnce && window.calls.filter(call=>call.method==='attachmentImport').length===1) return fail('Synthetic attachment transaction failed');
+          const grant=grants.get(input.grantId),inspection=inspections.get(grant.inspectionId);
+          const receipt={operationId:'attachment-operation',requestId:input.requestId,grantId:grant.grantId,grantHash:grant.contentHash,
+            inspectionId:inspection.inspectionId,source:inspection.source,libraryItemId:inspection.libraryItemId,
+            destinationProjectId:input.destination==='library_only' ? null : input.projectId,
+            document:{id:'document-a',libraryItemId:inspection.libraryItemId,filename:'file.pdf',mediaType:'application/pdf',
+              sourceHash:'d'.repeat(64),size:3,status:'imported',currentParseId:null,activeParseId:null,error:null,createdAt:at,updatedAt:at},
+            importedAt:at,contentHash:'e'.repeat(64)};
+          if(scenario.attachmentImportDeferred) return new Promise(resolve=>window.finishAttachmentImport=success=>resolve(success ? ok(receipt) : fail('Synthetic attachment import cancelled')));
+          return ok(receipt);
+        }),
+        cancelZoteroAttachmentImport: input => call('attachmentCancel',input,async()=>scenario.attachmentCancelError ?
+          fail('Synthetic attachment cancellation refused') : ok({requestId:input.requestId,cancelRequested:true})),
         readZoteroSourceState: input => call('sourceState',input,async()=>{
           if(scenario.sourceReadError) return fail('Synthetic saved observation damaged');
           const value=observations.get(JSON.stringify(input)) || (scenario.sourceStored ? observation(input,scenario.sourceStored) : null);
@@ -162,7 +224,7 @@ before(async () => {
             const metadata={id:'zotero:'+key,externalId:key,source:'zotero',doi:'10.1234/synthetic',title:item.data.title,
               authors:['Synthetic Author'],abstract:null,publishedYear:null,citationCount:null,url:null,openAccessUrl:null,
               importedAt:at,updatedAt:at};
-            const local=scenario.reviewDifference || scenario.reviewState || scenario.archived ? {
+            const local=scenario.reviewDifference || scenario.reviewState || scenario.archived || imported.get(input.previewId)?.has(key) ? {
               id:'local-paper',revision:3,archived:scenario.archived===true,updatedAt:at,
               metadata:{...metadata,title:'Existing canonical title'},
               bibliography:{citationKey:'LocalKey',entryType:'article',title:'Existing canonical title',authors:metadata.authors,
@@ -754,4 +816,290 @@ test('failed current-source checks preserve valid observations; damaged reads re
   await page.getByTestId('literature-zotero-previous-source').locator(':scope > summary').click();
   assert.equal(await page.getByTestId('literature-zotero-source-state').count(),0);
   assert.equal(await page.evaluate(()=>calls.filter(call=>['sourceState','sourceObserve'].includes(call.method)).length),0);
+});
+
+const child = key => page.locator(`[data-testid="literature-zotero-child"][data-item-key="${key}"]`);
+async function attachments(previous) {
+  const detail=previous.getByTestId('literature-zotero-attachments');
+  await detail.locator(':scope > summary').waitFor({state:'visible'});
+  await detail.locator(':scope > summary').focus();
+  await page.keyboard.press('Enter');
+  await detail.getByTestId('literature-zotero-children-read').waitFor({state:'visible'});
+  return detail;
+}
+async function discoverAttachments() {
+  const readCount=await page.evaluate(()=>calls.filter(call=>call.method==='children').length);
+  const previous=await originalSource();
+  const detail=await attachments(previous);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='children').length),readCount);
+  await detail.getByTestId('literature-zotero-children-read').click();
+  await child('ATTACH00').waitFor();
+  return detail;
+}
+
+test('attachment steps disclose exact input scope, native cancellation and retry receipts without implicit file work',async()=>{
+  await open({reviewDifference:true,grantCancelOnce:true,attachmentImportFailOnce:true});
+  await preview();
+  const detail=await discoverAttachments();
+  assert.match(await detail.innerText(),/子项 1–20 \/ 23，\s*文库版本 20/u);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method.startsWith('attachment')).length),0);
+  assert.deepEqual(await page.evaluate(()=>calls.find(call=>call.method==='children').input),{
+    serverId:'synthetic-instance',library:{kind:'user',id:0},projectId:'project-a',operationId:'prior-operation',
+    itemKey:'ITEM0000',offset:0,limit:20,expectedLibraryVersion:null});
+  const attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-check').focus();
+  await page.keyboard.press('Enter');
+  await attachment.getByText('文件可访问，尚需选择授权',{exact:true}).waitFor();
+  assert.match(await attachment.innerText(),/Zotero 管理文件/u);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentGrant' || call.method==='attachmentImport').length),0);
+  await attachment.getByTestId('literature-zotero-attachment-grant').click();
+  await attachment.getByText('已取消文件选择，未授权读取。',{exact:true}).waitFor();
+  assert.equal(await attachment.getByTestId('literature-zotero-attachment-import').count(),0);
+  await attachment.getByTestId('literature-zotero-attachment-grant').click();
+  await attachment.getByTestId('literature-zotero-attachment-import').waitFor();
+  assert.match(await attachment.innerText(),/已授权读取一个文件：\/synthetic\/file.pdf/u);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').length),0);
+  const grantInputs=await page.evaluate(()=>calls.filter(call=>call.method==='attachmentGrant').map(call=>call.input));
+  assert.notEqual(grantInputs[0].requestId,grantInputs[1].requestId);
+  assert.deepEqual(Object.keys(grantInputs[1]).sort(),['inspectionId','projectId','requestId']);
+  await attachment.getByTestId('literature-zotero-attachment-destination').selectOption('library_only');
+  await attachment.getByTestId('literature-zotero-attachment-import').click();
+  await attachment.getByText('Synthetic attachment transaction failed',{exact:true}).waitFor();
+  assert.equal(await attachment.getByTestId('literature-zotero-attachment-receipt').count(),0);
+  assert.equal(await attachment.getByTestId('literature-zotero-attachment-destination').isDisabled(),true);
+  await attachment.getByTestId('literature-zotero-attachment-import').click();
+  await attachment.getByTestId('literature-zotero-attachment-receipt').waitFor();
+  assert.match(await attachment.innerText(),/已导入 file.pdf/u);
+  assert.match(await attachment.innerText(),/仅文库，已导入，尚未解析/u);
+  assert.match(await attachment.innerText(),new RegExp('内容 SHA-256 '+'d'.repeat(64),'u'));
+  const imports=await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').map(call=>call.input));
+  assert.deepEqual(imports[0],imports[1]);
+  assert.equal(imports[1].destination,'library_only');
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),0);
+  await attachment.getByTestId('literature-zotero-attachment-receipt').scrollIntoViewIfNeeded();
+  await inspect('attachment-import-receipt');
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-dialog-panel').waitFor({state:'detached'});
+  await reopen();
+  await preview();
+  await discoverAttachments();
+  await child('ATTACH00').getByTestId('literature-zotero-attachment-receipt').waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').length),2);
+});
+
+test('attachment modes and inaccessible references stay distinct, notes and later pages cannot acquire file grants',async()=>{
+  await open({reviewDifference:true});
+  await preview();
+  const detail=await discoverAttachments();
+  const expected=['文件可访问，尚需选择授权','文件可访问，尚需选择授权','文件可访问，尚需选择授权',
+    '链接网址，没有本地文件输入','嵌入图片不作为文档输入','文件缺失或断链','无权读取文件',
+    '路径或文件类型无效','文件格式或大小不支持','附件在回收站','附件来源未找到'];
+  for(let i=0;i<expected.length;i++) {
+    const attachment=child('ATTACH'+String(i).padStart(2,'0'));
+    await attachment.getByTestId('literature-zotero-attachment-check').click();
+    await attachment.getByText(expected[i],{exact:true}).waitFor();
+    assert.equal(await attachment.getByTestId('literature-zotero-attachment-grant').count(),i<3 ? 1 : 0);
+  }
+  assert.match(await child('ATTACH01').innerText(),/链接文件/u);
+  assert.match(await child('ATTACH02').innerText(),/Zotero 保存的网页文件/u);
+  assert.equal(await child('ATTACH11').getByTestId('literature-zotero-attachment-check').count(),0);
+  await detail.getByTestId('literature-zotero-children-next').click();
+  await child('ATTACH22').waitFor();
+  assert.match(await detail.innerText(),/子项 21–23 \/ 23/u);
+  const input=await page.evaluate(()=>calls.filter(call=>call.method==='children').at(-1).input);
+  assert.equal(input.offset,20);
+  assert.equal(input.expectedLibraryVersion,20);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentGrant' || call.method==='attachmentImport' || call.method==='add').length),0);
+});
+
+test('already imported paused rows expose readonly original sources while repeated bibliography selection remains disabled',async()=>{
+  await open({});
+  await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.waitForFunction(()=>document.querySelector('[data-testid="literature-zotero-sync"]').textContent.includes('核对中'));
+  await page.getByTestId('literature-zotero-preview').click();
+  await row('ITEM0000').locator('input').check();
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="literature-zotero-import"]').disabled);
+  await page.getByTestId('literature-zotero-import').click();
+  const entry=row('ITEM0000');
+  await entry.getByTestId('literature-zotero-imported-source').waitFor();
+  assert.equal(await entry.locator('input').isDisabled(),true);
+  await page.getByTestId('literature-zotero-sync-pause').click();
+  await entry.getByTestId('literature-zotero-imported-source').locator(':scope > summary').focus();
+  await page.keyboard.press('Enter');
+  const reviewed=entry.getByTestId('literature-zotero-reviewed-object');
+  await reviewed.locator(':scope > summary').waitFor({state:'visible'});
+  await reviewed.locator(':scope > summary').click();
+  const original=reviewed.getByTestId('literature-zotero-previous-source');
+  await original.locator(':scope > summary').waitFor({state:'visible'});
+  await original.locator(':scope > summary').click();
+  const detail=await attachments(original);
+  await detail.getByTestId('literature-zotero-children-read').click();
+  await child('ATTACH00').waitFor();
+  assert.equal(await entry.locator('input').isDisabled(),true);
+  assert.equal(await page.getByTestId('literature-zotero-import').isDisabled(),true);
+  assert.equal(await page.getByTestId('literature-zotero-preview').isDisabled(),true);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),1);
+  await child('ATTACH00').scrollIntoViewIfNeeded();
+  await inspect('attachment-paused-imported');
+});
+
+test('attachment failures and actual cancellation signals preserve granted inputs and wait for import exit',async()=>{
+  for(const scenario of [{childrenError:true},{attachmentInspectError:true},{attachmentGrantError:true},
+    {attachmentImportDeferred:true,attachmentCancelError:true},{attachmentImportDeferred:true}]) {
+    await open({reviewDifference:true,...scenario});
+    await preview();
+    const previous=await originalSource(),detail=await attachments(previous);
+    await detail.getByTestId('literature-zotero-children-read').click();
+    if(scenario.childrenError) {
+      await detail.getByText('Synthetic child source disconnected',{exact:true}).waitFor();
+      assert.equal(await page.getByTestId('literature-zotero-child').count(),0);
+      continue;
+    }
+    const attachment=child('ATTACH00');
+    await attachment.getByTestId('literature-zotero-attachment-check').click();
+    if(scenario.attachmentInspectError) {
+      await attachment.getByText('Synthetic attachment inspection failed',{exact:true}).waitFor();
+      assert.equal(await attachment.getByTestId('literature-zotero-attachment-grant').count(),0);
+      continue;
+    }
+    await attachment.getByTestId('literature-zotero-attachment-grant').click();
+    if(scenario.attachmentGrantError) {
+      await attachment.getByText('Synthetic selected file differs',{exact:true}).waitFor();
+      assert.equal(await attachment.getByTestId('literature-zotero-attachment-import').count(),0);
+      continue;
+    }
+    await attachment.getByTestId('literature-zotero-attachment-import').click();
+    await page.waitForFunction(()=>typeof finishAttachmentImport==='function');
+    await attachment.getByTestId('literature-zotero-attachment-cancel').click();
+    if(scenario.attachmentCancelError) {
+      await attachment.getByText('Synthetic attachment cancellation refused',{exact:true}).waitFor();
+      assert.equal(await attachment.getByTestId('literature-zotero-attachment-cancel').isDisabled(),false);
+    } else {
+      await attachment.getByText('已请求取消，等待导入退出',{exact:true}).waitFor();
+      assert.equal(await attachment.getByTestId('literature-zotero-attachment-cancel').isDisabled(),true);
+    }
+    assert.equal(await attachment.getByTestId('literature-zotero-attachment-import').isDisabled(),true);
+    assert.equal(await attachment.getByTestId('literature-zotero-attachment-receipt').count(),0);
+    const [importInput,cancelInput]=await page.evaluate(()=>['attachmentImport','attachmentCancel'].map(method=>calls.find(call=>call.method===method).input));
+    assert.equal(cancelInput.requestId,importInput.requestId);
+    assert.equal(importInput.destination,'current_project');
+    await page.evaluate(()=>finishAttachmentImport(false));
+    await attachment.getByText('Synthetic attachment import cancelled',{exact:true}).waitFor();
+    assert.equal(await attachment.getByTestId('literature-zotero-attachment-import').isDisabled(),false);
+    assert.match(await attachment.innerText(),/已授权读取一个文件/u);
+  }
+});
+
+test('old attachment responses stay tied to source scope and library-only inputs remain explicit',async()=>{
+  await open({reviewDifference:true,childrenDeferred:true});
+  await preview();
+  let previous=await originalSource(),detail=await attachments(previous);
+  await detail.getByTestId('literature-zotero-children-read').click();
+  await page.waitForFunction(()=>typeof finishChildren==='function');
+  await page.getByTestId('literature-zotero-collection').selectOption('COLL0001');
+  await page.evaluate(()=>finishChildren());
+  assert.equal(await page.getByTestId('literature-zotero-child').count(),0);
+  await open({reviewDifference:true,projectId:null,attachmentImportDeferred:true});
+  await preview();
+  detail=await discoverAttachments();
+  let attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-check').click();
+  await attachment.getByTestId('literature-zotero-attachment-grant').click();
+  const options=await attachment.getByTestId('literature-zotero-attachment-destination').locator('option').allTextContents();
+  assert.deepEqual(options,['仅文库']);
+  await attachment.getByTestId('literature-zotero-attachment-import').click();
+  await page.waitForFunction(()=>typeof finishAttachmentImport==='function');
+  await page.evaluate(()=>window.oldImport=finishAttachmentImport);
+  await open({reviewDifference:true,projectId:'project-b'});
+  await preview();
+  await discoverAttachments();
+  await page.evaluate(()=>oldImport(true));
+  assert.equal(await child('ATTACH00').getByTestId('literature-zotero-attachment-receipt').count(),0);
+  assert.equal(await page.evaluate(()=>reloads),0);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').length),0);
+});
+
+test('attachment long file references retain keyboard controls across light and dark desktop widths',async()=>{
+  await open({reviewDifference:true,longPath:true});
+  await preview();
+  await discoverAttachments();
+  const attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-check').click();
+  await attachment.getByTestId('literature-zotero-attachment-grant').waitFor();
+  for(const theme of ['light','dark']) for(const width of [1100,1099,800]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,900),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await attachment.getByTestId('literature-zotero-attachment-grant').scrollIntoViewIfNeeded();
+    await attachment.getByTestId('literature-zotero-attachment-grant').hover();
+    await inspect('attachment-'+theme+'-'+width);
+    const geometry=await page.evaluate(()=>{
+      const dialog=document.querySelector('[data-testid="literature-import-dialog-panel"]');
+      const section=document.querySelector('[data-testid="literature-zotero-attachment"]');
+      const rect=section.getBoundingClientRect();
+      return {panelScroll:dialog.scrollTop,overflow:section.scrollWidth>section.clientWidth,
+        left:rect.left,right:rect.right,width:innerWidth,smallText:[...section.querySelectorAll('p,button,select')]
+          .some(element=>parseFloat(getComputedStyle(element).fontSize)<12)};
+    });
+    assert.equal(geometry.panelScroll,0);
+    assert.equal(geometry.overflow,false);
+    assert.ok(geometry.left>=0 && geometry.right<=geometry.width);
+    assert.equal(geometry.smallText,false);
+  }
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+});
+
+test('pending native grant and content import survive closure with source-bound receipts and no automatic replay',async()=>{
+  await open({reviewDifference:true,grantDeferred:true,attachmentImportDeferred:true});
+  await preview();
+  await discoverAttachments();
+  let attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-check').click();
+  await attachment.getByTestId('literature-zotero-attachment-grant').click();
+  await page.waitForFunction(()=>typeof finishGrant==='function');
+  assert.equal(await attachment.getByTestId('literature-zotero-attachment-check').isDisabled(),true);
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-dialog-panel').waitFor({state:'detached'});
+  await page.evaluate(()=>finishGrant());
+  await reopen();
+  await preview();
+  await discoverAttachments();
+  attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-import').waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentGrant').length),1);
+  await attachment.getByTestId('literature-zotero-attachment-import').click();
+  await page.waitForFunction(()=>typeof finishAttachmentImport==='function');
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-dialog-panel').waitFor({state:'detached'});
+  await page.evaluate(()=>finishAttachmentImport(true));
+  await reopen();
+  await preview();
+  await discoverAttachments();
+  await child('ATTACH00').getByTestId('literature-zotero-attachment-receipt').waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').length),1);
+});
+
+test('late granted-file output cannot authorize another original parent and scope changes drop pending discovery',async()=>{
+  await open({reviewDifference:true,grantDeferred:true});
+  await preview();
+  await discoverAttachments();
+  const attachment=child('ATTACH00');
+  await attachment.getByTestId('literature-zotero-attachment-check').click();
+  await attachment.getByTestId('literature-zotero-attachment-grant').click();
+  await page.waitForFunction(()=>typeof finishGrant==='function');
+  await row('ITEM0000').locator('input').uncheck();
+  await row('ITEM0001').locator('input').check();
+  const reviewed=page.getByTestId('literature-zotero-reviewed-object');
+  await reviewed.locator(':scope > summary').waitFor({state:'visible'});
+  await reviewed.locator(':scope > summary').click();
+  const previous=reviewed.getByTestId('literature-zotero-previous-source');
+  await previous.locator(':scope > summary').waitFor({state:'visible'});
+  await previous.locator(':scope > summary').click();
+  await attachments(previous);
+  await page.evaluate(()=>finishGrant());
+  assert.equal(await page.getByTestId('literature-zotero-attachment-import').count(),0);
+  assert.equal(await page.getByTestId('literature-zotero-attachment-receipt').count(),0);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='attachmentImport').length),0);
+  assert.equal(await page.evaluate(()=>calls.find(call=>call.method==='attachmentInspect').input.itemKey),'ITEM0000');
 });

@@ -10,6 +10,7 @@ import type { LiteratureImportOutcome } from './use-literature-store';
 import {LiteratureCandidateReview} from './LiteratureCandidateReview';
 import {ZoteroImportPanel} from './ZoteroImportPanel';
 import {useZoteroImportJob} from './use-zotero-import-job';
+import {useZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
 import type {RocClient} from '../shared/roc-client';
 import {
   DOCUMENT_EXTENSIONS,
@@ -115,6 +116,7 @@ function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad';
 export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null {
   const { open, onClose } = props;
   const zoteroJob = useZoteroImportJob(props.client, props.projectId, props.onZoteroImported);
+  const attachmentJobs = useZoteroAttachmentJobs(props.client, props.projectId, props.onZoteroImported);
   const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -569,7 +571,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           </div>
         ) : null}
 
-        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} /> : null}
+        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} attachments={attachmentJobs} /> : null}
 
         {tab === 'search' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-search">

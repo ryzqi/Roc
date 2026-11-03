@@ -2128,3 +2128,44 @@ counts, parent/version mismatch, actual bridge isolation and shutdown abort. Act
 panel and real Zotero client remain unrun. No real library/live literature/model/remote writes
 or frozen fixtures touched. Next F4B: readonly original-source entry for already-imported rows
 and child discovery/inspection/explicit native grant/content-import UI. Full plan unfinished.
+
+## PR-05F4B — explicit attachment UI and readonly imported-source access
+
+Status: `Verified passing` for this UI increment. Imported sync rows expose independent
+readonly original-source review while their bibliography checkbox stays disabled, including
+paused state. Original details contain explicit children discovery/paging, raw kinds/counts/
+versions and separate inspection/native single-file grant/destination/content-import steps.
+File references, linked/managed modes, missing/denied/invalid/unsupported and source states
+remain distinct; notes have no grant action. No eager source check, bytes or automatic parsing.
+
+Dialog-owned source/project-keyed jobs retain inspection/grant/request/receipt during details/
+tab/dialog closure. Retry keeps actual request and destination; cancellation acknowledgment
+waits for original import exit. Selection cancellation means no grant. Late source/project
+output cannot authorize or publish in current scope. Committed receipts display real hashes
+and translated document status, including imported/unparsed. Reopen explicitly rediscovers
+children and displays saved dialog state without repeating file selection/import. This UI
+does not claim automatic pipeline recovery across application restart; backend receipts remain
+durable and accessible by formal IDs. No second modal, shell or route.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm build` | Fresh production build/typecheck passed |
+| `node --test --test-concurrency=1 tests/renderer/` |77/77 passed |
+| `node --test --test-name-pattern='attachment steps' tests/renderer/zotero-import.test.mjs` | Focused retry1/1 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131153bytes/6files passed |
+| `git diff --check` | Passed |
+
+Backend unchanged; previous F4A unit809/native13/Harness94 apply. Evidence
+`pr05-attachment-ui-*.log` and `zotero-import-ui/attachment-*` screenshots/audits. Native
+Electron renderer tests cover explicit steps, access modes, raw pagination, notes, paused
+imported entry, exact input boundaries, selection cancel/new request, failure retry/same
+request, real cancellation acknowledgment/exit, pending closure recovery, stale collection/
+project/parent and keyboard/long-path light/dark1100/1099/800. Audits cut0/hidden0, fixed
+title/close, no horizontal overflow or <12px new text. Initial18 run17 passed; the one new
+JSX whitespace assertion was corrected without weakening action/state checks; final77 passed.
+Native choice remains synthetic; actual panel/client interoperability unrun. No live model,
+real library, remote writes or frozen fixtures. Next X-UI artifact inspector. Overall plan
+and external scientific/model acceptance remain unfinished.

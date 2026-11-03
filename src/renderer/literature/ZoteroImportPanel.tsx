@@ -7,6 +7,7 @@ import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '
 import type {ZoteroImportJob} from './use-zotero-import-job';
 import type {ZoteroSync, ZoteroSyncCapturedPage} from '../../shared/schemas/research-zotero-sync';
 import {ZoteroOriginalSource} from './ZoteroSourceStatePanel';
+import type {ZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
 
 const buttonClass = `${formSecondaryButtonClass} border-[0.5px]`;
 const inputClass = `${formInputClass} border-[0.5px] text-[var(--font-meta-size)]`;
@@ -15,7 +16,7 @@ const connectionLabels = {disabled: '未启用通信。请在 Zotero 高级设�
   unsupported: '版本不支持。需要 Zotero 10 或更新版本。',
   invalid_response: '本地服务响应无效。请检查 Zotero 客户端。'};
 
-export function ZoteroImportPanel({client, job}: {client: RocClient; job: ZoteroImportJob}): React.JSX.Element {
+export function ZoteroImportPanel({client, job, attachments}: {client: RocClient; job: ZoteroImportJob; attachments: ZoteroAttachmentJobs}): React.JSX.Element {
   const [attempt, setAttempt] = useState(0);
   const probe = useAsyncResource(attempt === 0 ? null : `zotero:probe:${attempt}`,
     () => client.api.research.probeZotero({}), {label: '连接 Zotero'});
@@ -31,12 +32,12 @@ export function ZoteroImportPanel({client, job}: {client: RocClient; job: Zotero
     {probe.error === null ? null : <Failure message={probe.error} />}
     {connection === null || connection.status === 'connected' ? null : <Failure message={connectionLabels[connection.status]} />}
     {connection?.status === 'connected' ? <ConnectedLibraries key={`${attempt}:${connection.serverId}`}
-      client={client} serverId={connection.serverId} job={job} /> : null}
+      client={client} serverId={connection.serverId} job={job} attachments={attachments} /> : null}
     <ImportReceipt job={job} />
   </div>;
 }
 
-function ConnectedLibraries({client, serverId, job}: {client: RocClient; serverId: string; job: ZoteroImportJob}): React.JSX.Element {
+function ConnectedLibraries({client, serverId, job, attachments}: {client: RocClient; serverId: string; job: ZoteroImportJob; attachments: ZoteroAttachmentJobs}): React.JSX.Element {
   const [offset, setOffset] = useState(0);
   const [library, setLibrary] = useState<ZoteroScope['library']>({kind: 'user', id: 0});
   const [libraryName, setLibraryName] = useState('我的文库');
@@ -66,12 +67,12 @@ function ConnectedLibraries({client, serverId, job}: {client: RocClient; serverI
     </fieldset>
     {groups.error === null ? null : <Failure message={groups.error} />}
     <LibraryPreview key={`${library.kind}:${library.id}`} client={client} scope={{serverId, library}}
-      libraryName={libraryName} job={job} />
+      libraryName={libraryName} job={job} attachments={attachments} />
   </>;
 }
 
-function LibraryPreview({client, scope, libraryName, job}: {
-  client: RocClient; scope: ZoteroScope; libraryName: string; job: ZoteroImportJob
+function LibraryPreview({client, scope, libraryName, job, attachments}: {
+  client: RocClient; scope: ZoteroScope; libraryName: string; job: ZoteroImportJob; attachments: ZoteroAttachmentJobs
 }): React.JSX.Element {
   const [query, setQuery] = useState<Pick<ZoteroPageRequest, 'offset' | 'expectedLibraryVersion'>>({offset: 0, expectedLibraryVersion: null});
   const [collection, setCollection] = useState<{key: string; name: string} | null>(null);
@@ -253,7 +254,8 @@ function LibraryPreview({client, scope, libraryName, job}: {
         已显示 {snapshot.records.length} / {snapshot.page.capturedTotal} 个。
       </p>
       <ul className="max-h-64 overflow-y-auto px-1" tabIndex={0} aria-label="Zotero 预览对象">
-        {snapshot.records.map(item => <ObjectRow key={item.key} item={item} checked={selected.has(item.key)}
+        {snapshot.records.map(item => <ObjectRow key={`${snapshot.page.previewId}:${item.key}`} item={item} checked={selected.has(item.key)}
+          client={client} attachments={attachments} previewId={snapshot.page.previewId} collectionKey={collection?.key ?? null}
           imported={snapshot.importedKeys.includes(item.key)}
           disabled={busy || snapshot.importedKeys.includes(item.key) || (!selected.has(item.key) && selected.size >= 30)}
           onSelect={checked => setSelected(current => {
@@ -278,7 +280,7 @@ function LibraryPreview({client, scope, libraryName, job}: {
       </div>
       {selected.size > 0 && reviewed === null && review.error === null ? <p role="status" className="text-muted">正在核对选中题录与本地字段…</p> : null}
       {review.error === null ? null : <Failure message={review.error} />}
-      {reviewed === null ? null : <SourceReview review={reviewed} client={client} projectId={job.projectId} collectionKey={collection?.key ?? null} />}
+      {reviewed === null ? null : <SourceReview review={reviewed} client={client} projectId={job.projectId} collectionKey={collection?.key ?? null} attachments={attachments} />}
       {sync?.status !== 'active' || sync.pendingPreviewId !== snapshot.page.previewId ? null : <div className="flex flex-col gap-2">
         <p className="text-muted">本页已收录 {snapshot.importedKeys.length} 个，确认时跳过 {snapshot.page.capturedTotal - snapshot.importedKeys.length} 个。</p>
         {snapshot.page.capturedTotal === snapshot.importedKeys.length ? null : <label className="flex flex-col gap-1 text-muted">
@@ -298,8 +300,9 @@ function LibraryPreview({client, scope, libraryName, job}: {
   </div>;
 }
 
-function ObjectRow({item, checked, disabled, imported, onSelect}: {
-  item: ZoteroItem; checked: boolean; disabled: boolean; imported: boolean; onSelect: (checked: boolean) => void
+function ObjectRow({item, checked, disabled, imported, onSelect, client, attachments, previewId, collectionKey}: {
+  item: ZoteroItem; checked: boolean; disabled: boolean; imported: boolean; onSelect: (checked: boolean) => void;
+  client: RocClient; attachments: ZoteroAttachmentJobs; previewId: string; collectionKey: string | null
 }): React.JSX.Element {
   const title = typeof item.data.title === 'string' ? item.data.title.trim() : '';
   const paper = !['attachment', 'note', 'annotation'].includes(item.data.itemType);
@@ -322,11 +325,29 @@ function ObjectRow({item, checked, disabled, imported, onSelect}: {
       <summary className="cursor-pointer text-muted">题录、标签、集合与附件引用</summary>
       <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)] text-muted">{JSON.stringify(item, null, 2)}</pre>
     </details>
+    {imported ? <ImportedSource client={client} attachments={attachments} previewId={previewId} itemKey={item.key} collectionKey={collectionKey} /> : null}
   </li>;
 }
 
-function SourceReview({review, client, projectId, collectionKey}: {
-  review: ZoteroReview; client: RocClient; projectId: string | null; collectionKey: string | null
+function ImportedSource({client, attachments, previewId, itemKey, collectionKey}: {
+  client: RocClient; attachments: ZoteroAttachmentJobs; previewId: string; itemKey: string; collectionKey: string | null
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const input = {projectId: attachments.projectId, previewId, itemKeys: [itemKey]};
+  const review = useAsyncResource(open ? `zotero:imported-review:${JSON.stringify(input)}` : null,
+    () => client.api.research.reviewZotero(input), {label: '查看已收录来源'});
+  return <details className="mt-2 pl-5" data-testid="literature-zotero-imported-source"
+    onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className="cursor-pointer text-ink">查看已收录来源与附件</summary>
+    {review.status === 'loading' ? <p role="status">正在读取已收录来源…</p> : null}
+    {review.error === null ? null : <Failure message={review.error} />}
+    {review.status !== 'ready' || review.data === null ? null : <SourceReview review={review.data} client={client}
+      projectId={attachments.projectId} collectionKey={collectionKey} attachments={attachments} />}
+  </details>;
+}
+
+function SourceReview({review, client, projectId, collectionKey, attachments}: {
+  review: ZoteroReview; client: RocClient; projectId: string | null; collectionKey: string | null; attachments: ZoteroAttachmentJobs
 }): React.JSX.Element {
   const states: Record<ZoteroReview['items'][number]['objectState'], string> = {
     new: '新来源对象', unchanged: '来源版本未变化', new_version: '新来源版本',
@@ -362,7 +383,7 @@ function SourceReview({review, client, projectId, collectionKey}: {
           <summary className="cursor-pointer">本地书目字段</summary>
           <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.local.bibliography.fields, null, 2)}</pre>
         </details>}
-        <ZoteroOriginalSource client={client} projectId={projectId} collectionKey={collectionKey} original={item.previousScopedSource} />
+        <ZoteroOriginalSource client={client} projectId={projectId} collectionKey={collectionKey} original={item.previousScopedSource} attachments={attachments} />
       </details>)}
     </div>
   </section>;

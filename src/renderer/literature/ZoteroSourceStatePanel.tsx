@@ -5,6 +5,8 @@ import type {ZoteroSourceState} from '../../shared/schemas/research-zotero-sourc
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import type {RocClient} from '../shared/roc-client';
+import type {ZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
+import {ZoteroAttachmentPanel} from './ZoteroAttachmentPanel';
 
 type Original = NonNullable<ZoteroReview['items'][number]['previousScopedSource']>;
 type Props = {client: RocClient; projectId: string | null; collectionKey: string | null; original: Original};
@@ -53,7 +55,7 @@ export function ZoteroSourceStatePanel({client, projectId, collectionKey, origin
   </section>;
 }
 
-export function ZoteroOriginalSource({client, projectId, collectionKey, original}: Omit<Props, 'original'> & {original: Original | null}): React.JSX.Element {
+export function ZoteroOriginalSource({client, projectId, collectionKey, original, attachments}: Omit<Props, 'original'> & {original: Original | null; attachments: ZoteroAttachmentJobs}): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return <details className="mt-2 text-muted" data-testid="literature-zotero-previous-source"
     onToggle={event => setOpen(event.currentTarget.open)}>
@@ -62,6 +64,8 @@ export function ZoteroOriginalSource({client, projectId, collectionKey, original
       <p>来源版本 {original.version}，收录时间 {original.importedAt}</p>
       {open ? <ZoteroSourceStatePanel key={JSON.stringify([projectId, collectionKey, original.scope, original.operationId, original.itemKey, original.version])}
         client={client} projectId={projectId} collectionKey={collectionKey} original={original} /> : null}
+      <ZoteroAttachmentPanel key={JSON.stringify([projectId, original.scope, original.operationId, original.itemKey, original.version])}
+        client={client} original={original} jobs={attachments} />
       <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(original.item, null, 2)}</pre>
     </>}
   </details>;
