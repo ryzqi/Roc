@@ -884,3 +884,40 @@ hashes, distinguish transport and payload errors, and force out-of-order concurr
 responses without cross-source receipts. Native P0 retained updated searches in its DB
 backups. Logs: `.artifacts/research-optimization/pr04-provider-receipt-*.log`.
 No live Provider/model request, credential access or external write.
+
+## PR-04.2C1 — bounded validated-response cache and parent-first shutdown
+
+Status: `Verified passing` for project-scoped cache and actual plugin/stage lifecycle.
+Provider quotas/health, paging and independently durable cancelled-inflight receipts
+remain pending. No academic retrieval metric or live availability claim.
+
+Snapshot v4 records cache miss or hit with original retrieval timestamp and response
+hash. The process-local LRU permits 32 entries, 8 MiB UTF-8 response text and a five-minute
+TTL; its key includes trusted project, exact URL/query/page and response format. Only
+validated results enter it. Hits make zero HTTP attempts and preserve metadata identity.
+The import service persists the project supplied by trusted execution context.
+
+Shutdown now starts actual parent interruption before search/import/native cleanup.
+All cleanup runs through the existing aggregate helper. Search waits for active requests,
+clears its cache and rejects new reads; late role output cannot publish an artifact.
+No obsolete snapshot adapter, disk cache, dependency or migration was introduced.
+
+Changed: literature-response-cache.ts, literature-service.ts, literature-import-service.ts,
+research-plugin-lifecycle.ts, index.ts, literature-import schema, focused tests and
+research-literature-fusion.md.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='plugin shutdown interrupts' tests/unit/literature-import.test.mjs` | Red: closed service still accepted a new read |
+| `node --test tests/unit/literature-import.test.mjs` | Final 21/21 passed |
+| `pnpm typecheck` | Passed |
+| `pnpm test:unit` | 654/654 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Current generated contracts |
+| `pnpm test:research-p0` | Fresh production build/typecheck and 12/12 native cases passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12 passed, zero renderer errors, exit 0 |
+| `git diff --check` | Passed |
+
+Retained logs: `.artifacts/research-optimization/pr04-cache-*.log`.

@@ -10,14 +10,20 @@ import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../
 import { normalizeResearchDoi } from './literature-identity';
 import { fuseLiterature, literatureSourcePriority } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
+import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
 import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']};
+type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']; projectId: string | null;
+  cacheHit: CachedLiteratureResponse | null; pendingCache: {key: string; response: CachedLiteratureResponse} | null;
+  fetchedAt: string | null};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
+  private readonly cache = new LiteratureResponseCache({maxEntries: 32, maxBytes: 8 * 1024 * 1024, ttlMs: 5 * 60_000}, Date.now);
+  private readonly lifetime = new AbortController();
+  private readonly active = new Set<Promise<Awaited<ReturnType<LiteratureSearchService['executeSearch']>>>>();
 
   constructor(private readonly fetchImpl: FetchLike = fetch) {}
 
@@ -31,7 +37,24 @@ export class LiteratureSearchService {
   async searchDetailed(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
     records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
   }> {
-    const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
+    this.lifetime.signal.throwIfAborted();
+    const pending = this.executeSearch(request, signal);
+    this.active.add(pending);
+    try { return await pending; }
+    finally { this.active.delete(pending); }
+  }
+
+  async shutdown(): Promise<void> {
+    this.lifetime.abort(new Error('literature_service_closed'));
+    await Promise.allSettled([...this.active]);
+    this.cache.clear();
+  }
+
+  private async executeSearch(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
+    records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
+  }> {
+    const deadline = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
+    const projectId = 'projectId' in request ? request.projectId ?? null : null;
     const sources: LiteratureSearchResult['sources'] = [];
     const records: ResearchLiterature[] = [];
     const requestedSources = z.array(literatureNetworkSourceSchema).min(1).parse(request.sources);
@@ -40,13 +63,20 @@ export class LiteratureSearchService {
       await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
         const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
         const receipts: ProviderContext['receipts'] = [];
+        const providerContext: ProviderContext = {signal: providerSignal, receipts, projectId,
+          cacheHit: null, pendingCache: null, fetchedAt: null};
+        const cacheObservation = (): LiteratureSearchResult['sources'][number]['cache'] => providerContext.cacheHit === null ?
+          {state: 'miss'} : {state: 'hit', fetchedAt: providerContext.cacheHit.fetchedAt, responseHash: providerContext.cacheHit.responseHash};
         try {
-          const found = await this.requests.run({signal: providerSignal, receipts}, () => this.searchSource(source, request.query, request.limit));
+          const found = await this.requests.run(providerContext, () => this.searchSource(source, request.query, request.limit));
           const valid = found.map((record) => researchLiteratureSchema.parse(record));
+          providerSignal.throwIfAborted();
+          if (providerContext.pendingCache !== null) this.cache.put(providerContext.pendingCache.key, providerContext.pendingCache.response);
           records.push(...valid);
           sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length,
-            errorCode: null, retryAfterMs: null, requests: receipts });
+            errorCode: null, retryAfterMs: null, requests: receipts, cache: cacheObservation() });
         } catch (error) {
+          this.lifetime.signal.throwIfAborted();
           signal?.throwIfAborted();
           const rateLimited = error instanceof ProviderError && error.status === 429;
           const invalidPayload = error instanceof z.ZodError ||
@@ -54,13 +84,14 @@ export class LiteratureSearchService {
           sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
             errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
               invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
-            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null, requests: receipts });
+            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null, requests: receipts, cache: cacheObservation() });
           return undefined;
         }
         return undefined;
       }));
     }
     signal?.throwIfAborted();
+    this.lifetime.signal.throwIfAborted();
     // Promise completion order must not change candidate ordering or identity.
     records.sort((a, b) => selected.indexOf(a.source as typeof selected[number]) - selected.indexOf(b.source as typeof selected[number]));
     sources.sort((a, b) => selected.indexOf(a.source) - selected.indexOf(b.source));
@@ -86,6 +117,7 @@ export class LiteratureSearchService {
 
   private async searchOpenAlex(query: string, limit: number): Promise<ResearchLiterature[]> {
     const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}&page=1`));
+    const timestamp = this.providerTimestamp();
     return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
@@ -98,13 +130,14 @@ export class LiteratureSearchService {
       citationCount: item.cited_by_count ?? null,
       url: item.id ?? null,
       openAccessUrl: item.open_access?.oa_url ?? null,
-      importedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      importedAt: timestamp,
+      updatedAt: timestamp
     }));
   }
 
   private async searchCrossref(query: string, limit: number): Promise<ResearchLiterature[]> {
     const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&offset=0`));
+    const timestamp = this.providerTimestamp();
     return payload.message.items.map((item) => ({
       id: `crossref:${item.DOI}`,
       source: 'crossref' as const,
@@ -117,13 +150,14 @@ export class LiteratureSearchService {
       citationCount: null,
       url: item.URL ?? null,
       openAccessUrl: null,
-      importedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      importedAt: timestamp,
+      updatedAt: timestamp
     }));
   }
 
   private async searchSemanticScholar(query: string, limit: number): Promise<ResearchLiterature[]> {
     const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&offset=0&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
+    const timestamp = this.providerTimestamp();
     return payload.data.map((item) => ({
       id: `semantic_scholar:${item.paperId}`,
       source: 'semantic_scholar' as const,
@@ -136,8 +170,8 @@ export class LiteratureSearchService {
       citationCount: item.citationCount ?? null,
       url: item.url ?? null,
       openAccessUrl: item.openAccessPdf?.url ?? null,
-      importedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      importedAt: timestamp,
+      updatedAt: timestamp
     }));
   }
 
@@ -146,6 +180,7 @@ export class LiteratureSearchService {
     if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
     const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
     const entries = normalizeArray(payload.feed.entry);
+    const timestamp = this.providerTimestamp();
     return entries.map((item) => ({
       id: `arxiv:${item.id}`,
       source: 'arxiv' as const,
@@ -158,14 +193,15 @@ export class LiteratureSearchService {
       citationCount: null,
       url: item.id,
       openAccessUrl: item.id,
-      importedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      importedAt: timestamp,
+      updatedAt: timestamp
     }));
   }
 
   private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc'): Promise<ResearchLiterature[]> {
     const medQuery = source === 'pubmed' ? `(${query}) AND SRC:MED` : query;
     const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}&cursorMark=*`));
+    const timestamp = this.providerTimestamp();
     return payload.resultList.result.map((item) => ({
       id: `${source}:${item.id}`,
       source,
@@ -178,8 +214,8 @@ export class LiteratureSearchService {
       citationCount: item.citedByCount ?? null,
       url: `https://europepmc.org/article/${item.source}/${item.id}`,
       openAccessUrl: item.isOpenAccess === 'Y' ? `https://europepmc.org/article/${item.source}/${item.id}` : null,
-      importedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      importedAt: timestamp,
+      updatedAt: timestamp
     }));
   }
 
@@ -198,9 +234,22 @@ export class LiteratureSearchService {
     if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
     const context = this.requests.getStore();
     if (context === undefined) throw new Error('literature_provider_context_missing');
+    context.signal.throwIfAborted();
+    const key = JSON.stringify([context.projectId, url, accept]);
+    const cached = this.cache.get(key);
+    if (cached !== null) {
+      context.cacheHit = cached;
+      context.fetchedAt = cached.fetchedAt;
+      return cached.body;
+    }
     for (let attempt = 0; ; attempt += 1) {
       context.signal.throwIfAborted();
-      try { return await this.readAttempt(url, accept, context); }
+      try {
+        const response = await this.readAttempt(url, accept, context);
+        context.pendingCache = {key, response};
+        context.fetchedAt = response.fetchedAt;
+        return response.body;
+      }
       catch (error) {
         if (!(error instanceof ProviderError) || (error.status !== 429 && error.status < 500) || attempt >= 2) throw error;
         await delay(error.retryAfterMs ?? 250 * 2 ** attempt, undefined, {signal: context.signal});
@@ -208,7 +257,13 @@ export class LiteratureSearchService {
     }
   }
 
-  private async readAttempt(url: string, accept: string, context: ProviderContext): Promise<string> {
+  private providerTimestamp(): string {
+    const context = this.requests.getStore();
+    if (context === undefined || context.fetchedAt === null) throw new Error('literature_provider_timestamp_missing');
+    return context.fetchedAt;
+  }
+
+  private async readAttempt(url: string, accept: string, context: ProviderContext): Promise<CachedLiteratureResponse> {
     const receipt: ProviderContext['receipts'][number] = {attempt: context.receipts.length + 1, method: 'GET', url,
       startedAt: new Date().toISOString(), endedAt: null, status: null, retryAfterMs: null, responseHash: null, errorCode: null};
     context.receipts.push(receipt);
@@ -240,7 +295,7 @@ export class LiteratureSearchService {
       } finally { await reader.cancel(); }
       const bytes = Buffer.concat(chunks);
       receipt.responseHash = createHash('sha256').update(bytes).digest('hex');
-      return bytes.toString('utf8');
+      return {body: bytes.toString('utf8'), fetchedAt: new Date().toISOString(), responseHash: receipt.responseHash};
     } catch (error) {
       receipt.errorCode = signal.aborted ? 'literature_provider_timeout' :
         error instanceof ProviderError ? `literature_provider_http_${error.status}` : 'literature_provider_transport_error';

@@ -33,12 +33,16 @@ export const literatureProviderRequestSchema = z.object({
   responseHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(), errorCode: z.string().nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(3), ranking: literatureRankingSchema,
+  schemaVersion: z.literal(4), ranking: literatureRankingSchema,
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'timeout', 'rate_limited', 'error']),
     returnedCount: z.number().int().nonnegative(), errorCode: z.string().nullable(), retryAfterMs: z.number().nullable(),
-    requests: z.array(literatureProviderRequestSchema) }).strict()),
+    requests: z.array(literatureProviderRequestSchema),
+    cache: z.discriminatedUnion('state', [
+      z.object({state: z.literal('miss')}).strict(),
+      z.object({state: z.literal('hit'), fetchedAt: z.string(), responseHash: z.string().regex(/^[a-f0-9]{64}$/u)}).strict()
+    ]) }).strict()),
   truncated: z.boolean(), warnings: z.array(z.string()), total: z.number().int().nonnegative(), nextOffset: z.number().int().nullable()
 }).strict();
 const page = { offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(30).default(10) };

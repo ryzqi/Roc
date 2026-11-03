@@ -22,6 +22,8 @@ export async function applyResearchWorkflowTransition(input: {
 }
 
 export async function shutdownResearchPlugin(services: {
+  literature: ShutdownService;
+  literatureImports: ShutdownService;
   productionInputs: ShutdownService;
   exports: ShutdownService;
   figures: ShutdownService;
@@ -35,13 +37,16 @@ export async function shutdownResearchPlugin(services: {
   prose: ShutdownService;
 }): Promise<void> {
   const ordered = [
+    // Abort the parent before child cleanup can reject its pending tool calls.
+    services.stageRuntime,
+    services.literature,
+    services.literatureImports,
     services.productionInputs,
     services.exports,
     services.figures,
     services.experiments,
     services.indexer,
     services.embeddings,
-    services.stageRuntime,
     services.templates,
     services.documents,
     services.library,

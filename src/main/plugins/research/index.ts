@@ -408,8 +408,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await literatureImports?.shutdown();
-        await shutdownResearchPlugin({ productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
       } finally {
         productionInputs = null;
         exports = null;
@@ -422,6 +421,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         prose = null;
         templates = null;
         stageRuntime = null;
+        literatureImports = null;
         repository = null;
       }
     },

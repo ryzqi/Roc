@@ -36,7 +36,8 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     this.library.validateDestination(context.projectId);
-    const found = await this.searchService.searchDetailed(request, context.signal);
+    const scopedRequest = {...request, projectId: context.projectId};
+    const found = await this.searchService.searchDetailed(scopedRequest, context.signal);
     this.requireActive(context);
     const createdAt = this.now();
     let unknownYear = false;
@@ -51,13 +52,13 @@ export class LiteratureImportService {
       return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
         missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
     });
-    const result: LiteratureSearchResult = { schemaVersion: 3, ranking: literatureRanking(request.sources),
+    const result: LiteratureSearchResult = { schemaVersion: 4, ranking: literatureRanking(request.sources),
       searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
       status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
       warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
     this.db.prepare('DELETE FROM research_literature_searches WHERE expires_at <= ?').run(createdAt);
     this.db.prepare('INSERT INTO research_literature_searches (id,owner,project_id,request_json,result_json,expires_at) VALUES (?,?,?,?,?,?)')
-      .run(result.searchId, context.owner, context.projectId, JSON.stringify(request), JSON.stringify(result), result.expiresAt);
+      .run(result.searchId, context.owner, context.projectId, JSON.stringify(scopedRequest), JSON.stringify(result), result.expiresAt);
     return result;
   }
 

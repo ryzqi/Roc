@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import * as esbuild from 'esbuild';
+import { createResearchFixture } from './fixtures/research-test-kit.mjs';
 
 let directory;
 let api;
@@ -21,6 +22,9 @@ before(async () => {
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
     export { fuseLiterature, literatureRanking } from './src/main/plugins/research/literature-fusion';
+    export { LiteratureResponseCache } from './src/main/plugins/research/literature-response-cache';
+    export { ResearchStageRuntime } from './src/main/plugins/research/stage-runtime';
+    export { shutdownResearchPlugin } from './src/main/plugins/research/research-plugin-lifecycle';
     export { withLiteratureContext } from './src/main/services/literature-context';
     export { createLiteratureTools } from './src/main/plugins/agent/literature-tools';
   `, resolveDir: process.cwd() }, outfile, bundle: true, format: 'esm', platform: 'node', target: 'node22',
@@ -107,7 +111,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 3);
+    assert.equal(result.schemaVersion, 4);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -135,7 +139,7 @@ function setup(options = {}) {
   const changes = [];
   const prepare = options.prepare ?? (async (metadata) => ({ metadata, bibliography: api.bibliographyFromRecord(metadata, new Set()) }));
   const search = options.search ?? { searchDetailed: async () => ({ records: options.records ?? [record()], sources: [
-    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [] }
+    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [], cache: {state: 'miss'} }
   ], status: 'complete', truncated: false, warnings: [] }) };
   const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
     prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
@@ -366,7 +370,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 3);
+    assert.equal(result.schemaVersion, 4);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -418,12 +422,134 @@ test('concurrent Provider responses cannot attach their request receipts to anot
   }
 });
 
+test('bounded response cache expires and evicts by byte budget and least recent access', () => {
+  let now = 0;
+  const cache = new api.LiteratureResponseCache({maxEntries: 2, maxBytes: 6, ttlMs: 10}, () => now);
+  const response = body => ({body, fetchedAt: timestamp, responseHash: createHash('sha256').update(body).digest('hex')});
+  cache.put('a', response('aaa'));
+  cache.put('b', response('bb'));
+  assert.equal(cache.get('a').body, 'aaa');
+  cache.put('c', response('cc'));
+  assert.equal(cache.get('b'), null);
+  assert.equal(cache.get('a').body, 'aaa');
+  assert.equal(cache.get('c').body, 'cc');
+  now = 10;
+  assert.equal(cache.get('a'), null);
+  assert.equal(cache.get('c'), null);
+  cache.put('oversize', response('1234567'));
+  assert.equal(cache.get('oversize'), null);
+  cache.put('fresh', response('fresh'));
+  cache.clear();
+  assert.equal(cache.get('fresh'), null);
+});
+
+test('cached searches retain original timestamps and hashes under the trusted project scope', async () => {
+  let calls = 0;
+  const search = new api.LiteratureSearchService(async () => {
+    calls++;
+    return Response.json({message: {items: [{DOI: '10.1234/cache', title: ['Cached paper']}]}});
+  });
+  const f = setup({search});
+  try {
+    const request = {query: 'cache scope', sources: ['crossref'], limit: 5, projectId: 'untrusted-input-project'};
+    const first = await f.run(() => f.service.search(request));
+    const cached = await f.run(() => f.service.search(request));
+    assert.equal(calls, 1);
+    assert.equal(first.sources[0].cache.state, 'miss');
+    assert.equal(cached.sources[0].requests.length, 0);
+    assert.deepEqual(cached.candidates, first.candidates);
+    assert.deepEqual(cached.sources[0].cache, {state: 'hit',
+      fetchedAt: first.candidates[0].record.importedAt, responseHash: first.sources[0].requests[0].responseHash});
+    const persisted = JSON.parse(f.db.prepare('SELECT request_json FROM research_literature_searches WHERE id=?')
+      .pluck().get(cached.searchId));
+    assert.equal(persisted.projectId, f.project.id);
+    const other = f.repo.createProject({title: 'Another cache scope', description: '', workspacePath: '/tmp/roc-other-cache-scope'});
+    const otherResult = await f.run(() => f.service.search(request), {projectId: other.id});
+    assert.equal(otherResult.sources[0].cache.state, 'miss');
+    assert.equal(calls, 2);
+    await f.run(() => f.service.search({...request, limit: 6}));
+    assert.equal(calls, 3, 'different source page sizes cannot share a response');
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('failed payloads do not enter cache and service shutdown aborts work and refuses warm-cache reads', async () => {
+  let calls = 0, startedResolve, lateResolve;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const late = new Promise(resolve => { lateResolve = resolve; });
+  let signal;
+  const search = new api.LiteratureSearchService(async (_url, init) => {
+    calls++;
+    if (calls === 1) return Response.json({error: 'bad payload'});
+    if (calls === 2) return Response.json({results: [{id: 'W1', title: 'Valid paper'}]});
+    signal = init.signal;
+    startedResolve();
+    return late;
+  });
+  const request = {query: 'cache failure', sources: ['openalex'], limit: 5, projectId: 'project'};
+  assert.equal((await search.searchDetailed(request)).status, 'failed');
+  assert.equal((await search.searchDetailed(request)).status, 'complete');
+  assert.equal((await search.searchDetailed(request)).sources[0].cache.state, 'hit');
+  assert.equal(calls, 2);
+  const pending = search.searchDetailed({...request, query: 'inflight shutdown'});
+  const rejected = assert.rejects(pending, /literature_service_closed/u);
+  await started;
+  const shutdown = search.shutdown();
+  assert.equal(signal.aborted, true);
+  lateResolve(Response.json({results: [{id: 'W2', title: 'Late paper'}]}));
+  await shutdown;
+  await rejected;
+  await assert.rejects(search.searchDetailed(request), /literature_service_closed/u);
+  assert.equal(calls, 3);
+});
+
+test('plugin shutdown interrupts the actual parent stage before closing search and rejects late role output', async () => {
+  const f = createResearchFixture(api, 'discovery');
+  let startedResolve, sourceSignal, requests = 0;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const search = new api.LiteratureSearchService(async (_url, init) => {
+    requests++;
+    if (requests > 1) return Response.json({results: []});
+    sourceSignal = init.signal;
+    startedResolve();
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true});
+    });
+  });
+  let roleFinished = false;
+  const runtime = new api.ResearchStageRuntime(f.repository, {}, {
+    async prepare() { return {providerId: 'fixture', modelId: 'fixture', async execute({signal}) {
+      try {
+        await search.searchDetailed({query: 'shutdown parent', sources: ['openalex'], limit: 5, projectId: f.project.id}, signal);
+      } catch {
+        // Simulate an executor that returns after cancellation; the real stage must fence it.
+      }
+      roleFinished = true;
+      return {output: {title: 'Late output', markdown: 'Must not publish', claims: [], sections: [], verdict: 'ready'}, modelVersion: null};
+    }}; }
+  }, {complete: async () => { throw new Error('late_gate_must_not_execute'); }});
+  try {
+    f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
+    const current = runtime.retry({projectId: f.project.id, runId: f.run.id, requestId: 'shutdown-parent'});
+    await started;
+    await api.shutdownResearchPlugin({stageRuntime: runtime, literature: search, literatureImports: null,
+      productionInputs: null, exports: null, figures: null, experiments: null, indexer: null,
+      embeddings: null, templates: null, documents: null, library: null, prose: null});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(roleFinished, true);
+    assert.equal(sourceSignal.reason.message, 'research_run_interrupted_by_shutdown');
+    assert.equal(f.repository.runs.get(current.id, f.project.id).status, 'interrupted');
+    assert.deepEqual(f.repository.runs.get(current.id, f.project.id).outputArtifactIds, []);
+    await assert.rejects(search.searchDetailed({query: 'shutdown parent', sources: ['openalex'], limit: 5}), /literature_service_closed/u);
+    assert.equal(requests, 1);
+  } finally { await runtime.shutdown(); await search.shutdown(); f.close(); }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 3, ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 4, ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);
