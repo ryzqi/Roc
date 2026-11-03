@@ -213,7 +213,7 @@ export const researchProvenanceSchema = z
   })
   .strict();
 
-export const researchLiteratureSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc', 'local', 'doi']);
+export const researchLiteratureSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc', 'local', 'doi', 'zotero']);
 
 export const researchLiteratureSchema = z
   .object({

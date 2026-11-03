@@ -15,7 +15,7 @@ export class ZoteroPreviewStore {
   capture(context: LiteratureExecutionContext, request: z.infer<typeof zoteroItemsRequestSchema>,
     sourcePage: z.infer<typeof zoteroItemsPageSchema>): ZoteroPreviewPage {
     const createdAt = this.now();
-    const body = zoteroPreviewBodySchema.parse({schemaVersion: 1, previewId: `zotero_preview_${randomUUID()}`,
+    const body = zoteroPreviewBodySchema.parse({schemaVersion: 2, projection: 'data,csljson', previewId: `zotero_preview_${randomUUID()}`,
       request, sourcePage, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString()});
     const snapshot = {...body, contentHash: hash(body)};
     this.db.prepare(`INSERT INTO research_zotero_previews(id,owner,project_id,run_id,created_at,expires_at,snapshot_json)

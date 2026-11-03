@@ -41,7 +41,7 @@ export class ResearchDocumentRepository {
       } else {
         if (input.entry !== null) throw new Error('research_document_target_invalid');
         if (this.research.library.get(libraryItemId).archived) throw new Error('research_library_item_archived');
-        if (input.projectId !== null) this.research.library.link(libraryItemId, input.projectId, true);
+        if (input.projectId !== null) this.research.library.link(libraryItemId, input.projectId, true, {notify: true});
       }
       const existing = this.db.prepare('SELECT id FROM research_documents WHERE library_item_id = ? AND source_hash = ?').get(libraryItemId, input.sourceHash) as { id: string } | undefined;
       if (existing !== undefined) return { document: this.get(existing.id), created: false };

@@ -71,6 +71,21 @@ export class ResearchLibraryService {
     }, signal);
   }
 
+  async prepareZotero(record: ResearchLiterature, cslJson: string, signal?: AbortSignal): Promise<{metadata: ResearchLiterature; bibliography: BibliographyEntry}> {
+    return this.job(async (root, directory, jobSignal) => {
+      const source = join(directory, 'zotero-csl.json');
+      await writeFile(source, cslJson, {flag: 'wx', mode: 0o600});
+      const entries = await this.tools.readBibliography({projectRoot: root, sourcePath: source,
+        outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal: jobSignal});
+      this.requireActive(jobSignal);
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      const bibliography = {...entries[0], doi: entries[0].doi === null ? null : normalizeResearchDoi(entries[0].doi)};
+      if (bibliography.doi !== record.doi || bibliography.title !== record.title) throw new Error('zotero_csl_metadata_mismatch');
+      return {metadata: {...record, authors: bibliography.authors, publishedYear: bibliography.publishedYear},
+        bibliography};
+    }, signal);
+  }
+
   async prepareDoi(inputDoi: string, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
     const doi = normalizeResearchDoi(inputDoi);
     return await this.job(async (root, directory, signal) => {

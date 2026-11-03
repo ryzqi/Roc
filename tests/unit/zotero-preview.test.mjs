@@ -123,7 +123,7 @@ test('preview shutdown drains even a late adapter and cannot publish a captured 
   const f = fixture();
   let release, started;
   const received = new Promise(resolve => {started = resolve;});
-  const late = {async items(_input, signal) {
+  const late = {async itemsWithBibliography(_input, signal) {
     started();
     await new Promise(resolve => {release = resolve;});
     assert.equal(signal.aborted, true);
@@ -165,5 +165,27 @@ test('DB12 upgrade preserves historical library data and creates no fictional Zo
     assert.equal(db.prepare('SELECT count(*) FROM research_zotero_previews').pluck().get(), 0);
     assert.deepEqual(db.prepare('SELECT * FROM research_library').all(), before);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=12 ORDER BY version').all(), ledger);
+  } finally {db.close();}
+});
+
+test('DB13 upgrade keeps original data-only previews verbatim and fabricates no Zotero object mappings', () => {
+  const db = new Database(':memory:');
+  try {
+    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research',
+      migrations: api.researchMigrations.filter(migration => migration.version <= 13)});
+    const body = {schemaVersion: 1, previewId: 'old-preview', request,
+      sourcePage: {serverId: request.serverId, library: request.library, libraryVersion: 9, offset: 0,
+        total: records.length, nextOffset: null, responseHash: createHash('sha256').update(JSON.stringify(records)).digest('hex'),
+        fetchedAt: timestamp, records}, createdAt: timestamp, expiresAt: '2026-11-10T00:00:00.000Z'};
+    const snapshot = {...body, contentHash: createHash('sha256').update(JSON.stringify(body)).digest('hex')};
+    db.prepare(`INSERT INTO research_zotero_previews(id,owner,project_id,run_id,created_at,expires_at,snapshot_json)
+      VALUES ('old-preview','thread:history',NULL,NULL,?,?,?)`).run(timestamp, body.expiresAt, JSON.stringify(snapshot));
+    const oldPreview = db.prepare('SELECT * FROM research_zotero_previews').all();
+    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
+    api.applyResearchDatabaseSchema(db);
+    assert.deepEqual(db.prepare('SELECT * FROM research_zotero_previews').all(), oldPreview);
+    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=13 ORDER BY version').all(), ledger);
+    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_objects').pluck().get(), 0);
+    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_object_versions').pluck().get(), 0);
   } finally {db.close();}
 });

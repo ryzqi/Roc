@@ -177,6 +177,7 @@ export const rocApi: RocPreloadApi = {
     getZoteroItems: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroItems, ...args),
     previewZotero: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroPreview, ...args),
     getZoteroPreview: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroReadPreview, ...args),
+    getZoteroSources: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroSources, ...args),
     cancelLiteratureImport: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureCancelImport, ...args),
     listEmbeddingConfigs: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingList, ...args),
     saveEmbeddingConfig: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingSave, ...args),

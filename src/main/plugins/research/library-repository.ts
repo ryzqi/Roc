@@ -279,14 +279,14 @@ export class ResearchLibraryRepository {
     return imported;
   }
 
-  link(id: string, projectId: string, linked: boolean): LibraryItem {
+  link(id: string, projectId: string, linked: boolean, options: {notify: boolean}): LibraryItem {
     this.validateDestination(projectId);
     const item = this.get(id);
     if (linked && item.archived) throw new Error('research_library_item_archived');
     if (linked) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);
     else this.db.prepare('DELETE FROM research_library_projects WHERE item_id = ? AND project_id = ?').run(id, projectId);
     const linkedItem = this.get(id);
-    this.onChanged?.([{ ...linkedItem, projectIds: [...new Set([...item.projectIds, projectId])] }], 'link');
+    if (options.notify) this.onChanged?.([{ ...linkedItem, projectIds: [...new Set([...item.projectIds, projectId])] }], 'link');
     return linkedItem;
   }
 

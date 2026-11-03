@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { researchLiteratureSchema } from './research';
+import {zoteroItemKeySchema} from './research-zotero';
 import {literatureIdentifierObservationSchema, literatureRawIdentifiersSchema} from './literature-identifiers';
 import {literatureReviewSchema} from './literature-review';
 
@@ -93,7 +94,8 @@ const reason = z.string().trim().max(500).optional();
 export const literatureAddSchema = z.object({
   entries: z.array(z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('candidate'), searchId: z.string().min(1), candidateId: z.string().min(1), reason }).strict(),
-    z.object({ kind: z.literal('doi'), doi: z.string().trim().min(1).max(512), reason }).strict()
+    z.object({ kind: z.literal('doi'), doi: z.string().trim().min(1).max(512), reason }).strict(),
+    z.object({kind: z.literal('zotero'), previewId: z.string().min(1), itemKey: zoteroItemKeySchema, reason}).strict()
   ])).min(1).max(30),
   destination: z.enum(['current_project', 'library_only']).default('current_project'), requestId: z.string().trim().min(1).max(200),
   projectId: z.string().min(1).nullable().optional()

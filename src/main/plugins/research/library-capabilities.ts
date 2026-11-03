@@ -80,7 +80,7 @@ export function registerResearchLibraryCapabilities(context: RocPluginContext, r
   register(capabilities.doi, (input) => service.importDoi(input));
   register(capabilities.file, (input) => service.importFile(input));
   register(capabilities.export, (input) => service.export(input));
-  register(capabilities.link, (input) => repository.link(input.id, input.projectId, input.linked));
+  register(capabilities.link, (input) => repository.link(input.id, input.projectId, input.linked, {notify: true}));
   register(capabilities.archive, (input) => repository.archive(input.id, input.expectedRevision, input.archived));
   register(capabilities.citationKey, (input) => repository.setCitationKey(input.id, input.expectedRevision, input.citationKey));
   register(capabilities.retractions, (input) => service.checkRetractions(input));

@@ -39,6 +39,7 @@ export { ResearchExportSourceService } from '../../../src/main/plugins/research/
 export { ResearchExportService } from '../../../src/main/plugins/research/export-service';
 export { LiteratureSearchService } from '../../../src/main/plugins/research/literature-service';
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
+export { ZoteroAdapter } from '../../../src/main/plugins/research/zotero-adapter';
 export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../../src/main/plugins/research/search-strategy';
 export { withLiteratureContext } from '../../../src/main/services/literature-context';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';

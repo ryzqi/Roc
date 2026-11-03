@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {researchLiteratureSchema} from './research';
 
 const version = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const zoteroServerIdSchema = z.string().min(1).max(256).regex(/^[\x21-\x7e]+$/u);
@@ -50,7 +51,7 @@ export const zoteroGroupsPageSchema = page.omit({library: true, libraryVersion: 
   records: z.array(zoteroGroupSchema)
 });
 export const zoteroPreviewBodySchema = z.object({
-  schemaVersion: z.literal(1), previewId: z.string().min(1),
+  schemaVersion: z.literal(2), projection: z.literal('data,csljson'), previewId: z.string().min(1),
   request: zoteroItemsRequestSchema, sourcePage: zoteroItemsPageSchema,
   createdAt: z.string(), expiresAt: z.string()
 }).strict();
@@ -66,6 +67,26 @@ export const zoteroPreviewPageSchema = zoteroPreviewSchema.extend({
 });
 export type ZoteroPreview = z.infer<typeof zoteroPreviewSchema>;
 export type ZoteroPreviewPage = z.infer<typeof zoteroPreviewPageSchema>;
+export const zoteroFrozenObjectSchema = z.object({
+  previewId: z.string().min(1), scope: zoteroScopeSchema, libraryVersion: version,
+  item: zoteroItemSchema, itemHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  metadata: researchLiteratureSchema, cslJson: z.string().min(1), capturedAt: z.string()
+}).strict();
+export type ZoteroFrozenObject = z.infer<typeof zoteroFrozenObjectSchema>;
+export const zoteroSourcesRequestSchema = z.object({
+  id: z.string().min(1), offset: version.default(0),
+  limit: z.number().int().min(1).max(50).default(20)
+}).strict();
+export const zoteroImportedObjectSchema = z.object({
+  scope: zoteroScopeSchema, itemKey: zoteroItemKeySchema, version, libraryVersion: version,
+  operationId: z.string().min(1),
+  libraryItemId: z.string().min(1), itemHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  previewId: z.string().min(1), item: zoteroItemSchema, capturedAt: z.string(), importedAt: z.string()
+}).strict();
+export const zoteroSourcesPageSchema = z.object({
+  itemId: z.string().min(1), records: z.array(zoteroImportedObjectSchema),
+  total: version, nextOffset: version.nullable()
+}).strict();
 export type ZoteroScope = z.infer<typeof zoteroScopeSchema>;
 export type ZoteroPageRequest = z.infer<typeof zoteroPageRequestSchema>;
 export type ZoteroItemsRequest = z.infer<typeof zoteroItemsRequestSchema>;

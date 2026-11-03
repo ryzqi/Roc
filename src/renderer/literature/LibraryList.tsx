@@ -44,7 +44,8 @@ const SOURCE_LABELS: Readonly<Record<ResearchLibraryItem['metadata']['source'], 
   pubmed: 'PubMed',
   europe_pmc: 'Europe PMC',
   local: '本地',
-  doi: 'DOI'
+  doi: 'DOI',
+  zotero: 'Zotero'
 };
 
 export function LibraryList({ compact = false, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {

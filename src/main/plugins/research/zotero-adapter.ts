@@ -66,8 +66,16 @@ export class ZoteroAdapter {
   }
 
   async items(input: unknown, signal?: AbortSignal): Promise<z.infer<typeof import('../../../shared/schemas/research-zotero').zoteroItemsPageSchema>> {
+    return this.readItems(input, 'data', signal);
+  }
+
+  async itemsWithBibliography(input: unknown, signal?: AbortSignal): Promise<z.infer<typeof import('../../../shared/schemas/research-zotero').zoteroItemsPageSchema>> {
+    return this.readItems(input, 'data,csljson', signal);
+  }
+
+  private async readItems(input: unknown, include: 'data' | 'data,csljson', signal?: AbortSignal): Promise<z.infer<typeof import('../../../shared/schemas/research-zotero').zoteroItemsPageSchema>> {
     const request = zoteroItemsRequestSchema.parse(input);
-    const query = new URLSearchParams({format: 'json', include: 'data', start: String(request.offset),
+    const query = new URLSearchParams({format: 'json', include, start: String(request.offset),
       limit: String(request.limit), sort: 'dateAdded', direction: 'asc'});
     if (request.since !== null) query.set('since', String(request.since));
     const path = request.collectionKey === null ? 'items' : `collections/${request.collectionKey}/items`;

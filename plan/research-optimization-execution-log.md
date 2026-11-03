@@ -1602,3 +1602,46 @@ checks weakened. Evidence `.artifacts/research-optimization/pr05-preview-*.log` 
 source/contract hash in pr05-zotero-primary-contract.json. No real Zotero DB/user library,
 credential, external write, paid model or frozen workflow-fixture edit. Next: user-selected
 Zotero items imported through existing bounded jobs with independent object mappings.
+
+
+## PR-05B2 — Zotero object import and durable scoped receipts
+
+Status: `Verified passing` for this increment. Full PR-05 remains incomplete.
+Research DB14, agent DB15, Zotero preview schema2 (`data,csljson`).
+
+User-selected preview objects enter existing owned, idempotent, cancellable metadata jobs.
+Native exported CSL supplies complete bibliography fields; title/normalized DOI disagreement,
+invalid frozen CSL, version regressions and same-version conflicts fail explicitly. Sync key
+is instance/library kind+ID/itemKey, distinct from DOI literature identity. Canonical paper,
+object mapping, raw version, scoped receipt and job result commit in one transaction. Tags,
+collections, unknown fields and CSL remain in immutable original versions; local note/keywords
+and archived state stay intact. Different same-DOI objects retain distinct mappings.
+
+A reproduced fresh-request duplicate-work bug is fixed: unchanged object version reuses saved
+bibliography and source revision, adds only a missing project link and a separate observation.
+Required notification policy is explicit at all library.link callers; job publication follows
+commit. New paginated sources capability checks trusted owner/project and raw key/version/hash;
+receipts remain readable after preview expiry/archive. DB13 history/ledger rows stay intact,
+old schema1 preview remains stored but is not converted into fabricated CSL.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-preview.test.mjs tests/unit/zotero-adapter.test.mjs` | Final26/26 passed |
+| `pnpm test:unit` | Final761/761 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm test:research-p0` | Fresh typecheck/build and13/13 native cases passed |
+| `pnpm check:ipc` | Generated contracts current, passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Startup/UI12/12, zero renderer errors, exit0 |
+| `pnpm check:renderer-chunks` | Eager1131095bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `.artifacts/research-optimization/pr05-object-*.log`, including deterministic fresh-
+request red, plus `pr05-object-native-csl/research.sqlite` and `receipt.json` from actual native
+worker. First native fixture was correctly refused for missing approved search plan; fixture
+changed to independent user-import context without weakening the gate. No live literature
+query, paid model call, remote write, real-user DB migration or frozen workflow fixture edit.
+Settings/library/collection/conflict UI, checkpoints/deletions, attachment grants and actual
+Zotero client acceptance remain pending. L2/full reviewed corpus/independent scientific labels
+remain externally blocked.

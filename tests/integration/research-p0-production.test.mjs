@@ -19,6 +19,55 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('Zotero captured CSL imports through the actual native bibliography worker with durable object provenance', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-zotero-native-')));
+  const f = createResearchFixture(api, 'figure', root);
+  const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const library = new api.ResearchLibraryService(f.repository.library, tools, root);
+  const key = 'ITEM2345';
+  const csl = [{id: key, type: 'article-journal', title: 'Synthetic native Zotero paper', DOI: '10.1234/NATIVE-ZOTERO',
+    author: [{literal: 'Synthetic Author'}], issued: {'date-parts': [[2026, 1, 2]]},
+    'container-title': 'Synthetic Native Journal', volume: '5', page: '1-4'}];
+  const original = {key, version: 8, data: {key, version: 8, itemType: 'journalArticle',
+    title: csl[0].title, DOI: csl[0].DOI, creators: [{creatorType: 'author', name: 'Synthetic Author'}],
+    tags: [{tag: 'native-source'}], collections: [], unknownField: 'retained'}, csljson: JSON.stringify(csl)};
+  let requests = 0;
+  const zotero = new api.ZoteroAdapter(async (url, init) => {
+    requests++;
+    assert.equal(init.method, 'GET');
+    assert.equal(new URL(url).searchParams.get('include'), 'data,csljson');
+    return Response.json([original], {headers: {'Zotero-API-Version': '3', 'Zotero-Schema-Version': '40',
+      'Zotero-Server-ID': 'native-fixture', 'Last-Modified-Version': '9', 'Total-Results': '1'}});
+  });
+  const imports = new api.LiteratureImportService(f.db, f.repository.library, {}, library, async () => {});
+  const run = operation => api.withLiteratureContext({owner: 'thread:native-zotero', projectId: f.project.id}, operation);
+  try {
+    const preview = await run(() => imports.previewZotero({serverId: 'native-fixture', library: {kind: 'user', id: 0},
+      expectedLibraryVersion: null, collectionKey: null, since: null}, zotero));
+    const input = {requestId: 'native-zotero', entries: [{kind: 'zotero', previewId: preview.previewId, itemKey: key}]};
+    const result = await run(() => imports.add(input));
+    assert.equal(result.status, 'completed');
+    const saved = f.repository.library.get(result.items[0].libraryItemId);
+    assert.equal(saved.bibliography.fields.journal, 'Synthetic Native Journal');
+    assert.equal(saved.bibliography.fields.volume, '5');
+    assert.equal(saved.bibliography.publishedYear, 2026);
+    assert.equal(saved.metadata.doi, '10.1234/native-zotero');
+    const sources = run(() => imports.readZoteroSources({id: saved.id}));
+    assert.deepEqual(sources.records[0].item, original);
+    assert.equal(requests, 1);
+    assert.deepEqual(await run(() => imports.add(input)), result);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/pr05-object-native-csl');
+    await mkdir(evidence, {recursive: true});
+    await f.db.backup(join(evidence, 'research.sqlite'));
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
+      electron: process.versions.electron, previewId: preview.previewId, contentHash: preview.contentHash,
+      result, bibliography: saved.bibliography, sources, requests}, null, 2) + '\n');
+  } finally {
+    await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 async function runtimeDescription() {
   const executable = await realpath(process.execPath);
   const metadata = {nodeVersion: process.versions.node, electronVersion: process.versions.electron,

@@ -1603,6 +1603,39 @@ CREATE INDEX idx_research_zotero_previews_scope
 `
 });
 
+researchMigrations.push({
+  version: 14, name: 'zotero_import_object_versions',
+  sql: `
+CREATE TABLE research_zotero_objects (
+  server_id TEXT NOT NULL, library_kind TEXT NOT NULL CHECK(library_kind IN ('user','group')),
+  library_id INTEGER NOT NULL, item_key TEXT NOT NULL,
+  item_id TEXT NOT NULL REFERENCES research_library(id), object_version INTEGER NOT NULL CHECK(object_version>=0),
+  item_hash TEXT NOT NULL, imported_at TEXT NOT NULL,
+  PRIMARY KEY(server_id,library_kind,library_id,item_key)
+);
+CREATE TABLE research_zotero_object_versions (
+  server_id TEXT NOT NULL, library_kind TEXT NOT NULL, library_id INTEGER NOT NULL, item_key TEXT NOT NULL,
+  object_version INTEGER NOT NULL, item_id TEXT NOT NULL REFERENCES research_library(id),
+  item_hash TEXT NOT NULL, preview_id TEXT NOT NULL REFERENCES research_zotero_previews(id),
+  item_json TEXT NOT NULL, captured_at TEXT NOT NULL, imported_at TEXT NOT NULL,
+  PRIMARY KEY(server_id,library_kind,library_id,item_key,object_version),
+  FOREIGN KEY(server_id,library_kind,library_id,item_key)
+    REFERENCES research_zotero_objects(server_id,library_kind,library_id,item_key)
+);
+CREATE INDEX idx_research_zotero_objects_item ON research_zotero_objects(item_id);
+CREATE TABLE research_zotero_import_observations (
+  operation_id TEXT NOT NULL REFERENCES research_literature_imports(id),
+  server_id TEXT NOT NULL, library_kind TEXT NOT NULL, library_id INTEGER NOT NULL, item_key TEXT NOT NULL,
+  object_version INTEGER NOT NULL, library_version INTEGER NOT NULL CHECK(library_version>=object_version),
+  preview_id TEXT NOT NULL REFERENCES research_zotero_previews(id),
+  captured_at TEXT NOT NULL, imported_at TEXT NOT NULL,
+  PRIMARY KEY(operation_id,server_id,library_kind,library_id,item_key),
+  FOREIGN KEY(server_id,library_kind,library_id,item_key,object_version)
+    REFERENCES research_zotero_object_versions(server_id,library_kind,library_id,item_key,object_version)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

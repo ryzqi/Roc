@@ -8,7 +8,7 @@ import {
 import type { z } from 'zod';
 import { assertLiteratureActive, literatureContext, type LiteratureExecutionContext } from '../../services/literature-context';
 import { betterBibtexKey } from './cite-key';
-import { normalizeResearchDoi } from './literature-identity';
+import { normalizeResearchDoi, literatureIdentity } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import type {LiteratureProviderIdentifierRecord} from '../../../shared/schemas/literature-identifiers';
 import type {LiteratureReviewRecord} from '../../../shared/schemas/literature-review';
@@ -19,12 +19,15 @@ import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literatur
 import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
-import {zoteroItemsRequestSchema, type ZoteroPreviewPage} from '../../../shared/schemas/research-zotero';
+import {zoteroItemsRequestSchema, zoteroSourcesRequestSchema, type zoteroSourcesPageSchema,
+  type ZoteroPreviewPage, type ZoteroFrozenObject} from '../../../shared/schemas/research-zotero';
 import type {ZoteroAdapter} from './zotero-adapter';
 import {ZoteroPreviewStore} from './zotero-preview-store';
+import {ZoteroObjectStore, freezeZoteroObject} from './zotero-object-store';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
-type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]};
+type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
+  {kind: 'zotero'; object: ZoteroFrozenObject};
 type FrozenEntry = { entry: LiteratureAdd['entries'][number]; source: FrozenSource; result: LiteratureImportItem };
 type OperationRow = { id: string; owner: string; scope_project: string; input_hash: string; frozen_json: string; result_json: string; cancel_requested: number };
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -41,13 +44,15 @@ export class LiteratureImportService {
   private readonly lifetime = new AbortController();
   private readonly searchLedger: LiteratureSearchLedger;
   private readonly zoteroPreviews: ZoteroPreviewStore;
+  private readonly zoteroObjects: ZoteroObjectStore;
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
-    private readonly searchService: LiteratureSearchService, private readonly prepare: Pick<ResearchLibraryService, 'prepareDoi' | 'prepareRecord'>,
+    private readonly searchService: LiteratureSearchService, private readonly prepare: Pick<ResearchLibraryService, 'prepareDoi' | 'prepareRecord' | 'prepareZotero'>,
     private readonly changed: (result: LiteratureImportResult) => Promise<void>, private readonly now: () => string = () => new Date().toISOString()) {
     this.searchLedger = new LiteratureSearchLedger(db, now);
     this.zoteroPreviews = new ZoteroPreviewStore(db, now);
+    this.zoteroObjects = new ZoteroObjectStore(db, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -64,7 +69,7 @@ export class LiteratureImportService {
     this.library.validateDestination(context.projectId);
     const pending = (async (): Promise<ZoteroPreviewPage> => {
       const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
-      const sourcePage = await adapter.items(request, signal);
+      const sourcePage = await adapter.itemsWithBibliography(request, signal);
       this.requireActive(context);
       return this.zoteroPreviews.capture(context, request, sourcePage);
     })();
@@ -77,6 +82,14 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     return this.zoteroPreviews.read(context, input);
+  }
+
+  readZoteroSources(input: unknown): z.infer<typeof zoteroSourcesPageSchema> {
+    const request = zoteroSourcesRequestSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    this.library.get(request.id);
+    return this.zoteroObjects.read(context, request);
   }
 
   private async executeSearch(input: unknown): Promise<LiteratureSearchResult> {
@@ -190,6 +203,12 @@ export class LiteratureImportService {
       let source: FrozenSource;
       let key: string;
       if (entry.kind === 'doi') { source = {kind: 'doi', doi: entry.doi}; key = `doi:${entry.doi}`; }
+      else if (entry.kind === 'zotero') {
+        const object = freezeZoteroObject(this.zoteroPreviews.load(context, entry.previewId), entry.itemKey);
+        this.zoteroObjects.validate(object);
+        source = {kind: 'zotero', object};
+        key = object.metadata.id;
+      }
       else {
         const snapshot = this.loadSearch(entry.searchId, context);
         const candidate = snapshot.candidates.find((candidate) => candidate.candidateId === entry.candidateId);
@@ -201,8 +220,12 @@ export class LiteratureImportService {
       if (duplicate !== undefined) {
         duplicate.result.inputPositions.push(position);
         if (source.kind === 'records') {
-          duplicate.source = duplicate.source.kind === 'doi' ? source :
+          if (duplicate.source.kind === 'doi') duplicate.source = source;
+          else if (duplicate.source.kind === 'records') duplicate.source =
             {kind: 'records', origins: uniqueOrigins([...duplicate.source.origins, ...source.origins])};
+          else throw new Error('literature_import_selection_conflict');
+        } else if (source.kind === 'zotero' && hash(source) !== hash(duplicate.source)) {
+          throw new Error('zotero_selection_conflict');
         }
         continue;
       }
@@ -275,38 +298,54 @@ export class LiteratureImportService {
         this.requireActive({ ...context, signal });
         const prepared: (Awaited<ReturnType<ResearchLibraryService['prepareRecord']>> & {
           providerRecord?: LiteratureCandidate['record']; identifierRecord?: LiteratureProviderIdentifierRecord; reviewRecord?: LiteratureReviewRecord})[] = [];
-        if (entry.source.kind === 'doi') {
-          prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
-        } else {
-          for (const {origin, executionId} of entry.source.origins) {
-            this.requireActive({ ...context, signal });
-            const identifierRecord = origin.rawIdentifiers === null ? undefined : {metadataHash: origin.metadataHash, executionId,
-              source: origin.source, externalId: origin.externalId, rank: origin.rank, retrievedAt: origin.retrievedAt,
-              raw: origin.rawIdentifiers, identifiers: origin.identifiers};
-            prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord,
-              reviewRecord: {metadataHash: origin.metadataHash, executionId, source: origin.source, externalId: origin.externalId,
-                rank: origin.rank, retrievedAt: origin.retrievedAt, review: origin.review}});
+        const known = entry.source.kind === 'zotero' ? this.zoteroObjects.validate(entry.source.object) : null;
+        const reusable = known !== null && entry.source.kind === 'zotero' && known.object_version === entry.source.object.item.version ? known : null;
+        if (reusable === null) {
+          if (entry.source.kind === 'doi') {
+            prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
+          } else if (entry.source.kind === 'zotero') {
+            const object = entry.source.object;
+            prepared.push({...await this.prepare.prepareZotero(object.metadata, object.cslJson, signal), providerRecord: object.metadata});
+          } else {
+            for (const {origin, executionId} of entry.source.origins) {
+              this.requireActive({ ...context, signal });
+              const identifierRecord = origin.rawIdentifiers === null ? undefined : {metadataHash: origin.metadataHash, executionId,
+                source: origin.source, externalId: origin.externalId, rank: origin.rank, retrievedAt: origin.retrievedAt,
+                raw: origin.rawIdentifiers, identifiers: origin.identifiers};
+              prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord,
+                reviewRecord: {metadataHash: origin.metadataHash, executionId, source: origin.source, externalId: origin.externalId,
+                  rank: origin.rank, retrievedAt: origin.retrievedAt, review: origin.review}});
+            }
           }
         }
         const identities = groupLiteratureIdentities(prepared.map(record => ({record: record.metadata,
           identifiers: record.identifierRecord === undefined ? [] : record.identifierRecord.identifiers})));
-        if (identities.length !== 1 || identities[0].identity !== item.entryKey) throw new Error('literature_import_identity_changed');
+        const expectedIdentity = entry.source.kind === 'zotero' ? literatureIdentity(entry.source.object.metadata) : item.entryKey;
+        if (reusable === null && (identities.length !== 1 || identities[0].identity !== expectedIdentity)) throw new Error('literature_import_identity_changed');
         this.db.transaction(() => {
           this.requireActive({ ...context, signal });
           this.library.validateDestination(context.projectId);
           const row = this.db.prepare('SELECT cancel_requested FROM research_literature_imports WHERE id = ?').get(result.operationId) as { cancel_requested: number };
           if (row.cancel_requested === 1) throw new Error('literature_import_cancelled');
-          const current = this.library.findByIdentity(item.entryKey, identities[0].aliases);
+          const current = reusable === null ? this.library.findByIdentity(expectedIdentity, identities[0].aliases) : this.library.get(reusable.item_id);
           if (current?.archived === true) {
             Object.assign(item, { disposition: 'skipped_archived', libraryItemId: current.id, citationKey: current.bibliography.citationKey });
           } else {
-            const citationKey = current?.bibliography.citationKey ?? betterBibtexKey(prepared[0].metadata, this.library.usedCitationKeys());
-            for (const source of prepared) source.bibliography.citationKey = citationKey;
-            const imported = this.library.import(prepared, result.destinationProjectId, { flush: false, notify: false, skipArchived: true });
-            const saved = imported.items[0];
+            let saved: ReturnType<ResearchLibraryRepository['get']>;
+            if (reusable !== null) {
+              saved = this.library.get(reusable.item_id);
+              if (result.destinationProjectId !== null && !saved.projectIds.includes(result.destinationProjectId)) {
+                saved = this.library.link(saved.id, result.destinationProjectId, true, {notify: false});
+              }
+            } else {
+              const citationKey = current?.bibliography.citationKey ?? betterBibtexKey(prepared[0].metadata, this.library.usedCitationKeys());
+              for (const source of prepared) source.bibliography.citationKey = citationKey;
+              saved = this.library.import(prepared, result.destinationProjectId, {flush: false, notify: false, skipArchived: true}).items[0];
+            }
             Object.assign(item, { disposition: current === null ? 'created' : result.destinationProjectId !== null && !current.projectIds.includes(result.destinationProjectId) ? 'linked' : 'already_present',
               libraryItemId: saved.id, citationKey: saved.bibliography.citationKey, metadata: 'ready', metadataUpdated: current !== null && current.revision !== saved.revision,
               index: { scope: 'metadata', keyword: 'ready', vector: 'not_requested' } });
+            if (entry.source.kind === 'zotero') this.zoteroObjects.record(entry.source.object, saved.id, result.operationId);
           }
           this.save(summarize(result));
         })();
@@ -318,10 +357,15 @@ export class LiteratureImportService {
         if (!committed) Object.assign(item, uncommitted);
         const cancelled = signal.aborted || this.closed || (error instanceof Error && error.message === 'literature_import_cancelled');
         const errorCode = cancelled ? 'literature_import_cancelled' : safeFailure(error);
+        const invalidFrozenCsl = entry.source.kind === 'zotero' &&
+          (errorCode.startsWith('research_csl_') || errorCode === 'research_json_invalid' ||
+            errorCode.startsWith('research_bibliography_'));
         Object.assign(item, { disposition: cancelled ? 'cancelled' : 'failed', metadata: cancelled ? 'not_requested' : 'failed',
-          errorCode, retryable: !cancelled && !['research_literature_identity_ambiguous', 'literature_import_identity_changed',
+          errorCode, retryable: !cancelled && !invalidFrozenCsl && !['research_literature_identity_ambiguous', 'literature_import_identity_changed',
             'research_library_identifier_observation_mismatch', 'research_library_identifier_observation_conflict',
-            'research_library_review_observation_mismatch', 'research_library_review_observation_conflict'].includes(errorCode) });
+            'research_library_review_observation_mismatch', 'research_library_review_observation_conflict',
+            'zotero_object_version_regressed', 'zotero_object_version_conflict', 'zotero_object_identity_changed',
+            'zotero_csl_metadata_mismatch'].includes(errorCode) });
         if (cancelled) {
           for (const remaining of result.items.slice(position + 1)) remaining.disposition = 'cancelled';
           break;
@@ -360,8 +404,8 @@ function uniqueOrigins(origins: FrozenOrigin[]): FrozenOrigin[] {
   });
 }
 function safeFailure(error: unknown): string {
-  const code = error instanceof Error ? error.message : '';
-  return /^(research|literature)_[a-z_]+$/u.test(code) ? code : 'literature_metadata_import_failed';
+  const code = error instanceof Error ? error.message.split(':', 1)[0] : '';
+  return /^(research|literature|zotero)_[a-z_]+$/u.test(code) ? code : 'literature_metadata_import_failed';
 }
 function emptyCounts(): LiteratureImportResult['counts'] {
   return { created: 0, linked: 0, alreadyPresent: 0, skippedArchived: 0, failed: 0, cancelled: 0, notProcessed: 0 };

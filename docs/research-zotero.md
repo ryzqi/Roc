@@ -37,6 +37,7 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.items | research.getZoteroItems | 指定库/集合的原始对象页，含标签和附件引用 |
 | research.zotero.preview | research.previewZotero | 按可信会话/项目保存完整来源页并返回审查预览 |
 | research.zotero.getPreview | research.getZoteroPreview | 按预览 ID 读取已冻结的来源对象 |
+| research.zotero.sources | research.getZoteroSources | 指定文献在当前会话/项目中的 Zotero 收录回执及原始对象 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -57,7 +58,7 @@ fetchedAt、total 和 nextOffset；不截断后伪装成有效页面。
 时间。主进程从可信执行上下文填写 owner、projectId、runId；输入不能指定其他
 会话或项目。预览不收录文献，不启动附件读取、解析、索引或书目 worker。
 
-preview 使用 items 参数抓取一页，再完整保存；返回首 20 个对象。
+preview 使用 items 参数，以 `include=data,csljson` 抓取一页，再完整保存；返回首 20 个对象。
 getPreview 只读本地快照，不重新请求 Zotero，默认 20、最多 30 个对象。
 `capturedTotal` / `nextPreviewOffset` 是保存页内的分页；
 `sourcePage.total` / `sourcePage.nextOffset` 是 Zotero 查询的总量及下一次来源读取位置。
@@ -71,7 +72,44 @@ contentHash 覆盖固定版本、预览 ID、完整来源页、原始请求和�
 请求失败、保存失败、调用者取消或应用关闭不返回成功预览。导入服务跟踪预览
 请求，关闭时中断并等待其退出；忽略取消的迟到响应仍被发布前检查拒绝。
 应用重启后的有效快照可在同一会话/项目继续审查；原始响应与冻结内容 hash 保留。
-这是后续用户选择与幂等导入的输入依据，尚未建立同步对象映射或收录检查点。
+当前预览合同为版本 2，显式声明 `projection:data,csljson`。旧的版本 1 不补造 CSL、
+不转换；数据库升级仍保留原始旧预览行，读取不符合当前合同的数据显式失败。
+
+## 对象收录与原始版本
+
+现有 `research.addLiterature` 接受 `kind:zotero`、previewId、itemKey。用户选择的
+每个对象在创建作业前按会话/项目读回完整预览，固定原始对象、版本、题录投影和
+导出的 CSL。附加 source 类型为 Zotero；附件、笔记、批注不能作为论文收录。
+缺题名、格式错误、缺 CSL 或 CSL 的题名/DOI 与原记录不一致均显式失败。
+
+CSL 走现有原生书目 worker，不使用只含题名/作者的临时书目代替完整导出。期刊、
+卷期、页码、完整作者角色和日期保留在书目/原始 CSL 中；DOI 规范化后比较。
+缺字段继续保持未知，不生成虚构题名、年份或作者。
+
+数据库 14 的同步主键为 serverId、library kind/id、itemKey；导入作业键也由该
+对象身份产生。不同对象即使 DOI 相同，也独立保留映射、原始版本与收录回执，
+可以共同指向同一个规范文献。同一来源版本出现不同内容、对象版本回退或已绑定
+对象要改到其他文献时拒绝，不按 DOI 重写同步主键。
+
+原始对象版本只保存一次，含全部题录、标签、集合、未知字段与 CSL。每次新的
+收录请求另存 operationId、所见文库版本、previewId、抓取与收录时间的回执。
+相同 requestId 的重放读回原结果；新 requestId 收录同一版本时复用已保存文献
+和书目，不重复 worker、不追加重复文献来源、不改引用键或本地注释/标签。
+需要关联新项目时只建立项目关联，在事务提交后发布作业事件。
+
+新来源版本保留旧、新两侧原始数据；不覆盖 Roc 用户已有书目 note/keywords。
+已归档文献保持归档，返回 skipped_archived，不自动恢复。元数据归并仍使用现有
+强身份规则；题名相似不建立新归并边。归并歧义、来源/CSL 冲突和不可重试的冻结
+输入错误保留明确原因。多对象作业可部分失败；取消停止剩余对象并拒绝迟到 worker。
+
+文献、对象映射、原始版本、当前收录回执与作业结果在同一 SQLite 事务提交。
+写入失败回滚该对象的全部变更，不留下“已收录”的结果。getZoteroSources 默认
+20、最多 50 条；按可信会话/项目分页回执，每条带完整原始对象及 hash，读取校验
+对象 key/version/hash。文献归档和预览审查有效期结束后，已收录回执仍可读。
+多个新请求使用相同对象版本，会有独立回执；这不表示文献或原始版本重复。
+
+对象版本记录是后续增量同步的依据；目前尚未自动读取 since、推进整库检查点
+或处理远端删除。实例变化及版本回退仍需人工核对，不能凭失败结果伪造同步完成。
 
 ## 附件与取消
 
@@ -86,7 +124,7 @@ HTTP/解析失败显式保留为失败，不回退为成功空页。
 
 ## 已验证与待完成
 
-只读适配器、冻结预览、主进程能力和 IPC 已接入。测试使用合成数据与真实本机 HTTP
+只读适配器、冻结预览、对象收录/来源回执、主进程能力和 IPC 已接入。测试使用合成数据与真实本机 HTTP
 fixture 验证 GET/无 key、实例和库范围、原始 hash、集合/群组版本、分页完整性、
 HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机标准路径
 `/Applications/Zotero.app` 未发现安装；未读取真实 Zotero 数据库、用户文库或凭证。
@@ -94,6 +132,13 @@ HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机�
 末页损坏、有效期、数据库拒绝写入、迟到取消与 DB12→13 保留历史原文。
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
-设置区连接/安装检测、库/集合选择、预览后的持久化幂等导入、版本检查点、冲突
-与删除状态、附件输入授权以及真实客户端验收仍待后续增量。V1 没有任何 Zotero
+设置区连接/安装检测、库/集合选择 UI、整库版本检查点、冲突审查 UI 与远端删除
+状态、附件输入授权以及真实客户端验收仍待后续增量。V1 没有任何 Zotero
 写请求，V3 写回继续另行授权。
+
+对象收录增量最终验证：单测 761/761、对象相关 26/26、Harness 94/94、原生 P0
+13/13（含真实 CSL bibliography worker）、应用启动 smoke 12/12，typecheck/build、
+IPC 和 renderer chunks 均通过。来源回执、DB13→14 原文及 ledger 保留、重复请求、
+同版本新请求复用、取消和事务回滚均有实际数据库回归。日志见
+`.artifacts/research-optimization/pr05-object-*.log`；原生 worker 的数据库与回执保留于
+`pr05-object-native-csl/`。真实 Zotero 客户端验收仍未运行。
