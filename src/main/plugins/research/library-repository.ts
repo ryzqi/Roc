@@ -8,6 +8,7 @@ import {
 import type { ResearchLiterature } from '../../../shared/types';
 import { citationKeySet } from './cite-key';
 import { bibliographyIdentity, literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { groupLiteratureIdentities } from './literature-identity-graph';
 import type { ResearchRepository } from './repository';
 
 export type LibraryItem = z.infer<typeof researchLibraryItemSchema>;
@@ -34,11 +35,17 @@ export class ResearchLibraryRepository {
 
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
-  findByIdentity(identity: string): LibraryItem | null {
-    const rows = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ? ORDER BY id LIMIT 2')
-      .all(identity) as Array<{id: string}>;
-    if (rows.length > 1) throw new Error('research_literature_identity_ambiguous');
-    return rows.length === 0 ? null : this.get(rows[0].id);
+  findByIdentity(identity: string, aliases: readonly string[] = []): LibraryItem | null {
+    const keys = [...new Set([identity, ...aliases])];
+    const rows = this.db.prepare(`SELECT DISTINCT l.id,l.identity_key FROM research_library_aliases a
+      JOIN research_library l ON l.id=a.item_id WHERE a.identity IN (${keys.map(() => '?').join(',')})
+      ORDER BY (l.identity_key=?) DESC,(l.identity_key NOT LIKE 'doi:%') DESC,l.id LIMIT 3`)
+      .all(...keys, identity) as Array<{id: string; identity_key: string}>;
+    const candidates = identity.startsWith('doi:') ? rows.filter(row => row.identity_key === identity || !row.identity_key.startsWith('doi:')) : rows;
+    const competingAnchor = identity.startsWith('doi:') && candidates.length > 0 &&
+      !candidates.some(row => row.identity_key === identity) && rows.some(row => row.identity_key.startsWith('doi:') && row.identity_key !== identity);
+    if (candidates.length > 1 || competingAnchor) throw new Error('research_literature_identity_ambiguous');
+    return candidates.length === 0 ? null : this.get(candidates[0].id);
   }
 
   flushIndex(): void { this.research.flushKnowledgeFromSource(); }
@@ -90,21 +97,31 @@ export class ResearchLibraryRepository {
       const identity = literatureIdentity(metadata);
       const providerRecord = entry.providerRecord === undefined ? null : researchLiteratureSchema.parse(entry.providerRecord);
       if (providerRecord !== null && literatureIdentity(providerRecord) !== identity) throw new Error('research_library_metadata_mismatch');
-      return { metadata, bibliography, identity, providerRecord };
+      return { metadata, bibliography, identity, providerRecord, aliases: [] as string[] };
     });
+    for (const group of groupLiteratureIdentities(parsed.map(entry => entry.metadata))) {
+      for (const index of group.indexes) Object.assign(parsed[index], {identity: group.identity, aliases: group.aliases});
+    }
     const imported = this.db.transaction(() => {
       let createdCount = 0;
       let duplicateCount = 0;
       const ids: string[] = [];
       const restoredIds = new Set<string>();
       for (const entry of parsed) {
-        const existing = this.findByIdentity(entry.identity);
+        if (entry.metadata.doi === null && entry.identity.startsWith('doi:')) {
+          const observed = this.findByIdentity(literatureIdentity(entry.metadata));
+          if (observed !== null && observed.metadata.doi !== null && literatureIdentity(observed.metadata) !== entry.identity) {
+            throw new Error('research_literature_identity_ambiguous');
+          }
+        }
+        const existing = this.findByIdentity(entry.identity, entry.aliases);
+        const canonicalIdentity = existing !== null && existing.metadata.doi !== null ? literatureIdentity(existing.metadata) : entry.identity;
         const timestamp = this.now();
         let id: string;
         if (existing === null) {
           id = `paper_${randomUUID()}`;
           this.db.prepare(`INSERT INTO research_library (id,identity_key,metadata_json,bibliography_json,sources_json,revision,archived,created_at,updated_at)
-            VALUES (?,?,?,?,?,1,0,?,?)`).run(id, entry.identity, JSON.stringify(entry.metadata), JSON.stringify(entry.bibliography),
+            VALUES (?,?,?,?,?,1,0,?,?)`).run(id, canonicalIdentity, JSON.stringify(entry.metadata), JSON.stringify(entry.bibliography),
               JSON.stringify([{ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord }]), timestamp, timestamp);
           createdCount += 1;
         } else {
@@ -119,6 +136,7 @@ export class ResearchLibraryRepository {
             sources.push({ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord });
           }
           const metadata = { ...current.metadata,
+            doi: current.metadata.doi ?? entry.metadata.doi,
             authors: current.metadata.authors.length === 0 ? entry.metadata.authors : current.metadata.authors,
             abstract: current.metadata.abstract?.trim() ? current.metadata.abstract : entry.metadata.abstract,
             publishedYear: current.metadata.publishedYear ?? entry.metadata.publishedYear,
@@ -142,17 +160,20 @@ export class ResearchLibraryRepository {
             }
           }
           const bibliography = { ...current.bibliography, fields,
+            doi: metadata.doi,
             authors: metadata.authors, abstract: metadata.abstract, publishedYear: metadata.publishedYear, url: metadata.url,
             entryType: current.bibliography.entryType === 'misc' ? entry.bibliography.entryType : current.bibliography.entryType,
             preambles: [...new Set([...current.bibliography.preambles, ...entry.bibliography.preambles])], csl };
           if (current.archived || JSON.stringify(sources) !== JSON.stringify(current.sources) || !sameMetadata(current.metadata, metadata)
-              || JSON.stringify(bibliography) !== JSON.stringify(current.bibliography)) {
-            this.db.prepare(`UPDATE research_library SET metadata_json = ?, bibliography_json = ?, sources_json = ?,
+              || JSON.stringify(bibliography) !== JSON.stringify(current.bibliography) || literatureIdentity(current.metadata) !== canonicalIdentity) {
+            this.db.prepare(`UPDATE research_library SET identity_key = ?, metadata_json = ?, bibliography_json = ?, sources_json = ?,
               archived = 0, revision = revision + 1, updated_at = ? WHERE id = ?`)
-              .run(JSON.stringify(metadata), JSON.stringify(bibliography), JSON.stringify(sources), timestamp, id);
+              .run(canonicalIdentity, JSON.stringify(metadata), JSON.stringify(bibliography), JSON.stringify(sources), timestamp, id);
           }
           duplicateCount += 1;
         }
+        const insertAlias = this.db.prepare('INSERT INTO research_library_aliases(item_id,identity) VALUES (?,?) ON CONFLICT DO NOTHING');
+        for (const alias of new Set([canonicalIdentity, ...entry.aliases])) insertAlias.run(id, alias);
         if (projectId !== null) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);
         if (!ids.includes(id)) ids.push(id);
       }

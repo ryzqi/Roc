@@ -1216,3 +1216,63 @@ Current arXiv/NLM identity documentation was verified; pinned better-sqlite3 13.
 and pragma API docs checked via Context7. No new live literature query, paid model call,
 remote write or real-user database migration. External-ID graph, complete review metadata/UI,
 independent annotated retrieval metrics and all L2 prerequisites remain unfinished.
+
+## PR-04.4B — uniquely anchored declared-ID graph and persistent library aliases
+
+Status: `Verified passing` for this declared-ID graph increment. PR-04 remains in progress.
+Research DB9, agent DB15, search snapshot11.
+
+The prior fusion split DOI-free PubMed/arXiv observations from an observation of the same
+declared identity with one DOI. The graph now connects these records only when exactly one
+DOI is observed for that source identity. Competing DOIs retain separate candidates and
+explicit identityConflicts, with DOI-free records still separate. Candidate aliases and
+conflicts retain their actual declaration; titles never create edges and primary provider
+metadata remains unchanged.
+
+Search, frozen candidate import and library import share the graph. Canonical library
+metadata/bibliography can acquire a uniquely witnessed DOI while retaining its item ID,
+citation key, primary metadata selection and every raw origin. A later DOI-free import
+resolves the persisted alias and never downgrades that DOI. Distinct known DOIs stay separate;
+shared DOI-free aliases become explicitly ambiguous. Archive state remains authoritative.
+
+DB9 adds a persistent alias index seeded from current primary metadata and actual retained
+providerRecord observations. It does not rewrite DB8 rows or infer unknown historical
+observations. Data-only migration transformations have an immutable dataVersion; existing
+applied SQL/name/checksums remain unchanged. A matching table schema cannot prove an
+unrecorded data/rebuild migration ran, so that fast path now refuses missing ledger evidence
+without modifying data or recording success.
+
+Changed: identity graph/alias migration, migration engine/schema, fusion/search/import/library
+consumers, search schema and renderer fixture, focused regressions and scoped docs.
+
+Commands from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`
+(also exposed at `/Users/Apple_501/Desktop/Roc/Roc`):
+
+| Command | Actual result |
+| --- | --- |
+| `node .artifacts/research-optimization/pr04-alias-graph-baseline.mjs` | Fixed f73fc26 baseline red: expected one same-PMID candidate, received two |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Initial75/75 passed |
+| `pnpm test:unit` | Final709/709 passed, including unproven ledger and competing stored-anchor regressions |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Generated contracts current |
+| `pnpm test:research-p0` | Fresh production build/typecheck and12/12 native cases passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final application startup/UI12/12, zero renderer errors, exit0 |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual Electron hook1/1 passed |
+| `pnpm check:renderer-chunks` | Eager JS1131076bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence: `.artifacts/research-optimization/pr04-alias-graph-*.log`. Provider docs research
+verified OpenAlex ids.pmid in its current primary dictionary. Semantic graph docs remained
+429 and its tutorial403; Ai2's authored code confirms externalIds.ArXiv, but the exact PubMed
+JSON field remains unverified. Those additional API observations are not implemented here.
+No new live literature query, paid model, remote write or real-user DB migration. Complete
+candidate review metadata/UI and independent annotated retrieval metrics remain pending.
+
+Final stored-anchor review adds a bounded three-row classification of exact DOI, provisional
+identity and competing DOI. A provisional historical row cannot be promoted while another
+stored DOI competes for its alias. DOI-free query origins consult stored identities before
+attachment; a competing stored anchor rejects the whole candidate import, retains original
+rows/sources and reports a conflict with retryable:false. Identity-change errors also do not
+invite an automatic retry. Three actual DB/import regressions cover these cases.
+Final full unit after this correction:709/709. Fresh production build/typecheck/native P0
+after the correction:12/12. Final startup smoke12/12 and renderer hook1/1 passed.

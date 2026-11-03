@@ -84,6 +84,22 @@ test('table replacement validates foreign keys before committing schema and data
   } finally { db.close(); }
 });
 
+test('matching schema cannot fabricate evidence that a one-time data migration ran', () => {
+  const db = new Database(':memory:');
+  const migrations = [
+    {version: 1, name: 'facts', sql: 'CREATE TABLE facts(id TEXT PRIMARY KEY, value INTEGER);'},
+    {version: 2, name: 'facts_data', sql: 'CREATE INDEX facts_value ON facts(value);',
+      data: {dataVersion: 'v1', migrate: database => database.prepare('INSERT INTO facts VALUES (?,?)').run('observed', 1)}}
+  ];
+  try {
+    applyDatabaseMigrations(db, {dbName: 'core', migrations});
+    db.prepare('DELETE FROM schema_migrations WHERE version=2').run();
+    assert.throws(() => applyDatabaseMigrations(db, {dbName: 'core', migrations}), /database_migration_data_unproven/u);
+    assert.equal(db.prepare('SELECT value FROM facts').pluck().get(), 1);
+    assert.deepEqual(ledgerVersions(db), [1]);
+  } finally { db.close(); }
+});
+
 test('空库从头跑完全部迁移', () => {
   const db = new Database(':memory:');
   applyDatabaseMigrations(db, {

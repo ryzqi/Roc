@@ -122,7 +122,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 10);
+    assert.equal(result.schemaVersion, 11);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -386,7 +386,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 10);
+    assert.equal(result.schemaVersion, 11);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -1235,7 +1235,7 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 10, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 11, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);
@@ -1443,7 +1443,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
     const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 8);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 9);
   } finally { f.close(); }
 });
 
@@ -1474,5 +1474,184 @@ test('DB8 refuses missing historical namespace evidence and restores schema, row
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 7);
     assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+  } finally { f.close(); }
+});
+
+test('DOI-free observations join a unique declared identity anchor and preserve their original metadata', () => {
+  const records = [
+    {...record('pubmed-free', null), source: 'pubmed', externalId: '123'},
+    {...record('med-anchor'), source: 'europe_pmc', externalId: 'MED:123'},
+    {...record('arxiv-free', null), source: 'arxiv', externalId: '2601.00001v1'},
+    {...record('arxiv-anchor'), source: 'arxiv', externalId: 'http://arxiv.org/abs/2601.00001v3'}
+  ];
+  const candidates = api.fuseLiterature(rankedRecords(records));
+  assert.equal(candidates.length, 2);
+  const med = candidates.find(candidate => candidate.identity === 'doi:10.1234/med-anchor');
+  assert.deepEqual(med.aliases, ['doi:10.1234/med-anchor', 'pmid:123']);
+  assert.deepEqual(med.record, records[0], 'canonical identity does not rewrite the displayed provider record');
+  assert.equal(med.origins.length, 2);
+  assert.equal(med.score, 2 / 61);
+  const arxiv = candidates.find(candidate => candidate.identity === 'doi:10.1234/arxiv-anchor');
+  assert.deepEqual(arxiv.aliases, ['arxiv:2601.00001', 'doi:10.1234/arxiv-anchor']);
+  assert.equal(arxiv.versionRelations.length, 1);
+  assert.equal(arxiv.score, 1 / 61);
+  const interleaved = [records[2], records[0], records[3], records[1]];
+  assert.deepEqual(api.fuseLiterature(rankedRecords(interleaved)), candidates);
+});
+
+test('competing DOI anchors preserve a separate DOI-free candidate and report the identity conflict', () => {
+  const records = [
+    {...record('anchor-b'), source: 'pubmed', externalId: '123'},
+    {...record('anchor-a'), source: 'europe_pmc', externalId: 'MED:123'},
+    {...record('unresolved', null), source: 'pubmed', externalId: '123'}
+  ];
+  const candidates = api.fuseLiterature(rankedRecords(records));
+  assert.equal(candidates.length, 3);
+  assert.equal(candidates.find(candidate => candidate.identity === 'pmid:123').origins.length, 1);
+  for (const candidate of candidates) assert.deepEqual(candidate.identityConflicts, [{
+    alias: 'pmid:123', doiIdentities: ['doi:10.1234/anchor-a', 'doi:10.1234/anchor-b']
+  }]);
+});
+
+test('a DOI-free primary candidate imports one canonical paper with every raw origin and durable aliases', async () => {
+  const originals = [
+    {...record('pmid-primary', null), source: 'pubmed', externalId: '123'},
+    {...record('doi-anchor'), source: 'europe_pmc', externalId: 'MED:123'}
+  ];
+  const f = setup({records: originals});
+  try {
+    const {result, entry} = await candidate(f);
+    assert.equal(result.candidates.length, 1);
+    assert.equal(result.candidates[0].record.doi, null);
+    assert.equal(result.candidates[0].identity, 'doi:10.1234/doi-anchor');
+    const imported = await f.run(() => f.service.add({entries: [entry], requestId: 'anchored-candidate'}));
+    assert.equal(imported.counts.created, 1);
+    const saved = f.repo.library.get(imported.items[0].libraryItemId);
+    assert.equal(saved.metadata.title, originals[0].title);
+    assert.equal(saved.metadata.doi, originals[1].doi);
+    assert.equal(saved.bibliography.doi, originals[1].doi);
+    assert.deepEqual(saved.sources.map(source => source.providerRecord), originals);
+    assert.equal(f.repo.library.findByIdentity('pmid:123').id, saved.id);
+    assert.equal(f.repo.library.findByIdentity('doi:10.1234/doi-anchor').id, saved.id);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 1);
+    f.setTime('2026-11-03T00:00:00.000Z');
+    const next = await candidate(f);
+    assert.equal(next.result.candidates[0].matchedLibraryItemId, saved.id);
+  } finally { f.close(); }
+});
+
+test('library aliases promote a uniquely matching DOI-free paper and never downgrade it on later imports', () => {
+  const f = setup();
+  try {
+    const without = {...record('without', null), source: 'pubmed', externalId: '123'};
+    const withDoi = {...record('with'), source: 'pubmed', externalId: '123'};
+    const prepare = metadata => ({metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())});
+    const first = f.repo.library.import([prepare(without)], f.project.id).items[0];
+    const linked = f.repo.library.import([prepare(withDoi)], f.project.id);
+    assert.equal(linked.createdCount, 0);
+    assert.equal(linked.items[0].id, first.id);
+    assert.equal(linked.items[0].metadata.doi, withDoi.doi);
+    assert.equal(linked.items[0].bibliography.citationKey, first.bibliography.citationKey);
+    const later = f.repo.library.import([prepare(without)], f.project.id);
+    assert.equal(later.items[0].id, first.id);
+    assert.equal(later.items[0].metadata.doi, withDoi.doi);
+    assert.equal(f.db.prepare('SELECT identity_key FROM research_library').pluck().get(), `doi:${withDoi.doi}`);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 1);
+    const archived = f.repo.library.archive(first.id, later.items[0].revision, true);
+    assert.equal(f.repo.library.findByIdentity('pmid:123').archived, true);
+    assert.throws(() => f.repo.library.import([prepare(without)], f.project.id, {skipArchived: true}), /research_library_item_archived/u);
+    assert.equal(f.repo.library.get(archived.id).archived, true);
+  } finally { f.close(); }
+});
+
+test('distinct library DOIs keep their own rows and make shared DOI-free aliases explicitly ambiguous', () => {
+  const f = setup();
+  try {
+    const papers = ['a', 'b'].map(id => ({...record(id), source: 'pubmed', externalId: '123'}));
+    for (const metadata of papers) f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+    assert.throws(() => f.repo.library.findByIdentity('pmid:123'), /research_literature_identity_ambiguous/u);
+    for (const metadata of papers) assert.equal(f.repo.library.findByIdentity(`doi:${metadata.doi}`, ['pmid:123']).metadata.doi, metadata.doi);
+    const metadata = {...papers[0], doi: null};
+    assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
+      /research_literature_identity_ambiguous/u);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+  } finally { f.close(); }
+});
+
+test('DB9 seeds declared aliases from retained raw records without rewriting DB8 rows or project links', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 8)});
+  try {
+    const metadata = {...record('seed'), source: 'pubmed', externalId: '123'};
+    const providerRecord = {...record('seed-arxiv', metadata.doi), source: 'arxiv', externalId: 'http://arxiv.org/abs/2601.00001v2'};
+    insertHistoricalLibrary(f, 'seeded', metadata);
+    const bibliography = api.bibliographyFromRecord(metadata, new Set());
+    f.db.prepare('UPDATE research_library SET sources_json=? WHERE id=?')
+      .run(JSON.stringify([{metadata, bibliography, providerRecord}]), 'seeded');
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    api.applyResearchDatabaseSchema(f.db);
+    for (const identity of [`doi:${metadata.doi}`, 'pmid:123', 'arxiv:2601.00001']) {
+      assert.equal(f.repo.library.findByIdentity(identity).id, 'seeded');
+    }
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.repo.library.get('seeded').projectIds, [f.project.id]);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
+    const aliases = f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all();
+    api.applyResearchDatabaseSchema(f.db);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all(), aliases);
+  } finally { f.close(); }
+});
+
+test('a competing stored DOI cannot promote an unresolved historical alias to a new DOI', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 8)});
+  try {
+    const without = {...record('historical-without', null), source: 'pubmed', externalId: '123'};
+    const known = {...record('historical-known'), source: 'pubmed', externalId: '123'};
+    insertHistoricalLibrary(f, 'unresolved-history', without);
+    insertHistoricalLibrary(f, 'known-history', known);
+    f.db.prepare('UPDATE research_library SET identity_key=? WHERE id=?').run('pmid:123', 'unresolved-history');
+    f.db.exec(`UPDATE research_library SET sources_json = (
+      SELECT json_group_array(json_set(value,'$.providerRecord',NULL)) FROM json_each(research_library.sources_json))`);
+    api.applyResearchDatabaseSchema(f.db);
+    const metadata = {...known, doi: '10.1234/new-competing-doi'};
+    assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
+      /research_literature_identity_ambiguous/u);
+    assert.equal(f.repo.library.get('unresolved-history').metadata.doi, null);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+  } finally { f.close(); }
+});
+
+test('a DOI-free observation cannot attach through a query anchor that conflicts with the stored library', () => {
+  const f = setup();
+  const known = {...record('stored-anchor'), source: 'pubmed', externalId: '123'};
+  try {
+    f.repo.library.import([{metadata: known, bibliography: api.bibliographyFromRecord(known, new Set())}], f.project.id);
+    const candidates = [
+      {...known, doi: '10.1234/current-query-anchor'},
+      {...known, doi: null}
+    ];
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    assert.throws(() => f.repo.library.import(candidates.map(metadata => ({metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())})), f.project.id),
+      /research_literature_identity_ambiguous/u);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 1);
+  } finally { f.close(); }
+});
+
+test('candidate import reports conflicting stored anchors without automatic retry or source mutation', async () => {
+  const without = {...record('without', null), source: 'pubmed', externalId: '123'};
+  const current = {...record('current'), source: 'europe_pmc', externalId: 'MED:123'};
+  const f = setup({records: [without, current]});
+  try {
+    const stored = [{...without, doi: '10.1234/other-stored'}, current];
+    for (const metadata of stored) f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id);
+    const {entry} = await candidate(f);
+    const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
+    const result = await f.run(() => f.service.add({entries: [entry], requestId: 'ambiguous-stored-candidate'}));
+    assert.equal(result.status, 'failed');
+    assert.equal(result.items[0].errorCode, 'research_literature_identity_ambiguous');
+    assert.equal(result.items[0].retryable, false);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
   } finally { f.close(); }
 });

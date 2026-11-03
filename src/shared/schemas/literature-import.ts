@@ -17,6 +17,8 @@ export const literatureSearchStrategyReceiptSchema = z.object({
 }).strict();
 export const literatureCandidateSchema = z.object({
   candidateId: z.string(), identity: z.string(), record: researchLiteratureSchema,
+  aliases: z.array(z.string().min(1)).min(1),
+  identityConflicts: z.array(z.object({alias: z.string().min(1), doiIdentities: z.array(z.string().startsWith('doi:')).min(2)}).strict()),
   score: z.number().nonnegative(),
   selectionReason: z.literal('source_priority_then_rank_then_metadata_hash'),
   origins: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(), rank: z.number().int().positive(),
@@ -63,7 +65,7 @@ export const literatureProviderCoverageSchema = z.object({
   nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(10), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(11), ranking: literatureRankingSchema, executionId: z.string().min(1),
   strategy: literatureSearchStrategyReceiptSchema.nullable(),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),

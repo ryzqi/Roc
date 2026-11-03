@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { literatureNetworkSourceSchema, type LiteratureCandidate, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 import type { ResearchLiterature } from '../../../shared/types';
-import { literatureIdentity, normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
+import { normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
+import { groupLiteratureIdentities } from './literature-identity-graph';
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
@@ -24,18 +25,14 @@ export function literatureRanking(sources: readonly string[]): LiteratureSearchR
  * Titles never establish identity. Ties use the normalized identity, without locale.
  */
 export function fuseLiterature(records: readonly RankedLiteratureRecord[]): FusedPaper[] {
-  const papers = new Map<string, LiteratureCandidate['origins']>();
-  for (const {record, rank} of records) {
-    const source = literatureNetworkSourceSchema.parse(record.source);
-    const identity = literatureIdentity(record);
-    const origin = {source, externalId: record.externalId, rank, retrievedAt: record.importedAt,
-      metadataHash: hash(record), record};
-    const origins = papers.get(identity);
-    if (origins === undefined) papers.set(identity, [origin]);
-    else origins.push(origin);
-  }
   const result: FusedPaper[] = [];
-  for (const [identity, origins] of papers) {
+  for (const group of groupLiteratureIdentities(records.map(item => item.record))) {
+    const identity = group.identity;
+    const origins = group.indexes.map(index => {
+      const {record, rank} = records[index];
+      const source = literatureNetworkSourceSchema.parse(record.source);
+      return {source, externalId: record.externalId, rank, retrievedAt: record.importedAt, metadataHash: hash(record), record};
+    });
     origins.sort((left, right) => literatureSourcePriority.indexOf(left.source) - literatureSourcePriority.indexOf(right.source)
       || left.rank - right.rank || compare(left.metadataHash, right.metadataHash));
     const primary = origins[0];
@@ -56,7 +53,7 @@ export function fuseLiterature(records: readonly RankedLiteratureRecord[]): Fuse
       if (new Set(distinct).size > 1) conflicts.push({field, values});
     }
     result.push({candidateId: `candidate_${hash(identity)}`, identity, record: primary.record,
-      origins, contributions, conflicts, versionRelations: arxivVersionRelations(origins),
+      origins, contributions, conflicts, aliases: group.aliases, identityConflicts: group.conflicts, versionRelations: arxivVersionRelations(origins),
       score: contributions.reduce((score, contribution) => score + contribution.score, 0),
       selectionReason: 'source_priority_then_rank_then_metadata_hash'});
   }

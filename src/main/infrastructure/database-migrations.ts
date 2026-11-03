@@ -9,6 +9,8 @@ export type RocDatabaseMigration = {
   sql: string;
   /** Table replacement must run with FK enforcement off, then validate before commit. */
   rebuild?: { dataVersion: string; migrate: (db: DatabaseConnection) => void };
+  /** dataVersion names a frozen transformation; changes require a new migration. */
+  data?: { dataVersion: string; migrate: (db: DatabaseConnection) => void };
 };
 
 export type RocSchemaMetadata = {
@@ -24,9 +26,9 @@ const expectedSchemaCache = new Map<string, ReadonlyMap<string, string>>();
 /**
  * 把库推到 `migrations` 声明的形状。三条路：
  *
- * 1. **已经是最新**（`sqlite_master` 里的对象与清单逐字一致）：历史 ledger 一致或为空时只补记 ledger；已记录的 migration 被改写仍要求重建。
+ * 1. **已经是最新**（`sqlite_master` 里的对象与清单逐字一致）：仅 schema 迁移可补记 ledger；数据迁移缺少记录时拒绝推测执行结果。
  * 2. **空库**（无对象、无 ledger）：从头跑全部迁移。
- * 3. **已应用一部分**：只要是**追加式**变化（新增列/新增表），就把未应用的迁移按版本顺序跑完，
+ * 3. **已应用一部分**：把声明的未应用迁移按版本顺序跑完，包括追加变化及显式的表替换，
  *    并在同一个事务里验证最终形状与清单一致。历史 migration 被改写（名字或 checksum 变了）、
  *    或者跑完对不上，才要求重建。
  *
@@ -59,6 +61,9 @@ export function applyDatabaseMigrations(
   }
   const expectedObjects = getExpectedSchemaObjects(input.migrations);
   if (schemaObjectsMatch(db, expectedObjects)) {
+    if (input.migrations.some(migration => !applied.has(migration.version) && (migration.data !== undefined || migration.rebuild !== undefined))) {
+      throw new Error('database_migration_data_unproven');
+    }
     if (!appliedMigrationsMatch(applied, input.migrations)) {
       recordCurrentMigrations(db, input.dbName, input.migrations, now);
     }
@@ -98,6 +103,7 @@ export function applyDatabaseMigrations(
 function executeMigration(db: DatabaseConnection, migration: RocDatabaseMigration): void {
   db.exec(migration.sql);
   migration.rebuild?.migrate(db);
+  migration.data?.migrate(db);
 }
 
 function applyMigrationBatch(db: DatabaseConnection, migrations: readonly RocDatabaseMigration[], apply: () => void): void {
@@ -313,7 +319,8 @@ function writeMetadata(
 
 function checksumMigration(migration: RocDatabaseMigration): string {
   const dataVersion = migration.rebuild === undefined ? '' : `\nrebuild:${migration.rebuild.dataVersion}`;
-  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}${dataVersion}`);
+  const transformVersion = migration.data === undefined ? '' : `\ndata:${migration.data.dataVersion}`;
+  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}${dataVersion}${transformVersion}`);
 }
 
 function checksumText(value: string): string {

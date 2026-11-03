@@ -3,6 +3,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 import { applyDatabaseMigrations, type RocDatabaseMigration } from './database-migrations';
 import type { RocLogicalDatabaseName } from './database-pragmas';
 import { migrateLiteratureIdentity } from '../plugins/research/literature-identity-migration';
+import { migrateLiteratureAliases } from '../plugins/research/literature-alias-migration';
 
 type Clock = () => string;
 
@@ -1531,6 +1532,19 @@ DROP TABLE research_library;
 ALTER TABLE research_library_next RENAME TO research_library;
 CREATE INDEX idx_research_library_identity ON research_library(identity_key);
 CREATE INDEX idx_research_library_citation_key ON research_library(json_extract(bibliography_json, '$.citationKey'));
+`
+});
+
+researchMigrations.push({
+  version: 9,
+  name: 'literature_declared_alias_index',
+  data: {dataVersion: 'literature_declared_alias_index_v1', migrate: migrateLiteratureAliases},
+  sql: `
+CREATE TABLE research_library_aliases (
+  item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+  identity TEXT NOT NULL, PRIMARY KEY(item_id,identity)
+);
+CREATE INDEX idx_research_library_alias_identity ON research_library_aliases(identity,item_id);
 `
 });
 

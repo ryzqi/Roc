@@ -8,7 +8,8 @@ import {
 import type { z } from 'zod';
 import { assertLiteratureActive, literatureContext, type LiteratureExecutionContext } from '../../services/literature-context';
 import { betterBibtexKey } from './cite-key';
-import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { normalizeResearchDoi } from './literature-identity';
+import { groupLiteratureIdentities } from './literature-identity-graph';
 import { fuseLiterature, literatureRanking } from './literature-fusion';
 import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literature-search-ledger';
 import type { LiteratureSearchService } from './literature-service';
@@ -82,11 +83,11 @@ export class LiteratureImportService {
           && (request.yearTo === undefined || candidate.record.publishedYear <= request.yearTo);
       });
       const candidates: LiteratureCandidate[] = grouped.slice(0, request.limit).map(candidate => {
-        const match = this.library.findByIdentity(candidate.identity);
+        const match = this.library.findByIdentity(candidate.identity, candidate.aliases);
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 10, ranking: literatureRanking(request.sources), executionId, strategy,
+      const result: LiteratureSearchResult = { schemaVersion: 11, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
@@ -135,13 +136,14 @@ export class LiteratureImportService {
     const frozen: FrozenEntry[] = [];
     for (const [position, entry] of entries.entries()) {
       let source: FrozenSource;
-      if (entry.kind === 'doi') source = {kind: 'doi', doi: entry.doi};
+      let key: string;
+      if (entry.kind === 'doi') { source = {kind: 'doi', doi: entry.doi}; key = `doi:${entry.doi}`; }
       else {
         const candidate = this.loadSearch(entry.searchId, context).candidates.find((candidate) => candidate.candidateId === entry.candidateId);
         if (candidate === undefined) throw new Error('literature_candidate_not_found');
         source = {kind: 'records', records: uniqueRecords(candidate.record, candidate.origins.map(origin => origin.record))};
+        key = candidate.identity;
       }
-      const key = source.kind === 'doi' ? `doi:${source.doi}` : literatureIdentity(source.records[0]);
       const duplicate = frozen.find((item) => item.result.entryKey === key);
       if (duplicate !== undefined) {
         duplicate.result.inputPositions.push(position);
@@ -227,13 +229,14 @@ export class LiteratureImportService {
             prepared.push({...await this.prepare.prepareRecord(record, signal), providerRecord: record});
           }
         }
-        if (prepared.some(record => literatureIdentity(record.metadata) !== item.entryKey)) throw new Error('literature_import_identity_changed');
+        const identities = groupLiteratureIdentities(prepared.map(record => record.metadata));
+        if (identities.length !== 1 || identities[0].identity !== item.entryKey) throw new Error('literature_import_identity_changed');
         this.db.transaction(() => {
           this.requireActive({ ...context, signal });
           this.library.validateDestination(context.projectId);
           const row = this.db.prepare('SELECT cancel_requested FROM research_literature_imports WHERE id = ?').get(result.operationId) as { cancel_requested: number };
           if (row.cancel_requested === 1) throw new Error('literature_import_cancelled');
-          const current = this.library.findByIdentity(item.entryKey);
+          const current = this.library.findByIdentity(item.entryKey, identities[0].aliases);
           if (current?.archived === true) {
             Object.assign(item, { disposition: 'skipped_archived', libraryItemId: current.id, citationKey: current.bibliography.citationKey });
           } else {
@@ -254,8 +257,9 @@ export class LiteratureImportService {
       } catch (error) {
         if (!committed) Object.assign(item, uncommitted);
         const cancelled = signal.aborted || this.closed || (error instanceof Error && error.message === 'literature_import_cancelled');
+        const errorCode = cancelled ? 'literature_import_cancelled' : safeFailure(error);
         Object.assign(item, { disposition: cancelled ? 'cancelled' : 'failed', metadata: cancelled ? 'not_requested' : 'failed',
-          errorCode: cancelled ? 'literature_import_cancelled' : safeFailure(error), retryable: !cancelled });
+          errorCode, retryable: !cancelled && !['research_literature_identity_ambiguous', 'literature_import_identity_changed'].includes(errorCode) });
         if (cancelled) {
           for (const remaining of result.items.slice(position + 1)) remaining.disposition = 'cancelled';
           break;
