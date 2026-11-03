@@ -8,6 +8,9 @@ import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
 import {LiteratureCandidateReview} from './LiteratureCandidateReview';
+import {ZoteroImportPanel} from './ZoteroImportPanel';
+import {useZoteroImportJob} from './use-zotero-import-job';
+import type {RocClient} from '../shared/roc-client';
 import {
   DOCUMENT_EXTENSIONS,
   arxivQueryFromInput,
@@ -41,6 +44,9 @@ import {
  */
 
 export type ImportDialogProps = {
+  client: RocClient;
+  projectId: string | null;
+  onZoteroImported: () => void;
   open: boolean;
   /** Which tab to show first; defaults to 文档. */
   initialTab?: ImportTabRequest;
@@ -69,7 +75,8 @@ const TABS: Array<{ id: ImportTabRequest; label: string }> = [
   { id: 'doi', label: 'DOI' },
   { id: 'bibliography', label: '参考文献文件' },
   { id: 'manual', label: '手工录入' },
-  { id: 'search', label: '检索' }
+  { id: 'search', label: '检索' },
+  { id: 'zotero', label: 'Zotero' }
 ];
 
 const BIBLIOGRAPHY_FORMATS: Array<{ id: ResearchBibliographyFormat; label: string }> = [
@@ -107,6 +114,7 @@ function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad';
 
 export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null {
   const { open, onClose } = props;
+  const zoteroJob = useZoteroImportJob(props.client, props.projectId, props.onZoteroImported);
   const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -219,7 +227,17 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
       footer={null}
     >
       <div className="flex flex-col gap-3" data-testid="literature-import-body">
-        <div role="tablist" aria-label="导入方式" className="flex flex-wrap items-center gap-1">
+        <div role="tablist" aria-label="导入方式" className="flex flex-wrap items-center gap-1"
+          onKeyDown={event => {
+            if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const index = TABS.findIndex(entry => entry.id === tab);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 :
+              (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+            setTab(TABS[next].id);
+            setMessage(null);
+            event.currentTarget.querySelector<HTMLButtonElement>(`[data-testid="literature-import-tab-${TABS[next].id}"]`)!.focus();
+          }}>
           {TABS.map((entry) => (
             <button
               key={entry.id}
@@ -550,6 +568,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             </button>
           </div>
         ) : null}
+
+        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} /> : null}
 
         {tab === 'search' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-search">

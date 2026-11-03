@@ -14,4 +14,4 @@
 export type LiteratureSubView = 'reader' | 'rag' | 'wiki' | 'graph';
 
 /** The import dialog's tabs; `?import=`-style deep links are deliberately absent. */
-export type ImportTabRequest = 'document' | 'doi' | 'bibliography' | 'manual' | 'search';
+export type ImportTabRequest = 'document' | 'doi' | 'bibliography' | 'manual' | 'search' | 'zotero';

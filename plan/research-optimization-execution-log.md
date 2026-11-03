@@ -1713,3 +1713,50 @@ spoofing refusal, no second HTTP on readback, durable scoped sources and unchang
 replay with one CSL worker. UI draft remains separate and uncommitted; its initial renderer
 run6/7 passed, native details test must wait for actual expansion. No real Zotero user library,
 live paper query, model call, remote write or frozen workflow-fixture edit.
+
+
+## PR-05C2 — user-reviewed Zotero selection and import UI
+
+Status: `Verified passing` for this UI increment. Full PR-05 remains in progress.
+No database/API format changes. Existing literature import dialog gains a Zotero tab with
+keyboard Arrow/Home/End navigation, explicit connection, paginated personal/group libraries
+and collections,20/30/50 source-page scope and separate frozen-preview pagination. Source
+version is carried across pages; errors cannot publish an old preview as the new page.
+Native keyboard details reveal complete raw tags/collections/attachment references/unknown
+fields. Notes/annotations/attachments and missing title/CSL cannot be selected as papers;
+actual metadata validation remains at the main boundary. At most30 papers per import.
+
+Existing owned jobs provide outcomes, partial retry and request idempotency. Lost transport
+retries keep requestId; actual failed results allow only declared retryable items. Cancel
+looks up that requestId and sends the real operationId, retaining submitted-vs-final state.
+Pending cancellation blocks another write and its acknowledgment is tied to the request.
+Parent dialog retains active/final receipt across close/tab changes; project key remounts
+it so old output cannot enter a new scope. Reopening within the same mounted canvas resumes
+receipt display; cross-restart selection/checkpoint recovery is not claimed.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm build` | Final production typecheck/build passed |
+| `node --test tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` | Final8/8 passed (new5, existing3) |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual hook1/1 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final startup/UI12/12, zero renderer errors, exit0 |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current contracts/eager1131135bytes/6files passed |
+| `git diff --check` | Passed |
+
+Shared backend unit765/Harness94/native13 passed in preceding scoped IPC increment with the
+UI draft present; final changes are renderer-only and received fresh build/runtime checks.
+Evidence `.artifacts/research-optimization/pr05-ui-*.log` and zotero-import-ui/: default,
+hover, expanded, long raw originals, reduced-motion light/dark1100/1099/800 allcut0/hidden0;
+normal light and long dark1099 inspected. First details assertion preceded native expansion;
+waiting for visible pre corrected the fixture, no product guard weakened. Additional checks
+prove exact group/collection/scope/page request, no implicit import, source-vs-review paging,
+selected-only import, retry-only failed entry, cancel/reopen/final receipt, explicit read
+errors, same-ID lost-transport retry, library-only null scope, old project refusal and distinct
+source50/selection30 caps. Temp Electron harness artifacts removed by test cleanup.
+
+No new live literature query, paid model, actual Zotero user library read, external write or
+frozen workflow-fixture edit. Next: source/local conflict review, incremental checkpoints and
+remote deletion state, attachment input authorization. Actual Zotero interoperability and
+independent scientific/L2/full-reviewed-corpus acceptance remain externally blocked.

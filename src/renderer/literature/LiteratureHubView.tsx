@@ -326,6 +326,10 @@ export function LiteratureHubView(): React.JSX.Element {
       )}
 
       <ImportDialog
+        key={store.projectId ?? 'library'}
+        client={store.client}
+        projectId={store.projectId}
+        onZoteroImported={store.reload}
         open={importOpen}
         initialTab={importTab}
         onClose={() => setImportOpen(false)}
