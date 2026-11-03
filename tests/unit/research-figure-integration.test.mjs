@@ -60,6 +60,10 @@ test('real figure rendering is polled with runId and published into a persisted 
     const { projectId, ownerRunId, ...request } = figureRequest(project.id, run.id, { timeoutMs: 10_000 });
     const started = await tools.find((entry) => entry.name === 'start_figure').invoke(request);
     assert.equal(started.status, 'preparing');
+    const execution = fixture.tasks.requireExecution('figure', started.runId, project.id);
+    assert.equal(execution.taskId, run.taskId);
+    assert.equal(execution.parentKind, 'stage');
+    assert.equal(execution.parentExecutionId, run.id);
     await waitFor(() => !['preparing', 'running'].includes(effects.getFigure(run.id, project.id, started.runId).status));
     const completed = await tools.find((entry) => entry.name === 'get_figure').invoke({ runId: started.runId });
     assert.equal(completed.status, 'completed', completed.error);
@@ -75,6 +79,22 @@ test('real figure rendering is polled with runId and published into a persisted 
     const repeated = await effects.publishFigure(run.id, project.id, started.runId, null);
     assert.equal(repeated.id, published.figureId);
     assert.equal(effects.getFigure(run.id, project.id, started.runId).artifactId, published.artifactId);
+  } finally { await fixture.dispose(); }
+});
+
+test('association persistence failure prevents renderer dispatch and records failed figure', async () => {
+  let renders = 0;
+  const fixture = await setup({ renderFigure() { renders += 1; throw new Error('must_not_render'); } });
+  try {
+    const { agentDb, project, run, service, repository } = fixture;
+    agentDb.exec(`CREATE TRIGGER reject_figure_task BEFORE INSERT ON research_task_executions
+      WHEN NEW.kind = 'figure' BEGIN SELECT RAISE(ABORT, 'fixture_figure_link_failed'); END`);
+    await assert.rejects(service.start(figureRequest(project.id, run.id)), /fixture_figure_link_failed/);
+    assert.equal(renders, 0);
+    const saved = repository.figureRuns.list(project.id, 10)[0];
+    assert.equal(saved.status, 'failed');
+    assert.equal(saved.error, 'research_task_association_failed');
+    assert.equal(repository.figures.list(project.id, 10).length, 0);
   } finally { await fixture.dispose(); }
 });
 

@@ -581,6 +581,31 @@ CREATE TABLE agent_run_event_snapshot_pending (
 ];
 
 
+agentMigrations.push({
+  version: 11,
+  name: 'trusted_research_tasks_and_dispatch',
+  sql: `
+CREATE TABLE research_tasks (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, snapshot_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX research_tasks_project ON research_tasks(project_id, created_at);
+CREATE TABLE research_task_executions (
+  kind TEXT NOT NULL, execution_id TEXT NOT NULL, task_id TEXT NOT NULL, project_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY(kind, execution_id), FOREIGN KEY(task_id) REFERENCES research_tasks(id)
+);
+CREATE INDEX research_task_execution_task ON research_task_executions(task_id, created_at);
+CREATE TABLE agent_research_dispatch_grants (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, thread_id TEXT NOT NULL, project_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL, manifest_hash TEXT NOT NULL, state TEXT NOT NULL
+    CHECK(state IN ('issued','consumed','expired','revoked')),
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+CREATE INDEX agent_research_dispatch_run ON agent_research_dispatch_grants(run_id, state);
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
@@ -1328,6 +1353,16 @@ INSERT INTO research_knowledge_chunks_fts(research_knowledge_chunks_fts)
 `
   }
 ];
+
+researchMigrations.push({
+  version: 6,
+  name: 'research_stage_task_identity',
+  sql: `
+ALTER TABLE research_stage_runs ADD COLUMN task_id TEXT;
+CREATE INDEX research_stage_task ON research_stage_runs(task_id);
+UPDATE research_stage_runs SET snapshot_json = json_set(snapshot_json, '$.taskId', NULL);
+`
+});
 
 function applySchema(
   db: DatabaseConnection,

@@ -5,3 +5,16 @@ export { getResearchStageRoleProfile } from '../../../src/main/plugins/research/
 export { applyResearchDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 export { ResearchFigureService } from '../../../src/main/plugins/research/figure-service';
 export { renderResearchFigure } from '../../../src/main/plugins/research/figure-renderer';
+export { ResearchTaskRepository } from '../../../src/main/plugins/research/research-task-repository';
+export { ResearchStageRuntime } from '../../../src/main/plugins/research/stage-runtime';
+export { ExecutionGrantBroker, openExecutionGrantBroker } from '../../../src/main/services/deep-agent/execution-grant-broker';
+export { withResearchDispatchReference } from '../../../src/main/services/research-dispatch-context';
+export { registerResearchRunCapabilities } from '../../../src/main/plugins/research/run-capabilities';
+export { registerResearchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
+export { registerResearchFigureCapabilities } from '../../../src/main/plugins/research/figure-capabilities';
+export { registerResearchExportCapabilities } from '../../../src/main/plugins/research/export-capabilities';
+export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';
+export { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
+export { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
+export { createRunBudget, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
+export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';

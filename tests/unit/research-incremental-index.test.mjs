@@ -9,10 +9,11 @@ import Database from 'better-sqlite3';
 test('dirty file reconciliation preserves unrelated files and falls back for directories and unsafe paths', async () => {
   const dir = mkdtempSync(realpathSync(join(tmpdir())) + '/roc-dirty-index-');
   const db = new Database(':memory:');
+  const agentDb = new Database(':memory:');
   try {
     symlinkSync(join(process.cwd(), 'node_modules'), join(dir, 'node_modules'), 'dir');
     const modules = {};
-    for (const [name, entry] of Object.entries({ files: 'src/main/plugins/research/index-files.ts', repo: 'src/main/plugins/research/repository.ts', schema: 'src/main/infrastructure/database-schemas.ts', options: 'src/shared/schemas/research-index.ts' })) {
+    for (const [name, entry] of Object.entries({ files: 'src/main/plugins/research/index-files.ts', repo: 'src/main/plugins/research/repository.ts', tasks: 'src/main/plugins/research/research-task-repository.ts', migrations: 'src/main/infrastructure/database-migrations.ts', schema: 'src/main/infrastructure/database-schemas.ts', options: 'src/shared/schemas/research-index.ts' })) {
       const outfile = join(dir, `${name}.mjs`);
       await build({ entryPoints: [entry], outfile, bundle: true, format: 'esm', platform: 'node', packages: 'external', loader: { '.md': 'text' } });
       modules[name] = await import(outfile);
@@ -28,7 +29,8 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     const full = await modules.files.scanIndexFiles(root, options, storage, signal);
     assert.equal(full.length, 2);
     modules.schema.applyResearchDatabaseSchema(db);
-    const repo = new modules.repo.ResearchRepository(db, () => '2026-07-10T00:00:00.000Z');
+    modules.migrations.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: modules.schema.agentMigrations });
+    const repo = new modules.repo.ResearchRepository(db, new modules.tasks.ResearchTaskRepository(agentDb), () => '2026-07-10T00:00:00.000Z');
     const project = repo.createProject({ title: 'dirty', description: '', workspacePath: root });
     repo.indexing.bindRoot(project.id, root);
     const keys = new Map([['markdown', 'roc-text-1']]);
@@ -46,7 +48,7 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     const deleted = await modules.files.scanChangedIndexFiles(root, paths, options, storage, signal);
     repo.indexing.reconcile(project.id, repo.indexing.beginScan(project.id), deleted, false, null, keys, paths);
     assert.deepEqual(repo.indexing.listFiles(project.id, '', false, 100).map(file => file.path), ['b.md']);
-  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { db.close(); agentDb.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('full scans honor aborts, skip symlink files, and enforce safety caps', async () => {

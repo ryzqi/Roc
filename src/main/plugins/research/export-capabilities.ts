@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
-  researchExportListRequestSchema, researchExportPrepareSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
+  researchExportListRequestSchema, researchExportPrepareRequestSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
   researchExportSourceRequestSchema, researchExportWriteRequestSchema } from '../../../shared/schemas/research-exports';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchExportRepository } from './export-repository';
 import type { ResearchExportService } from './export-service';
 
 const capabilities = {
-  prepare: descriptor('research.export.prepare', researchExportPrepareSchema, researchExportExecutionSchema),
+  prepare: descriptor('research.export.prepare', researchExportPrepareRequestSchema, researchExportExecutionSchema),
   get: descriptor('research.export.get', researchExportIdRequestSchema, researchExportExecutionSchema),
   list: descriptor('research.export.list', researchExportListRequestSchema, researchExportExecutionSchema.array()),
   cancel: descriptor('research.export.cancel', researchExportIdRequestSchema, researchExportExecutionSchema),

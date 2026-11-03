@@ -74,6 +74,15 @@ export class ResearchExperimentService {
       signal.throwIfAborted();
       if (project.workspacePath === null) throw new Error('research_project_workspace_required');
       const run = this.repository.experiments.create(request, project.workspacePath, workspace, storage);
+      try {
+        this.repository.tasks.linkOwned({ kind: 'experiment', executionId: run.id, projectId: run.projectId,
+          ownerRunId: run.ownerRunId, goal: request.label, snapshot: run.request });
+      } catch (error) {
+        this.repository.experiments.finish(run.projectId, run.id, {
+          status: 'failed', files: run.files, exitCode: null, error: 'research_task_association_failed'
+        });
+        throw error;
+      }
       if (run.status === 'preparing' && !this.executions.has(run.id)) {
         this.executions.start(run.id, { projectId: run.projectId }, (jobSignal) => this.execute(run, jobSignal));
       }

@@ -18,6 +18,7 @@ const researchExportPrepareFields = {
   figureIds: z.array(id).max(100).refine((ids) => new Set(ids).size === ids.length), template: researchExportTemplateSchema
 } as const;
 export const researchOwnedExportPrepareSchema = z.object(researchExportPrepareFields).strict();
+export const researchExportPrepareRequestSchema = researchOwnedExportPrepareSchema.extend({ projectId: id });
 export const researchExportPrepareSchema = z.object({
   projectId: id, ownerRunId: id.nullable().optional(), ...researchExportPrepareFields
 }).strict();

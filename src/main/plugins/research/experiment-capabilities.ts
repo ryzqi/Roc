@@ -2,14 +2,14 @@ import { basename, extname } from 'node:path';
 import { z } from 'zod';
 import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentEvidenceRequestSchema,
   researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema, researchExperimentIdRequestSchema,
-  researchExperimentListRequestSchema, researchExperimentSourceRequestSchema, researchExperimentStartSchema } from '../../../shared/schemas/research-experiments';
+  researchExperimentListRequestSchema, researchExperimentSourceRequestSchema, researchExperimentStartRequestSchema } from '../../../shared/schemas/research-experiments';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchExperimentRepository } from './experiment-repository';
 import type { ResearchExperimentService } from './experiment-service';
 
 const capabilities = {
   environment: descriptor('research.experiment.environment', researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema),
-  start: descriptor('research.experiment.start', researchExperimentStartSchema, researchExperimentExecutionSchema),
+  start: descriptor('research.experiment.start', researchExperimentStartRequestSchema, researchExperimentExecutionSchema),
   get: descriptor('research.experiment.get', researchExperimentIdRequestSchema, researchExperimentExecutionSchema),
   list: descriptor('research.experiment.list', researchExperimentListRequestSchema, researchExperimentExecutionSchema.array()),
   cancel: descriptor('research.experiment.cancel', researchExperimentIdRequestSchema, researchExperimentExecutionSchema),

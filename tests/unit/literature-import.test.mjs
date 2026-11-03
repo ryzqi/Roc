@@ -14,7 +14,9 @@ before(async () => {
   const outfile = join(directory, 'fixture.mjs');
   await esbuild.build({ stdin: { contents: `
     export { ResearchRepository } from './src/main/plugins/research/repository';
-    export { applyResearchDatabaseSchema } from './src/main/infrastructure/database-schemas';
+    export { applyResearchDatabaseSchema, agentMigrations } from './src/main/infrastructure/database-schemas';
+    export { applyDatabaseMigrations } from './src/main/infrastructure/database-migrations';
+    export { ResearchTaskRepository } from './src/main/plugins/research/research-task-repository';
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
     export { withLiteratureContext } from './src/main/services/literature-context';
@@ -33,7 +35,9 @@ function setup(options = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   api.applyResearchDatabaseSchema(db, () => timestamp);
-  const repo = new api.ResearchRepository(db, () => timestamp);
+  const agentDb = new Database(':memory:');
+  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations });
+  const repo = new api.ResearchRepository(db, new api.ResearchTaskRepository(agentDb), () => timestamp);
   const project = repo.createProject({ title: 'Import', description: '', workspacePath: `/tmp/roc-${crypto.randomUUID()}` });
   let time = timestamp;
   const changes = [];
@@ -47,7 +51,7 @@ function setup(options = {}) {
   const scope = { owner: 'thread:a', projectId: project.id, runId: 'run_a' };
   return { db, repo, service, project, scope, changes, make, setTime: (next) => { time = next; },
     run: (action, override = {}) => api.withLiteratureContext({ ...scope, ...override }, action),
-    close: () => db.close() };
+    close: () => { db.close(); agentDb.close(); } };
 }
 async function candidate(f) {
   const result = await f.run(() => f.service.search({ query: 'literature', sources: ['crossref'], limit: 10 }));

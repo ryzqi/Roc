@@ -36,6 +36,7 @@ import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import { toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocCommandTool } from '../../services/deep-agent/command-tool';
 import { createResearchTools } from './research-tools';
+import { withResearchDispatchReference } from '../../services/research-dispatch-context';
 import { assertMcpToolContractMatches, readMcpToolContractMetadata } from '../mcp/mcp-tool-contract';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
@@ -144,6 +145,7 @@ export async function buildRunHarness(
     executionGrantBroker: services.executionGrantBroker
   });
   const tools = await createExecutorTools({
+    executionGrantBroker: services.executionGrantBroker,
     threadId: request.run.threadId,
     capabilities: services.capabilities,
     runId: request.run.id,
@@ -424,6 +426,7 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshot): Workspace 
  * 缺席的组直接空数组，不影响其余组的相对次序。
  */
 async function createExecutorTools(input: {
+  executionGrantBroker?: ExecutionGrantBroker;
   threadId: string;
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
@@ -481,6 +484,7 @@ async function createExecutorTools(input: {
  * 按清单过滤而不是按项目 id 直接信任，保证运行时工具集与冻结的清单一致。
  */
 function createManifestAuthorizedResearchTools(input: {
+  executionGrantBroker?: ExecutionGrantBroker;
   threadId: string;
   runId: string;
   capabilities: RocCapabilityRegistry;
@@ -497,7 +501,16 @@ function createManifestAuthorizedResearchTools(input: {
     projectId: input.researchProjectId,
     threadId: input.threadId,
     runId: input.runId,
-    signal: input.abortSignal
+    signal: input.abortSignal,
+    dispatchStage: async (request) => {
+      input.abortSignal.throwIfAborted();
+      if (input.executionGrantBroker === undefined) throw new Error('research_dispatch_broker_required');
+      const reference = input.executionGrantBroker.issueResearchDispatch({
+        runId: input.runId, threadId: input.threadId, manifest: input.capabilityManifest, request
+      });
+      return await withResearchDispatchReference(reference, () =>
+        input.capabilities.invoke('research.workflow.startRun', request));
+    }
   }).filter((tool) => manifestToolNames.has(tool.name)) as ClientTool[];
 }
 

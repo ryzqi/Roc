@@ -41,6 +41,7 @@ import { SecretService } from './services/secret-service';
 import { SelfConfigService } from './services/self-config';
 import { openExecutionGrantBroker } from './services/deep-agent/execution-grant-broker';
 import { WorkspaceService } from './services/workspace-service';
+import { ResearchTaskRepository } from './plugins/research/research-task-repository';
 
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
@@ -203,6 +204,7 @@ function createDefaultMainKernelPlugins(input: {
   const configService = input.configService;
   const agentDatabase = input.databasePool.getConnection('@roc/plugin-agent');
   const executionGrantBroker = openExecutionGrantBroker(agentDatabase);
+  const researchTasks = new ResearchTaskRepository(agentDatabase);
   // One binding, two readers. `workspace.select` writes this instance (the workspace plugin owns
   // the capability) and the memory plugin reads it, so the two project memory slots
   // (`/memory/workspaces/current/{AGENTS,MEMORY}.md`) resolve against the directory the shell
@@ -271,7 +273,10 @@ function createDefaultMainKernelPlugins(input: {
       agentTaskHistory: new AgentTaskHistoryContract(agentDatabase)
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
-    createResearchPlugin({ roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
+    createResearchPlugin({
+      tasks: researchTasks,
+      executionGrantBroker,
+      roleExecutor: createResearchRoleExecutor(agentModelFactory), toolchainRoot: input.researchToolchainRoot,
       modelsRoot: input.researchModelsRoot,
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
       exportRoot: join(input.paths.root, 'research-exports'), proseRoot: join(input.paths.root, 'research-prose') }),

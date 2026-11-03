@@ -8,6 +8,8 @@ import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types'
 import type { ResearchRunRepository } from './run-repository';
 import type { ResearchStageRuntime } from './stage-runtime';
 import type { ResearchReviewRepository } from './review-repository';
+import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
+import { researchDispatchReference } from '../../services/research-dispatch-context';
 
 const capabilities = {
   cycle: descriptor('research.workflow.reviewCycle', researchStagePoliciesRequestSchema, researchReviewCycleSchema.nullable()),
@@ -23,14 +25,17 @@ const capabilities = {
 
 export const researchRunCapabilities = Object.values(capabilities);
 
-export function registerResearchRunCapabilities(context: RocPluginContext, repository: ResearchRunRepository, runtime: ResearchStageRuntime, reviews: ResearchReviewRepository): void {
+export function registerResearchRunCapabilities(context: RocPluginContext, repository: ResearchRunRepository, runtime: ResearchStageRuntime, reviews: ResearchReviewRepository, grants: ExecutionGrantBroker): void {
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
     context.capabilities.register(context.pluginId, capability, async (input) => run(capability.inputSchema.parse(input)));
   }
   register(capabilities.cycle, (request) => reviews.get(request.projectId));
   register(capabilities.policies, (request) => repository.listPolicies(request.projectId));
   register(capabilities.savePolicy, (request) => repository.savePolicy(request));
-  register(capabilities.start, (request) => runtime.start(request));
+  register(capabilities.start, (request) => {
+    const reference = researchDispatchReference();
+    return runtime.start(request, reference === undefined ? null : grants.consumeResearchDispatch(reference, request));
+  });
   register(capabilities.get, (request) => repository.get(request.runId, request.projectId));
   register(capabilities.list, (request) => repository.list(request));
   register(capabilities.cancel, (request) => runtime.cancel(request));

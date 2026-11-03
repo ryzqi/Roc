@@ -27,7 +27,11 @@ export function createResearchFixture(api, stage = 'figure', workspacePath = '/t
   db.pragma('foreign_keys = ON');
   const now = () => '2026-11-03T00:00:00.000Z';
   api.applyResearchDatabaseSchema(db, now);
-  const repository = new api.ResearchRepository(db, now);
+  const agentDb = new Database(':memory:');
+  agentDb.pragma('foreign_keys = ON');
+  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations });
+  const tasks = new api.ResearchTaskRepository(agentDb, now);
+  const repository = new api.ResearchRepository(db, tasks, now);
   const project = repository.createProject({
     title: 'Synthetic reproducibility study', description: 'Contract fixture',
     workspacePath
@@ -38,8 +42,10 @@ export function createResearchFixture(api, stage = 'figure', workspacePath = '/t
   const queued = repository.runs.begin({
     projectId: project.id, expectedStage: stage, instruction: 'Produce fixture artifact', requestId: 'stage-1'
   });
+  tasks.linkStage(queued, null);
+  repository.runs.bindTask(queued.id, project.id);
   const run = repository.runs.markRunning(queued.id, project.id, { providerId: 'fixture-provider', modelId: 'fixture-model' });
-  return { db, repository, project, run, close: () => db.close() };
+  return { db, agentDb, tasks, repository, project, run, close: () => { db.close(); agentDb.close(); } };
 }
 
 export function figureRequest(projectId, ownerRunId, overrides = {}) {

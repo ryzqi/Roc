@@ -65,6 +65,10 @@ const nativeStartSchema = z.object({
   if (value.runtime.kind !== runtimeKind) context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
 });
 export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, nativeStartSchema]);
+export const researchExperimentStartRequestSchema = z.discriminatedUnion('engine', [
+  typescriptStartSchema.safeExtend({ projectId: z.string().min(1) }),
+  nativeStartSchema.safeExtend({ projectId: z.string().min(1) })
+]);
 const historicalExperimentStartFields = {
   requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256),
   sourcePath: researchExperimentPathSchema, inputPaths: z.array(researchExperimentPathSchema).max(1000),

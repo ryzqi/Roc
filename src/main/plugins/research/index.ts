@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
+import type { ResearchTaskRepository } from './research-task-repository';
 import { LiteratureImportService } from './literature-import-service';
 import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
 import { z } from 'zod';
@@ -133,6 +135,8 @@ const lifecycleCapabilities = {
 };
 
 export type ResearchPluginOptions = {
+  executionGrantBroker: ExecutionGrantBroker;
+  tasks: ResearchTaskRepository;
   experimentRoot?: string;
   exportRoot?: string;
   indexRoot?: string;
@@ -148,7 +152,7 @@ export type ResearchPluginOptions = {
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
 };
 
-export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPlugin {
+export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin {
   let repository: ResearchRepository | null = null;
   let stageRuntime: ResearchStageRuntime | null = null;
   let templates: ResearchTemplateService | null = null;
@@ -182,7 +186,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       toolchain.attachModelConfig(context.config);
       const db = context.database.getConnection();
       loadResearchVectorExtension(db);
-      repository = new ResearchRepository(db);
+      repository = new ResearchRepository(db, options.tasks);
       const researchRepository = repository;
       const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
       embeddings = researchEmbeddings;
@@ -196,6 +200,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const researchFigures = new ResearchFigureService(researchRepository, toolchain, options.experimentRoot ?? null, context.logger);
       figures = researchFigures;
       registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);
+      researchRepository.runs.reconcileTaskLinks();
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
       const notifyWorkspacePathStructureChanged: WorkspacePathStructureChangeNotifier = (workspacePath, reason) => {
@@ -260,7 +265,7 @@ export function createResearchPlugin(options: ResearchPluginOptions = {}): RocPl
       const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects);
       stageRuntime = runtime;
-      registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews);
+      registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);

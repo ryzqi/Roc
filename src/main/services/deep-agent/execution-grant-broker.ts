@@ -6,6 +6,17 @@ import type { RunCapabilityManifestV1 } from '../../../shared/types';
 import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
 import { runExecutionSnapshotAnySchema } from '../../../shared/schemas/agent';
 import { evaluateShellPolicy } from './shell-policy';
+import type { ResearchStageRunStartRequest } from '../../../shared/types';
+import { researchDispatchRequestHash } from '../research-dispatch-context';
+
+export type ConsumedResearchDispatchGrant = Readonly<{
+  grantId: string; runId: string; threadId: string; projectId: string;
+  requestHash: string; manifestHash: string;
+}>;
+const researchDispatchTokens = new WeakSet<object>();
+export function assertResearchDispatchGrant(value: ConsumedResearchDispatchGrant): void {
+  if (!researchDispatchTokens.has(value)) throw new Error('research_dispatch_grant_untrusted');
+}
 
 export type ExecutionGrantProfile = 'isolated_read' | 'isolated_write' | 'trusted_host';
 export type ExecutionGrantBinding = {
@@ -59,6 +70,70 @@ export class ExecutionGrantBroker {
     private readonly db: DatabaseConnection,
     private readonly now: () => Date = () => new Date()
   ) {}
+
+  issueResearchDispatch(input: { runId: string; threadId: string; manifest: RunCapabilityManifestV1; request: ResearchStageRunStartRequest }): string {
+    return this.db.transaction(() => {
+      this.assertResearchRun(input.runId, input.threadId, input.request.projectId, input.manifest.manifestHash);
+      const tool = input.manifest.tools.find((entry) => entry.modelVisibleName === 'research_run_stage');
+      if (tool === undefined || !tool.executionScopes.includes('main')) throw new Error('research_dispatch_capability_denied');
+      const id = randomUUID();
+      const now = this.now();
+      this.db.prepare(`INSERT INTO agent_research_dispatch_grants
+        (id,run_id,thread_id,project_id,request_hash,manifest_hash,state,created_at,expires_at)
+        VALUES (?,?,?,?,?,?,'issued',?,?)`).run(id, input.runId, input.threadId, input.request.projectId,
+          researchDispatchRequestHash(input.request), input.manifest.manifestHash,
+          now.toISOString(), new Date(now.getTime() + grantLifetimeMs).toISOString());
+      return id;
+    }).immediate();
+  }
+
+  consumeResearchDispatch(reference: string, request: ResearchStageRunStartRequest): ConsumedResearchDispatchGrant {
+    const result = this.db.transaction(() => {
+      const row = this.db.prepare('SELECT * FROM agent_research_dispatch_grants WHERE id = ?').get(reference) as {
+        id: string; run_id: string; thread_id: string; project_id: string; request_hash: string;
+        manifest_hash: string; state: string; expires_at: string;
+      } | undefined;
+      if (row === undefined || row.state !== 'issued') throw new Error('research_dispatch_grant_unavailable');
+      if (Date.parse(row.expires_at) <= this.now().getTime()) {
+        this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'expired' WHERE id = ?").run(reference);
+        return null;
+      }
+      if (row.project_id !== request.projectId || row.request_hash !== researchDispatchRequestHash(request)) {
+        throw new Error('research_dispatch_request_mismatch');
+      }
+      this.assertResearchRun(row.run_id, row.thread_id, row.project_id, row.manifest_hash);
+      this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'consumed' WHERE id = ?").run(reference);
+      const token = Object.freeze({ grantId: row.id, runId: row.run_id, threadId: row.thread_id,
+        projectId: row.project_id, requestHash: row.request_hash, manifestHash: row.manifest_hash });
+      researchDispatchTokens.add(token);
+      return token;
+    }).immediate();
+    if (result === null) throw new Error('research_dispatch_grant_expired');
+    return result;
+  }
+
+  private assertResearchRun(runId: string, threadId: string, projectId: string, manifestHash: string): void {
+    const run = this.db.prepare(`SELECT r.status,r.snapshot_json,r.snapshot_version,t.research_project_id
+      FROM agent_runs r JOIN agent_threads t ON t.id = r.thread_id
+      WHERE r.id = ? AND r.thread_id = ?`).get(runId, threadId) as {
+        status: string; snapshot_json: string | null; snapshot_version: number | null; research_project_id: string | null;
+      } | undefined;
+    if (run === undefined || run.status !== 'running') throw new Error('research_dispatch_parent_not_active');
+    if (this.db.prepare('SELECT 1 FROM agent_execution_run_fences WHERE run_id = ?').get(runId) !== undefined) {
+      throw new Error('research_dispatch_parent_revoked');
+    }
+    if (run.snapshot_json === null) throw new Error('research_dispatch_snapshot_missing');
+    const snapshot = runExecutionSnapshotAnySchema.parse(JSON.parse(run.snapshot_json));
+    const { manifestHash: storedHash, ...content } = snapshot.capabilityManifest;
+    if (snapshot.schemaVersion !== 9 || run.snapshot_version !== 9 || snapshot.runId !== runId || snapshot.threadId !== threadId
+      || snapshot.researchProjectId !== projectId || run.research_project_id !== projectId
+      || storedHash !== manifestHash || hash(JSON.stringify(content)) !== manifestHash) {
+      throw new Error('research_dispatch_parent_binding_invalid');
+    }
+    if (!snapshot.capabilityManifest.tools.some((entry) => entry.modelVisibleName === 'research_run_stage' && entry.executionScopes.includes('main'))) {
+      throw new Error('research_dispatch_capability_denied');
+    }
+  }
 
   recordTrustedHostApproval(binding: ExecutionGrantBinding): string {
     const prepared = prepareBinding(binding);
@@ -239,6 +314,8 @@ export class ExecutionGrantBroker {
   }
 
   private revokePendingExecutionGrantsInTransaction(runId: string, revokedAt: string): number {
+    const research = this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'revoked' WHERE run_id = ? AND state = 'issued'")
+      .run(runId).changes;
     this.db.prepare(`
       UPDATE agent_execution_approvals SET status = 'revoked', revoked_at = ?
       WHERE run_id = ? AND (
@@ -250,7 +327,7 @@ export class ExecutionGrantBroker {
         )
       )
     `).run(revokedAt, runId, runId);
-    return this.db.prepare(`
+    return research + this.db.prepare(`
       UPDATE agent_execution_grants SET status = 'revoked', revoked_at = ?
       WHERE run_id = ? AND status = 'issued'
     `).run(revokedAt, runId).changes;
@@ -259,6 +336,7 @@ export class ExecutionGrantBroker {
   reconcileStartupState(): number {
     const now = this.now().toISOString();
     return this.db.transaction(() => {
+      const research = this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'revoked' WHERE state = 'issued'").run().changes;
       const fenced = this.db.prepare(`
         INSERT OR IGNORE INTO agent_execution_run_fences (run_id, revoked_at)
         SELECT id, ? FROM agent_runs WHERE status IN ('completed','failed','cancelled','interrupted','archived')
@@ -291,7 +369,7 @@ export class ExecutionGrantBroker {
         UPDATE agent_execution_approvals SET status = 'revoked', revoked_at = ?
         WHERE status = 'issued'
       `).run(now).changes;
-      return fenced + grantsExpired + expiredGrantReceipts + approvalsExpired + grantsRevoked + revokedGrantReceipts + approvalsRevoked;
+      return research + fenced + grantsExpired + expiredGrantReceipts + approvalsExpired + grantsRevoked + revokedGrantReceipts + approvalsRevoked;
     }).immediate();
   }
 

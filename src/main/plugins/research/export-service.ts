@@ -31,6 +31,15 @@ export class ResearchExportService {
       const storage = await exportStorage(this.rootPath);
       this.requireActive(signal);
       const record = this.repository.exports.create(request, storage);
+      try {
+        this.repository.tasks.linkOwned({ kind: 'export', executionId: record.id, projectId: record.projectId,
+          ownerRunId: record.ownerRunId, goal: request.title, snapshot: record.request });
+      } catch (error) {
+        this.repository.exports.finish(record.projectId, record.id, {
+          ...record, status: 'failed', error: 'research_task_association_failed'
+        });
+        throw error;
+      }
       if (record.status === 'preparing' && !this.preparing.has(record.id)) this.schedule(record);
       return record;
     });

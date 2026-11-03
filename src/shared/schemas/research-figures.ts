@@ -50,6 +50,9 @@ function refineHistoricalFigureStart(value: { sourcePath: string; inputPaths: st
 }
 
 export const researchOwnedFigureStartSchema = z.object(figureStartFields).strict().superRefine(refineFigureStart);
+export const researchFigureStartRequestSchema = researchOwnedFigureStartSchema.safeExtend({
+  projectId: z.string().min(1)
+});
 export const researchFigureStartSchema = z.object({
   projectId: z.string().min(1),
   ownerRunId: z.string().min(1).nullable().optional(),

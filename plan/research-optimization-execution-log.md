@@ -81,7 +81,7 @@ No remote writes, public publication or model spending performed.
 
 ## Remaining scope
 
-ROC-PR-02A/B/C, ROC-PR-03A/B, P0 integration, ROC-PR-04/05,
+ROC-PR-02B/C, ROC-PR-03A/B, P0 integration, ROC-PR-04/05,
 X-UI, ROC-PR-06/07/09, X-SAFE, ROC-PR-08, X-NB/X-EXP, X-IDEA/X-WRITE,
 ROC-PR-10, X-ECO/X-MON and X-PERF/X-CONTEXT/X-OBS remain pending.
 
@@ -133,3 +133,43 @@ approval and real-model quality remain outside these deterministic checks.
 Changed modules: role profiles/tools/prompts, production effects, stage snapshot execution,
 figure renderer fingerprint/sizing, figure publication/run repositories, figure documentation
 and focused tests. No model spending or external writes.
+
+## ROC-PR-02A — trusted task identity and dispatch
+
+Status: `Verified passing` for local task identity, dispatch and persistence contracts.
+Baseline: `9ba15a00`.
+
+Research tasks and immutable execution associations live in the agent database (migration 11).
+Stage runs store their task ID in the research database (migration 6).
+Existing snapshots acquire an explicit null task ID; no historical chat parentage is inferred.
+Startup repairs task links only when the authority already contains the matching execution.
+
+Chat dispatch requires a one-use, short-lived broker reference bound to a running chat,
+thread, project, frozen manifest and exact stage request. Copied tokens, request drift,
+expired/revoked references, changed project/manifest and inactive parents fail before scheduling.
+The reference crosses the capability call through main-process asynchronous context.
+It never enters renderer input or model arguments.
+
+Direct stage starts create independent roots. Retries share the previous task. Review
+roles preserve scientific stage parentage separately from chat parent execution.
+Experiments, figures and exports associate before background work starts. Association failure
+records a failed domain execution and sends no model/rendering request.
+Public capability and IPC schemas reject ownerRunId; internal production effects supply it.
+No compatibility aliases or permissive failure fallbacks were added.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | 592 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed, generated files current |
+| `pnpm build` | Passed, includes typecheck |
+| `node --test tests/unit/research-task-identity.test.mjs tests/unit/ipc-execution-boundary.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-figure-integration.test.mjs` | Final consumer audit: 24 passed, 0 failed |
+| `git diff --check` | Passed |
+
+The final IPC consumer correction occurred after the full unit run; the focused final run
+exercised actual public IPC parsing and all affected contracts, and production build was repeated.
+Logs: `.artifacts/research-optimization/pr02a-{unit,harness,ipc,build,contracts-final}.log`.
+This increment establishes execution identity, not unified budget admission or task cancellation.
+Those remain ROC-PR-02B/02C. Real-model L2 and scientific review remain unrun.

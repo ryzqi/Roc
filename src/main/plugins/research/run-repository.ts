@@ -100,6 +100,7 @@ export class ResearchRunRepository {
       const timestamp = this.now();
       const run: ResearchStageRun = {
         id: `research_run_${randomUUID()}`, projectId: request.projectId, stage: stage.stage, requestId: request.requestId,
+        taskId: null,
         parentRunId: null, retryOfRunId: retryOf?.id ?? null, role: retryOf?.role ?? profile.role, outputKind: retryOf?.outputKind ?? profile.outputKind,
         reviewCycleId: cycle?.originArtifactId ?? null, revisionRound,
         status: 'queued', instruction: request.instruction, skillIds: retryOf?.skillIds ?? [...profile.skillIds],
@@ -142,6 +143,25 @@ export class ResearchRunRepository {
     const row = this.db.prepare('SELECT snapshot_json FROM research_stage_runs WHERE id = ? AND project_id = ?').get(id, projectId) as { snapshot_json: string } | undefined;
     if (row === undefined) throw new Error('research_stage_run_not_found');
     return researchStageRunSchema.parse(JSON.parse(row.snapshot_json));
+  }
+
+  bindTask(id: string, projectId: string): ResearchStageRun {
+    const run = this.get(id, projectId);
+    const execution = this.research.tasks.requireExecution('stage', id, projectId);
+    if (run.taskId !== null && run.taskId !== execution.taskId) throw new Error('research_task_execution_conflict');
+    const linked = { ...run, taskId: execution.taskId };
+    this.saveRun(linked);
+    return linked;
+  }
+
+  reconcileTaskLinks(): void {
+    const rows = this.db.prepare('SELECT id, project_id FROM research_stage_runs WHERE task_id IS NULL')
+      .all() as Array<{ id: string; project_id: string }>;
+    for (const row of rows) {
+      if (this.research.tasks.findExecution('stage', row.id, row.project_id) !== null) {
+        this.bindTask(row.id, row.project_id);
+      }
+    }
   }
 
   list(request: ResearchStageRunsRequest): ResearchStageRun[] {
@@ -425,19 +445,19 @@ export class ResearchRunRepository {
   }
 
   private insertRun(run: ResearchStageRun, context: ResearchExecutionContext): void {
-    this.db.prepare('INSERT INTO research_stage_runs (id, project_id, stage, request_id, parent_run_id, status, snapshot_json, context_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(run.id, run.projectId, run.stage, run.requestId, run.parentRunId, run.status, JSON.stringify(run), JSON.stringify(context));
+    this.db.prepare('INSERT INTO research_stage_runs (id, project_id, stage, request_id, parent_run_id, task_id, status, snapshot_json, context_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(run.id, run.projectId, run.stage, run.requestId, run.parentRunId, run.taskId, run.status, JSON.stringify(run), JSON.stringify(context));
   }
 
   private saveRun(run: ResearchStageRun): void {
     researchStageRunSchema.parse(run);
-    this.db.prepare('UPDATE research_stage_runs SET status = ?, snapshot_json = ? WHERE id = ?')
-      .run(run.status, JSON.stringify(run), run.id);
+    this.db.prepare('UPDATE research_stage_runs SET status = ?, task_id = ?, snapshot_json = ? WHERE id = ?')
+      .run(run.status, run.taskId, JSON.stringify(run), run.id);
   }
 
   private recordEvent(run: ResearchStageRun, type: string, message: string): void {
     this.db.prepare('INSERT INTO research_workflow_events (id, project_id, stage, type, message, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), run.projectId, run.stage, type, message,
-        JSON.stringify({ runId: run.id, role: run.role, modelId: run.modelId, providerId: run.providerId }), this.now());
+        JSON.stringify({ runId: run.id, taskId: run.taskId, role: run.role, modelId: run.modelId, providerId: run.providerId }), this.now());
   }
 }

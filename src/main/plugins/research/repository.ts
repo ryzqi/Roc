@@ -45,6 +45,7 @@ import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
+import type { ResearchTaskRepository } from './research-task-repository';
 
 export const researchStages = [
   'discovery',
@@ -95,6 +96,7 @@ export class ResearchRepository {
 
   constructor(
     private readonly db: DatabaseConnection,
+    readonly tasks: ResearchTaskRepository,
     private readonly now: Clock = () => new Date().toISOString()
   ) {
     this.projectLanguageReady = this.db.prepare("SELECT 1 FROM pragma_table_info('research_projects') WHERE name = 'language'").get() !== undefined;

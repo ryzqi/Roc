@@ -47,6 +47,7 @@ export const researchStageOutputSchema = z.object({
 
 export const researchStageRunSchema = z.object({
   id,
+  taskId: id.nullable(),
   projectId: id,
   stage: researchStageSchema,
   requestId: id,

@@ -4,14 +4,14 @@ import { researchExperimentFileContentSchema, researchExperimentFileRequestSchem
   researchExperimentSourceRequestSchema } from '../../../shared/schemas/research-experiments';
 import { researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema, researchFigureIdRequestSchema,
   researchFigureListRequestSchema, researchFigurePublicationSchema, researchFigurePublishRequestSchema, researchFigureRunSchema,
-  researchFigureSourceRequestSchema, researchFigureStartSchema } from '../../../shared/schemas/research-figures';
+  researchFigureSourceRequestSchema, researchFigureStartRequestSchema } from '../../../shared/schemas/research-figures';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchFigureRepository } from './figure-repository';
 import type { ResearchFigureService } from './figure-service';
 
 const capabilities = {
   environment: descriptor('research.figure.environment', researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema),
-  start: descriptor('research.figure.start', researchFigureStartSchema, researchFigureRunSchema),
+  start: descriptor('research.figure.start', researchFigureStartRequestSchema, researchFigureRunSchema),
   getRun: descriptor('research.figure.getRun', researchExperimentIdRequestSchema, researchFigureRunSchema),
   listRuns: descriptor('research.figure.listRuns', researchFigureListRequestSchema, researchFigureRunSchema.array()),
   cancel: descriptor('research.figure.cancel', researchExperimentIdRequestSchema, researchFigureRunSchema),

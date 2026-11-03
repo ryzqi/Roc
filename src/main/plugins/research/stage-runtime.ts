@@ -7,6 +7,8 @@ import type { PreparedResearchRole, ResearchRoleExecutor } from './role-executor
 import { createResearchRoleTools } from './role-tools';
 import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchHumanGate } from './human-gate';
+import { assertResearchDispatchGrant, type ConsumedResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
+import { researchDispatchRequestHash } from '../../services/research-dispatch-context';
 
 type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string };
 
@@ -26,18 +28,20 @@ export class ResearchStageRuntime {
     this.gate = gate;
   }
 
-  start(request: ResearchStageRunStartRequest): ResearchStageRun {
+  start(request: ResearchStageRunStartRequest, dispatch: ConsumedResearchDispatchGrant | null = null): ResearchStageRun {
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
+    if (dispatch !== null) {
+      assertResearchDispatchGrant(dispatch);
+      if (dispatch.requestHash !== researchDispatchRequestHash(request)) throw new Error('research_dispatch_request_mismatch');
+    }
     const run = this.repository.runs.begin(request);
-    this.schedule(run);
-    return run;
+    return this.linkAndSchedule(run, dispatch);
   }
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
     const run = this.repository.runs.retry(request);
-    this.schedule(run);
-    return run;
+    return this.linkAndSchedule(run, null);
   }
 
   cancel(request: ResearchStageRunIdRequest): ResearchStageRun {
@@ -102,6 +106,20 @@ export class ResearchStageRuntime {
     this.active.set(run.id, { controller, pending, cleanup: pending, projectId: run.projectId });
   }
 
+  private linkAndSchedule(run: ResearchStageRun, dispatch: ConsumedResearchDispatchGrant | null): ResearchStageRun {
+    try {
+      this.repository.tasks.linkStage(run, dispatch);
+      const linked = this.repository.runs.bindTask(run.id, run.projectId);
+      this.schedule(linked);
+      return linked;
+    } catch (error) {
+      if (run.taskId === null && ['queued', 'running'].includes(run.status)) {
+        this.repository.runs.terminate(run.id, run.projectId, 'failed', executionErrorCode(error));
+      }
+      throw error;
+    }
+  }
+
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
     const timeout = setTimeout(() => controller.abort(new Error('research_run_timeout')), queued.policy.timeoutMs);
     let children: Promise<ResearchStageRun>[] = [];
@@ -109,7 +127,10 @@ export class ResearchStageRuntime {
       const { prepared, run } = await this.prepareRole(queued, controller.signal);
       if (run.stage === 'review') {
         children = this.repository.runs.createReviewChildren(run.id, run.projectId)
-          .map((child) => this.executeChild(child, controller.signal));
+          .map((child) => {
+            this.repository.tasks.linkStage(child, null);
+            return this.executeChild(this.repository.runs.bindTask(child.id, child.projectId), controller.signal);
+          });
         const reports = await Promise.all(children);
         this.repository.runs.setReviewReports(run.id, run.projectId, reports);
       }
@@ -127,6 +148,7 @@ export class ResearchStageRuntime {
 
   private async prepareRole(queued: ResearchStageRun, signal: AbortSignal) {
     signal.throwIfAborted();
+    this.repository.tasks.requireExecution('stage', queued.id, queued.projectId);
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
     const prepared = await withAbort(this.executor.prepare(queued.policy.model), signal);
     signal.throwIfAborted();

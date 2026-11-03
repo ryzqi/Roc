@@ -61,6 +61,7 @@ export function createResearchTools(input: {
   threadId?: string;
   runId?: string;
   signal: AbortSignal;
+  dispatchStage: (request: import('../../../shared/types').ResearchStageRunStartRequest) => Promise<ResearchStageRun>;
 }): StructuredToolInterface[] {
   const projectId = input.projectId;
   const invoke = async <TOutput>(name: string, request: unknown): Promise<TOutput> => {
@@ -194,7 +195,7 @@ export function createResearchTools(input: {
       const snapshot = await workflow();
       const expectedStage = stage ?? snapshot.currentStage;
       const resolvedInstruction = instruction ?? await defaultStageInstruction(invoke, projectId, expectedStage);
-      const run = await invoke<ResearchStageRun>('research.workflow.startRun', {
+      const run = await input.dispatchStage({
         projectId, expectedStage, instruction: resolvedInstruction, requestId: randomRequestId()
       });
       return {
@@ -312,7 +313,7 @@ function artifactSummary(artifact: ResearchArtifact) {
 
 function summarizeRun(run: ResearchStageRun) {
   return {
-    runId: run.id, stage: run.stage, status: run.status, role: run.role, outputKind: run.outputKind,
+    runId: run.id, taskId: run.taskId, stage: run.stage, status: run.status, role: run.role, outputKind: run.outputKind,
     error: run.error, outputArtifactIds: run.outputArtifactIds, startedAt: run.startedAt, endedAt: run.endedAt
   };
 }
