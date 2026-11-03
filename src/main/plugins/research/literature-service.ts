@@ -16,6 +16,8 @@ import { LiteratureResponseCache, type CachedLiteratureResponse } from './litera
 import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, literatureProviderHosts, type LiteratureProviderGovernor } from './literature-provider-governor';
 import { LiteratureRequestAuditError } from './literature-search-ledger';
 import { betterBibtexKey } from './cite-key';
+import {unknownLiteratureReview, openAlexReview, crossrefReview, arxivReview} from './literature-provider-review';
+import {literatureReviewSchema, type LiteratureReview} from '../../../shared/schemas/literature-review';
 import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -31,7 +33,8 @@ type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['s
   coverage: LiteratureSearchResult['sources'][number]['coverage'] | null;
   position: LiteraturePagePosition; rankOffset: number; url: string | null; visited: Set<string>;
   source: LiteratureSearchResult['sources'][number]['source']; audit: LiteratureRequestAudit | undefined;
-  identifiers: LiteratureIdentifierObservation[][] | null; rawIdentifiers: Array<LiteratureRawIdentifiers | null> | null};
+  identifiers: LiteratureIdentifierObservation[][] | null; rawIdentifiers: Array<LiteratureRawIdentifiers | null> | null;
+  reviews: LiteratureReview[] | null};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
@@ -105,7 +108,7 @@ export class LiteratureSearchService {
       const rankOffset = position.kind === 'page' ? (position.value - 1) * request.limit : position.kind === 'offset' ? position.value : records.length;
       const context: ProviderContext = {signal: providerSignal, receipts, projectId: request.projectId ?? null, source, host, audit,
         cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null, position, rankOffset, url: null, visited,
-        identifiers: null, rawIdentifiers: null};
+        identifiers: null, rawIdentifiers: null, reviews: null};
       visited.add(JSON.stringify(position));
       try {
         providerSignal.throwIfAborted();
@@ -119,7 +122,8 @@ export class LiteratureSearchService {
         if (context.pendingCache !== null) this.cache.put(context.pendingCache.key, context.pendingCache.response);
         records.push(...valid.map((record, index) => ({record, rank: context.rankOffset + index + 1,
           identifiers: context.identifiers === null ? [] : context.identifiers[index],
-          rawIdentifiers: context.rawIdentifiers === null ? null : context.rawIdentifiers[index]})));
+          rawIdentifiers: context.rawIdentifiers === null ? null : context.rawIdentifiers[index],
+          review: context.reviews === null ? unknownLiteratureReview() : context.reviews[index]})));
         pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: valid.length, cache: pageCache(context), coverage: context.coverage});
         coverage = {...context.coverage, validatedPages: coverage.validatedPages + 1};
         if (coverage.state === 'reported_end') {
@@ -187,6 +191,7 @@ export class LiteratureSearchService {
     const timestamp = this.providerTimestamp();
     this.observeIdentifiers(payload.results.map(item => item.ids == null ? null : literatureRawIdentifiersSchema.parse(item.ids)),
       payload.results.map(item => openAlexIdentifierObservations(item.ids)));
+    this.observeReviews(payload.results.map(openAlexReview));
     return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
@@ -210,6 +215,7 @@ export class LiteratureSearchService {
     this.observeCoverage(total, payload.message.items.length,
       total !== null && total > offset + payload.message.items.length ? {kind: 'offset', value: offset + payload.message.items.length} : null);
     const timestamp = this.providerTimestamp();
+    this.observeReviews(payload.message.items.map(crossrefReview));
     return payload.message.items.map((item) => ({
       id: `crossref:${item.DOI}`,
       source: 'crossref' as const,
@@ -255,6 +261,7 @@ export class LiteratureSearchService {
     if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
     const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
     const entries = normalizeArray(payload.feed.entry);
+    this.observeReviews(entries.map(entry => arxivReview(entry.id)));
     this.observeCoverage(payload.feed.totalResults, entries.length,
       payload.feed.totalResults > offset + entries.length ? {kind: 'offset', value: offset + entries.length} : null);
     const timestamp = this.providerTimestamp();
@@ -354,6 +361,12 @@ export class LiteratureSearchService {
     if (context === undefined) throw new Error('literature_provider_context_missing');
     context.rawIdentifiers = raw;
     context.identifiers = identifiers;
+  }
+
+  private observeReviews(reviews: LiteratureReview[]): void {
+    const context = this.requests.getStore();
+    if (context === undefined) throw new Error('literature_provider_context_missing');
+    context.reviews = reviews.map(review => literatureReviewSchema.parse(review));
   }
 
   private observeCoverage(apiHitCount: number | null, returnedCount: number,

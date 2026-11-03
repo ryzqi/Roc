@@ -10,7 +10,9 @@ const nullableYear = z.number().int().nullable().optional();
 export const openAlexSearchPayload = z.looseObject({
   meta: z.looseObject({count: z.number().int().nonnegative()}).optional(),
   results: z.array(z.looseObject({
-    id: text, title: text, doi: nullableText,
+    id: text, title: text, doi: nullableText, type: nullableText, is_retracted: z.boolean().nullable().optional(),
+    primary_location: z.looseObject({landing_page_url: nullableText, license: nullableText,
+      version: z.enum(['publishedVersion', 'acceptedVersion', 'submittedVersion']).nullable().optional()}).nullable().optional(),
     ids: z.looseObject({doi: nullableText, pmid: nullableText}).nullable().optional(),
     authorships: z.array(z.looseObject({author: z.looseObject({display_name: nullableText}).optional()})).optional(),
     abstract_inverted_index: z.record(z.string(), z.array(z.number().int().nonnegative())).nullable().optional(),
@@ -21,7 +23,9 @@ export const openAlexSearchPayload = z.looseObject({
 
 export const crossrefSearchPayload = z.looseObject({
   message: z.looseObject({'total-results': z.number().int().nonnegative().optional(), items: z.array(z.looseObject({
-    DOI: text, title: z.array(text).min(1), URL: nullableText,
+    DOI: text, title: z.array(text).min(1), URL: nullableText, type: nullableText,
+    license: z.array(z.looseObject({URL: text, 'content-version': text})).optional(),
+    'update-to': z.array(z.looseObject({DOI: text, type: text, label: z.string(), source: text})).optional(),
     author: z.array(z.looseObject({given: z.string().optional(), family: z.string().optional()})).optional(),
     abstract: nullableText, published: z.looseObject({'date-parts': z.array(z.array(z.number().int())).optional()}).optional()
   }))})

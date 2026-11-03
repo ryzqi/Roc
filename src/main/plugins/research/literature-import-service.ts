@@ -11,6 +11,7 @@ import { betterBibtexKey } from './cite-key';
 import { normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import type {LiteratureProviderIdentifierRecord} from '../../../shared/schemas/literature-identifiers';
+import type {LiteratureReviewRecord} from '../../../shared/schemas/literature-review';
 import { fuseLiterature, literatureRanking } from './literature-fusion';
 import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literature-search-ledger';
 import type { LiteratureSearchService } from './literature-service';
@@ -88,7 +89,7 @@ export class LiteratureImportService {
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 12, ranking: literatureRanking(request.sources), executionId, strategy,
+      const result: LiteratureSearchResult = { schemaVersion: 13, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
@@ -223,7 +224,7 @@ export class LiteratureImportService {
       try {
         this.requireActive({ ...context, signal });
         const prepared: (Awaited<ReturnType<ResearchLibraryService['prepareRecord']>> & {
-          providerRecord?: LiteratureCandidate['record']; identifierRecord?: LiteratureProviderIdentifierRecord})[] = [];
+          providerRecord?: LiteratureCandidate['record']; identifierRecord?: LiteratureProviderIdentifierRecord; reviewRecord?: LiteratureReviewRecord})[] = [];
         if (entry.source.kind === 'doi') {
           prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
         } else {
@@ -232,7 +233,9 @@ export class LiteratureImportService {
             const identifierRecord = origin.rawIdentifiers === null ? undefined : {metadataHash: origin.metadataHash, executionId,
               source: origin.source, externalId: origin.externalId, rank: origin.rank, retrievedAt: origin.retrievedAt,
               raw: origin.rawIdentifiers, identifiers: origin.identifiers};
-            prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord});
+            prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord,
+              reviewRecord: {metadataHash: origin.metadataHash, executionId, source: origin.source, externalId: origin.externalId,
+                rank: origin.rank, retrievedAt: origin.retrievedAt, review: origin.review}});
           }
         }
         const identities = groupLiteratureIdentities(prepared.map(record => ({record: record.metadata,
@@ -267,7 +270,8 @@ export class LiteratureImportService {
         const errorCode = cancelled ? 'literature_import_cancelled' : safeFailure(error);
         Object.assign(item, { disposition: cancelled ? 'cancelled' : 'failed', metadata: cancelled ? 'not_requested' : 'failed',
           errorCode, retryable: !cancelled && !['research_literature_identity_ambiguous', 'literature_import_identity_changed',
-            'research_library_identifier_observation_mismatch', 'research_library_identifier_observation_conflict'].includes(errorCode) });
+            'research_library_identifier_observation_mismatch', 'research_library_identifier_observation_conflict',
+            'research_library_review_observation_mismatch', 'research_library_review_observation_conflict'].includes(errorCode) });
         if (cancelled) {
           for (const remaining of result.items.slice(position + 1)) remaining.disposition = 'cancelled';
           break;

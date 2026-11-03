@@ -31,6 +31,7 @@ before(async () => {
     export { withLiteratureContext } from './src/main/services/literature-context';
     export { createLiteratureTools } from './src/main/plugins/agent/literature-tools';
     export { providerIdentifierObservations } from './src/main/plugins/research/literature-provider-identifiers';
+    export { unknownLiteratureReview } from './src/main/plugins/research/literature-provider-review';
     export { registerResearchLibraryCapabilities } from './src/main/plugins/research/library-capabilities';
     export { parseIpcRequestArgs } from './src/shared/ipc-registry';
   `, resolveDir: process.cwd() }, outfile, bundle: true, format: 'esm', platform: 'node', target: 'node22',
@@ -48,7 +49,7 @@ function rankedRecords(records) {
   return records.map(record => {
     const rank = (ranks.get(record.source) ?? 0) + 1;
     ranks.set(record.source, rank);
-    return {record, rank, identifiers: [], rawIdentifiers: null};
+    return {record, rank, identifiers: [], rawIdentifiers: null, review: api.unknownLiteratureReview()};
   });
 }
 
@@ -125,7 +126,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 12);
+    assert.equal(result.schemaVersion, 13);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -389,7 +390,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 12);
+    assert.equal(result.schemaVersion, 13);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -1238,7 +1239,7 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 12, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 13, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);
@@ -1272,7 +1273,7 @@ test('Europe PMC namespaces remain distinct while MED records and PubMed share t
 test('arXiv revisions retain original records, one source contribution and observed version relationships', () => {
   const records = ['http://arxiv.org/abs/2601.00001v1', 'https://arxiv.org/abs/2601.00001v3'].map((externalId, index) => ({
     record: {...record(`arxiv-${index}`, null), source: 'arxiv', externalId, id: externalId}, rank: index + 1,
-    identifiers: [], rawIdentifiers: null
+    identifiers: [], rawIdentifiers: null, review: api.unknownLiteratureReview()
   }));
   const candidates = api.fuseLiterature(records);
   assert.equal(candidates.length, 1);
@@ -1447,7 +1448,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
     const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 10);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
   } finally { f.close(); }
 });
 
@@ -1764,7 +1765,8 @@ test('invalid known external identifiers fail before cache admission; unknown ke
 });
 
 function observedRecord(metadata, raw, rank = 1) {
-  return {record: metadata, rank, rawIdentifiers: raw, identifiers: api.providerIdentifierObservations(metadata.source, raw)};
+  return {record: metadata, rank, rawIdentifiers: raw, identifiers: api.providerIdentifierObservations(metadata.source, raw),
+    review: api.unknownLiteratureReview()};
 }
 function identifierEntry(origin, executionId) {
   const metadata = origin.record;
@@ -1886,7 +1888,7 @@ test('DB10 upgrades DB9 without inferring historical external identifiers or rew
     insertHistoricalLibrary(f, 'history-external', metadata);
     const before = f.db.prepare('SELECT * FROM research_library').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 10);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getIdentifiers({id: 'history-external'}).total, 0);
     api.applyResearchDatabaseSchema(f.db);
@@ -1915,4 +1917,131 @@ test('identifier persistence failure rolls back the candidate import and exposes
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_aliases').pluck().get(), 0);
     assert.equal(f.changes.length, 0);
   } finally { await search.shutdown(); f.close(); }
+});
+
+test('candidate review retains declared copy scope, updates and retraction observations through cache and import', async () => {
+  let calls = 0;
+  const search = new api.LiteratureSearchService(async url => {
+    calls++;
+    return Response.json(new URL(url).hostname === 'api.openalex.org' ?
+      {results: [{id: 'W1', doi: '10.1234/review', title: 'Review paper', type: 'article', is_retracted: true,
+        primary_location: {landing_page_url: 'https://example.test/published', version: 'publishedVersion', license: 'cc-by'}}]} :
+      {message: {items: [{DOI: '10.1234/review', title: ['Review paper'], type: 'journal-article',
+        license: [{URL: 'https://example.test/accepted-license', 'content-version': 'am'}],
+        'update-to': [{DOI: '10.1234/target', type: 'correction', label: 'Correction', source: 'publisher'}]}]}});
+  }, governanceFixture().governor);
+  const f = setup({search});
+  try {
+    const request = {query: 'review metadata', sources: ['openalex', 'crossref'], limit: 5};
+    const first = await f.run(() => f.service.search(request));
+    const hit = await f.run(() => f.service.search(request));
+    assert.equal(calls, 2);
+    assert.deepEqual(hit.candidates, first.candidates);
+    const paper = hit.candidates[0];
+    const [crossref, openalex] = paper.origins;
+    assert.equal(crossref.review.publicationType, 'journal-article');
+    assert.deepEqual(crossref.review.copies, [{field: 'license[0]', locationUrl: null, version: 'am', license: 'https://example.test/accepted-license'}]);
+    assert.deepEqual(crossref.review.updates, [{type: 'correction', doi: '10.1234/target', label: 'Correction', source: 'publisher'}]);
+    assert.equal(crossref.review.retraction.status, 'unknown', 'update target is not current-paper retraction');
+    assert.deepEqual(openalex.review.copies, [{field: 'primary_location', locationUrl: 'https://example.test/published',
+      version: 'publishedVersion', license: 'cc-by'}]);
+    assert.deepEqual(openalex.review.retraction, {status: 'retracted', field: 'is_retracted'});
+    const added = await f.run(() => f.service.add({requestId: 'review-import', entries: [
+      {kind: 'candidate', searchId: hit.searchId, candidateId: paper.candidateId}
+    ]}));
+    assert.equal(added.status, 'completed');
+    const id = added.items[0].libraryItemId;
+    const reviews = f.repo.library.getReviews({id, limit: 1});
+    assert.equal(reviews.total, 2);
+    assert.equal(reviews.nextOffset, 1);
+    assert.equal(f.repo.library.getReviews({id, offset: 1, limit: 1}).nextOffset, null);
+    const all = f.repo.library.getReviews({id});
+    assert.deepEqual(all.records.map(record => record.review), paper.origins.map(origin => origin.review));
+    assert.ok(all.records.every(record => record.executionId === hit.executionId));
+    f.setTime('2026-11-05T00:00:00.000Z');
+    const item = f.repo.library.get(id);
+    f.repo.library.archive(id, item.revision, true);
+    assert.deepEqual(f.repo.library.getReviews({id}), all);
+    assert.deepEqual(api.parseIpcRequestArgs('roc:research:library-reviews', [{id}]), [{id, offset: 0, limit: 20}]);
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('false and absent retraction flags stay distinct; invalid review metadata never enters cache', async () => {
+  for (const [flag, expected] of [[false, 'not_reported'], [undefined, 'unknown']]) {
+    const search = new api.LiteratureSearchService(async () => Response.json({
+      results: [{id: 'W1', title: 'Status', is_retracted: flag}]
+    }), governanceFixture().governor);
+    try {
+      const result = await search.searchDetailed({query: 'status', sources: ['openalex'], limit: 5});
+      assert.equal(result.records[0].review.retraction.status, expected);
+      assert.deepEqual(result.records[0].review.copies, []);
+    } finally { await search.shutdown(); }
+  }
+  for (const invalid of [{is_retracted: 'false'}, {type: ''}, {primary_location: {version: 'invented'}}]) {
+    let calls = 0;
+    const search = new api.LiteratureSearchService(async () => {calls++; return Response.json({
+      results: [{id: 'W1', title: 'Invalid', ...invalid}]
+    });}, governanceFixture({failureThreshold: 10}).governor);
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await search.searchDetailed({query: 'invalid review', sources: ['openalex'], limit: 5});
+        assert.equal(result.status, 'failed');
+        assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+      }
+      assert.equal(calls, 2);
+    } finally { await search.shutdown(); }
+  }
+});
+
+test('review replay refuses conflicting observations and mismatched metadata without partial library writes', async () => {
+  const f = setup();
+  try {
+    const {result} = await candidate(f);
+    const metadata = {...record('review-durable'), source: 'openalex'};
+    const entry = {...identifierEntry(observedRecord(metadata, {}), result.executionId),
+      reviewRecord: {metadataHash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'), executionId: result.executionId,
+        source: metadata.source, externalId: metadata.externalId, rank: 1, retrievedAt: metadata.importedAt,
+        review: api.unknownLiteratureReview()}};
+    const item = f.repo.library.import([entry], f.project.id).items[0];
+    f.repo.library.import([entry], f.project.id);
+    assert.equal(f.repo.library.getReviews({id: item.id}).total, 1);
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    assert.throws(() => f.repo.library.import([{...entry, reviewRecord: {...entry.reviewRecord,
+      review: {...entry.reviewRecord.review, publicationType: 'different'}}}], f.project.id), /research_library_review_observation_conflict/u);
+    assert.throws(() => f.repo.library.import([{...entry, reviewRecord: {...entry.reviewRecord, metadataHash: '0'.repeat(64)}}], f.project.id),
+      /research_library_review_observation_mismatch/u);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+    assert.throws(() => f.repo.library.getReviews({id: 'missing'}), /research_library_item_not_found/u);
+  } finally { f.close(); }
+});
+
+test('review observation insertion failure rolls back the import operation and marks a nonretryable conflict', async () => {
+  const f = setup();
+  try {
+    f.db.exec(`CREATE TRIGGER reject_review BEFORE INSERT ON research_library_provider_reviews
+      BEGIN SELECT RAISE(ABORT,'research_library_review_observation_conflict'); END`);
+    const {entry} = await candidate(f);
+    const result = await f.run(() => f.service.add({requestId: 'review-rollback', entries: [entry]}));
+    assert.equal(result.status, 'failed');
+    assert.equal(result.items[0].retryable, false);
+    assert.equal(result.items[0].errorCode, 'research_library_review_observation_conflict');
+    assert.equal(result.items[0].libraryItemId, null);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 0);
+  } finally { f.close(); }
+});
+
+test('DB11 adds review storage without rewriting DB10 papers or inventing historical review observations', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 10)});
+  try {
+    insertHistoricalLibrary(f, 'review-history', record('history-review'));
+    const before = f.db.prepare('SELECT * FROM research_library').all();
+    api.applyResearchDatabaseSchema(f.db);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.equal(f.repo.library.getReviews({id: 'review-history'}).total, 0);
+    api.applyResearchDatabaseSchema(f.db);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+  } finally { f.close(); }
 });

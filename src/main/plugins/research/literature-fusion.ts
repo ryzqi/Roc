@@ -4,11 +4,12 @@ import type { ResearchLiterature } from '../../../shared/types';
 import { normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import type {LiteratureIdentifierObservation, LiteratureRawIdentifiers} from '../../../shared/schemas/literature-identifiers';
+import type {LiteratureReview} from '../../../shared/schemas/literature-review';
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
 export type RankedLiteratureRecord = {record: ResearchLiterature; rank: number;
-  identifiers: LiteratureIdentifierObservation[]; rawIdentifiers: LiteratureRawIdentifiers | null};
+  identifiers: LiteratureIdentifierObservation[]; rawIdentifiers: LiteratureRawIdentifiers | null; review: LiteratureReview};
 
 /** This ordering selects metadata; every selected source has equal ranking weight. */
 export const literatureSourcePriority: readonly Source[] = ['crossref', 'openalex', 'semantic_scholar', 'pubmed', 'europe_pmc', 'arxiv'];
@@ -31,9 +32,9 @@ export function fuseLiterature(records: readonly RankedLiteratureRecord[]): Fuse
   for (const group of groupLiteratureIdentities(records)) {
     const identity = group.identity;
     const origins = group.indexes.map(index => {
-      const {record, rank, identifiers, rawIdentifiers} = records[index];
+      const {record, rank, identifiers, rawIdentifiers, review} = records[index];
       const source = literatureNetworkSourceSchema.parse(record.source);
-      return {source, externalId: record.externalId, rank, retrievedAt: record.importedAt, metadataHash: hash(record), record, identifiers, rawIdentifiers};
+      return {source, externalId: record.externalId, rank, retrievedAt: record.importedAt, metadataHash: hash(record), record, identifiers, rawIdentifiers, review};
     });
     origins.sort((left, right) => literatureSourcePriority.indexOf(left.source) - literatureSourcePriority.indexOf(right.source)
       || left.rank - right.rank || compare(left.metadataHash, right.metadataHash) || compare(hash(left.identifiers), hash(right.identifiers)));

@@ -222,6 +222,7 @@ export const rocApi: RocPreloadApi = {
     listLibrary: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryList, ...args),
     getLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryGet, ...args),
     getLibraryIdentifiers: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryIdentifiers, ...args),
+    getLibraryReviews: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryReviews, ...args),
     importLibraryRecord: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportRecord, ...args),
     importLibraryDoi: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportDoi, ...args),
     importBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportFile, ...args),

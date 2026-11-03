@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportSchema, literatureImportResultSchema,
   literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
 import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from './schemas/literature-identifiers';
+import {literatureReadReviewsSchema, literatureReviewRecordsResultSchema} from './schemas/literature-review';
 
 import { menuPages } from './surfaces';
 import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
@@ -512,6 +513,7 @@ export const ipcRegistry = {
     request({ key: 'researchLibraryList', channel: 'roc:research:library-list', domain: 'research', method: 'listLibrary', kind: 'plugin', capabilityName: 'research.library.list', inputTransform: first, contract: methodContract(oneArg(researchLibraryListRequestSchema), researchLibraryItemSchema.array()) }),
     request({ key: 'researchLibraryGet', channel: 'roc:research:library-get', domain: 'research', method: 'getLibraryItem', kind: 'plugin', capabilityName: 'research.library.get', inputTransform: first, contract: methodContract(oneArg(researchLibraryIdRequestSchema), researchLibraryItemSchema) }),
     request({ key: 'researchLibraryIdentifiers', channel: 'roc:research:library-identifiers', domain: 'research', method: 'getLibraryIdentifiers', kind: 'plugin', capabilityName: 'research.library.getIdentifiers', inputTransform: first, contract: methodContract(oneArg(literatureReadIdentifiersSchema), literatureIdentifierRecordsResultSchema) }),
+    request({ key: 'researchLibraryReviews', channel: 'roc:research:library-reviews', domain: 'research', method: 'getLibraryReviews', kind: 'plugin', capabilityName: 'research.library.getReviews', inputTransform: first, contract: methodContract(oneArg(literatureReadReviewsSchema), literatureReviewRecordsResultSchema) }),
     request({ key: 'researchLibraryImportRecord', channel: 'roc:research:library-import-record', domain: 'research', method: 'importLibraryRecord', kind: 'plugin', capabilityName: 'research.library.importRecord', inputTransform: first, contract: methodContract(oneArg(researchLibraryRecordImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportDoi', channel: 'roc:research:library-import-doi', domain: 'research', method: 'importLibraryDoi', kind: 'plugin', capabilityName: 'research.library.importDoi', inputTransform: first, contract: methodContract(oneArg(researchLibraryDoiImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportFile', channel: 'roc:research:library-import-file', domain: 'research', method: 'importBibliography', kind: 'plugin', capabilityName: 'research.library.importFile', inputTransform: first, contract: methodContract(oneArg(researchLibraryFileImportRequestSchema), researchLibraryImportResultSchema) }),

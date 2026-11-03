@@ -7,6 +7,7 @@ import { ModalShell } from '../shell/ModalShell';
 import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
+import {LiteratureCandidateReview} from './LiteratureCandidateReview';
 import {
   DOCUMENT_EXTENSIONS,
   arxivQueryFromInput,
@@ -214,7 +215,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
       title="导入文献"
       onClose={onClose}
       testId="literature-import-dialog"
-      widthClassName="max-w-2xl"
+      widthClassName="w-[672px]"
       footer={null}
     >
       <div className="flex flex-col gap-3" data-testid="literature-import-body">
@@ -609,33 +610,13 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </p>
             )}
             {searchHits.length === 0 ? null : (
-              <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto" aria-label="检索结果">
-                {searchHits.map((candidate) => {
-                  const hit = candidate.record;
-                  return (
-                    <li key={candidate.candidateId} className="flex items-start gap-2 rounded-control border border-line px-2 py-1.5">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-ink text-[var(--font-meta-size)]">{hit.title}</span>
-                        <span className="block truncate text-muted text-[var(--font-micro-size)]">
-                          {hit.source} · {hit.publishedYear ?? '—'} · {hit.authors.slice(0, 2).join(' · ')}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={pending || candidate.archived || searchResult === null}
-                        title={candidate.archived ? '文献已归档，请先在文献库恢复' : '加入元数据；不下载或解析PDF'}
-                        onClick={() => {
-                          if (searchResult === null) return;
-                          void run(() => props.addCandidate(searchResult.searchId, candidate.candidateId));
-                        }}
-                        data-testid={`literature-import-hit-${hit.id}`}
-                        className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-                      >
-                        {candidate.archived ? '已归档' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
-                      </button>
-                    </li>
-                  );
-                })}
+              <ul className="flex max-h-80 flex-col overflow-y-auto pr-1" aria-label="检索结果" tabIndex={0}>
+                {searchHits.map(candidate => <LiteratureCandidateReview key={candidate.candidateId}
+                  candidate={candidate} pending={pending || searchResult === null}
+                  onAdd={() => {
+                    if (searchResult === null) return;
+                    void run(() => props.addCandidate(searchResult.searchId, candidate.candidateId));
+                  }} />)}
               </ul>
             )}
           </div>

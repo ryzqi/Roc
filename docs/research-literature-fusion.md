@@ -5,7 +5,7 @@
 
 ## 冻结排序合同
 
-当前快照版本为 12，排序方法为 RRF v1：
+当前快照版本为 13，排序方法为 RRF v1：
 
 ```text
 score(paper) = sum(1 / (60 + source_rank(paper)))
@@ -102,6 +102,24 @@ metadata 和书目内容仍不改写。旧来源 `providerRecord:null`，不将�
 `research.library.getIdentifiers` / `research.getLibraryIdentifiers` 分页读取这些
 观察，默认 20 条、最多 50 条。候选过期和文库归档不删除观察。普通文库列表
 不附带完整原始字典，模型搜索/读回工具也省略字典；模型仍可核对已知映射值。
+
+数据库 11 单独保存候选收录时的审查观察，含执行、来源、排名、原始记录 hash
+与观察时间。`research.library.getReviews` / `research.getLibraryReviews` 按同样的
+默认 20/最多 50 条分页读取，候选过期或文库归档后仍可读。旧文库不补造类型、
+许可或撤稿结论。不同审查内容不能占据同一执行/来源/排名，冲突会回滚收录。
+
+导入弹窗逐候选展示来源、类型、版本、许可、撤稿及更正/更新信息，原生 details
+用键盘展开完整来源和字段/身份冲突。来源缺失的状态显示未知，不显示“正常”。
+`is_retracted:false` 显示“来源未报告撤稿”，不代表独立核查或永久有效。收录仍
+是独立按钮，撤稿信息供人核对，归档条目不能自动恢复。
+
+OpenAlex 保存 type、primary_location 的 version/license/landing_page_url 以及
+is_retracted。许可只用于所声明副本，不推广到其他版本，依据
+[OpenAlex locations](https://help.openalex.org/data/locations/)。
+Crossref 保存 type、license 的 URL/content-version 与 update-to 的目标信息，
+依据 [Crossref Swagger](https://api.crossref.org/swagger-docs)。更新关系显示当前
+记录更新哪个 DOI，不据此判定当前记录自身已撤稿。arXiv 版本来自实际 entry.id；
+其他来源尚未验证的字段保持未知。所有已知字段在缓存前校验。
 
 ## 原始问题与确认检索计划
 
@@ -246,8 +264,8 @@ list query 1 次/秒要求并观察响应头：
 
 这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
 分页回执、有界缓存、进程内配额/健康度、持久化请求账本和确认检索计划已接入。
-OpenAlex/Semantic 已验证外部标识归并已接入；完整文献类型/版本/许可/撤稿展示
-和独立检索标注仍待后续增量。
+OpenAlex/Semantic 已验证外部标识归并及候选类型/版本/许可/撤稿/更正/冲突展示
+已接入。其他来源未验证字段保持未知；独立检索标注与指标仍待后续增量。
 
 官方合同核对日期：2026-11-03。OpenAlex 当前支持无 key 的基本查询；cursor
 翻页需要 key，不能自动创建账号或读取凭证。参数和分页依据

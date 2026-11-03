@@ -1566,6 +1566,21 @@ CREATE INDEX idx_research_library_provider_identifiers_item
 `
 });
 
+researchMigrations.push({
+  version: 11, name: 'literature_provider_review_observations',
+  sql: `
+CREATE TABLE research_library_provider_reviews (
+  item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+  execution_id TEXT NOT NULL REFERENCES research_literature_search_executions(id),
+  source TEXT NOT NULL, rank INTEGER NOT NULL CHECK(rank>0),
+  retrieved_at TEXT NOT NULL, record_json TEXT NOT NULL,
+  PRIMARY KEY(item_id,execution_id,source,rank), UNIQUE(execution_id,source,rank)
+);
+CREATE INDEX idx_research_library_provider_reviews_item
+  ON research_library_provider_reviews(item_id,retrieved_at,execution_id,source,rank);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

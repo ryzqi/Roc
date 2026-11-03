@@ -14,6 +14,8 @@ import {providerIdentifierObservations} from './literature-provider-identifiers'
 import {literatureReadIdentifiersSchema, literatureProviderIdentifierRecordSchema,
   type LiteratureProviderIdentifierRecord, type literatureIdentifierRecordsResultSchema} from '../../../shared/schemas/literature-identifiers';
 import type { ResearchRepository } from './repository';
+import {literatureReadReviewsSchema, literatureReviewRecordSchema, type LiteratureReviewRecord,
+  type literatureReviewRecordsResultSchema} from '../../../shared/schemas/literature-review';
 
 export type LibraryItem = z.infer<typeof researchLibraryItemSchema>;
 export type BibliographyEntry = z.infer<typeof researchBibliographyEntrySchema>;
@@ -78,6 +80,16 @@ export class ResearchLibraryRepository {
     return {itemId: request.id, records, total, nextOffset: request.offset + request.limit < total ? request.offset + request.limit : null};
   }
 
+  getReviews(input: z.infer<typeof literatureReadReviewsSchema>): z.infer<typeof literatureReviewRecordsResultSchema> {
+    const request = literatureReadReviewsSchema.parse(input);
+    if (this.db.prepare('SELECT id FROM research_library WHERE id=?').get(request.id) === undefined) throw new Error('research_library_item_not_found');
+    const total = this.db.prepare('SELECT COUNT(*) FROM research_library_provider_reviews WHERE item_id=?').pluck().get(request.id) as number;
+    const records = (this.db.prepare(`SELECT record_json FROM research_library_provider_reviews WHERE item_id=?
+      ORDER BY retrieved_at DESC,execution_id,source,rank LIMIT ? OFFSET ?`).pluck()
+      .all(request.id, request.limit, request.offset) as string[]).map(value => literatureReviewRecordSchema.parse(readJsonColumn(value)));
+    return {itemId: request.id, records, total, nextOffset: request.offset + request.limit < total ? request.offset + request.limit : null};
+  }
+
   resolveCitationKey(projectId: string, citationKey: string): LibraryItem {
     this.research.getProject(projectId);
     const rows = this.db.prepare(`SELECT l.id, EXISTS (
@@ -103,7 +115,7 @@ export class ResearchLibraryRepository {
   }
 
   import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry; providerRecord?: ResearchLiterature;
-    identifierRecord?: LiteratureProviderIdentifierRecord }[], projectId: string | null,
+    identifierRecord?: LiteratureProviderIdentifierRecord; reviewRecord?: LiteratureReviewRecord }[], projectId: string | null,
     options: { flush?: boolean; notify?: boolean; skipArchived?: boolean } = {}): {
     items: LibraryItem[]; createdCount: number; duplicateCount: number;
   } {
@@ -127,7 +139,12 @@ export class ResearchLibraryRepository {
         }
       }
       const identifiers = identifierRecord === null ? [] : identifierRecord.identifiers;
-      return { metadata, bibliography, identity, providerRecord, identifierRecord, identifiers, aliases: [] as string[] };
+      const reviewRecord = entry.reviewRecord === undefined ? null : literatureReviewRecordSchema.parse(entry.reviewRecord);
+      if (reviewRecord !== null && (providerRecord === null ||
+          reviewRecord.metadataHash !== createHash('sha256').update(JSON.stringify(providerRecord)).digest('hex') ||
+          reviewRecord.source !== providerRecord.source || reviewRecord.externalId !== providerRecord.externalId ||
+          reviewRecord.retrievedAt !== providerRecord.importedAt)) throw new Error('research_library_review_observation_mismatch');
+      return { metadata, bibliography, identity, providerRecord, identifierRecord, reviewRecord, identifiers, aliases: [] as string[] };
     });
     for (const group of groupLiteratureIdentities(parsed.map(entry => ({record: entry.metadata, identifiers: entry.identifiers})))) {
       for (const index of group.indexes) Object.assign(parsed[index], {identity: group.identity, aliases: group.aliases});
@@ -232,6 +249,21 @@ export class ResearchLibraryRepository {
               VALUES (?,?,?,?,?,?,?,?,?)`)
               .run(id, observation.executionId, observation.source, observation.rank, observation.metadataHash,
                 observation.externalId, observation.retrievedAt, JSON.stringify(observation.raw), JSON.stringify(observation.identifiers));
+          }
+        }
+        if (entry.reviewRecord !== null) {
+          const observation = entry.reviewRecord;
+          const previous = this.db.prepare(`SELECT item_id,record_json FROM research_library_provider_reviews
+            WHERE execution_id=? AND source=? AND rank=?`).get(observation.executionId, observation.source, observation.rank) as
+            {item_id: string; record_json: string} | undefined;
+          if (previous !== undefined) {
+            if (previous.item_id !== id || !isDeepStrictEqual(readJsonColumn(previous.record_json), observation)) {
+              throw new Error('research_library_review_observation_conflict');
+            }
+          } else {
+            this.db.prepare(`INSERT INTO research_library_provider_reviews(item_id,execution_id,source,rank,retrieved_at,record_json)
+              VALUES (?,?,?,?,?,?)`).run(id, observation.executionId, observation.source, observation.rank,
+                observation.retrievedAt, JSON.stringify(observation));
           }
         }
         if (projectId !== null) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);

@@ -1335,3 +1335,62 @@ Remaining: candidate type/license/retraction/conflict review UI, independent ret
 annotation/metrics and later plan increments. L2/full reviewed corpus remains blocked.
 
 Final application startup/UI smoke12/12, zero renderer errors, exit0; actual renderer literature hook1/1 and whitespace check passed. Eager JS1131076bytes/6files.
+
+
+## PR-04.4D — candidate review metadata, durable provenance and desktop disclosure
+
+Status: `Verified passing` for this candidate review increment. Full PR-04 remains in progress.
+Research DB11, agent DB15, search snapshot13.
+
+Candidate origins now retain declared types, copy-scoped versions/licenses, retraction
+observations and update targets. OpenAlex maps type/primary_location/is_retracted; Crossref
+maps type/license content-version/update-to; arXiv revisions come from actual entry.id.
+Unverified/missing source fields remain unknown. False OpenAlex retraction means the source
+has not reported a retraction at that observation time, never a credibility/safety score.
+Crossref update-to names the current record's update target and never proves the current
+record itself was retracted. Known field/schema failures are refused before caching.
+
+DB11 persists review observations separately from normal library list items, retaining
+execution/source/rank/hash/retrieval provenance. research.library.getReviews and generated
+research.getLibraryReviews use default20/max50 pages. Old DB10 items remain unchanged and
+receive no fabricated reviews; observations survive candidate expiry/archive. Identical
+replay is idempotent, conflicting content/mismatched source metadata and persistence failure
+roll back the whole import and return nonretryable failures.
+
+The existing import dialog now uses dense candidate rows with all sources, type, version,
+license, retraction and update status. Native keyboard details reveal original metadata,
+copy scope, update targets, identity/field conflicts and actual arXiv revisions. Explicit
+add remains separate; archived candidates stay disabled. Unknown fields do not become
+normal/clear. Rows use semantic tokens,12/13px type and hairline boundaries; no second shell,
+new route, decorative animation or heavy dependency. Explicit672px dialog width avoids the
+conflicting max-width rules that left insufficient shadow room at800px.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `ROC_REVIEW_BASELINE=1 node --test --test-name-pattern='candidate review exposes' tests/renderer/literature-review.test.mjs` | Fixed07319ba red: previous dialog has no candidate review rows |
+| `pnpm test:unit` | Initial723/723; final724/724 passed |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Final94/94 passed, including DB10→11 preservation |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Generated contracts current; check passed |
+| `pnpm test:research-p0` | Fresh build/typecheck and12/12 native cases passed |
+| `pnpm build` | Final build/typecheck passed after dialog width correction |
+| `node --test tests/renderer/literature-review.test.mjs` | Final3/3 actual Electron cases passed |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual hook1/1 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final application startup/UI12/12, zero renderer errors, exit0 |
+| `pnpm check:renderer-chunks` | Eager JS1131076bytes/6files passed |
+| `git diff --check` | Passed |
+
+UI evidence: `.artifacts/research-optimization/review-ui/` contains default, hover,
+expanded, long text/light/dark1100/1099/800 screenshots and nine shadow audits; every final
+cut0/hidden0. Screenshots inspected at normal light and long dark1099 states. Initial test
+fixtures omitted the application's LazyMotion/MotionConfig, leaving panels at transparent
+initial state; those invalid screenshots are superseded by actual providers and final-state
+waits. Initial early native-details and shadow failures are retained in diagnostic logs.
+
+Provider contract readings: current primary OpenAlex work/location dictionary and Crossref
+Swagger4.5.1, as linked in docs/research-literature-fusion.md. No new live paper query, paid
+model, remote write, real-user DB migration or fixture corpus modification. Source plan
+still requires independent retrieval annotations/Recall@20/nDCG@10/duplicate metrics and
+later plan increments. L2/full reviewed task corpus remains externally blocked.
