@@ -1,5 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
 import {captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
@@ -199,4 +200,49 @@ test('real gate graph preserves semantic refusal as a new interrupt and accepts 
       assert.equal(f.repository.getArtifact(f.artifactId).status, 'approved');
     } finally {f.close();}
   }
+});
+
+test('export review seal captures exact source, conditions and user history, and changes on an independent relation decision', async () => {
+  const f = scene('writing');
+  try {
+    f.review(f.relations()[0], 'reject');
+    f.review(f.propose('qualifies', f.sources[0], 'Only for the fixed synthetic source.'));
+    await f.complete();
+    await f.approve();
+    const bundle = f.repository.manuscripts.exportBundle({projectId: f.project.id, artifactId: f.artifactId});
+    const sources = {project: f.project, claims: bundle.claims, evidence: bundle.evidence};
+    const before = f.changes();
+    const snapshot = api.captureExportScientificReview(f.repository, sources);
+    const bytes = api.serializeExportScientificReview(snapshot);
+    const file = {path: api.exportScientificReviewPath, size: Buffer.byteLength(bytes),
+      sha256: createHash('sha256').update(bytes).digest('hex')};
+    const record = {sources, sourceHash: snapshot.sourceHash, files: [file]};
+    assert.equal(snapshot.relations.find(relation => relation.kind === 'qualifies').condition, 'Only for the fixed synthetic source.');
+    assert.equal(snapshot.history.at(-1).revisions.at(-1).relation.reviewer.id, 'synthetic-scientific-reviewer');
+    assert.deepEqual(snapshot.evidence[0].evidence, f.sources[0]);
+    api.assertCurrentExportScientificReview(f.repository, record);
+    assert.equal(f.changes(), before);
+    assert.throws(() => api.assertCurrentExportScientificReview(f.repository, {...record, sourceHash: '0'.repeat(64)}),
+      /research_export_sources_changed/u);
+    assert.throws(() => api.assertCurrentExportScientificReview(f.repository, {...record, files: []}),
+      error => error.code === 'research_export_semantic_snapshot_required');
+    assert.equal(f.changes(), before);
+    // An independent relation never enters claim.evidenceIds, yet its review must still revoke the seal.
+    f.db.prepare("UPDATE research_artifacts SET status='draft' WHERE id=?").run(f.artifactId);
+    f.db.prepare("UPDATE research_projects SET current_stage='writing' WHERE id=?").run(f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='waiting_approval' WHERE project_id=? AND stage='writing'").run(f.project.id);
+    const source = f.repository.knowledge.upsertFromSource({id: 'independent-export-source', projectId: f.project.id,
+      sourceType: 'file', sourceId: 'independent-synthetic.md', title: 'Independent synthetic source',
+      content: 'An independent dependency.', chunks: [{content: 'An independent dependency.', locator: 'block:0'}],
+      embeddingPolicy: 'none'});
+    const independentSource = f.repository.evidence.capture({projectId: f.project.id, chunkId: `${source.id}:chunk:0`});
+    const independent = f.review(f.propose('depends_on', independentSource));
+    const changed = f.changes();
+    assert.throws(() => api.assertCurrentExportScientificReview(f.repository, record),
+      error => error.code === 'research_export_semantic_snapshot_changed');
+    assert.equal(f.changes(), changed);
+    assert.equal(snapshot.relations.some(relation => relation.id === independent.id), false);
+    assert.equal(f.claim.evidenceIds.includes(independentSource.id), false);
+    assert.equal(api.serializeExportScientificReview(snapshot), bytes);
+  } finally {f.close();}
 });

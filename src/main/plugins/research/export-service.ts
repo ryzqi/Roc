@@ -12,6 +12,8 @@ import { ResearchProcessError } from './process-runner';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
+import {assertCurrentExportScientificReview, captureExportScientificReview, exportScientificReviewPath, serializeExportScientificReview} from './export-scientific-review';
+import {RocDomainError} from '../../services/errors';
 
 export class ResearchExportService {
   private readonly session = new ResearchJobSession('research_export_closed');
@@ -87,6 +89,7 @@ export class ResearchExportService {
       for (const record of records) {
         if (record.sources === null) throw new Error('research_export_sources_required');
         this.sources.assertCurrent(record.request, record.sources);
+        assertCurrentExportScientificReview(this.repository, record);
       }
     });
   }
@@ -131,6 +134,7 @@ export class ResearchExportService {
         await hashExportArchive(temporary, { ...record.archive, path: 'export.zip' }, signal);
         this.requireActive(signal);
         this.sources.assertCurrent(record.request, record.sources);
+        assertCurrentExportScientificReview(this.repository, record);
         this.requireApproved(record.projectId, record.id);
         // 最后只执行同一文件系统上的排他链接，已有文件不会被替换；检查与提交之间不让出事件循环。
         try { linkSync(staged, destinationPath); }
@@ -166,11 +170,12 @@ export class ResearchExportService {
       scratch = await createResearchDirectory(root, 'scratch');
       sources = await this.sources.capture(record.request, signal);
       sourceHash = exportSourceHash(sources);
+      await writer.write(exportScientificReviewPath, serializeExportScientificReview(captureExportScientificReview(this.repository, sources)));
       toolchainHash = await this.tools.identity();
       const toolchain = await this.tools.status();
       if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
       await buildExportFiles({ record, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
-      await writer.write('manifest.json', JSON.stringify({ version: 1, exportId: record.id, request: record.request, sourceHash, toolchainHash,
+      await writer.write('manifest.json', JSON.stringify({ version: 2, exportId: record.id, request: record.request, sourceHash, toolchainHash,
         toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list() }, null, 2));
       archive = await this.archive({ root, bundle: writer, scratch, tools: this.tools, signal });
       const current = await this.sources.capture(record.request, signal);
@@ -194,6 +199,7 @@ export class ResearchExportService {
     this.repository.exports.requireCurrent(record.request);
     const current = await this.sources.capture(record.request, signal);
     if (exportSourceHash(current) !== record.sourceHash || exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
+    assertCurrentExportScientificReview(this.repository, record);
     await this.verifyContent(record, signal);
   }
 
@@ -231,6 +237,7 @@ export class ResearchExportService {
 }
 
 function exportError(error: unknown): string {
+  if (error instanceof RocDomainError) return error.code;
   if (error instanceof ResearchProcessError) return error.code;
   // 与 `stage-runtime.ts` 的 `executionErrorCode()` 同一形状：本域的错误信息带 `<码>:<定位>`
   // （例如 `research_export_figure_claim_in_body:claim_…`），用只接受裸码的正则会把定位丢掉，

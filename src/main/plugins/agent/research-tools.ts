@@ -179,7 +179,8 @@ export function createResearchTools(input: {
       if (![
         'research_artifact_review_required', 'research_artifact_review_set_changed', 'research_artifact_review_changed',
         'research_search_plan_approval_changed', 'research_figure_review_changed', 'research_export_review_changed',
-        'research_relation_review_required', 'research_relation_conflict'
+        'research_relation_review_required', 'research_relation_conflict',
+        'research_export_semantic_snapshot_required', 'research_export_semantic_snapshot_changed'
       ].includes(code)) throw error;
       return {outcome: null, reviewError: error.message};
     }

@@ -2708,3 +2708,48 @@ task-owned temporary checkout removed. This pre-existing broad check remains unr
 Strict source-review seals, export captured relation/locator snapshots and migration candidates
 are next. PR-06 and the whole execution plan remain incomplete. Independent scientific
 judgments, reviewed200-task corpus, L2 spend and actual Zotero-client acceptance remain unrun.
+
+
+## ROC-PR-06A4B — sealed export scientific review and historical reads
+
+Verified passing. New manifestv2 archives include provenance/scientific-review.json with
+strict required source/claim/relations/history arrays, real captured sourceLocator and human
+review versions. Canonical bytes/hash/size bind the review file to original sources.sourceHash.
+Independent relation evidence endpoints are included even outside claim.evidenceIds. New ready
+finish/publication, final gate transaction and delivery after async copy reject missing/changed
+seals; known refusal returns a new original LangGraph interrupt. Export jobs retain domain codes.
+
+Historical sources, files and archives are not rewritten or backfilled. Fixed historical
+inspect/read/source verify original content seals, while current verification/publication/delivery
+requires valid current sources/relations/review seal. This uses existing versioned immutable
+file contracts without a DB migration, compatibility alias or invented historical reviewer.
+
+Commands from /Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test tests/unit/research-semantic-publication.test.mjs | Final9/9, including bad sourceHash/missing seal/independent endpoint decision |
+| pnpm test:unit | 858/858 before final direct sourceHash assertion; final focused/native check covers it |
+| pnpm build | Final typecheck and fresh production build passed |
+| node scripts/run-research-p0.mjs | Final13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | 27/27 Electron |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm harness:eval | 94/94 |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed, eager1132980bytes6files |
+
+Native evidence under .artifacts/research-optimization/p0-production/<taskId> retains
+provenance/scientific-review.json, manifest.json and historical-export-audit.json. Actual
+PDF parse/block/source locator, synthetic window:93 confirmation and full revisions are
+captured. Tampered task-created review file rejects inspect/read; exact byte/mode restoration
+passes. After source invalidation, original record/review/PDF/sourceHash/archiveHash remain
+unchanged, current delivery refuses without a destination, and reads/refusals produce zero DB writes.
+
+Initial fullunit hit missing installed Electron45 dist/path.txt (ENOENT); no new source
+assertion failed. Restored the existing local electron-v45.0.0-darwin-arm64.zip after checksum
+896c3a50b148e89a158dca08a6996a022ddf39b23aac871e107f5b4087f8caa9 matched package
+checksums. Shipped extractor restored bytes; optional absent zip dts caused a rename error,
+then exact path metadata was restored. Stopped only task-owned automatic download processes.
+No tracked dependency/lock change. Missing-runtime origin remains undetermined.
+
+PR-06 source migration candidates remain next, then PR-07. The earlier baseline-confirmed
+expanded P4 assistant smoke defect and external scientific/client/L2 acceptance remain unresolved.

@@ -45,7 +45,7 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；失效封印、定位迁移候选及导出快照扩展
+整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选
 仍属于后续增量，不能以当前消费者完成代替 PR-06 整体验收。
 
 ## 可信用户 IPC
@@ -130,6 +130,30 @@ rejected、invalidated、depends_on、supersedes 都不能冒充支持确认。
 逐条确认模型支持提议，再进行版本冻结与批准。该测试证明传输、事务和消费者链，
 不证明真实科学结论。原冻结科研样本保持不变。
 
+## 固定导出审核封印
+
+每个新导出保存 `provenance/scientific-review.json`。严格 schema 记录 project、
+原 `sourceHash`、Claim version/hash、实际 inspected evidence（含 sourceLocator）、
+所有关联关系及其完整修订历史。独立关系的证据端点也进入快照，即使它没有进入
+旧 claim.evidenceIds。原文、条件、提出者、审核人、时间和失效历史均来自真实仓库。
+JSON 采用固定序列化；manifest v2 保存文件 SHA/size，归档哈希覆盖该文件。
+
+ready 落库、publish、complete/approve 的最终事务、异步校验后及交付链接前均比较
+当前只读审核快照与已存文件 SHA/size。缺少封印返回
+research_export_semantic_snapshot_required；变化返回
+research_export_semantic_snapshot_changed。用户需核对当前关系并重新生成导出，
+原 LangGraph 闸门保留新的人工中断。异步导出失败保留准确领域码。
+
+历史 `sources`、sourceHash 和归档不重写，不补造历史人工审核，也没有兼容 alias。
+历史 inspect/read/source 仅验证保存文件和归档哈希；当前来源失效后仍可读取原 PDF
+及原审核快照。当前发布/校验/交付另要求有效来源、关系与封印。缺少新审核文件的
+历史归档可以核对其原内容，不能用于当前发布。读取不撤销、替换或生成文件。
+
+原生验收保留科学审核快照、manifest v2 和 historical-export-audit.json。实际
+PDF source/parse/block 定位、synthetic window:93 确认及修订历史均进入封印。
+任务创建文件篡改后检查/读取拒绝；精确恢复后通过。来源失效后保存记录、审核
+文件及 PDF 保持原哈希；当前交付失败、目标不存在、所有读取与拒绝零 DB 写入。
+
 ## 已验证范围
 
 来源定位增量 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
@@ -149,3 +173,8 @@ repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域�
 人工审核、修订历史、模型支持提议与 UI 已实现；严格语义消费者准入、定位
 迁移候选及历史导出仍待接通。来源完整性、科学语义和人工审核分别报告，PR-06
 整体尚未完成。
+
+严格批准/当前导出增量已验证 focused32/unit857/Harness94/native13/UI37/startup12。
+导出审核封印增量已验证 unit858/final focused9/Harness94/native13/UI27/startup12、
+fresh build/type/IPC/chunks1132980bytes6files。定位迁移候选仍未完成；上述离线
+传输和来源验收不构成真实科学结论或整体计划完成。

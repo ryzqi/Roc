@@ -59,4 +59,5 @@ export {registerResearchProductionInputCapabilities} from '../../../src/main/plu
 export {researchProductionInputSchema, researchProductionInputContentSchema} from '../../../src/shared/schemas/research-production-inputs';
 export {researchSourceLocatorSchema} from '../../../src/shared/schemas/research-source-locator';
 export {relationSourceDigest, relationClaimHash} from '../../../src/main/plugins/research/evidence-relation-repository';
+export {captureExportScientificReview, assertCurrentExportScientificReview, serializeExportScientificReview, exportScientificReviewPath} from '../../../src/main/plugins/research/export-scientific-review';
 export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema} from '../../../src/shared/schemas/research-evidence-relations';

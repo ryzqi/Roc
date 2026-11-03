@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { researchExportExecutionSchema, type ResearchExportExecution, type ResearchExportPrepare } from '../../../shared/schemas/research-exports';
+import {assertCurrentExportScientificReview} from './export-scientific-review';
 import type { ResearchArtifact } from '../../../shared/types';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
@@ -75,6 +76,7 @@ export class ResearchExportRepository {
           || !next.files.some((file) => file.path === 'paper.pdf') || !next.files.some((file) => file.path === 'manifest.json')) throw new Error('research_export_result_invalid');
       }
       const value = { ...record, ...next, endedAt: this.now() };
+      if (value.status === 'ready') assertCurrentExportScientificReview(this.research, value);
       this.save(value);
       this.event(value, `export_${value.status}`, value.status === 'ready' ? '交付文件已生成，等待预览与最终审核。' : '导出准备已结束，详情见日志。');
       return value;
@@ -85,6 +87,7 @@ export class ResearchExportRepository {
     return this.db.transaction(() => {
       const record = this.get(projectId, id);
       if (record.status !== 'ready') throw new Error('research_export_ready_required');
+      assertCurrentExportScientificReview(this.research, record);
       if (record.ownerRunId !== null) this.research.runs.requireActive(record.ownerRunId, projectId);
       if (record.artifactId !== null) {
         if (record.replacesExportId !== replacesExportId) throw new Error('research_export_publish_conflict');
