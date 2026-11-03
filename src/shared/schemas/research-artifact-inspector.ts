@@ -3,6 +3,7 @@ import {researchArtifactSchema, researchStageStateSchema, researchProvenanceSche
 import {researchArtifactContentSchema, researchStageRunSchema} from './research-runs';
 import {researchClaimSchema, researchEvidenceSchema} from './research-evidence';
 import {researchProductionInputSchema} from './research-production-inputs';
+import {researchSourceLocatorSchema} from './research-source-locator';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
@@ -15,7 +16,7 @@ export const researchArtifactLinksSchema = researchArtifactLinkSchema.array().mi
   links => new Set(links.map(link => link.artifactId)).size === links.length, 'Artifact links must be unique.');
 export const researchInspectedEvidenceSchema = z.object({
   evidence: researchEvidenceSchema, referenceStatus: z.enum(['recorded', 'superseded']),
-  invalidatedAt: z.string().nullable()
+  invalidatedAt: z.string().nullable(), sourceLocator: researchSourceLocatorSchema.nullable()
 }).strict();
 export const researchArtifactOriginSchema = researchStageRunSchema.pick({
   id: true, taskId: true, stage: true, status: true, providerId: true, modelId: true,

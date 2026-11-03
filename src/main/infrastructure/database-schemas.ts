@@ -1725,6 +1725,17 @@ CREATE TABLE research_zotero_attachment_imports (
 `
 });
 
+researchMigrations.push({
+  version: 20, name: 'immutable_evidence_document_source_locators',
+  sql: `
+CREATE TABLE research_evidence_source_locators (
+  evidence_id TEXT PRIMARY KEY REFERENCES research_evidence(id) ON DELETE CASCADE,
+  locator_json TEXT NOT NULL CHECK(json_valid(locator_json)),
+  captured_at TEXT NOT NULL
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

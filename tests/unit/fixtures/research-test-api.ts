@@ -54,3 +54,4 @@ export {researchWorkflowTransitionRequestSchema} from '../../../src/shared/schem
 export {ResearchProductionInputService} from '../../../src/main/plugins/research/production-input-service';
 export {registerResearchProductionInputCapabilities} from '../../../src/main/plugins/research/production-input-capabilities';
 export {researchProductionInputSchema, researchProductionInputContentSchema} from '../../../src/shared/schemas/research-production-inputs';
+export {researchSourceLocatorSchema} from '../../../src/shared/schemas/research-source-locator';

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-artifact-inspector';
+import {captureEvidenceSourceLocator, inspectEvidenceSourceLocator} from './evidence-source-locator';
 
 import {
   researchClaimCreateRequestSchema,
@@ -75,6 +76,7 @@ export class ResearchEvidenceRepository {
       ).get(record.projectId, record.chunkId, record.sourceVersion, record.locator, record.contentHash));
       if (hasMetadata) this.db.prepare('INSERT INTO research_evidence_source_metadata (evidence_id,metadata_json) VALUES (?,?) ON CONFLICT DO NOTHING')
         .run(stored.id, JSON.stringify(metadata));
+      captureEvidenceSourceLocator(this.db, stored, record.createdAt);
       return stored;
     })();
   }
@@ -194,7 +196,8 @@ export class ResearchEvidenceRepository {
     // 还在，只是块定位不再成立 —— 必须明确报「引用待重建」，不得静默指向新块，也不得退化成
     // not_found（那会让用户以为证据被删掉了）。失效标记由真正改变块身份的两个事件写入。
     if (evidence.contentHash !== hash(evidence.excerpt)) throw new Error('research_evidence_integrity_invalid');
-    return {evidence, referenceStatus: invalidatedAt === null ? 'recorded' : 'superseded', invalidatedAt};
+    return {evidence, referenceStatus: invalidatedAt === null ? 'recorded' : 'superseded', invalidatedAt,
+      sourceLocator: inspectEvidenceSourceLocator(this.db, id)};
   }
 
   /**

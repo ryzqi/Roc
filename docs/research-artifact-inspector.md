@@ -206,3 +206,9 @@ renderer输入是明确标注的typed synthetic展示fixture；三类实际执�
 client/scroll width均553px，没有overflow后代。restored-reading.png按CSS像素
 截取真实面板，已检查完整source/hash/CSV可读。X-UI本地离线链路验证完成；
 生产PDF定位属于后续PR-07，不将此检查器称为PDF阅读器。
+
+
+PR-06A1 的 inspector evidence 现在包含 required nullable sourceLocator，保存真实
+managed document/parse/block/source/parse hash 与原页/区域，并参与工件 SHA。
+没有托管文档关联保持 null；历史来源定位保持不可替换快照。读取不读磁盘字节，
+PDF 对齐入口仍未实现。详见 [证据来源与关系审核](research-evidence-relations.md)。

@@ -2486,3 +2486,42 @@ shadows hidden. A4B1 unit824/Harness94/native13 backend evidence applies unchang
 X-UI local offline acceptance complete; actual repository/parent-child gate path uses a named
 Playwright-to-Node seam and does not claim production chat/preload transport. Next PR-06 evidence
 semantics/locators; whole plan and external scientific/live-client acceptance remain unfinished.
+
+
+## PR-06A1 — immutable managed-document source locators
+
+Status: `Verified passing` for this source contract increment. DB20 sidecars capture the actual
+managed document/parse/block association, source and canonical parsed-content SHA, parser
+fingerprint, original locator and saved page/regions. Exact nonblank indexed block ordering,
+excerpt and locator match prevents duplicate-prose mislocation. Current ready parse and
+source hash required. Evidence/metadata/locator commit together. Re-capture idempotent; saved
+location conflicts refuse replacement. Reparse preserves old evidence/coordinates and strict
+consumers still refuse superseded references. Historical evidence is not backfilled or assigned
+fake coordinates/reviewers. Unmanaged sources explicitly have nullable locator. HTML zero
+geometry records page-only null region; invalid pages/inverted geometry refuse. Inspector
+includes source locator in existing artifact SHA with no file read/write or worker launch.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm generate:ipc` |Current generated contract |
+| `pnpm typecheck` |Initial and final fresh build passed |
+| `node --test tests/unit/research-source-locator.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-evidence-invalidation.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-manuscript-integrity.test.mjs tests/unit/research-citation-integrity.test.mjs` |Third43/43 passed before final geometry case |
+| `pnpm test:unit` |Final3 830/830 passed including locator6 |
+| `pnpm harness:eval` |Final2 94/94 passed; no harness changes after geometry check |
+| `pnpm test:research-p0` |Final3 fresh build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs` |Final3 22/22 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final3 12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs pr06-source-locator-*.log. Unit synthetic parse input is clearly separate from native
+actual PDF parsing. Native full workflows save evidence-source-locator.json and verify actual
+document/parse/source/canonical parse hash/block/excerpt/regions plus zero inspection DB writes.
+Initial test failures were expected digest before canonical schema ordering and incorrect
+migration fixture stage/kind; fixed tests to actual persisted parse and discovery/search_strategy.
+Three older literature migration tests expected final DB19 while applying all migrations;
+updated final version to20 retaining every data/provenance assertion. No frozen fixture, live
+query/client, paid model or remote write. Coordinate projection/preview belongs to PR-07.
+Next PR-06 semantic relation proposal/review/history and consumers/UI; whole plan unfinished.
