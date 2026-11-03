@@ -1530,3 +1530,31 @@ DB/profile, credentials or global settings read/modified. No Zotero/plugin insta
 No paid model, remote write or frozen workflow fixture edit. Next: durable preview/import
 object mapping through existing bounded metadata jobs, then settings/selection/attachments
 and incremental checkpoints. Real Zotero client contract acceptance remains unrun.
+
+
+## PR-05 prerequisite — retain migration application history
+
+Status: `Verified passing`. New preview upgrade regression exposed that the common migration
+writer deleted/reinserted all old ledger rows whenever appending a migration, changing their
+original applied_at timestamps. A separate deterministic-time regression reproduced the
+failure before the fix. Writer now reads validated applied versions and appends only missing
+versions. Existing migration names/checksums/application times stay unchanged; checks for
+rewritten migrations, unproven data transforms and transactional schema/FK rollback remain.
+No applied migration SQL/name/checksum changed and no real-user DB was touched.
+
+Checks from `/Users/Apple_501/Desktop/Roc/Roc`, on the source state including the uncommitted
+Zotero preview increment (this correction itself has no dependency on that new migration):
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='preserves complete historical ledger' tests/unit/database-migrations.test.mjs` | Before-fix red: old applied_at replaced by upgrade timestamp |
+| `node --test tests/unit/zotero-preview.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Final114/114 passed, full ledger rows preserved for synthetic append and actual DB12→13 |
+| `pnpm test:unit` | Final750/750 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm test:research-p0` | Fresh typecheck/build and12/12 native scenarios passed |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current contracts and eager1131076bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `.artifacts/research-optimization/pr05-migration-history-red.log` and
+`pr05-preview-focused-latest.log`, `pr05-preview-unit-latest.log`, `pr05-preview-native.log`.
+Preview implementation remains for the following separate commit after startup verification.

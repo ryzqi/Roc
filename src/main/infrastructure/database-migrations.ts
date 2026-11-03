@@ -228,8 +228,9 @@ function writeCurrentMigrationRows(
   migrations: readonly RocDatabaseMigration[],
   now: () => string
 ): void {
-  db.prepare('DELETE FROM schema_migrations WHERE db_name = ?').run(dbName);
+  const applied = readAppliedMigrations(db, dbName);
   for (const migration of migrations) {
+    if (applied.has(migration.version)) continue;
     db.prepare(
       `INSERT INTO schema_migrations (db_name, version, name, checksum, applied_at)
        VALUES (?, ?, ?, ?, ?)`

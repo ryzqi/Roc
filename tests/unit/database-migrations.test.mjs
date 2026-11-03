@@ -58,6 +58,23 @@ const columnNames = (db, table) =>
 const ledgerVersions = (db) =>
   db.prepare('SELECT version FROM schema_migrations ORDER BY version').pluck().all();
 
+test('appending a migration preserves complete historical ledger rows and their original application times', () => {
+  const db = new Database(':memory:');
+  const initialTime = '2026-11-01T00:00:00.000Z';
+  const upgradeTime = '2026-11-03T00:00:00.000Z';
+  try {
+    applyDatabaseMigrations(db, {dbName: 'core', migrations: baseMigrations, now: () => initialTime});
+    const original = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
+    db.prepare('INSERT INTO widgets(id,label) VALUES (?,?)').run('retained', 'Original user data');
+    applyDatabaseMigrations(db, {dbName: 'core', migrations: [...baseMigrations, additiveMigration], now: () => upgradeTime});
+    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=2 ORDER BY version').all(), original);
+    assert.equal(db.prepare('SELECT applied_at FROM schema_migrations WHERE version=3').pluck().get(), upgradeTime);
+    assert.equal(db.prepare('SELECT label FROM widgets WHERE id=?').pluck().get('retained'), 'Original user data');
+    applyDatabaseMigrations(db, {dbName: 'core', migrations: [...baseMigrations, additiveMigration], now: () => '2026-11-04T00:00:00.000Z'});
+    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=2 ORDER BY version').all(), original);
+  } finally {db.close();}
+});
+
 test('table replacement validates foreign keys before committing schema and data together', () => {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
