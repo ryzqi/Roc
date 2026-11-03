@@ -8,7 +8,7 @@ import type { ResearchRepository } from './repository';
 export class ResearchProductionInputService {
   private readonly session = new ResearchJobSession('research_production_input_closed');
   constructor(private readonly repository: ResearchRepository, private readonly experiments: Pick<ResearchExperimentService, 'snapshot' | 'read'>,
-    private readonly figures: Pick<ResearchFigureService, 'verify'>, private readonly exports: Pick<ResearchExportService, 'inspect' | 'read'>) {}
+    private readonly figures: Pick<ResearchFigureService, 'verify' | 'read'>, private readonly exports: Pick<ResearchExportService, 'inspect' | 'read'>) {}
 
   async inspect(projectId: string, artifactId: string): Promise<ResearchProductionInput> {
     return await this.session.guard(async () => {
@@ -36,7 +36,8 @@ export class ResearchProductionInputService {
       content = await this.exports.read(request.projectId, input.source.execution.id, request.path);
     } else {
       if (request.area === 'bundle') throw new Error('research_production_file_not_found');
-      content = await this.experiments.read({ projectId: request.projectId, runId: input.source.execution.id, area: request.area, path: request.path });
+      const fileRequest = {projectId: request.projectId, runId: input.source.execution.id, area: request.area, path: request.path};
+      content = input.source.kind === 'figure' ? await this.figures.read(fileRequest) : await this.experiments.read(fileRequest);
     }
     this.session.requireOpen();
     this.resolve(request.projectId, request.artifactId);

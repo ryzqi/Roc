@@ -2340,3 +2340,32 @@ new gate hashes with old body; added return guard, explicit new-body regression 
 full87/startup. Final screenshot inspected: selected review/display hashes and latest body match.
 No frozen fixtures/client/model/live queries/remote writes. Next production type views and reading
 location; X-UI/full plan unfinished.
+
+
+## X-UIA4 prerequisite — actual figure production file reader
+
+Status: `Verified passing`. Production input file reads dispatch figure-run identities to the
+figure reader, experiment identities to experiment reader and export identities to export reader.
+Previously figure reads called experiment.read and actual approved PNG failed with
+research_experiment_not_found. Required figure reader dependency replaces that incorrect route;
+existing approved-artifact/path/preview-size/hash checks remain. No expanded draft/role authority.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node scripts/run-research-p0.mjs --test-name-pattern='trusted chat task spans'` | Red1/1 research_experiment_not_found; green1/1 passed |
+| `pnpm test:unit` |819/819 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` |Fresh production build/type/native13/13 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132803bytes/6files passed |
+| `git diff --check` |Passed |
+
+Evidence xui-production-read-*.log and real native task production-input-previews.json. Native
+workflow now reads actual approved output files for experiment/figure/export, verifies returned
+bytes SHA/size against saved file metadata and unchanged total_changes, and explicitly refuses
+preapproval reads. Figure selection requires actual output PNG. Existing renderer87 from A3B
+applies unchanged; no renderer files changed. No frozen workflow fixture modifications, client
+operations, live queries, paid model or remote writes. Production reviewer contract/type views
+and reading location still pending; full plan unfinished.

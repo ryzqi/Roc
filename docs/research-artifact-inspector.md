@@ -129,3 +129,8 @@ A3B 最终 fresh build/type、相关Electron13、完整串行renderer87、启动
 IPC/chunks1132803bytes6files和diff通过。A3A unit819/Harness94/native13后端证据
 沿用；本增量未改后端。日志`xui-review-ui-*.log`，最终完整上下文和返回卡片截图
 保留；选择工件的审核hash、显示hash与最新正文已人工检查一致。
+
+生产文件读取前置修复：图稿文件按真实 figure-run ID 交给图稿服务，实验/导出分别
+交给自己的读取器。旧图稿路由到实验仓库导致真实PNG失败，已由native红/绿回归
+覆盖。最终unit819/Harness94/fresh build/type/native13/startup12/IPC/chunks通过；
+每类真实已批准文件均校验bytes/SHA/size且DB无写入，未批准角色读取继续拒绝。
