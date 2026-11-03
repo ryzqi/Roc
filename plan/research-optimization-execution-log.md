@@ -319,3 +319,36 @@ Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
 Seven lifecycle regressions exercise pause cleanup, unchanged deadline/budget, new execution
 identity, activation rollback, real approval, cancellation during verification, restart and
 the real v12 database upgrade. Logs: `.artifacts/research-optimization/pr02c-lifecycle-*.log`.
+
+## ROC-PR-02C.3 — task diagnostics and approval restoration
+
+Status: `Verified passing` for authoritative summaries and paused approval restoration.
+Task event correlation and shell presentation remain pending.
+
+Task and execution budget views share one aggregation implementation and the same call rows.
+The task summary reports known, unknown and reserved consumption without adding run totals
+again. Domain diagnostics expose execution status, actual model identity, error codes,
+timestamps, parent associations and artifact IDs. Prompt envelopes and credentials are omitted.
+External service costs remain explicitly unknown, separate from application model amounts.
+Chat lookup validates the persisted thread and task project before returning diagnostics.
+It supports the actual chat lifecycle states, including recovery and dispatch transitions.
+
+Paused approval can be restored to waiting approval without recreating the completed stage,
+resetting its budget/deadline or calling a model. Pending cleanup still blocks restoration.
+The diagnostics contract identifies stopped stage continuation and approval restoration
+from authoritative domain records, not renderer counters.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | 626 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `node --test tests/unit/research-task-diagnostics.test.mjs tests/unit/research-task-cancellation.test.mjs tests/unit/research-task-lifecycle.test.mjs tests/unit/run-budget-ledger.test.mjs` | Final consumer audit: 19 passed, 0 failed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `git diff --check` | Passed |
+
+The final consumer audit expanded diagnostics to the canonical chat status schema after
+the full unit run. Focused contracts and production build were repeated after that change.
+Logs: `.artifacts/research-optimization/pr02c-diagnostics-*.log`. No model/network calls.

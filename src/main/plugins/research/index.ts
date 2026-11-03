@@ -3,6 +3,8 @@ import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-g
 import type { ResearchTaskRepository } from './research-task-repository';
 import { ResearchTaskController } from './task-controller';
 import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
+import { ResearchTaskDiagnosticsService } from './task-diagnostics';
+import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import { LiteratureImportService } from './literature-import-service';
 import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
 import { z } from 'zod';
@@ -139,6 +141,7 @@ const lifecycleCapabilities = {
 export type ResearchPluginOptions = {
   executionGrantBroker: ExecutionGrantBroker;
   tasks: ResearchTaskRepository;
+  budgetLedger: RunBudgetLedger;
   experimentRoot?: string;
   exportRoot?: string;
   indexRoot?: string;
@@ -278,7 +281,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
           }
         }
       });
-      registerResearchTaskCapabilities(context, options.tasks, taskController);
+      registerResearchTaskCapabilities(context, options.tasks, taskController,
+        new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger));
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);

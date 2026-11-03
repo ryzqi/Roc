@@ -65,6 +65,29 @@ export class ResearchTaskRepository {
     return row === undefined ? null : researchTaskSchema.parse(JSON.parse(row.snapshot_json));
   }
 
+  taskForChatScope(request: { runId: string; threadId: string; projectId: string }): ResearchTask | null {
+    const task = this.taskForChat(request.runId);
+    if (task === null) return null;
+    const run = this.db.prepare('SELECT thread_id FROM agent_runs WHERE id = ?')
+      .get(request.runId) as { thread_id: string } | undefined;
+    if (run === undefined) throw new Error('task_run_not_found');
+    if (run.thread_id !== request.threadId) throw new Error('research_task_thread_mismatch');
+    if (task.projectId !== request.projectId) throw new Error('research_task_project_mismatch');
+    return task;
+  }
+
+  chatDiagnostics(runId: string): {
+    status: string; startedAt: string | null; endedAt: string | null; providerId: string | null; modelId: string | null; error: string | null;
+  } {
+    const row = this.db.prepare(`SELECT r.status,r.started_at startedAt,r.ended_at endedAt,
+      r.provider_id providerId,r.model_id modelId,json_extract(t.telemetry_json,'$.terminal.errorCode') error
+      FROM agent_runs r LEFT JOIN agent_run_telemetry t ON t.run_id = r.id WHERE r.id = ?`)
+      .get(runId) as { status: string; startedAt: string | null; endedAt: string | null;
+        providerId: string | null; modelId: string | null; error: string | null } | undefined;
+    if (row === undefined) throw new Error('task_run_not_found');
+    return row;
+  }
+
   reconcileInterruptedChats(): void {
     const rows = this.db.prepare(`SELECT DISTINCT t.id,t.project_id FROM research_tasks t
       JOIN research_task_executions e ON e.task_id = t.id AND e.kind = 'chat'

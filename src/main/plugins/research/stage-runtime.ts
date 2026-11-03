@@ -123,6 +123,17 @@ export class ResearchStageRuntime {
     }));
   }
 
+  restoreTaskApproval(request: { taskId: string; projectId: string }) {
+    const workflow = this.repository.getWorkflow(request.projectId);
+    const current = workflow.stages.find(stage => stage.stage === workflow.currentStage);
+    if (current?.status !== 'waiting_approval' ||
+      !this.repository.runs.taskIdsForStage(request.projectId, workflow.currentStage).includes(request.taskId)) {
+      throw new Error('research_task_approval_not_waiting');
+    }
+    return this.repository.tasks.setStatus(request.taskId, request.projectId, 'waiting_approval',
+      'research_task_waiting_approval', ['paused']);
+  }
+
   private stop(request: ResearchStageRunIdRequest, status: 'cancelled' | 'interrupted', reason: string): ResearchStageRun {
     const previous = this.repository.runs.get(request.runId, request.projectId);
     if (previous.parentRunId !== null) {

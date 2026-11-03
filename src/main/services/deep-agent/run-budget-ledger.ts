@@ -206,6 +206,30 @@ export class RunBudgetLedger {
   }
 
   readBudgetStatus(runId: string, limits: RunLimits, modelPricingKnown: boolean): RunBudgetStatus {
+    const row = this.db.prepare(`SELECT COALESCE(b.stop_reason,r.budget_stop_reason) budget_stop_reason
+      FROM agent_runs r
+      LEFT JOIN research_task_executions e ON e.kind = 'chat' AND e.execution_id = r.id
+      LEFT JOIN research_task_budgets b ON b.task_id = e.task_id WHERE r.id = ?
+      UNION ALL
+      SELECT b.stop_reason budget_stop_reason FROM research_task_executions e
+      JOIN research_task_budgets b ON b.task_id = e.task_id
+      WHERE e.kind = 'stage' AND e.execution_id = ?`).get(runId, runId) as
+      { budget_stop_reason: string | null } | undefined;
+    if (row === undefined) throw new Error('task_run_not_found');
+    return this.readScopedBudgetStatus('run_id', runId, limits, modelPricingKnown, row.budget_stop_reason);
+  }
+
+  readTaskBudgetStatus(taskId: string, projectId: string): RunBudgetStatus {
+    const row = this.db.prepare(`SELECT t.project_id,b.limits_json,b.stop_reason FROM research_tasks t
+      JOIN research_task_budgets b ON b.task_id = t.id WHERE t.id = ?`)
+      .get(taskId) as { project_id: string; limits_json: string; stop_reason: string | null } | undefined;
+    if (row === undefined) throw new Error('research_task_budget_missing');
+    if (row.project_id !== projectId) throw new Error('research_task_project_mismatch');
+    return this.readScopedBudgetStatus('task_id', taskId, runBudgetSchema.parse(JSON.parse(row.limits_json)), true, row.stop_reason);
+  }
+
+  private readScopedBudgetStatus(column: 'run_id' | 'task_id', id: string, limits: RunLimits,
+    modelPricingKnown: boolean, stopReason: string | null): RunBudgetStatus {
     const totals = this.db.prepare(`SELECT
       COALESCE(SUM(COALESCE(actual_tokens, reserved_tokens)), 0) total_tokens,
       COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_tokens ELSE 0 END), 0) settled_tokens,
@@ -220,22 +244,12 @@ export class RunBudgetLedger {
       COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_cost_microusd ELSE 0 END), 0) settled_cost,
       COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN COALESCE(actual_cost_microusd,reserved_cost_microusd,0) ELSE 0 END), 0) reserved_cost,
       COALESCE(SUM(CASE WHEN kind = 'model' AND (state = 'unknown' OR COALESCE(actual_cost_microusd,reserved_cost_microusd) IS NULL) THEN 1 ELSE 0 END), 0) unknown_cost_calls
-      FROM agent_budget_calls WHERE run_id = ?`).get(runId) as {
+      FROM agent_budget_calls WHERE ${column} = ?`).get(id) as {
         total_tokens: number; settled_tokens: number; unknown_tokens: number; reserved_tokens: number;
         model_calls: number; reserved_models: number; tool_calls: number; reserved_tools: number;
         child_calls: number; reserved_children: number; settled_cost: number; reserved_cost: number;
         unknown_cost_calls: number;
       };
-    const row = this.db.prepare(`SELECT COALESCE(b.stop_reason,r.budget_stop_reason) budget_stop_reason
-      FROM agent_runs r
-      LEFT JOIN research_task_executions e ON e.kind = 'chat' AND e.execution_id = r.id
-      LEFT JOIN research_task_budgets b ON b.task_id = e.task_id WHERE r.id = ?
-      UNION ALL
-      SELECT b.stop_reason budget_stop_reason FROM research_task_executions e
-      JOIN research_task_budgets b ON b.task_id = e.task_id
-      WHERE e.kind = 'stage' AND e.execution_id = ?`).get(runId, runId) as
-      { budget_stop_reason: string | null } | undefined;
-    if (row === undefined) throw new Error('task_run_not_found');
     return {
       tokens: {
         limit: limits.maxTotalTokens,
@@ -257,7 +271,7 @@ export class RunBudgetLedger {
       },
       pricingCatalogVersion: limits.pricingCatalogVersion,
       deadlineAt: limits.deadlineAt,
-      stopReason: row.budget_stop_reason
+      stopReason
     };
   }
 

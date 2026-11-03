@@ -25,3 +25,4 @@ export { ResearchTaskController } from '../../../src/main/plugins/research/task-
 export { registerResearchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';
 export { createAgentPlugin } from '../../../src/main/plugins/agent';
 export { createResearchHumanGate } from '../../../src/main/plugins/research/human-gate';
+export { ResearchTaskDiagnosticsService } from '../../../src/main/plugins/research/task-diagnostics';

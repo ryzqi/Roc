@@ -4,7 +4,7 @@ import type { ResearchStageRuntime } from './stage-runtime';
 
 type JobKind = Exclude<ResearchTaskExecution['kind'], 'chat' | 'stage'>;
 type TaskCancellationServices = {
-  stages: Pick<ResearchStageRuntime, 'cancelTask' | 'pauseTask' | 'continueTask'>;
+  stages: Pick<ResearchStageRuntime, 'cancelTask' | 'pauseTask' | 'continueTask' | 'restoreTaskApproval'>;
   cancelChat(runId: string): Promise<unknown>;
   cancelJob(kind: JobKind, projectId: string, executionId: string): Promise<unknown>;
 };
@@ -38,6 +38,14 @@ export class ResearchTaskController {
       throw new Error('research_task_cleanup_pending');
     }
     return this.services.stages.continueTask(request);
+  }
+
+  restoreApproval(request: { taskId: string; projectId: string }) {
+    this.tasks.get(request.taskId, request.projectId);
+    if (this.cancellations.has(request.taskId) || this.cancellations.has(`${request.taskId}:paused`)) {
+      throw new Error('research_task_cleanup_pending');
+    }
+    return this.services.stages.restoreTaskApproval(request);
   }
 
   private cleanup(task: ResearchTask, status: 'paused' | 'cancelled'): Promise<ResearchTask> {
