@@ -296,6 +296,63 @@ test('provider outcomes distinguish partial, empty, rate limiting and invalid re
   assert.equal(result.sources.find(source => source.source === 'crossref').retryAfterMs, 2000);
 });
 
+test('every Provider rejects missing result containers and invented paper identities instead of returning empty success', async () => {
+  const cases = [
+    ['openalex', {results: [{id: 'W1', title: 'Located paper'}]}, {results: [{}]}, {results: []}],
+    ['crossref', {message: {items: [{DOI: '10.1234/located', title: ['Located paper']}]}},
+      {message: {items: [{title: ['No DOI']}]}}, {message: {items: []}}],
+    ['semantic_scholar', {data: [{paperId: 'S1', title: 'Located paper'}]}, {data: [{title: 'No paper ID'}]}, {data: []}],
+    ['pubmed', {resultList: {result: [{id: '123', source: 'MED', title: 'Located paper', pubYear: '2024'}]}},
+      {resultList: {result: [{source: 'MED', title: 'No paper ID'}]}}, {resultList: {result: []}}],
+    ['europe_pmc', {resultList: {result: [{id: 'PMC123', source: 'PMC', title: 'Located paper'}]}},
+      {resultList: {result: [{id: 'PMC123', title: 'No source identity'}]}}, {resultList: {result: []}}]
+  ];
+  for (const [source, valid, invalid, empty] of cases) {
+    for (const [payload, expectedStatus] of [[valid, 'complete'], [invalid, 'failed'], [{error: 'bad query'}, 'failed'], [empty, 'complete']]) {
+      const service = new api.LiteratureSearchService(async () => Response.json(payload));
+      const result = await service.searchDetailed({query: 'located', sources: [source], limit: 5});
+      assert.equal(result.status, expectedStatus, `${source}: ${JSON.stringify(payload)}`);
+      if (expectedStatus === 'failed') {
+        assert.equal(result.records.length, 0);
+        assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+      } else {
+        assert.equal(result.records.length, payload === valid ? 1 : 0);
+      }
+    }
+  }
+  let openAlexUrl;
+  await new api.LiteratureSearchService(async url => { openAlexUrl = new URL(url); return Response.json({results: []}); })
+    .searchDetailed({query: 'paging contract', sources: ['openalex'], limit: 7});
+  assert.equal(openAlexUrl.searchParams.get('per_page'), '7');
+  assert.equal(openAlexUrl.searchParams.has('per-page'), false);
+});
+
+test('arXiv parses located Atom records and DOI but refuses error feeds and invalid XML as papers', async () => {
+  const feed = entry => `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+    xmlns:arxiv="http://arxiv.org/schemas/atom"><opensearch:totalResults>${entry ? 1 : 0}</opensearch:totalResults>${entry}</feed>`;
+  const paper = `<entry><id>http://arxiv.org/abs/2601.00001v2</id><title> Located paper </title>
+    <summary>Original abstract</summary><published>2026-01-01T00:00:00Z</published>
+    <author><name>Author</name></author><arxiv:doi>10.1234/located</arxiv:doi></entry>`;
+  for (const [xml, expectedStatus, count] of [
+    [feed(paper), 'complete', 1], [feed(''), 'complete', 0],
+    [feed(paper.replace('http://arxiv.org/abs/2601.00001v2', 'http://arxiv.org/api/errors#query')), 'failed', 0],
+    ['<html><title>Backend failure</title></html>', 'failed', 0],
+    [feed(paper).replace('</feed>', ''), 'failed', 0],
+    ['<feed/>', 'failed', 0]
+  ]) {
+    const result = await new api.LiteratureSearchService(async () => new Response(xml))
+      .searchDetailed({query: 'located', sources: ['arxiv'], limit: 5});
+    assert.equal(result.status, expectedStatus);
+    assert.equal(result.records.length, count);
+    if (expectedStatus === 'failed') assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+    if (count === 1) {
+      assert.equal(result.records[0].doi, '10.1234/located');
+      assert.equal(result.records[0].publishedYear, 2026);
+      assert.equal(result.records[0].title, 'Located paper');
+    }
+  }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();

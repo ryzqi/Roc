@@ -1,12 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { z } from 'zod';
 import { researchLiteratureSchema } from '../../../shared/schemas/research';
-import type { LiteratureSearchInput, LiteratureSearchResult } from '../../../shared/schemas/literature-import';
+import { literatureNetworkSourceSchema, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
 import { normalizeResearchDoi } from './literature-identity';
 import { fuseLiterature, literatureSourcePriority } from './literature-fusion';
+import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
@@ -30,7 +32,8 @@ export class LiteratureSearchService {
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
     const sources: LiteratureSearchResult['sources'] = [];
     const records: ResearchLiterature[] = [];
-    const selected = literatureSourcePriority.filter(source => request.sources.includes(source));
+    const requestedSources = z.array(literatureNetworkSourceSchema).min(1).parse(request.sources);
+    const selected = literatureSourcePriority.filter(source => requestedSources.includes(source));
     for (let offset = 0; offset < selected.length; offset += 3) {
       await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
         const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
@@ -42,8 +45,11 @@ export class LiteratureSearchService {
         } catch (error) {
           signal?.throwIfAborted();
           const rateLimited = error instanceof ProviderError && error.status === 429;
+          const invalidPayload = error instanceof z.ZodError ||
+            error instanceof Error && error.message === 'literature_provider_response_invalid';
           sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
-            errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' : 'literature_provider_error',
+            errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
+              invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
             retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null });
           return undefined;
         }
@@ -60,7 +66,7 @@ export class LiteratureSearchService {
   }
 
   private async searchSource(
-    source: ResearchLiteratureSearchRequest['sources'][number],
+    source: typeof literatureSourcePriority[number],
     query: string,
     limit: number
   ): Promise<ResearchLiterature[]> {
@@ -71,18 +77,17 @@ export class LiteratureSearchService {
       case 'arxiv': return this.searchArxiv(query, limit);
       case 'pubmed': return this.searchEuropePmc(query, limit, 'pubmed');
       case 'europe_pmc': return this.searchEuropePmc(query, limit, 'europe_pmc');
-      case 'local': return [];
     }
   }
 
   private async searchOpenAlex(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${limit}`) as OpenAlexPayload;
-    return (payload.results ?? []).map((item) => ({
+    const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}`));
+    return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
       externalId: item.id,
       doi: optionalResearchDoi(item.doi),
-      title: item.title ?? 'Untitled work',
+      title: item.title,
       authors: (item.authorships ?? []).map((author) => author.author?.display_name ?? '').filter(Boolean),
       abstract: invertAbstract(item.abstract_inverted_index),
       publishedYear: item.publication_year ?? null,
@@ -95,13 +100,13 @@ export class LiteratureSearchService {
   }
 
   private async searchCrossref(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}`) as CrossrefPayload;
-    return (payload.message?.items ?? []).map((item) => ({
-      id: `crossref:${item.DOI ?? item.URL ?? item.title?.[0] ?? crypto.randomUUID()}`,
+    const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}`));
+    return payload.message.items.map((item) => ({
+      id: `crossref:${item.DOI}`,
       source: 'crossref' as const,
-      externalId: item.DOI ?? item.URL ?? item.title?.[0] ?? crypto.randomUUID(),
+      externalId: item.DOI,
       doi: optionalResearchDoi(item.DOI),
-      title: item.title?.[0] ?? 'Untitled work',
+      title: item.title[0],
       authors: (item.author ?? []).map((author) => [author.given, author.family].filter(Boolean).join(' ')),
       abstract: item.abstract ?? null,
       publishedYear: item.published?.['date-parts']?.[0]?.[0] ?? null,
@@ -114,13 +119,13 @@ export class LiteratureSearchService {
   }
 
   private async searchSemanticScholar(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`) as SemanticScholarPayload;
-    return (payload.data ?? []).map((item) => ({
+    const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
+    return payload.data.map((item) => ({
       id: `semantic_scholar:${item.paperId}`,
       source: 'semantic_scholar' as const,
       externalId: item.paperId,
       doi: optionalResearchDoi(item.externalIds?.DOI),
-      title: item.title ?? 'Untitled work',
+      title: item.title,
       authors: (item.authors ?? []).map((author) => author.name),
       abstract: item.abstract ?? null,
       publishedYear: item.year ?? null,
@@ -134,20 +139,21 @@ export class LiteratureSearchService {
 
   private async searchArxiv(query: string, limit: number): Promise<ResearchLiterature[]> {
     const xml = await this.getText(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}`);
-    const payload = this.xmlParser.parse(xml) as { feed?: { entry?: ArxivEntry | ArxivEntry[] } };
-    const entries = normalizeArray(payload.feed?.entry);
+    if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
+    const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
+    const entries = normalizeArray(payload.feed.entry);
     return entries.map((item) => ({
-      id: `arxiv:${textValue(item.id)}`,
+      id: `arxiv:${item.id}`,
       source: 'arxiv' as const,
-      externalId: textValue(item.id),
-      doi: null,
-      title: normalizeWhitespace(textValue(item.title)) || 'Untitled work',
-      authors: normalizeArray(item.author).map((author) => textValue(author.name)).filter(Boolean),
-      abstract: normalizeWhitespace(textValue(item.summary)) || null,
-      publishedYear: yearFromDate(textValue(item.published)),
+      externalId: item.id,
+      doi: optionalResearchDoi(item.doi),
+      title: normalizeWhitespace(item.title),
+      authors: normalizeArray(item.author).map(author => author.name),
+      abstract: normalizeWhitespace(item.summary),
+      publishedYear: Number(item.published.slice(0, 4)),
       citationCount: null,
-      url: textValue(item.id) || null,
-      openAccessUrl: textValue(item.id) || null,
+      url: item.id,
+      openAccessUrl: item.id,
       importedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -155,19 +161,19 @@ export class LiteratureSearchService {
 
   private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc'): Promise<ResearchLiterature[]> {
     const medQuery = source === 'pubmed' ? `(${query}) AND SRC:MED` : query;
-    const payload = await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}`) as EuropePmcPayload;
-    return (payload.resultList?.result ?? []).map((item) => ({
-      id: `${source}:${item.id ?? item.pmid ?? crypto.randomUUID()}`,
+    const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}`));
+    return payload.resultList.result.map((item) => ({
+      id: `${source}:${item.id}`,
       source,
-      externalId: item.id ?? item.pmid ?? crypto.randomUUID(),
+      externalId: item.id,
       doi: optionalResearchDoi(item.doi),
-      title: item.title ?? 'Untitled work',
+      title: item.title,
       authors: item.authorString === undefined ? [] : item.authorString.split(',').map((author) => author.trim()).filter(Boolean),
       abstract: item.abstractText ?? null,
       publishedYear: item.pubYear === undefined ? null : Number(item.pubYear),
       citationCount: item.citedByCount ?? null,
-      url: item.id === undefined ? null : `https://europepmc.org/article/${item.source ?? 'MED'}/${item.id}`,
-      openAccessUrl: item.isOpenAccess === 'Y' && item.id !== undefined ? `https://europepmc.org/article/${item.source ?? 'MED'}/${item.id}` : null,
+      url: `https://europepmc.org/article/${item.source}/${item.id}`,
+      openAccessUrl: item.isOpenAccess === 'Y' ? `https://europepmc.org/article/${item.source}/${item.id}` : null,
       importedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -247,24 +253,9 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
 }
 
-function yearFromDate(value: string): number | null {
-  const match = value.match(/\b(19|20)\d{2}\b/u);
-  return match === null ? null : Number(match[0]);
-}
-
-function textValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
 function normalizeArray<T>(value: T | T[] | null | undefined): T[] {
   return value === undefined || value === null ? [] : Array.isArray(value) ? value : [value];
 }
-
-type OpenAlexPayload = { results?: Array<{ id: string; doi?: string | null; title?: string | null; authorships?: Array<{ author?: { display_name?: string | null } }>; abstract_inverted_index?: Record<string, number[]> | null; publication_year?: number | null; cited_by_count?: number | null; open_access?: { oa_url?: string | null } }> };
-type CrossrefPayload = { message?: { items?: Array<{ DOI?: string; URL?: string; title?: string[]; author?: Array<{ given?: string; family?: string }>; abstract?: string; published?: { 'date-parts'?: number[][] } }> } };
-type SemanticScholarPayload = { data?: Array<{ paperId: string; title?: string; authors?: Array<{ name: string }>; abstract?: string | null; year?: number | null; citationCount?: number | null; externalIds?: { DOI?: string }; openAccessPdf?: { url?: string | null }; url?: string | null }> };
-type ArxivEntry = { id?: string; title?: string; summary?: string; published?: string; author?: { name?: string } | Array<{ name?: string }> };
-type EuropePmcPayload = { resultList?: { result?: Array<{ id?: string; pmid?: string; doi?: string; title?: string; authorString?: string; abstractText?: string; pubYear?: string; citedByCount?: number; isOpenAccess?: string; source?: string }> } };
 
 /**
  * **引用键不再是身份哈希**。

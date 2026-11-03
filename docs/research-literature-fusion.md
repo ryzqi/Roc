@@ -39,6 +39,20 @@ score(paper) = sum(1 / (60 + source_rank(paper)))
 旧版本搜索快照不转换、不补猜测字段。读取不符合当前合同的快照显式失败。
 正式文献、证据和科研历史没有被删除或重写。
 
+## Provider 响应合同
+
+六个来源都校验结果容器、论文身份与题名。合法的空数组是空结果；缺失容器、
+HTTP 200 错误对象、无身份记录或错误数据类型是来源失败，错误码为
+`literature_provider_response_invalid`。不生成随机论文 ID、虚构题名或空成功。
+来源可以增加元数据字段，已有必需字段不能消失后仍被接受。
+
+OpenAlex 请求使用官方 `per_page` 参数。arXiv 先验证 XML 语法，再校验 Atom
+结构；错误 entry 不能成为论文，公开 DOI 则保留到元数据中。Atom 的响应结构、
+DOI 扩展与错误 entry 依据
+[arXiv API manual](https://info.arxiv.org/help/api/user-manual.html)。
+本地 fixture 验证正确、空、缺容器、缺身份、Atom 错误与未闭合 XML；没有把
+fixture 覆盖等同于真实 Provider 可用性。
+
 ## 验证与后续范围
 
 确定性回归覆盖来源到达顺序、来源内重复、同分排序、DOI 等价写法、同标题不同

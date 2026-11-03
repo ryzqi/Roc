@@ -813,3 +813,37 @@ ordering became fixed. No check was weakened. Official OpenAlex help/Context7 an
 Crossref tips were read on 2026-11-03; Semantic Scholar docs returned 429 and Europe PMC
 returned 403. No live Provider, model, credential or external write was used. Docs make
 those research/quality limits explicit. Logs: `.artifacts/research-optimization/pr04-fusion-*.log`.
+
+## PR-04.2A — strict Provider response contracts
+
+Status: `Verified passing` for all six response adapters and existing native consumers.
+Remaining PR-04 work is unchanged: request/pagination receipts, caching/quota/health,
+arXiv/PMID aliases, candidate metadata UI and independent retrieval evaluation.
+
+Every adapter now validates result containers and required paper identity/title fields
+with the installed Zod 4.6.7. A valid empty container remains empty; missing containers,
+HTTP200 error objects, missing identities and invalid types fail that source explicitly
+with literature_provider_response_invalid. Random IDs, invented Untitled titles, unchecked
+payload casts and obsolete payload type guesses were removed. Optional metadata still
+uses its declared unknown state. Source selection requires actual network sources; the
+unused local empty-success branch was removed. OpenAlex now sends per_page. arXiv
+validates XML grammar and Atom shape, refuses error entries and preserves declared DOI.
+
+Changed: literature-provider-schemas.ts, literature-service.ts, focused regressions and
+research-literature-fusion.md. No dependency, migration or renderer change.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/literature-import.test.mjs` | Initial 15/15 passed before the XML syntax addition |
+| `pnpm typecheck` | Initial passed; final included in the production build |
+| `pnpm test:unit` | Final 648/648 passed including malformed XML |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck and 12/12 native P0 passed |
+| `git diff --check` | Passed |
+
+Official arXiv Atom/error/DOI documentation and matching Zod/fast-xml-parser primary
+Context7 docs were checked. Europe PMC and Semantic Scholar documentation fetch limits
+remain recorded; no live API availability or academic coverage claim is made. All Provider
+responses were local fixtures. Logs: `.artifacts/research-optimization/pr04-provider-contract-*.log`.
