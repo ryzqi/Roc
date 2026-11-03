@@ -12,7 +12,7 @@ export async function loadResearchTestApi() {
     await build({
       entryPoints: ['tests/unit/fixtures/research-test-api.ts'],
       outfile, bundle: true, format: 'esm', platform: 'node', packages: 'external',
-      loader: { '.md': 'text' }, logLevel: 'silent'
+      loader: { '.md': 'text', '.c': 'text' }, logLevel: 'silent'
     });
     const api = await import(outfile);
     return { ...api, dispose: () => rmSync(directory, { recursive: true, force: true }) };

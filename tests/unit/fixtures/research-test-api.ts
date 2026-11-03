@@ -29,3 +29,10 @@ export { ResearchTaskDiagnosticsService } from '../../../src/main/plugins/resear
 export { notifyResearchTaskChanged } from '../../../src/main/plugins/research/task-notifications';
 export { ProjectBudgetLedger } from '../../../src/main/services/deep-agent/project-budget-ledger';
 export { registerResearchProjectBudgetCapabilities } from '../../../src/main/plugins/research/project-budget-capabilities';
+export { ResearchExperimentService } from '../../../src/main/plugins/research/experiment-service';
+export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
+export { ResearchWorkspaceFileService } from '../../../src/main/plugins/research/workspace-files';
+export { ResearchToolchain } from '../../../src/main/plugins/research/toolchain';
+export { ResearchTemplateService } from '../../../src/main/plugins/research/template-service';
+export { ResearchExportSourceService } from '../../../src/main/plugins/research/export-sources';
+export { ResearchExportService } from '../../../src/main/plugins/research/export-service';

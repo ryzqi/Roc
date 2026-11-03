@@ -497,3 +497,51 @@ migration, project ownership/revisions and stale-policy refusal.
 
 Logs: `.artifacts/research-optimization/pr02b-project-*.log`. All model attempts are local
 fixtures or the isolated localhost smoke Provider. No paid requests or tracing exports.
+
+## P0.1 — fixed-data experiment, figure and human gate integration
+
+Status: `Verified passing` for this bounded offline production chain. Full P0 remains
+unfinished: retrieval/PDF/manuscript/review/export and the fault matrix need separate
+checks; live L2 still requires isolated credentials, pricing and spending authorization.
+
+The real TypeScript service launches Electron as Node under the native sandbox and Node
+permissions, computes A=2/B=4 from the frozen CSV, indexes the output and publishes the
+experiment. The figure stage captures that actual located result as evidence, renders
+PNG/SVG/PDF with Skia, polls the correct figure repository, publishes and completes both
+human gates. Chat, stage and owned domain jobs share one task identity. Original call
+rows account for three local fixture attempts and 60 settled Tokens; costs remain unknown.
+
+This regression exposed a production startup failure: the sandbox allowed Electron's
+executable but omitted its bundled Frameworks. The bundled-node environment now declares
+that directory for read access. Execution, networking and writes retain their existing
+policies. The test uses public published figure source reads and actual template/export
+services for cleanup; no approval or source evidence is mocked. The role model response
+and tool choices are deterministic fixtures, so this does not establish model quality.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/unit/research-p0-production-integration.test.mjs` | 1 passed; real process, renderer and approval |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false pnpm test:unit` | 642 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm build` | Production build and typecheck passed |
+| `pnpm check:ipc` | Passed |
+
+Failed draft runs retained in planning progress: missing raw C loader, missing cleanup
+dependency, then the reproduced dyld refusal and the correctly refused evidence-free
+figure approval. Checks were corrected against real contracts; no human gate was relaxed.
+
+Logs: `.artifacts/research-optimization/p0-*.log`. Real output files, SHA-256 records,
+located evidence, sanitized task diagnostics, events, runtime identity and both database
+backups are retained under `.artifacts/research-optimization/p0-production/<taskId>/`.
+No paid Provider request, tracing upload or remote write occurred.
+
+Final isolated Electron smoke:
+`LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs`
+passed 12/12 with zero renderer errors and exit 0.
+
+Follow-up discovery: the pinned toolchain exists at `.runtime/research-toolchain/darwin-arm64`;
+the actual ResearchToolchain.status check verified its manifest and locked versions
+(Tectonic 0.17.0, Vale 3.24.0, Typst 0.15.0). Missing system PATH binaries do not block
+the next local manuscript/export integration.

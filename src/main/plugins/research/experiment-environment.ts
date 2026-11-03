@@ -1,4 +1,4 @@
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment, type ResearchExperimentStartRuntime } from '../../../shared/schemas/research-experiments';
 import { researchContentHash } from './research-files';
 import { runResearchProcess, type ResearchProcessRequest } from './process-runner';
@@ -40,7 +40,9 @@ export class ResearchExperimentEnvironmentService {
       };
       const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
       signal.throwIfAborted();
-      return { snapshot, readablePaths: [tools.runnerPath, ...tools.packageRoots], environment: tools.environment, typescriptRuntime: tools };
+      // Electron's macOS executable loads its bundled dylibs before Node's permission checks.
+      const frameworks = join(dirname(dirname(tools.executable)), 'Frameworks');
+      return { snapshot, readablePaths: [tools.runnerPath, frameworks, ...tools.packageRoots], environment: tools.environment, typescriptRuntime: tools };
     }
     const tools = await this.tools.nativeRuntime(jobDir);
     return inspectNativeExperimentEnvironment({ workspace: root, runtime, jobDir, tools, run: this.run, signal });
