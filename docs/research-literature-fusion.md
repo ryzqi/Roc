@@ -5,7 +5,7 @@
 
 ## 冻结排序合同
 
-当前快照版本为 4，排序方法为 RRF v1：
+当前快照版本为 5，排序方法为 RRF v1：
 
 ```text
 score(paper) = sum(1 / (60 + source_rank(paper)))
@@ -61,6 +61,32 @@ fixture 覆盖等同于真实 Provider 可用性。
 
 ## 验证与后续范围
 
+来源共用主机级准入，复用现有 FIFO 资源协调器。每个主机同时只有一个 HTTP
+尝试，连接保持到结果校验完成；不同主机可以并行。PubMed 与 Europe PMC 使用
+同一 EBI 主机，因此共享连接、配额和冷却。当前五个主机限定应用最多五个活跃
+尝试，每次搜索继续分批调度最多三个来源。
+
+应用策略为每主机固定一小时窗口最多 300 次尝试，最短间隔 1 秒，arXiv 为 3 秒。
+这是本应用的进程内调用上限，不代表远端剩余额度；重启会重建窗口，其他程序和
+机器的调用不在这个计数内。缓存命中和被拒绝的准入不占配额；重试分别占用。
+配额耗尽显式报告 `literature_provider_quota_exhausted`，没有虚构 HTTP 回执。
+
+Retry-After 在主机范围生效，包括其他项目的排队请求。Crossref 的响应 rate
+limit/interval 只收紧应用间隔，不能扩大本地配额。连续三个 HTTP、传输、超时
+或有效载荷失败开启 60 秒断路冷却；到期后允许受同一连接约束的恢复尝试。
+只有新的完整校验成功才能恢复健康，旧缓存不能清除失败。用户取消及应用关闭
+不计来源故障。排队与退避可取消，取消之后不继续调度该搜索。
+
+快照保存主机、unknown/healthy/degraded/cooldown/quota_exhausted、连续失败数、
+本地剩余次数/重置时间、实际最短间隔、冷却截止及最后成功/失败时间。它是该次
+结果观察到的应用状态，不是后台轮询的实时服务状态或学术覆盖评分。
+
+arXiv 的单连接和 3 秒要求依据
+[arXiv API terms](https://info.arxiv.org/help/api/tou.html)。
+Crossref 通用访问页仍有较旧的汇总限额，本实现采用 2026-07-21 发布的 public
+list query 1 次/秒要求并观察响应头：
+[Crossref query rate limits](https://community.crossref.org/t/refining-rest-api-limits-for-improved-stability-and-reliability/16137)。
+
 应用共享进程内 LRU 响应缓存，最多 32 条、8 MiB UTF-8 响应文本，TTL 为 5 分钟。
 缓存键包含可信项目、完整请求 URL（查询和分页参数）与响应格式。只有通过响应
 及文献合同校验的结果才写入缓存，失败响应不缓存。导入入口从执行上下文确定
@@ -76,7 +102,7 @@ fixture 覆盖等同于真实 Provider 可用性。
 解析、证据、实验、论文和导出的消费者链。
 
 这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
-首页回执与有界缓存已保留。后续分页、配额/健康度、取消时的独立持久化请求账本、
+首页回执、有界缓存与进程内配额/健康度已保留。后续分页、取消时的独立持久化请求账本、
 完整文献类型/版本/许可/撤稿展示仍待后续增量。
 
 官方合同核对日期：2026-11-03。OpenAlex 当前支持无 key 的基本查询；cursor

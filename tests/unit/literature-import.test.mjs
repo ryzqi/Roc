@@ -23,6 +23,7 @@ before(async () => {
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
     export { fuseLiterature, literatureRanking } from './src/main/plugins/research/literature-fusion';
     export { LiteratureResponseCache } from './src/main/plugins/research/literature-response-cache';
+    export { LiteratureProviderGovernor, createLiteratureProviderGovernor } from './src/main/plugins/research/literature-provider-governor';
     export { ResearchStageRuntime } from './src/main/plugins/research/stage-runtime';
     export { shutdownResearchPlugin } from './src/main/plugins/research/research-plugin-lifecycle';
     export { withLiteratureContext } from './src/main/services/literature-context';
@@ -111,7 +112,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 4);
+    assert.equal(result.schemaVersion, 5);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -139,7 +140,8 @@ function setup(options = {}) {
   const changes = [];
   const prepare = options.prepare ?? (async (metadata) => ({ metadata, bibliography: api.bibliographyFromRecord(metadata, new Set()) }));
   const search = options.search ?? { searchDetailed: async () => ({ records: options.records ?? [record()], sources: [
-    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [], cache: {state: 'miss'} }
+    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [], cache: {state: 'miss'},
+      governance: api.createLiteratureProviderGovernor().observe('api.crossref.org') }
   ], status: 'complete', truncated: false, warnings: [] }) };
   const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
     prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
@@ -370,7 +372,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 4);
+    assert.equal(result.schemaVersion, 5);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -544,12 +546,191 @@ test('plugin shutdown interrupts the actual parent stage before closing search a
   } finally { await runtime.shutdown(); await search.shutdown(); f.close(); }
 });
 
+test('concurrent searches share one host connection and cancellation removes queued HTTP work', async () => {
+  let startedResolve, finishResolve, calls = 0;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const finish = new Promise(resolve => { finishResolve = resolve; });
+  const search = new api.LiteratureSearchService(async url => {
+    calls++;
+    if (url.includes('openalex')) return Response.json({results: []});
+    startedResolve();
+    if (calls === 1) await finish;
+    return Response.json({message: {items: []}});
+  });
+  const request = {query: 'host admission', sources: ['crossref'], limit: 5};
+  const first = search.searchDetailed(request);
+  await started;
+  const controller = new AbortController();
+  const second = search.searchDetailed({...request, query: 'queued host'}, controller.signal);
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 1, 'another search cannot bypass the shared host admission');
+    const rejection = assert.rejects(second, /queued_cancelled/u);
+    controller.abort(new Error('queued_cancelled'));
+    await rejection;
+    const independent = await search.searchDetailed({...request, sources: ['openalex']});
+    assert.equal(independent.status, 'complete', 'a blocked host cannot hold an unrelated host');
+    finishResolve();
+    assert.equal((await first).status, 'complete');
+    assert.equal(calls, 2);
+  } finally { finishResolve(); await Promise.allSettled([first, second]); await search.shutdown(); }
+});
+
+function governanceFixture(overrides = {}) {
+  let now = Date.parse(timestamp);
+  const waits = [];
+  const hosts = ['api.openalex.org', 'api.crossref.org', 'api.semanticscholar.org', 'export.arxiv.org', 'www.ebi.ac.uk'];
+  const policy = {minIntervalMs: 1000, maxRequests: 300, windowMs: 3600_000, failureThreshold: 3, cooldownMs: 60_000, ...overrides};
+  const governor = new api.LiteratureProviderGovernor(Object.fromEntries(hosts.map(host => [host, policy])), () => now,
+    async (ms, signal) => { signal.throwIfAborted(); waits.push(ms); now += ms; });
+  return {governor, waits, advance: ms => { now += ms; }, now: () => now};
+}
+
+test('host quota counts actual retries, permits cached reads and refuses dispatch until its window resets', async () => {
+  const g = governanceFixture({maxRequests: 2});
+  let calls = 0;
+  const search = new api.LiteratureSearchService(async () => {
+    calls++;
+    return Response.json({results: [{id: 'W1', title: 'Quota paper'}]});
+  }, g.governor);
+  const request = {query: 'quota', sources: ['openalex'], limit: 5};
+  try {
+    const first = await search.searchDetailed(request);
+    assert.equal(first.sources[0].governance.remainingRequests, 1);
+    const cached = await search.searchDetailed(request);
+    assert.equal(cached.sources[0].requests.length, 0);
+    assert.equal(cached.sources[0].governance.remainingRequests, 1);
+    await search.searchDetailed({...request, query: 'second dispatch'});
+    const denied = await search.searchDetailed({...request, query: 'third dispatch'});
+    assert.equal(denied.status, 'failed');
+    assert.equal(denied.sources[0].errorCode, 'literature_provider_quota_exhausted');
+    assert.equal(denied.sources[0].governance.state, 'quota_exhausted');
+    assert.deepEqual(denied.sources[0].requests, []);
+    assert.equal(calls, 2);
+    g.advance(3600_000);
+    const resumed = await search.searchDetailed({...request, query: 'new quota window'});
+    assert.equal(resumed.status, 'complete');
+    assert.equal(resumed.sources[0].governance.remainingRequests, 1);
+    assert.equal(calls, 3);
+  } finally { await search.shutdown(); }
+});
+
+test('Retry-After and response rate headers constrain later searches across projects without extending allowance', async () => {
+  const g = governanceFixture();
+  let calls = 0;
+  const starts = [];
+  const search = new api.LiteratureSearchService(async () => {
+    starts.push(g.now());
+    calls++;
+    return calls === 1 ? new Response('rate limited', {status: 429, headers: {'retry-after': '0'}}) :
+      Response.json({message: {items: []}}, {headers: {'x-rate-limit-limit': '1', 'x-rate-limit-interval': '2s'}});
+  }, g.governor);
+  try {
+    const first = await search.searchDetailed({query: 'retry', sources: ['crossref'], limit: 5, projectId: 'project_a'});
+    assert.deepEqual(first.sources[0].requests.map(receipt => receipt.status), [429, 200]);
+    assert.equal(first.sources[0].governance.remainingRequests, 298);
+    assert.equal(first.sources[0].governance.minIntervalMs, 2000);
+    await search.searchDetailed({query: 'different project', sources: ['crossref'], limit: 5, projectId: 'project_b'});
+    assert.equal(starts[1] - starts[0], 1000);
+    assert.equal(starts[2] - starts[1], 2000);
+    g.governor.responseLimits('api.crossref.org', new Headers({'x-rate-limit-limit': '100', 'x-rate-limit-interval': '1s'}));
+    assert.equal(g.governor.observe('api.crossref.org').minIntervalMs, 2000);
+    g.governor.failure('api.crossref.org', 5000);
+    const release = await g.governor.acquire('api.crossref.org', new AbortController().signal);
+    release();
+    assert.equal(g.now() - starts[2], 5000);
+  } finally { await search.shutdown(); }
+});
+
+test('invalid HTTP200 payloads open host cooldown and a validated recovery probe restores health', async () => {
+  const g = governanceFixture();
+  let valid = false, calls = 0;
+  const search = new api.LiteratureSearchService(async () => {
+    calls++;
+    return valid ? Response.json({data: []}) : Response.json({error: 'schema changed'});
+  }, g.governor);
+  const request = {query: 'payload health', sources: ['semantic_scholar'], limit: 5};
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await search.searchDetailed(request);
+      assert.equal(result.sources[0].requests[0].status, 200);
+      assert.equal(result.sources[0].governance.consecutiveFailures, attempt + 1);
+    }
+    const blocked = await search.searchDetailed(request);
+    assert.equal(blocked.sources[0].errorCode, 'literature_provider_cooldown');
+    assert.equal(blocked.sources[0].governance.state, 'cooldown');
+    assert.deepEqual(blocked.sources[0].requests, []);
+    assert.equal(calls, 3);
+    g.advance(60_000);
+    valid = true;
+    const recovered = await search.searchDetailed(request);
+    assert.equal(recovered.status, 'complete');
+    assert.equal(recovered.sources[0].governance.state, 'healthy');
+    assert.equal(recovered.sources[0].governance.consecutiveFailures, 0);
+    assert.equal(calls, 4);
+  } finally { await search.shutdown(); }
+});
+
+test('PubMed and Europe PMC share host quota while unrelated Providers remain available', async () => {
+  const g = governanceFixture({maxRequests: 1});
+  const hosts = [];
+  const search = new api.LiteratureSearchService(async url => {
+    hosts.push(new URL(url).hostname);
+    return url.includes('europepmc') ? Response.json({resultList: {result: []}}) : Response.json({results: []});
+  }, g.governor);
+  try {
+    await search.searchDetailed({query: 'shared endpoint', sources: ['pubmed'], limit: 5});
+    const denied = await search.searchDetailed({query: 'shared endpoint', sources: ['europe_pmc', 'openalex'], limit: 5});
+    assert.equal(denied.status, 'partial');
+    assert.equal(denied.sources.find(source => source.source === 'europe_pmc').errorCode, 'literature_provider_quota_exhausted');
+    assert.deepEqual(hosts, ['www.ebi.ac.uk', 'api.openalex.org']);
+    const defaults = api.createLiteratureProviderGovernor();
+    assert.equal(defaults.observe('export.arxiv.org').minIntervalMs, 3000);
+    assert.equal(defaults.observe('api.crossref.org').minIntervalMs, 1000);
+  } finally { await search.shutdown(); }
+});
+
+test('cached responses cannot clear failures and caller cancellation cannot poison host health', async () => {
+  const g = governanceFixture();
+  let bad = false, calls = 0, startedResolve;
+  const started = new Promise(resolve => { startedResolve = resolve; });
+  const search = new api.LiteratureSearchService(async (url, init) => {
+    calls++;
+    if (url.includes('semantic')) {
+      startedResolve();
+      return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true}));
+    }
+    return bad ? Response.json({error: 'bad payload'}) : Response.json({message: {items: []}});
+  }, g.governor);
+  const warm = {query: 'warm health', sources: ['crossref'], limit: 5};
+  try {
+    await search.searchDetailed(warm);
+    bad = true;
+    for (let i = 0; i < 3; i++) await search.searchDetailed({...warm, query: `bad health ${i}`});
+    const hit = await search.searchDetailed(warm);
+    assert.equal(hit.status, 'complete');
+    assert.equal(hit.sources[0].cache.state, 'hit');
+    assert.equal(hit.sources[0].governance.state, 'cooldown');
+    assert.equal(hit.sources[0].governance.consecutiveFailures, 3);
+    assert.equal(calls, 4);
+    const controller = new AbortController();
+    const pending = search.searchDetailed({...warm, sources: ['semantic_scholar']}, controller.signal);
+    const rejection = assert.rejects(pending, /intentional_cancel/u);
+    await started;
+    controller.abort(new Error('intentional_cancel'));
+    await rejection;
+    assert.equal(g.governor.observe('api.semanticscholar.org').consecutiveFailures, 0);
+    assert.equal(g.governor.observe('api.semanticscholar.org').state, 'unknown');
+    assert.equal(g.governor.observe('api.semanticscholar.org').remainingRequests, 299);
+  } finally { await search.shutdown(); }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 4, ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 5, ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);

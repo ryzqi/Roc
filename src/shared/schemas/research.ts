@@ -228,14 +228,6 @@ export const researchLiteratureSchema = z
   })
   .strict();
 
-export const researchLiteratureSearchRequestSchema = z
-  .object({
-    query: z.string().trim().min(1),
-    sources: z.array(researchLiteratureSourceSchema.exclude(['doi'])).min(1),
-    limit: z.number().int().positive().max(50)
-  })
-  .strict();
-
 export const researchEmbeddingConfigSchema = z
   .object({
     id: z.string(),

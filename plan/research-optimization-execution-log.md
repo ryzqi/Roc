@@ -921,3 +921,52 @@ Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
 | `git diff --check` | Passed |
 
 Retained logs: `.artifacts/research-optimization/pr04-cache-*.log`.
+
+## PR-04.2C2 — shared host quota, concurrency and health
+
+Status: `Verified passing` for application admission and local Provider fault fixtures.
+Paging, durable cancelled-inflight receipts, strong aliases, candidate UI and independent
+retrieval quality metrics remain pending.
+
+Snapshot v5 records source host health, consecutive failures, local remaining requests
+and quota reset, enforced interval, cooldown and observed success/failure timestamps.
+Existing FIFO network resource claims serialize each host through payload validation;
+unrelated hosts continue concurrently. PubMed/Europe PMC share the EBI gate and quota.
+Application policy permits 300 attempts per host per fixed hour, one active connection,
+one-second spacing and three-second arXiv spacing. Retry attempts consume quota. Cached
+responses and denied admission do not. This process-local policy is not a remote quota
+claim and resets on restart.
+
+Retry-After applies to other projects and queued searches. Response rate headers can
+tighten spacing, never increase local allowance. Three consecutive actual HTTP, transport,
+timeout or payload failures open a 60-second breaker. Validated new responses restore
+health; cached reads do not. User cancellation/shutdown do not count as source failures.
+Queued cancellation prevents HTTP dispatch. Admission failures retain explicit errors
+and no invented HTTP receipts.
+
+Removed the unused unscoped search wrapper and its obsolete shared request type/schema;
+the only production consumer uses the bounded, trusted-context import request. No alias,
+dependency, migration, renderer flow or credential was added.
+
+Changed: literature-provider-governor.ts, literature-service.ts, literature-import-service.ts,
+literature-import/research schemas, research types, focused regressions and fusion docs.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='concurrent searches share one host' tests/unit/literature-import.test.mjs` | Red: two simultaneous same-host dispatches |
+| `node --test tests/unit/literature-import.test.mjs` | Final 27/27 passed |
+| `pnpm typecheck` | Passed |
+| `pnpm test:unit` | 660/660 passed before final unused API deletion |
+| `pnpm harness:eval` | 94/94 passed before that deletion |
+| `pnpm check:ipc` | Current after deletion |
+| `pnpm test:research-p0` | Final fresh build/typecheck and all 12 native cases passed after deletion |
+| `git diff --check` | Passed |
+
+Initial focused19/26 failures were outdated test fixtures lacking required governance and
+one v4 assertion; fixtures now record explicit unknown health. No guard or check weakened.
+Newest official Crossref July21,2026 list-query guidance and arXiv API ToU were verified
+on2026-11-03. Docs link both and distinguish stale generic Crossref limits. No live search,
+paid model, account email or external write. Logs:
+`.artifacts/research-optimization/pr04-governance-*.log`.

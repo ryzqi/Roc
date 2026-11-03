@@ -136,7 +136,6 @@ import type {
   researchFigureRecordRequestSchema,
   researchFigureSchema,
   researchLiteratureSchema,
-  researchLiteratureSearchRequestSchema,
   researchProvenanceSchema,
   researchStageStateSchema,
   researchWorkflowSnapshotSchema,
@@ -170,7 +169,6 @@ export type ResearchWorkflowEvent = z.infer<typeof researchWorkflowEventSchema>;
 export type ResearchWorkflowEventsRequest = z.infer<typeof researchWorkflowEventsRequestSchema>;
 export type ResearchProvenance = z.infer<typeof researchProvenanceSchema>;
 export type ResearchLiterature = z.infer<typeof researchLiteratureSchema>;
-export type ResearchLiteratureSearchRequest = z.infer<typeof researchLiteratureSearchRequestSchema>;
 export type ResearchEmbeddingConfig = z.infer<typeof researchEmbeddingConfigSchema>;
 export type ResearchEmbeddingConfigSaveRequest = z.infer<typeof researchEmbeddingConfigSaveRequestSchema>;
 export type ResearchKnowledgeDocument = z.infer<typeof researchKnowledgeDocumentSchema>;

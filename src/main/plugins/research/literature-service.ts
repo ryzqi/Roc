@@ -6,18 +6,19 @@ import { z } from 'zod';
 import { researchLiteratureSchema } from '../../../shared/schemas/research';
 import { literatureNetworkSourceSchema, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
-import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
+import type { ResearchLiterature } from '../../../shared/types';
 import { normalizeResearchDoi } from './literature-identity';
 import { fuseLiterature, literatureSourcePriority } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
+import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, literatureProviderHosts, type LiteratureProviderGovernor } from './literature-provider-governor';
 import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']; projectId: string | null;
   cacheHit: CachedLiteratureResponse | null; pendingCache: {key: string; response: CachedLiteratureResponse} | null;
-  fetchedAt: string | null};
+  fetchedAt: string | null; host: string; release: (() => void) | null};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
@@ -25,16 +26,11 @@ export class LiteratureSearchService {
   private readonly lifetime = new AbortController();
   private readonly active = new Set<Promise<Awaited<ReturnType<LiteratureSearchService['executeSearch']>>>>();
 
-  constructor(private readonly fetchImpl: FetchLike = fetch) {}
+  constructor(private readonly fetchImpl: FetchLike = fetch, private readonly governor: LiteratureProviderGovernor = createLiteratureProviderGovernor()) {}
 
   private readonly requests = new AsyncLocalStorage<ProviderContext>();
 
-  async search(request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
-    const result = await this.searchDetailed(request);
-    return fuseLiterature(result.records).slice(0, request.limit).map(candidate => candidate.record);
-  }
-
-  async searchDetailed(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
+  async searchDetailed(request: LiteratureSearchInput, signal?: AbortSignal): Promise<{
     records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
   }> {
     this.lifetime.signal.throwIfAborted();
@@ -50,11 +46,11 @@ export class LiteratureSearchService {
     this.cache.clear();
   }
 
-  private async executeSearch(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
+  private async executeSearch(request: LiteratureSearchInput, signal?: AbortSignal): Promise<{
     records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
   }> {
     const deadline = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
-    const projectId = 'projectId' in request ? request.projectId ?? null : null;
+    const projectId = request.projectId ?? null;
     const sources: LiteratureSearchResult['sources'] = [];
     const records: ResearchLiterature[] = [];
     const requestedSources = z.array(literatureNetworkSourceSchema).min(1).parse(request.sources);
@@ -63,30 +59,35 @@ export class LiteratureSearchService {
       await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
         const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
         const receipts: ProviderContext['receipts'] = [];
+        const host = literatureProviderHosts[source];
         const providerContext: ProviderContext = {signal: providerSignal, receipts, projectId,
-          cacheHit: null, pendingCache: null, fetchedAt: null};
+          cacheHit: null, pendingCache: null, fetchedAt: null, host, release: null};
         const cacheObservation = (): LiteratureSearchResult['sources'][number]['cache'] => providerContext.cacheHit === null ?
           {state: 'miss'} : {state: 'hit', fetchedAt: providerContext.cacheHit.fetchedAt, responseHash: providerContext.cacheHit.responseHash};
         try {
           const found = await this.requests.run(providerContext, () => this.searchSource(source, request.query, request.limit));
           const valid = found.map((record) => researchLiteratureSchema.parse(record));
           providerSignal.throwIfAborted();
+          if (providerContext.cacheHit === null) this.governor.success(host);
           if (providerContext.pendingCache !== null) this.cache.put(providerContext.pendingCache.key, providerContext.pendingCache.response);
           records.push(...valid);
           sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length,
-            errorCode: null, retryAfterMs: null, requests: receipts, cache: cacheObservation() });
+            errorCode: null, retryAfterMs: null, requests: receipts, cache: cacheObservation(), governance: this.governor.observe(host) });
         } catch (error) {
           this.lifetime.signal.throwIfAborted();
           signal?.throwIfAborted();
           const rateLimited = error instanceof ProviderError && error.status === 429;
           const invalidPayload = error instanceof z.ZodError ||
             error instanceof Error && error.message === 'literature_provider_response_invalid';
+          if (invalidPayload) this.governor.failure(host, null);
           sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
             errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
-              invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
-            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null, requests: receipts, cache: cacheObservation() });
+              error instanceof LiteratureProviderAdmissionError ? error.code :
+                invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
+            retryAfterMs: error instanceof ProviderError || error instanceof LiteratureProviderAdmissionError ? error.retryAfterMs : null,
+            requests: receipts, cache: cacheObservation(), governance: this.governor.observe(host) });
           return undefined;
-        }
+        } finally { providerContext.release?.(); }
         return undefined;
       }));
     }
@@ -245,14 +246,17 @@ export class LiteratureSearchService {
     for (let attempt = 0; ; attempt += 1) {
       context.signal.throwIfAborted();
       try {
+        context.release = await this.governor.acquire(context.host, context.signal);
         const response = await this.readAttempt(url, accept, context);
         context.pendingCache = {key, response};
         context.fetchedAt = response.fetchedAt;
         return response.body;
       }
       catch (error) {
+        context.release?.();
+        context.release = null;
         if (!(error instanceof ProviderError) || (error.status !== 429 && error.status < 500) || attempt >= 2) throw error;
-        await delay(error.retryAfterMs ?? 250 * 2 ** attempt, undefined, {signal: context.signal});
+        if (error.retryAfterMs === null) await delay(250 * 2 ** attempt, undefined, {signal: context.signal});
       }
     }
   }
@@ -271,6 +275,7 @@ export class LiteratureSearchService {
     try {
       const response = await this.fetchImpl(url, {method: 'GET', headers: { accept }, signal, redirect: 'error'});
       receipt.status = response.status;
+      this.governor.responseLimits(context.host, response.headers);
       if (!response.ok) {
         const header = response.headers.get('retry-after');
         const seconds = header === null ? NaN : Number(header);
@@ -297,6 +302,9 @@ export class LiteratureSearchService {
       receipt.responseHash = createHash('sha256').update(bytes).digest('hex');
       return {body: bytes.toString('utf8'), fetchedAt: new Date().toISOString(), responseHash: receipt.responseHash};
     } catch (error) {
+      if (!signal.aborted || signal.reason instanceof Error && signal.reason.name === 'TimeoutError') {
+        this.governor.failure(context.host, error instanceof ProviderError ? error.retryAfterMs : null);
+      }
       receipt.errorCode = signal.aborted ? 'literature_provider_timeout' :
         error instanceof ProviderError ? `literature_provider_http_${error.status}` : 'literature_provider_transport_error';
       throw error;
