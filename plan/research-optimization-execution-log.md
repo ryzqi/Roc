@@ -2418,3 +2418,34 @@ only its own resolved temporary experiment manifest, asserts ENOENT and no regen
 restores exact bytes. Approved original role reads continue passing. No frozen fixture changes,
 live clients/queries/model spending or remote writes. Lazy production type UI and reading position
 remain next; X-UI/full plan unfinished.
+
+
+## X-UIA4B2 — lazy production source and verified file views
+
+Status: `Verified passing` for this UI increment. Explicit production opening loads actual
+experiment/figure/export source modules on demand. Metadata reflects saved execution,
+publication, validation and export identities. Files remain explicit readonly selections,
+scoped by artifact version and file hash; escaped text and verified raster data have no Blob
+URL. Old file/version/project responses cannot replace current content. Errors have explicit
+retry; >4MiB reads are disabled. PDF positioning is visibly pending PR-07, ZIP is metadata-only.
+No backend or role permission changes. Reading-location recovery remains next.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm build` |Final fresh build/type passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-production.test.mjs` |Initial6/6 passed |
+| `node --test --test-concurrency=1 tests/renderer/` |Final94/94 including production7 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132803bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs xui-production-ui-*.log. Electron actual saved figure preview verifies PNG216x144,
+returned bytes SHA/size, original CSV, no DB changes and still-draft status. Typed synthetic
+experiment/export cases isolate renderer presentation and explicit requests; A4B1 native13
+establishes all three actual source/read contracts. Retry/failure/no-read limit regressions
+passed. Final light800 and dark1099 source/PNG screenshots inspected; keyboard focus visible,
+fixed title/close, wrap and nested scroll readable. Audit cut0, only full-height physical
+panel top/right/bottom shadows hidden. Frozen workflow fixtures and unrelated docs untouched.
+Full plan unfinished; reading-location recovery then evidence relationships next.

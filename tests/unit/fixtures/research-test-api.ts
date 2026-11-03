@@ -53,3 +53,4 @@ export {createPluginCapabilityAdapter} from '../../../src/main/ipc/plugin-capabi
 export {researchWorkflowTransitionRequestSchema} from '../../../src/shared/schemas/research';
 export {ResearchProductionInputService} from '../../../src/main/plugins/research/production-input-service';
 export {registerResearchProductionInputCapabilities} from '../../../src/main/plugins/research/production-input-capabilities';
+export {researchProductionInputSchema, researchProductionInputContentSchema} from '../../../src/shared/schemas/research-production-inputs';

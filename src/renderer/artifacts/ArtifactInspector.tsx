@@ -7,6 +7,7 @@ import {ModalShell} from '../shell/ModalShell';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 
 const StageContent = lazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
+const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function ArtifactInspector({client, request, onClose, onOpenTask, onReviewContext}: {
@@ -19,6 +20,7 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
   const result = read.status === 'ready' ? read.data : null;
   const snapshot = result?.snapshot;
   const [reviewNonce, setReviewNonce] = useState(0);
+  const [productionOpen,setProductionOpen] = useState(false);
   const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
     () => {
       if (snapshot === undefined) throw new Error('research_artifact_snapshot_required');
@@ -47,6 +49,10 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
         {snapshot?.availableActions.includes('review_gate') ? <button type="button" className={button}
           disabled={review.status === 'loading'} data-testid="artifact-inspector-review"
           onClick={() => setReviewNonce(value => value + 1)}>读取本阶段全部审核工件</button> : null}
+        {snapshot?.production===null||snapshot===undefined||snapshot.projectStatus==='archived'||snapshot.artifact.status==='superseded' ? null :
+          snapshot.artifact.status==='approved'||snapshot.availableActions.includes('review_gate') ? <button type="button"
+            className={button} data-testid="artifact-inspector-production" aria-expanded={productionOpen}
+            onClick={()=>setProductionOpen(value=>!value)}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
       </div>
       {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
@@ -82,6 +88,10 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
         <Suspense fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </Suspense>
+        {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
+          <ProductionView key={snapshot.version} client={client} request={{projectId:request.projectId,
+            artifactId:request.artifactId,expectedVersion:snapshot.version}}/>
+        </Suspense>}
         <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="工件证据来源">
           <h2 className="font-medium text-ink">证据来源</h2>
           {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :

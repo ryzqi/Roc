@@ -162,3 +162,26 @@ SHA/size 必须匹配捕获值和当前 metadata。单文件预览上限 4 MiB�
 `production-review-previews.json` 保留真实未批准三类生产文件的 bytes/SHA/size 和
 无 DB 写入证据。只有 task-created 临时 manifest 被删除/按原字节恢复以验证
 缺失拒绝；冻结科研 fixtures 没有改动。生产类型 UI 与阅读位置仍待下一增量。
+
+
+## 按需生产类型视图
+
+检查器通过显式“查看生产文件”加载生产视图，再按实际来源加载实验、图稿或
+导出模块。实验显示真实运行标识、环境、退出码、时间、输入hash和参数；图稿
+显示实际发布/运行标识、源文件、物理/像素尺寸、种子及发布/渲染hash；导出显示
+保存的正文、来源、工具链、交付包hash及题录/图稿/审稿报告数量。nullable来源值
+明确显示未记录，不编造执行环境或已完成状态。
+
+输入、输出、日志和交付文件按区域选择；文件按钮明确触发带工件版本与文件hash
+的只读IPC。文本由React转义，PNG/JPEG/WebP展示已验证base64内容。版本或选定
+文件改变立即清除旧内容，迟到响应不进入新范围。核对/读取错误保持失败状态并
+提供显式重试。超过4MiB的文件禁用读取；ZIP只显示校验metadata；PDF入口明确
+未接入，后续PR-07复用现有files.preview协议，不使用Blob URL。
+
+最终fresh build/type、完整串行renderer94、启动12/zero errors、IPC与chunks
+1132803bytes/6files通过。新增Electron7含真实已发布未批准图稿PNG尺寸/bytes/hash、
+原始CSV、旧版本拒绝、迟到文件/项目响应、失败重试和预览上限。实验/导出的
+renderer输入是明确标注的typed synthetic展示fixture；三类实际执行、来源和bytes
+依赖A4B1 native13证据，不将合成UI称为真实完整执行。截图与审计保留在
+.artifacts/research-optimization/artifact-production-ui/，明暗1100/1099/800均cut0；
+仅共享全高面板物理上/右/下边的阴影完全隐藏。关闭后的阅读位置恢复仍待完成。
