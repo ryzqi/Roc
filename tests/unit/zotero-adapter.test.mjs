@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, rmSync, symlinkSync} from 'node:fs';
+import {mkdtempSync, rmSync, symlinkSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import * as esbuild from 'esbuild';
@@ -23,6 +23,7 @@ before(async () => {
   const outfile = join(directory, 'api.mjs');
   await esbuild.build({stdin: {contents: `
     export {ZoteroAdapter} from './src/main/plugins/research/zotero-adapter';
+    export {detectZoteroInstallation} from './src/main/plugins/research/zotero-installation';
     export {zoteroCapabilities, registerZoteroCapabilities} from './src/main/plugins/research/zotero-capabilities';
     export {ipcRegistry} from './src/shared/ipc-registry';
   `,
@@ -189,8 +190,11 @@ test('registered read-only capability and generated IPC contracts expose actual 
     handlers.set(descriptor.name, handler);
   }}}, adapter(), imports);
   assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.getPreview',
-    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.sources']);
+    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.sources', 'research.zotero.status']);
   assert.equal((await handlers.get('research.zotero.probe')({})).status, 'connected');
+  const status = await handlers.get('research.zotero.status')({});
+  assert.equal(status.connection.status, 'connected');
+  assert.equal(['found', 'not_found'].includes(status.installation.status), true);
   assert.deepEqual((await handlers.get('research.zotero.items')(input())).records, [item]);
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
@@ -200,4 +204,18 @@ test('registered read-only capability and generated IPC contracts expose actual 
   for (const descriptor of api.zoteroCapabilities) {
     assert.equal(api.ipcRegistry.requests.some(entry => entry.capabilityName === descriptor.name), true);
   }
+});
+
+test('installation detection checks application executables without inferring state from transport', async () => {
+  const system = {location: 'system', path: join(directory, 'system/Zotero.app')};
+  const user = {location: 'user', path: join(directory, 'user/Zotero.app')};
+  assert.deepEqual(await api.detectZoteroInstallation([system, user]), {status: 'not_found'});
+  mkdirSync(join(system.path, 'Contents/MacOS/zotero'), {recursive: true});
+  assert.deepEqual(await api.detectZoteroInstallation([system]), {status: 'not_found'});
+  mkdirSync(join(user.path, 'Contents/MacOS'), {recursive: true});
+  writeFileSync(join(user.path, 'Contents/MacOS/zotero'), 'synthetic executable fixture');
+  assert.deepEqual(await api.detectZoteroInstallation([system, user]), {status: 'found', location: 'user'});
+  const loop = join(directory, 'loop');
+  symlinkSync(loop, loop);
+  await assert.rejects(api.detectZoteroInstallation([{location: 'system', path: loop}]), /zotero_installation_unreadable/u);
 });

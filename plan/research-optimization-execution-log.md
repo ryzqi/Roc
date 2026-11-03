@@ -1645,3 +1645,38 @@ query, paid model call, remote write, real-user DB migration or frozen workflow 
 Settings/library/collection/conflict UI, checkpoints/deletions, attachment grants and actual
 Zotero client acceptance remain pending. L2/full reviewed corpus/independent scientific labels
 remain externally blocked.
+
+
+## PR-05C1 — Zotero status in existing literature settings
+
+Status: `Verified passing` for this settings increment. Research DB14 and preview schema2
+unchanged. Full PR-05 remains incomplete. Click-only standard application-executable detection
+and independent API probe expose found/not_found separately from connected/disabled/
+unreachable/unsupported/invalid_response. Standard directory scope is explicit; no assertion
+of absence elsewhere. Filesystem read errors are failures. No automatic client launch,
+settings change or library read. New capability/preload: research.zotero.status/getZoteroStatus.
+
+Actual Electron regression reproduced stale connected state during refresh. Unique probe
+resource keys now remove prior data immediately; unmount discards late results. Uses existing
+settings literature section with12/13px tokens, keyboard focus and0.5px separator.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-adapter.test.mjs` | 11/11 passed including installation/error path and capability/IPC |
+| `pnpm test:unit` | 762/762 passed |
+| `pnpm build` | Final production typecheck/build passed |
+| `node --test tests/renderer/zotero-settings.test.mjs tests/renderer/radix-settings-dialog.test.mjs` | 4/4 passed |
+| `node --test tests/renderer/zotero-settings.test.mjs` | Final3/3 after border-only correction passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current IPC/eager1131095bytes/6files passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12, zero renderer errors, exit0 before final border-only correction |
+| `git diff --check` | Passed |
+
+Evidence `.artifacts/research-optimization/pr05-settings-*.log` and zotero-settings-ui/:
+default/hover/light/dark/reduced-motion1100/1099/800 screenshots, all final cut0/hidden0;
+connected default and final dark1099 inspected. Initial full-border utility corrected to
+border-t-[0.5px], final production build and actual component checks rerun. No new literature
+query, model call, external write or fixture corpus edit. Actual Zotero interoperability,
+selection/conflict UI, sync checkpoints/deletions and attachment authorization remain pending.

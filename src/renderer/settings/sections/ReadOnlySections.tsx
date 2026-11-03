@@ -9,6 +9,7 @@ import {
 import { getRtkStatus, getToolchainStatus } from '../settings-store';
 import { KeyValueRow, FormNote, FormSection, SelectField, TextField, formSecondaryButtonClass } from '../../shared/form-ui';
 import { formatBytes } from '../../shared/format';
+import {ZoteroSection} from './ZoteroSection';
 
 /**
  * 文献与解析 · 编译与沙箱 — the two sections with **no writer** (T8.3).
@@ -94,6 +95,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
       title="文献与解析"
       testId="settings-section-literature-body"
     >
+      <ZoteroSection client={store.client} />
       {models.error === null ? null : (
         <FormNote tone="warn" testId="settings-models-status-error">
           {models.error}

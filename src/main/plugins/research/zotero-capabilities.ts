@@ -2,17 +2,20 @@ import type {z} from 'zod';
 import {
   zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
   zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
-  zoteroPreviewReadSchema, zoteroPreviewPageSchema, zoteroSourcesRequestSchema, zoteroSourcesPageSchema
+  zoteroPreviewReadSchema, zoteroPreviewPageSchema, zoteroSourcesRequestSchema, zoteroSourcesPageSchema,
+  zoteroStatusSchema
 } from '../../../shared/schemas/research-zotero';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import {RocDomainError} from '../../services/errors';
 import type {ZoteroAdapter} from './zotero-adapter';
 import type {LiteratureImportService} from './literature-import-service';
+import {detectZoteroInstallation} from './zotero-installation';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
   probe: descriptor('research.zotero.probe', zoteroProbeRequestSchema, zoteroProbeSchema),
+  status: descriptor('research.zotero.status', zoteroProbeRequestSchema, zoteroStatusSchema),
   groups: descriptor('research.zotero.groups', zoteroGroupsRequestSchema, zoteroGroupsPageSchema),
   collections: descriptor('research.zotero.collections', zoteroPageRequestSchema, zoteroCollectionsPageSchema),
   items: descriptor('research.zotero.items', zoteroItemsRequestSchema, zoteroItemsPageSchema),
@@ -54,6 +57,10 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
     });
   }
   register(capabilities.probe, () => adapter.probe());
+  register(capabilities.status, async () => {
+    const [installation, connection] = await Promise.all([detectZoteroInstallation(), adapter.probe()]);
+    return {installation, connection};
+  });
   register(capabilities.groups, input => adapter.groups(input));
   register(capabilities.collections, input => adapter.collections(input));
   register(capabilities.items, input => adapter.items(input));

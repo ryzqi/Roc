@@ -7,7 +7,8 @@ import {literatureReadPoolSchema, literatureSearchPoolPageSchema} from './schema
 import {
   zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
   zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
-  zoteroPreviewReadSchema, zoteroPreviewPageSchema, zoteroSourcesRequestSchema, zoteroSourcesPageSchema
+  zoteroPreviewReadSchema, zoteroPreviewPageSchema, zoteroSourcesRequestSchema, zoteroSourcesPageSchema,
+  zoteroStatusSchema
 } from './schemas/research-zotero';
 
 import { menuPages } from './surfaces';
@@ -469,6 +470,7 @@ export const ipcRegistry = {
     request({ key: 'researchLiteratureGetImport', channel: 'roc:research:literature-get-import', domain: 'research', method: 'getLiteratureImport', kind: 'plugin', capabilityName: 'research.library.getImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureGetImportSchema), literatureImportResultSchema) }),
     request({ key: 'researchLiteraturePool', channel: 'roc:research:literature-pool', domain: 'research', method: 'getLiteraturePool', kind: 'plugin', capabilityName: 'research.literature.getPool', inputTransform: first, contract: methodContract(oneArg(literatureReadPoolSchema), literatureSearchPoolPageSchema) }),
     request({key: 'researchZoteroProbe', channel: 'roc:research:zotero-probe', domain: 'research', method: 'probeZotero', kind: 'plugin', capabilityName: 'research.zotero.probe', inputTransform: first, contract: methodContract(oneArg(zoteroProbeRequestSchema), zoteroProbeSchema)}),
+    request({key: 'researchZoteroStatus', channel: 'roc:research:zotero-status', domain: 'research', method: 'getZoteroStatus', kind: 'plugin', capabilityName: 'research.zotero.status', inputTransform: first, contract: methodContract(oneArg(zoteroProbeRequestSchema), zoteroStatusSchema)}),
     request({key: 'researchZoteroGroups', channel: 'roc:research:zotero-groups', domain: 'research', method: 'getZoteroGroups', kind: 'plugin', capabilityName: 'research.zotero.groups', inputTransform: first, contract: methodContract(oneArg(zoteroGroupsRequestSchema), zoteroGroupsPageSchema)}),
     request({key: 'researchZoteroCollections', channel: 'roc:research:zotero-collections', domain: 'research', method: 'getZoteroCollections', kind: 'plugin', capabilityName: 'research.zotero.collections', inputTransform: first, contract: methodContract(oneArg(zoteroPageRequestSchema), zoteroCollectionsPageSchema)}),
     request({key: 'researchZoteroItems', channel: 'roc:research:zotero-items', domain: 'research', method: 'getZoteroItems', kind: 'plugin', capabilityName: 'research.zotero.items', inputTransform: first, contract: methodContract(oneArg(zoteroItemsRequestSchema), zoteroItemsPageSchema)}),

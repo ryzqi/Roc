@@ -31,6 +31,7 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 
 | 能力 | preload 方法 | 内容 |
 | --- | --- | --- |
+| research.zotero.status | research.getZoteroStatus | 常用应用目录检测与独立 API 连接状态 |
 | research.zotero.probe | research.probeZotero | API/实例/schema 头及探测时间 |
 | research.zotero.groups | research.getZoteroGroups | 当前用户的群组元数据页 |
 | research.zotero.collections | research.getZoteroCollections | 指定库的集合、父集合及版本 |
@@ -132,7 +133,7 @@ HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机�
 末页损坏、有效期、数据库拒绝写入、迟到取消与 DB12→13 保留历史原文。
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
-设置区连接/安装检测、库/集合选择 UI、整库版本检查点、冲突审查 UI 与远端删除
+库/集合选择 UI、整库版本检查点、冲突审查 UI 与远端删除
 状态、附件输入授权以及真实客户端验收仍待后续增量。V1 没有任何 Zotero
 写请求，V3 写回继续另行授权。
 
@@ -142,3 +143,23 @@ IPC 和 renderer chunks 均通过。来源回执、DB13→14 原文及 ledger �
 同版本新请求复用、取消和事务回滚均有实际数据库回归。日志见
 `.artifacts/research-optimization/pr05-object-*.log`；原生 worker 的数据库与回执保留于
 `pr05-object-native-csl/`。真实 Zotero 客户端验收仍未运行。
+
+## 设置状态
+
+现有设置弹窗的「文献与解析」区提供 Zotero「检测连接」。打开设置不自动读取
+Zotero；用户点击才检查 /Applications/Zotero.app 和 ~/Applications/Zotero.app 的
+Contents/MacOS/zotero 文件，同时探测固定 loopback API。只检测应用执行文件是否
+存在，不启动它，不扫描或读取 Zotero 文库。其他路径的安装不在检测范围内；
+未发现常用目录安装不能推出系统中未安装，API 不可达也不能推出未安装。目录
+读取异常是明确的失败，不伪装成未发现。
+
+UI 独立显示应用目录与 API：已连接、未启用通信、不可达、版本不支持、响应无效。
+已连接时列出真实 API3 和题录预览能力；未启用提示高级设置操作，Roc 不代为修改。
+每次检测使用新资源键，立即移除旧状态；关闭后的迟到结果不能出现在再次打开
+的区块。新 UI 使用 12/13px tokens、0.5px 分隔线、键盘焦点和状态文字。
+
+最终单测762/762，实际 Electron 设置组件3/3，原设置 Radix 层级1/1，Harness94/94，
+生产 build/typecheck、IPC/chunks 通过。应用启动 smoke12/12 在最后一处纯边框修改
+前通过；最终新组件再次运行3/3并更新光暗1100/1099/800截图与阴影审计，全部
+cut0/hidden0。证据 `pr05-settings-*.log`、`zotero-settings-ui/`。真实 Zotero 客户端
+互操作仍未运行。

@@ -20,6 +20,14 @@ export const zoteroPageRequestSchema = zoteroScopeSchema.extend({
   offset: version.default(0), limit: z.number().int().min(1).max(50).default(20),
   expectedLibraryVersion: version.nullable()
 });
+export const zoteroInstallationSchema = z.discriminatedUnion('status', [
+  z.object({status: z.literal('found'), location: z.enum(['system', 'user'])}).strict(),
+  z.object({status: z.literal('not_found')}).strict()
+]);
+export const zoteroStatusSchema = z.object({
+  installation: zoteroInstallationSchema, connection: zoteroProbeSchema
+}).strict();
+export type ZoteroStatus = z.infer<typeof zoteroStatusSchema>;
 export const zoteroItemsRequestSchema = zoteroPageRequestSchema.extend({
   collectionKey: zoteroItemKeySchema.nullable(), since: version.nullable()
 });
