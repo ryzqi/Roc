@@ -205,6 +205,66 @@ contentHash、total 和 nextOffset，hash 覆盖固定版本、执行、时间�
 标注或学术质量验收。当前仍没有独立查询集与人工相关性标签，不能报告真实
 Recall@20、nDCG@10 或质量提升。
 
+## 离线标注与排名评估
+
+评估工具只读取明确指定的本地 JSON，不调用 Provider 或模型，也不写文库。
+输入合同在 `src/shared/schemas/literature-retrieval-evaluation.ts`。完整池须按
+`getLiteraturePool` 分页结果重建，校验全部记录数量与 contentHash；不能只保存
+一页或当前候选。没有原始池的历史执行不能进入评估。
+
+先准备 capture set：`schemaVersion:1`、corpusId、明确的 minimumTopics，以及
+queries 数组；每个查询包含 queryId、topicId 和完整 pool。执行：
+
+```sh
+pnpm research:retrieval-eval --prepare captures.json new-annotation-packet.json
+```
+
+输出 `unlabeled_packet`，按原始元数据 hash 排列。保留问题、时间范围、题名、
+作者、摘要、DOI、URL 与已知原始标识值，移除排名、分数、来源排序和候选归组。
+同一元数据 hash 的不同标识观察取并集。packet contentHash 和执行/pool hash
+用于核对来源；URL 和标识仍可能透露 Provider，不能宣称来源盲法。包本身无相关性
+标签，不能直接作为评估输入。
+
+人工评审需要独立确定 paperId，给每个原始元数据 recordHash 恰好一个归属，并按
+0–3 级标注 grade；grade>0 为相关。每个 paper 保留 evidenceRefs。已知相关但未被
+捕获的论文使用空 recordHashes，仍进入 Recall 分母和理想排名。完整 pool 只证明
+抓取记录完整，无法证明相关论文全集完整；只有池内判断时应报告池内 Recall。
+人工评审与争议裁定的方法、范围、遗漏论文发现方法应保存在 annotation evidence。
+
+带标签输入在 capture set 上增加 kind、annotation，并给每个查询增加 papers。
+`engineering_fixture` 必须 annotation:null，始终输出 engineering_only。
+`human_reviewed` 必须声明 method:independent_human、blindToRanking:true、至少两个
+不同 reviewerIds、producerIds 和 evidence 的 reference/SHA-256；评审者不能同时
+是生产者。工具记录 declared_independent_human，不认证身份、证据内容或独立性。
+人工评估要求相关源码已提交且无相关工作区改动，捕获 limit 至少 20。执行：
+
+```sh
+pnpm research:retrieval-eval labeled-corpus.json new-report.json
+```
+
+两种输出均先完成内容写入，再原子发布新文件；已有路径报 EEXIST，不覆盖。
+不完整 pool、hash 错误、重复查询/执行、缺失/重复标签和无相关论文分母均显式失败，
+不会发布报告。报告保留 corpus/pool hash、源码 commit、编译 bundle hash、查询、
+主题、失败/部分失败数量与声明的最小主题数。达到声明数量只表示数量条件满足，
+不证明样本有代表性或评估结论成立。
+
+基线按固定来源优先级、原始 rank 和 identity 排序，与 RRF v1 使用相同的当前
+身份归并及主记录年份规则。这是来源排序比较，不是历史完整应用版本的质量比较。
+每个排名先截取 20 个候选，重复 paperId 只首次计相关性；合并多个人工 paperId
+的候选不计增益，并计入 falseMerges20。失败查询保留，空排名重复率为 null。
+
+Recall@20 为前 20 个候选中不同相关论文数除以全部已标注相关论文数。
+nDCG@10 使用 gain=`2^grade-1`、discount=`log2(rank+1)`，理想排名包括全部已标注
+相关论文，含没有捕获记录的论文。公式依据
+[Microsoft Research TR-2008-164](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2008-164.pdf)；
+Recall 与等权主题汇总依据
+[NIST TREC 2021 overview](https://trec.nist.gov/pubs/trec30/papers/Overview-2021.pdf)。
+同主题查询先平均，再等权平均主题；重复率按全部查询的前 20 个候选槽位汇总。
+没有未经依据的目标值、置信区间或提升声明。当前保留的示例均为合成工程 fixture；
+独立人工检索验收仍为 `Blocked, not run`。
+
+## 来源覆盖与运行约束
+
 当前来源 coverage 保存实际响应声明的 API 命中数、通过校验的页数、分页范围和
 后续页标识。OpenAlex 使用 meta.count；Crossref 使用 total-results；Semantic
 Scholar 使用 total/next；Europe PMC 使用 hitCount/nextCursorMark；arXiv 使用

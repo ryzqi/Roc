@@ -1444,3 +1444,46 @@ paid model, remote write, real-user DB migration or frozen workflow-fixture edit
 This is input/provenance preparation, not a Recall/nDCG/duplicate-rate result or independent
 annotation. An independently reviewed query set and relevance labels are still missing;
 complete scientific retrieval validation and later plan increments remain pending.
+
+
+## PR-04.5B — offline judgment preparation and retrieval metrics
+
+Status: `Verified passing` for offline tooling. Independent scientific retrieval acceptance:
+`Blocked, not run` because independently reviewed queries/judgments are absent.
+No product runtime, database version or captured-pool format changes.
+
+Strict local corpus contracts distinguish engineering fixtures from declared independent
+human review. Preparation strips ranks/scores/candidate grouping, unions original identifier
+observations by metadata hash and retains execution/pool/content hashes. Evaluation compares
+source-priority/rank with RRF v1 using the same current identity/year rules; this is not a
+complete historical-app comparison. Labels independently group records by human paper ID.
+Recall20/nDCG10 count duplicate relevance only once; mixed-paper merges gain nothing and are
+reported. Missed labeled papers remain in denominators/ideal rankings. Failed queries stay
+in equal-topic averages; duplicate rates pool top20 slots and empty rankings return null.
+
+Reports retain code commit/bundle/corpus/pool hashes, declared sample minimum and explicit
+annotation assurance. Human inputs require committed relevant source and capture limit>=20.
+Declared reviewer identity/evidence cannot certify independent human review. Complete capture
+cannot certify complete relevant-paper ground truth; pool-only Recall must be named as such.
+No scientific gain, target value or confidence interval fabricated. CLI only reads explicit
+local files; fully written private sibling files are atomically linked to exclusive new
+outputs, never overwrite existing outputs, and are removed after publication/refusal.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/literature-retrieval-evaluation.test.mjs` | 6/6 passed before final atomic publication; all included in final fullunit |
+| `pnpm test:unit` | Final734/734 passed after packet/docs/publication changes |
+| `pnpm typecheck` | Final passed |
+| `pnpm check:ipc` | Current, passed |
+| `pnpm harness:eval` | 94/94 passed before final offline packet/publication edits; Harness runtime unaffected |
+| `git diff --check` | Passed |
+
+Actual CLI regressions exercise report/packet startup, exact output, EEXIST preservation and
+no report for invalid input. Hand calculations verify graded gains, missed-paper ideal,
+duplicates, false merges, failed queries and topic weighting. Evidence:
+`.artifacts/research-optimization/pr04-metrics-*.log` and three retained explicitly synthetic
+engineering corpus/report/unlabeled-packet JSON files. No live literature query/model call,
+remote write, credentials read or frozen workflow fixture edit. Next independent authorized
+increment: Zotero read-only adapter and import; PR-04's scientific acceptance remains open.
