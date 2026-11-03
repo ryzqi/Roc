@@ -146,6 +146,18 @@ export class LiteratureImportService {
     return this.zoteroSyncs.read(context, input);
   }
 
+  findZoteroSync(input: unknown): ZoteroSync | null {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroSyncs.find(context, input);
+  }
+
+  readZoteroSyncPage(input: unknown): ZoteroSyncCapturedPage {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroSyncs.readPage(context, input);
+  }
+
   controlZoteroSync(input: unknown): ZoteroSync {
     const context = literatureContext();
     this.requireActive(context);

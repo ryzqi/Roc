@@ -13,7 +13,7 @@ import {
 } from './schemas/research-zotero';
 import {
   zoteroSyncStartIpcSchema, zoteroSyncReadIpcSchema, zoteroSyncPageIpcSchema,
-  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema
+  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema, zoteroSyncFindIpcSchema
 } from './schemas/research-zotero-sync';
 
 import { menuPages } from './surfaces';
@@ -485,6 +485,8 @@ export const ipcRegistry = {
     request({key: 'researchZoteroReview', channel: 'roc:research:zotero-review', domain: 'research', method: 'reviewZotero', kind: 'plugin', capabilityName: 'research.zotero.review', inputTransform: first, contract: methodContract(oneArg(zoteroReviewIpcSchema), zoteroReviewSchema)}),
     request({key: 'researchZoteroSyncStart', channel: 'roc:research:zotero-sync-start', domain: 'research', method: 'startZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncStart', inputTransform: first, contract: methodContract(oneArg(zoteroSyncStartIpcSchema), zoteroSyncSchema)}),
     request({key: 'researchZoteroSyncRead', channel: 'roc:research:zotero-sync-read', domain: 'research', method: 'readZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncRead', inputTransform: first, contract: methodContract(oneArg(zoteroSyncReadIpcSchema), zoteroSyncSchema)}),
+    request({key: 'researchZoteroSyncFind', channel: 'roc:research:zotero-sync-find', domain: 'research', method: 'findZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncFind', inputTransform: first, contract: methodContract(oneArg(zoteroSyncFindIpcSchema), zoteroSyncSchema.nullable())}),
+    request({key: 'researchZoteroSyncReadPage', channel: 'roc:research:zotero-sync-read-page', domain: 'research', method: 'readZoteroSyncPage', kind: 'plugin', capabilityName: 'research.zotero.syncReadPage', inputTransform: first, contract: methodContract(oneArg(zoteroSyncReadIpcSchema), zoteroSyncCapturedPageSchema)}),
     request({key: 'researchZoteroSyncPage', channel: 'roc:research:zotero-sync-page', domain: 'research', method: 'captureZoteroSyncPage', kind: 'plugin', capabilityName: 'research.zotero.syncPage', inputTransform: first, contract: methodContract(oneArg(zoteroSyncPageIpcSchema), zoteroSyncCapturedPageSchema)}),
     request({key: 'researchZoteroSyncControl', channel: 'roc:research:zotero-sync-control', domain: 'research', method: 'controlZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncControl', inputTransform: first, contract: methodContract(oneArg(zoteroSyncControlIpcSchema), zoteroSyncSchema)}),
     request({key: 'researchZoteroSyncAcknowledge', channel: 'roc:research:zotero-sync-acknowledge', domain: 'research', method: 'acknowledgeZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncAcknowledge', inputTransform: first, contract: methodContract(oneArg(zoteroSyncAcknowledgeIpcSchema), zoteroSyncSchema)}),

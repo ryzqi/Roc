@@ -241,6 +241,31 @@ test('version changes between pages refuse completion without advancing last com
   }finally{await f.dispose();}
 });
 
+test('explicit rebaseline permits a lower instance checkpoint while retaining old source decisions and import version guards',async()=>{
+  const f=fixture();
+  try{
+    const captured=await f.page(f.start({limit:50}));
+    await f.add(captured.preview,['ITEM0000']);
+    const old=f.ack(captured.sync,captured.preview,['ITEM0000'],[
+      {itemKey:'ITEM0001',reason:'Excluded'},{itemKey:'ITEM0002',reason:'Excluded'}]);
+    const library=f.db.prepare('SELECT * FROM research_library').all();
+    f.source({version:19,records:[item(0,7)]});
+    const ordinary=f.start({mode:'full'});
+    await assert.rejects(f.page(ordinary),/version_regressed/u);
+    const explicit=f.start({mode:'rebaseline'});
+    assert.equal(explicit.since,null);
+    const restored=await f.page(explicit);
+    await assert.rejects(f.add(restored.preview,['ITEM0000']),/zotero_object_version_regressed/u);
+    assert.equal(f.workers(),1);
+    const completed=f.skipAll(restored.sync,restored.preview);
+    assert.equal(completed.checkpointVersion,19);
+    assert.equal(f.read(old).checkpointVersion,20);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(),library);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_sync_pages').pluck().get(),2);
+    assert.equal(f.start().since,19);
+  }finally{await f.dispose();}
+});
+
 test('actual sender IPC scopes sync state and receipts; foreign project and owner cannot read or advance',async()=>{
   const f=fixture();
   try{
@@ -258,6 +283,10 @@ test('actual sender IPC scopes sync state and receipts; foreign project and owne
     assert.equal(startedResult.ok,true,JSON.stringify(startedResult));
     const started=startedResult.data;
     const read={syncId:started.syncId,projectId:f.project.id};
+    const find={...scope,projectId:f.project.id,collectionKey:null};
+    assert.deepEqual((await call('findZoteroSync',find)).data,started);
+    assert.equal((await call('findZoteroSync',find,8)).data,null);
+    assert.equal((await call('findZoteroSync',{...find,collectionKey:'COLL0000'})).data,null);
     assert.deepEqual((await call('readZoteroSync',read)).data,started);
     assert.equal((await call('readZoteroSync',read,8)).error.code,'zotero_sync_not_found');
     assert.equal((await call('readZoteroSync',{...read,projectId:null})).error.code,'zotero_sync_not_found');
@@ -272,6 +301,11 @@ test('actual sender IPC scopes sync state and receipts; foreign project and owne
       entries:[{kind:'zotero',previewId:captured.preview.previewId,itemKey:'ITEM0000'}]});
     assert.equal(imported.ok,true,JSON.stringify(imported));
     assert.equal(imported.data.status,'completed');
+    const restored=await call('readZoteroSyncPage',read);
+    assert.equal(restored.ok,true,JSON.stringify(restored));
+    assert.deepEqual(restored.data.importedKeys,['ITEM0000']);
+    assert.equal(restored.data.sync.revision,1);
+    assert.equal((await call('readZoteroSyncPage',read,8)).error.code,'zotero_sync_not_found');
     const ack=await call('acknowledgeZoteroSync',{...read,expectedRevision:1,
       previewId:captured.preview.previewId,importedKeys:['ITEM0000'],skipped:[{itemKey:'ITEM0001',reason:'Excluded'}]});
     assert.equal(ack.ok,true,JSON.stringify(ack));
@@ -314,6 +348,28 @@ test('empty page completes a real version; duplicate decisions, active scope and
     const next=f.start();
     f.db.prepare('UPDATE research_zotero_syncs SET state_json=? WHERE id=?').run('{"unknown":true}',next.syncId);
     assert.throws(()=>f.read(next),/storage_invalid/u);
+  }finally{await f.dispose();}
+});
+
+test('lookup finds the newest scoped session with tied clock timestamps and pending receipts remain readonly',async()=>{
+  const f=fixture();
+  try{
+    const find={...scope,collectionKey:null};
+    assert.equal(f.run(()=>f.service.findZoteroSync(find)),null);
+    const first=f.start();
+    f.control(first,'abandon');
+    const second=f.start();
+    assert.equal(f.run(()=>f.service.findZoteroSync(find)).syncId,second.syncId);
+    const captured=await f.page(second);
+    assert.throws(()=>f.run(()=>f.service.readZoteroSyncPage({syncId:first.syncId})),/page_missing/u);
+    await f.add(captured.preview,['ITEM0000']);
+    const changes=f.db.prepare('SELECT total_changes()').pluck().get();
+    const read=f.run(()=>f.service.readZoteroSyncPage({syncId:second.syncId}));
+    assert.deepEqual(read.importedKeys,['ITEM0000']);
+    assert.deepEqual(read.sync,captured.sync);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changes);
+    assert.equal(f.requests.length,1);
+    assert.equal(f.workers(),1);
   }finally{await f.dispose();}
 });
 

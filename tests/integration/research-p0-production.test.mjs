@@ -87,6 +87,11 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
       entries: [{kind: 'zotero', previewId: captured.preview.previewId, itemKey: key}]}));
     assert.equal(syncImport.status, 'completed');
     assert.equal(f.repository.library.get(saved.id).revision, saved.revision);
+    const restoredPage = run(() => imports.readZoteroSyncPage({syncId: sync.syncId}));
+    assert.deepEqual(restoredPage.importedKeys, [key]);
+    assert.deepEqual(restoredPage.sync, resumed);
+    assert.equal(run(() => imports.findZoteroSync({serverId: 'native-fixture', library: {kind: 'user', id: 0},
+      collectionKey: null})).syncId, sync.syncId);
     const completed = run(() => imports.acknowledgeZoteroSync({syncId: sync.syncId, expectedRevision: resumed.revision,
       previewId: captured.preview.previewId, importedKeys: [key], skipped: []}));
     assert.equal(completed.status, 'completed');

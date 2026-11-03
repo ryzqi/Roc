@@ -1,10 +1,11 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {AlertTriangle} from 'lucide-react';
 import type {ZoteroItem, ZoteroPageRequest, ZoteroPreviewPage, ZoteroScope, ZoteroReview} from '../../shared/schemas/research-zotero';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import type {ZoteroImportJob} from './use-zotero-import-job';
+import type {ZoteroSync, ZoteroSyncCapturedPage} from '../../shared/schemas/research-zotero-sync';
 
 const buttonClass = `${formSecondaryButtonClass} border-[0.5px]`;
 const inputClass = `${formInputClass} border-[0.5px] text-[var(--font-meta-size)]`;
@@ -74,8 +75,21 @@ function LibraryPreview({client, scope, libraryName, job}: {
   const [query, setQuery] = useState<Pick<ZoteroPageRequest, 'offset' | 'expectedLibraryVersion'>>({offset: 0, expectedLibraryVersion: null});
   const [collection, setCollection] = useState<{key: string; name: string} | null>(null);
   const [limit, setLimit] = useState(20);
-  const [snapshot, setSnapshot] = useState<{page: ZoteroPreviewPage; records: ZoteroItem[]} | null>(null);
+  const [snapshot, setSnapshot] = useState<{page: ZoteroPreviewPage; records: ZoteroItem[]; importedKeys: string[]} | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [syncOverride, setSyncOverride] = useState<{value: ZoteroSync | null} | null>(null);
+  const [skipReason, setSkipReason] = useState('');
+  const lookup = useAsyncResource(`zotero:sync:${JSON.stringify([job.projectId, scope, collection?.key ?? null])}`,
+    () => client.api.research.findZoteroSync({...scope, projectId: job.projectId, collectionKey: collection?.key ?? null}),
+    {label: '读取同步检查点'});
+  const sync = syncOverride === null ? lookup.status === 'ready' ? lookup.data : null : syncOverride.value;
+  const ongoing = sync?.status === 'active' || sync?.status === 'paused';
+  const begin = useAsyncAction(client.api.research.startZoteroSync, {label: '建立逐页核对'});
+  const syncPage = useAsyncAction(client.api.research.captureZoteroSyncPage, {label: '读取核对页'});
+  const readPending = useAsyncAction(client.api.research.readZoteroSyncPage, {label: '恢复待核对页'});
+  const readState = useAsyncAction(client.api.research.readZoteroSync, {label: '刷新核对状态'});
+  const control = useAsyncAction(client.api.research.controlZoteroSync, {label: '控制逐页核对'});
+  const acknowledge = useAsyncAction(client.api.research.acknowledgeZoteroSync, {label: '确认本页核对'});
   const collections = useAsyncResource(`zotero:collections:${JSON.stringify([scope, query])}`,
     () => client.api.research.getZoteroCollections({...scope, ...query, limit: 20}), {label: '读取 Zotero 集合'});
   const collectionPage = collections.status === 'ready' ? collections.data : null;
@@ -87,20 +101,81 @@ function LibraryPreview({client, scope, libraryName, job}: {
   {label: '审查 Zotero 与本地字段'});
   const reviewed = review.status === 'ready' ? review.data : null;
   const blocked = reviewed?.items.some(item => item.local?.archived || !['new', 'unchanged', 'new_version'].includes(item.objectState)) === true;
-  const busy = job.pending || job.cancelling || capture.pending || readMore.pending;
-  const reset = (): void => {setSnapshot(null); setSelected(new Set()); capture.reset(); readMore.reset();};
+  const busy = job.pending || job.cancelling || capture.pending || readMore.pending || begin.pending ||
+    syncPage.pending || readPending.pending || readState.pending || control.pending || acknowledge.pending;
+  const reset = (): void => {
+    setSnapshot(null); setSelected(new Set()); setSkipReason('');
+    capture.reset(); readMore.reset(); syncPage.reset(); readPending.reset(); acknowledge.reset();
+    begin.reset(); control.reset(); readState.reset();
+  };
+  const acceptPage = (data: ZoteroSyncCapturedPage): void => {
+    setSyncOverride({value: data.sync});
+    setSnapshot({page: data.preview, records: data.preview.sourcePage.records, importedKeys: data.importedKeys});
+    setSelected(new Set()); setSkipReason('');
+  };
+  const syncId = sync?.syncId;
+  const pendingPreviewId = sync?.pendingPreviewId;
+  useEffect(() => {
+    if (syncId === undefined || pendingPreviewId === null || pendingPreviewId === undefined ||
+      job.result === null || ['queued', 'running'].includes(job.result.status) ||
+      !job.selection.some(item => item.previewId === pendingPreviewId)) return;
+    let active = true;
+    void readPending.run({projectId: job.projectId, syncId}).then(result => {
+      if (active && result.ok) acceptPage(result.data);
+    });
+    return () => {active = false;};
+  }, [syncId, pendingPreviewId, job.result, job.projectId]);
+
+  async function start(mode: ZoteroSync['mode']): Promise<void> {
+    reset();
+    const result = await begin.run({...scope, projectId: job.projectId, collectionKey: collection?.key ?? null, mode, limit});
+    if (result.ok) setSyncOverride({value: result.data});
+  }
+  async function controlSync(action: 'pause' | 'resume' | 'abandon'): Promise<void> {
+    const result = await control.run({projectId: job.projectId, syncId: sync!.syncId, expectedRevision: sync!.revision, action});
+    if (result.ok) {
+      setSyncOverride({value: result.data});
+      if (action === 'abandon') reset();
+    } else await refreshSync();
+  }
+  async function refreshSync(): Promise<void> {
+    const result = await readState.run({projectId: job.projectId, syncId: sync!.syncId});
+    if (result.ok) setSyncOverride({value: result.data});
+  }
+  async function openPending(): Promise<void> {
+    reset();
+    const result = await readPending.run({projectId: job.projectId, syncId: sync!.syncId});
+    if (result.ok) acceptPage(result.data);
+  }
+  async function confirmPage(): Promise<void> {
+    const current = snapshot!;
+    const result = await acknowledge.run({projectId: job.projectId, syncId: sync!.syncId, expectedRevision: sync!.revision,
+      previewId: current.page.previewId, importedKeys: current.importedKeys,
+      skipped: current.records.filter(item => !current.importedKeys.includes(item.key))
+        .map(item => ({itemKey: item.key, reason: skipReason.trim()}))});
+    if (result.ok) {setSyncOverride({value: result.data}); reset();}
+    else await refreshSync();
+  }
 
   async function preview(offset: number): Promise<void> {
+    if (sync?.status === 'active') {
+      reset();
+      const result = await syncPage.run({projectId: job.projectId, syncId: sync.syncId, expectedRevision: sync.revision,
+        replacePreviewId: sync.pendingPreviewId});
+      if (result.ok) acceptPage(result.data);
+      else await refreshSync();
+      return;
+    }
     const expectedLibraryVersion = snapshot?.page.sourcePage.libraryVersion ?? collectionPage!.libraryVersion;
     reset();
     const result = await capture.run({...scope, projectId: job.projectId, expectedLibraryVersion, collectionKey: collection?.key ?? null,
       since: null, offset, limit});
-    if (result.ok) setSnapshot({page: result.data, records: result.data.sourcePage.records});
+    if (result.ok) setSnapshot({page: result.data, records: result.data.sourcePage.records, importedKeys: []});
   }
   async function more(): Promise<void> {
     const current = snapshot!;
     const result = await readMore.run({projectId: job.projectId, previewId: current.page.previewId, offset: current.page.nextPreviewOffset!, limit: 20});
-    if (result.ok) setSnapshot({page: result.data, records: [...current.records, ...result.data.sourcePage.records]});
+    if (result.ok) setSnapshot({...current, page: result.data, records: [...current.records, ...result.data.sourcePage.records]});
   }
   return <div className="flex flex-col gap-2">
     <div className="flex flex-wrap items-end gap-3">
@@ -108,7 +183,7 @@ function LibraryPreview({client, scope, libraryName, job}: {
         <select className={inputClass} value={collection?.key ?? ''} disabled={busy || collectionPage === null}
           data-testid="literature-zotero-collection" onChange={event => {
             setCollection(event.target.value === '' ? null : {key: event.target.value, name: event.target.selectedOptions[0].label});
-            reset();
+            setSyncOverride(null); reset();
           }}>
           <option value="">整个文库</option>
           {collection !== null && !collectionPage?.records.some(item => item.key === collection.key) ?
@@ -119,7 +194,7 @@ function LibraryPreview({client, scope, libraryName, job}: {
         </select>
       </label>
       <label className="flex w-32 flex-col gap-1 text-muted">每次读取
-        <select className={inputClass} value={limit} disabled={busy} data-testid="literature-zotero-limit"
+        <select className={inputClass} value={ongoing ? sync.limit : limit} disabled={busy || ongoing} data-testid="literature-zotero-limit"
           onChange={event => {setLimit(Number(event.target.value)); reset();}}>
           {[20, 30, 50].map(value => <option key={value} value={value}>{value} 个对象</option>)}
         </select>
@@ -133,10 +208,39 @@ function LibraryPreview({client, scope, libraryName, job}: {
         onClick={() => setQuery({offset: collectionPage.nextOffset!, expectedLibraryVersion: collectionPage.libraryVersion})}>下一页集合</button>
     </div>}
     {collections.error === null ? null : <Failure message={collections.error} />}
+    <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="逐页核对" data-testid="literature-zotero-sync">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
+          data-testid="literature-zotero-sync-start" onClick={() => void start('incremental')}>增量逐页核对</button>
+        <button type="button" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
+          data-testid="literature-zotero-sync-full" onClick={() => void start('full')}>完整重新核对</button>
+        {sync?.status !== 'reset_required' ? null : <button type="button" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-rebaseline" onClick={() => void start('rebaseline')}>按当前来源重新建立检查点</button>}
+        {sync?.status === 'active' ? <button type="button" className={buttonClass} disabled={job.cancelling || control.pending}
+          data-testid="literature-zotero-sync-pause" onClick={() => void controlSync('pause')}>暂停核对</button> : null}
+        {sync?.status === 'paused' ? <button type="button" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-resume" onClick={() => void controlSync('resume')}>继续核对</button> : null}
+        {ongoing ? <button type="button" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-abandon" onClick={() => void controlSync('abandon')}>结束本次核对</button> : null}
+        {sync === null ? null : <button type="button" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-refresh" onClick={() => void refreshSync()}>刷新核对状态</button>}
+        {sync?.pendingPreviewId === null || sync === null ? null : <button type="button" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-open" onClick={() => void openPending()}>打开待核对页</button>}
+      </div>
+      {sync === null ? <p className="text-subtle">逐页收录或明确跳过后才推进检查点；中断后可继续。</p> : <p className="break-words text-muted" role="status">
+        {sync.status === 'active' ? '核对中' : sync.status === 'paused' ? '已暂停' : sync.status === 'completed' ? '本次核对完成' : '需要重新建立核对'}
+        {' · '}已确认 {sync.nextOffset} 个对象，完整版本 {sync.checkpointVersion ?? '尚未建立'}
+        {sync.targetVersion === null ? null : `，本次版本 ${sync.targetVersion}`}
+        {sync.errorCode === null ? null : ` · ${sync.errorCode}`}
+      </p>}
+      {sync?.mode === 'rebaseline' ? <p className="text-subtle">本次按当前来源版本重新建立检查点；旧核对历史与本地资料保留。</p> : null}
+      {[lookup.error, begin.error, syncPage.error, readPending.error, readState.error, control.error, acknowledge.error]
+        .filter((message): message is string => message !== null).map((message, index) => <Failure key={index} message={message} />)}
+    </section>
     <div className="flex items-center gap-2">
-      <button type="button" className={buttonClass} disabled={busy || collectionPage === null}
+      <button type="button" className={buttonClass} disabled={busy || collectionPage === null || sync?.status === 'paused'}
         data-testid="literature-zotero-preview" onClick={() => void preview(0)}>
-        {capture.pending ? '读取中…' : '读取并预览'}
+        {capture.pending || syncPage.pending ? '读取中…' : ongoing ? sync.pendingPreviewId === null ? '读取下一页并预览' : '重新读取本页' : '读取并预览'}
       </button>
       <span className="min-w-0 break-all text-muted">{libraryName}{collection === null ? '' : ` / ${collection.name}`}</span>
     </div>
@@ -149,7 +253,8 @@ function LibraryPreview({client, scope, libraryName, job}: {
       </p>
       <ul className="max-h-64 overflow-y-auto px-1" tabIndex={0} aria-label="Zotero 预览对象">
         {snapshot.records.map(item => <ObjectRow key={item.key} item={item} checked={selected.has(item.key)}
-          disabled={busy || (!selected.has(item.key) && selected.size >= 30)}
+          imported={snapshot.importedKeys.includes(item.key)}
+          disabled={busy || snapshot.importedKeys.includes(item.key) || (!selected.has(item.key) && selected.size >= 30)}
           onSelect={checked => setSelected(current => {
             const next = new Set(current);
             if (checked) next.add(item.key); else next.delete(item.key);
@@ -167,19 +272,33 @@ function LibraryPreview({client, scope, libraryName, job}: {
         <button type="button" className={buttonClass} disabled={busy || selected.size === 0}
           onClick={() => setSelected(new Set())}>取消选择</button>
         <button type="button" className={buttonClass}
-          disabled={busy || snapshot.page.sourcePage.nextOffset === null || selected.size > 0}
+          disabled={busy || ongoing || snapshot.page.sourcePage.nextOffset === null || selected.size > 0}
           data-testid="literature-zotero-next-source" onClick={() => void preview(snapshot.page.sourcePage.nextOffset!)}>下一页来源</button>
       </div>
       {selected.size > 0 && reviewed === null && review.error === null ? <p role="status" className="text-muted">正在核对选中题录与本地字段…</p> : null}
       {review.error === null ? null : <Failure message={review.error} />}
       {reviewed === null ? null : <SourceReview review={reviewed} />}
+      {sync?.status !== 'active' || sync.pendingPreviewId !== snapshot.page.previewId ? null : <div className="flex flex-col gap-2">
+        <p className="text-muted">本页已收录 {snapshot.importedKeys.length} 个，确认时跳过 {snapshot.page.capturedTotal - snapshot.importedKeys.length} 个。</p>
+        {snapshot.page.capturedTotal === snapshot.importedKeys.length ? null : <label className="flex flex-col gap-1 text-muted">
+          未收录对象的跳过理由
+          <input className={inputClass} value={skipReason} maxLength={500} disabled={busy}
+            data-testid="literature-zotero-sync-skip-reason" onChange={event => setSkipReason(event.target.value)} />
+        </label>}
+        <button type="button" className={`${formPrimaryButtonClass} border-[0.5px]`}
+          data-testid="literature-zotero-sync-confirm" disabled={busy || selected.size > 0 ||
+            snapshot.records.length !== snapshot.page.capturedTotal ||
+            (snapshot.page.capturedTotal !== snapshot.importedKeys.length && skipReason.trim() === '')}
+          onClick={() => void confirmPage()}>确认本页核对</button>
+        {snapshot.records.length !== snapshot.page.capturedTotal ? <p className="text-subtle">先显示本次预览全部对象，再确认本页。</p> : null}
+      </div>}
       <p className="text-subtle">每次最多收录 30 篇。翻页前先收录或取消本页选择；附件需另行授权。</p>
     </>}
   </div>;
 }
 
-function ObjectRow({item, checked, disabled, onSelect}: {
-  item: ZoteroItem; checked: boolean; disabled: boolean; onSelect: (checked: boolean) => void
+function ObjectRow({item, checked, disabled, imported, onSelect}: {
+  item: ZoteroItem; checked: boolean; disabled: boolean; imported: boolean; onSelect: (checked: boolean) => void
 }): React.JSX.Element {
   const title = typeof item.data.title === 'string' ? item.data.title.trim() : '';
   const paper = !['attachment', 'note', 'annotation'].includes(item.data.itemType);
@@ -196,6 +315,7 @@ function ObjectRow({item, checked, disabled, onSelect}: {
     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-5 text-subtle">
       <span>{item.data.itemType}</span><span>对象 {item.key}</span><span>版本 {item.version}</span>
       {reason === null ? null : <span>{reason}</span>}
+      {imported ? <span>本页已收录</span> : null}
     </div>
     <details className="mt-1 pl-5" data-testid="literature-zotero-object-details">
       <summary className="cursor-pointer text-muted">题录、标签、集合与附件引用</summary>

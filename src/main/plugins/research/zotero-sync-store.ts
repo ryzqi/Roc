@@ -3,7 +3,7 @@ import type {Database} from 'better-sqlite3';
 import type {z} from 'zod';
 import {
   zoteroSyncStartSchema, zoteroSyncReadSchema, zoteroSyncPageSchema,
-  zoteroSyncControlSchema, zoteroSyncAcknowledgeSchema, zoteroSyncSchema,
+  zoteroSyncControlSchema, zoteroSyncAcknowledgeSchema, zoteroSyncSchema, zoteroSyncFindSchema,
   type ZoteroSync, type ZoteroSyncCapturedPage
 } from '../../../shared/schemas/research-zotero-sync';
 import type {zoteroItemsPageSchema, zoteroItemsRequestSchema} from '../../../shared/schemas/research-zotero';
@@ -52,6 +52,24 @@ export class ZoteroSyncStore {
     return state;
   }
 
+  find(context: LiteratureExecutionContext, input: unknown): ZoteroSync | null {
+    const request = zoteroSyncFindSchema.parse(input);
+    const row = this.db.prepare('SELECT id FROM research_zotero_syncs WHERE scope_key=? ORDER BY rowid DESC LIMIT 1')
+      .get(this.key(context, {serverId: request.serverId, library: request.library}, request.collectionKey)) as {id: string} | undefined;
+    return row === undefined ? null : this.read(context, {syncId: row.id});
+  }
+
+  readPage(context: LiteratureExecutionContext, input: unknown): ZoteroSyncCapturedPage {
+    const state = this.read(context, input);
+    if (state.pendingPreviewId === null) throw new Error('zotero_sync_page_missing');
+    const preview = this.previews.read(context, {previewId: state.pendingPreviewId, limit: 30});
+    const importedKeys = this.db.prepare(`SELECT DISTINCT o.item_key FROM research_zotero_import_observations o
+      JOIN research_literature_imports i ON i.id=o.operation_id
+      WHERE o.preview_id=? AND i.owner=? AND i.scope_project=? ORDER BY o.item_key`)
+      .pluck().all(state.pendingPreviewId, context.owner, context.projectId ?? '') as string[];
+    return {sync: state, preview, importedKeys};
+  }
+
   pageRequest(context: LiteratureExecutionContext, input: unknown): z.infer<typeof zoteroItemsRequestSchema> {
     const request = zoteroSyncPageSchema.parse(input);
     const state = this.expected(context, request, 'active');
@@ -65,7 +83,9 @@ export class ZoteroSyncStore {
     return this.db.transaction(() => {
       const query = this.pageRequest(context, request);
       const state = this.read(context, {syncId: request.syncId});
-      if (source.libraryVersion < (state.checkpointVersion ?? 0)) throw new Error('zotero_sync_version_regressed');
+      if (state.mode !== 'rebaseline' && source.libraryVersion < (state.checkpointVersion ?? 0)) {
+        throw new Error('zotero_sync_version_regressed');
+      }
       if (state.total !== null && source.total !== state.total) throw new Error('zotero_sync_total_changed');
       for (const item of source.records) {
         if (this.db.prepare('SELECT 1 FROM research_zotero_sync_seen WHERE sync_id=? AND item_key=?')
@@ -76,7 +96,7 @@ export class ZoteroSyncStore {
       state.targetVersion = source.libraryVersion;
       state.total = source.total;
       state.pendingPreviewId = preview.previewId;
-      return {sync: this.save(state), preview};
+      return {sync: this.save(state), preview, importedKeys: []};
     })();
   }
 

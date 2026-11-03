@@ -6,10 +6,11 @@ const identity = {syncId: z.string().min(1)};
 const action = {...identity, expectedRevision: version};
 const ipcScope = {projectId: z.string().min(1).nullable()};
 export const zoteroSyncStartSchema = zoteroScopeSchema.extend({
-  collectionKey: zoteroItemKeySchema.nullable(), mode: z.enum(['full', 'incremental']),
+  collectionKey: zoteroItemKeySchema.nullable(), mode: z.enum(['full', 'incremental', 'rebaseline']),
   limit: z.number().int().min(1).max(50)
 });
 export const zoteroSyncReadSchema = z.object(identity).strict();
+export const zoteroSyncFindSchema = zoteroScopeSchema.extend({collectionKey: zoteroItemKeySchema.nullable()});
 export const zoteroSyncPageSchema = z.object({
   ...action, replacePreviewId: z.string().min(1).nullable()
 }).strict();
@@ -28,7 +29,7 @@ export const zoteroSyncAcknowledgeSchema = z.object({
 }, 'zotero_sync_duplicate_decision');
 export const zoteroSyncSchema = z.object({
   syncId: z.string().min(1), scope: zoteroScopeSchema, collectionKey: zoteroItemKeySchema.nullable(),
-  mode: z.enum(['full', 'incremental']), limit: z.number().int().min(1).max(50),
+  mode: z.enum(['full', 'incremental', 'rebaseline']), limit: z.number().int().min(1).max(50),
   revision: version, status: z.enum(['active', 'paused', 'completed', 'reset_required']),
   checkpointVersion: version.nullable(), since: version.nullable(),
   targetVersion: version.nullable(), total: version.nullable(), nextOffset: version,
@@ -36,8 +37,10 @@ export const zoteroSyncSchema = z.object({
   createdAt: z.string(), updatedAt: z.string()
 }).strict();
 export const zoteroSyncCapturedPageSchema = z.object({
-  sync: zoteroSyncSchema, preview: zoteroPreviewPageSchema
+  sync: zoteroSyncSchema, preview: zoteroPreviewPageSchema,
+  importedKeys: z.array(zoteroItemKeySchema).max(50)
 }).strict();
+export const zoteroSyncFindIpcSchema = zoteroSyncFindSchema.extend(ipcScope);
 export const zoteroSyncStartIpcSchema = zoteroSyncStartSchema.extend(ipcScope);
 export const zoteroSyncReadIpcSchema = zoteroSyncReadSchema.extend(ipcScope);
 export const zoteroSyncPageIpcSchema = zoteroSyncPageSchema.extend(ipcScope);

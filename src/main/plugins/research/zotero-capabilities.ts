@@ -13,7 +13,7 @@ import type {LiteratureImportService} from './literature-import-service';
 import {detectZoteroInstallation} from './zotero-installation';
 import {
   zoteroSyncStartIpcSchema, zoteroSyncReadIpcSchema, zoteroSyncPageIpcSchema,
-  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema
+  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema, zoteroSyncFindIpcSchema
 } from '../../../shared/schemas/research-zotero-sync';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
@@ -21,6 +21,8 @@ const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema:
 const capabilities = {
   syncStart: descriptor('research.zotero.syncStart', zoteroSyncStartIpcSchema, zoteroSyncSchema),
   syncRead: descriptor('research.zotero.syncRead', zoteroSyncReadIpcSchema, zoteroSyncSchema),
+  syncFind: descriptor('research.zotero.syncFind', zoteroSyncFindIpcSchema, zoteroSyncSchema.nullable()),
+  syncReadPage: descriptor('research.zotero.syncReadPage', zoteroSyncReadIpcSchema, zoteroSyncCapturedPageSchema),
   syncPage: descriptor('research.zotero.syncPage', zoteroSyncPageIpcSchema, zoteroSyncCapturedPageSchema),
   syncControl: descriptor('research.zotero.syncControl', zoteroSyncControlIpcSchema, zoteroSyncSchema),
   syncAcknowledge: descriptor('research.zotero.syncAcknowledge', zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema),
@@ -38,7 +40,8 @@ export const zoteroCapabilities = Object.values(capabilities);
 
 export function registerZoteroCapabilities(context: RocPluginContext, adapter: ZoteroAdapter,
   imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero' |
-    'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync'>): void {
+    'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync' |
+    'findZoteroSync' | 'readZoteroSyncPage'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
@@ -102,6 +105,8 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.review, async ({projectId: _scope, ...input}) => imports.reviewZotero(input));
   register(capabilities.syncStart, async ({projectId: _scope, ...input}) => imports.startZoteroSync(input));
   register(capabilities.syncRead, async ({projectId: _scope, ...input}) => imports.readZoteroSync(input));
+  register(capabilities.syncFind, async ({projectId: _scope, ...input}) => imports.findZoteroSync(input));
+  register(capabilities.syncReadPage, async ({projectId: _scope, ...input}) => imports.readZoteroSyncPage(input));
   register(capabilities.syncPage, ({projectId: _scope, ...input}) => imports.captureZoteroSyncPage(input, adapter));
   register(capabilities.syncControl, async ({projectId: _scope, ...input}) => imports.controlZoteroSync(input));
   register(capabilities.syncAcknowledge, async ({projectId: _scope, ...input}) => imports.acknowledgeZoteroSync(input));

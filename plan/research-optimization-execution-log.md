@@ -1847,3 +1847,47 @@ suite detected three latest schema14 expectations after migration15; changed onl
 version assertions, preservation checks remain. Final full suite passes. No real Zotero
 client/user library, new live literature query, paid model, remote write or frozen fixture edit.
 Next: sync UI discovery/recovery, trash/membership state and attachment input grants.
+
+## PR-05E2 — sync discovery, recovery and explicit rebaseline UI
+
+Status: `Verified passing` for this UI/API increment. Research DB15 unchanged.
+Full PR-05 and overall plan remain in progress.
+
+Readonly scoped latest-session lookup and pending-page/imported-key read restore the actual
+DB state and receipts, including tied timestamps. Existing dialog exposes full/incremental,
+pause/resume/abandon, pending preview restore/recapture, authoritative refresh and explicit
+page acknowledgement. It requires all captured objects loaded/displayed and actual import
+receipts or user-entered skip reasons. Confirmation/source read/import are separate explicit
+actions. Close/reopen restores paused state and receipts without automatic source/model work.
+Prior-collection lookup cannot replace current scope; errors cannot become completion.
+
+Review found full mode correctly retained the old version floor, leaving same-instance
+rollback without an explicit reset entry. Added rebaseline mode/button: completed full-source
+decisions may establish a lower latest checkpoint; old sync/library/source history and
+object import version/conflict guards remain. Rebaseline is never automatic.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-sync.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-import.test.mjs` | Final39/39 passed |
+| `pnpm test:unit` | Final782/782 passed |
+| `pnpm harness:eval` | Final94/94 passed |
+| `pnpm test:research-p0` | Final fresh build/typecheck/native13/13 passed |
+| `node --test tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` | Final12/12 passed (Zotero9, existing3) |
+| `node --test --test-name-pattern='sync UI restores' tests/renderer/zotero-import.test.mjs` | Final keyboard/paused dark1099 layout1/1 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-sync-ui-*.log`, current `pr05-sync-native-csl/`, zotero-import-ui/ paused/
+complete/long screenshots and audits. Dark1099 paused screenshot inspected; fixed title/
+close, counts and source/receipt rows readable, cut0/hidden0. New paused reconnect initially
+used a helper that required preview enabled; corrected to wait for the paused resume action.
+Rebaseline test initially expected a failed job but the existing guard refuses before job/
+worker; corrected assertion verifies that stronger boundary. No production checks weakened.
+
+No real Zotero user library/client, new live literature query, paid model, remote write or
+frozen workflow-fixture changes. Next: truthful remote trash/membership state and attachment
+path/access grants; actual client interoperability and independent scientific/L2 acceptance
+remain externally blocked.
