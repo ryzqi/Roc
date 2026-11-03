@@ -5,7 +5,7 @@
 
 ## 冻结排序合同
 
-当前快照版本为 11，排序方法为 RRF v1：
+当前快照版本为 12，排序方法为 RRF v1：
 
 ```text
 score(paper) = sum(1 / (60 + source_rank(paper)))
@@ -18,12 +18,27 @@ score(paper) = sum(1 / (60 + source_rank(paper)))
 
 当前归并依据首先是规范化 DOI；没有 DOI 时采用规范化 arXiv、PMID 或来源与
 外部 ID。标题相同或近似不构成归并依据。不同 DOI 不因同一个 arXiv/PMID 自动
-合并；OpenAlex/Semantic 外部标识图及预印本/正式版关系仍待后续增量。
+合并；预印本与正式出版版之间的关系仍需实际来源证据。
 
 同一声明的来源身份只有一个已观察 DOI 时，无 DOI 记录连接到该 DOI。多个
 DOI 锚点仍保留独立候选，无 DOI 记录也单独保留；`identityConflicts` 显示共享
 标识及竞争 DOI。`aliases` 保存该候选实际关联的规范身份。主展示记录保持
 原 Provider 元数据，缺失 DOI 不用来拆分已确认同一标识的记录。
+
+OpenAlex 的 `ids.doi` / `ids.pmid` 与 Semantic Scholar 的
+`externalIds.DOI` / `externalIds.ArXiv` 参与强身份图。每条观察保存原始字段、
+原始值与规范身份，完整标识字典也保留未知键。Semantic PubMed JSON 字段尚未
+验证，因此只保留未知原始数据，不猜测身份边。已知标识格式错误在缓存前拒绝。
+OpenAlex 主 DOI 与 ids.doi 冲突时保留竞争 DOI，该记录的附加 PMID 不连接其他
+论文。无 DOI 的连通分量只有唯一 DOI 锚点时才附着；竞争锚点不能自动归并。
+
+来源依据为 2026-11-03 核对的
+[OpenAlex work attributes](https://help.openalex.org/data/works/attributes/)
+以及 Ai2 编写的
+[Semantic externalIds.ArXiv consumer](https://github.com/allenai/genesys/blob/main/model_discovery/agents/search_utils.py)。
+不使用 OpenAlex 各 location 的 DOI 推测版本相同，也不将 Semantic 声明的
+arXiv vN 当作已从 arXiv 端点取得该版内容。修订关系继续仅来自直接观察的
+arXiv 记录。
 
 arXiv 规范化支持现代 ID、旧 archive/subject ID 和 `/abs/` URL。0704–1412 序号
 为 4 位，1501 起为 5 位，版本必须为正整数。候选保留完整原始 ID 和记录；
@@ -76,6 +91,17 @@ metadata 和书目内容仍不改写。旧来源 `providerRecord:null`，不将�
 已有不同 DOI 的条目不会因共享来源标识自动合并。
 数据库表结构相同也不能补造数据迁移已经执行的账本；缺少对应迁移记录时
 显式拒绝，保留原数据与迁移账本。
+
+数据库 10 单独持久化 Provider 标识观察：文库条目、执行 ID、来源、原始 rank、
+外部 ID、抓取时间、元数据 hash、原始字典与映射结果。旧数据不补造外部观察。
+收录核对原始 Provider 记录及重新映射结果；同一执行/来源/rank 只有一个观察，
+相同内容重复收录幂等，不同内容或不同条目冲突会回滚整个候选收录。
+仅标识字段提供的 DOI 也同步到规范 metadata、书目 DOI、BibTeX 字段及已有 CSL；
+原始来源记录和原始书目仍保留。
+
+`research.library.getIdentifiers` / `research.getLibraryIdentifiers` 分页读取这些
+观察，默认 20 条、最多 50 条。候选过期和文库归档不删除观察。普通文库列表
+不附带完整原始字典，模型搜索/读回工具也省略字典；模型仍可核对已知映射值。
 
 ## 原始问题与确认检索计划
 
@@ -220,7 +246,8 @@ list query 1 次/秒要求并观察响应头：
 
 这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
 分页回执、有界缓存、进程内配额/健康度、持久化请求账本和确认检索计划已接入。
-OpenAlex/Semantic 外部标识归并、完整文献类型/版本/许可/撤稿展示仍待后续增量。
+OpenAlex/Semantic 已验证外部标识归并已接入；完整文献类型/版本/许可/撤稿展示
+和独立检索标注仍待后续增量。
 
 官方合同核对日期：2026-11-03。OpenAlex 当前支持无 key 的基本查询；cursor
 翻页需要 key，不能自动创建账号或读取凭证。参数和分页依据

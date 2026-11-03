@@ -11,6 +11,7 @@ export const openAlexSearchPayload = z.looseObject({
   meta: z.looseObject({count: z.number().int().nonnegative()}).optional(),
   results: z.array(z.looseObject({
     id: text, title: text, doi: nullableText,
+    ids: z.looseObject({doi: nullableText, pmid: nullableText}).nullable().optional(),
     authorships: z.array(z.looseObject({author: z.looseObject({display_name: nullableText}).optional()})).optional(),
     abstract_inverted_index: z.record(z.string(), z.array(z.number().int().nonnegative())).nullable().optional(),
     publication_year: nullableYear, cited_by_count: nullableCount,
@@ -31,7 +32,7 @@ export const semanticScholarSearchPayload = z.looseObject({
   data: z.array(z.looseObject({
     paperId: text, title: text, authors: z.array(z.looseObject({name: text})).optional(),
     abstract: nullableText, year: nullableYear, citationCount: nullableCount,
-    externalIds: z.looseObject({DOI: nullableText}).nullable().optional(),
+    externalIds: z.looseObject({DOI: nullableText, ArXiv: nullableText}).nullable().optional(),
     openAccessPdf: z.looseObject({url: nullableText}).nullable().optional(), url: nullableText
   }))
 });

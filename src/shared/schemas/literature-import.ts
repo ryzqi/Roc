@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { researchLiteratureSchema } from './research';
+import {literatureIdentifierObservationSchema, literatureRawIdentifiersSchema} from './literature-identifiers';
 
 export const literatureNetworkSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc']);
 export const literatureSearchToolSchema = z.object({
@@ -22,7 +23,8 @@ export const literatureCandidateSchema = z.object({
   score: z.number().nonnegative(),
   selectionReason: z.literal('source_priority_then_rank_then_metadata_hash'),
   origins: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(), rank: z.number().int().positive(),
-    retrievedAt: z.string(), metadataHash: z.string(), record: researchLiteratureSchema }).strict()),
+    retrievedAt: z.string(), metadataHash: z.string(), record: researchLiteratureSchema,
+    identifiers: z.array(literatureIdentifierObservationSchema), rawIdentifiers: literatureRawIdentifiersSchema.nullable() }).strict()).min(1),
   contributions: z.array(z.object({ source: literatureNetworkSourceSchema, rank: z.number().int().positive(), score: z.number().positive() }).strict()),
   conflicts: z.array(z.object({ field: z.enum(['doi', 'title', 'authors', 'publishedYear', 'citationCount', 'url', 'openAccessUrl']),
     values: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(),
@@ -65,7 +67,7 @@ export const literatureProviderCoverageSchema = z.object({
   nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(11), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(12), ranking: literatureRankingSchema, executionId: z.string().min(1),
   strategy: literatureSearchStrategyReceiptSchema.nullable(),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),

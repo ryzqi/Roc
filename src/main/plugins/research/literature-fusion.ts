@@ -3,10 +3,12 @@ import { literatureNetworkSourceSchema, type LiteratureCandidate, type Literatur
 import type { ResearchLiterature } from '../../../shared/types';
 import { normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
+import type {LiteratureIdentifierObservation, LiteratureRawIdentifiers} from '../../../shared/schemas/literature-identifiers';
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
-export type RankedLiteratureRecord = {record: ResearchLiterature; rank: number};
+export type RankedLiteratureRecord = {record: ResearchLiterature; rank: number;
+  identifiers: LiteratureIdentifierObservation[]; rawIdentifiers: LiteratureRawIdentifiers | null};
 
 /** This ordering selects metadata; every selected source has equal ranking weight. */
 export const literatureSourcePriority: readonly Source[] = ['crossref', 'openalex', 'semantic_scholar', 'pubmed', 'europe_pmc', 'arxiv'];
@@ -26,15 +28,15 @@ export function literatureRanking(sources: readonly string[]): LiteratureSearchR
  */
 export function fuseLiterature(records: readonly RankedLiteratureRecord[]): FusedPaper[] {
   const result: FusedPaper[] = [];
-  for (const group of groupLiteratureIdentities(records.map(item => item.record))) {
+  for (const group of groupLiteratureIdentities(records)) {
     const identity = group.identity;
     const origins = group.indexes.map(index => {
-      const {record, rank} = records[index];
+      const {record, rank, identifiers, rawIdentifiers} = records[index];
       const source = literatureNetworkSourceSchema.parse(record.source);
-      return {source, externalId: record.externalId, rank, retrievedAt: record.importedAt, metadataHash: hash(record), record};
+      return {source, externalId: record.externalId, rank, retrievedAt: record.importedAt, metadataHash: hash(record), record, identifiers, rawIdentifiers};
     });
     origins.sort((left, right) => literatureSourcePriority.indexOf(left.source) - literatureSourcePriority.indexOf(right.source)
-      || left.rank - right.rank || compare(left.metadataHash, right.metadataHash));
+      || left.rank - right.rank || compare(left.metadataHash, right.metadataHash) || compare(hash(left.identifiers), hash(right.identifiers)));
     const primary = origins[0];
     const contributions: LiteratureCandidate['contributions'] = [];
     for (const origin of origins) {

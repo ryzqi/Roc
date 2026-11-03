@@ -8,6 +8,8 @@ import { literatureSearchInputSchema, type LiteraturePagePosition, type Literatu
 
 import type { ResearchLiterature } from '../../../shared/types';
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import {openAlexIdentifierObservations, semanticScholarIdentifierObservations} from './literature-provider-identifiers';
+import {literatureRawIdentifiersSchema, type LiteratureIdentifierObservation, type LiteratureRawIdentifiers} from '../../../shared/schemas/literature-identifiers';
 import { fuseLiterature, literatureSourcePriority, type RankedLiteratureRecord } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
@@ -28,7 +30,8 @@ type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['s
   fetchedAt: string | null; host: string; release: (() => void) | null;
   coverage: LiteratureSearchResult['sources'][number]['coverage'] | null;
   position: LiteraturePagePosition; rankOffset: number; url: string | null; visited: Set<string>;
-  source: LiteratureSearchResult['sources'][number]['source']; audit: LiteratureRequestAudit | undefined};
+  source: LiteratureSearchResult['sources'][number]['source']; audit: LiteratureRequestAudit | undefined;
+  identifiers: LiteratureIdentifierObservation[][] | null; rawIdentifiers: Array<LiteratureRawIdentifiers | null> | null};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
@@ -101,7 +104,8 @@ export class LiteratureSearchService {
     for (let page = 0; page < request.maxPages; page++) {
       const rankOffset = position.kind === 'page' ? (position.value - 1) * request.limit : position.kind === 'offset' ? position.value : records.length;
       const context: ProviderContext = {signal: providerSignal, receipts, projectId: request.projectId ?? null, source, host, audit,
-        cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null, position, rankOffset, url: null, visited};
+        cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null, position, rankOffset, url: null, visited,
+        identifiers: null, rawIdentifiers: null};
       visited.add(JSON.stringify(position));
       try {
         providerSignal.throwIfAborted();
@@ -113,7 +117,9 @@ export class LiteratureSearchService {
         providerSignal.throwIfAborted();
         if (context.cacheHit === null) this.governor.success(host);
         if (context.pendingCache !== null) this.cache.put(context.pendingCache.key, context.pendingCache.response);
-        records.push(...valid.map((record, index) => ({record, rank: context.rankOffset + index + 1})));
+        records.push(...valid.map((record, index) => ({record, rank: context.rankOffset + index + 1,
+          identifiers: context.identifiers === null ? [] : context.identifiers[index],
+          rawIdentifiers: context.rawIdentifiers === null ? null : context.rawIdentifiers[index]})));
         pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: valid.length, cache: pageCache(context), coverage: context.coverage});
         coverage = {...context.coverage, validatedPages: coverage.validatedPages + 1};
         if (coverage.state === 'reported_end') {
@@ -134,7 +140,8 @@ export class LiteratureSearchService {
         signal?.throwIfAborted();
         const rateLimited = error instanceof ProviderError && error.status === 429;
         const invalidPayload = error instanceof z.ZodError || error instanceof Error &&
-          (error.message === 'literature_provider_response_invalid' || /^research_(?:arxiv|pmid|europe_pmc)_identifier_invalid$/u.test(error.message));
+          (error.message === 'literature_provider_response_invalid' || error.message === 'research_doi_invalid' ||
+            /^research_(?:arxiv|pmid|europe_pmc)_identifier_invalid$/u.test(error.message));
         if (invalidPayload) this.governor.failure(host, null);
         if (context.url !== null) pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: 0, cache: pageCache(context),
           coverage: {state: 'failed', apiHitCount: null, validatedPages: 0, nextPage: null}});
@@ -178,6 +185,8 @@ export class LiteratureSearchService {
     const total = payload.meta?.count ?? null;
     this.observeCoverage(total, payload.results.length, total !== null && total > (page - 1) * limit + payload.results.length ? {kind: 'page', value: page + 1} : null);
     const timestamp = this.providerTimestamp();
+    this.observeIdentifiers(payload.results.map(item => item.ids == null ? null : literatureRawIdentifiersSchema.parse(item.ids)),
+      payload.results.map(item => openAlexIdentifierObservations(item.ids)));
     return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
@@ -222,6 +231,8 @@ export class LiteratureSearchService {
     const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
     this.observeCoverage(payload.total ?? null, payload.data.length, payload.next === undefined ? null : {kind: 'offset', value: payload.next});
     const timestamp = this.providerTimestamp();
+    this.observeIdentifiers(payload.data.map(item => item.externalIds == null ? null : literatureRawIdentifiersSchema.parse(item.externalIds)),
+      payload.data.map(item => semanticScholarIdentifierObservations(item.externalIds)));
     return payload.data.map((item) => ({
       id: `semantic_scholar:${item.paperId}`,
       source: 'semantic_scholar' as const,
@@ -336,6 +347,13 @@ export class LiteratureSearchService {
     const context = this.requests.getStore();
     if (context === undefined || context.fetchedAt === null) throw new Error('literature_provider_timestamp_missing');
     return context.fetchedAt;
+  }
+
+  private observeIdentifiers(raw: Array<LiteratureRawIdentifiers | null>, identifiers: LiteratureIdentifierObservation[][]): void {
+    const context = this.requests.getStore();
+    if (context === undefined) throw new Error('literature_provider_context_missing');
+    context.rawIdentifiers = raw;
+    context.identifiers = identifiers;
   }
 
   private observeCoverage(apiHitCount: number | null, returnedCount: number,

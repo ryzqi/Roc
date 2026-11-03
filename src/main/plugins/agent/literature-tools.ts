@@ -58,7 +58,7 @@ export function createLiteratureTools(capabilities: RocCapabilityRegistry, conte
 /** Provider snapshots stay in the scoped search store; model tools receive bounded previews. */
 function previewCandidate(candidate: LiteratureCandidate, abstractLimit: number) {
   return {...candidate, record: {...candidate.record, abstract: candidate.record.abstract?.slice(0, abstractLimit) ?? null},
-    origins: candidate.origins.map(({record: _record, ...origin}) => origin),
+    origins: candidate.origins.map(({record: _record, rawIdentifiers: _rawIdentifiers, ...origin}) => origin),
     conflicts: candidate.conflicts.map(conflict => ({field: conflict.field, totalValues: conflict.values.length,
       values: conflict.values.slice(0, 6).map(value => ({...value,
         truncated: typeof value.value === 'string' ? value.value.length > 800 :

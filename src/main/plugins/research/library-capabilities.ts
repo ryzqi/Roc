@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from '../../../shared/schemas/literature-identifiers';
 import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
@@ -22,7 +23,8 @@ const capabilities = {
   link: descriptor('research.library.linkProject', researchLibraryLinkRequestSchema, researchLibraryItemSchema),
   archive: descriptor('research.library.archive', researchLibraryArchiveRequestSchema, researchLibraryItemSchema),
   citationKey: descriptor('research.library.setCitationKey', researchLibraryCitationKeyRequestSchema, researchLibraryItemSchema),
-  retractions: descriptor('research.library.checkRetractions', researchLibraryRetractionRequestSchema, researchLibraryRetractionResultSchema)
+  retractions: descriptor('research.library.checkRetractions', researchLibraryRetractionRequestSchema, researchLibraryRetractionResultSchema),
+  identifiers: descriptor('research.library.getIdentifiers', literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema)
 };
 export const researchLibraryCapabilities = Object.values(capabilities);
 
@@ -35,6 +37,8 @@ const libraryFailures: Record<string, { message: string; category: RocErrorCateg
   research_library_selection_duplicate: { message: '同一文献不能重复选择。', category: 'validation' },
   research_library_item_archived: { message: '请先恢复已归档文献。', category: 'conflict' },
   research_literature_identity_ambiguous: { message: '同一文献身份对应多个文库条目，请先人工核对并整理。', category: 'conflict' },
+  research_library_identifier_observation_mismatch: { message: '外部标识与原始来源记录不一致，导入已取消。', category: 'validation' },
+  research_library_identifier_observation_conflict: { message: '同一检索位置已有不同的标识记录，导入已取消。', category: 'conflict' },
   research_arxiv_identifier_invalid: { message: 'arXiv 标识符格式无效。', category: 'validation' },
   research_pmid_identifier_invalid: { message: 'PMID 格式无效。', category: 'validation' },
   research_europe_pmc_identifier_invalid: { message: 'Europe PMC 标识符缺少有效来源命名空间。', category: 'validation' },
@@ -76,6 +80,7 @@ export function registerResearchLibraryCapabilities(context: RocPluginContext, r
   register(capabilities.archive, (input) => repository.archive(input.id, input.expectedRevision, input.archived));
   register(capabilities.citationKey, (input) => repository.setCitationKey(input.id, input.expectedRevision, input.citationKey));
   register(capabilities.retractions, (input) => service.checkRetractions(input));
+  register(capabilities.identifiers, (input) => repository.getIdentifiers(input));
 }
 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {

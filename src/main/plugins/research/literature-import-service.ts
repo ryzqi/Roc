@@ -10,14 +10,15 @@ import { assertLiteratureActive, literatureContext, type LiteratureExecutionCont
 import { betterBibtexKey } from './cite-key';
 import { normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
+import type {LiteratureProviderIdentifierRecord} from '../../../shared/schemas/literature-identifiers';
 import { fuseLiterature, literatureRanking } from './literature-fusion';
 import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literature-search-ledger';
 import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
 
-type ProviderRecords = [LiteratureCandidate['record'], ...LiteratureCandidate['record'][]];
-type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; records: ProviderRecords};
+type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
+type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]};
 type FrozenEntry = { entry: LiteratureAdd['entries'][number]; source: FrozenSource; result: LiteratureImportItem };
 type OperationRow = { id: string; owner: string; scope_project: string; input_hash: string; frozen_json: string; result_json: string; cancel_requested: number };
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -87,7 +88,7 @@ export class LiteratureImportService {
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 11, ranking: literatureRanking(request.sources), executionId, strategy,
+      const result: LiteratureSearchResult = { schemaVersion: 12, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
@@ -139,9 +140,10 @@ export class LiteratureImportService {
       let key: string;
       if (entry.kind === 'doi') { source = {kind: 'doi', doi: entry.doi}; key = `doi:${entry.doi}`; }
       else {
-        const candidate = this.loadSearch(entry.searchId, context).candidates.find((candidate) => candidate.candidateId === entry.candidateId);
+        const snapshot = this.loadSearch(entry.searchId, context);
+        const candidate = snapshot.candidates.find((candidate) => candidate.candidateId === entry.candidateId);
         if (candidate === undefined) throw new Error('literature_candidate_not_found');
-        source = {kind: 'records', records: uniqueRecords(candidate.record, candidate.origins.map(origin => origin.record))};
+        source = {kind: 'records', origins: uniqueOrigins(candidate.origins.map(origin => ({origin, executionId: snapshot.executionId})))};
         key = candidate.identity;
       }
       const duplicate = frozen.find((item) => item.result.entryKey === key);
@@ -149,7 +151,7 @@ export class LiteratureImportService {
         duplicate.result.inputPositions.push(position);
         if (source.kind === 'records') {
           duplicate.source = duplicate.source.kind === 'doi' ? source :
-            {kind: 'records', records: uniqueRecords(duplicate.source.records[0], [...duplicate.source.records.slice(1), ...source.records])};
+            {kind: 'records', origins: uniqueOrigins([...duplicate.source.origins, ...source.origins])};
         }
         continue;
       }
@@ -220,16 +222,21 @@ export class LiteratureImportService {
       let committed = false;
       try {
         this.requireActive({ ...context, signal });
-        const prepared: (Awaited<ReturnType<ResearchLibraryService['prepareRecord']>> & {providerRecord?: LiteratureCandidate['record']})[] = [];
+        const prepared: (Awaited<ReturnType<ResearchLibraryService['prepareRecord']>> & {
+          providerRecord?: LiteratureCandidate['record']; identifierRecord?: LiteratureProviderIdentifierRecord})[] = [];
         if (entry.source.kind === 'doi') {
           prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
         } else {
-          for (const record of entry.source.records) {
+          for (const {origin, executionId} of entry.source.origins) {
             this.requireActive({ ...context, signal });
-            prepared.push({...await this.prepare.prepareRecord(record, signal), providerRecord: record});
+            const identifierRecord = origin.rawIdentifiers === null ? undefined : {metadataHash: origin.metadataHash, executionId,
+              source: origin.source, externalId: origin.externalId, rank: origin.rank, retrievedAt: origin.retrievedAt,
+              raw: origin.rawIdentifiers, identifiers: origin.identifiers};
+            prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord});
           }
         }
-        const identities = groupLiteratureIdentities(prepared.map(record => record.metadata));
+        const identities = groupLiteratureIdentities(prepared.map(record => ({record: record.metadata,
+          identifiers: record.identifierRecord === undefined ? [] : record.identifierRecord.identifiers})));
         if (identities.length !== 1 || identities[0].identity !== item.entryKey) throw new Error('literature_import_identity_changed');
         this.db.transaction(() => {
           this.requireActive({ ...context, signal });
@@ -259,7 +266,8 @@ export class LiteratureImportService {
         const cancelled = signal.aborted || this.closed || (error instanceof Error && error.message === 'literature_import_cancelled');
         const errorCode = cancelled ? 'literature_import_cancelled' : safeFailure(error);
         Object.assign(item, { disposition: cancelled ? 'cancelled' : 'failed', metadata: cancelled ? 'not_requested' : 'failed',
-          errorCode, retryable: !cancelled && !['research_literature_identity_ambiguous', 'literature_import_identity_changed'].includes(errorCode) });
+          errorCode, retryable: !cancelled && !['research_literature_identity_ambiguous', 'literature_import_identity_changed',
+            'research_library_identifier_observation_mismatch', 'research_library_identifier_observation_conflict'].includes(errorCode) });
         if (cancelled) {
           for (const remaining of result.items.slice(position + 1)) remaining.disposition = 'cancelled';
           break;
@@ -288,14 +296,14 @@ export class LiteratureImportService {
     assertLiteratureActive(context);
   }
 }
-function uniqueRecords(primary: LiteratureCandidate['record'], records: LiteratureCandidate['record'][]): ProviderRecords {
-  const seen = new Set<string>([hash(primary)]);
-  return [primary, ...records.filter(record => {
+function uniqueOrigins(origins: FrozenOrigin[]): FrozenOrigin[] {
+  const seen = new Set<string>();
+  return origins.filter(record => {
     const fingerprint = hash(record);
     if (seen.has(fingerprint)) return false;
     seen.add(fingerprint);
     return true;
-  })];
+  });
 }
 function safeFailure(error: unknown): string {
   const code = error instanceof Error ? error.message : '';

@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
 import { researchLiteratureSchema } from '../../../shared/schemas/research';
@@ -9,6 +10,9 @@ import type { ResearchLiterature } from '../../../shared/types';
 import { citationKeySet } from './cite-key';
 import { bibliographyIdentity, literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
+import {providerIdentifierObservations} from './literature-provider-identifiers';
+import {literatureReadIdentifiersSchema, literatureProviderIdentifierRecordSchema,
+  type LiteratureProviderIdentifierRecord, type literatureIdentifierRecordsResultSchema} from '../../../shared/schemas/literature-identifiers';
 import type { ResearchRepository } from './repository';
 
 export type LibraryItem = z.infer<typeof researchLibraryItemSchema>;
@@ -59,6 +63,21 @@ export class ResearchLibraryRepository {
         .map((entry) => (entry as { project_id: string }).project_id) });
   }
 
+  getIdentifiers(input: z.infer<typeof literatureReadIdentifiersSchema>): z.infer<typeof literatureIdentifierRecordsResultSchema> {
+    const request = literatureReadIdentifiersSchema.parse(input);
+    if (this.db.prepare('SELECT id FROM research_library WHERE id=?').get(request.id) === undefined) throw new Error('research_library_item_not_found');
+    const total = (this.db.prepare('SELECT COUNT(*) FROM research_library_provider_identifiers WHERE item_id=?').pluck().get(request.id) as number);
+    const rows = this.db.prepare(`SELECT metadata_hash,execution_id,source,external_id,rank,retrieved_at,raw_json,mapped_json
+      FROM research_library_provider_identifiers WHERE item_id=?
+      ORDER BY retrieved_at DESC,execution_id,source,rank LIMIT ? OFFSET ?`)
+      .all(request.id, request.limit, request.offset) as Array<{metadata_hash: string; execution_id: string; source: string;
+        external_id: string; rank: number; retrieved_at: string; raw_json: string; mapped_json: string}>;
+    const records = rows.map(row => literatureProviderIdentifierRecordSchema.parse({metadataHash: row.metadata_hash,
+      executionId: row.execution_id, source: row.source, externalId: row.external_id, rank: row.rank, retrievedAt: row.retrieved_at,
+      raw: readJsonColumn(row.raw_json), identifiers: readJsonColumn(row.mapped_json)}));
+    return {itemId: request.id, records, total, nextOffset: request.offset + request.limit < total ? request.offset + request.limit : null};
+  }
+
   resolveCitationKey(projectId: string, citationKey: string): LibraryItem {
     this.research.getProject(projectId);
     const rows = this.db.prepare(`SELECT l.id, EXISTS (
@@ -83,7 +102,8 @@ export class ResearchLibraryRepository {
       .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
-  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry; providerRecord?: ResearchLiterature }[], projectId: string | null,
+  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry; providerRecord?: ResearchLiterature;
+    identifierRecord?: LiteratureProviderIdentifierRecord }[], projectId: string | null,
     options: { flush?: boolean; notify?: boolean; skipArchived?: boolean } = {}): {
     items: LibraryItem[]; createdCount: number; duplicateCount: number;
   } {
@@ -97,9 +117,19 @@ export class ResearchLibraryRepository {
       const identity = literatureIdentity(metadata);
       const providerRecord = entry.providerRecord === undefined ? null : researchLiteratureSchema.parse(entry.providerRecord);
       if (providerRecord !== null && literatureIdentity(providerRecord) !== identity) throw new Error('research_library_metadata_mismatch');
-      return { metadata, bibliography, identity, providerRecord, aliases: [] as string[] };
+      const identifierRecord = entry.identifierRecord === undefined ? null : literatureProviderIdentifierRecordSchema.parse(entry.identifierRecord);
+      if (identifierRecord !== null) {
+        if (providerRecord === null || identifierRecord.metadataHash !== createHash('sha256').update(JSON.stringify(providerRecord)).digest('hex') ||
+            identifierRecord.source !== providerRecord.source || identifierRecord.externalId !== providerRecord.externalId ||
+            identifierRecord.retrievedAt !== providerRecord.importedAt ||
+            JSON.stringify(identifierRecord.identifiers) !== JSON.stringify(providerIdentifierObservations(providerRecord.source, identifierRecord.raw))) {
+          throw new Error('research_library_identifier_observation_mismatch');
+        }
+      }
+      const identifiers = identifierRecord === null ? [] : identifierRecord.identifiers;
+      return { metadata, bibliography, identity, providerRecord, identifierRecord, identifiers, aliases: [] as string[] };
     });
-    for (const group of groupLiteratureIdentities(parsed.map(entry => entry.metadata))) {
+    for (const group of groupLiteratureIdentities(parsed.map(entry => ({record: entry.metadata, identifiers: entry.identifiers})))) {
       for (const index of group.indexes) Object.assign(parsed[index], {identity: group.identity, aliases: group.aliases});
     }
     const imported = this.db.transaction(() => {
@@ -109,19 +139,26 @@ export class ResearchLibraryRepository {
       const restoredIds = new Set<string>();
       for (const entry of parsed) {
         if (entry.metadata.doi === null && entry.identity.startsWith('doi:')) {
-          const observed = this.findByIdentity(literatureIdentity(entry.metadata));
+          const observed = this.findByIdentity(literatureIdentity(entry.metadata), entry.identifiers.filter(value => value.kind !== 'doi').map(value => value.identity));
           if (observed !== null && observed.metadata.doi !== null && literatureIdentity(observed.metadata) !== entry.identity) {
             throw new Error('research_literature_identity_ambiguous');
           }
         }
         const existing = this.findByIdentity(entry.identity, entry.aliases);
-        const canonicalIdentity = existing !== null && existing.metadata.doi !== null ? literatureIdentity(existing.metadata) : entry.identity;
+        const storedIdentity = existing === null ? null :
+          this.db.prepare('SELECT identity_key FROM research_library WHERE id=?').pluck().get(existing.id) as string;
+        const canonicalIdentity = existing !== null && existing.metadata.doi !== null ? literatureIdentity(existing.metadata) :
+          entry.identity.startsWith('doi:') ? entry.identity : storedIdentity ?? entry.identity;
+        const canonicalDoi = canonicalIdentity.startsWith('doi:') ? canonicalIdentity.slice(4) : null;
         const timestamp = this.now();
         let id: string;
         if (existing === null) {
           id = `paper_${randomUUID()}`;
           this.db.prepare(`INSERT INTO research_library (id,identity_key,metadata_json,bibliography_json,sources_json,revision,archived,created_at,updated_at)
-            VALUES (?,?,?,?,?,1,0,?,?)`).run(id, canonicalIdentity, JSON.stringify(entry.metadata), JSON.stringify(entry.bibliography),
+            VALUES (?,?,?,?,?,1,0,?,?)`).run(id, canonicalIdentity, JSON.stringify({...entry.metadata, doi: canonicalDoi}),
+              JSON.stringify({...entry.bibliography, doi: canonicalDoi,
+                fields: {...entry.bibliography.fields, ...(canonicalDoi === null ? {} : {doi: canonicalDoi})},
+                csl: entry.bibliography.csl === null ? null : {...entry.bibliography.csl, ...(canonicalDoi === null ? {} : {DOI: canonicalDoi})}}),
               JSON.stringify([{ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord }]), timestamp, timestamp);
           createdCount += 1;
         } else {
@@ -136,13 +173,14 @@ export class ResearchLibraryRepository {
             sources.push({ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord });
           }
           const metadata = { ...current.metadata,
-            doi: current.metadata.doi ?? entry.metadata.doi,
+            doi: current.metadata.doi ?? canonicalDoi,
             authors: current.metadata.authors.length === 0 ? entry.metadata.authors : current.metadata.authors,
             abstract: current.metadata.abstract?.trim() ? current.metadata.abstract : entry.metadata.abstract,
             publishedYear: current.metadata.publishedYear ?? entry.metadata.publishedYear,
             citationCount: current.metadata.citationCount ?? entry.metadata.citationCount,
             url: current.metadata.url ?? entry.metadata.url, openAccessUrl: current.metadata.openAccessUrl ?? entry.metadata.openAccessUrl };
           const fields = { ...current.bibliography.fields };
+          if (current.metadata.doi === null && metadata.doi !== null) fields.doi = metadata.doi;
           const dateFields = new Set(['date', 'year', 'month', 'day']);
           if (current.bibliography.publishedYear === null && entry.bibliography.publishedYear !== null) {
             for (const key of dateFields) delete fields[key];
@@ -159,13 +197,14 @@ export class ResearchLibraryRepository {
               if (csl[key] === undefined || csl[key] === null) csl[key] = value;
             }
           }
+          if (csl !== null && metadata.doi !== null) csl = {...csl, DOI: metadata.doi};
           const bibliography = { ...current.bibliography, fields,
             doi: metadata.doi,
             authors: metadata.authors, abstract: metadata.abstract, publishedYear: metadata.publishedYear, url: metadata.url,
             entryType: current.bibliography.entryType === 'misc' ? entry.bibliography.entryType : current.bibliography.entryType,
             preambles: [...new Set([...current.bibliography.preambles, ...entry.bibliography.preambles])], csl };
           if (current.archived || JSON.stringify(sources) !== JSON.stringify(current.sources) || !sameMetadata(current.metadata, metadata)
-              || JSON.stringify(bibliography) !== JSON.stringify(current.bibliography) || literatureIdentity(current.metadata) !== canonicalIdentity) {
+              || JSON.stringify(bibliography) !== JSON.stringify(current.bibliography) || storedIdentity !== canonicalIdentity) {
             this.db.prepare(`UPDATE research_library SET identity_key = ?, metadata_json = ?, bibliography_json = ?, sources_json = ?,
               archived = 0, revision = revision + 1, updated_at = ? WHERE id = ?`)
               .run(canonicalIdentity, JSON.stringify(metadata), JSON.stringify(bibliography), JSON.stringify(sources), timestamp, id);
@@ -174,6 +213,27 @@ export class ResearchLibraryRepository {
         }
         const insertAlias = this.db.prepare('INSERT INTO research_library_aliases(item_id,identity) VALUES (?,?) ON CONFLICT DO NOTHING');
         for (const alias of new Set([canonicalIdentity, ...entry.aliases])) insertAlias.run(id, alias);
+        if (entry.identifierRecord !== null) {
+          const observation = entry.identifierRecord;
+          const previous = this.db.prepare(`SELECT item_id,metadata_hash,external_id,retrieved_at,raw_json,mapped_json
+            FROM research_library_provider_identifiers WHERE execution_id=? AND source=? AND rank=?`)
+            .get(observation.executionId, observation.source, observation.rank) as {
+              item_id: string; metadata_hash: string; external_id: string; retrieved_at: string; raw_json: string; mapped_json: string
+            } | undefined;
+          if (previous !== undefined) {
+            if (previous.item_id !== id || previous.metadata_hash !== observation.metadataHash || previous.external_id !== observation.externalId ||
+                previous.retrieved_at !== observation.retrievedAt || !isDeepStrictEqual(readJsonColumn(previous.raw_json), observation.raw) ||
+                !isDeepStrictEqual(readJsonColumn(previous.mapped_json), observation.identifiers)) {
+              throw new Error('research_library_identifier_observation_conflict');
+            }
+          } else {
+            this.db.prepare(`INSERT INTO research_library_provider_identifiers
+              (item_id,execution_id,source,rank,metadata_hash,external_id,retrieved_at,raw_json,mapped_json)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+              .run(id, observation.executionId, observation.source, observation.rank, observation.metadataHash,
+                observation.externalId, observation.retrievedAt, JSON.stringify(observation.raw), JSON.stringify(observation.identifiers));
+          }
+        }
         if (projectId !== null) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);
         if (!ids.includes(id)) ids.push(id);
       }

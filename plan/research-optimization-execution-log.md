@@ -1276,3 +1276,62 @@ rows/sources and reports a conflict with retryable:false. Identity-change errors
 invite an automatic retry. Three actual DB/import regressions cover these cases.
 Final full unit after this correction:709/709. Fresh production build/typecheck/native P0
 after the correction:12/12. Final startup smoke12/12 and renderer hook1/1 passed.
+
+
+## PR-04.4C — verified Provider external identifiers and durable observations
+
+Status: `Verified passing` for this external-identifier increment.
+Research DB10, agent DB15, search snapshot12. Full PR-04 remains in progress.
+
+OpenAlex ids.doi/ids.pmid and Semantic externalIds.DOI/ArXiv now participate in the
+identity graph. Each ranked origin retains original values, field names, normalized
+identities and the complete identifier dictionary, including unknown keys. The verified
+OpenAlex PMID connects direct PubMed/MED observations; Semantic ArXiv connects direct
+arXiv observations without claiming that a declared revision was fetched. Unverified
+Semantic PubMed keys stay opaque. Invalid known identifiers fail before cache admission.
+Primary DOI versus external DOI conflicts retain competing anchors and exclude supplemental
+PID edges; DOI-free components attach only to one unique DOI anchor. Original provider
+metadata and original source bibliography remain unchanged.
+
+Frozen candidate imports retain full origins and execution IDs. Library import validates
+raw Provider hash, source, external ID, retrieval time and recomputed identifier mapping.
+DB10 stores paginated observations independently of library list rows; original source
+rank and execution provenance survive candidate expiry and library archive. Same execution,
+source and rank can replay only with identical data and item identity. Conflicting replay
+or persistence failure rolls back the whole candidate import and returns a nonretryable
+failure. A canonical DOI witnessed only in external fields updates metadata, bibliography,
+BibTeX DOI and existing CSL DOI. Stored provisional canonical keys remain stable on later
+DOI-free imports; idempotent external-PMID replay does not increment library revision.
+
+New readonly capability research.library.getIdentifiers and generated preload method
+research.getLibraryIdentifiers use offset/limit pages, default20/max50. Missing items fail
+explicitly; archived observations remain readable. Model search/read previews omit complete
+raw dictionaries while retaining known mapped values. Old snapshots are refused rather
+than converted, and DB10 does not infer historical identifier observations.
+
+Changed files: Provider identifier/shared schemas, adapters, identity graph/fusion,
+import/library repository/capability and generated IPC, focused regressions, renderer
+snapshot fixture and scoped fusion documentation. Existing unrelated docs remain unstaged.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node .artifacts/research-optimization/pr04-external-ids-baseline.mjs` | Fixed8e53377 red: mapped OpenAlex PMID and direct PubMed produce two candidates (expected one) |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Initial79/79 passed |
+| `node --test --test-name-pattern='observations\|external identifiers\|supplemental PMID\|identifier replay\|identifier API\|identifier dictionaries\|identifier persistence' tests/unit/literature-import.test.mjs` | New/related observation regressions10/10 passed |
+| `node --test --test-name-pattern='repeated PMID-only' tests/unit/literature-import.test.mjs` | Red: repeated import incremented revision; fixed in final full suite |
+| `pnpm test:unit` | Initial718/718; final719/719 passed after canonical-key fix |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Generated preload/registry current; check passed |
+| `pnpm typecheck` | First run preceded generation completion and failed on missing preload method; subsequent check/final build passed |
+| `pnpm test:research-p0` | Final fresh production build/typecheck and12/12 native cases passed |
+| `pnpm check:renderer-chunks` | Passed; exact budget in retained log |
+
+Evidence: `.artifacts/research-optimization/pr04-external-ids-*.log` and fixed baseline
+script. Task-created scratch source and temporary baseline bundle removed after verification.
+No new live literature query, paid model call, remote write or real-user DB migration.
+Remaining: candidate type/license/retraction/conflict review UI, independent retrieval
+annotation/metrics and later plan increments. L2/full reviewed corpus remains blocked.
+
+Final application startup/UI smoke12/12, zero renderer errors, exit0; actual renderer literature hook1/1 and whitespace check passed. Eager JS1131076bytes/6files.
