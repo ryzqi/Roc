@@ -6,7 +6,8 @@ import {literatureReadReviewsSchema, literatureReviewRecordsResultSchema} from '
 import {literatureReadPoolSchema, literatureSearchPoolPageSchema} from './schemas/literature-search-pool';
 import {
   zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
-  zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema
+  zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
+  zoteroPreviewReadSchema, zoteroPreviewPageSchema
 } from './schemas/research-zotero';
 
 import { menuPages } from './surfaces';
@@ -471,6 +472,8 @@ export const ipcRegistry = {
     request({key: 'researchZoteroGroups', channel: 'roc:research:zotero-groups', domain: 'research', method: 'getZoteroGroups', kind: 'plugin', capabilityName: 'research.zotero.groups', inputTransform: first, contract: methodContract(oneArg(zoteroGroupsRequestSchema), zoteroGroupsPageSchema)}),
     request({key: 'researchZoteroCollections', channel: 'roc:research:zotero-collections', domain: 'research', method: 'getZoteroCollections', kind: 'plugin', capabilityName: 'research.zotero.collections', inputTransform: first, contract: methodContract(oneArg(zoteroPageRequestSchema), zoteroCollectionsPageSchema)}),
     request({key: 'researchZoteroItems', channel: 'roc:research:zotero-items', domain: 'research', method: 'getZoteroItems', kind: 'plugin', capabilityName: 'research.zotero.items', inputTransform: first, contract: methodContract(oneArg(zoteroItemsRequestSchema), zoteroItemsPageSchema)}),
+    request({key: 'researchZoteroPreview', channel: 'roc:research:zotero-preview', domain: 'research', method: 'previewZotero', kind: 'plugin', capabilityName: 'research.zotero.preview', inputTransform: first, contract: methodContract(oneArg(zoteroItemsRequestSchema), zoteroPreviewPageSchema)}),
+    request({key: 'researchZoteroReadPreview', channel: 'roc:research:zotero-read-preview', domain: 'research', method: 'getZoteroPreview', kind: 'plugin', capabilityName: 'research.zotero.getPreview', inputTransform: first, contract: methodContract(oneArg(zoteroPreviewReadSchema), zoteroPreviewPageSchema)}),
     request({ key: 'researchLiteratureCancelImport', channel: 'roc:research:literature-cancel-import', domain: 'research', method: 'cancelLiteratureImport', kind: 'plugin', capabilityName: 'research.library.cancelImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureCancelImportSchema), literatureImportResultSchema) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),

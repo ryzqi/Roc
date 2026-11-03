@@ -250,7 +250,6 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchProseCapabilities(context, researchProse);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
-      registerZoteroCapabilities(context, zotero);
       const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key', operationId: string | null = null) => {
         await context.eventBus.publish({ type: 'research.library.changed', source: pluginId, createdAt: new Date().toISOString(),
           payload: { eventId: randomUUID(), operationId, affectedItemIds: items.map((item) => item.id),
@@ -265,6 +264,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       literatureImports.recover();
       registerLiteratureImportCapabilities(context, literatureImports);
+      registerZoteroCapabilities(context, zotero, literatureImports);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
       if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {

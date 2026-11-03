@@ -1591,6 +1591,18 @@ CREATE TABLE research_literature_search_pools (
 `
 });
 
+researchMigrations.push({
+  version: 13, name: 'zotero_owned_immutable_previews',
+  sql: `
+CREATE TABLE research_zotero_previews (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT, run_id TEXT,
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL, snapshot_json TEXT NOT NULL
+);
+CREATE INDEX idx_research_zotero_previews_scope
+  ON research_zotero_previews(owner,project_id,created_at,id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

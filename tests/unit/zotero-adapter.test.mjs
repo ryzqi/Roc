@@ -182,16 +182,18 @@ test('shutdown cancels an active HTTP body and waits for its refusal', async t =
 
 test('registered read-only capability and generated IPC contracts expose actual pages and errors', async () => {
   const handlers = new Map();
+  const imports = {previewZotero: () => assert.fail('preview is verified by the owned import fixture'),
+    readZoteroPreview: () => assert.fail('preview is verified by the owned import fixture')};
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
-  }}}, adapter());
-  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.groups',
-    'research.zotero.items', 'research.zotero.probe']);
+  }}}, adapter(), imports);
+  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.getPreview',
+    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe']);
   assert.equal((await handlers.get('research.zotero.probe')({})).status, 'connected');
   assert.deepEqual((await handlers.get('research.zotero.items')(input())).records, [item]);
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
-  }}}, adapter([], headers, 412));
+  }}}, adapter([], headers, 412), imports);
   await assert.rejects(handlers.get('research.zotero.items')(input()), error =>
     error.code === 'zotero_server_changed' && error.retryable === false);
   for (const descriptor of api.zoteroCapabilities) {

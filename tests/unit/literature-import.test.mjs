@@ -1456,7 +1456,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
     const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 13);
   } finally { f.close(); }
 });
 
@@ -1896,7 +1896,7 @@ test('DB10 upgrades DB9 without inferring historical external identifiers or rew
     insertHistoricalLibrary(f, 'history-external', metadata);
     const before = f.db.prepare('SELECT * FROM research_library').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 13);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getIdentifiers({id: 'history-external'}).total, 0);
     api.applyResearchDatabaseSchema(f.db);
@@ -2045,7 +2045,7 @@ test('DB11 adds review storage without rewriting DB10 papers or inventing histor
     insertHistoricalLibrary(f, 'review-history', record('history-review'));
     const before = f.db.prepare('SELECT * FROM research_library').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 13);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getReviews({id: 'review-history'}).total, 0);
     api.applyResearchDatabaseSchema(f.db);

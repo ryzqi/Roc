@@ -49,6 +49,23 @@ export const zoteroCollectionsPageSchema = page.extend({records: z.array(zoteroC
 export const zoteroGroupsPageSchema = page.omit({library: true, libraryVersion: true}).extend({
   records: z.array(zoteroGroupSchema)
 });
+export const zoteroPreviewBodySchema = z.object({
+  schemaVersion: z.literal(1), previewId: z.string().min(1),
+  request: zoteroItemsRequestSchema, sourcePage: zoteroItemsPageSchema,
+  createdAt: z.string(), expiresAt: z.string()
+}).strict();
+export const zoteroPreviewSchema = zoteroPreviewBodySchema.extend({
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/u)
+});
+export const zoteroPreviewReadSchema = z.object({
+  previewId: z.string().min(1), offset: version.default(0),
+  limit: z.number().int().min(1).max(30).default(20)
+}).strict();
+export const zoteroPreviewPageSchema = zoteroPreviewSchema.extend({
+  capturedTotal: version, nextPreviewOffset: version.nullable()
+});
+export type ZoteroPreview = z.infer<typeof zoteroPreviewSchema>;
+export type ZoteroPreviewPage = z.infer<typeof zoteroPreviewPageSchema>;
 export type ZoteroScope = z.infer<typeof zoteroScopeSchema>;
 export type ZoteroPageRequest = z.infer<typeof zoteroPageRequestSchema>;
 export type ZoteroItemsRequest = z.infer<typeof zoteroItemsRequestSchema>;

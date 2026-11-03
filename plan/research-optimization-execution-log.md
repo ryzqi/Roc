@@ -1558,3 +1558,47 @@ Zotero preview increment (this correction itself has no dependency on that new m
 Evidence `.artifacts/research-optimization/pr05-migration-history-red.log` and
 `pr05-preview-focused-latest.log`, `pr05-preview-unit-latest.log`, `pr05-preview-native.log`.
 Preview implementation remains for the following separate commit after startup verification.
+
+
+## PR-05B1 — owned immutable Zotero review previews
+
+Status: `Verified passing` for preview capture/readback. Full Zotero metadata import/object
+mapping, settings/selection/attachment authorization and checkpoint acceptance remain pending.
+Research DB13, agent DB15. Zotero preview schema1; no old snapshot conversion.
+
+A source page is captured completely before returning a20-object review slice. Original
+objects/unknown fields, local server/library/version, request, raw response hash and time are
+frozen with a full contentHash and7-day review expiry. Trusted owner/project/run are stored
+by main context; input cannot select another scope. Preview readback uses20/default30/max
+pagination and checks the complete body before slicing, even for hidden final records.
+Source total/nextOffset and capturedTotal/nextPreviewOffset remain distinct. No library import,
+attachment read, normalization worker or indexing starts during preview. Database failure,
+invalid page, cancellation, closure and late output cannot publish a successful snapshot.
+Import service tracks/drains preview jobs; effective snapshots survive service restart.
+
+New research.zotero.preview/getPreview capabilities and generated preload previewZotero/
+getZoteroPreview. DB12→13 preserves real-shaped historical library source data and full old
+migration ledger rows, and fabricates no Zotero preview. Migration history correction is
+separately committed459f30df. Previous latest-schema test assertions now expect13, while
+historical fixture version pins and row/hash assertions remain unchanged.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-preview.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Final114/114 passed |
+| `pnpm test:unit` | Final750/750 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Current generated contracts, passed |
+| `pnpm test:research-p0` | Fresh typecheck/build and12/12 native scenarios passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Startup/UI12/12, zero renderer error, exit0 |
+| `pnpm check:renderer-chunks` / `git diff --check` |1131076bytes/6files and whitespace passed |
+
+Five new actual SQLite/capability regressions cover25-original capture, complete hash/paging,
+service restart/no second HTTP, owner/project/expiry/hidden-record integrity, database refusal,
+invalid remote page, late shutdown fence and DB12 upgrade. Initial fixture guessed wrong
+ledger dbName/closed error/capability lexical order; corrected to existing contracts. No
+checks weakened. Evidence `.artifacts/research-optimization/pr05-preview-*.log` plus primary
+source/contract hash in pr05-zotero-primary-contract.json. No real Zotero DB/user library,
+credential, external write, paid model or frozen workflow-fixture edit. Next: user-selected
+Zotero items imported through existing bounded jobs with independent object mappings.

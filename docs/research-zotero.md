@@ -35,6 +35,8 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.groups | research.getZoteroGroups | 当前用户的群组元数据页 |
 | research.zotero.collections | research.getZoteroCollections | 指定库的集合、父集合及版本 |
 | research.zotero.items | research.getZoteroItems | 指定库/集合的原始对象页，含标签和附件引用 |
+| research.zotero.preview | research.previewZotero | 按可信会话/项目保存完整来源页并返回审查预览 |
+| research.zotero.getPreview | research.getZoteroPreview | 按预览 ID 读取已冻结的来源对象 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -49,6 +51,28 @@ fetchedAt、total 和 nextOffset；不截断后伪装成有效页面。
 分页/版本依据
 [官方 Basics](https://www.zotero.org/support/dev/web_api/v3/basics)。
 
+## 冻结预览
+
+数据库 13 保存预览原始完整来源页、查询参数、实例、库、版本、响应 hash 与抓取
+时间。主进程从可信执行上下文填写 owner、projectId、runId；输入不能指定其他
+会话或项目。预览不收录文献，不启动附件读取、解析、索引或书目 worker。
+
+preview 使用 items 参数抓取一页，再完整保存；返回首 20 个对象。
+getPreview 只读本地快照，不重新请求 Zotero，默认 20、最多 30 个对象。
+`capturedTotal` / `nextPreviewOffset` 是保存页内的分页；
+`sourcePage.total` / `sourcePage.nextOffset` 是 Zotero 查询的总量及下一次来源读取位置。
+两个范围保持独立，不能把保存的一页当作已抓取整库。
+
+contentHash 覆盖固定版本、预览 ID、完整来源页、原始请求和审查有效期。每次读回
+先校验全部内容，再截取当前显示页；被省略的末页记录损坏也会拒绝。未找到、
+其他会话/项目、7 天有效期结束或内容损坏均显式失败。预览有效期不删除正式文库
+或已有科研历史。旧数据库升级不补造 Zotero 来源、预览或导入映射。
+
+请求失败、保存失败、调用者取消或应用关闭不返回成功预览。导入服务跟踪预览
+请求，关闭时中断并等待其退出；忽略取消的迟到响应仍被发布前检查拒绝。
+应用重启后的有效快照可在同一会话/项目继续审查；原始响应与冻结内容 hash 保留。
+这是后续用户选择与幂等导入的输入依据，尚未建立同步对象映射或收录检查点。
+
 ## 附件与取消
 
 主进程附件路径方法读取 `items/<key>/file/view/url` 的纯文本 file URI，仅接受
@@ -62,10 +86,12 @@ HTTP/解析失败显式保留为失败，不回退为成功空页。
 
 ## 已验证与待完成
 
-只读适配器、主进程能力和 IPC 是当前增量。测试使用合成数据与真实本机 HTTP
+只读适配器、冻结预览、主进程能力和 IPC 已接入。测试使用合成数据与真实本机 HTTP
 fixture 验证 GET/无 key、实例和库范围、原始 hash、集合/群组版本、分页完整性、
 HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机标准路径
 `/Applications/Zotero.app` 未发现安装；未读取真实 Zotero 数据库、用户文库或凭证。
+预览回归还覆盖 25 条原始对象完整保存、分页/hash 重建、服务重启、会话/项目隔离、
+末页损坏、有效期、数据库拒绝写入、迟到取消与 DB12→13 保留历史原文。
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
 设置区连接/安装检测、库/集合选择、预览后的持久化幂等导入、版本检查点、冲突
