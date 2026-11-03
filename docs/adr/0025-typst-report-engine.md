@@ -47,8 +47,9 @@ Tectonic + TeX bundle）**。本 ADR 用实测数据回答后者，并记录前�
      JS 引擎做同一件事」——两个引擎对同一份数据给出不同结果时，没人知道该信哪个；
    - 样式是**数据**：`resources/research-runtime/csl/` 三份 `.csl`（APA / IEEE / GB/T 7714），
      参与 `lockHashes`，加样式要重建工具链。
-4. **附带物失败不阻断导出**：`export-builder.ts` 在 `try/catch` 里调用报告生成，失败只写
-   `logs/typst-report-error.txt`。一份能编译的论文不该因为报告排版失败而导不出来。
+4. **交付包必须包含报告**：`report.pdf` 和 `report.typ` 是导出合同的一部分。报告生成失败时，
+   导出作业失败，保留 `logs/export-error.txt`，不能发布或人工批准缺少报告的交付包。
+   P0 集成发现旧实现因编译目录错误漏掉报告却返回成功；取消这种成功降级。
 
 ## 落地边界（红线）
 

@@ -23,6 +23,7 @@
     "test": "pnpm test:unit && pnpm test:renderer && node scripts/smoke-electron.mjs",
     "test:unit": "node --test tests/unit/",
     "test:renderer": "node --test tests/renderer/",
+    "test:research-p0": "LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/integration/research-p0-production.test.mjs",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",
     "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs",

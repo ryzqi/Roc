@@ -131,17 +131,10 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   const preview = await tools.renderPdf({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: join(writer.root, 'paper.pdf'),
     outputDir: join(scratch, 'preview'), jobDir: scratch, page: 1, scale: 1, signal });
   if (preview.sourceHash !== result.pdfHash) throw new Error('research_export_snapshot_changed');
-  // 报告是**附加物**：Typst 不可用、字体缺失、样式文件不认，都只留一份日志。
-  // 一份能编译的论文不该因为附带报告排版失败而导不出来。
-  try {
-    const report = await createTypstReport({ tools, jobDir: scratch, sources, bibliography: references.content,
-      language: repository.getProject(record.projectId).language, signal });
-    await writer.write(report.filename, report.pdf);
-    await writer.write('report.typ', report.source);
-  } catch (error) {
-    if (signal.aborted) throw error;
-    await writer.write('logs/typst-report-error.txt', `${error instanceof Error ? error.message : String(error)}\n`);
-  }
+  const report = await createTypstReport({ tools, jobDir: scratch, sources, bibliography: references.content,
+    language: repository.getProject(record.projectId).language, signal });
+  await writer.write(report.filename, report.pdf);
+  await writer.write('report.typ', report.source);
   await writer.write('README.txt', `Roc 科研交付文件\n\nPDF：paper.pdf\n编译入口：source/${entryPath}\n参考文献：references.bib\n` +
     `source/${join(entryDirectory, bblName)} 是编译产出的 BibTeX 结果，arXiv 不运行 BibTeX，上传时一并带上。\n` +
     `source/${join(entryDirectory, 'figures')} 保留 PNG、SVG、PDF；provenance 保存批准正文、证据定位、模型/实验运行和输入输出。\n` +

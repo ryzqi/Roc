@@ -545,3 +545,55 @@ Follow-up discovery: the pinned toolchain exists at `.runtime/research-toolchain
 the actual ResearchToolchain.status check verified its manifest and locked versions
 (Tectonic 0.17.0, Vale 3.24.0, Typst 0.15.0). Missing system PATH binaries do not block
 the next local manuscript/export integration.
+
+## P0.2 — standard offline research workflow and real export
+
+Status: `Verified passing` for the standard fixture chain and the report-failure case.
+P0's other failure scenarios and authorized live L2 evaluation remain unfinished.
+
+A trusted chat task now exercises discovery, frozen literature search, explicit import,
+actual source PDF parsing and located evidence capture, ideation/planning, frozen TypeScript
+data execution, published Skia figures, evidence-backed manuscript, three review children
+and synthesis, human acceptance, native Tectonic/Typst compilation, export approval and
+local ZIP delivery. Search/model responses are deterministic local fixtures. Parsing and
+figure/PDF rendering call actual production implementations in process, so this does not
+establish packaged-worker isolation, OCR or model quality.
+
+The standard task has 17 executions and 14 original model calls / 280 settled Tokens.
+Costs remain unknown. Source/output/ZIP SHA-256 values, execution tree, events, budgets,
+source evidence, both databases, compiled PDFs and first-page previews are retained.
+PDF text readback verifies A=2/B=4 and the report's project identity. Both previews were
+visually inspected: chart bounds, text, captions/references and Chinese report tables render.
+
+True export exposed a Typst bug: paths relative to rootPath were evaluated with jobDir cwd.
+The compiler now runs in rootPath. Report generation is a required part of the delivery
+contract; the old catch that returned success without report.pdf/report.typ was removed
+under the user's no-defensive-code instruction. Export docs and ADR 0025 reflect the new
+behavior. An injected Typst refusal now persists a failed export/stage/task and diagnostic,
+with no archive or artifact. Publication and local write both refuse it.
+
+Native-toolchain scenarios moved to `tests/integration/research-p0-production.test.mjs`
+and `pnpm test:research-p0`; ordinary unit checks do not require a prepared .runtime.
+The suite requires and verifies actual pinned tools, with no missing-tool skips.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:research-p0` | Final 3 passed including real PDF readback/previews and report-failure refusal |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false pnpm test:unit` | 641 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm build` | Production build and typecheck passed |
+| `pnpm check:ipc` | Passed |
+
+Draft failures were a guessed library list request, a guessed PDF chunk identity, a
+shared fixture-model structured tool name across review children, and the real Typst
+path failure. Fixture errors were corrected against actual APIs; temporary wrappers
+were removed. No Provider spending, tracing upload, remote write or compatibility alias.
+Logs: `.artifacts/research-optimization/p0-standard-*.log`. Outputs: the P0 production
+artifact directory. Remaining P0 work is the cancellation/restart/stale-approval/retry/
+unknown-usage/MCP/hostile-document matrix and packaged-worker checks.
+
+Final P0.2 isolated Electron smoke:
+`LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs`
+passed 12/12, zero renderer errors, exit 0.

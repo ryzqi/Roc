@@ -87,7 +87,7 @@ ZIP 包含：
 - `report.pdf`：**研究过程报告**（Typst 排版）：项目与研究目标、本版规模、证据索引、图稿清单、
   按 CSL 样式（APA / IEEE / GB/T 7714，随项目文稿语言选默认）排版的完整参考文献。它不是正文的
   第二个渲染——正文的真身仍是 claim 序列。取舍见 [ADR 0025](adr/0025-typst-report-engine.md)。
-  报告排版失败**不阻断导出**：只写 `logs/typst-report-error.txt`，交付包里就没有 `report.pdf`。
+  报告排版失败会使导出作业失败，诊断保存在 `logs/export-error.txt`；不发布缺少报告的交付包。
 - `report.typ`：报告的 Typst 源，用户手上有 Typst 就能改。
 - `source/`：可重新编译的模板、正文、BibTeX、编译产出的 `.bbl` 与 PNG/SVG/PDF 图稿。
 - `references.bib`：参考文献交换文件。

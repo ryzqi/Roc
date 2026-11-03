@@ -36,3 +36,8 @@ export { ResearchToolchain } from '../../../src/main/plugins/research/toolchain'
 export { ResearchTemplateService } from '../../../src/main/plugins/research/template-service';
 export { ResearchExportSourceService } from '../../../src/main/plugins/research/export-sources';
 export { ResearchExportService } from '../../../src/main/plugins/research/export-service';
+export { LiteratureSearchService } from '../../../src/main/plugins/research/literature-service';
+export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
+export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
+export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
+export { parseResearchDocument } from '../../../src/main/plugins/research/document-parser';

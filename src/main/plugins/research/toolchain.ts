@@ -267,7 +267,7 @@ export class ResearchToolchain {
       args: ['compile', '--root', input.rootPath,
         ...fontPaths.flatMap((path) => ['--font-path', path]),
         input.sourcePath, input.outputPath],
-      cwd: input.jobDir,
+      cwd: input.rootPath,
       readablePaths: [root, input.rootPath, ...fontPaths],
       writablePaths: [input.jobDir],
       environment: { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
