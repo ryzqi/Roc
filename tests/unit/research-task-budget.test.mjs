@@ -126,6 +126,9 @@ test('dispatch attaches already billed chat calls once and shares remaining cap 
     assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_budget_calls WHERE task_id = ?').pluck().get(execution.taskId), 2);
     assert.equal(f.agentDb.prepare('SELECT SUM(COALESCE(actual_cost_microusd,reserved_cost_microusd)) FROM agent_budget_calls WHERE task_id = ?')
       .pluck().get(execution.taskId), 100);
+    const linkedEvents = f.tasks.events({ taskId: execution.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
+    assert.deepEqual(linkedEvents.filter(event => event.eventType === 'call_linked')
+      .map(event => [event.executionId, event.callId, event.state]), [[runId, 'chat-call', 'settled']]);
   } finally { f.close(); }
 });
 
@@ -205,6 +208,9 @@ test('actual stage createAgent accounts provider attempt and refuses the next ca
     assert.equal(f.repository.runs.get(retried.id, f.project.id).error, 'run_model_call_budget_exhausted');
     assert.equal(retried.taskId, f.run.taskId);
     assert.equal(requests, 1);
+    const events = f.tasks.events({ taskId: f.run.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
+    assert.equal(events.filter(event => event.eventType === 'call_reserved').length, 1);
+    assert.equal(events.filter(event => event.eventType === 'call_unknown').length, 1);
     await runtime.shutdown();
   } finally { f.close(); }
 });
@@ -244,6 +250,9 @@ test('actual stage createAgent settles successful usage without requiring a chat
     assert.equal(JSON.parse(call.envelope_json).providerId, 'fixture-provider');
     assert.equal(JSON.parse(call.envelope_json).modelId, 'fixture-model');
     assert.equal(f.ledger.readBudgetStatus(f.run.id, f.budget, false).tokens.settled, 20);
+    const events = f.tasks.events({ taskId: f.run.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
+    assert.equal(events.filter(event => event.eventType === 'call_reserved').length, 1);
+    assert.equal(events.filter(event => event.eventType === 'call_settled').length, 1);
     assert.throws(() => f.ledger.settle(f.run.id, call.call_id, 1, 'settled'), /run_budget_settlement_invalid/);
   } finally { f.close(); }
 });

@@ -352,3 +352,32 @@ Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
 The final consumer audit expanded diagnostics to the canonical chat status schema after
 the full unit run. Focused contracts and production build were repeated after that change.
 Logs: `.artifacts/research-optimization/pr02c-diagnostics-*.log`. No model/network calls.
+
+## ROC-PR-02C.4 — durable task and model-call events
+
+Status: `Verified passing` for task event correlation and replay.
+Shell presentation and live invalidation remain pending.
+
+Agent migration 14 records task creation/status, execution linkage, prior-call attribution,
+reservations, settlement and startup uncertainty. SQLite triggers write each event in the
+same transaction as its authoritative change. Activation rollback removes its status event;
+denied/duplicate calls and duplicate settlement create no success event.
+Events carry task, execution kind/ID and call ID, with monotonic sequence cursors.
+Project-scoped replay uses explicit page size and cursor and returns actual stored events.
+Migration retains existing tasks without fabricating historical event rows.
+Event payloads contain no prompt envelopes or credentials.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final 630 passed, 0 failed |
+| `pnpm harness:eval` | Final 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `git diff --check` | Passed |
+
+Coverage includes actual createAgent success/failure correlation, prior billed chat linkage,
+startup unknown conversion, rollback, duplicate attempts, pagination/project isolation and
+the real v13 database upgrade. Logs: `.artifacts/research-optimization/pr02c-events-*.log`.
+No model/network calls; integration model attempts use local fixtures.

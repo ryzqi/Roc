@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import {
-  researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema
+  researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema,
+  researchTaskEventsRequestSchema, researchTaskEventsPageSchema
 } from '../../../shared/schemas/research-tasks';
 import { researchStageRunSchema } from '../../../shared/schemas/research-runs';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
@@ -19,6 +20,9 @@ const capabilities = {
   forChat: {
     name: 'research.task.forChat', version: '1.0.0', inputSchema: researchTaskForChatRequestSchema,
     outputSchema: researchTaskDiagnosticsSchema.nullable()
+  },
+  events: {
+    name: 'research.task.events', version: '1.0.0', inputSchema: researchTaskEventsRequestSchema, outputSchema: researchTaskEventsPageSchema
   },
   continueTask: {
     name: 'research.task.continue', version: '1.0.0', inputSchema: researchTaskContinueRequestSchema, outputSchema: researchStageRunSchema
@@ -49,6 +53,8 @@ export function registerResearchTaskCapabilities(
     diagnostics.get(researchTaskRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, capabilities.forChat, async input =>
     diagnostics.forChat(researchTaskForChatRequestSchema.parse(input)));
+  context.capabilities.register(context.pluginId, capabilities.events, async input =>
+    tasks.events(researchTaskEventsRequestSchema.parse(input)));
 }
 
 function descriptor<T>(name: string, outputSchema: z.ZodType<T>): CapabilityDescriptor<

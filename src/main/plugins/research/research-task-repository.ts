@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import {
-  researchTaskSchema, researchTaskExecutionSchema,
+  researchTaskSchema, researchTaskExecutionSchema, researchTaskEventSchema, researchTaskEventsPageSchema,
   type ResearchTask, type ResearchTaskExecution
 } from '../../../shared/schemas/research-tasks';
 import type { ResearchStageRun } from '../../../shared/types';
@@ -56,6 +56,18 @@ export class ResearchTaskRepository {
     this.get(taskId, projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_task_executions WHERE task_id = ? ORDER BY created_at, rowid')
       .all(taskId) as Array<{ snapshot_json: string }>).map((row) => researchTaskExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+  }
+
+  events(request: { taskId: string; projectId: string; afterSequence: number; limit: number }) {
+    this.get(request.taskId, request.projectId);
+    const rows = this.db.prepare(`SELECT sequence,task_id taskId,event_type eventType,
+      execution_kind executionKind,execution_id executionId,call_id callId,state,reason,created_at createdAt
+      FROM research_task_events WHERE task_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`)
+      .all(request.taskId, request.afterSequence, request.limit + 1);
+    const events = rows.slice(0, request.limit).map(row => researchTaskEventSchema.parse(row));
+    return researchTaskEventsPageSchema.parse({
+      events, nextSequence: events.at(-1)?.sequence ?? request.afterSequence, hasMore: rows.length > request.limit
+    });
   }
 
   taskForChat(runId: string): ResearchTask | null {

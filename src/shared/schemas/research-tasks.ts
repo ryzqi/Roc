@@ -39,3 +39,25 @@ export const researchTaskExecutionSchema = z.object({
 
 export type ResearchTask = z.infer<typeof researchTaskSchema>;
 export type ResearchTaskExecution = z.infer<typeof researchTaskExecutionSchema>;
+
+export const researchTaskEventSchema = z.object({
+  sequence: z.number().int().positive(),
+  taskId: id,
+  eventType: z.enum(['task_created', 'task_status', 'execution_linked', 'call_linked', 'call_reserved', 'call_settled', 'call_unknown']),
+  executionKind: researchExecutionKindSchema.nullable(),
+  executionId: id.nullable(),
+  callId: id.nullable(),
+  state: z.string().nullable(),
+  reason: z.string().nullable(),
+  createdAt: z.iso.datetime()
+}).strict();
+export const researchTaskEventsRequestSchema = researchTaskRequestSchema.extend({
+  afterSequence: z.number().int().nonnegative(),
+  limit: z.number().int().min(1).max(200)
+}).strict();
+export const researchTaskEventsPageSchema = z.object({
+  events: z.array(researchTaskEventSchema),
+  nextSequence: z.number().int().nonnegative(),
+  hasMore: z.boolean()
+}).strict();
+export type ResearchTaskEvent = z.infer<typeof researchTaskEventSchema>;

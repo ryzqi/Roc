@@ -657,6 +657,51 @@ UPDATE research_tasks SET status = json_extract(snapshot_json,'$.status'), snaps
 `
 });
 
+agentMigrations.push({
+  version: 14,
+  name: 'research_task_events',
+  sql: `
+CREATE TABLE research_task_events (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL REFERENCES research_tasks(id),
+  event_type TEXT NOT NULL CHECK(event_type IN ('task_created','task_status','execution_linked','call_linked','call_reserved','call_settled','call_unknown')),
+  execution_kind TEXT CHECK(execution_kind IN ('chat','stage','experiment','figure','export')),
+  execution_id TEXT, call_id TEXT, state TEXT, reason TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX research_task_events_task_sequence ON research_task_events(task_id,sequence);
+CREATE TRIGGER research_task_created_event AFTER INSERT ON research_tasks BEGIN
+  INSERT INTO research_task_events(task_id,event_type,state,reason,created_at)
+  VALUES(NEW.id,'task_created',NEW.status,json_extract(NEW.snapshot_json,'$.statusReason'),NEW.created_at);
+END;
+CREATE TRIGGER research_task_status_event AFTER UPDATE OF status,snapshot_json ON research_tasks
+WHEN NEW.status != OLD.status OR json_extract(NEW.snapshot_json,'$.statusReason') IS NOT json_extract(OLD.snapshot_json,'$.statusReason')
+BEGIN
+  INSERT INTO research_task_events(task_id,event_type,state,reason,created_at)
+  VALUES(NEW.id,'task_status',NEW.status,json_extract(NEW.snapshot_json,'$.statusReason'),json_extract(NEW.snapshot_json,'$.updatedAt'));
+END;
+CREATE TRIGGER research_task_execution_event AFTER INSERT ON research_task_executions BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,created_at)
+  VALUES(NEW.task_id,'execution_linked',NEW.kind,NEW.execution_id,NEW.created_at);
+END;
+CREATE TRIGGER research_task_call_reserved_event AFTER INSERT ON agent_budget_calls
+WHEN NEW.task_id IS NOT NULL BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,'call_reserved',NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,NEW.created_at);
+END;
+CREATE TRIGGER research_task_call_linked_event AFTER UPDATE OF task_id ON agent_budget_calls
+WHEN OLD.task_id IS NULL AND NEW.task_id IS NOT NULL BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,'call_linked',NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+CREATE TRIGGER research_task_call_settled_event AFTER UPDATE OF state ON agent_budget_calls
+WHEN NEW.task_id IS NOT NULL AND NEW.state != OLD.state BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,CASE WHEN NEW.state = 'unknown' THEN 'call_unknown' ELSE 'call_settled' END,
+    NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
