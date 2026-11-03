@@ -360,12 +360,27 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         const uniqueRefs = [...new Map(refs.map((ref) => [ref.path, ref])).values()];
         return { ...proof, detail: `${proof.detail} Full ${request.stage} verifier passed.`, refs: uniqueRefs };
       });
-      context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async (input) => applyResearchWorkflowTransition({
-        request: researchWorkflowTransitionRequestSchema.parse(input),
-        gate: humanGate,
-        runtime,
-        exports: researchExports
-      }));
+      context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async input => {
+        const request = researchWorkflowTransitionRequestSchema.parse(input);
+        if (request.action === 'pause') {
+          const workflow = researchRepository.getWorkflow(request.projectId);
+          if (workflow.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
+          const runId = workflow.stages.find(stage => stage.stage === request.expectedStage)?.activeRunId;
+          if (runId !== null && runId !== undefined) {
+            const run = researchRepository.runs.get(runId, request.projectId);
+            if (run.taskId === null) throw new Error('research_task_execution_unlinked');
+            await taskController.pause({ taskId: run.taskId, projectId: request.projectId });
+            return researchRepository.getWorkflow(request.projectId);
+          }
+        }
+        const snapshot = await applyResearchWorkflowTransition({ request, gate: humanGate, runtime, exports: researchExports });
+        if (['complete', 'approve', 'reject'].includes(request.action)) {
+          for (const taskId of researchRepository.runs.taskIdsForStage(request.projectId, request.expectedStage)) {
+            runtime.synchronizeTaskState(taskId, request.projectId);
+          }
+        }
+        return snapshot;
+      });
       context.capabilities.register(pluginId, workbenchCapabilities.stageRole, async (input) =>
         getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
       );

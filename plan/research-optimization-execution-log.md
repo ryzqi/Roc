@@ -281,3 +281,41 @@ Unit coverage includes the actual Agent plugin capability, actual stage runtime,
 child termination, unrelated active stage isolation, delayed cleanup, late output,
 direct domain service routing, cleanup failure, persistent identity and IPC boundaries.
 Logs: `.artifacts/research-optimization/pr02c-{unit,harness,build,ipc,contracts}.log`.
+
+## ROC-PR-02C.2 — stage pause, continuation and recovery states
+
+Status: `Verified passing` for stage lifecycle and persisted task states.
+Aggregate diagnostics, task events, approval-only pause restoration and shell controls remain pending.
+
+Task schema v2 and agent migration 13 distinguish active, paused, waiting approval,
+interrupted, failed, cancelled and completed states. Status reasons persist with snapshots;
+the checked task status column governs budget admission. Migration upgrades old task records
+without inventing execution links or reasons. A schema change is required because the existing
+migration engine skips data-only SQL when schema objects already match.
+
+Pause refuses new dispatch before stopping executions and awaits cleanup.
+The task policy explicitly keeps its original deadline running during pause.
+Continuation of stopped stage work creates a new execution under the same task and frozen
+budget. Failed continuation rolls back task activation; old executions remain terminal.
+Existing stage retries can explicitly continue failed/interrupted/paused tasks.
+Cancelled tasks require the task continuation API.
+Permanent budget stop reasons and unknown reservations are retained.
+
+Restart interrupts only linked executions actually left running, preserves cancelled identity,
+and starts no new execution. Human approval remains distinct from task completion.
+Task states follow actual gate outcomes. A stage cancellation signal is checked again before
+the human gate commits after asynchronous verification, fencing late workflow advancement.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final 623 passed, 0 failed |
+| `pnpm harness:eval` | Final 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `git diff --check` | Passed |
+
+Seven lifecycle regressions exercise pause cleanup, unchanged deadline/budget, new execution
+identity, activation rollback, real approval, cancellation during verification, restart and
+the real v12 database upgrade. Logs: `.artifacts/research-optimization/pr02c-lifecycle-*.log`.

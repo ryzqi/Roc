@@ -315,8 +315,23 @@ export class ResearchRunRepository {
   recoverInterrupted(): number {
     const rows = this.db.prepare("SELECT id, project_id FROM research_stage_runs WHERE status IN ('queued','running')")
       .all() as Array<{ id: string; project_id: string }>;
-    for (const row of rows) this.terminate(row.id, row.project_id, 'interrupted', 'research_run_interrupted_by_restart');
+    for (const row of rows) {
+      const run = this.get(row.id, row.project_id);
+      const task = run.taskId === null ? null : this.research.tasks.get(run.taskId, row.project_id);
+      this.terminate(row.id, row.project_id, task?.status === 'cancelled' ? 'cancelled' : 'interrupted',
+        task?.status === 'cancelled' ? 'research_task_cancelled' : 'research_run_interrupted_by_restart');
+      if (task?.status === 'active') {
+        this.research.tasks.setStatus(task.id, row.project_id, 'interrupted', 'research_task_interrupted_by_restart', ['active']);
+      }
+    }
     return rows.length;
+  }
+
+  taskIdsForStage(projectId: string, stage: ResearchStageRun['stage']): string[] {
+    this.research.getProject(projectId);
+    return this.db.prepare(`SELECT DISTINCT task_id FROM research_stage_runs
+      WHERE project_id = ? AND stage = ? AND task_id IS NOT NULL AND parent_run_id IS NULL AND status = 'completed'`)
+      .pluck().all(projectId, stage) as string[];
   }
 
   requireActive(id: string, projectId: string): ResearchStageRun {

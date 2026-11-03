@@ -65,15 +65,37 @@ export class ResearchTaskRepository {
     return row === undefined ? null : researchTaskSchema.parse(JSON.parse(row.snapshot_json));
   }
 
+  reconcileInterruptedChats(): void {
+    const rows = this.db.prepare(`SELECT DISTINCT t.id,t.project_id FROM research_tasks t
+      JOIN research_task_executions e ON e.task_id = t.id AND e.kind = 'chat'
+      JOIN agent_runs r ON r.id = e.execution_id
+      WHERE r.status = 'interrupted' AND t.status = 'active'`)
+      .all() as Array<{ id: string; project_id: string }>;
+    for (const row of rows) this.setStatus(row.id, row.project_id, 'interrupted',
+      'research_task_interrupted_by_restart', ['active']);
+  }
+
   cancel(taskId: string, projectId: string): ResearchTask {
+    return this.setStatus(taskId, projectId, 'cancelled', 'research_task_cancelled',
+      ['active', 'waiting_approval', 'paused', 'interrupted', 'failed', 'cancelled']);
+  }
+
+  setStatus(taskId: string, projectId: string, status: ResearchTask['status'], reason: string | null,
+    allowed: ResearchTask['status'][]): ResearchTask {
     return this.db.transaction(() => {
       const task = this.get(taskId, projectId);
-      if (task.status === 'completed') throw new Error('research_task_already_completed');
-      if (task.status === 'cancelled') return task;
-      const cancelled = researchTaskSchema.parse({ ...task, status: 'cancelled', updatedAt: this.now() });
-      this.db.prepare('UPDATE research_tasks SET snapshot_json = ? WHERE id = ?')
-        .run(JSON.stringify(cancelled), taskId);
-      return cancelled;
+      if (!allowed.includes(task.status)) throw new Error('research_task_status_conflict');
+      const changed = researchTaskSchema.parse({ ...task, status, statusReason: reason, updatedAt: this.now() });
+      this.db.prepare('UPDATE research_tasks SET status = ?, snapshot_json = ? WHERE id = ?')
+        .run(status, JSON.stringify(changed), taskId);
+      return changed;
+    }).immediate();
+  }
+
+  continueWith<T>(taskId: string, projectId: string, operation: () => T): T {
+    return this.db.transaction(() => {
+      this.setStatus(taskId, projectId, 'active', null, ['paused', 'interrupted', 'failed', 'cancelled']);
+      return operation();
     }).immediate();
   }
 
@@ -122,11 +144,12 @@ export class ResearchTaskRepository {
 
   private createTask(projectId: string, goal: string, rootAgentRunId: string | null): ResearchTask {
     const task = researchTaskSchema.parse({
-      schemaVersion: 1, id: `research_task_${randomUUID()}`, projectId, goal, rootAgentRunId,
-      status: 'active', budgetPolicyVersion: 1, createdAt: this.now(), updatedAt: this.now()
+      schemaVersion: 2, id: `research_task_${randomUUID()}`, projectId, goal, rootAgentRunId,
+      status: 'active', statusReason: null, deadlineClock: 'continuous',
+      budgetPolicyVersion: 1, createdAt: this.now(), updatedAt: this.now()
     });
-    this.db.prepare('INSERT INTO research_tasks (id, project_id, snapshot_json, created_at) VALUES (?, ?, ?, ?)')
-      .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
+    this.db.prepare('INSERT INTO research_tasks (id, project_id, status, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);
     const limits = rootAgentRunId === null
       ? createRunBudget({ contextBudgetTokens: null, startedAt: task.createdAt })
       : this.rootChatBudget(rootAgentRunId);

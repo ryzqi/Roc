@@ -146,6 +146,7 @@ export function createAgentPlugin(options: AgentPluginOptions): RocPlugin {
       const runEventLog = new AgentRunEventLog(db);
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
+      options.researchTasks.reconcileInterruptedChats();
           const budgetLedger = new RunBudgetLedger(db);
       budgetLedger.reconcileStartup();
       // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
@@ -420,7 +421,7 @@ function registerAgentCapabilities(
     const request = chatCancelRunRequestSchema.parse(input);
     const result = await runtime.cancelRun(request);
     const task = options.researchTasks.taskForChat(request.runId);
-    if (task !== null && task.status !== 'cancelled' && task.status !== 'completed') {
+    if (task !== null && ['active', 'waiting_approval', 'failed'].includes(task.status)) {
       await context.capabilities.invoke('research.task.cancel', { taskId: task.id, projectId: task.projectId });
     }
     return result;

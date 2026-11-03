@@ -646,6 +646,17 @@ CREATE INDEX idx_agent_tool_progress_run ON agent_tool_progress(run_id,sequence)
 `
 });
 
+agentMigrations.push({
+  version: 13,
+  name: 'research_task_lifecycle',
+  sql: `
+ALTER TABLE research_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+  CHECK(status IN ('active','paused','waiting_approval','interrupted','completed','cancelled','failed'));
+UPDATE research_tasks SET status = json_extract(snapshot_json,'$.status'), snapshot_json = json_set(snapshot_json,
+  '$.schemaVersion', 2, '$.statusReason', NULL, '$.deadlineClock', 'continuous');
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

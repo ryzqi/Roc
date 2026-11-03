@@ -24,3 +24,4 @@ export { createResearchRoleExecutor } from '../../../src/main/plugins/research/r
 export { ResearchTaskController } from '../../../src/main/plugins/research/task-controller';
 export { registerResearchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';
 export { createAgentPlugin } from '../../../src/main/plugins/agent';
+export { createResearchHumanGate } from '../../../src/main/plugins/research/human-gate';

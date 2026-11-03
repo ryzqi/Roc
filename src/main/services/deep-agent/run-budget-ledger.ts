@@ -139,7 +139,7 @@ export class RunBudgetLedger {
   }
 
   private assertTaskReservation(taskId: string, input: Reservation): void {
-    const row = this.db.prepare(`SELECT b.limits_json,b.stop_reason,json_extract(t.snapshot_json,'$.status') status
+    const row = this.db.prepare(`SELECT b.limits_json,b.stop_reason,t.status
       FROM research_task_budgets b JOIN research_tasks t ON t.id = b.task_id WHERE b.task_id = ?`)
       .get(taskId) as { limits_json: string; stop_reason: string | null; status: string } | undefined;
     if (row === undefined) throw new Error('research_task_budget_missing');

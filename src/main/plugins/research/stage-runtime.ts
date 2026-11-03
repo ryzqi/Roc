@@ -40,6 +40,11 @@ export class ResearchStageRuntime {
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
+    const execution = this.repository.tasks.requireExecution('stage', request.runId, request.projectId);
+    const task = this.repository.tasks.get(execution.taskId, request.projectId);
+    if (['paused', 'interrupted', 'failed'].includes(task.status)) {
+      return this.repository.tasks.continueWith(task.id, task.projectId, () => this.retry(request));
+    }
     this.repository.tasks.budgetForExecution('stage', request.runId, request.projectId);
     const run = this.repository.runs.retry(request);
     return this.linkAndSchedule(run, null);
@@ -84,15 +89,23 @@ export class ResearchStageRuntime {
   }
 
   async cancelTask(taskId: string, projectId: string): Promise<void> {
+    await this.stopTask(taskId, projectId, 'cancelled', 'research_task_cancelled');
+  }
+
+  async pauseTask(taskId: string, projectId: string): Promise<void> {
+    await this.stopTask(taskId, projectId, 'interrupted', 'research_task_paused');
+  }
+
+  async stopTask(taskId: string, projectId: string, status: 'cancelled' | 'interrupted', reason: string): Promise<void> {
     const runs = this.repository.tasks.executions(taskId, projectId)
       .filter((execution) => execution.kind === 'stage')
       .map((execution) => this.repository.runs.get(execution.executionId, projectId));
     const pending: Promise<void>[] = [];
     for (const run of runs) {
-      this.repository.runs.terminate(run.id, projectId, 'cancelled', 'research_task_cancelled');
+      this.repository.runs.terminate(run.id, projectId, status, reason);
       const active = this.active.get(run.id);
       if (active !== undefined) {
-        active.controller.abort(new Error('research_task_cancelled'));
+        active.controller.abort(new Error(reason));
         pending.push(active.cleanup);
       }
       if (this.effects !== undefined) pending.push(this.effects.cancelOwned(projectId, run.id));
@@ -102,10 +115,26 @@ export class ResearchStageRuntime {
     if (errors.length > 0) throw new AggregateError(errors, 'research_task_stage_cleanup_failed');
   }
 
+  continueTask(request: { taskId: string; projectId: string; runId: string; requestId: string }): ResearchStageRun {
+    const execution = this.repository.tasks.requireExecution('stage', request.runId, request.projectId);
+    if (execution.taskId !== request.taskId) throw new Error('research_task_execution_conflict');
+    return this.repository.tasks.continueWith(request.taskId, request.projectId, () => this.retry({
+      projectId: request.projectId, runId: request.runId, requestId: request.requestId
+    }));
+  }
+
   private stop(request: ResearchStageRunIdRequest, status: 'cancelled' | 'interrupted', reason: string): ResearchStageRun {
     const previous = this.repository.runs.get(request.runId, request.projectId);
     if (previous.parentRunId !== null) {
       throw new Error('research_run_cancel_parent_required');
+    }
+    if (previous.taskId !== null && (['queued', 'running'].includes(previous.status) || this.active.has(previous.id))) {
+      const task = this.repository.tasks.get(previous.taskId, previous.projectId);
+      if (task.status === 'active') {
+        this.repository.tasks.setStatus(task.id, task.projectId,
+          status === 'cancelled' ? 'cancelled' : reason === 'research_run_paused' ? 'paused' : 'interrupted',
+          reason, ['active']);
+      }
     }
     const run = this.repository.runs.terminate(request.runId, request.projectId, status, reason);
     const active = this.active.get(run.id);
@@ -158,6 +187,12 @@ export class ResearchStageRuntime {
     } catch (error) {
       controller.abort(error);
       await Promise.allSettled(children);
+      const task = queued.taskId === null ? null : this.repository.tasks.get(queued.taskId, queued.projectId);
+      if (task?.status === 'active') {
+        this.repository.tasks.setStatus(task.id, task.projectId,
+          controller.signal.reason instanceof Error && controller.signal.reason.message === 'research_run_interrupted_by_shutdown'
+            ? 'interrupted' : 'failed', executionErrorCode(error), ['active']);
+      }
       if (this.repository.runs.get(queued.id, queued.projectId).status === 'completed') return;
       this.repository.runs.terminate(queued.id, queued.projectId, 'failed', executionErrorCode(error));
       await this.effects?.cancelOwned(queued.projectId, queued.id);
@@ -185,9 +220,24 @@ export class ResearchStageRuntime {
     const completed = this.repository.runs.complete(run.id, run.projectId, result.output);
     if (completed.parentRunId === null) {
       signal.throwIfAborted();
-      await this.gate.complete({ projectId: completed.projectId, expectedStage: completed.stage, action: 'complete' });
+      await this.gate.complete({ projectId: completed.projectId, expectedStage: completed.stage, action: 'complete' }, signal);
+      signal.throwIfAborted();
+      this.synchronizeTaskState(completed.taskId, completed.projectId);
     }
     return completed;
+  }
+
+  synchronizeTaskState(taskId: string | null, projectId: string): void {
+    if (taskId === null) throw new Error('research_task_execution_unlinked');
+    const task = this.repository.tasks.get(taskId, projectId);
+    if (!['active', 'waiting_approval'].includes(task.status)) return;
+    const workflow = this.repository.getWorkflow(projectId);
+    const current = workflow.stages.find(stage => stage.stage === workflow.currentStage);
+    if (current === undefined) throw new Error('research_stage_not_found');
+    const status = workflow.projectStatus === 'completed' ? 'completed'
+      : current.status === 'waiting_approval' ? 'waiting_approval' : 'active';
+    this.repository.tasks.setStatus(taskId, projectId, status,
+      status === 'waiting_approval' ? 'research_task_waiting_approval' : null, ['active', 'waiting_approval']);
   }
 
   private async executeChild(queued: ResearchStageRun, signal: AbortSignal): Promise<ResearchStageRun> {
@@ -212,6 +262,6 @@ function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 
 function executionErrorCode(error: unknown): string {
   if (error instanceof ZodError) return 'research_role_output_invalid';
-  if (error instanceof Error && /^(?:research|run)_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message;
+  if (error instanceof Error && /^(?:research|run)_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message.slice(0, 256);
   return 'research_role_execution_failed';
 }
