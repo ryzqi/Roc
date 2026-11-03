@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {zoteroItemKeySchema} from './research-zotero';
+import {zoteroItemKeySchema, zoteroItemsPageSchema, zoteroImportedObjectSchema} from './research-zotero';
 import {zoteroObjectReadSchema, zoteroSourceStateRequestSchema} from './research-zotero-source-state';
 import {researchDocumentSchema} from './research-documents';
 
@@ -53,3 +53,12 @@ export const zoteroAttachmentImportBodySchema = z.object({
 export const zoteroAttachmentImportSchema = zoteroAttachmentImportBodySchema.extend({contentHash: hash});
 export const zoteroAttachmentImportCancelSchema = z.object({requestId: z.string().min(1), cancelRequested: z.boolean()}).strict();
 export type ZoteroAttachmentImport = z.infer<typeof zoteroAttachmentImportSchema>;
+export const zoteroChildrenRequestSchema = zoteroAttachmentRequestSchema.omit({attachmentKey: true}).extend({
+  offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  limit: z.number().int().min(1).max(50), expectedLibraryVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable()
+});
+export const zoteroChildrenIpcSchema = zoteroChildrenRequestSchema.extend({projectId: z.string().min(1).nullable()});
+export const zoteroChildrenPageSchema = z.object({
+  parent: zoteroImportedObjectSchema, request: zoteroChildrenRequestSchema, page: zoteroItemsPageSchema
+}).strict();
+export type ZoteroChildrenPage = z.infer<typeof zoteroChildrenPageSchema>;

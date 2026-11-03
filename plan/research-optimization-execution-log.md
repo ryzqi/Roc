@@ -2099,3 +2099,32 @@ No real Zotero user library, new live literature query, paid model, remote write
 workflow-fixture edits. Next: scoped attachment child discovery and original-source UI for
 check/explicit selected-file grant/content import, then actual-client acceptance and X-UI.
 Full PR-05 and overall plan remain unfinished.
+
+## PR-05F4A — owned parent child discovery
+
+Status: `Verified passing` for scoped backend/API discovery. Research DB19 unchanged.
+`research.zotero.children` / `getZoteroChildren` require explicit project/source receipt and
+pagination/version input. Owned original parent receipt is validated before HTTP; user/group
+children endpoint stays on the fixed local API. Raw notes/attachments, exact counts, object
+versions and library version remain distinct. Every child must match parentItem. No DB write,
+file bytes, grant, worker or automatic HTTP. Shutdown aborts actual read and refuses late output.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-sync.test.mjs tests/unit/zotero-preview.test.mjs` |74/74 passed |
+| `pnpm test:unit` |809/809 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |15/15 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-children-*.log`; native CSL regression reads actual original-parent children
+after granted import. Tests cover owned/project refusal before dispatch, raw kinds/pagination/
+counts, parent/version mismatch, actual bridge isolation and shutdown abort. Actual native
+panel and real Zotero client remain unrun. No real library/live literature/model/remote writes
+or frozen fixtures touched. Next F4B: readonly original-source entry for already-imported rows
+and child discovery/inspection/explicit native grant/content-import UI. Full plan unfinished.

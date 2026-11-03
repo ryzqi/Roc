@@ -193,6 +193,7 @@ export const rocApi: RocPreloadApi = {
     importZoteroAttachment: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroAttachmentImport, ...args),
     readZoteroAttachmentImport: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroAttachmentImportRead, ...args),
     cancelZoteroAttachmentImport: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroAttachmentImportCancel, ...args),
+    getZoteroChildren: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroChildren, ...args),
     captureZoteroSyncPage: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroSyncPage, ...args),
     controlZoteroSync: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroSyncControl, ...args),
     acknowledgeZoteroSync: (...args) => ipcRenderer.invoke(ipcChannels.researchZoteroSyncAcknowledge, ...args),

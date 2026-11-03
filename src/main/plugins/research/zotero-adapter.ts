@@ -98,6 +98,14 @@ export class ZoteroAdapter {
     return {...common, status: deletion.data === true ? 'trashed' : 'present', item, objectVersion: item.version};
   }
 
+  async children(input: z.infer<typeof zoteroPageRequestSchema>, keyInput: unknown, signal?: AbortSignal) {
+    const request = zoteroPageRequestSchema.parse(input), key = zoteroItemKeySchema.parse(keyInput);
+    const query = new URLSearchParams({format: 'json', include: 'data', start: String(request.offset), limit: String(request.limit)});
+    const result = await this.page(request, `${prefix(request)}/items/${key}/children?${query}`, zoteroItemSchema, signal);
+    if (result.records.some(item => item.data.parentItem !== key)) throw new Error('zotero_children_parent_mismatch');
+    return result;
+  }
+
   /** A path reference is not filesystem authorization; the import boundary must validate access. */
   async attachmentPath(scopeInput: unknown, keyInput: unknown, signal?: AbortSignal): Promise<string> {
     const scope = zoteroScopeSchema.parse(scopeInput);

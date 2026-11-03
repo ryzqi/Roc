@@ -126,6 +126,7 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     const attachmentAdapter=new api.ZoteroAdapter(async(url,init)=>{
       attachmentCalls.push(url);assert.equal(init.method,'GET');
       const headers={'Zotero-API-Version':'3','Zotero-Schema-Version':'40','Zotero-Server-ID':'native-fixture','Last-Modified-Version':'9'};
+      if(new URL(url).pathname.endsWith('/children')) return Response.json([attachment],{headers:{...headers,'Total-Results':'1'}});
       return new URL(url).pathname.endsWith('/file/view/url') ? new Response(pathToFileURL(attachmentPath).href,{headers}) :
         Response.json(attachment,{headers});
     });
@@ -167,6 +168,8 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
         assert.deepEqual(await run(()=>imports.importZoteroAttachment(input,documents)),imported);
         assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),1);
         assert.equal(f.repository.library.get(saved.id).revision,saved.revision);
+        const children=await run(()=>imports.readZoteroChildren({...parent,offset:0,limit:20,expectedLibraryVersion:null},attachmentAdapter));
+        assert.deepEqual(children.page.records,[attachment]);assert.equal(children.parent.operationId,result.operationId);
         const importEvidence=join(process.cwd(),'.artifacts/research-optimization/pr05-attachment-import-native-csl');
         await mkdir(importEvidence,{recursive:true});
         await f.db.backup(join(importEvidence,'research.sqlite'));

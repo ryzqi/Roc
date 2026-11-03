@@ -43,7 +43,7 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
           'research.zotero.syncReadPage', 'research.zotero.sourceObserve', 'research.zotero.sourceState',
           'research.zotero.attachmentInspect', 'research.zotero.attachmentRead',
           'research.zotero.attachmentGrant', 'research.zotero.attachmentGrantRead', 'research.zotero.attachmentImport',
-          'research.zotero.attachmentImportRead', 'research.zotero.attachmentImportCancel'].includes(target.capabilityName);
+          'research.zotero.attachmentImportRead', 'research.zotero.attachmentImportCancel', 'research.zotero.children'].includes(target.capabilityName);
         if (!scoped) return invoker.invokeCapability(target.capabilityName, input);
         const projectId = typeof input === 'object' && input !== null && !Array.isArray(input) && 'projectId' in input && typeof input.projectId === 'string' ? input.projectId : null;
         return withLiteratureContext({ owner: `window:${windowId}`, projectId }, () => invoker.invokeCapability(target.capabilityName, input));

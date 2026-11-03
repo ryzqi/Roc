@@ -37,6 +37,7 @@ import {zoteroAttachmentImportRequestSchema, type ZoteroAttachmentImport} from '
 import {ZoteroAttachmentImportStore} from './zotero-attachment-import-store';
 import {readZoteroGrantedFile} from './zotero-granted-file';
 import type {ResearchDocumentService} from './document-service';
+import {zoteroChildrenRequestSchema, type ZoteroChildrenPage} from '../../../shared/schemas/research-zotero-attachment';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -69,6 +70,7 @@ export class LiteratureImportService {
   private readonly attachmentGrantJobs = new Map<string, Promise<ZoteroAttachmentGrantOutcome>>();
   private readonly zoteroAttachmentImports: ZoteroAttachmentImportStore;
   private readonly attachmentImportJobs = new Map<string, {controller: AbortController; promise: Promise<ZoteroAttachmentImport>}>();
+  private readonly zoteroChildrenJobs = new Set<Promise<ZoteroChildrenPage>>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -236,6 +238,23 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     return this.zoteroAttachments.read(context, inspectionId);
+  }
+
+  async readZoteroChildren(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroChildrenPage> {
+    const request = zoteroChildrenRequestSchema.parse(input);
+    const {offset, limit, expectedLibraryVersion, ...source} = request;
+    const context = literatureContext();
+    this.requireActive(context);
+    const parent = this.zoteroObjects.imported(context, {...source, collectionKey: null});
+    const pending = (async (): Promise<ZoteroChildrenPage> => {
+      const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+      const page = await adapter.children({...parent.scope, offset, limit, expectedLibraryVersion}, parent.itemKey, signal);
+      this.requireActive(context);
+      return {parent, request, page};
+    })();
+    this.zoteroChildrenJobs.add(pending);
+    try {return await pending;}
+    finally {this.zoteroChildrenJobs.delete(pending);}
   }
 
   readZoteroAttachmentGrant(grantId: string): ZoteroAttachmentGrant {
@@ -590,6 +609,7 @@ export class LiteratureImportService {
     await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs, ...this.attachmentJobs,
       ...this.attachmentGrantJobs.values(),
       ...[...this.attachmentImportJobs.values()].map(job => job.promise),
+      ...this.zoteroChildrenJobs,
       ...[...this.active.values()].map((task) => task.promise)]);
   }
 

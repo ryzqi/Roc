@@ -73,6 +73,71 @@ async function selectedGrant(f) {
     async(_context,path)=>path))).grant;
 }
 
+test('owned children pagination retains all raw child kinds and source version without imports or checkpoint writes',async()=>{
+  const f=await grantFixture(),calls=[];
+  const children=Array.from({length:3},(_,i)=>({key:'CHLD000'+i,version:9,data:{key:'CHLD000'+i,version:9,
+    itemType:i===1 ? 'note' : 'attachment',parentItem:'GRNT5678',title:'Child '+i,unknownField:{retained:true}}}));
+  const adapter=new api.ZoteroAdapter(async(url,init)=>{
+    calls.push({url,init});const parsed=new URL(url),offset=Number(parsed.searchParams.get('start')),limit=Number(parsed.searchParams.get('limit'));
+    return Response.json(children.slice(offset,offset+limit),{headers:{'Zotero-API-Version':'3','Zotero-Server-ID':request.serverId,
+      'Zotero-Schema-Version':'40','Last-Modified-Version':'21','Total-Results':'3'}});
+  });
+  try{
+    const {attachmentKey:_attachment,...parent}=f.source;
+    const input={...parent,offset:0,limit:2,expectedLibraryVersion:null};
+    const changes=f.db.prepare('SELECT total_changes()').pluck().get();
+    const first=await f.run(()=>f.service.readZoteroChildren(input,adapter));
+    assert.equal(first.parent.operationId,f.source.operationId);assert.equal(first.page.libraryVersion,21);
+    assert.deepEqual(first.page.records,children.slice(0,2));assert.equal(first.page.nextOffset,2);
+    const second=await f.run(()=>f.service.readZoteroChildren({...input,offset:first.page.nextOffset,expectedLibraryVersion:first.page.libraryVersion},adapter));
+    assert.deepEqual(second.page.records,children.slice(2));assert.equal(second.page.nextOffset,null);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changes);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+    assert.equal(new URL(calls[0].url).pathname,'/api/users/0/items/GRNT5678/children');
+    assert.equal(new URL(calls[0].url).searchParams.get('include'),'data');
+    assert.equal(calls[0].init.method,'GET');assert.equal(calls[0].init.redirect,'manual');
+    assert.equal(calls.length,2);
+    assert.equal(f.workerCalls(),1);
+  }finally{await adapter.shutdown();await f.closeGrant();}
+});
+
+test('child reads refuse foreign parent receipts before HTTP and mismatched child parent or page version cannot become an empty success',async()=>{
+  const f=await grantFixture();
+  let calls=0,wrong=true;
+  const adapter=new api.ZoteroAdapter(async()=>{
+    calls++;return Response.json([{key:'CHLD0000',version:9,data:{key:'CHLD0000',version:9,itemType:'attachment',
+      parentItem:wrong ? 'OTHER567' : 'GRNT5678'}}],{headers:{'Zotero-API-Version':'3','Zotero-Server-ID':request.serverId,
+      'Zotero-Schema-Version':'40','Last-Modified-Version':'22','Total-Results':'1'}});
+  });
+  try{
+    const {attachmentKey:_attachment,...parent}=f.source,input={...parent,offset:0,limit:20,expectedLibraryVersion:null};
+    for(const context of [{owner:'thread:foreign'},{projectId:null}]){
+      await assert.rejects(f.run(()=>f.service.readZoteroChildren(input,adapter),context),/zotero_source_observation_not_found/u);
+    }
+    assert.equal(calls,0);
+    await assert.rejects(f.run(()=>f.service.readZoteroChildren(input,adapter)),/zotero_children_parent_mismatch/u);
+    wrong=false;
+    await assert.rejects(f.run(()=>f.service.readZoteroChildren({...input,expectedLibraryVersion:21},adapter)),/zotero_library_version_changed/u);
+    assert.equal(calls,2);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
+  }finally{await adapter.shutdown();await f.closeGrant();}
+});
+
+test('children read shutdown aborts actual pending HTTP and rejects any late page publication',async()=>{
+  const f=await grantFixture();
+  let started;
+  const received=new Promise(resolve=>{started=resolve;});
+  const adapter=new api.ZoteroAdapter(async(_url,init)=>new Promise((_resolve,reject)=>{
+    started();init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true});
+  }));
+  try{
+    const {attachmentKey:_attachment,...parent}=f.source;
+    const pending=f.run(()=>f.service.readZoteroChildren({...parent,offset:0,limit:20,expectedLibraryVersion:null},adapter));
+    const refused=assert.rejects(pending,/zotero_cancelled/u);await received;await f.service.shutdown();await refused;
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+  }finally{await adapter.shutdown();await f.closeGrant();}
+});
+
 test('granted attachment bytes import through the real document service with atomic raw provenance and filesystem-free replay',async()=>{
   const f=await grantFixture();
   try{
@@ -281,6 +346,21 @@ test('grant bridge binds actual sender and project, refuses duplicate active sel
     assert.equal(deniedContent.ok,false);assert.equal(deniedContent.error.code,'zotero_attachment_import_not_found');
     const stopped=await bridge.invoke('research.cancelZoteroAttachmentImport',[{projectId:f.project.id,requestId:contentInput.requestId}],301);
     assert.deepEqual(stopped.data,{requestId:contentInput.requestId,cancelRequested:false});
+    let childCalls=0;
+    const childAdapter=new api.ZoteroAdapter(async()=>{
+      childCalls++;return Response.json([f.remote.attachment],{headers:{'Zotero-API-Version':'3','Zotero-Server-ID':request.serverId,
+        'Zotero-Schema-Version':'40','Last-Modified-Version':'21','Total-Results':'1'}});
+    });
+    try{
+      api.registerZoteroCapabilities(registry,childAdapter,f.service,pick,f.documents);
+      const {attachmentKey:_attachment,...parent}=f.source;
+      const childrenInput={...parent,operationId:imported.data.operationId,projectId:f.project.id,offset:0,limit:20,expectedLibraryVersion:null};
+      const children=await bridge.invoke('research.getZoteroChildren',[childrenInput],301);
+      assert.equal(children.ok,true);assert.equal(children.data.page.total,1);
+      const foreign=await bridge.invoke('research.getZoteroChildren',[childrenInput],302);
+      assert.equal(foreign.ok,false);assert.equal(foreign.error.code,'zotero_source_observation_not_found');
+      assert.equal(childCalls,1);
+    }finally{await childAdapter.shutdown();}
   }finally{await f.closeGrant();}
 });
 

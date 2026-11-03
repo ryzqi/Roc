@@ -42,6 +42,7 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.review | research.reviewZotero | 冻结来源与当前文库字段、对象版本及范围内原始来源的只读核对 |
 | research.zotero.sourceObserve | research.observeZoteroSource | 校验本范围原始收录回执后，显式读取当前对象并保存来源状态观察 |
 | research.zotero.sourceState | research.readZoteroSourceState | 只读同原始收录回执与集合范围的最后有效观察 |
+| research.zotero.children | research.getZoteroChildren | 校验原始父对象收录回执后，显式分页读取当前原始子项 |
 | research.zotero.attachmentInspect | research.inspectZoteroAttachment | 验证原收录回执与当前子附件关系，保存路径/访问/文件身份检查 |
 | research.zotero.attachmentRead | research.readZoteroAttachment | 只读当前会话/项目的附件检查记录 |
 | research.zotero.attachmentGrant | research.grantZoteroAttachment | 原生选择并授权检查记录中的一个真实附件文件 |
@@ -447,3 +448,22 @@ hash、来源/授权/文档链接。当前请求可取消；cancelRequested表�
 回归还覆盖损坏回执、实际sender隔离、文件删除/权限/变动、归档、事务失败副本清理、
 项目关联无早发通知、取消/关闭和DB18→19历史保留。附件发现/授权/导入UI及真实客户端
 互操作仍待后续验收，原生面板选择仍未实际操作。
+
+## 原始父对象范围内的子项发现
+
+`getZoteroChildren` 输入显式携带 projectId、原收录 operationId、实例/库/itemKey、
+offset/limit/expectedLibraryVersion。主进程先校验当前会话/项目的真实原始父对象回执，
+再按原回执范围 GET `items/<key>/children?format=json&include=data&start=...&limit=...`。
+个人/群组库沿用既有固定主机、实例、版本、数量和原文 hash 合同；每个返回子项的
+parentItem 必须严格等于父对象键。其他范围和不匹配关系均显式失败。
+
+返回原收录父对象、实际请求与原始子项页；笔记和附件保留其真实类型、分页数量、
+对象/文库版本，不把所有子项当成附件。初始化和只读回执不发 HTTP；显式发现不写
+数据库、不读附件字节、不创建文档或授权。关闭中止真实请求并拒绝迟到返回。
+Research DB19 未变化。附件发现/检查/授权/导入界面为下一增量。
+
+最终 unit809/809、相关74/74、Harness94/94、fresh build/typecheck/native13/13、
+现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。日志
+`pr05-children-*.log` 保留；原生CSL回归在已授权内容导入后，按真实原父回执读取
+当前原始子项。测试涵盖真实sender桥接与隔离、分页/类型/数量、父关系/版本冲突及
+关闭HTTP中止。实际 Zotero 客户端与原生选择框操作仍未运行。

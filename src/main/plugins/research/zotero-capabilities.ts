@@ -22,11 +22,12 @@ import {zoteroAttachmentIpcSchema, zoteroAttachmentReadIpcSchema, zoteroAttachme
 import type {ZoteroAttachmentPicker} from './zotero-attachment-grant-store';
 import type {ResearchDocumentService} from './document-service';
 import {zoteroAttachmentImportIpcSchema, zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportSchema,
-  zoteroAttachmentImportCancelSchema} from '../../../shared/schemas/research-zotero-attachment';
+  zoteroAttachmentImportCancelSchema, zoteroChildrenIpcSchema, zoteroChildrenPageSchema} from '../../../shared/schemas/research-zotero-attachment';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
+  children: descriptor('research.zotero.children', zoteroChildrenIpcSchema, zoteroChildrenPageSchema),
   attachmentImport: descriptor('research.zotero.attachmentImport', zoteroAttachmentImportIpcSchema, zoteroAttachmentImportSchema),
   attachmentImportRead: descriptor('research.zotero.attachmentImportRead', zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportSchema),
   attachmentImportCancel: descriptor('research.zotero.attachmentImportCancel', zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportCancelSchema),
@@ -60,7 +61,7 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
     'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync' |
     'findZoteroSync' | 'readZoteroSyncPage' | 'observeZoteroSource' | 'readZoteroSourceState' |
     'inspectZoteroAttachment' | 'readZoteroAttachment' | 'grantZoteroAttachment' | 'readZoteroAttachmentGrant' |
-    'importZoteroAttachment' | 'readZoteroAttachmentImport' | 'cancelZoteroAttachmentImport'>,
+    'importZoteroAttachment' | 'readZoteroAttachmentImport' | 'cancelZoteroAttachmentImport' | 'readZoteroChildren'>,
   pick: ZoteroAttachmentPicker, documents: Pick<ResearchDocumentService, 'importPrepared'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
@@ -103,7 +104,7 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
         if (code === 'zotero_attachment_inspection_storage_invalid') {
           throw new RocDomainError({code, message: '附件检查记录损坏，无法读取。', category: 'degraded', retryable: false});
         }
-        if (code === 'zotero_attachment_parent_mismatch' || code === 'zotero_attachment_changed_during_inspection') {
+        if (code === 'zotero_attachment_parent_mismatch' || code === 'zotero_attachment_changed_during_inspection' || code === 'zotero_children_parent_mismatch') {
           throw new RocDomainError({code, message: '附件对象关系或实际文件已改变，请重新核对。',
             category: 'conflict', retryable: false});
         }
@@ -187,4 +188,5 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.attachmentImport, ({projectId: _scope, ...input}) => imports.importZoteroAttachment(input, documents));
   register(capabilities.attachmentImportRead, async input => imports.readZoteroAttachmentImport(input.requestId));
   register(capabilities.attachmentImportCancel, async input => imports.cancelZoteroAttachmentImport(input.requestId));
+  register(capabilities.children, ({projectId: _scope, ...input}) => imports.readZoteroChildren(input, adapter));
 }
