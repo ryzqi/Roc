@@ -47,3 +47,6 @@ export { ResearchDocumentService } from '../../../src/main/plugins/research/docu
 export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';
 export { createToolEffectIdempotencyMiddleware } from '../../../src/main/services/deep-agent/tool-effect-idempotency';
 export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client-adapter';
+
+export {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability} from '../../../src/main/plugins/research/artifact-inspector-capability';
+export {createPluginCapabilityAdapter} from '../../../src/main/ipc/plugin-capability-adapter';

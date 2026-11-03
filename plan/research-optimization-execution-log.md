@@ -2169,3 +2169,45 @@ JSX whitespace assertion was corrected without weakening action/state checks; fi
 Native choice remains synthetic; actual panel/client interoperability unrun. No live model,
 real library, remote writes or frozen fixtures. Next X-UI artifact inspector. Overall plan
 and external scientific/model acceptance remain unfinished.
+
+## X-UIA1 — project-scoped readonly artifact snapshots
+
+Status: `Verified passing` for this backend/API increment. `research.artifacts.inspect` /
+`research.inspectArtifact` require project/artifact IDs and explicit nullable expectedVersion.
+One consistent read captures actual artifact/project/stage, saved role content and origin/task,
+claims, artifact-local provenance and immutable evidence history. SHA-256 version includes
+stored values, excludes read time and reports actual stale/new snapshots even for same-clock
+edits. Null saved content remains null. Only real linked tasks expose return_to_task; this
+increment cannot approve, edit or run work. It does not read arbitrary artifact.path bytes.
+
+Evidence inspection retains original/hash-checked excerpts and recorded invalidation times;
+recorded means no stored invalidation, not scientific or live source verification. Strict
+getEvidence publication consumers still reject superseded references. Missing/cross-project/
+corrupt sources fail explicitly. No DB migration/write, HTTP, model or worker. Production
+files retain their existing inspectProduction/readProductionFile boundaries. Details in
+`docs/research-artifact-inspector.md`; assistant/overlay/type modules/gate version binding next.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/research-artifact-inspector.test.mjs tests/unit/research-evidence-invalidation.test.mjs tests/unit/research-manuscript-integrity.test.mjs tests/unit/research-citation-integrity.test.mjs` |25/25 passed |
+| `pnpm test:unit` |813/813 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |23/23 passed |
+| `node --test tests/unit/research-artifact-inspector.test.mjs` | Final4/4 including exact missing-project category passed |
+| `pnpm build` | Final production build/typecheck passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Final current;1131153bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `xui-inspector-*.log` and actual native workflow
+`p0-production/<taskId>/artifact-inspections.json`. Native checks inspect every completed
+output with real origin/task/content identity and unchanged total_changes. Unit regressions
+cover empty/recorded content, exact origin metadata, source isolation, same-clock edits, claims/
+stage/invalidation version change, immutable invalidated excerpt retention, damaged/missing
+source refusal, explicit input/actual sender bridge and permission/not_found errors. Final
+error-category refinement does not mutate records; final4/build/startup establish that branch.
+No frozen fixtures, live literature/model/client/user-data read or remote writes. X-UI and full
+plan remain unfinished; next actual artifact references from assistant gate and readonly overlay.

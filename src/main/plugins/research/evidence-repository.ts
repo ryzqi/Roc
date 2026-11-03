@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-artifact-inspector';
 
 import {
   researchClaimCreateRequestSchema,
@@ -173,10 +174,17 @@ export class ResearchEvidenceRepository {
   }
 
   getEvidence(id: string, projectId: string): ResearchEvidence {
+    const inspected = this.inspectEvidence(id, projectId);
+    if (inspected.referenceStatus === 'superseded') throw new Error('research_evidence_reference_superseded');
+    return inspected.evidence;
+  }
+
+  /** Read the immutable excerpt even when its old locator has been invalidated. */
+  inspectEvidence(id: string, projectId: string): ResearchInspectedEvidence {
     const row = this.db.prepare(`SELECT id, project_id AS projectId, document_id AS documentId, chunk_id AS chunkId,
       source_type AS sourceType, source_id AS sourceId, source_version AS sourceVersion, title,
       locator, excerpt, content_hash AS contentHash, created_at AS createdAt, invalidated_at
-      FROM research_evidence WHERE id = ?`).get(id) as (Record<string, unknown> & { invalidated_at?: string | null }) | undefined;
+      FROM research_evidence WHERE id = ?`).get(id) as (Record<string, unknown> & { invalidated_at: string | null }) | undefined;
     if (row === undefined) throw new Error('research_evidence_not_found');
     // invalidated_at 是失效标记本身，不属于证据契约（schema 是 strict 的），先摘掉再校验。
     const { invalidated_at: invalidatedAt, ...fields } = row;
@@ -185,9 +193,8 @@ export class ResearchEvidenceRepository {
     // 引用失效（提案 §8.4）：该证据引用的块已随代际切换或重新解析换掉/删除。原文与证据行都
     // 还在，只是块定位不再成立 —— 必须明确报「引用待重建」，不得静默指向新块，也不得退化成
     // not_found（那会让用户以为证据被删掉了）。失效标记由真正改变块身份的两个事件写入。
-    if (invalidatedAt !== null && invalidatedAt !== undefined) throw new Error('research_evidence_reference_superseded');
     if (evidence.contentHash !== hash(evidence.excerpt)) throw new Error('research_evidence_integrity_invalid');
-    return evidence;
+    return {evidence, referenceStatus: invalidatedAt === null ? 'recorded' : 'superseded', invalidatedAt};
   }
 
   /**

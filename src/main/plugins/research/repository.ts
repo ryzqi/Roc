@@ -46,6 +46,8 @@ import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
+import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
+  type ResearchArtifactInspectRequest, type ResearchArtifactInspectResult} from '../../../shared/schemas/research-artifact-inspector';
 
 export const researchStages = [
   'discovery',
@@ -287,6 +289,34 @@ export class ResearchRepository {
     return rows.map(toArtifact);
   }
 
+  inspectArtifact(request: ResearchArtifactInspectRequest): ResearchArtifactInspectResult {
+    return this.db.transaction(() => {
+      const project = this.getProject(request.projectId), artifact = this.getArtifact(request.artifactId);
+      if (artifact.projectId !== project.id) throw new Error('research_artifact_project_mismatch');
+      const content = this.runs.getArtifactContent(project.id, artifact.id);
+      const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
+      const evidence = [...new Set(claims.flatMap(claim => claim.evidenceIds))]
+        .map(id => this.evidence.inspectEvidence(id, project.id));
+      const rows = this.db.prepare(`SELECT id, project_id, artifact_id, subject_type, subject_id,
+        source_type, source_id, locator, excerpt, created_at FROM research_provenance
+        WHERE project_id = ? AND artifact_id = ? ORDER BY id`).all(project.id, artifact.id) as ProvenanceRow[];
+      const run = content === null ? null : this.runs.get(content.runId, project.id);
+      const origin = run === null ? null : {id: run.id, taskId: run.taskId, stage: run.stage, status: run.status,
+        providerId: run.providerId, modelId: run.modelId, modelVersion: run.modelVersion,
+        skillHash: run.skillHash, inputArtifactIds: run.inputArtifactIds};
+      const body = researchArtifactInspectionBodySchema.parse({
+        artifact, projectStatus: project.status, currentStage: project.currentStage,
+        stage: this.readStage(project.id, artifact.stage), content, origin, claims, evidence,
+        provenance: rows.map(toProvenance), availableActions: origin !== null && origin.taskId !== null ? ['return_to_task'] : []
+      });
+      const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+      return researchArtifactInspectResultSchema.parse({
+        status: request.expectedVersion === null || request.expectedVersion === version ? 'current' : 'stale',
+        snapshot: {...body, version}, readAt: this.now()
+      });
+    })();
+  }
+
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
     const current = this.requireEditableArtifact(input.id);
     if (this.experiments.hasArtifact(input.id)) throw new Error('research_experiment_publication_immutable');
@@ -468,18 +498,7 @@ export class ResearchRepository {
          ORDER BY created_at DESC`
       )
       .all(...(request.subjectId === undefined ? [request.projectId] : [request.projectId, request.subjectId])) as ProvenanceRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      projectId: row.project_id,
-      artifactId: row.artifact_id,
-      subjectType: row.subject_type,
-      subjectId: row.subject_id,
-      sourceType: row.source_type,
-      sourceId: row.source_id,
-      locator: row.locator,
-      excerpt: row.excerpt,
-      createdAt: row.created_at
-    }));
+    return rows.map(toProvenance);
   }
 
   getWorkflow(projectId: string): ResearchWorkflowSnapshot {
@@ -925,3 +944,9 @@ function toArtifact(row: ArtifactRow): ResearchArtifact {
   };
 }
 
+
+function toProvenance(row: ProvenanceRow): ResearchProvenance {
+  return {id: row.id, projectId: row.project_id, artifactId: row.artifact_id,
+    subjectType: row.subject_type, subjectId: row.subject_id, sourceType: row.source_type,
+    sourceId: row.source_id, locator: row.locator, excerpt: row.excerpt, createdAt: row.created_at};
+}
