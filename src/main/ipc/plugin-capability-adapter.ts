@@ -37,7 +37,9 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
         const input = transformInput(target.inputTransform, args);
         const scoped = ['research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature',
           'research.library.getImportOperation', 'research.library.cancelImportOperation', 'research.literature.getPool',
-          'research.zotero.preview', 'research.zotero.getPreview', 'research.zotero.sources', 'research.zotero.review'].includes(target.capabilityName);
+          'research.zotero.preview', 'research.zotero.getPreview', 'research.zotero.sources', 'research.zotero.review',
+          'research.zotero.syncStart', 'research.zotero.syncRead', 'research.zotero.syncPage',
+          'research.zotero.syncControl', 'research.zotero.syncAcknowledge'].includes(target.capabilityName);
         if (!scoped) return invoker.invokeCapability(target.capabilityName, input);
         const projectId = typeof input === 'object' && input !== null && !Array.isArray(input) && 'projectId' in input && typeof input.projectId === 'string' ? input.projectId : null;
         return withLiteratureContext({ owner: `window:${windowId}`, projectId }, () => invoker.invokeCapability(target.capabilityName, input));

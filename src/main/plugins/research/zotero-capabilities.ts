@@ -11,10 +11,19 @@ import {RocDomainError} from '../../services/errors';
 import type {ZoteroAdapter} from './zotero-adapter';
 import type {LiteratureImportService} from './literature-import-service';
 import {detectZoteroInstallation} from './zotero-installation';
+import {
+  zoteroSyncStartIpcSchema, zoteroSyncReadIpcSchema, zoteroSyncPageIpcSchema,
+  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema
+} from '../../../shared/schemas/research-zotero-sync';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
+  syncStart: descriptor('research.zotero.syncStart', zoteroSyncStartIpcSchema, zoteroSyncSchema),
+  syncRead: descriptor('research.zotero.syncRead', zoteroSyncReadIpcSchema, zoteroSyncSchema),
+  syncPage: descriptor('research.zotero.syncPage', zoteroSyncPageIpcSchema, zoteroSyncCapturedPageSchema),
+  syncControl: descriptor('research.zotero.syncControl', zoteroSyncControlIpcSchema, zoteroSyncSchema),
+  syncAcknowledge: descriptor('research.zotero.syncAcknowledge', zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema),
   probe: descriptor('research.zotero.probe', zoteroProbeRequestSchema, zoteroProbeSchema),
   status: descriptor('research.zotero.status', zoteroProbeRequestSchema, zoteroStatusSchema),
   review: descriptor('research.zotero.review', zoteroReviewIpcSchema, zoteroReviewSchema),
@@ -28,12 +37,25 @@ const capabilities = {
 export const zoteroCapabilities = Object.values(capabilities);
 
 export function registerZoteroCapabilities(context: RocPluginContext, adapter: ZoteroAdapter,
-  imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero'>): void {
+  imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero' |
+    'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
         const code = error instanceof Error ? error.message : '';
+        if (code === 'zotero_sync_not_found') {
+          throw new RocDomainError({code, message: '同步记录不存在，或不属于当前会话与项目。',
+            category: 'not_found', retryable: false});
+        }
+        if (code === 'zotero_sync_storage_invalid') {
+          throw new RocDomainError({code, message: '同步检查点损坏，无法继续。',
+            category: 'degraded', retryable: false});
+        }
+        if (code.startsWith('zotero_sync_')) {
+          throw new RocDomainError({code, message: '同步状态或页回执不匹配，请重新读取检查点并核对本页。',
+            category: 'conflict', retryable: false});
+        }
         if (code === 'zotero_server_changed' || code === 'zotero_library_version_changed') {
           throw new RocDomainError({code, message: 'Zotero 实例或文库版本已改变，请重新读取并核对导入范围。',
             category: 'conflict', retryable: false});
@@ -78,4 +100,9 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.readPreview, async ({projectId: _scope, ...input}) => imports.readZoteroPreview(input));
   register(capabilities.sources, async ({projectId: _scope, ...input}) => imports.readZoteroSources(input));
   register(capabilities.review, async ({projectId: _scope, ...input}) => imports.reviewZotero(input));
+  register(capabilities.syncStart, async ({projectId: _scope, ...input}) => imports.startZoteroSync(input));
+  register(capabilities.syncRead, async ({projectId: _scope, ...input}) => imports.readZoteroSync(input));
+  register(capabilities.syncPage, ({projectId: _scope, ...input}) => imports.captureZoteroSyncPage(input, adapter));
+  register(capabilities.syncControl, async ({projectId: _scope, ...input}) => imports.controlZoteroSync(input));
+  register(capabilities.syncAcknowledge, async ({projectId: _scope, ...input}) => imports.acknowledgeZoteroSync(input));
 }

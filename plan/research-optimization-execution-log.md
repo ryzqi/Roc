@@ -1804,3 +1804,46 @@ disabled-state assertion; now it awaits real DOM disabled state before the same 
 Next parallel run had Radix Escape contention across Electron windows; serial63/63 passed.
 No checks weakened. No live paper query, real Zotero library, paid model call, remote write
 or frozen workflow-fixture edit. Next: version checkpoints/recovery/deletion and attachments.
+
+## PR-05E1 — durable reviewed-page checkpoints
+
+Status: `Verified passing` for this backend/API increment. Research DB15; no applied
+migration rewritten. Full PR-05 and overall plan remain in progress.
+
+Scoped sync sessions retain mode/full-vs-incremental range, same-instance local baseline,
+fixed batch version/total, revision, pending preview, committed position and explicit control.
+Captured preview/session publication is atomic. Acknowledge requires all captured keys
+to have an actual owned same-preview/version import observation or an explicit skip reason.
+Page decisions/seen objects/next offset and the final completed-batch version checkpoint
+commit together. Partial imports or errors do not advance. Prior committed literature stays.
+
+Pause/abandon abort actual HTTP; resume is explicit. Concurrent duplicate reads refuse before
+dispatch. Pending preview replacement is explicit, stale/expired selection cannot acknowledge.
+Version/instance/total change or duplicate across pages requires reset without erasing old
+history. Actual DB file reopen preserves paused pending source/offset with no automatic
+HTTP/worker. API recovery currently requires saved syncId and the same trusted owner/project;
+UI discovery/recovery entry remains next work.
+
+Pinned official source re-read via Agent Reach/Jina on2026-11-04 verifies local since/
+versions and trash support, not a permanent-deletion API. Absent incremental objects do not
+prove deletion/membership loss. This increment makes no deletion inference or Zotero write.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-sync.test.mjs tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs` | Final37/37 passed |
+| `pnpm test:unit` | Final780/780 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test tests/renderer/zotero-import.test.mjs` |6/6 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-sync-*.log`, `pr05-sync-native-csl/` DB and native CSL/checkpoint receipts.
+Initial test guessed bridge.handle; corrected to actual invoke/enveloped results. First full
+suite detected three latest schema14 expectations after migration15; changed only latest
+version assertions, preservation checks remain. Final full suite passes. No real Zotero
+client/user library, new live literature query, paid model, remote write or frozen fixture edit.
+Next: sync UI discovery/recovery, trash/membership state and attachment input grants.

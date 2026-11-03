@@ -1636,6 +1636,38 @@ CREATE TABLE research_zotero_import_observations (
 `
 });
 
+researchMigrations.push({
+  version: 15, name: 'zotero_reviewed_page_checkpoints',
+  sql: `
+CREATE TABLE research_zotero_syncs (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, scope_project TEXT NOT NULL, scope_key TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('active','paused','completed','reset_required')),
+  revision INTEGER NOT NULL CHECK(revision>=0), state_json TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_research_zotero_syncs_active ON research_zotero_syncs(scope_key)
+  WHERE status IN ('active','paused');
+CREATE TABLE research_zotero_sync_checkpoints (
+  scope_key TEXT PRIMARY KEY, sync_id TEXT NOT NULL REFERENCES research_zotero_syncs(id),
+  library_version INTEGER NOT NULL CHECK(library_version>=0), updated_at TEXT NOT NULL
+);
+CREATE TABLE research_zotero_sync_pages (
+  sync_id TEXT NOT NULL REFERENCES research_zotero_syncs(id),
+  source_offset INTEGER NOT NULL CHECK(source_offset>=0),
+  preview_id TEXT NOT NULL REFERENCES research_zotero_previews(id),
+  decisions_json TEXT NOT NULL, acknowledged_at TEXT NOT NULL,
+  PRIMARY KEY(sync_id,source_offset), UNIQUE(preview_id)
+);
+CREATE TABLE research_zotero_sync_seen (
+  sync_id TEXT NOT NULL REFERENCES research_zotero_syncs(id), item_key TEXT NOT NULL,
+  object_version INTEGER NOT NULL CHECK(object_version>=0),
+  source_offset INTEGER NOT NULL CHECK(source_offset>=0),
+  PRIMARY KEY(sync_id,item_key),
+  FOREIGN KEY(sync_id,source_offset) REFERENCES research_zotero_sync_pages(sync_id,source_offset)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

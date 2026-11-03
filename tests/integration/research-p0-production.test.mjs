@@ -76,6 +76,27 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     await writeFile(join(reviewEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
       electron: process.versions.electron, previewId: preview.previewId, contentHash: preview.contentHash,
       result, review, requests}, null, 2) + '\n');
+    const sync = run(() => imports.startZoteroSync({serverId: 'native-fixture', library: {kind: 'user', id: 0},
+      collectionKey: null, mode: 'incremental', limit: 20}));
+    const captured = await run(() => imports.captureZoteroSyncPage({syncId: sync.syncId, expectedRevision: sync.revision,
+      replacePreviewId: null}, zotero));
+    const pause = run(() => imports.controlZoteroSync({syncId: sync.syncId, expectedRevision: captured.sync.revision, action: 'pause'}));
+    assert.deepEqual(run(() => imports.readZoteroSync({syncId: sync.syncId})), pause);
+    const resumed = run(() => imports.controlZoteroSync({syncId: sync.syncId, expectedRevision: pause.revision, action: 'resume'}));
+    const syncImport = await run(() => imports.add({requestId: 'native-sync-import',
+      entries: [{kind: 'zotero', previewId: captured.preview.previewId, itemKey: key}]}));
+    assert.equal(syncImport.status, 'completed');
+    assert.equal(f.repository.library.get(saved.id).revision, saved.revision);
+    const completed = run(() => imports.acknowledgeZoteroSync({syncId: sync.syncId, expectedRevision: resumed.revision,
+      previewId: captured.preview.previewId, importedKeys: [key], skipped: []}));
+    assert.equal(completed.status, 'completed');
+    assert.equal(completed.checkpointVersion, 9);
+    assert.equal(requests, 2);
+    const syncEvidence = join(process.cwd(), '.artifacts/research-optimization/pr05-sync-native-csl');
+    await mkdir(syncEvidence, {recursive: true});
+    await f.db.backup(join(syncEvidence, 'research.sqlite'));
+    await writeFile(join(syncEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
+      electron: process.versions.electron, captured, pause, resumed, syncImport, completed, requests}, null, 2) + '\n');
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();
     await rm(root, {recursive: true, force: true});

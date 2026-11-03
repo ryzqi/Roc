@@ -190,7 +190,8 @@ test('registered read-only capability and generated IPC contracts expose actual 
     handlers.set(descriptor.name, handler);
   }}}, adapter(), imports);
   assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.getPreview',
-    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review', 'research.zotero.sources', 'research.zotero.status']);
+    'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review', 'research.zotero.sources', 'research.zotero.status',
+    'research.zotero.syncAcknowledge', 'research.zotero.syncControl', 'research.zotero.syncPage', 'research.zotero.syncRead', 'research.zotero.syncStart']);
   assert.equal((await handlers.get('research.zotero.probe')({})).status, 'connected');
   const status = await handlers.get('research.zotero.status')({});
   assert.equal(status.connection.status, 'connected');

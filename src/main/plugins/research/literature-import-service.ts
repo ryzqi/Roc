@@ -24,6 +24,8 @@ import {zoteroItemsRequestSchema, zoteroSourcesRequestSchema, type zoteroSources
 import type {ZoteroAdapter} from './zotero-adapter';
 import {ZoteroPreviewStore} from './zotero-preview-store';
 import {ZoteroObjectStore, freezeZoteroObject} from './zotero-object-store';
+import {ZoteroSyncStore} from './zotero-sync-store';
+import {zoteroSyncPageSchema, type ZoteroSync, type ZoteroSyncCapturedPage} from '../../../shared/schemas/research-zotero-sync';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -45,6 +47,9 @@ export class LiteratureImportService {
   private readonly searchLedger: LiteratureSearchLedger;
   private readonly zoteroPreviews: ZoteroPreviewStore;
   private readonly zoteroObjects: ZoteroObjectStore;
+  private readonly zoteroSyncs: ZoteroSyncStore;
+  private readonly syncJobs = new Set<Promise<ZoteroSyncCapturedPage>>();
+  private readonly syncReads = new Map<string, AbortController>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -53,6 +58,7 @@ export class LiteratureImportService {
     this.searchLedger = new LiteratureSearchLedger(db, now);
     this.zoteroPreviews = new ZoteroPreviewStore(db, now);
     this.zoteroObjects = new ZoteroObjectStore(db, now);
+    this.zoteroSyncs = new ZoteroSyncStore(db, this.zoteroPreviews, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -125,6 +131,64 @@ export class LiteratureImportService {
     });
     return {previewId: preview.previewId, scope: {serverId: preview.sourcePage.serverId, library: preview.sourcePage.library},
       libraryVersion: preview.sourcePage.libraryVersion, reviewedAt: this.now(), policy: 'retain_existing_fill_missing', items};
+  }
+
+  startZoteroSync(input: unknown): ZoteroSync {
+    const context = literatureContext();
+    this.requireActive(context);
+    this.library.validateDestination(context.projectId);
+    return this.zoteroSyncs.start(context, input);
+  }
+
+  readZoteroSync(input: unknown): ZoteroSync {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroSyncs.read(context, input);
+  }
+
+  controlZoteroSync(input: unknown): ZoteroSync {
+    const context = literatureContext();
+    this.requireActive(context);
+    const state = this.zoteroSyncs.control(context, input);
+    if (state.status !== 'active') this.syncReads.get(state.syncId)?.abort();
+    return state;
+  }
+
+  acknowledgeZoteroSync(input: unknown): ZoteroSync {
+    const context = literatureContext();
+    this.requireActive(context);
+    this.library.validateDestination(context.projectId);
+    return this.zoteroSyncs.acknowledge(context, input);
+  }
+
+  async captureZoteroSyncPage(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroSyncCapturedPage> {
+    const context = literatureContext();
+    this.requireActive(context);
+    this.library.validateDestination(context.projectId);
+    const request = zoteroSyncPageSchema.parse(input);
+    const query = this.zoteroSyncs.pageRequest(context, request);
+    if (this.syncReads.has(request.syncId)) throw new Error('zotero_sync_page_in_progress');
+    const controller = new AbortController();
+    this.syncReads.set(request.syncId, controller);
+    const pending = (async (): Promise<ZoteroSyncCapturedPage> => {
+      try {
+        const signal = AbortSignal.any([this.lifetime.signal, controller.signal,
+          ...(context.signal === undefined ? [] : [context.signal])]);
+        const source = await adapter.itemsWithBibliography(query, signal);
+        this.requireActive(context);
+        return this.zoteroSyncs.capture(context, input, source);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : '';
+        if (['zotero_server_changed', 'zotero_library_version_changed',
+          'zotero_sync_version_regressed', 'zotero_sync_total_changed', 'zotero_sync_page_duplicate'].includes(code)) {
+          this.zoteroSyncs.invalidate(context, input, code);
+        }
+        throw error;
+      }
+    })();
+    this.syncJobs.add(pending);
+    try {return await pending;}
+    finally {this.syncJobs.delete(pending); this.syncReads.delete(request.syncId);}
   }
 
   private async executeSearch(input: unknown): Promise<LiteratureSearchResult> {
@@ -320,7 +384,7 @@ export class LiteratureImportService {
     this.closed = true;
     this.lifetime.abort(new Error('literature_service_closed'));
     for (const task of this.active.values()) task.controller.abort();
-    await Promise.allSettled([...this.searches, ...this.previewJobs, ...[...this.active.values()].map((task) => task.promise)]);
+    await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...[...this.active.values()].map((task) => task.promise)]);
   }
 
   private async execute(context: LiteratureExecutionContext, signal: AbortSignal, result: LiteratureImportResult, frozen: FrozenEntry[]): Promise<LiteratureImportResult> {
