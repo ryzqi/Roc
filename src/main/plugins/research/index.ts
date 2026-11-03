@@ -3,6 +3,7 @@ import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-g
 import type { ResearchTaskRepository } from './research-task-repository';
 import { ResearchTaskController } from './task-controller';
 import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
+import { researchProjectBudgetCapabilities, registerResearchProjectBudgetCapabilities } from './project-budget-capabilities';
 import { ResearchTaskDiagnosticsService } from './task-diagnostics';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import { notifyResearchTaskChanged } from './task-notifications';
@@ -184,7 +185,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -285,6 +286,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       registerResearchTaskCapabilities(context, options.tasks, taskController,
         new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger));
+      registerResearchProjectBudgetCapabilities(context, researchRepository);
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);

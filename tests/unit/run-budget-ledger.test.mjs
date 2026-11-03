@@ -1,41 +1,23 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { build } from 'esbuild';
 import Database from 'better-sqlite3';
+import { loadResearchTestApi } from './fixtures/research-test-kit.mjs';
 
 async function createLedger() {
-  const directory = mkdtempSync(join(tmpdir(), 'roc-run-budget-ledger-'));
-  const outfile = join(directory, 'ledger.mjs');
-  await build({ entryPoints: ['src/main/services/deep-agent/run-budget-ledger.ts'], outfile, bundle: true, format: 'esm', platform: 'node' });
-  const { RunBudgetLedger } = await import(outfile);
+  const api = await loadResearchTestApi();
   const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations });
   db.exec(`
-    CREATE TABLE agent_runs (id TEXT PRIMARY KEY, budget_stop_reason TEXT);
-    CREATE TABLE agent_budget_calls (
-      run_id TEXT NOT NULL, call_id TEXT NOT NULL, kind TEXT NOT NULL, input_hash TEXT NOT NULL,
-      execution_kind TEXT NOT NULL, task_id TEXT,
-      reserved_tokens INTEGER NOT NULL, actual_tokens INTEGER, reserved_cost_microusd INTEGER,
-      actual_cost_microusd INTEGER, pricing_version TEXT, state TEXT NOT NULL,
-      envelope_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (run_id, call_id)
-    );
-    CREATE TABLE research_task_executions (execution_id TEXT,kind TEXT,task_id TEXT);
-    CREATE TABLE research_task_budgets (task_id TEXT,limits_json TEXT,stop_reason TEXT);
-    CREATE TABLE agent_pilot_runs (
-      run_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, decision TEXT NOT NULL, disclosure TEXT NOT NULL,
-      profile TEXT, bucket INTEGER NOT NULL, extra_budget_microusd INTEGER NOT NULL,
-      allowance_model_calls INTEGER NOT NULL, allowance_tool_calls INTEGER NOT NULL, allowance_tokens INTEGER NOT NULL,
-      spent_model_calls INTEGER NOT NULL DEFAULT 0, spent_tool_calls INTEGER NOT NULL DEFAULT 0,
-      spent_tokens INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    );
-    INSERT INTO agent_runs (id, budget_stop_reason) VALUES ('run', NULL);
+    INSERT INTO agent_threads(id,kind,title,goal,status,created_at,updated_at)
+      VALUES ('thread','chat','Budget fixture','Budget fixture','active','2026-11-03T00:00:00.000Z','2026-11-03T00:00:00.000Z');
+    INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin)
+      VALUES ('run','thread',1,'Budget fixture','running','2026-11-03T00:00:00.000Z','{}','chat');
   `);
   return {
-    directory,
+    dispose: api.dispose,
     db,
-    ledger: new RunBudgetLedger(db)
+    ledger: new api.RunBudgetLedger(db)
   };
 }
 
@@ -71,7 +53,7 @@ function reservation(id, overrides = {}) {
 }
 
 test('run budget ledger reserves before requests, enforces hard limits and preserves unknown usage', async () => {
-  const { directory, db, ledger } = await createLedger();
+  const { dispose, db, ledger } = await createLedger();
   try {
     const limits = makeLimits({ maxConcurrentModelCalls: 1 });
     ledger.reserve('run', limits, reservation('call-1', { costMicrousd: 80, pricingVersion: 'test-prices-v1' }));
@@ -93,12 +75,12 @@ test('run budget ledger reserves before requests, enforces hard limits and prese
     assert.equal(status.cost.reservedMicrousd, 80);
   } finally {
     db.close();
-    rmSync(directory, { recursive: true, force: true });
+    dispose();
   }
 });
 
 test('run budget ledger rejects unverifiable dollar reservations and token overages before insertion', async () => {
-  const { directory, db, ledger } = await createLedger();
+  const { dispose, db, ledger } = await createLedger();
   try {
     const feeCapped = makeLimits({ maxCostMicrousd: 100 });
     assert.throws(() => ledger.reserve('run', feeCapped, reservation('unknown-price')), /run_cost_estimate_unavailable/);
@@ -112,12 +94,12 @@ test('run budget ledger rejects unverifiable dollar reservations and token overa
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM agent_budget_calls').get().count, 0);
   } finally {
     db.close();
-    rmSync(directory, { recursive: true, force: true });
+    dispose();
   }
 });
 
 test('run budget ledger emits a durable first stop reason', async () => {
-  const { directory, db, ledger } = await createLedger();
+  const { dispose, db, ledger } = await createLedger();
   try {
     ledger.recordStopReason('run', 'run_total_token_budget_exhausted');
     ledger.recordStopReason('run', 'run_cost_budget_exhausted');
@@ -125,6 +107,6 @@ test('run budget ledger emits a durable first stop reason', async () => {
       'run_total_token_budget_exhausted');
   } finally {
     db.close();
-    rmSync(directory, { recursive: true, force: true });
+    dispose();
   }
 });

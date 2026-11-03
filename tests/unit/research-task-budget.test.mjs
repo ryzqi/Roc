@@ -120,6 +120,8 @@ test('dispatch attaches already billed chat calls once and shares remaining cap 
     const grant = broker.consumeResearchDispatch(broker.issueResearchDispatch({ runId, threadId, manifest, request }), request);
     const execution = f.tasks.linkStage(queued, grant);
     assert.equal(f.agentDb.prepare('SELECT task_id FROM agent_budget_calls').pluck().get(), execution.taskId);
+    assert.equal(f.tasks.projectBudgets.status(f.project.id).models.total, 1);
+    assert.equal(f.tasks.projectBudgets.status(f.project.id).tokens.settled, 50);
     assert.deepEqual(f.tasks.budgetForExecution('stage', queued.id, f.project.id), budget);
     assert.throws(() => f.ledger.reserve(queued.id, budget, reservation('stage-over', { costMicrousd: 61 })), /run_cost_budget_exhausted/);
     f.ledger.reserve(queued.id, budget, reservation('stage-call', { costMicrousd: 60 }));

@@ -449,3 +449,51 @@ Logs: `.artifacts/research-optimization/pr02c-ui-*.log`. Real Electron screensho
 four light/dark assistant/drawer audits are in `.artifacts/research-optimization/task-ui/`;
 each audit reports cut=0 and hidden=0. The isolated smoke uses a localhost stub Provider.
 No paid model requests or tracing exports. Artifact opening/inspection belongs to X-UI.
+
+## ROC-PR-02B.2 — project-wide model budget authority
+
+Status: `Verified passing` for project/task/stage model admission and explicit configuration.
+Project model budgets are now complete; P0 integration/live evaluation remain pending.
+
+Agent migration 15 attributes original call rows to their trusted project and records the
+project policy revision used for each new model reservation. Root chats use their frozen
+project snapshot before any research stage association. Later task linkage does not create
+another call or charge. Historical calls gain only stored project attribution; historical
+budgets/revisions are not invented.
+
+An explicit project policy caps model calls, concurrency, aggregate Tokens and optional
+integer microdollar cost. Missing policies refuse model dispatch. Project, task and stage
+admission plus call INSERT share the same SQLite immediate transaction. Unknown attempts
+retain their ceilings; missing cost ceilings reject dollar-capped dispatch. Revision history
+is immutable, all project consumption remains cumulative, and raising a cap does not reset
+spend. Temporary concurrency refusal is not permanent. A delayed old-policy refusal cannot
+block a new policy revision. Project stop reasons do not permanently exhaust task budgets.
+
+The existing management drawer provides explicit project budget configuration and live
+known/unknown/reserved summaries. Writes retain the draft's original revision, surface
+conflicts and lock inputs until completion. Native get/save/notification IPC validates the
+project and contains no model prompts. Smoke fixtures configure their isolated budget.
+
+Commands ran from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final 641 passed, 0 failed |
+| `pnpm harness:eval` | Final 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `pnpm check:renderer-chunks` | Passed; eager JS 1,131,037 bytes across 6 files |
+| `node --test --test-concurrency=1 tests/renderer/` | 47 passed before the final write-lock review |
+| `node --test tests/renderer/research-tasks.test.mjs` | Final 10 passed including project policy configuration/revision and pending write locks |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12 passed, zero renderer errors, exit 0 |
+| `git diff --check` | Passed |
+
+Initial failures were outdated v14 assertions, two hand-written database fixtures and
+missing required thread goal/workspace values in new fixtures. The hand-written ledger
+schema was removed in favor of real migrations, and required inputs were supplied without
+relaxing constraints. Seven project regressions cover independent task competition, two
+connections, retained unknown spend, actual provider refusal, root chat attribution, v14
+migration, project ownership/revisions and stale-policy refusal.
+
+Logs: `.artifacts/research-optimization/pr02b-project-*.log`. All model attempts are local
+fixtures or the isolated localhost smoke Provider. No paid requests or tracing exports.

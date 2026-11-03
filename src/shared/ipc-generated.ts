@@ -90,6 +90,8 @@ export const ipcChannels = {
   researchTaskPause: 'roc:research:task-pause',
   researchTaskContinue: 'roc:research:task-continue',
   researchTaskRestoreApproval: 'roc:research:task-restore-approval',
+  researchProjectBudget: 'roc:research:project-budget',
+  researchProjectBudgetSave: 'roc:research:project-budget-save',
   researchTaskList: 'roc:research:task-list',
   researchTaskDiagnostics: 'roc:research:task-diagnostics',
   researchTaskForChat: 'roc:research:task-for-chat',
@@ -235,6 +237,7 @@ export const ipcChannels = {
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute',
   shellConfirm: 'roc:shell:confirm',
+  researchProjectBudgetUpdated: 'roc:research:project-budget-updated',
   researchTaskUpdated: 'roc:research:task-updated',
   researchLibraryChanged: 'roc:research:library-changed',
   appearanceUpdated: 'roc:appearance:updated',
@@ -336,6 +339,8 @@ export const ipcRequestChannelKeys = [
   'researchTaskPause',
   'researchTaskContinue',
   'researchTaskRestoreApproval',
+  'researchProjectBudget',
+  'researchProjectBudgetSave',
   'researchTaskList',
   'researchTaskDiagnostics',
   'researchTaskForChat',
@@ -484,6 +489,7 @@ export const ipcRequestChannelKeys = [
 ] as const;
 
 export const ipcEventChannelKeys = [
+  'researchProjectBudgetUpdated',
   'researchTaskUpdated',
   'researchLibraryChanged',
   'appearanceUpdated',
@@ -585,6 +591,8 @@ export const ipcRequestDefinitions = [
   { key: 'researchTaskPause', channel: ipcChannels.researchTaskPause, domain: 'research', method: 'pauseTask', kind: 'plugin' },
   { key: 'researchTaskContinue', channel: ipcChannels.researchTaskContinue, domain: 'research', method: 'continueTask', kind: 'plugin' },
   { key: 'researchTaskRestoreApproval', channel: ipcChannels.researchTaskRestoreApproval, domain: 'research', method: 'restoreTaskApproval', kind: 'plugin' },
+  { key: 'researchProjectBudget', channel: ipcChannels.researchProjectBudget, domain: 'research', method: 'getProjectBudget', kind: 'plugin' },
+  { key: 'researchProjectBudgetSave', channel: ipcChannels.researchProjectBudgetSave, domain: 'research', method: 'saveProjectBudget', kind: 'plugin' },
   { key: 'researchTaskList', channel: ipcChannels.researchTaskList, domain: 'research', method: 'listTasks', kind: 'plugin' },
   { key: 'researchTaskDiagnostics', channel: ipcChannels.researchTaskDiagnostics, domain: 'research', method: 'getTaskDiagnostics', kind: 'plugin' },
   { key: 'researchTaskForChat', channel: ipcChannels.researchTaskForChat, domain: 'research', method: 'getTaskForChat', kind: 'plugin' },
@@ -733,6 +741,7 @@ export const ipcRequestDefinitions = [
 ] as const;
 
 export const ipcEventDefinitions = [
+  { key: 'researchProjectBudgetUpdated', channel: ipcChannels.researchProjectBudgetUpdated, domain: 'research', method: 'onProjectBudgetUpdated' },
   { key: 'researchTaskUpdated', channel: ipcChannels.researchTaskUpdated, domain: 'research', method: 'onTaskUpdated' },
   { key: 'researchLibraryChanged', channel: ipcChannels.researchLibraryChanged, domain: 'research', method: 'onLibraryChanged' },
   { key: 'appearanceUpdated', channel: ipcChannels.appearanceUpdated, domain: 'app', method: 'onAppearanceUpdated' },
@@ -817,6 +826,8 @@ export const pluginCapabilityMappings = [
   { domain: 'research', preloadMethod: 'research.pauseTask', channel: ipcChannels.researchTaskPause, capabilityName: 'research.task.pause', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.continueTask', channel: ipcChannels.researchTaskContinue, capabilityName: 'research.task.continue', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.restoreTaskApproval', channel: ipcChannels.researchTaskRestoreApproval, capabilityName: 'research.task.restoreApproval', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.getProjectBudget', channel: ipcChannels.researchProjectBudget, capabilityName: 'research.projectBudget.get', inputTransform: { kind: 'first' } },
+  { domain: 'research', preloadMethod: 'research.saveProjectBudget', channel: ipcChannels.researchProjectBudgetSave, capabilityName: 'research.projectBudget.save', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.listTasks', channel: ipcChannels.researchTaskList, capabilityName: 'research.task.list', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.getTaskDiagnostics', channel: ipcChannels.researchTaskDiagnostics, capabilityName: 'research.task.diagnostics', inputTransform: { kind: 'first' } },
   { domain: 'research', preloadMethod: 'research.getTaskForChat', channel: ipcChannels.researchTaskForChat, capabilityName: 'research.task.forChat', inputTransform: { kind: 'first' } },

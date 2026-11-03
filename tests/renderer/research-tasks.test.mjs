@@ -22,8 +22,11 @@ before(async () => {
         import { flushSync } from 'react-dom';
         import { ResearchTaskProgress } from './src/renderer/assistant/ResearchTaskProgress';
         import { ResearchTasksSection } from './src/renderer/management/sections/ResearchTasksSection';
+        import { ProjectBudgetSection } from './src/renderer/management/sections/ProjectBudgetSection';
         const root = createRoot(document.getElementById('root'));
         window.listeners = new Set();
+        window.budgetListeners = new Set();
+        window.chatListeners = new Set();
         window.calls = [];
         window.opened = [];
         window.makeData = (projectId = 'project-a', taskId = 'task-a', chatId = 'chat-a') => {
@@ -65,7 +68,12 @@ before(async () => {
           for (const listener of [...listeners]) listener({taskId, projectId});
         };
         const record = (method, request, response) => { calls.push({method, request}); return Promise.resolve(response); };
-        window.client = {api: {research: {
+        window.client = {api: {chat: {onRunEvent: listener => {
+          chatListeners.add(listener); return () => chatListeners.delete(listener);
+        }}, research: {
+          getProjectBudget: request => record('budget', request, window.budgetResponse),
+          saveProjectBudget: request => record('budget-save', request, window.budgetActionResponse),
+          onProjectBudgetUpdated: listener => { budgetListeners.add(listener); return () => budgetListeners.delete(listener); },
           getTaskForChat: request => record('chat', request, window.response),
           getTaskDiagnostics: request => record('diagnostics', request, window.response),
           onTaskUpdated: listener => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -94,10 +102,21 @@ before(async () => {
             onSelectTask: taskId => mountDrawer(taskId, projectId)
           }))
         ));
+        window.mountBudget = (projectId = 'project-a') => flushSync(() => root.render(
+          React.createElement(React.StrictMode, null, React.createElement(ProjectBudgetSection, {key: projectId, client, projectId}))
+        ));
+        window.makeProjectBudget = (projectId = 'project-a', revision = 1) => ({
+          projectId, policyVersion: 1, revision, limits: {maxTotalTokens: 200, maxModelCalls: 2, maxConcurrentModelCalls: 1, maxCostMicrousd: null},
+          tokens: {settled: 80, unknown: 100, reserved: 0, remaining: 20},
+          models: {total: 1, reserved: 0}, cost: {state: 'unknown', settledMicrousd: 40, reservedMicrousd: 100},
+          stopReason: null, updatedAt: '2026-11-03T00:00:00.000Z'
+        });
         window.clear = () => flushSync(() => root.render(null));
         window.reset = () => {
           clear();
           calls = []; opened = [];
+          budgetResponse = {ok: true, data: null};
+          budgetActionResponse = {ok: true, data: makeProjectBudget()};
           response = {ok: true, data: makeData()};
           actionResponse = {ok: true, data: makeData().task};
           listResponse = {ok: true, data: {tasks: [makeData().task], nextTaskId: 'task-a', hasMore: false}};
@@ -302,6 +321,56 @@ test('project task cursor loads another page and new-task invalidation refreshes
   await page.evaluate(() => { mountDrawer('task-c'); });
   await page.getByText('research_task_diagnostics_identity_mismatch', {exact: true}).waitFor();
   assert.equal(await page.getByTestId('mgmt-task-tree').count(), 0);
+});
+
+test('project budget requires explicit configuration and saving preserves integer amounts and original revision', async () => {
+  await page.evaluate(() => { reset(); mountBudget(); });
+  await page.getByText('尚未配置项目预算，模型调用已禁用。', {exact: true}).waitFor();
+  await page.getByTestId('mgmt-project-budget-edit').click();
+  assert.equal(await page.getByTestId('mgmt-project-budget-save').isDisabled(), true);
+  await page.getByTestId('mgmt-project-budget-tokens').fill('200');
+  await page.getByTestId('mgmt-project-budget-models').fill('2');
+  await page.getByTestId('mgmt-project-budget-concurrency').fill('1');
+  await page.evaluate(() => { window.pendingSave = deferred(); budgetActionResponse = pendingSave.promise; });
+  await page.getByTestId('mgmt-project-budget-save').click();
+  assert.equal(await page.getByTestId('mgmt-project-budget-tokens').isDisabled(), true);
+  await page.evaluate(() => {
+    budgetResponse = {ok: true, data: makeProjectBudget()};
+    pendingSave.resolve({ok: true, data: makeProjectBudget()});
+  });
+  await page.getByTestId('mgmt-project-budget-data').waitFor();
+  assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'budget-save').request), {
+    projectId: 'project-a', expectedRevision: 0,
+    limits: {maxTotalTokens: 200, maxModelCalls: 2, maxConcurrentModelCalls: 1, maxCostMicrousd: null}
+  });
+  assert.ok((await page.getByTestId('mgmt-project-budget-data').innerText()).includes('未知 100'));
+  await page.evaluate(() => clear());
+  assert.equal(await page.evaluate(() => listeners.size + budgetListeners.size + chatListeners.size), 0);
+});
+
+test('project budget draft keeps its original revision through live updates and rejects invalid integer inputs', async () => {
+  await page.evaluate(() => { reset(); budgetResponse = {ok: true, data: makeProjectBudget()}; mountBudget(); });
+  await page.getByTestId('mgmt-project-budget-data').waitFor();
+  await page.getByTestId('mgmt-project-budget-edit').click();
+  await page.getByTestId('mgmt-project-budget-tokens').fill('1.5');
+  assert.equal(await page.getByTestId('mgmt-project-budget-save').isDisabled(), true);
+  await page.getByTestId('mgmt-project-budget-tokens').fill('300');
+  await page.getByTestId('mgmt-project-budget-cost').fill('100000');
+  await page.evaluate(() => {
+    budgetResponse = {ok: true, data: makeProjectBudget('project-a', 2)};
+    budgetActionResponse = {ok: false, error: {message: 'research_project_budget_revision_conflict'}};
+    for (const listener of budgetListeners) listener({projectId: 'project-a'});
+  });
+  await page.getByTestId('mgmt-project-budget-save').click();
+  await page.getByText('research_project_budget_revision_conflict', {exact: true}).waitFor();
+  const request = await page.evaluate(() => calls.find(call => call.method === 'budget-save').request);
+  assert.equal(request.expectedRevision, 1);
+  assert.equal(request.limits.maxCostMicrousd, 100000);
+  assert.equal(await page.getByTestId('mgmt-project-budget-tokens').inputValue(), '300');
+  await page.evaluate(() => { budgetResponse = {ok: true, data: makeProjectBudget('project-b')}; mountBudget('project-b'); });
+  await page.getByTestId('mgmt-project-budget-data').waitFor();
+  assert.equal(await page.getByTestId('mgmt-project-budget-tokens').count(), 0);
+  assert.equal(await page.getByRole('alert').count(), 0);
 });
 
 test('light and dark task layouts remain readable in narrow assistant and scrolling drawer', async () => {

@@ -11,6 +11,7 @@ import { researchDispatchRequestHash } from '../../services/research-dispatch-co
 import { runBudgetSchema, runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
 import { createRunBudget } from '../agent/run-execution-snapshot';
 import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
+import { ProjectBudgetLedger } from '../../services/deep-agent/project-budget-ledger';
 
 type ExecutionIdentity = Pick<ResearchTaskExecution, 'kind' | 'executionId'>;
 type ExecutionInput = Omit<ResearchTaskExecution, 'schemaVersion' | 'createdAt'>;
@@ -18,7 +19,10 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(va
 
 /** Task identity and accounting share the agent database. Domain runs keep their own storage. */
 export class ResearchTaskRepository {
-  constructor(private readonly db: Database, private readonly now = () => new Date().toISOString()) {}
+  readonly projectBudgets: ProjectBudgetLedger;
+  constructor(private readonly db: Database, private readonly now = () => new Date().toISOString()) {
+    this.projectBudgets = new ProjectBudgetLedger(db);
+  }
 
   get(id: string, projectId: string): ResearchTask {
     const row = this.db.prepare('SELECT snapshot_json FROM research_tasks WHERE id = ?').get(id) as { snapshot_json: string } | undefined;
@@ -239,8 +243,8 @@ export class ResearchTaskRepository {
       const drift = this.db.prepare('SELECT 1 FROM agent_budget_calls WHERE run_id = ? AND task_id IS NOT NULL AND task_id != ?')
         .get(execution.executionId, execution.taskId);
       if (drift !== undefined) throw new Error('research_task_budget_association_conflict');
-      this.db.prepare('UPDATE agent_budget_calls SET task_id = ? WHERE run_id = ? AND execution_kind = ?')
-        .run(execution.taskId, execution.executionId, execution.kind);
+      this.db.prepare('UPDATE agent_budget_calls SET task_id = ?, project_id = ? WHERE run_id = ? AND execution_kind = ?')
+        .run(execution.taskId, execution.projectId, execution.executionId, execution.kind);
     }
     return execution;
   }

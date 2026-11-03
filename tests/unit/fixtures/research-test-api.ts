@@ -27,3 +27,5 @@ export { createAgentPlugin } from '../../../src/main/plugins/agent';
 export { createResearchHumanGate } from '../../../src/main/plugins/research/human-gate';
 export { ResearchTaskDiagnosticsService } from '../../../src/main/plugins/research/task-diagnostics';
 export { notifyResearchTaskChanged } from '../../../src/main/plugins/research/task-notifications';
+export { ProjectBudgetLedger } from '../../../src/main/services/deep-agent/project-budget-ledger';
+export { registerResearchProjectBudgetCapabilities } from '../../../src/main/plugins/research/project-budget-capabilities';

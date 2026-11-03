@@ -3,6 +3,7 @@ import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
 import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
 import { ResearchTasksSection } from './sections/ResearchTasksSection';
+import { ProjectBudgetSection } from './sections/ProjectBudgetSection';
 import { McpSection } from './sections/McpSection';
 import { MemorySection } from './sections/MemorySection';
 import { SkillsSection } from './sections/SkillsSection';
@@ -188,8 +189,11 @@ function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   return (
     <div className="grid gap-4">
       {scope.projectId === null ? null : (
-        <ResearchTasksSection key={scope.projectId} client={scope.client} projectId={scope.projectId}
-          selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} />
+        <div key={scope.projectId} className="grid gap-4">
+          <ProjectBudgetSection client={scope.client} projectId={scope.projectId} />
+          <ResearchTasksSection client={scope.client} projectId={scope.projectId}
+            selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} />
+        </div>
       )}
       {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}
     </div>

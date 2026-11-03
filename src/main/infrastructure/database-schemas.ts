@@ -702,6 +702,39 @@ END;
 `
 });
 
+agentMigrations.push({
+  version: 15,
+  name: 'research_project_budget',
+  sql: `
+ALTER TABLE agent_budget_calls ADD COLUMN project_id TEXT;
+ALTER TABLE agent_budget_calls ADD COLUMN project_budget_revision INTEGER
+  CHECK(project_budget_revision IS NULL OR (project_budget_revision>0 AND project_id IS NOT NULL));
+UPDATE agent_budget_calls SET project_id=COALESCE(
+  (SELECT project_id FROM research_tasks WHERE id=agent_budget_calls.task_id),
+  (SELECT json_extract(snapshot_json,'$.researchProjectId') FROM agent_runs WHERE id=agent_budget_calls.run_id)
+);
+CREATE INDEX agent_budget_calls_project ON agent_budget_calls(project_id,kind,state);
+CREATE TABLE research_project_budget_policies (
+  project_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),limits_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,PRIMARY KEY(project_id,revision)
+);
+CREATE TABLE research_project_budget_states (
+  project_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,stop_reason TEXT,updated_at TEXT NOT NULL,
+  FOREIGN KEY(project_id,revision) REFERENCES research_project_budget_policies(project_id,revision)
+);
+CREATE TRIGGER research_project_budget_policy_immutable BEFORE UPDATE ON research_project_budget_policies
+BEGIN SELECT RAISE(ABORT,'research_project_budget_policy_immutable'); END;
+CREATE TRIGGER research_project_budget_policy_retained BEFORE DELETE ON research_project_budget_policies
+BEGIN SELECT RAISE(ABORT,'research_project_budget_policy_immutable'); END;
+CREATE TRIGGER research_project_budget_call_scope BEFORE UPDATE OF project_id ON agent_budget_calls
+WHEN OLD.project_id IS NOT NULL AND NEW.project_id IS NOT OLD.project_id
+BEGIN SELECT RAISE(ABORT,'research_project_budget_association_conflict'); END;
+CREATE TRIGGER research_project_budget_call_revision BEFORE UPDATE OF project_budget_revision ON agent_budget_calls
+WHEN OLD.project_budget_revision IS NOT NULL AND NEW.project_budget_revision IS NOT OLD.project_budget_revision
+BEGIN SELECT RAISE(ABORT,'research_project_budget_revision_conflict'); END;
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
