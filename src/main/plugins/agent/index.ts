@@ -67,6 +67,7 @@ import { AgentPluginRuntime } from './runtime';
 import type { AgentLifecycleHookEmitter } from './runtime-types';
 import { AgentSessionRepository } from './session-repository';
 import type { ResearchProof } from '../../services/deep-agent/task-contract-store';
+import type { ResearchTaskRepository } from '../research/research-task-repository';
 
 const pluginId = '@roc/plugin-agent';
 const capabilityVersion = '1.0.0';
@@ -103,6 +104,7 @@ const agentCapabilityDescriptors = [
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type AgentPluginOptions = {
+  researchTasks: ResearchTaskRepository;
   executionGrantBroker?: ExecutionGrantBroker;
   capabilityPreview?: {
     deleteFileApprovalModeProvider: () => ApprovalMode;
@@ -121,7 +123,7 @@ export type AgentPluginOptions = {
   statusProvider?: () => AgentRuntimeStatus;
 };
 
-export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
+export function createAgentPlugin(options: AgentPluginOptions): RocPlugin {
   let runtime: AgentPluginRuntime | null = null;
   const capabilities =
     options.capabilityPreview === undefined ? baseAgentCapabilityDescriptors : agentCapabilityDescriptors;
@@ -414,9 +416,15 @@ function registerAgentCapabilities(
   context.capabilities.register(pluginId, baseDescriptor('agent.run.start'), async (input) =>
     runtime.startRun(chatStartRunRequestSchema.parse(input))
   );
-  context.capabilities.register(pluginId, baseDescriptor('agent.run.cancel'), async (input) =>
-    runtime.cancelRun(chatCancelRunRequestSchema.parse(input))
-  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.cancel'), async (input) => {
+    const request = chatCancelRunRequestSchema.parse(input);
+    const result = await runtime.cancelRun(request);
+    const task = options.researchTasks.taskForChat(request.runId);
+    if (task !== null && task.status !== 'cancelled' && task.status !== 'completed') {
+      await context.capabilities.invoke('research.task.cancel', { taskId: task.id, projectId: task.projectId });
+    }
+    return result;
+  });
   context.capabilities.register(pluginId, baseDescriptor('agent.run.correct'), async input => {
     const request = chatCorrectRunRequestSchema.parse(input);
     const sequence = new RunBudgetLedger(context.database.getConnection())

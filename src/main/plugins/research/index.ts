@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import type { ResearchTaskRepository } from './research-task-repository';
+import { ResearchTaskController } from './task-controller';
+import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
 import { LiteratureImportService } from './literature-import-service';
 import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
 import { z } from 'zod';
@@ -178,7 +180,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -265,6 +267,18 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects);
       stageRuntime = runtime;
+      const taskController = new ResearchTaskController(options.tasks, {
+        stages: runtime,
+        cancelChat: async runId => await context.capabilities.invoke('agent.run.cancel', { runId }),
+        cancelJob: async (kind, projectId, executionId) => {
+          switch (kind) {
+            case 'experiment': return await researchExperiments.cancel(projectId, executionId);
+            case 'figure': return await researchFigures.cancel(projectId, executionId);
+            case 'export': return await researchExports.cancel(projectId, executionId);
+          }
+        }
+      });
+      registerResearchTaskCapabilities(context, options.tasks, taskController);
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);

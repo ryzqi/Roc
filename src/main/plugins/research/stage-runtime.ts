@@ -40,6 +40,7 @@ export class ResearchStageRuntime {
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
+    this.repository.tasks.budgetForExecution('stage', request.runId, request.projectId);
     const run = this.repository.runs.retry(request);
     return this.linkAndSchedule(run, null);
   }
@@ -80,6 +81,25 @@ export class ResearchStageRuntime {
 
   async waitForIdle(): Promise<void> {
     await Promise.all([...this.active.values()].map((entry) => entry.cleanup));
+  }
+
+  async cancelTask(taskId: string, projectId: string): Promise<void> {
+    const runs = this.repository.tasks.executions(taskId, projectId)
+      .filter((execution) => execution.kind === 'stage')
+      .map((execution) => this.repository.runs.get(execution.executionId, projectId));
+    const pending: Promise<void>[] = [];
+    for (const run of runs) {
+      this.repository.runs.terminate(run.id, projectId, 'cancelled', 'research_task_cancelled');
+      const active = this.active.get(run.id);
+      if (active !== undefined) {
+        active.controller.abort(new Error('research_task_cancelled'));
+        pending.push(active.cleanup);
+      }
+      if (this.effects !== undefined) pending.push(this.effects.cancelOwned(projectId, run.id));
+    }
+    const results = await Promise.allSettled(pending);
+    const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (errors.length > 0) throw new AggregateError(errors, 'research_task_stage_cleanup_failed');
   }
 
   private stop(request: ResearchStageRunIdRequest, status: 'cancelled' | 'interrupted', reason: string): ResearchStageRun {

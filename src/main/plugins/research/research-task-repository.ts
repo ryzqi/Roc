@@ -45,6 +45,7 @@ export class ResearchTaskRepository {
 
   budgetForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunLimits {
     const execution = this.requireExecution(kind, executionId, projectId);
+    if (this.get(execution.taskId, projectId).status !== 'active') throw new Error('research_task_not_active');
     const row = this.db.prepare('SELECT limits_json FROM research_task_budgets WHERE task_id = ?')
       .get(execution.taskId) as { limits_json: string } | undefined;
     if (row === undefined) throw new Error('research_task_budget_missing');
@@ -55,6 +56,25 @@ export class ResearchTaskRepository {
     this.get(taskId, projectId);
     return (this.db.prepare('SELECT snapshot_json FROM research_task_executions WHERE task_id = ? ORDER BY created_at, rowid')
       .all(taskId) as Array<{ snapshot_json: string }>).map((row) => researchTaskExecutionSchema.parse(JSON.parse(row.snapshot_json)));
+  }
+
+  taskForChat(runId: string): ResearchTask | null {
+    const row = this.db.prepare(`SELECT t.snapshot_json FROM research_task_executions e
+      JOIN research_tasks t ON t.id = e.task_id WHERE e.kind = 'chat' AND e.execution_id = ?`)
+      .get(runId) as { snapshot_json: string } | undefined;
+    return row === undefined ? null : researchTaskSchema.parse(JSON.parse(row.snapshot_json));
+  }
+
+  cancel(taskId: string, projectId: string): ResearchTask {
+    return this.db.transaction(() => {
+      const task = this.get(taskId, projectId);
+      if (task.status === 'completed') throw new Error('research_task_already_completed');
+      if (task.status === 'cancelled') return task;
+      const cancelled = researchTaskSchema.parse({ ...task, status: 'cancelled', updatedAt: this.now() });
+      this.db.prepare('UPDATE research_tasks SET snapshot_json = ? WHERE id = ?')
+        .run(JSON.stringify(cancelled), taskId);
+      return cancelled;
+    }).immediate();
   }
 
   linkStage(run: ResearchStageRun, dispatch: ConsumedResearchDispatchGrant | null): ResearchTaskExecution {

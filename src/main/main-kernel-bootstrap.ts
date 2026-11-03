@@ -229,6 +229,7 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createAgentPlugin({
+      researchTasks,
       executionGrantBroker,
       capabilityPreview: {
         deleteFileApprovalModeProvider: () => {

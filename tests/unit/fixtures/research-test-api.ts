@@ -21,3 +21,6 @@ export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';
 export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budget-ledger';
 export { RunBudgetObserver } from '../../../src/main/services/deep-agent/run-budget-observer';
 export { createResearchRoleExecutor } from '../../../src/main/plugins/research/role-executor';
+export { ResearchTaskController } from '../../../src/main/plugins/research/task-controller';
+export { registerResearchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';
+export { createAgentPlugin } from '../../../src/main/plugins/agent';

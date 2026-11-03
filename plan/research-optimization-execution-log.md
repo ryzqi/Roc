@@ -247,3 +247,37 @@ Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
 
 Logs: `.artifacts/research-optimization/pr02b-{unit,harness,success,typecheck,build,ipc}.log`.
 Task cancellation, aggregate diagnostics and shell presentation continue in PR-02C.
+
+## ROC-PR-02C.1 — persistent task cancellation
+
+Status: `Verified passing` for the task cancellation API and cleanup propagation.
+Pause, continuation, interruption diagnostics and shell presentation remain pending.
+
+Task cancellation persists the cancelled identity before aborting executions. Shared budget
+admission and stage retries refuse cancelled tasks before starting another execution.
+Task get, execution tree and cancel capabilities have strict project-scoped IPC contracts.
+Agent cancellation resolves its trusted task association and awaits task cleanup, including
+when the chat has already ended but its stage is still active.
+Task status prevents cancellation recursion.
+
+Only the task's stage roots, review children, owned jobs and direct domain jobs stop.
+Owned domain cleanup uses existing stage cleanup; direct experiment, figure and export
+tasks use their own services. Concurrent cancellation requests share one pending cleanup.
+Cleanup errors are reported after all affected operations settle.
+Late model output cannot publish an artifact or run the human gate.
+No separate shell, compatibility alias or model/network call was added.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final 616 passed, 0 failed |
+| `pnpm harness:eval` | Final 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `git diff --check` | Passed |
+
+Unit coverage includes the actual Agent plugin capability, actual stage runtime, review
+child termination, unrelated active stage isolation, delayed cleanup, late output,
+direct domain service routing, cleanup failure, persistent identity and IPC boundaries.
+Logs: `.artifacts/research-optimization/pr02c-{unit,harness,build,ipc,contracts}.log`.

@@ -4,6 +4,7 @@ import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportS
 
 import { menuPages } from './surfaces';
 import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
+import { researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema } from './schemas/research-tasks';
 
 import {
   agentCapabilityPreviewRequestSchema,
@@ -418,6 +419,9 @@ export const ipcRegistry = {
     request({ key: 'researchWorkflowGetRun', channel: 'roc:research:workflow-get-run', domain: 'research', method: 'getStageRun', kind: 'plugin', capabilityName: 'research.workflow.getRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchWorkflowListRuns', channel: 'roc:research:workflow-list-runs', domain: 'research', method: 'listStageRuns', kind: 'plugin', capabilityName: 'research.workflow.listRuns', inputTransform: first, contract: methodContract(oneArg(researchStageRunsRequestSchema), researchStageRunSchema.array()) }),
     request({ key: 'researchWorkflowCancelRun', channel: 'roc:research:workflow-cancel-run', domain: 'research', method: 'cancelStageRun', kind: 'plugin', capabilityName: 'research.workflow.cancelRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchTaskGet', channel: 'roc:research:task-get', domain: 'research', method: 'getTask', kind: 'plugin', capabilityName: 'research.task.get', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskExecutions', channel: 'roc:research:task-executions', domain: 'research', method: 'getTaskExecutions', kind: 'plugin', capabilityName: 'research.task.executions', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskExecutionSchema.array()) }),
+    request({ key: 'researchTaskCancel', channel: 'roc:research:task-cancel', domain: 'research', method: 'cancelTask', kind: 'plugin', capabilityName: 'research.task.cancel', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
     request({ key: 'researchWorkflowRetryRun', channel: 'roc:research:workflow-retry-run', domain: 'research', method: 'retryStageRun', kind: 'plugin', capabilityName: 'research.workflow.retryRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunRetryRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchArtifactContent', channel: 'roc:research:artifact-content', domain: 'research', method: 'getArtifactContent', kind: 'plugin', capabilityName: 'research.artifacts.content', inputTransform: first, contract: methodContract(oneArg(researchArtifactContentRequestSchema), researchArtifactContentSchema.nullable()) }),
     request({ key: 'researchProductionInputInspect', channel: 'roc:research:production-input-inspect', domain: 'research', method: 'inspectProductionInput', kind: 'plugin', capabilityName: 'research.artifacts.inspectProduction', inputTransform: first, contract: methodContract(oneArg(researchProductionInputRequestSchema), researchProductionInputSchema) }),

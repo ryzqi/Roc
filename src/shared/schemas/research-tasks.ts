@@ -3,6 +3,7 @@ import { z } from 'zod';
 const id = z.string().trim().min(1).max(256);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExecutionKindSchema = z.enum(['chat', 'stage', 'experiment', 'figure', 'export']);
+export const researchTaskRequestSchema = z.object({ taskId: id, projectId: id }).strict();
 export const researchTaskSchema = z.object({
   schemaVersion: z.literal(1),
   id,
