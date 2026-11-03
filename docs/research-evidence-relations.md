@@ -31,7 +31,7 @@ digest。confirm/reject 追加审核人、时间、说明及不可替换的修�
 supersedes 仅在用户确认时撤销旧关系；拒绝或未审核提议不改变旧关系。
 仓库接受可信 main 调用者提供的 actor。用户 IPC 的 actor 由 main 从实际
 sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核人。
-模型提议工具及检查器审核按钮仍属于后续增量。
+模型提议工具仍属于后续增量；检查器已经接通用户提议与审核按钮。
 
 主张修改和证据失效在原写入事务中撤销 proposed/confirmed/historical 关系，
 保留原始来源和审核人，追加 system 原因。修订写入失败时，原主张/证据更新及
@@ -45,8 +45,8 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。新语义消费者准入、失效传播、历史导出和
-检查器矩阵属于下一增量，不能以仓库完成代替 PR-06 整体验收。
+整个迁移回滚，数据库保持 DB20。新语义消费者准入、失效传播和历史导出
+属于后续增量，不能以仓库或矩阵完成代替 PR-06 整体验收。
 
 ## 可信用户 IPC
 
@@ -61,29 +61,54 @@ main IPC adapter 建立的窗口/项目/能力上下文中写入。缺少 sender
 缺少端点返回 not_found；破损来源或关系快照返回 degraded。未知失败继续
 抛出，不包装为成功。generated preload/IPC 合同来自单一 ipc-registry。
 原生验收已通过真实 SQLite、PDF parser 和 registry/adapter；测试 sender
-为明确的 synthetic main 输入，尚未声称真人窗口或模型调用已验收。
+为明确的 synthetic main 输入。检查器另有实际 Electron 窗口的键盘提议、
+审核、历史读取及原闸门返回验收；模型调用尚未验收。
 
 真实区域保留原坐标及 origin；当前 HTML 的零面积坐标转为仅页定位（bbox/origin
 均 null）。没有 locations 时保持空数组，不从任意来源字符串猜页码或矩形。
 页码超出保存的 pageCount、倒置/退化的非零区域拒绝捕获。
 
 工件 inspector 每条 evidence 增加 required nullable sourceLocator；它参与既有
-工件 SHA，读取没有文件 IO、数据库写入或 worker。UI 的显式页/区域入口与语义
-关系矩阵仍属后续增量；现有原文快照可核对保存定位。
+工件 SHA，读取没有文件 IO、数据库写入或 worker。UI 的显式页/区域预览仍属
+后续 PR-07；现有原文快照可核对保存定位。
+
+## 检查器矩阵
+
+检查器延迟加载关系模块。支持/反对/限定列分别显示当前主张版本的 confirmed
+与 proposed 数量；historical、rejected、invalidated 不计作确认或待审核。
+来源必须与当前捕获一致。筛选支持全部、未确认支持、已确认反对、待审核；
+保留主张原顺序，明确说明统计口径，没有模型生成的分数或假冒科研质量结论。
+依赖、替代及历史关联仍在主张详情中显示原文、条件和状态。
+
+用户选择当前工件显示的证据后，单独通过 source inspector 重读真实片段及
+digest，再保存 proposed。qualifies 必须填写条件；supersedes 必须明确旧
+关系。确认/拒绝位于固定原文旁，提交精确 relation/claim/source 版本，
+支持可空审核说明、真实 pending 和明确错误。confirm 不改变 Claim 的
+hypothesis 状态。缺少当前权限、旧工件或失效来源不能审核或提议；人工
+审核历史只在明确读取时请求，读取不写库。
+
+成功写入刷新工件，旧 SHA 显示 stale，必须明确重新核对当前版本；整个阶段
+的闸门上下文仍需另行重读，再返回助手作原闸门决定。关闭/换项目后晚到的
+写入响应和历史不刷新新工件，不传递批准状态。所有文本由 React 转义。
+current source inspector 也包含关系的真实 evidence 端点，不能只枚举旧
+evidenceIds。矩阵跳转聚焦详情组；原生 summary 保持独立键盘展开。
 
 ## 已验证范围
 
-最终 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
-startup12/zero errors、IPC/chunks1132980bytes/6files通过。新增 unit6 使用真实
+来源定位增量 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
+startup12/zero errors、IPC/chunks1132980bytes/6files通过。定位 unit6 使用真实
 repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域、旧解析保留、
 来源/块冲突事务回滚、页/区域拒绝和19→20迁移历史保留。native full workflow
 实际解析冻结 PDF，经真实角色 capture 保存 document/parse/block/source/parse hash
 与原区域，readonly inspection 无 DB 写入；evidence-source-locator.json 与工件检查
 记录保留。冻结 fixtures 没有修改。
 
-## 后续语义关系
+关系仓库、可信 IPC 与矩阵增量的最终命令、结果和截图路径以
+`plan/research-optimization-execution-log.md` 为准。
 
-`evidenceIds` 当前是来源关联，不表示已经人工确认科学支持。下一增量加入
-supports/contradicts/qualifies/depends_on/supersedes 的明确关系、提出者、版本绑定、
-人工审核与修订历史；模型默认提出，人工确认科学语义。旧关联保存为历史事实，
-不得伪造历史审核人。来源完整性、科学语义和人工审核分别报告。
+## 后续验收
+
+`evidenceIds` 是来源关联，不表示已经人工确认科学支持。明确关系、版本绑定、
+人工审核、修订历史与 UI 已实现；模型产出提议、严格语义消费者准入、定位迁移
+候选及历史导出仍待接通。来源完整性、科学语义和人工审核分别报告，PR-06
+整体尚未完成。

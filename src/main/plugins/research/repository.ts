@@ -300,7 +300,8 @@ export class ResearchRepository {
       if (artifact.projectId !== project.id) throw new Error('research_artifact_project_mismatch');
       const content = this.runs.getArtifactContent(project.id, artifact.id);
       const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
-      const evidence = [...new Set(claims.flatMap(claim => claim.evidenceIds))]
+      const relations = this.evidence.relations.forArtifact(artifact.id, project.id);
+      const evidence = [...new Set([...claims.flatMap(claim => claim.evidenceIds), ...relations.map(relation => relation.evidenceId)])]
         .map(id => this.evidence.inspectEvidence(id, project.id));
       const rows = this.db.prepare(`SELECT id, project_id, artifact_id, subject_type, subject_id,
         source_type, source_id, locator, excerpt, created_at FROM research_provenance
@@ -323,7 +324,7 @@ export class ResearchRepository {
       if (artifact.kind === 'export_package') production = {kind: 'export', execution: this.exports.forArtifact(artifact)};
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
-        stage, content, origin, claims, evidence, relations: this.evidence.relations.forArtifact(artifact.id, project.id),
+        stage, content, origin, claims, evidence, relations,
         production, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');

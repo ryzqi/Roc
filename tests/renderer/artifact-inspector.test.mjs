@@ -26,7 +26,11 @@ before(async()=>{
     import {ResearchGateApprovalCard} from './src/renderer/assistant/blocks/approval-cards';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
-    const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input)}}};
+    const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input),
+      inspectEvidence:input=>window.relationFromMain('inspectEvidence',input),
+      proposeEvidenceRelation:input=>window.relationFromMain('proposeEvidenceRelation',input),
+      reviewEvidenceRelation:input=>window.relationFromMain('reviewEvidenceRelation',input),
+      evidenceRelationHistory:input=>window.relationFromMain('evidenceRelationHistory',input)}}};
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
       const [readingLocations]=useState(()=>new Map());
@@ -80,6 +84,16 @@ before(async()=>{
     if(f.deferGate) return new Promise(resolve=>{f.finishGate=()=>resolve(result);});
     return result;
   });
+  await page.exposeFunction('relationFromMain',async(method,input)=>{
+    const f=active;
+    reads.push({relation:method,input});
+    const channel={inspectEvidence:'roc:research:evidence-inspect',proposeEvidenceRelation:'roc:research:relations-propose',
+      reviewEvidenceRelation:'roc:research:relations-review',evidenceRelationHistory:'roc:research:relations-history'}[method];
+    api.parseIpcRequestArgs(channel,[input]);
+    const result=await f.bridge.invoke(`research.${method}`,[input],windowId);
+    if(f.deferRelation===method)return new Promise(resolve=>{f.finishRelation=()=>resolve(result);});
+    return result;
+  });
   await page.exposeFunction('submitGateFromMain',async(id,decisions)=>{
     const f=active;
     assert.equal(id,f.approval.interruptId);
@@ -110,6 +124,7 @@ async function scene({long=false}={}) {
   const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId,expectedVersion:null}).snapshot;
   const handlers=new Map();
   api.registerResearchArtifactInspectorCapability({pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){handlers.set(descriptor.name,handler);}}},f.repository);
+  api.registerResearchEvidenceCapabilities({pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){handlers.set(descriptor.name,handler);}}},f.repository.evidence);
   f.bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
   f.link={projectId:f.project.id,artifactId,expectedVersion:snapshot.version,title:snapshot.artifact.title,kind:snapshot.artifact.kind};
   f.empty=empty;f.snapshot=snapshot;
@@ -150,6 +165,179 @@ async function audit(label) {
   assert.ok(result.issues.every(issue=>issue.el==='div.fixed.inset-0.flex > div.relative.z-10.ml-auto' && issue.gap===0));
   await page.screenshot({path:join(artifacts,label+'.png')});
 }
+
+async function openRelationClaim(f) {
+  const claim=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId})[0];
+  await page.getByTestId(`artifact-relations-claim-${claim.id}`).focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator(`#relation-claim-${claim.id}`).evaluate(details=>details===document.activeElement),true,
+    'keyboard jump focuses the details group so its Enter cannot toggle the summary');
+  await page.locator(`#relation-claim-${claim.id} > div`).waitFor({state:'visible'});
+  return claim;
+}
+async function activateRendered(locator) {
+  await locator.waitFor({state:'visible'});
+  await locator.focus();
+  assert.equal(await locator.evaluate(element=>element===document.activeElement),true,'keyboard action must reach the rendered control');
+  await page.keyboard.press('Enter');
+}
+async function recaptureRelations(f) {
+  await page.getByTestId('artifact-inspector-recapture').waitFor();
+  await page.getByTestId('artifact-inspector-recapture').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-relations').waitFor();
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});
+  return await openRelationClaim(f);
+}
+async function proposeRelation(f,kind='supports',condition='') {
+  const claim=await openRelationClaim(f);
+  await activateRendered(page.locator(`[data-reading-key="relation-proposal-summary:${claim.id}"]`));
+  assert.equal(await page.getByTestId(`artifact-relation-propose-${claim.id}`).isDisabled(),true);
+  await page.getByTestId(`artifact-relation-source-${claim.id}`).selectOption('inspector-evidence');
+  await page.getByTestId(`artifact-relation-kind-${claim.id}`).selectOption(kind);
+  if(condition!=='')await page.getByTestId(`artifact-relation-condition-${claim.id}`).fill(condition);
+  await page.waitForFunction(id=>!document.querySelector(`[data-testid="${id}"]`).disabled,`artifact-relation-propose-${claim.id}`);
+  await activateRendered(page.getByTestId(`artifact-relation-propose-${claim.id}`));
+  await recaptureRelations(f);
+  return f.repository.evidence.relations.list({projectId:f.project.id,claimId:claim.id}).at(-1);
+}
+
+test('keyboard source selection creates a real proposal, human confirmation refreshes versions, and the original gate needs new context',async()=>{
+  const f=await scene(),before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await openArtifact();await page.getByTestId('artifact-relations-matrix').waitFor();
+  assert.match(await page.getByTestId('artifact-relations-matrix').innerText(),/确认 0/u);
+  await page.getByTestId('artifact-relations-filter').selectOption('weak');
+  assert.equal(await page.getByTestId('artifact-relations-matrix').count(),1);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  const proposed=await proposeRelation(f);
+  assert.equal(proposed.status,'proposed');
+  assert.deepEqual(proposed.proposer,{kind:'user',id:`window:${windowId}`});
+  assert.equal(proposed.reviewer,null);
+  assert.match(await page.getByTestId('artifact-relations-matrix').innerText(),/提议 1/u);
+  const expected={projectId:f.project.id,relationId:proposed.id,expectedVersion:1,expectedClaimVersion:1,
+    expectedSourceDigest:proposed.sourceDigest,decision:'confirm',note:'已核对固定原文，保留假设状态。'};
+  await page.getByTestId(`artifact-relation-note-${proposed.id}`).fill(expected.note);
+  await activateRendered(page.getByTestId(`artifact-relation-confirm-${proposed.id}`));
+  await recaptureRelations(f);
+  const confirmed=f.repository.evidence.relations.get(proposed.id,f.project.id);
+  assert.equal(confirmed.status,'confirmed');assert.deepEqual(confirmed.reviewer,{kind:'user',id:`window:${windowId}`});
+  assert.equal(f.repository.evidence.getClaim(confirmed.claimId).status,'hypothesis');
+  assert.ok(reads.some(read=>read.relation==='reviewEvidenceRelation'&&JSON.stringify(read.input)===JSON.stringify(expected)));
+  assert.match(await page.getByTestId('artifact-relations-matrix').innerText(),/确认 1/u);
+  await page.getByTestId('artifact-relations-filter').selectOption('weak');
+  assert.match(await page.getByTestId('artifact-relations').innerText(),/没有符合条件/u);
+  await page.getByTestId('artifact-relations-filter').selectOption('all');await openRelationClaim(f);
+  const after=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId(`artifact-relation-history-${proposed.id}`));
+  await page.getByTestId(`artifact-relation-${proposed.id}`).getByText(/版本 2，已确认/u).waitFor();
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),after);
+  await page.getByTestId('artifact-inspector-review').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-inspector-return-review').waitFor();
+  await page.getByTestId('artifact-inspector-return-review').focus();await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  await page.getByTestId('assistant-gate-approve').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>window.resumeResult?.done===true);
+  assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'ideation');
+});
+
+test('contradictions, required qualification conditions and rejected decisions stay distinct from historical support',async()=>{
+  const f=await scene();await openArtifact();
+  const contradicts=await proposeRelation(f,'contradicts');
+  await activateRendered(page.getByTestId(`artifact-relation-confirm-${contradicts.id}`));
+  const claim=await recaptureRelations(f);
+  await page.getByTestId('artifact-relations-filter').selectOption('conflict');
+  assert.match(await page.getByTestId('artifact-relations-matrix').innerText(),/确认 1/u);
+  await page.getByTestId('artifact-relations-filter').selectOption('all');await openRelationClaim(f);
+  await activateRendered(page.locator(`[data-reading-key="relation-proposal-summary:${claim.id}"]`));
+  await page.getByTestId(`artifact-relation-source-${claim.id}`).selectOption('inspector-evidence');
+  await page.getByTestId(`artifact-relation-kind-${claim.id}`).selectOption('qualifies');
+  assert.equal(await page.getByTestId(`artifact-relation-propose-${claim.id}`).isDisabled(),true);
+  await page.getByTestId(`artifact-relation-condition-${claim.id}`).fill('仅适用于保存的样本，单位与原文一致。');
+  await activateRendered(page.getByTestId(`artifact-relation-propose-${claim.id}`));
+  await recaptureRelations(f);
+  const qualifies=f.repository.evidence.relations.list({projectId:f.project.id,claimId:claim.id}).at(-1);
+  assert.equal(qualifies.kind,'qualifies');
+  assert.match(await page.getByTestId(`artifact-relation-${qualifies.id}`).innerText(),/仅适用于保存的样本/u);
+  await activateRendered(page.getByTestId(`artifact-relation-reject-${qualifies.id}`));
+  await recaptureRelations(f);
+  assert.equal(f.repository.evidence.relations.get(qualifies.id,f.project.id).status,'rejected');
+  await page.getByTestId('artifact-relations-filter').selectOption('pending');
+  assert.match(await page.getByTestId('artifact-relations').innerText(),/没有符合条件/u);
+  await page.getByTestId('artifact-relations-filter').selectOption('weak');
+  assert.equal(await page.getByTestId('artifact-relations-matrix').count(),1,'confirmed contradiction does not create confirmed support');
+});
+
+test('source invalidation after display refuses a real decision without writes and refresh shows retained invalidated evidence',async()=>{
+  const f=await scene();await openArtifact();
+  const proposed=await proposeRelation(f);
+  f.repository.evidence.invalidateChunksOf('inspector-document');
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId(`artifact-relation-confirm-${proposed.id}`));
+  await page.getByTestId(`artifact-relation-${proposed.id}`).getByRole('alert').waitFor();
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.equal(f.repository.evidence.relations.get(proposed.id,f.project.id).status,'invalidated');
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  await page.getByTestId('artifact-inspector-refresh').focus();await page.keyboard.press('Enter');
+  const claim=await recaptureRelations(f);
+  assert.match(await page.getByTestId(`artifact-relation-${proposed.id}`).innerText(),/来源已失效/u);
+  assert.equal(await page.getByTestId(`artifact-relation-confirm-${proposed.id}`).count(),0);
+  await activateRendered(page.locator(`[data-reading-key="relation-proposal-summary:${claim.id}"]`));
+  await page.getByTestId(`artifact-relation-source-${claim.id}`).selectOption('inspector-evidence');
+  await page.getByText('此来源已失效，不能提议新关系。',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId(`artifact-relation-propose-${claim.id}`).isDisabled(),true);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+});
+
+test('late actual relation review response cannot refresh or expose the prior project after selection changes',async()=>{
+  const f=await scene();await openArtifact();
+  const proposed=await proposeRelation(f);
+  f.deferRelation='reviewEvidenceRelation';
+  await activateRendered(page.getByTestId(`artifact-relation-confirm-${proposed.id}`));
+  for(let attempt=0;attempt<100&&f.finishRelation===undefined;attempt++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.ok(f.finishRelation);
+  assert.equal(await page.getByTestId(`artifact-relation-confirm-${proposed.id}`).isDisabled(),true);
+  assert.equal(f.repository.evidence.relations.get(proposed.id,f.project.id).status,'confirmed');
+  const other=await scene();
+  await openArtifact();
+  const before=reads.length;
+  f.finishRelation();f.deferRelation=null;
+  await page.getByTestId('artifact-relations').waitFor();
+  assert.equal(await page.getByTestId(`artifact-relation-${proposed.id}`).count(),0);
+  assert.equal(await page.getByText('关系变更已保存，请核对刷新后的工件版本。',{exact:true}).count(),0);
+  assert.equal(reads.length,before);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.equal(other.repository.evidence.relations.list({projectId:other.project.id,claimId:null}).length,0);
+});
+
+test('long relation excerpts preserve native keyboard reading and matrix layout across light dark narrow windows and reduced motion',async()=>{
+  const f=await scene({long:true});
+  const claim=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId})[0];
+  const request={projectId:f.project.id,claimId:claim.id,expectedClaimVersion:claim.version,evidenceId:'inspector-evidence',
+    expectedSourceDigest:api.relationSourceDigest(f.repository.evidence.inspectEvidence('inspector-evidence',f.project.id)),
+    kind:'qualifies',condition:'实际保存的限定条件。'.repeat(40),supersedesRelationId:null};
+  const proposal=await f.bridge.invoke('research.proposeEvidenceRelation',[request],windowId);
+  assert.equal(proposal.ok,true);
+  await openArtifact();await recaptureRelations(f);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  for(const [width,theme,motion] of [[1100,'light','no-preference'],[1099,'dark','reduce'],[800,'light','reduce']]) {
+    await page.setViewportSize({width,height:800});await page.emulateMedia({reducedMotion:motion});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.getByTestId('artifact-relations-filter').scrollIntoViewIfNeeded();
+    const layout=await page.getByTestId('artifact-relations').evaluate(element=>({
+      width:element.clientWidth,overflow:element.scrollWidth>element.clientWidth,
+      fonts:[...new Set([...element.querySelectorAll('button,select,p,td,th,summary,textarea')].map(node=>getComputedStyle(node).fontSize))]
+    }));
+    assert.equal(layout.overflow,false);assert.ok(layout.width>350);
+    assert.ok(layout.fonts.every(size=>parseFloat(size)>=12));
+    await page.getByTestId(`artifact-relation-note-${proposal.data.id}`).waitFor({state:'visible'});
+    await page.getByTestId(`artifact-relation-note-${proposal.data.id}`).focus();
+    assert.equal(await page.getByTestId(`artifact-relation-note-${proposal.data.id}`).evaluate(element=>element===document.activeElement),true);
+    await page.keyboard.press('PageDown');
+    await audit(`relations-${width}-${theme}-${motion}`);
+  }
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  await page.setViewportSize({width:1100,height:900});await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+});
 
 test('assistant identity links inspect real saved content and source then return focus and actual task without approving',async()=>{
   const f=await scene(),before=f.db.prepare('SELECT total_changes()').pluck().get();

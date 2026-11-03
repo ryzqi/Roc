@@ -10,6 +10,7 @@ import {useArtifactReadingLocation} from './use-artifact-reading-location';
 
 const StageContent = lazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
+const Relations = lazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function ArtifactInspector({client, request, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -22,6 +23,7 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
   const result = read.status === 'ready' ? read.data : null;
   const snapshot = result?.snapshot;
   const [reviewNonce, setReviewNonce] = useState(0);
+  const [relationSaved, setRelationSaved] = useState(false);
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
@@ -68,6 +70,7 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
       </p> : null}
       {reviewNonce > 0 && review.status === 'loading' ? <p role="status">正在读取整个阶段的审核上下文…</p> : null}
       {review.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{review.error}</p>}
+      {relationSaved ? <p role="status">关系变更已保存，请核对刷新后的工件版本。</p> : null}
       {review.data === null ? null : <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-inspector-gate-context">
         <h2 className="font-medium">本阶段全部待核对工件</h2>
         <ul className="flex flex-col gap-1">
@@ -114,6 +117,10 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
               <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {source.evidence.contentHash}</p>
             </details>)}
         </section>
+        <Suspense fallback={<p role="status">正在加载证据关系…</p>}>
+          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={result?.status === 'current'}
+            onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
+        </Suspense>
         <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>
           <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
         </details>

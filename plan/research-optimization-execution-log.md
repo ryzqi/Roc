@@ -2590,3 +2590,47 @@ refusal/no-write checked, proposer window91/reviewer window92 recorded. Window I
 explicit synthetic main inputs; actual renderer user path is the next UI increment. Existing
 old-gate refusal and new exact-version approval remain verified. No frozen fixture changes,
 paid/live requests or remote writes. PR-06 and overall plan remain incomplete.
+
+## ROC-PR-06A3B — actual inspector relation matrix and human review
+
+Lazy matrix shows current confirmed/proposed support, contradiction and qualification counts,
+with original-order weak/contradiction/pending filters and explicit historical association
+labels. Details preserve fixed excerpts, conditions, source/claim hashes, actors and explicit
+readonly history. Human source selection re-inspects digest before proposing; qualification
+needs conditions and supersession needs a prior relation. Explicit confirm/reject bind the
+shown versions. Success refreshes artifact, requires current recapture and separate whole-
+stage gate reread; confirmation retains hypothesis status. Old/inactive sources refuse.
+Late responses after selection change cannot refresh another project. Inspector now includes
+relation evidence endpoints beyond old claim evidenceIds, without rewriting the associations.
+
+Verification from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm build` |Final2 fresh type/build passed |
+| `node --test tests/unit/research-evidence-relations.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs tests/unit/research-artifact-inspector.test.mjs` |20/20 passed |
+| `pnpm test:unit` |Final846/846 passed |
+| `pnpm harness:eval` |Final94/94 passed |
+| `pnpm test:research-p0` |Final fresh build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs` |Finalscope14/14 passed |
+| `node --test --test-concurrency=1 tests/renderer/` |Final2 101/101 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final2 12/12; zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Final2 current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs pr06-relation-ui-*.log. New Electron tests exercise actual registered adapter with the
+actual Electron webContents sender: source→proposal→user review→history→fresh context→original
+LangGraph gate. Synthetic scientific content is explicitly labelled. Source invalidation
+between display and decision refuses without writes; late actual write response cannot refresh
+new project. Source endpoints beyond associations retain actual invalidation/no-write checks.
+Light1100, dark1099 and light800 reduced-motion screenshots/audits retained at
+.artifacts/research-optimization/artifact-inspector-ui/relations-*.png and *-audit.json;
+cut0, only three known physical drawer-edge shadows hidden, no horizontal overflow or fonts<12.
+Final light800 screenshot reviewed after nonshrinking 查看 label correction.
+
+First UI failures mixed synchronous focus retargeting onto summary and test actions before
+expanded native details painted. Matrix jumps now focus a noninteractive details group with
+visible focus; test controls wait for visibility and assert actual focus before Enter. Reader
+probe had no saved location/restore callbacks; reading restoration code unchanged. Temporary
+probes removed, original assertions/timeouts preserved. Model proposals, strict semantic
+consumers, migration candidates and historical exports remain next; PR-06 is incomplete.

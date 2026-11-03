@@ -76,6 +76,31 @@ test('contradiction and conditional qualification retain scientific meaning and 
   }finally{f.close();}
 });
 
+test('artifact inspection includes relation endpoints beyond the old claim evidenceIds with current invalidation and no writes',()=>{
+  const f=scene();
+  try {
+    f.repository.knowledge.upsertFromSource({id:'additional-relation-source',projectId:f.project.id,
+      sourceType:'experiment',sourceId:'synthetic-additional-source',title:'Additional synthetic source',
+      content:'An additional source.',chunks:[{content:'An additional source.',locator:'extra.csv:row:1'}],embeddingPolicy:'none'});
+    const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'additional-relation-source:chunk:0'});
+    const relation=f.propose({evidenceId:evidence.id,
+      expectedSourceDigest:api.relationSourceDigest(f.repository.evidence.inspectEvidence(evidence.id,f.project.id))});
+    f.review(relation);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const first=f.repository.inspectArtifact({projectId:f.project.id,artifactId:f.artifact.id,expectedVersion:null});
+    assert.deepEqual(first.snapshot.evidence.map(source=>source.evidence.id),[f.evidence.id,evidence.id]);
+    assert.deepEqual(first.snapshot.claims[0].evidenceIds,[f.evidence.id]);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    f.repository.evidence.invalidateChunksOf('additional-relation-source');
+    const after=f.db.prepare('SELECT total_changes()').pluck().get();
+    const changed=f.repository.inspectArtifact({projectId:f.project.id,artifactId:f.artifact.id,expectedVersion:first.snapshot.version});
+    assert.equal(changed.status,'stale');
+    assert.equal(changed.snapshot.evidence[1].referenceStatus,'superseded');
+    assert.equal(changed.snapshot.relations[0].status,'invalidated');
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),after);
+  }finally{f.close();}
+});
+
 test('waiting at the original gate permits only human relation metadata, keeps body editing locked and refuses inactive immutable drafts',()=>{
   const f=scene();
   try {
