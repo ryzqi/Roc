@@ -768,7 +768,7 @@ test('MCP timeout after a local external write requires a matching receipt and r
     const receiptsPath = join(root, 'receipts.jsonl');
     const server = {id: 'receipt', name: 'Local receipt fixture', enabled: true,
       transport: 'stdio', preset: false, riskLevel: 'medium',
-      command: `"${process.execPath}" "${await realpath('tests/fixtures/research-workflow/mcp-receipt-server.mjs')}" "${receiptsPath}"`,
+      command: `"${process.execPath}" "${await realpath('tests/fixtures/mcp/receipt-server.mjs')}" "${receiptsPath}"`,
       allowedTools: ['write', 'query'], status: 'ready', tools: 2};
     try {
       const compiled = api.compileRunCapabilityManifest({

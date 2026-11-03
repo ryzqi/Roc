@@ -758,3 +758,15 @@ different digest so the semantic mismatch check was exercised. No product behavi
 checks were weakened. Logs: `.artifacts/research-optimization/p0-mcp-timeout-*.log` and
 `p0-fault-matrix-final.log`. Server receipts, unknown/resolved identities and both DBs are
 retained under the P0 production artifact directory. Next: PR-04 academic search fusion.
+
+### P0 fixture placement correction
+
+A subsequent complete unit run during PR-04 found that the new MCP server had been
+placed inside the frozen CC0 research-workflow directory. Its immutable file-list
+check failed (644/645 unit checks passed). The server now lives in
+`tests/fixtures/mcp/receipt-server.mjs`; the original dataset manifest and hashes stay
+unchanged. From the repository root, `node --test tests/unit/research-workflow-fixture.test.mjs`
+passed 2/2 and `node scripts/run-research-p0.mjs '--test-name-pattern=MCP timeout'`
+passed 1/1 after relocation. Logs: `p0-mcp-fixture-manifest.log` and
+`p0-mcp-fixture-relocated.log` in the research optimization artifact directory.
+Status: `Verified passing` for the corrected fixture boundary.
