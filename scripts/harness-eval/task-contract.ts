@@ -81,8 +81,8 @@ export async function verifyTaskContracts(directory: string): Promise<Record<str
     });
     store.createUnverifiedReport('run_restart', 'Process restarted before the task completed.');
     db.prepare(`INSERT INTO agent_budget_calls
-      (run_id,call_id,kind,input_hash,reserved_tokens,actual_tokens,state,envelope_json,created_at)
-      VALUES ('run_restart','child_restart','child','input-hash',0,0,'unknown',?,?)`)
+      (run_id,call_id,execution_kind,kind,input_hash,reserved_tokens,actual_tokens,state,envelope_json,created_at)
+      VALUES ('run_restart','child_restart','chat','child','input-hash',0,0,'unknown',?,?)`)
       .run(JSON.stringify({ childTaskId: 'child_restart', outcomeStatus: 'failed', failureCode: 'child_task_failed' }), now);
     const restartHandoff = store.saveHandoff('run_restart', { reason: 'restart', checkpointPresent: true });
     store.assertCheckpointHandoffCanResume('run_restart', 'thread_restart');

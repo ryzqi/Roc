@@ -150,7 +150,8 @@ export class ResearchStageRuntime {
     signal.throwIfAborted();
     this.repository.tasks.requireExecution('stage', queued.id, queued.projectId);
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
-    const prepared = await withAbort(this.executor.prepare(queued.policy.model), signal);
+    const budget = this.repository.tasks.budgetForExecution('stage', queued.id, queued.projectId);
+    const prepared = await withAbort(this.executor.prepare(queued.policy.model, budget), signal);
     signal.throwIfAborted();
     return { prepared, run: this.repository.runs.markRunning(queued.id, queued.projectId, prepared) };
   }
@@ -191,6 +192,6 @@ function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 
 function executionErrorCode(error: unknown): string {
   if (error instanceof ZodError) return 'research_role_output_invalid';
-  if (error instanceof Error && /^research_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message;
+  if (error instanceof Error && /^(?:research|run)_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message;
   return 'research_role_execution_failed';
 }

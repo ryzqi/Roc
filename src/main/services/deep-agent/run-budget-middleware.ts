@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
 import { RunBudgetLedger, type RunLimits } from './run-budget-ledger';
@@ -42,7 +42,7 @@ export function createRunBudgetMiddleware(
         estimatedInputTokens: count === null || profile === null ? null : count.tokens + profile.systemToolOverheadTokens,
         // Provider framing and tool encoding are estimated even when text tokenization is exact.
         estimateApproximate: tokenCounter === undefined ? null : true,
-        responseMessage: (result: unknown) => result,
+        responseMessage: readModelCallMessage,
         invoke: async () => await handler(request)
       });
     },
@@ -109,6 +109,15 @@ export function createRunBudgetMiddleware(
       return result;
     }
   });
+}
+
+/** LangChain 1.5 returns messages plus structuredResponse for a parsed response. */
+function readModelCallMessage(result: unknown): AIMessage | null {
+  if (AIMessage.isInstance(result)) return result;
+  if (result === null || typeof result !== 'object' || !('messages' in result) ||
+    !Array.isArray(result.messages)) return null;
+  const message: unknown = result.messages[0];
+  return AIMessage.isInstance(message) ? message : null;
 }
 
 function safeChildFailureCode(error: unknown): string {

@@ -212,3 +212,38 @@ Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
 Logs: `.artifacts/research-optimization/pr03a-{contracts,typecheck,audit,harness,ipc}.log`.
 Continue authorized offline PR-02B/02C while the independent corpus, live adapter,
 isolated credentials, attributable prices and spending authorization are prepared.
+
+## ROC-PR-02B — shared task and stage accounting
+
+Status: `Verified passing` for shared task/stage admission and model accounting.
+Project-wide budget configuration remains pending.
+
+Agent migration 12 preserves existing calls and progress records while admitting linked
+stage executions. Tasks freeze their parent chat policy or the explicit direct-root default.
+Missing historical task policies reject dispatch; no guessed caps are introduced.
+One immediate SQLite transaction checks task and execution calls, tokens, concurrency
+and integer microdollar reservations. Linking a chat attaches its existing calls once.
+Unknown consumption survives restart. Permanent stop reasons survive retries and stages.
+Temporary concurrency denial does not permanently stop a task.
+
+Stage createAgent now uses the existing budget middleware and observer, with a capped
+model output. The real structured-output handler returns messages with structuredResponse;
+the middleware reads its raw AIMessage for trustworthy usage. Successful stage settlement
+reads stage budget status without requiring a chat row. Envelopes record provider/model.
+No model/network calls occurred; the integration model is a local BaseChatModel fixture.
+Dollar-capped dispatch without trustworthy pricing rejects.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final 610 passed, 0 failed |
+| `pnpm harness:eval` | Final 94 deterministic cases passed |
+| `node --test tests/unit/research-task-budget.test.mjs tests/unit/run-budget-observer.test.mjs` | Final 15 passed, including actual createAgent success/failure |
+| `pnpm typecheck` | Passed |
+| `pnpm build` | Final production build passed |
+| `pnpm check:ipc` | Passed |
+| `git diff --check` | Passed |
+
+Logs: `.artifacts/research-optimization/pr02b-{unit,harness,success,typecheck,build,ipc}.log`.
+Task cancellation, aggregate diagnostics and shell presentation continue in PR-02C.

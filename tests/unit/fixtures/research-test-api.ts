@@ -18,3 +18,6 @@ export { applyDatabaseMigrations } from '../../../src/main/infrastructure/databa
 export { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
 export { createRunBudget, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
 export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';
+export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budget-ledger';
+export { RunBudgetObserver } from '../../../src/main/services/deep-agent/run-budget-observer';
+export { createResearchRoleExecutor } from '../../../src/main/plugins/research/role-executor';

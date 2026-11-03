@@ -5,6 +5,9 @@ import { researchStageOutputSchema } from '../../../shared/schemas/research-runs
 import type { ResearchModelSelection, ResearchStageRun } from '../../../shared/types';
 import type { AgentModelFactoryAdapter } from '../agent/model-factory-adapter';
 import type { ResearchExecutionContext } from './run-repository';
+import type { RunBudgetLedger, RunLimits } from '../../services/deep-agent/run-budget-ledger';
+import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
+import { createRunBudgetMiddleware } from '../../services/deep-agent/run-budget-middleware';
 
 export type ResearchRoleExecution = {
   run: ResearchStageRun;
@@ -20,15 +23,15 @@ export type PreparedResearchRole = {
 };
 
 export type ResearchRoleExecutor = {
-  prepare(model: ResearchModelSelection): Promise<PreparedResearchRole>;
+  prepare(model: ResearchModelSelection, budget: RunLimits): Promise<PreparedResearchRole>;
 };
 
-export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter): ResearchRoleExecutor {
+export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, ledger: RunBudgetLedger): ResearchRoleExecutor {
   return {
-    async prepare(selection) {
+    async prepare(selection, budget) {
       const handle = selection.kind === 'app_default'
-        ? await factory.createDefaultModelHandle()
-        : await factory.createModelHandleByProviderAndModel(selection);
+        ? await factory.createDefaultModelHandle({ maxOutputTokens: budget.maxOutputTokens })
+        : await factory.createModelHandleByProviderAndModel({ ...selection, maxOutputTokens: budget.maxOutputTokens });
       const model = handle.langChainHandle?.model;
       if (model === undefined) throw new Error('research_model_handle_missing');
       return {
@@ -36,9 +39,14 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter): R
         modelId: handle.modelId,
         async execute(input) {
           input.signal.throwIfAborted();
+          const limits = { ...budget, maxModelCalls: Math.min(budget.maxModelCalls, input.run.policy.maxSteps) };
+          const observer = new RunBudgetObserver(ledger, input.run.id, limits, input.run.skillHash, {
+            providerId: handle.providerId, modelId: handle.modelId
+          });
           const agent = createAgent({
             model,
             tools: input.tools,
+            middleware: [createRunBudgetMiddleware(ledger, input.run.id, limits, observer)],
             systemPrompt: [
               `你是 Roc 科研工作流的 ${input.run.role}，只负责 ${input.run.stage} 阶段。`,
               `当前项目工作语言为 ${input.context.project.language === 'en' ? 'English' : '中文'}。输出、主张和 Idea Canvas 使用该语言。`,

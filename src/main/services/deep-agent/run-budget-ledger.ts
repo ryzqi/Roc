@@ -3,6 +3,7 @@ import type { RunBudgetStatus, RunExecutionSnapshot } from '../../../shared/type
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { hashToolInput } from './tool-effect-store';
+import { runBudgetSchema } from '../../../shared/schemas/agent';
 
 export type RunLimits = RunExecutionSnapshot['budget'];
 type Reservation = {
@@ -77,6 +78,17 @@ export class RunBudgetLedger {
         if (existing.input_hash !== input.inputHash) throw new Error('run_budget_call_input_drift');
         throw new Error('run_budget_call_already_reserved');
       }
+      if (!Number.isSafeInteger(input.tokens) || input.tokens < 0 ||
+        (input.costMicrousd !== null && input.costMicrousd !== undefined &&
+          (!Number.isSafeInteger(input.costMicrousd) || input.costMicrousd < 0))) {
+        throw new Error('run_budget_reservation_invalid');
+      }
+      const execution = this.db.prepare("SELECT kind, task_id FROM research_task_executions WHERE execution_id = ? AND kind IN ('chat','stage')")
+        .get(runId) as { kind: 'chat' | 'stage'; task_id: string } | undefined;
+      if (execution === undefined && this.db.prepare('SELECT 1 FROM agent_runs WHERE id = ?').get(runId) === undefined) {
+        throw new Error('run_budget_execution_unlinked');
+      }
+      if (execution !== undefined) this.assertTaskReservation(execution.task_id, input);
       const totals = this.db.prepare(`SELECT
         COALESCE(SUM(CASE WHEN kind = 'model' THEN 1 ELSE 0 END), 0) model_calls,
         COALESCE(SUM(CASE WHEN kind IN ('tool', 'child') THEN 1 ELSE 0 END), 0) tool_calls,
@@ -107,27 +119,68 @@ export class RunBudgetLedger {
       if (input.kind === 'model' && input.tokens > limits.maxCallTokens) {
         throw new Error('run_model_call_token_reservation_exhausted');
       }
-      if (totals.tokens + input.tokens > limits.maxTotalTokens) {
+      if (input.tokens > limits.maxTotalTokens - totals.tokens) {
         this.consumePilotAllowance(runId, 'token', input.tokens, 'run_total_token_budget_exhausted');
       }
       if (input.kind === 'model' && limits.maxCostMicrousd !== null) {
         if (input.costMicrousd === null || input.costMicrousd === undefined || totals.unknown_cost_calls > 0) {
           throw new Error('run_cost_estimate_unavailable');
         }
-        if (totals.cost_microusd + input.costMicrousd > limits.maxCostMicrousd) {
+        if (input.costMicrousd > limits.maxCostMicrousd - totals.cost_microusd) {
           throw new Error('run_cost_budget_exhausted');
         }
       }
       this.db.prepare(`INSERT INTO agent_budget_calls
-        (run_id, call_id, kind, input_hash, reserved_tokens, reserved_cost_microusd, pricing_version, state, envelope_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)`).run(
-        runId, input.id, input.kind, input.inputHash, input.tokens, input.costMicrousd ?? null,
+        (run_id, call_id, execution_kind, task_id, kind, input_hash, reserved_tokens, reserved_cost_microusd, pricing_version, state, envelope_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)`).run(
+        runId, input.id, execution?.kind ?? 'chat', execution?.task_id ?? null, input.kind, input.inputHash, input.tokens, input.costMicrousd ?? null,
         input.pricingVersion ?? null, JSON.stringify(input.envelope), new Date().toISOString());
     }).immediate();
   }
 
+  private assertTaskReservation(taskId: string, input: Reservation): void {
+    const row = this.db.prepare(`SELECT b.limits_json,b.stop_reason,json_extract(t.snapshot_json,'$.status') status
+      FROM research_task_budgets b JOIN research_tasks t ON t.id = b.task_id WHERE b.task_id = ?`)
+      .get(taskId) as { limits_json: string; stop_reason: string | null; status: string } | undefined;
+    if (row === undefined) throw new Error('research_task_budget_missing');
+    if (row.status !== 'active') throw new Error('research_task_not_active');
+    if (row.stop_reason !== null) throw new Error(row.stop_reason);
+    const limits = runBudgetSchema.parse(JSON.parse(row.limits_json));
+    if (Date.now() >= Date.parse(limits.deadlineAt)) throw new Error('run_deadline_exhausted');
+    const totals = this.db.prepare(`SELECT
+      COALESCE(SUM(kind = 'model'),0) models, COALESCE(SUM(kind IN ('tool','child')),0) tools,
+      COALESCE(SUM(kind = 'child'),0) children,
+      COALESCE(SUM(kind = 'model' AND state = 'reserved'),0) active_models,
+      COALESCE(SUM(kind = 'tool' AND state = 'reserved'),0) active_tools,
+      COALESCE(SUM(kind = 'child' AND state = 'reserved'),0) active_children,
+      COALESCE(SUM(COALESCE(actual_tokens,reserved_tokens)),0) tokens,
+      COALESCE(SUM(COALESCE(actual_cost_microusd,reserved_cost_microusd)),0) cost,
+      COALESCE(SUM(kind = 'model' AND actual_cost_microusd IS NULL AND reserved_cost_microusd IS NULL),0) unknown_costs
+      FROM agent_budget_calls WHERE task_id = ?`).get(taskId) as {
+        models: number; tools: number; children: number; active_models: number; active_tools: number;
+        active_children: number; tokens: number; cost: number; unknown_costs: number;
+      };
+    if (input.kind === 'model' && totals.models >= limits.maxModelCalls) throw new Error('run_model_call_budget_exhausted');
+    if (input.kind !== 'model' && totals.tools >= limits.maxToolCalls) throw new Error('run_tool_call_budget_exhausted');
+    if (input.kind === 'model' && totals.active_models >= limits.maxConcurrentModelCalls) throw new Error('run_model_concurrency_exhausted');
+    if (input.kind === 'tool' && totals.active_tools >= limits.maxConcurrentToolCalls) throw new Error('run_tool_concurrency_exhausted');
+    if (input.kind === 'child' && totals.children >= limits.maxChildTasks) throw new Error('run_child_task_budget_exhausted');
+    if (input.kind === 'child' && totals.active_children >= limits.maxConcurrentChildTasks) throw new Error('run_child_task_concurrency_exhausted');
+    if (input.kind === 'model' && input.tokens > limits.maxCallTokens) throw new Error('run_model_call_token_reservation_exhausted');
+    if (input.tokens > limits.maxTotalTokens - totals.tokens) throw new Error('run_total_token_budget_exhausted');
+    if (input.kind === 'model' && limits.maxCostMicrousd !== null) {
+      if (input.costMicrousd === null || input.costMicrousd === undefined || totals.unknown_costs > 0) {
+        throw new Error('run_cost_estimate_unavailable');
+      }
+      if (input.costMicrousd > limits.maxCostMicrousd - totals.cost) throw new Error('run_cost_budget_exhausted');
+    }
+  }
+
   settle(runId: string, callId: string, tokens: number | null, state: 'settled' | 'unknown', outcomeHash?: string,
     outcome: Record<string, unknown> = {}, costMicrousd: number | null = null, pricingVersion: string | null = null): void {
+    if ((tokens !== null && (!Number.isSafeInteger(tokens) || tokens < 0)) ||
+      (costMicrousd !== null && (!Number.isSafeInteger(costMicrousd) || costMicrousd < 0)) ||
+      (state === 'settled' && tokens === null)) throw new Error('run_budget_settlement_invalid');
     const existing = this.db.prepare('SELECT envelope_json FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
       .get(runId, callId) as { envelope_json: string } | undefined;
     if (existing === undefined) throw new Error('run_budget_settlement_invalid');
@@ -145,6 +198,10 @@ export class RunBudgetLedger {
 
   recordStopReason(runId: string, reason: string): void {
     this.db.prepare('UPDATE agent_runs SET budget_stop_reason = COALESCE(budget_stop_reason, ?) WHERE id = ?')
+      .run(reason.slice(0, 128), runId);
+    if (reason.includes('_concurrency_exhausted')) return;
+    this.db.prepare(`UPDATE research_task_budgets SET stop_reason = COALESCE(stop_reason, ?)
+      WHERE task_id IN (SELECT task_id FROM research_task_executions WHERE execution_id = ? AND kind IN ('chat','stage'))`)
       .run(reason.slice(0, 128), runId);
   }
 
@@ -169,7 +226,14 @@ export class RunBudgetLedger {
         child_calls: number; reserved_children: number; settled_cost: number; reserved_cost: number;
         unknown_cost_calls: number;
       };
-    const row = this.db.prepare('SELECT budget_stop_reason FROM agent_runs WHERE id = ?').get(runId) as
+    const row = this.db.prepare(`SELECT COALESCE(b.stop_reason,r.budget_stop_reason) budget_stop_reason
+      FROM agent_runs r
+      LEFT JOIN research_task_executions e ON e.kind = 'chat' AND e.execution_id = r.id
+      LEFT JOIN research_task_budgets b ON b.task_id = e.task_id WHERE r.id = ?
+      UNION ALL
+      SELECT b.stop_reason budget_stop_reason FROM research_task_executions e
+      JOIN research_task_budgets b ON b.task_id = e.task_id
+      WHERE e.kind = 'stage' AND e.execution_id = ?`).get(runId, runId) as
       { budget_stop_reason: string | null } | undefined;
     if (row === undefined) throw new Error('task_run_not_found');
     return {

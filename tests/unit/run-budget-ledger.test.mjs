@@ -16,10 +16,13 @@ async function createLedger() {
     CREATE TABLE agent_runs (id TEXT PRIMARY KEY, budget_stop_reason TEXT);
     CREATE TABLE agent_budget_calls (
       run_id TEXT NOT NULL, call_id TEXT NOT NULL, kind TEXT NOT NULL, input_hash TEXT NOT NULL,
+      execution_kind TEXT NOT NULL, task_id TEXT,
       reserved_tokens INTEGER NOT NULL, actual_tokens INTEGER, reserved_cost_microusd INTEGER,
       actual_cost_microusd INTEGER, pricing_version TEXT, state TEXT NOT NULL,
       envelope_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (run_id, call_id)
     );
+    CREATE TABLE research_task_executions (execution_id TEXT,kind TEXT,task_id TEXT);
+    CREATE TABLE research_task_budgets (task_id TEXT,limits_json TEXT,stop_reason TEXT);
     CREATE TABLE agent_pilot_runs (
       run_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, decision TEXT NOT NULL, disclosure TEXT NOT NULL,
       profile TEXT, bucket INTEGER NOT NULL, extra_budget_microusd INTEGER NOT NULL,

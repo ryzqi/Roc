@@ -8,6 +8,9 @@ import type { ResearchStageRun } from '../../../shared/types';
 import type { ConsumedResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
 import { assertResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
 import { researchDispatchRequestHash } from '../../services/research-dispatch-context';
+import { runBudgetSchema, runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
+import { createRunBudget } from '../agent/run-execution-snapshot';
+import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
 
 type ExecutionIdentity = Pick<ResearchTaskExecution, 'kind' | 'executionId'>;
 type ExecutionInput = Omit<ResearchTaskExecution, 'schemaVersion' | 'createdAt'>;
@@ -38,6 +41,14 @@ export class ResearchTaskRepository {
     const execution = this.findExecution(kind, executionId, projectId);
     if (execution === null) throw new Error('research_task_execution_unlinked');
     return execution;
+  }
+
+  budgetForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunLimits {
+    const execution = this.requireExecution(kind, executionId, projectId);
+    const row = this.db.prepare('SELECT limits_json FROM research_task_budgets WHERE task_id = ?')
+      .get(execution.taskId) as { limits_json: string } | undefined;
+    if (row === undefined) throw new Error('research_task_budget_missing');
+    return runBudgetSchema.parse(JSON.parse(row.limits_json));
   }
 
   executions(taskId: string, projectId: string): ResearchTaskExecution[] {
@@ -96,7 +107,19 @@ export class ResearchTaskRepository {
     });
     this.db.prepare('INSERT INTO research_tasks (id, project_id, snapshot_json, created_at) VALUES (?, ?, ?, ?)')
       .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
+    const limits = rootAgentRunId === null
+      ? createRunBudget({ contextBudgetTokens: null, startedAt: task.createdAt })
+      : this.rootChatBudget(rootAgentRunId);
+    this.db.prepare('INSERT INTO research_task_budgets (task_id, limits_json, stop_reason, created_at) VALUES (?, ?, NULL, ?)')
+      .run(task.id, JSON.stringify(limits), task.createdAt);
     return task;
+  }
+
+  private rootChatBudget(runId: string): RunLimits {
+    const row = this.db.prepare('SELECT snapshot_json FROM agent_runs WHERE id = ?')
+      .get(runId) as { snapshot_json: string | null } | undefined;
+    if (row === undefined || row.snapshot_json === null) throw new Error('research_task_parent_snapshot_missing');
+    return runExecutionSnapshotSchema.parse(JSON.parse(row.snapshot_json)).budget;
   }
 
   private link(input: ExecutionInput): ResearchTaskExecution {
@@ -115,6 +138,13 @@ export class ResearchTaskRepository {
     const execution = researchTaskExecutionSchema.parse({ schemaVersion: 1, ...input, createdAt: this.now() });
     this.db.prepare('INSERT INTO research_task_executions (kind, execution_id, task_id, project_id, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(execution.kind, execution.executionId, execution.taskId, execution.projectId, JSON.stringify(execution), execution.createdAt);
+    if (execution.kind === 'chat' || execution.kind === 'stage') {
+      const drift = this.db.prepare('SELECT 1 FROM agent_budget_calls WHERE run_id = ? AND task_id IS NOT NULL AND task_id != ?')
+        .get(execution.executionId, execution.taskId);
+      if (drift !== undefined) throw new Error('research_task_budget_association_conflict');
+      this.db.prepare('UPDATE agent_budget_calls SET task_id = ? WHERE run_id = ? AND execution_kind = ?')
+        .run(execution.taskId, execution.executionId, execution.kind);
+    }
     return execution;
   }
 }

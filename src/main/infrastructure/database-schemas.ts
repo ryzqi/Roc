@@ -606,6 +606,46 @@ CREATE INDEX agent_research_dispatch_run ON agent_research_dispatch_grants(run_i
 `
 });
 
+agentMigrations.push({
+  version: 12,
+  name: 'shared_research_task_budget',
+  sql: `
+CREATE TABLE research_task_budgets (
+  task_id TEXT PRIMARY KEY REFERENCES research_tasks(id), limits_json TEXT NOT NULL,
+  stop_reason TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE agent_budget_calls_next (
+  run_id TEXT NOT NULL, call_id TEXT NOT NULL,
+  execution_kind TEXT NOT NULL CHECK(execution_kind IN ('chat','stage')),
+  task_id TEXT REFERENCES research_tasks(id),
+  kind TEXT NOT NULL CHECK(kind IN ('model','tool','child')), input_hash TEXT NOT NULL,
+  reserved_tokens INTEGER NOT NULL CHECK(reserved_tokens >= 0),
+  actual_tokens INTEGER CHECK(actual_tokens >= 0),
+  state TEXT NOT NULL CHECK(state IN ('reserved','settled','unknown')),
+  envelope_json TEXT NOT NULL, created_at TEXT NOT NULL,
+  reserved_cost_microusd INTEGER CHECK(reserved_cost_microusd IS NULL OR reserved_cost_microusd >= 0),
+  actual_cost_microusd INTEGER CHECK(actual_cost_microusd IS NULL OR actual_cost_microusd >= 0),
+  pricing_version TEXT, PRIMARY KEY(run_id,call_id)
+);
+INSERT INTO agent_budget_calls_next
+SELECT c.run_id,c.call_id,'chat',
+  (SELECT e.task_id FROM research_task_executions e WHERE e.kind = 'chat' AND e.execution_id = c.run_id),
+  c.kind,c.input_hash,c.reserved_tokens,c.actual_tokens,c.state,c.envelope_json,c.created_at,
+  c.reserved_cost_microusd,c.actual_cost_microusd,c.pricing_version FROM agent_budget_calls c;
+DROP TABLE agent_budget_calls;
+ALTER TABLE agent_budget_calls_next RENAME TO agent_budget_calls;
+CREATE INDEX idx_agent_budget_calls_run_kind_state ON agent_budget_calls(run_id,kind,state);
+CREATE INDEX idx_agent_budget_calls_task ON agent_budget_calls(task_id,kind,state);
+CREATE TABLE agent_tool_progress_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, fingerprint TEXT NOT NULL
+);
+INSERT INTO agent_tool_progress_next SELECT * FROM agent_tool_progress;
+DROP TABLE agent_tool_progress;
+ALTER TABLE agent_tool_progress_next RENAME TO agent_tool_progress;
+CREATE INDEX idx_agent_tool_progress_run ON agent_tool_progress(run_id,sequence);
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

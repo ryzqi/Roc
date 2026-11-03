@@ -107,6 +107,8 @@ export class RunBudgetObserver {
             schemaVersion: 2,
             callId,
             revision: this.revision,
+            providerId: this.options.providerId ?? null,
+            modelId: this.options.modelId ?? null,
             purpose: input.purpose,
             messages,
             reservedTokens: this.limits.maxCallTokens,
