@@ -21,9 +21,9 @@ before(async () => {
     import {ResearchGateApprovalCard} from './src/renderer/assistant/blocks/approval-cards';
     const root = createRoot(document.getElementById('root'));
     window.decisions = [];
-    window.mount = (searchPlan, searchPlanHash) => flushSync(() => root.render(React.createElement(ResearchGateApprovalCard, {
+    window.mount = (searchPlan, searchPlanHash, artifactLinks = [{projectId:'synthetic-project',artifactId:'synthetic-artifact',expectedVersion:'a'.repeat(64),title:'检索计划',kind:'search_strategy'}]) => flushSync(() => root.render(React.createElement(ResearchGateApprovalCard, {
       approval: {kind: 'approval', interruptId: 'plan-gate', actionRequests: [{name: 'research_approve_gate',
-        args: {stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactLinks: [{projectId:'synthetic-project',artifactId:'synthetic-artifact',expectedVersion:'a'.repeat(64),title:'检索计划',kind:'search_strategy'}],
+        args: {stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactLinks,
           ...(searchPlan === null ? {} : {searchPlan}), searchPlanHash}}],
         reviewConfigs: [{actionName: 'research_approve_gate', allowedDecisions: ['approve', 'reject']}]},
       onOpenArtifact: request => window.openedArtifact=request,
@@ -70,7 +70,8 @@ test('approval card displays complete query scopes and returns the reviewed hash
   await page.screenshot({path: join(artifacts, 'plan-review.png')});
   await page.locator('[data-testid="assistant-gate-approve"]').focus();
   await page.keyboard.press('Enter');
-  assert.deepEqual(await page.evaluate(() => decisions), [{id: 'plan-gate', values: [{type: 'approve', reviewedSearchPlanHash: hash}]}]);
+  assert.deepEqual(await page.evaluate(() => decisions), [{id: 'plan-gate', values: [{type: 'approve', reviewedSearchPlanHash: hash,
+    reviewedArtifactVersions: [{artifactId:'synthetic-artifact',version:'a'.repeat(64)}]}]}]);
 });
 
 test('missing plan or invalid hash disables approval while retaining the reject action', async () => {
@@ -80,7 +81,8 @@ test('missing plan or invalid hash disables approval while retaining the reject 
     assert.match(await page.locator('[role="alert"]').innerText(), /检索计划缺失或无效/u);
     await page.locator('[data-testid="assistant-gate-reject"]').focus();
     await page.keyboard.press('Enter');
-    assert.deepEqual(await page.evaluate(() => decisions), [{id: 'plan-gate', values: [{type: 'reject'}]}]);
+    assert.deepEqual(await page.evaluate(() => decisions), [{id: 'plan-gate', values: [{type: 'reject',
+      reviewedArtifactVersions: [{artifactId:'synthetic-artifact',version:'a'.repeat(64)}]}]}]);
   }
 });
 
@@ -118,4 +120,15 @@ test('long plan remains readable with keyboard scrolling in light and dark modes
     }
   }
   writeFileSync(join(artifacts, 'shadow-audit.json'), JSON.stringify(audits, null, 2));
+});
+
+
+test('malformed artifact links explicitly disable all gate decisions', async () => {
+  for (const links of [null, [], [{title:'Title without identity'}]]) {
+    await page.evaluate(links => {decisions=[];mount(null, 'a'.repeat(64), links);}, links);
+    assert.equal(await page.getByTestId('assistant-gate-approve').isDisabled(), true);
+    assert.equal(await page.getByTestId('assistant-gate-reject').isDisabled(), true);
+    assert.match(await page.locator('[role="alert"]').first().innerText(), /闸门决定已禁用/u);
+    assert.deepEqual(await page.evaluate(()=>decisions), []);
+  }
 });

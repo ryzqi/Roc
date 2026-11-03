@@ -199,6 +199,7 @@ export function ResearchGateApprovalCard({
   const summary = readString(args, 'summary');
   const rejectNote = readString(args, 'rejectNote');
   const decisionLabel = readString(args, 'decisionLabel');
+  const reviewError = readString(args, 'reviewError');
   const isReview = stage === 'review';
   const isDiscovery = stage === 'discovery';
   const plan = isDiscovery ? researchSearchPlanSchema.safeParse(args !== null && typeof args === 'object' ? args.searchPlan : undefined) : null;
@@ -208,10 +209,12 @@ export function ResearchGateApprovalCard({
   const approveLabel = decisionLabel === '' ? defaultApproveLabel(isReview) : decisionLabel;
   const rejectLabel = rejectNote === '' ? defaultRejectLabel(isReview) : rejectNote;
   const decide = (type: GateDecisionType): void => {
+    if (!links.success) return;
+    const reviewedArtifactVersions = links.data.map(link => ({artifactId: link.artifactId, version: link.expectedVersion}));
     if (type === 'approve') {
       if (!canApprovePlan) return;
-      onApprovalDecision?.(approval.interruptId, [{type, ...(isDiscovery ? {reviewedSearchPlanHash: planHash} : {})}]);
-    } else onApprovalDecision?.(approval.interruptId, [{ type }]);
+      onApprovalDecision?.(approval.interruptId, [{type, reviewedArtifactVersions, ...(isDiscovery ? {reviewedSearchPlanHash: planHash} : {})}]);
+    } else onApprovalDecision?.(approval.interruptId, [{type, reviewedArtifactVersions}]);
   };
   const decisions =
     approval.reviewConfigs.find((config) => config.actionName === RESEARCH_GATE_TOOL_NAME)?.allowedDecisions ?? [
@@ -233,6 +236,9 @@ export function ResearchGateApprovalCard({
       <p className="text-muted text-[var(--font-meta-size)]" data-testid="assistant-gate-summary">
         {summary === '' ? '确认通过本阶段产物并进入下一阶段。' : summary}
       </p>
+      {reviewError === '' ? null : <p role="alert" className="mt-2 text-[var(--st-bad)]" data-testid="assistant-gate-review-error">
+        上次决定未执行：核对版本缺失或已变化。请核对下面的完整阶段上下文，再重新确认。
+      </p>}
       {links.success ? <ul className="mt-1.5 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
           <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
@@ -240,7 +246,7 @@ export function ResearchGateApprovalCard({
             {link.title}
           </button>
         </li>)}
-      </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，请退回重新核对。</p>}
+      </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</p>}
       {isDiscovery ? plan?.success && canApprovePlan ? (
         <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
@@ -278,7 +284,8 @@ export function ResearchGateApprovalCard({
           <button
             type="button"
             data-testid="assistant-gate-revise"
-            className={approvalButtonClass('neutral')}
+            disabled={!links.success}
+            className={`${approvalButtonClass('neutral')} disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => decide('revise')}
           >
             要求修订
@@ -288,7 +295,8 @@ export function ResearchGateApprovalCard({
           <button
             type="button"
             data-testid="assistant-gate-reject"
-            className={approvalButtonClass('reject')}
+            disabled={!links.success}
+            className={`${approvalButtonClass('reject')} disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => decide('reject')}
           >
             {rejectLabel}

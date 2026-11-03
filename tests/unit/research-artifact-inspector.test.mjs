@@ -111,7 +111,7 @@ test('actual artifact inspection bridge enforces explicit project and version co
   try {
     const artifact=manual(f),handlers=new Map();
     api.registerResearchArtifactInspectorCapability({pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){
-      assert.equal(descriptor.name,'research.artifacts.inspect');handlers.set(descriptor.name,handler);
+      assert.ok(['research.artifacts.inspect','research.workflow.gateReview'].includes(descriptor.name));handlers.set(descriptor.name,handler);
     }}},f.repository);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
     const input=readInput(f,artifact);

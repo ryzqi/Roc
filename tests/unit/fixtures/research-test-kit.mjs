@@ -77,3 +77,11 @@ export function figureRequest(projectId, ownerRunId, overrides = {}) {
     ...overrides
   };
 }
+
+/** Freeze the exact stored artifact versions before a synthetic human decision. */
+export function captureResearchArtifactVersions(repository, projectId) {
+  const workflow=repository.getWorkflow(projectId);
+  const current=workflow.stages.find(stage=>stage.stage===workflow.currentStage);
+  return current.artifactIds.map(artifactId=>({artifactId,
+    version:repository.inspectArtifact({projectId,artifactId,expectedVersion:null}).snapshot.version}));
+}

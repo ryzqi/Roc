@@ -1,3 +1,4 @@
+import {captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { after, before, test } from 'node:test';
@@ -108,7 +109,7 @@ test('real human gate leaves task awaiting approval and approval updates it with
     assert.equal(f.repository.runs.get(current.id, f.project.id).status, 'completed');
     assert.equal(f.tasks.get(current.taskId, f.project.id).status, 'waiting_approval');
     assert.throws(() => f.tasks.budgetForExecution('stage', current.id, f.project.id), /research_task_not_active/);
-    await gate.approve({ projectId: f.project.id, expectedStage: 'planning', action: 'approve' });
+    await gate.approve({ projectId: f.project.id, expectedStage: 'planning', action: 'approve', expectedArtifactVersions: captureResearchArtifactVersions(f.repository,f.project.id) });
     runtime.synchronizeTaskState(current.taskId, f.project.id);
     assert.equal(f.tasks.get(current.taskId, f.project.id).status, 'active');
     assert.equal(attempts, 1);

@@ -48,6 +48,9 @@ import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowle
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
   type ResearchArtifactInspectRequest, type ResearchArtifactInspectResult} from '../../../shared/schemas/research-artifact-inspector';
+import {researchGateReviewContextSchema, type ResearchGateReviewRequest, type ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
+import {researchArtifactVersionsSchema, type ResearchArtifactVersion} from '../../../shared/schemas/research-artifact-version';
+import {requireSearchPlanContent, searchPlanApprovalHash} from './search-strategy';
 
 export const researchStages = [
   'discovery',
@@ -304,10 +307,14 @@ export class ResearchRepository {
       const origin = run === null ? null : {id: run.id, taskId: run.taskId, stage: run.stage, status: run.status,
         providerId: run.providerId, modelId: run.modelId, modelVersion: run.modelVersion,
         skillHash: run.skillHash, inputArtifactIds: run.inputArtifactIds};
+      const stage = this.readStage(project.id, artifact.stage);
+      const availableActions: Array<'return_to_task' | 'review_gate'> = [];
+      if (origin !== null && origin.taskId !== null) availableActions.push('return_to_task');
+      if (project.status !== 'archived' && project.currentStage === artifact.stage && stage.status === 'waiting_approval' &&
+        stage.gateRequired && !stage.gateApproved && stage.artifactIds.includes(artifact.id)) availableActions.push('review_gate');
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
-        stage: this.readStage(project.id, artifact.stage), content, origin, claims, evidence,
-        provenance: rows.map(toProvenance), availableActions: origin !== null && origin.taskId !== null ? ['return_to_task'] : []
+        stage, content, origin, claims, evidence, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({
@@ -315,6 +322,52 @@ export class ResearchRepository {
         snapshot: {...body, version}, readAt: this.now()
       });
     })();
+  }
+
+  readGateReviewContext(request: ResearchGateReviewRequest): ResearchGateReviewContext {
+    return this.db.transaction(() => {
+      const project = this.getProject(request.projectId);
+      if (project.status === 'archived') throw new Error('research_project_archived');
+      if (project.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
+      const stage = this.readStage(project.id, project.currentStage);
+      this.requireStatus(stage, ['waiting_approval'], 'research_stage_not_waiting_approval');
+      if (stage.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
+      if (request.artifactId !== null) {
+        const selected = this.getArtifact(request.artifactId);
+        if (selected.projectId !== project.id) throw new Error('research_artifact_project_mismatch');
+        if (selected.stage !== stage.stage || !stage.artifactIds.includes(selected.id)) throw new Error('research_gate_artifact_inactive');
+      }
+      const artifactLinks = stage.artifactIds.map(artifactId => {
+        const {snapshot} = this.inspectArtifact({projectId: project.id, artifactId, expectedVersion: null});
+        if (snapshot.artifact.stage !== stage.stage) throw new Error('research_gate_artifact_inactive');
+        return {projectId: project.id, artifactId, expectedVersion: snapshot.version,
+          title: snapshot.artifact.title, kind: snapshot.artifact.kind};
+      });
+      const output = stage.stage === 'discovery' && stage.artifactIds.length === 1 ?
+        requireSearchPlanContent(this, this.getArtifact(stage.artifactIds[0])) : null;
+      if (stage.stage === 'discovery' && output === null) throw new Error('research_search_plan_required');
+      return researchGateReviewContextSchema.parse({projectId: project.id, stage: stage.stage, artifactLinks,
+        searchPlan: output === null ? null : output.searchPlan,
+        searchPlanHash: output === null ? null : searchPlanApprovalHash(project.id, stage.artifactIds[0], output),
+        readAt: this.now()});
+    })();
+  }
+
+  assertArtifactReview(request: {projectId: string; expectedStage: ResearchStage; expectedArtifactVersions: ResearchArtifactVersion[]}): void {
+    const versions = researchArtifactVersionsSchema.safeParse(request.expectedArtifactVersions);
+    if (!versions.success) throw new Error('research_artifact_review_required');
+    const project = this.getProject(request.projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    if (project.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
+    const stage = this.readStage(project.id, project.currentStage);
+    this.requireStatus(stage, ['waiting_approval'], 'research_stage_not_waiting_approval');
+    if (JSON.stringify([...stage.artifactIds].sort()) !== JSON.stringify(versions.data.map(value => value.artifactId).sort())) {
+      throw new Error('research_artifact_review_set_changed');
+    }
+    for (const value of versions.data) {
+      const inspected = this.inspectArtifact({projectId: project.id, artifactId: value.artifactId, expectedVersion: value.version});
+      if (inspected.status !== 'current') throw new Error('research_artifact_review_changed');
+    }
   }
 
   updateArtifact(input: ResearchArtifactUpdateRequest): ResearchArtifact {
@@ -595,18 +648,21 @@ export class ResearchRepository {
           break;
         case 'approve':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
+          this.assertArtifactReview(request);
           this.requireStageArtifacts(request.projectId, current);
           current.artifactIds.forEach((artifactId) => {
             this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, artifactId);
           });
           this.updateStage(request.projectId, current.stage, { gateApproved: true });
           this.appendEvent(request.projectId, current.stage, 'approval_granted', request.note ?? '阶段产物已通过审核。', {
-            artifactIds: current.artifactIds, reviewDecision: request.reviewDecision ?? null
+            artifactIds: current.artifactIds, expectedArtifactVersions: request.expectedArtifactVersions,
+            reviewDecision: request.reviewDecision ?? null
           }, timestamp);
           this.completeStage(request.projectId, current.stage, timestamp, request.reviewDecision);
           break;
         case 'reject':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
+          this.assertArtifactReview(request);
           this.updateStage(request.projectId, current.stage, { status: 'running', gateApproved: false, lastError: request.note ?? '用户要求修改。' });
           this.appendEvent(request.projectId, current.stage, 'approval_rejected', request.note ?? '用户要求修改。', request, timestamp);
           break;

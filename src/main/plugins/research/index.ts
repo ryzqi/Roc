@@ -92,7 +92,7 @@ import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } fr
 import { registerResearchManuscriptCapabilities, researchManuscriptCapabilities } from './manuscript-capabilities';
 import { registerResearchIdeaCapabilities, researchIdeaCapabilities } from './idea-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
-import {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability} from './artifact-inspector-capability';
+import {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability, researchGateReviewCapability} from './artifact-inspector-capability';
 import type { ResearchRoleExecutor } from './role-executor';
 import { ResearchStageRuntime } from './stage-runtime';
 import { createResearchHumanGate } from './human-gate';
@@ -192,7 +192,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，

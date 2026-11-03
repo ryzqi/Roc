@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import { after, before, test } from 'node:test';
 import { createResearchFixture, loadResearchTestApi, researchSearchPlanFixture } from './fixtures/research-test-kit.mjs';
 import { Annotation, Command, END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
@@ -16,7 +17,7 @@ async function confirm(f) {
   await gate.complete({projectId: f.project.id, expectedStage: 'discovery', action: 'complete'});
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'discovery');
   assert.equal(f.repository.getArtifact(completed.outputArtifactIds[0]).status, 'draft');
-  await gate.approve({projectId: f.project.id, expectedStage: 'discovery', action: 'approve',
+  await gate.approve({projectId: f.project.id, expectedStage: 'discovery', action: 'approve', expectedArtifactVersions:captureResearchArtifactVersions(f.repository,f.project.id),
     expectedSearchPlanHash: api.searchPlanApprovalHash(f.project.id, completed.outputArtifactIds[0],
       f.repository.runs.getArtifactContent(f.project.id, completed.outputArtifactIds[0]).output)});
   const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'retrieval', instruction: 'Execute approved plan', requestId: 'retrieval'});
@@ -104,7 +105,7 @@ test('manual artifacts, missing human approval and changed plan contents cannot 
     const frozen = {project: f.project, inputs: [{artifact: {...f.repository.getArtifact(artifactId), status: 'approved'},
       output: f.repository.runs.getArtifactContent(f.project.id, artifactId).output}]};
     assert.throws(() => api.requireConfirmedSearchStrategy(f.repository, frozen), /research_confirmed_search_plan_required/u);
-    await gate.approve({projectId: f.project.id, expectedStage: 'discovery', action: 'approve',
+    await gate.approve({projectId: f.project.id, expectedStage: 'discovery', action: 'approve', expectedArtifactVersions:captureResearchArtifactVersions(f.repository,f.project.id),
       expectedSearchPlanHash: api.searchPlanApprovalHash(f.project.id, artifactId, frozen.inputs[0].output)});
     const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'retrieval', instruction: 'Retrieve', requestId: 'plan-stale'});
     const context = f.repository.runs.getContext(queued.id);
@@ -178,7 +179,7 @@ test('actual gate interrupt carries the visible plan and requires its original h
         capabilities: {invoke: async (name, request) => {
           if (name === 'research.workflow.get') return f.repository.getWorkflow(f.project.id);
           if (name === 'research.artifacts.list') return f.repository.listArtifacts(f.project.id);
-          if (name === 'research.artifacts.inspect') return f.repository.inspectArtifact(request);
+          if (name === 'research.workflow.gateReview') return f.repository.readGateReviewContext(request);
           if (name === 'research.artifacts.content') return f.repository.runs.getArtifactContent(f.project.id, request.artifactId);
           if (name === 'research.workflow.transition') return gate.approve(request);
           assert.fail(name);
@@ -203,14 +204,16 @@ test('actual gate interrupt carries the visible plan and requires its original h
         stored.title = 'Changed title after review';
         f.db.prepare('UPDATE research_artifact_contents SET output_json=? WHERE artifact_id=?').run(JSON.stringify(stored), artifactId);
       }
-      const decision = {type: 'approve', ...(change === 'missing_hash' ? {} : {reviewedSearchPlanHash: args.searchPlanHash})};
+      const decision = {type: 'approve', reviewedArtifactVersions:args.artifactLinks.map(link=>({artifactId:link.artifactId,version:link.expectedVersion})), ...(change === 'missing_hash' ? {} : {reviewedSearchPlanHash: args.searchPlanHash})};
       const resume = graph.invoke(new Command({resume: {decisions: [decision]}}), config);
       if (change === 'none') {
         assert.equal((await resume).done, true);
         assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'retrieval');
         assert.equal(f.repository.getArtifact(artifactId).status, 'approved');
       } else {
-        await assert.rejects(resume, /research_search_plan_approval_changed/u);
+        const retry=await resume;
+        assert.equal(retry.done,false);
+        assert.equal(retry.__interrupt__[0].value.request.actionRequests[0].args.reviewError,'research_search_plan_approval_changed');
         assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'discovery');
         assert.equal(f.repository.getArtifact(artifactId).status, 'draft');
       }

@@ -2253,3 +2253,48 @@ asserted and all other issues refused. Left shadow visible; dark1099 screenshot 
 changes only whitespace/comment attachment. No live client/model/literature, remote writes or
 frozen workflow fixtures. Next X-UIA3: version-bound human gate context/approve/reject and refresh
 back to assistant confirmation, then production type views/reading position. Full plan unfinished.
+
+
+## X-UIA3A — whole-stage artifact versions bound to human decisions
+
+Status: `Verified passing` for this gate contract increment. Readonly gateReview capability
+returns a consistent entire current waiting-stage context with actual artifact versions and
+strict discovery plan scope. Archived/missing/foreign/inactive/empty/nonwaiting inputs refuse.
+Approve/reject require complete unique SHA versions; approve checks before production IO and
+again in its write transaction. All decisions including review revision retain human versions
+in audit events. HITL generic decisions carry optional research versions; custom gate requires
+them. Cards disable all decisions for malformed IDs instead of accepting a no-op click.
+
+Child review graph has one interrupt per node invocation. Known missing/changed review values
+return an explicit failed decision and conditional edge to a new interrupt ID, with no DB
+writes. Human must explicitly review and decide again; replay never adopts new values.
+Unknown/domain publication failures propagate. No renderer direct approval endpoint introduced.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm generate:ipc` / `pnpm typecheck` | Generated; final fresh build/typecheck passed |
+| `node --test tests/unit/research-gate-review.test.mjs tests/unit/research-search-plan.test.mjs` |13/13 passed |
+| `pnpm test:unit` |819/819 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `node --test tests/unit/research-gate-review.test.mjs` | Final6/6 after archived/nonwaiting/selected-stage refinement |
+| `pnpm test:research-p0` | Final fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/` |83/83 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132666bytes/6files passed |
+| `git diff --check` |Passed |
+
+Evidence `xui-gate-*.log` and existing native fault source receipt. Unit6 covers missing/empty/
+duplicate/extra/foreign/stale versions, same-clock body change, source invalidation, set change,
+readonly actual bridge and current-stage constraints, exact event payloads, pre/post async
+verification, all stale decision kinds, distinct interrupt IDs and explicit reread/reconfirmation.
+Synthetic production signature and incomplete review cycle seams are explicit; native13 covers
+actual published production/evidence/review path. Initial fixture setup errors were corrected
+without loosening production guards. Latest official LangGraph docs require conditional edges
+instead of node-local repeated interrupt loops. Native initial12/13 expected old superseded
+boundary: final version guard now rejects first, exact review_changed assertion plus separate
+strict superseded getter retained. Final13 passes. Last repository status/selected-stage checks
+verified by final6/fresh native and assembled UI. No frozen workflow fixtures, new live queries,
+model spending, client operations or remote writes. Next A3B inspector/card whole-context refresh
+and return to original confirmation, then production type views/reading location. Full plan pending.

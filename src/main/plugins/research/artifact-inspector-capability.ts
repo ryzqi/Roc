@@ -2,13 +2,20 @@ import {RocDomainError} from '../../services/errors';
 import type {RocPluginContext} from '../../kernel/types';
 import {researchArtifactInspectRequestSchema, researchArtifactInspectResultSchema} from '../../../shared/schemas/research-artifact-inspector';
 import type {ResearchRepository} from './repository';
+import {researchGateReviewRequestSchema, researchGateReviewContextSchema} from '../../../shared/schemas/research-gate-review';
 
 export const researchArtifactInspectorCapability = {
   name: 'research.artifacts.inspect', version: '1.0.0',
   inputSchema: researchArtifactInspectRequestSchema, outputSchema: researchArtifactInspectResultSchema
 };
+export const researchGateReviewCapability = {
+  name: 'research.workflow.gateReview', version: '1.0.0',
+  inputSchema: researchGateReviewRequestSchema, outputSchema: researchGateReviewContextSchema
+};
 
-export function registerResearchArtifactInspectorCapability(context: RocPluginContext, repository: Pick<ResearchRepository, 'inspectArtifact'>): void {
+export function registerResearchArtifactInspectorCapability(context: RocPluginContext, repository: Pick<ResearchRepository, 'inspectArtifact' | 'readGateReviewContext'>): void {
+  context.capabilities.register(context.pluginId, researchGateReviewCapability, async input =>
+    repository.readGateReviewContext(researchGateReviewRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, researchArtifactInspectorCapability, async input => {
     try {
       return repository.inspectArtifact(researchArtifactInspectRequestSchema.parse(input));

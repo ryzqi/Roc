@@ -1,14 +1,13 @@
-import type {ResearchArtifactInspectResult} from '../../../shared/schemas/research-artifact-inspector';
+import type {ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
+import {researchArtifactVersionsSchema} from '../../../shared/schemas/research-artifact-version';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { StructuredToolInterface } from '@langchain/core/tools';
-import { interrupt } from '@langchain/langgraph';
+import { Annotation, END, START, StateGraph, interrupt } from '@langchain/langgraph';
 import { tool } from 'langchain';
 import { z } from 'zod';
 
 import { createLiteratureTools } from './literature-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
-import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
-import { searchPlanApprovalHash } from '../research/search-strategy';
 import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
 import type {
   ResearchArtifact,
@@ -75,6 +74,112 @@ export function createResearchTools(input: {
   };
   const workflow = async (): Promise<ResearchWorkflowSnapshot> =>
     await invoke<ResearchWorkflowSnapshot>('research.workflow.get', { id: projectId });
+
+  const gateState = Annotation.Root({
+    note: Annotation<string | undefined>(),
+    reviewError: Annotation<string | null>(),
+    outcome: Annotation<ReturnType<typeof summarizeGateOutcome> | null>()
+  });
+  const gateGraph = new StateGraph(gateState).addNode('review', async (state) => {
+    const {note} = state;
+    const snapshot = await workflow();
+    const current = snapshot.stages.find((entry) => entry.stage === snapshot.currentStage);
+    if (current === undefined) throw new Error('research_stage_not_found');
+    if (current.status !== 'waiting_approval') {
+      throw new Error(`research_gate_not_waiting_approval:${current.status}`);
+    }
+    const isReview = current.stage === 'review';
+    const review = await invoke<ResearchGateReviewContext>('research.workflow.gateReview', {
+      projectId, expectedStage: current.stage, artifactId: null
+    });
+    const artifactLinks = review.artifactLinks;
+    const searchPlanReview = review.searchPlan === null ? null : {
+      searchPlan: review.searchPlan, searchPlanHash: review.searchPlanHash
+    };
+    const resume = interrupt({
+      kind: 'approval',
+      request: {
+        actionRequests: [{
+          name: GATE_TOOL_NAME,
+          args: {
+            projectId,
+            stage: current.stage,
+            artifactLinks,
+            reviewError: state.reviewError,
+            ...(searchPlanReview === null ? {} : searchPlanReview),
+            summary: isReview
+              ? '确认审稿结论：接受正文则进入导出，要求修订则回到修订阶段，退回则重跑本阶段。'
+              : '确认本阶段产物是否可以进入下一阶段。'
+          },
+          description: '人工闸门'
+        }],
+        // 审稿阶段有第三态（要求修订）；其他阶段的闸门只有通过/退回。
+        reviewConfigs: [{
+          actionName: GATE_TOOL_NAME,
+          allowedDecisions: isReview ? ['approve', 'revise', 'reject'] : ['approve', 'reject']
+        }]
+      }
+    }) as { decisions?: Array<{ type?: unknown; message?: unknown; reviewedSearchPlanHash?: unknown; reviewedArtifactVersions?: unknown }> };
+    try {
+      const decision = resume.decisions?.[0];
+      const type = decision?.type;
+      const decisionNote = typeof decision?.message === 'string' ? decision.message : note;
+      const reviewedArtifactVersions = (): Array<{artifactId: string; version: string}> => {
+        const parsed = researchArtifactVersionsSchema.safeParse(decision?.reviewedArtifactVersions);
+        if (!parsed.success) throw new Error('research_artifact_review_required');
+        const expected = new Map(artifactLinks.map(link => [link.artifactId, link.expectedVersion]));
+        if (parsed.data.length !== expected.size || parsed.data.some(value => !expected.has(value.artifactId))) {
+          throw new Error('research_artifact_review_set_changed');
+        }
+        if (parsed.data.some(value => expected.get(value.artifactId) !== value.version)) {
+          throw new Error('research_artifact_review_changed');
+        }
+        return parsed.data;
+      };
+      if (type === 'approve') {
+        if ((searchPlanReview !== null && decision?.reviewedSearchPlanHash !== searchPlanReview.searchPlanHash) ||
+            (searchPlanReview === null && decision?.reviewedSearchPlanHash !== undefined)) {
+          throw new Error('research_search_plan_approval_changed');
+        }
+        const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
+          projectId,
+          expectedStage: current.stage,
+          action: 'approve', expectedArtifactVersions: reviewedArtifactVersions(),
+          ...(searchPlanReview === null ? {} : {expectedSearchPlanHash: searchPlanReview.searchPlanHash}),
+          ...(isReview ? { reviewDecision: 'accept' as const } : {})
+        });
+        return {outcome: summarizeGateOutcome('approve', transitioned), reviewError: null};
+      }
+      // 要求修订与退回都走 approve+reviewDecision:'revise'：这样审稿周期进入 revision_required、
+      // 回到修订阶段，而不是把审稿阶段整体重跑（重跑会丢掉审稿意见）。
+      if (isReview && (type === 'revise' || type === 'reject')) {
+        const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
+          projectId,
+          expectedStage: current.stage,
+          action: 'approve', expectedArtifactVersions: reviewedArtifactVersions(),
+          reviewDecision: 'revise' as const,
+          ...(decisionNote === undefined ? {} : { note: decisionNote })
+        });
+        return {outcome: summarizeGateOutcome('revise', transitioned), reviewError: null};
+      }
+      if (type !== 'reject') {
+        throw new Error('research_gate_decision_invalid');
+      }
+      const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
+        projectId,
+        expectedStage: current.stage,
+        action: 'reject', expectedArtifactVersions: reviewedArtifactVersions(),
+        note: decisionNote ?? '用户要求重做本阶段。'
+      });
+      return {outcome: summarizeGateOutcome('reject', transitioned), reviewError: null};
+    } catch (error) {
+      if (!(error instanceof Error) || ![
+        'research_artifact_review_required', 'research_artifact_review_set_changed', 'research_artifact_review_changed',
+        'research_search_plan_approval_changed', 'research_figure_review_changed', 'research_export_review_changed'
+      ].includes(error.message)) throw error;
+      return {outcome: null, reviewError: error.message};
+    }
+  }).addEdge(START, 'review').addConditionalEdges('review', state => state.outcome === null ? 'review' : END).compile();
 
   return [
     tool(async () => summarizeOverview(
@@ -221,89 +326,10 @@ export function createResearchTools(input: {
       name: GATE_TOOL_NAME,
       description: '在对话里请用户确认当前阶段的产物：批准则通过闸门并推进阶段，退回则让阶段回到执行中。阶段处于待审核（waiting_approval）时调用它，不要替用户决定。',
       schema: z.object({ note: z.string().trim().max(2000).optional() }),
-      func: async ({ note }) => {
-        const snapshot = await workflow();
-        const current = snapshot.stages.find((entry) => entry.stage === snapshot.currentStage);
-        if (current === undefined) throw new Error('research_stage_not_found');
-        if (current.status !== 'waiting_approval') {
-          throw new Error(`research_gate_not_waiting_approval:${current.status}`);
-        }
-        const isReview = current.stage === 'review';
-        const inspections = await Promise.all(current.artifactIds.map(artifactId =>
-          invoke<ResearchArtifactInspectResult>('research.artifacts.inspect', {projectId, artifactId, expectedVersion: null})));
-        const artifactLinks = inspections.map(({snapshot}) => ({projectId, artifactId: snapshot.artifact.id,
-          expectedVersion: snapshot.version, title: snapshot.artifact.title, kind: snapshot.artifact.kind}));
-        let searchPlanReview: {searchPlan: z.infer<typeof researchSearchPlanSchema>; searchPlanHash: string} | null = null;
-        if (current.stage === 'discovery') {
-          if (current.artifactIds.length !== 1) throw new Error('research_search_plan_required');
-          const artifactId = current.artifactIds[0];
-          const content = await invoke<ResearchArtifactContent | null>('research.artifacts.content', {projectId, artifactId});
-          if (content === null) throw new Error('research_search_plan_required');
-          searchPlanReview = {searchPlan: researchSearchPlanSchema.parse(content.output.searchPlan),
-            searchPlanHash: searchPlanApprovalHash(projectId, artifactId, content.output)};
-        }
-        const resume = interrupt({
-          kind: 'approval',
-          request: {
-            actionRequests: [{
-              name: GATE_TOOL_NAME,
-              args: {
-                projectId,
-                stage: current.stage,
-                artifactLinks,
-                ...(searchPlanReview === null ? {} : searchPlanReview),
-                summary: isReview
-                  ? '确认审稿结论：接受正文则进入导出，要求修订则回到修订阶段，退回则重跑本阶段。'
-                  : '确认本阶段产物是否可以进入下一阶段。'
-              },
-              description: '人工闸门'
-            }],
-            // 审稿阶段有第三态（要求修订）；其他阶段的闸门只有通过/退回。
-            reviewConfigs: [{
-              actionName: GATE_TOOL_NAME,
-              allowedDecisions: isReview ? ['approve', 'revise', 'reject'] : ['approve', 'reject']
-            }]
-          }
-        }) as { decisions?: Array<{ type?: unknown; message?: unknown; reviewedSearchPlanHash?: unknown }> };
-        const decision = resume.decisions?.[0];
-        const type = decision?.type;
-        const decisionNote = typeof decision?.message === 'string' ? decision.message : note;
-        if (type === 'approve') {
-          if ((searchPlanReview !== null && decision?.reviewedSearchPlanHash !== searchPlanReview.searchPlanHash) ||
-              (searchPlanReview === null && decision?.reviewedSearchPlanHash !== undefined)) {
-            throw new Error('research_search_plan_approval_changed');
-          }
-          const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
-            projectId,
-            expectedStage: current.stage,
-            action: 'approve',
-            ...(searchPlanReview === null ? {} : {expectedSearchPlanHash: searchPlanReview.searchPlanHash}),
-            ...(isReview ? { reviewDecision: 'accept' as const } : {})
-          });
-          return summarizeGateOutcome('approve', transitioned);
-        }
-        // 要求修订与退回都走 approve+reviewDecision:'revise'：这样审稿周期进入 revision_required、
-        // 回到修订阶段，而不是把审稿阶段整体重跑（重跑会丢掉审稿意见）。
-        if (type === 'revise' || (isReview && type === 'reject')) {
-          const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
-            projectId,
-            expectedStage: current.stage,
-            action: 'approve',
-            reviewDecision: 'revise' as const,
-            ...(decisionNote === undefined ? {} : { note: decisionNote })
-          });
-          return summarizeGateOutcome('revise', transitioned);
-        }
-        if (type !== 'reject') {
-          throw new Error('research_gate_decision_invalid');
-        }
-        const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
-          projectId,
-          expectedStage: current.stage,
-          action: 'reject',
-          note: decisionNote ?? '用户要求重做本阶段。'
-        });
-        return summarizeGateOutcome('reject', transitioned);
+      func: async ({note}, _runManager, config) => {
+        const result = await gateGraph.invoke({note, reviewError: null, outcome: null}, config);
+        if (result.outcome === null) throw new Error('research_gate_outcome_missing');
+        return result.outcome;
       }
     })
   ];

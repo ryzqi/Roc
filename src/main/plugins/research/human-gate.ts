@@ -32,6 +32,7 @@ export function createResearchHumanGate(input: {
         throw new Error('research_search_plan_approval_changed');
       }
     }
+    if (request.action === 'approve') input.repository.assertArtifactReview(request);
     if (current.stage === 'figure' || current.stage === 'export') {
       if (input.production === undefined) throw new Error(current.stage === 'figure' ? 'research_figure_verify_unavailable' : 'research_export_verify_unavailable');
       const signature = current.stage === 'figure'

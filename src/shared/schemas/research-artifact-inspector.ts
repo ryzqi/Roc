@@ -25,7 +25,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   currentStage: researchStageStateSchema.shape.stage, stage: researchStageStateSchema,
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
-  provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task']).array().max(1)
+  provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task', 'review_gate']).array().max(2)
 }).strict();
 export const researchArtifactInspectionSchema = researchArtifactInspectionBodySchema.extend({version: hash});
 export const researchArtifactInspectResultSchema = z.object({

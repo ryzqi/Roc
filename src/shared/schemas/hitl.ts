@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {researchArtifactVersionsSchema} from './research-artifact-version';
 
 const identifierSchema = z.string().trim().min(1);
 const jsonObjectSchema = z.record(z.string(), z.json());
@@ -32,10 +33,12 @@ export const hitlRequestSchema = z
   .strict();
 
 export const hitlResumeDecisionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('approve'), reviewedSearchPlanHash: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict(),
+  z.object({ type: z.literal('approve'), reviewedSearchPlanHash: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+    reviewedArtifactVersions: researchArtifactVersionsSchema.optional() }).strict(),
   z
     .object({
       type: z.literal('reject'),
+      reviewedArtifactVersions: researchArtifactVersionsSchema.optional(),
       message: identifierSchema.optional()
     })
     .strict(),
@@ -49,6 +52,7 @@ export const hitlResumeDecisionSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('revise'),
+      reviewedArtifactVersions: researchArtifactVersionsSchema.optional(),
       message: identifierSchema.optional()
     })
     .strict()

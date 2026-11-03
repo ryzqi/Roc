@@ -50,3 +50,4 @@ export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client
 
 export {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability} from '../../../src/main/plugins/research/artifact-inspector-capability';
 export {createPluginCapabilityAdapter} from '../../../src/main/ipc/plugin-capability-adapter';
+export {researchWorkflowTransitionRequestSchema} from '../../../src/shared/schemas/research';
