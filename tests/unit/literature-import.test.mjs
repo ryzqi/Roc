@@ -113,7 +113,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 6);
+    assert.equal(result.schemaVersion, 7);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -142,7 +142,8 @@ function setup(options = {}) {
   const prepare = options.prepare ?? (async (metadata) => ({ metadata, bibliography: api.bibliographyFromRecord(metadata, new Set()) }));
   const search = options.search ?? { searchDetailed: async () => ({ records: options.records ?? [record()], sources: [
     { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [], cache: {state: 'miss'},
-      governance: api.createLiteratureProviderGovernor().observe('api.crossref.org') }
+      governance: api.createLiteratureProviderGovernor().observe('api.crossref.org'),
+      coverage: {state: 'unknown', apiHitCount: null, validatedPages: 1, nextPage: null} }
   ], status: 'complete', truncated: false, warnings: [] }) };
   const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
     prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
@@ -373,7 +374,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 6);
+    assert.equal(result.schemaVersion, 7);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -894,12 +895,82 @@ test('import shutdown drains every source receipt before closing an interrupted 
   }
 });
 
+test('Provider coverage preserves declared hit counts and continuations without inventing academic recall', async () => {
+  const payloads = {
+    openalex: {meta: {count: 12}, results: [{id: 'W1', title: 'Coverage paper'}]},
+    crossref: {message: {'total-results': 12, items: [{DOI: '10.1234/coverage', title: ['Coverage paper']}]}},
+    semantic_scholar: {total: 12, next: 1, data: [{paperId: 'S1', title: 'Coverage paper'}]},
+    europe_pmc: {hitCount: 12, nextCursorMark: 'opaque+cursor/=', resultList: {result: [{id: 'PMC1', source: 'PMC', title: 'Coverage paper'}]}},
+    pubmed: {hitCount: 12, nextCursorMark: 'opaque-med-cursor', resultList: {result: [{id: '1', source: 'MED', title: 'Coverage paper'}]}}
+  };
+  for (const [source, payload] of Object.entries(payloads)) {
+    const result = await new api.LiteratureSearchService(async () => Response.json(payload))
+      .searchDetailed({query: 'coverage', sources: [source], limit: 1});
+    assert.equal(result.sources[0].coverage.apiHitCount, 12);
+    assert.equal(result.sources[0].coverage.validatedPages, 1);
+    assert.equal(result.sources[0].coverage.state, 'limited');
+    assert.ok(result.sources[0].coverage.nextPage);
+    assert.equal(result.truncated, true);
+    assert.match(result.warnings.join(' '), /全部 API 命中/u);
+    assert.equal('recall' in result.sources[0].coverage, false);
+  }
+  const xml = `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+    <opensearch:totalResults>12</opensearch:totalResults><entry><id>http://arxiv.org/abs/2601.00001v1</id>
+    <title>Coverage paper</title><summary>Abstract</summary><published>2026-01-01T00:00:00Z</published><author><name>Author</name></author></entry></feed>`;
+  const arxiv = await new api.LiteratureSearchService(async () => new Response(xml))
+    .searchDetailed({query: 'coverage', sources: ['arxiv'], limit: 1});
+  assert.deepEqual(arxiv.sources[0].coverage, {apiHitCount: 12, validatedPages: 1, state: 'limited', nextPage: {kind: 'offset', value: 1}});
+});
+
+test('missing hit metadata remains unknown while invalid counts and oversized pages fail explicitly', async () => {
+  for (const [payload, status, state] of [
+    [{results: [{id: 'W1', title: 'Unknown count'}]}, 'complete', 'unknown'],
+    [{meta: {count: 1}, results: [{id: 'W1', title: 'Reported end'}]}, 'complete', 'reported_end'],
+    [{meta: {count: -1}, results: []}, 'failed', 'failed'],
+    [{meta: {count: '12'}, results: []}, 'failed', 'failed'],
+    [{meta: {count: 12}, results: []}, 'failed', 'failed'],
+    [{results: [{id: 'W1', title: 'One'}, {id: 'W2', title: 'Two'}]}, 'failed', 'failed']
+  ]) {
+    const result = await new api.LiteratureSearchService(async () => Response.json(payload))
+      .searchDetailed({query: 'coverage shape', sources: ['openalex'], limit: 1});
+    assert.equal(result.status, status);
+    assert.equal(result.sources[0].coverage.state, state);
+    if (status === 'failed') {
+      assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+      assert.equal(result.sources[0].requests[0].status, 200);
+      assert.deepEqual(result.records, []);
+    }
+    if (state === 'unknown') {
+      assert.equal(result.sources[0].coverage.apiHitCount, null);
+      assert.match(result.warnings.join(' '), /未报告/u);
+    }
+  }
+});
+
+test('cached and persisted coverage retains the reported API count and original opaque cursor', async () => {
+  const search = new api.LiteratureSearchService(async () => Response.json({hitCount: 500,
+    nextCursorMark: 'original+cursor/=', resultList: {result: [{id: 'PMC1', source: 'PMC', title: 'Cached coverage'}]}}));
+  const f = setup({search});
+  try {
+    const request = {query: 'cached continuation', sources: ['europe_pmc'], limit: 1};
+    const first = await f.run(() => f.service.search(request));
+    const hit = await f.run(() => f.service.search(request));
+    assert.equal(hit.sources[0].cache.state, 'hit');
+    assert.deepEqual(hit.sources[0].requests, []);
+    assert.deepEqual(hit.sources[0].coverage, first.sources[0].coverage);
+    const stored = f.run(() => f.service.readSearch({searchId: hit.searchId}));
+    assert.deepEqual(stored.sources[0].coverage, {apiHitCount: 500, validatedPages: 1, state: 'limited',
+      nextPage: {kind: 'cursor', value: 'original+cursor/='}});
+    assert.equal(stored.truncated, true);
+  } finally { await search.shutdown(); f.close(); }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 6, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 7, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);

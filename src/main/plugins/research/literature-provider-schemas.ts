@@ -8,6 +8,7 @@ const nullableYear = z.number().int().nullable().optional();
 // Providers may add fields. Required result containers and paper identities do not
 // become empty successes when an API changes its response or returns a 200 error.
 export const openAlexSearchPayload = z.looseObject({
+  meta: z.looseObject({count: z.number().int().nonnegative()}).optional(),
   results: z.array(z.looseObject({
     id: text, title: text, doi: nullableText,
     authorships: z.array(z.looseObject({author: z.looseObject({display_name: nullableText}).optional()})).optional(),
@@ -18,7 +19,7 @@ export const openAlexSearchPayload = z.looseObject({
 });
 
 export const crossrefSearchPayload = z.looseObject({
-  message: z.looseObject({items: z.array(z.looseObject({
+  message: z.looseObject({'total-results': z.number().int().nonnegative().optional(), items: z.array(z.looseObject({
     DOI: text, title: z.array(text).min(1), URL: nullableText,
     author: z.array(z.looseObject({given: z.string().optional(), family: z.string().optional()})).optional(),
     abstract: nullableText, published: z.looseObject({'date-parts': z.array(z.array(z.number().int())).optional()}).optional()
@@ -26,6 +27,7 @@ export const crossrefSearchPayload = z.looseObject({
 });
 
 export const semanticScholarSearchPayload = z.looseObject({
+  total: z.number().int().nonnegative().optional(), next: z.number().int().positive().optional(),
   data: z.array(z.looseObject({
     paperId: text, title: text, authors: z.array(z.looseObject({name: text})).optional(),
     abstract: nullableText, year: nullableYear, citationCount: nullableCount,
@@ -46,6 +48,7 @@ export const arxivSearchPayload = z.looseObject({
 });
 
 export const europePmcSearchPayload = z.looseObject({
+  hitCount: z.number().int().nonnegative().optional(), nextCursorMark: z.string().min(1).max(2048).optional(),
   resultList: z.looseObject({result: z.array(z.looseObject({
     id: text, title: text, pmid: z.string().optional(), doi: nullableText,
     authorString: z.string().optional(), abstractText: nullableText,

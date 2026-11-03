@@ -5,7 +5,7 @@
 
 ## 冻结排序合同
 
-当前快照版本为 6，排序方法为 RRF v1：
+当前快照版本为 7，排序方法为 RRF v1：
 
 ```text
 score(paper) = sum(1 / (60 + source_rank(paper)))
@@ -82,6 +82,28 @@ executionId、会话 owner、项目、执行 runId、冻结请求和 running 状
 
 ## 验证与后续范围
 
+当前来源 coverage 保存实际响应声明的 API 命中数、通过校验的页数、分页范围和
+后续页标识。OpenAlex 使用 meta.count；Crossref 使用 total-results；Semantic
+Scholar 使用 total/next；Europe PMC 使用 hitCount/nextCursorMark；arXiv 使用
+Atom totalResults。统计缺失保留 null 与 unknown，并提示统计或终点未经报告；
+不以返回条数补造 API 总命中数。
+
+coverage 的 limited 表示当前候选尚未覆盖声明的 API 命中，truncated 同步标记
+并提示后续分页。reported_end 仅表示抓取到该响应报告的 API 查询终点；complete
+表示本次来源请求成功。学术 Recall、完整领域覆盖和穷尽结论需要独立标注与验证。
+非法计数、与首页记录矛盾的计数或超出请求条数的页面是来源失败，HTTP 回执仍保留。
+缓存命中保留原始统计、opaque cursor 与响应抓取身份。
+
+这批只记录首页与后续标识；实际抓取后续页待下一增量。OpenAlex 当前基础
+page/per_page 支持范围与 key 要求依据
+[OpenAlex paging](https://help.openalex.org/api/paging/)；
+Crossref 当前整数统计和 offset/rows 合同依据
+[Crossref Swagger specification](https://api.crossref.org/swagger-docs)；
+Semantic Scholar relevance search 的分页与范围依据
+[Semantic Scholar Graph API](https://api.semanticscholar.org/api-docs/graph)。
+Europe PMC 的后续 cursor 与终页省略规则依据
+[Europe PMC API release announcement](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/yG8kMl1R3cI)。
+
 来源共用主机级准入，复用现有 FIFO 资源协调器。每个主机同时只有一个 HTTP
 尝试，连接保持到结果校验完成；不同主机可以并行。PubMed 与 Europe PMC 使用
 同一 EBI 主机，因此共享连接、配额和冷却。当前五个主机限定应用最多五个活跃
@@ -132,4 +154,8 @@ list query 1 次/秒要求并观察响应头：
 [OpenAlex Authentication](https://help.openalex.org/api/authentication/)。
 Crossref 的缓存、rows/cursor 和退避建议见
 [Crossref REST API tips](https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/)。
-本批仅核对文档并使用本地响应 fixture，没有发起真实检索或费用调用。
+2026-11-03 另对 Europe PMC 官方示例公开标识发起一次匿名只读请求，确认 6.9
+响应包含 hitCount=1、一个记录且终页省略 cursor。原始响应 hash 与脱敏合同记录
+保存在 `.artifacts/research-optimization/pr04-coverage-live-contract.json`；随后离线
+校验同一响应通过实际适配器。此探测只验证一个响应结构，其他来源仍由本地
+fixture 验证；没有真实模型费用调用。

@@ -38,14 +38,24 @@ export const literatureProviderGovernanceSchema = z.object({
   quotaResetAt: z.string(), minIntervalMs: z.number().nonnegative(), cooldownUntil: z.string().nullable(),
   lastSuccessAt: z.string().nullable(), lastFailureAt: z.string().nullable()
 }).strict();
+export const literatureProviderCoverageSchema = z.object({
+  apiHitCount: z.number().int().nonnegative().nullable(), validatedPages: z.number().int().nonnegative(),
+  state: z.enum(['unknown', 'limited', 'reported_end', 'failed']),
+  nextPage: z.discriminatedUnion('kind', [
+    z.object({kind: z.literal('page'), value: z.number().int().positive()}).strict(),
+    z.object({kind: z.literal('offset'), value: z.number().int().nonnegative()}).strict(),
+    z.object({kind: z.literal('cursor'), value: z.string().min(1).max(2048)}).strict()
+  ]).nullable()
+}).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(6), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(7), ranking: literatureRankingSchema, executionId: z.string().min(1),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'timeout', 'rate_limited', 'error']),
     returnedCount: z.number().int().nonnegative(), errorCode: z.string().nullable(), retryAfterMs: z.number().nullable(),
     requests: z.array(literatureProviderRequestSchema),
     governance: literatureProviderGovernanceSchema,
+    coverage: literatureProviderCoverageSchema,
     cache: z.discriminatedUnion('state', [
       z.object({state: z.literal('miss')}).strict(),
       z.object({state: z.literal('hit'), fetchedAt: z.string(), responseHash: z.string().regex(/^[a-f0-9]{64}$/u)}).strict()

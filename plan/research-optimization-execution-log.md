@@ -1014,3 +1014,49 @@ complete owned search, one received hashed request and one atomically linked can
 snapshot. The figure-only scenario correctly has none. Evidence:
 `.artifacts/research-optimization/pr04-durable-native-ledger.log`; full logs:
 `.artifacts/research-optimization/pr04-durable-*.log`.
+
+## PR-04.3A — reported API coverage and continuation provenance
+
+Status: `Verified passing` for single-page coverage metadata. Actual later-page fetching
+remains the next increment; independent Recall/nDCG, aliases and candidate UI remain pending.
+
+Snapshot v7 records declared API hit counts, validated page count, unknown/limited/
+reported_end/failed coverage and typed page/offset/opaque-cursor continuation. Missing
+statistics stay null with an explicit warning. Counts are never inferred from record
+length as academic Recall. A known uncollected API remainder marks truncated and warns.
+Invalid counts, impossible homepage totals and oversized pages fail the source while
+retaining HTTP200/body-hash receipts. Cached snapshots preserve original counts/cursors.
+Tool descriptions distinguish request success from academic coverage.
+
+Changed: literature-provider-schemas.ts, literature-service.ts, literature-import-service.ts,
+literature-import result schema, literature tools, focused regressions and fusion docs.
+No migration or dependency change; research DB remains7 and agent DB15.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='Provider coverage preserves' tests/unit/literature-import.test.mjs` | Red: coverage metadata absent |
+| `node --test tests/unit/literature-import.test.mjs` | 36/36 passed |
+| `pnpm typecheck` | Passed |
+| `pnpm test:unit` | Final 669/669 passed |
+| `node --test --test-name-pattern='template reader preserves extraction errors' tests/unit/research-archive-libraries.test.mjs` | Existing unchanged timeout case 1/1 passed in10ms |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Current generated contracts |
+| `pnpm test:research-p0` | Fresh production build/typecheck and12/12 native cases passed |
+| `node --test --test-name-pattern='model tools preview\|main-process tool context' tests/unit/literature-import.test.mjs` | Final tool consumers2/2 passed |
+| `pnpm build` | Final description update build/typecheck passed |
+| `git diff --check` | Passed |
+
+Initial fullunit668/669 hit the existing archive close test's30ms wall-clock deadline
+while build ran concurrently. Its unchanged focused run passed, and the full rerun with
+no overlapping build passed669/669. No check or timeout weakened.
+
+Primary current OpenAlex/Semantic docs and Crossref Swagger2.0 /swagger-docs verified
+pagination/count fields. One anonymous read-only Europe PMC official-example query
+(`EXT_ID:28620943 AND SRC:MED`, pageSize1, JSON) returned current6.9 shape with one hit,
+one record and omitted terminal cursor. HTTP status was not captured and stays null in
+probe evidence. The same raw bytes then passed the actual adapter offline. This proves
+one response shape, not a production-network integration or scientific quality score.
+Sanitized evidence: `.artifacts/research-optimization/pr04-coverage-live-contract.json`;
+logs: `.artifacts/research-optimization/pr04-coverage-*.log`. No model/credential/write call.
