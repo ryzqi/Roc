@@ -674,6 +674,9 @@ export class ResearchRepository {
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
           this.assertArtifactReview(request);
           this.requireStageArtifacts(request.projectId, current);
+          for (const artifactId of current.artifactIds) {
+            this.evidence.assertReviewedSupportForArtifact(this.getArtifact(artifactId));
+          }
           current.artifactIds.forEach((artifactId) => {
             this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, artifactId);
           });

@@ -245,6 +245,10 @@ test('20 to 21 preserves raw claim state and creates only explicitly unreviewed 
     assert.equal(historical.kind,'historical');assert.equal(historical.status,'historical');assert.equal(historical.claimVersion,3);
     assert.equal(historical.proposer,null);assert.equal(historical.reviewer,null);assert.equal(historical.reviewedAt,null);
     assert.equal(repository.evidence.relations.history(historical.id,project.id)[0].actor,null);
+    const changes=db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>repository.evidence.assertReviewedSupport(repository.evidence.getClaim('historical-claim')),
+      error=>error.code==='research_relation_review_required');
+    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
     const before=db.prepare('SELECT total_changes()').pluck().get();api.applyResearchDatabaseSchema(db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}

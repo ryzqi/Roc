@@ -94,6 +94,8 @@ function setup({ claims = [], evidence = [] } = {}) {
      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`
   );
   insertArtifact.run(manuscriptId, project.id, 'writing', 'manuscript', 'Body', 'draft', now, now);
+  db.prepare("UPDATE research_stage_states SET artifact_ids_json = ? WHERE project_id = ? AND stage = 'writing'")
+    .run(JSON.stringify([manuscriptId]), project.id);
 
   for (const entry of evidence) {
     db.prepare(
@@ -117,6 +119,20 @@ function setup({ claims = [], evidence = [] } = {}) {
 function finalize(seeded, { cycleStatus = 'accepted' } = {}) {
   const sections = [{ title: 'Introduction', claimIds: seeded.claimIds }];
   seeded.repo.manuscripts.saveManuscript({ artifactId: seeded.manuscriptId, sections });
+  for (const claimId of seeded.claimIds) {
+    const claim = seeded.repo.evidence.getClaim(claimId);
+    for (const evidenceId of claim.evidenceIds) {
+      const source = seeded.repo.evidence.inspectEvidence(evidenceId, seeded.projectId);
+      const relation = seeded.repo.evidence.relations.propose({projectId: seeded.projectId, claimId,
+        expectedClaimVersion: claim.version, evidenceId, expectedSourceDigest: hashOf(JSON.stringify(source)),
+        kind: 'supports', condition: null, supersedesRelationId: null},
+      {kind: 'user', id: 'synthetic-body-gate-reviewer'});
+      seeded.repo.evidence.relations.review({projectId: seeded.projectId, relationId: relation.id,
+        expectedVersion: relation.version, expectedClaimVersion: relation.claimVersion,
+        expectedSourceDigest: relation.sourceDigest, decision: 'confirm', note: 'Explicit synthetic body gate review.'},
+      {kind: 'user', id: 'synthetic-body-gate-reviewer'});
+    }
+  }
   db.prepare("UPDATE research_artifacts SET status = 'approved' WHERE id = ?").run(seeded.manuscriptId);
   db.prepare("UPDATE research_projects SET current_stage = 'export' WHERE id = ?").run(seeded.projectId);
   db.prepare(

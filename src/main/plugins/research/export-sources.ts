@@ -52,6 +52,7 @@ export class ResearchExportSourceService {
       if (figure.status !== 'approved') throw new Error('research_export_figure_approval_required');
       const artifact = this.repository.getArtifact(figure.artifactId);
       this.repository.evidence.assertPublishable(artifact);
+      this.repository.evidence.assertReviewedSupportForArtifact(artifact);
       figures.push(figure);
       claims.push(...this.repository.evidence.listClaims({ projectId: project.id, artifactId: artifact.id }));
     }

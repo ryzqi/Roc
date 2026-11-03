@@ -21,6 +21,7 @@ type ArtifactAccess = {
 type ManuscriptEvidence = {
   getClaim(id: string): ResearchClaim;
   assertSupported(claim: ResearchClaim): void;
+  assertReviewedSupport(claim: ResearchClaim): void;
   evidenceForClaims(claims: ResearchClaim[], projectId: string): ResearchEvidence[];
 };
 
@@ -76,6 +77,7 @@ export class ResearchManuscriptRepository {
     if (artifact.projectId !== request.projectId) throw new Error('research_manuscript_project_mismatch');
     if (artifact.status !== 'approved') throw new Error('research_manuscript_approval_required');
     const { manuscript, claims } = this.requireCurrentManuscript(artifact);
+    for (const claim of claims) this.evidence.assertReviewedSupport(claim);
     return {
       ...request, manuscript, claims,
       evidence: this.evidence.evidenceForClaims(claims, request.projectId), generatedAt: this.now()
@@ -83,7 +85,7 @@ export class ResearchManuscriptRepository {
   }
 
   /**
-   * 与 `exportBundle` 同构，**只少一条批准要求**。
+   * 读取待审草稿的来源完整性；人工语义确认由批准/当前导出路径要求。
    *
    * 文稿检查的用处恰恰在批之前：写作/修订刚产出草稿时发现问题，比等到审稿间门才发现便宜得多。
    * 而导出必须只认已批准正文，所以两者不能共用同一个入口——把钢丝放在同一条路径上，

@@ -45,8 +45,8 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。新语义消费者准入、失效传播和历史导出
-属于后续增量，不能以仓库或矩阵完成代替 PR-06 整体验收。
+整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；失效封印、定位迁移候选及导出快照扩展
+仍属于后续增量，不能以当前消费者完成代替 PR-06 整体验收。
 
 ## 可信用户 IPC
 
@@ -62,7 +62,7 @@ main IPC adapter 建立的窗口/项目/能力上下文中写入。缺少 sender
 抛出，不包装为成功。generated preload/IPC 合同来自单一 ipc-registry。
 原生验收已通过真实 SQLite、PDF parser 和 registry/adapter；测试 sender
 为明确的 synthetic main 输入。检查器另有实际 Electron 窗口的键盘提议、
-审核、历史读取及原闸门返回验收；模型调用尚未验收。
+审核、历史读取及原闸门返回验收；模型提议已由明确的离线角色模型验收，没有实时科研查询。
 
 真实区域保留原坐标及 origin；当前 HTML 的零面积坐标转为仅页定位（bbox/origin
 均 null）。没有 locations 时保持空数组，不从任意来源字符串猜页码或矩形。
@@ -109,8 +109,26 @@ completion；重复完成、结束或非当前阶段的 agent 不能再提出关
 角色没有用户确认能力；写入 reviewer 仍只能走可信窗口上下文。
 
 本增量模型产出直接表达 supports，其他关系类型仍由用户显式提议。
-批准和当前导出的严格关系准入仍属于下一增量，不能把此模型提议当作已经
-通过科学语义审核。
+模型提议必须另经用户确认，不能把产出声明当作已经通过科学语义审核。
+
+## 批准与当前导出
+
+complete 允许草稿进入 waiting_approval，以便用户先核查关系。approve 在原最终
+写事务中检查所有 supported 主张：每个声明来源必须有当前 confirmed supports
+或 qualifies；qualifies 保存明确适用条件。confirmed contradicts 即使同时存在
+支持关系也拒绝批准，需用户核对并显式替代旧反对关系。historical、proposed、
+rejected、invalidated、depends_on、supersedes 都不能冒充支持确认。
+
+正文创建/保存和草稿 inspectBundle 仍检查声明状态及来源完整性；不提前要求人工
+确认而阻断核查。exportBundle 及当前导出正文、图稿另外执行严格关系检查。来源
+失效、主张变化或审核版本变化不能通过当前导出；检查器仍可核对旧原文和审核历史。
+批准拒绝使用 research_relation_review_required 或 research_relation_conflict，
+原 LangGraph 闸门仅捕获这些已知用户可处理错误，返回新 interrupt；用户审核、
+重读全阶段版本后再决定。未知错误继续抛出。
+
+离线原生工作流经真实 registry/generated adapter，由明确 synthetic window:93
+逐条确认模型支持提议，再进行版本冻结与批准。该测试证明传输、事务和消费者链，
+不证明真实科学结论。原冻结科研样本保持不变。
 
 ## 已验证范围
 

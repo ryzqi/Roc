@@ -2666,3 +2666,45 @@ one actual unmanaged experiment source. Native gate version changes still refuse
 No paid/live model query, remote writes or fixture changes. Existing scientific quality and
 actual Zotero-client limitations remain. Strict semantic approval/export consumers, invalidation
 seals, source-migration candidates and historical exports are next; PR-06 remains incomplete.
+
+
+## ROC-PR-06A4A — semantic approval and current export
+
+Verified passing for this increment. Complete permits draft review; final approve transaction
+requires current confirmed supports/qualifies covering each declared source and refuses
+confirmed contradictions. Historical/proposed/rejected/invalidated/dependency/superseding
+relations cannot count as support. Conditions remain captured. Draft manuscript writes and
+inspection retain source integrity; approved body/current export and selected figures also
+require reviewed semantics. Claim/source changes revoke effective reviews while inspection
+retains original source and reviewer. Known semantic refusals produce a fresh original gate
+interrupt without writes; explicit human review and whole-stage reread then permit approval.
+
+Native offline scenarios now confirm actual model proposals through separate synthetic
+window:93 user registry/generated adapter. This proves transport and consumers, not real
+scientific conclusions. Frozen research-workflow fixtures were not changed.
+
+All commands from /Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test tests/unit/research-semantic-publication.test.mjs | Red: missing rejection; green8/8 |
+| node --test tests/unit/research-semantic-publication.test.mjs tests/unit/research-export-body-gate.test.mjs tests/unit/research-evidence-relations.test.mjs tests/unit/research-gate-review.test.mjs | Final32/32 |
+| pnpm test:unit | Final857/857 |
+| pnpm harness:quality:check | Offline16-task audit passed; no model/external calls |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Typecheck and fresh production build passed |
+| node scripts/run-research-p0.mjs | 13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-tasks.test.mjs tests/renderer/research-search-plan.test.mjs | 37/37 actual Electron |
+| node scripts/smoke-electron.mjs --full | Base startup12/12, zero renderer errors; additional P4 failed |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980 bytes6files |
+
+Expanded P4 waited30s for visible assistant running state at gate1. The same unchanged
+script reproduces that failure both standalone and in clean detached b47dab11 baseline
+with fresh build; baseline working directory was task-owned
+.artifacts/research-optimization/pr06-p4-baseline. No script/assertion/timeout relaxation.
+Exact reports/logs retained as pr06-semantic-p4-* under the task artifact directory;
+task-owned temporary checkout removed. This pre-existing broad check remains unresolved.
+
+Strict source-review seals, export captured relation/locator snapshots and migration candidates
+are next. PR-06 and the whole execution plan remain incomplete. Independent scientific
+judgments, reviewed200-task corpus, L2 spend and actual Zotero-client acceptance remain unrun.

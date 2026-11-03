@@ -3,6 +3,7 @@ import type {Database} from 'better-sqlite3';
 import type {ResearchArtifact, ResearchClaim} from '../../../shared/types';
 import {researchInspectedEvidenceSchema, type ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
 import {researchClaimSchema} from '../../../shared/schemas/research-evidence';
+import {RocDomainError} from '../../services/errors';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema,
   researchEvidenceRelationSchema, researchEvidenceRelationRevisionSchema,
@@ -162,6 +163,27 @@ export class ResearchEvidenceRelationRepository {
   assertCurrent(relation: ResearchEvidenceRelation): void {
     this.requireCurrent(relation, relation.claimVersion, relation.sourceDigest);
     if (relation.status === 'invalidated') throw new Error('research_relation_invalidated');
+  }
+
+  requireReviewedSupport(claim: ResearchClaim): ResearchEvidenceRelation[] {
+    const current = this.evidence.getClaim(claim.id);
+    if (relationClaimHash(current) !== relationClaimHash(claim)) throw new Error('research_relation_claim_changed');
+    if (current.status !== 'supported') throw new Error(`research_claim_unverified:${claim.id}`);
+    if (current.evidenceIds.length === 0) throw new Error('research_claim_evidence_required');
+    const confirmed = this.list({projectId: claim.projectId, claimId: claim.id}).filter(relation => relation.status === 'confirmed');
+    for (const relation of confirmed) this.assertCurrent(relation);
+    if (confirmed.some(relation => relation.kind === 'contradicts')) {
+      throw new RocDomainError({code: 'research_relation_conflict', category: 'conflict', retryable: false,
+        message: `主张 ${claim.id} 有已确认的反对关系。请核对原文并解决冲突后再批准。`});
+    }
+    const supported = confirmed.filter(relation => relation.kind === 'supports' || relation.kind === 'qualifies');
+    for (const evidenceId of claim.evidenceIds) {
+      if (!supported.some(relation => relation.evidenceId === evidenceId)) {
+        throw new RocDomainError({code: 'research_relation_review_required', category: 'conflict', retryable: false,
+          message: `主张 ${claim.id} 的来源 ${evidenceId} 尚无当前版本的人工支持确认。请在工件检查器审核证据关系。`});
+      }
+    }
+    return supported.filter(relation => claim.evidenceIds.includes(relation.evidenceId));
   }
 
   private requireCurrent(relation: ResearchEvidenceRelation, expectedClaimVersion: number, expectedSourceDigest: string): void {

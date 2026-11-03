@@ -175,6 +175,17 @@ export class ResearchEvidenceRepository {
     this.validateSupport(claim);
   }
 
+  assertReviewedSupport(claim: ResearchClaim): void {
+    this.assertSupported(claim);
+    this.relations.requireReviewedSupport(claim);
+  }
+
+  assertReviewedSupportForArtifact(artifact: ResearchArtifact): void {
+    for (const claim of this.listClaims({projectId: artifact.projectId, artifactId: artifact.id})) {
+      if (claim.status === 'supported') this.assertReviewedSupport(claim);
+    }
+  }
+
   evidenceForClaims(claims: ResearchClaim[], projectId: string): ResearchEvidence[] {
     return [...new Set(claims.flatMap((claim) => claim.evidenceIds))].map((id) => this.getEvidence(id, projectId));
   }

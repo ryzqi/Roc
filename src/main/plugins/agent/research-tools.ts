@@ -18,6 +18,7 @@ import type {
   ResearchWorkflowSnapshot
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
+import {RocDomainError} from '../../services/errors';
 
 /**
  * 对话代理在绑定研究项目后拿到的科研工具。工具本体只做两件事：
@@ -173,10 +174,13 @@ export function createResearchTools(input: {
       });
       return {outcome: summarizeGateOutcome('reject', transitioned), reviewError: null};
     } catch (error) {
-      if (!(error instanceof Error) || ![
+      if (!(error instanceof Error)) throw error;
+      const code = error instanceof RocDomainError ? error.code : error.message;
+      if (![
         'research_artifact_review_required', 'research_artifact_review_set_changed', 'research_artifact_review_changed',
-        'research_search_plan_approval_changed', 'research_figure_review_changed', 'research_export_review_changed'
-      ].includes(error.message)) throw error;
+        'research_search_plan_approval_changed', 'research_figure_review_changed', 'research_export_review_changed',
+        'research_relation_review_required', 'research_relation_conflict'
+      ].includes(code)) throw error;
       return {outcome: null, reviewError: error.message};
     }
   }).addEdge(START, 'review').addConditionalEdges('review', state => state.outcome === null ? 'review' : END).compile();
