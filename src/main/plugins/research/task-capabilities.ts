@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import {
   researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema,
-  researchTaskEventsRequestSchema, researchTaskEventsPageSchema
+  researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskListRequestSchema, researchTaskListPageSchema
 } from '../../../shared/schemas/research-tasks';
 import { researchStageRunSchema } from '../../../shared/schemas/research-runs';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
@@ -12,6 +12,9 @@ import { researchTaskDiagnosticsSchema, researchTaskForChatRequestSchema } from 
 import { notifyResearchTaskChanged } from './task-notifications';
 
 const capabilities = {
+  list: {
+    name: 'research.task.list', version: '1.0.0', inputSchema: researchTaskListRequestSchema, outputSchema: researchTaskListPageSchema
+  },
   get: descriptor('research.task.get', researchTaskSchema),
   executions: descriptor('research.task.executions', researchTaskExecutionSchema.array()),
   cancel: descriptor('research.task.cancel', researchTaskSchema),
@@ -34,6 +37,8 @@ export const researchTaskCapabilities = Object.values(capabilities);
 export function registerResearchTaskCapabilities(
   context: RocPluginContext, tasks: ResearchTaskRepository, controller: ResearchTaskController, diagnostics: ResearchTaskDiagnosticsService
 ): void {
+  context.capabilities.register(context.pluginId, capabilities.list, async input =>
+    tasks.list(researchTaskListRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, capabilities.get, async input => {
     const request = researchTaskRequestSchema.parse(input);
     return tasks.get(request.taskId, request.projectId);

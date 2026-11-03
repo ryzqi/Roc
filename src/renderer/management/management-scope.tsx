@@ -25,6 +25,8 @@ export type ManagementScope = {
   projectId: string | null;
   /** Bound working directory: needed for the workspace memory slots and for a task's workspacePath. */
   workspacePath: string | null;
+  researchTaskId: string | null;
+  onSelectResearchTask: (taskId: string) => void;
   onOpenThread: (threadId: string) => void;
   onAskAssistant: (prompt: string) => void;
   /**

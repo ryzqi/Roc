@@ -407,3 +407,45 @@ Commands ran from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
 Logs: `.artifacts/research-optimization/pr02c-notifications-*.log`.
 Smoke used temporary application data/workspace and a local stub Provider.
 No paid model requests or tracing exports.
+
+## ROC-PR-02C.6 — assistant controls and management task diagnostics
+
+Status: `Verified passing` for shell presentation, cursor task listing and event replay.
+PR-02C implementation is complete; broader P0 integration remains pending.
+
+The assistant shows persisted task progress and known/unknown/reserved budget amounts.
+Pause, whole-task cancellation, continuation and approval restoration use authoritative
+APIs. Pending stop actions remain pending until resource cleanup responds; failures remain
+visible and unconfirmed cleanup disables continuation. User actions are the only dispatch
+trigger. A task notification invalidates reads rather than incrementing a local counter.
+
+The existing management drawer lists project tasks with stable creation cursors and shows
+parent execution associations, provider/model identity, timestamps/duration, errors,
+artifact IDs and paginated stored events. The shell owns selected task identity.
+Project/thread/task changes drop stale reads and notification subscriptions are disposed.
+Task metadata uses 12px system tokens. No extra route, shell or dependency was added.
+
+Commands ran from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | 634 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Final production build and typecheck passed |
+| `pnpm check:renderer-chunks` | Passed; eager JS 1,131,037 bytes across 6 files |
+| `pnpm test:renderer` | Parallel run: 42 passed, 2 existing window/anchor tests timed out |
+| `node --test --test-concurrency=1 tests/renderer/` | 44 passed, 0 failed before the final pagination test addition |
+| `node --test tests/renderer/research-tasks.test.mjs` | Final 8 passed, 0 failed including added task pagination |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12 passed, zero renderer errors, exit 0 |
+| `git diff --check` | Passed |
+
+The parallel renderer failures were transcript anchor and settings dialog focus timeouts;
+their unchanged checks passed with serialized test files. The new renderer suite first
+failed because its audit helper was evaluated as a function without invocation; corrected
+the invocation and retained the cut=0 assertion. No production check was relaxed.
+
+Logs: `.artifacts/research-optimization/pr02c-ui-*.log`. Real Electron screenshots and
+four light/dark assistant/drawer audits are in `.artifacts/research-optimization/task-ui/`;
+each audit reports cut=0 and hidden=0. The isolated smoke uses a localhost stub Provider.
+No paid model requests or tracing exports. Artifact opening/inspection belongs to X-UI.

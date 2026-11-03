@@ -6,7 +6,7 @@ import { menuPages } from './surfaces';
 import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
 import { researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema } from './schemas/research-tasks';
 import { researchTaskForChatRequestSchema, researchTaskDiagnosticsSchema } from './schemas/research-task-diagnostics';
-import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskUpdatedSchema } from './schemas/research-tasks';
+import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskUpdatedSchema, researchTaskListRequestSchema, researchTaskListPageSchema } from './schemas/research-tasks';
 
 import {
   agentCapabilityPreviewRequestSchema,
@@ -427,6 +427,7 @@ export const ipcRegistry = {
     request({ key: 'researchTaskPause', channel: 'roc:research:task-pause', domain: 'research', method: 'pauseTask', kind: 'plugin', capabilityName: 'research.task.pause', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
     request({ key: 'researchTaskContinue', channel: 'roc:research:task-continue', domain: 'research', method: 'continueTask', kind: 'plugin', capabilityName: 'research.task.continue', inputTransform: first, contract: methodContract(oneArg(researchTaskContinueRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchTaskRestoreApproval', channel: 'roc:research:task-restore-approval', domain: 'research', method: 'restoreTaskApproval', kind: 'plugin', capabilityName: 'research.task.restoreApproval', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskList', channel: 'roc:research:task-list', domain: 'research', method: 'listTasks', kind: 'plugin', capabilityName: 'research.task.list', inputTransform: first, contract: methodContract(oneArg(researchTaskListRequestSchema), researchTaskListPageSchema) }),
     request({ key: 'researchTaskDiagnostics', channel: 'roc:research:task-diagnostics', domain: 'research', method: 'getTaskDiagnostics', kind: 'plugin', capabilityName: 'research.task.diagnostics', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskDiagnosticsSchema) }),
     request({ key: 'researchTaskForChat', channel: 'roc:research:task-for-chat', domain: 'research', method: 'getTaskForChat', kind: 'plugin', capabilityName: 'research.task.forChat', inputTransform: first, contract: methodContract(oneArg(researchTaskForChatRequestSchema), researchTaskDiagnosticsSchema.nullable()) }),
     request({ key: 'researchTaskEvents', channel: 'roc:research:task-events', domain: 'research', method: 'getTaskEvents', kind: 'plugin', capabilityName: 'research.task.events', inputTransform: first, contract: methodContract(oneArg(researchTaskEventsRequestSchema), researchTaskEventsPageSchema) }),

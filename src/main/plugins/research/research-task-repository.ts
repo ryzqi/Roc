@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import {
-  researchTaskSchema, researchTaskExecutionSchema, researchTaskEventSchema, researchTaskEventsPageSchema,
+  researchTaskSchema, researchTaskExecutionSchema, researchTaskEventSchema, researchTaskEventsPageSchema, researchTaskListPageSchema,
   type ResearchTask, type ResearchTaskExecution
 } from '../../../shared/schemas/research-tasks';
 import type { ResearchStageRun } from '../../../shared/types';
@@ -26,6 +26,22 @@ export class ResearchTaskRepository {
     const task = researchTaskSchema.parse(JSON.parse(row.snapshot_json));
     if (task.projectId !== projectId) throw new Error('research_task_project_mismatch');
     return task;
+  }
+
+  list(request: { projectId: string; afterTaskId: string | null; limit: number }) {
+    let cursor: number | null = null;
+    if (request.afterTaskId !== null) {
+      this.get(request.afterTaskId, request.projectId);
+      cursor = (this.db.prepare('SELECT rowid FROM research_tasks WHERE id = ?')
+        .get(request.afterTaskId) as { rowid: number }).rowid;
+    }
+    const rows = this.db.prepare(`SELECT snapshot_json FROM research_tasks
+      WHERE project_id = ? AND (? IS NULL OR rowid < ?) ORDER BY rowid DESC LIMIT ?`)
+      .all(request.projectId, cursor, cursor, request.limit + 1) as Array<{ snapshot_json: string }>;
+    const tasks = rows.slice(0, request.limit).map(row => researchTaskSchema.parse(JSON.parse(row.snapshot_json)));
+    return researchTaskListPageSchema.parse({
+      tasks, nextTaskId: tasks.at(-1)?.id ?? request.afterTaskId, hasMore: rows.length > request.limit
+    });
   }
 
   findExecution(kind: ResearchTaskExecution['kind'], executionId: string, projectId: string): ResearchTaskExecution | null {

@@ -9,6 +9,7 @@ import { setDefaultModel } from '../settings/settings-store';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { AssistantComposer, type ComposerModel, type ComposerSkill } from './composer';
+import { ResearchTaskProgress } from './ResearchTaskProgress';
 import {
   clearAssistantComposerDraft,
   migrateAssistantComposerDraft,
@@ -87,6 +88,7 @@ export type AssistantPanelProps = {
    */
   threadId: string | null;
   onThreadIdChange: (threadId: string | null) => void;
+  onOpenTask: (taskId: string) => void;
   /** Bound workspace path, so a run is scoped to the directory the user is looking at. */
   workspacePath: string | null;
   projectName: string | null;
@@ -113,6 +115,7 @@ export function AssistantPanel({
   projectId,
   threadId,
   onThreadIdChange,
+  onOpenTask,
   workspacePath,
   projectName,
   stageLabel = null,
@@ -375,6 +378,11 @@ export function AssistantPanel({
           threadId={threadId}
           runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'}
         />
+      )}
+      {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
+        <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`}
+          client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
+          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} />
       )}
     </div>
   );

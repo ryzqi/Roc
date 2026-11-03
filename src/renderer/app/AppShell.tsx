@@ -120,6 +120,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   }, []);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
+  const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
   /**
    * A prompt handed to the assistant's composer by the management drawer (P9/T9.1).
    *
@@ -360,6 +361,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       client,
       projectId: route.projectId,
       workspacePath: boundWorkspace.path,
+      researchTaskId: researchTaskSelection?.projectId === route.projectId ? researchTaskSelection.taskId : null,
+      onSelectResearchTask: (taskId) => {
+        const projectId = routeRef.current.projectId;
+        if (projectId === null) throw new Error('research_task_project_required');
+        setResearchTaskSelection({ projectId, taskId });
+      },
       onOpenThread: (threadId) => {
         setAssistantThreadId(threadId);
         setManagementOpen(false);
@@ -378,7 +385,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         navigate({ ...routeRef.current, page: 'settings' });
       }
     }),
-    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection]
+    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection, researchTaskSelection]
   );
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =
@@ -709,6 +716,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   projectId={route.projectId}
                   threadId={assistantThreadId}
                   onThreadIdChange={setAssistantThreadId}
+                  onOpenTask={(taskId) => {
+                    if (route.projectId === null) throw new Error('research_task_project_required');
+                    setResearchTaskSelection({ projectId: route.projectId, taskId });
+                    openManagementSection('tasks');
+                  }}
                   workspacePath={boundWorkspace.path}
                   projectName={projectName}
                   composerSeed={assistantSeed}

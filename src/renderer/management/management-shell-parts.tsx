@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
 import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
+import { ResearchTasksSection } from './sections/ResearchTasksSection';
 import { McpSection } from './sections/McpSection';
 import { MemorySection } from './sections/MemorySection';
 import { SkillsSection } from './sections/SkillsSection';
@@ -149,7 +150,7 @@ export function ManagementSectionBody({
       section = <McpSectionContent scope={scope} />;
       break;
     case 'tasks':
-      section = <TasksSectionContent />;
+      section = <TasksSectionContent scope={scope} />;
       break;
   }
 
@@ -182,9 +183,17 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   return store === null ? <ManagementSectionLoading /> : <McpSection scope={scope} store={store} />;
 }
 
-function TasksSectionContent(): ReactNode {
+function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
-  return store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />;
+  return (
+    <div className="grid gap-4">
+      {scope.projectId === null ? null : (
+        <ResearchTasksSection key={scope.projectId} client={scope.client} projectId={scope.projectId}
+          selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} />
+      )}
+      {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}
+    </div>
+  );
 }
 
 function ManagementSectionLoading(): React.JSX.Element {

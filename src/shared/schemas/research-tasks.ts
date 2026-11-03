@@ -40,6 +40,13 @@ export const researchTaskExecutionSchema = z.object({
 export type ResearchTask = z.infer<typeof researchTaskSchema>;
 export type ResearchTaskExecution = z.infer<typeof researchTaskExecutionSchema>;
 
+export const researchTaskListRequestSchema = z.object({
+  projectId: id, afterTaskId: id.nullable(), limit: z.number().int().min(1).max(100)
+}).strict();
+export const researchTaskListPageSchema = z.object({
+  tasks: z.array(researchTaskSchema), nextTaskId: id.nullable(), hasMore: z.boolean()
+}).strict();
+
 export const researchTaskEventSchema = z.object({
   sequence: z.number().int().positive(),
   taskId: id,
