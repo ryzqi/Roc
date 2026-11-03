@@ -58,6 +58,32 @@ const columnNames = (db, table) =>
 const ledgerVersions = (db) =>
   db.prepare('SELECT version FROM schema_migrations ORDER BY version').pluck().all();
 
+test('table replacement validates foreign keys before committing schema and data together', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  const base = [{version: 1, name: 'parent_and_child', sql: `
+    CREATE TABLE parents(id TEXT PRIMARY KEY, obsolete TEXT);
+    CREATE TABLE children(id TEXT PRIMARY KEY, parent_id TEXT REFERENCES parents(id) ON DELETE CASCADE);`}];
+  const replacement = {version: 2, name: 'parent_replacement', sql: `
+    CREATE TABLE parents_next(id TEXT PRIMARY KEY);
+    INSERT INTO parents_next SELECT id FROM parents;
+    DROP TABLE parents;
+    ALTER TABLE parents_next RENAME TO parents;`,
+    rebuild: {dataVersion: 'v1', migrate: database => database.prepare('DELETE FROM parents WHERE id=?').run('parent')}};
+  try {
+    applyDatabaseMigrations(db, {dbName: 'core', migrations: base});
+    db.prepare('INSERT INTO parents VALUES (?,?)').run('parent', 'kept during rollback');
+    db.prepare('INSERT INTO children VALUES (?,?)').run('child', 'parent');
+    assert.throws(() => applyDatabaseMigrations(db, {dbName: 'core', migrations: [...base, replacement]}),
+      /database_migration_foreign_key_invalid/u);
+    assert.deepEqual(columnNames(db, 'parents'), ['id', 'obsolete']);
+    assert.equal(db.prepare('SELECT COUNT(*) FROM children').pluck().get(), 1);
+    assert.deepEqual(ledgerVersions(db), [1]);
+    assert.equal(db.pragma('foreign_keys', {simple: true}), 1);
+    assert.deepEqual(db.pragma('foreign_key_check'), []);
+  } finally { db.close(); }
+});
+
 test('空库从头跑完全部迁移', () => {
   const db = new Database(':memory:');
   applyDatabaseMigrations(db, {

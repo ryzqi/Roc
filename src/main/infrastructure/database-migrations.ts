@@ -7,6 +7,8 @@ export type RocDatabaseMigration = {
   version: number;
   name: string;
   sql: string;
+  /** Table replacement must run with FK enforcement off, then validate before commit. */
+  rebuild?: { dataVersion: string; migrate: (db: DatabaseConnection) => void };
 };
 
 export type RocSchemaMetadata = {
@@ -67,11 +69,11 @@ export function applyDatabaseMigrations(
   if (!hasSchemaObjects && applied.size === 0) {
     const applyAll = db.transaction(() => {
       for (const migration of input.migrations) {
-        db.exec(migration.sql);
+        executeMigration(db, migration);
       }
       writeCurrentMigrationRows(db, input.dbName, input.migrations, now);
     });
-    applyAll();
+    applyMigrationBatch(db, input.migrations, applyAll);
     return;
   }
 
@@ -82,7 +84,7 @@ export function applyDatabaseMigrations(
   const pending = input.migrations.filter((migration) => !applied.has(migration.version));
   const applyPending = db.transaction(() => {
     for (const migration of pending) {
-      db.exec(migration.sql);
+      executeMigration(db, migration);
     }
     writeCurrentMigrationRows(db, input.dbName, input.migrations, now);
     if (!schemaObjectsMatch(db, expectedObjects)) {
@@ -90,7 +92,27 @@ export function applyDatabaseMigrations(
       throw new Error('database_schema_rebuild_required');
     }
   });
-  applyPending();
+  applyMigrationBatch(db, pending, applyPending);
+}
+
+function executeMigration(db: DatabaseConnection, migration: RocDatabaseMigration): void {
+  db.exec(migration.sql);
+  migration.rebuild?.migrate(db);
+}
+
+function applyMigrationBatch(db: DatabaseConnection, migrations: readonly RocDatabaseMigration[], apply: () => void): void {
+  if (!migrations.some(migration => migration.rebuild !== undefined)) { apply(); return; }
+  if (db.inTransaction) throw new Error('database_migration_transaction_active');
+  const foreignKeys = db.pragma('foreign_keys', {simple: true}) as number;
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      apply();
+      if ((db.pragma('foreign_key_check') as unknown[]).length !== 0) throw new Error('database_migration_foreign_key_invalid');
+    })();
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys}`);
+  }
 }
 
 export function readSchemaMetadata(db: DatabaseConnection, dbName: RocLogicalDatabaseName): RocSchemaMetadata | null {
@@ -290,7 +312,8 @@ function writeMetadata(
 }
 
 function checksumMigration(migration: RocDatabaseMigration): string {
-  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}`);
+  const dataVersion = migration.rebuild === undefined ? '' : `\nrebuild:${migration.rebuild.dataVersion}`;
+  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}${dataVersion}`);
 }
 
 function checksumText(value: string): string {

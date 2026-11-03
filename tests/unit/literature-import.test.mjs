@@ -21,6 +21,7 @@ before(async () => {
     export { ResearchTaskRepository } from './src/main/plugins/research/research-task-repository';
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
+    export { normalizeResearchArxiv, normalizeResearchPmid, literatureIdentity } from './src/main/plugins/research/literature-identity';
     export { fuseLiterature, literatureRanking } from './src/main/plugins/research/literature-fusion';
     export { LiteratureResponseCache } from './src/main/plugins/research/literature-response-cache';
     export { LiteratureProviderGovernor, createLiteratureProviderGovernor } from './src/main/plugins/research/literature-provider-governor';
@@ -121,7 +122,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 9);
+    assert.equal(result.schemaVersion, 10);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -140,7 +141,8 @@ test('fused candidate snapshots retain score, conflicts and original records thr
 function setup(options = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  api.applyResearchDatabaseSchema(db, () => timestamp);
+  if (options.migrations !== undefined) api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: options.migrations});
+  else api.applyResearchDatabaseSchema(db, () => timestamp);
   const agentDb = new Database(':memory:');
   api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations });
   const repo = new api.ResearchRepository(db, new api.ResearchTaskRepository(agentDb), () => timestamp);
@@ -384,7 +386,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 9);
+    assert.equal(result.schemaVersion, 10);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -1233,7 +1235,7 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 9, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 10, strategy: null, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);
@@ -1243,4 +1245,234 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   controller.abort();
   await assert.rejects(tools[1].invoke({ searchId: 'search_fixture' }));
   assert.equal(calls.length, 2);
+});
+
+test('Europe PMC namespaces remain distinct while MED records and PubMed share the real PMID', async () => {
+  const search = new api.LiteratureSearchService(async url => {
+    const medOnly = new URL(url).searchParams.get('query').includes('SRC:MED');
+    return Response.json({resultList: {result: medOnly ? [{id: '123', source: 'MED', title: 'MED article'}] :
+      [{id: '123', source: 'MED', title: 'MED article'}, {id: '123', source: 'PMC', title: 'Different PMC record'}]}});
+  }, governanceFixture().governor);
+  try {
+    const result = await search.searchDetailed({query: 'namespace', sources: ['pubmed', 'europe_pmc'], limit: 5});
+    const candidates = api.fuseLiterature(result.records);
+    assert.equal(api.fuseLiterature(result.records.filter(item => item.record.source === 'europe_pmc')).length, 2);
+    assert.equal(candidates.length, 2);
+    const med = candidates.find(candidate => candidate.identity === 'pmid:123');
+    assert.equal(med.origins.length, 2);
+    assert.deepEqual(med.contributions.map(contribution => contribution.source), ['pubmed', 'europe_pmc']);
+    assert.equal(candidates.find(candidate => candidate.identity === 'europe_pmc:PMC:123').origins.length, 1);
+    assert.deepEqual(result.records.map(item => item.record.externalId), ['123', 'MED:123', 'PMC:123']);
+  } finally { await search.shutdown(); }
+});
+
+test('arXiv revisions retain original records, one source contribution and observed version relationships', () => {
+  const records = ['http://arxiv.org/abs/2601.00001v1', 'https://arxiv.org/abs/2601.00001v3'].map((externalId, index) => ({
+    record: {...record(`arxiv-${index}`, null), source: 'arxiv', externalId, id: externalId}, rank: index + 1
+  }));
+  const candidates = api.fuseLiterature(records);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].identity, 'arxiv:2601.00001');
+  assert.equal(candidates[0].score, 1 / 61);
+  assert.deepEqual(candidates[0].origins.map(origin => origin.record), records.map(item => item.record));
+  assert.equal(candidates[0].versionRelations.length, 1);
+  assert.equal(candidates[0].versionRelations[0].older.version, 1);
+  assert.equal(candidates[0].versionRelations[0].newer.version, 3);
+  assert.deepEqual(api.fuseLiterature(records.toReversed()), candidates);
+});
+
+test('arXiv identifiers enforce date-specific widths, exact revisions and original archive notation', () => {
+  for (const [value, expected] of [
+    ['arXiv:0704.0001', {id: '0704.0001', version: null}],
+    ['1412.9999v12', {id: '1412.9999', version: 12}],
+    ['https://arxiv.org/abs/1501.00001v2', {id: '1501.00001', version: 2}],
+    ['HTTP://ARXIV.ORG/abs/HEP-TH/9107001v1', {id: 'hep-th/9107001', version: 1}],
+    ['arXiv:math.gt/0301001', {id: 'math.GT/0301001', version: null}],
+    ['cs.SE/0703001v3', {id: 'cs.SE/0703001', version: 3}]
+  ]) assert.deepEqual(api.normalizeResearchArxiv(value), expected);
+  for (const invalid of ['0703.0001', '1412.00001', '1501.0001', '2600.00001', '2613.00001',
+    '2601.00000', 'hep-th/9106001', 'math.GT/0704001', 'hep-th/9107000', '2601.00001v0',
+    '2601.00001v9007199254740992', 'https://arxiv.org/abs/2601.00001?download=1',
+    'https://user@arxiv.org/abs/2601.00001', 'https://other.test/abs/2601.00001']) {
+    assert.throws(() => api.normalizeResearchArxiv(invalid), /research_arxiv_identifier_invalid/u, invalid);
+  }
+});
+
+test('PMID spellings canonicalize without numerical rounding; conflicting DOIs remain distinct', () => {
+  for (const spelling of ['123', 'PMID:123', 'https://pubmed.ncbi.nlm.nih.gov/123/']) assert.equal(api.normalizeResearchPmid(spelling), '123');
+  assert.equal(api.normalizeResearchPmid('9007199254740993'), '9007199254740993');
+  for (const invalid of ['0', '00123', '1e3', '123/x', 'https://pubmed.ncbi.nlm.nih.gov/123/?x=1']) {
+    assert.throws(() => api.normalizeResearchPmid(invalid), /research_pmid_identifier_invalid/u);
+  }
+  const samePmid = [
+    {...record('pmid-a'), source: 'pubmed', externalId: '123'},
+    {...record('pmid-b'), source: 'europe_pmc', externalId: 'MED:123'}
+  ];
+  assert.equal(api.fuseLiterature(rankedRecords(samePmid)).length, 2);
+  const versions = ['2601.00001v1', '2601.00001v2'].map((externalId, index) => ({...record(`version-${index}`), source: 'arxiv', externalId}));
+  assert.equal(api.fuseLiterature(rankedRecords(versions)).length, 2, 'different DOIs are not an implicit publication relation');
+  const withSharedDoi = api.fuseLiterature(rankedRecords(versions.map(value => ({...value, doi: '10.1234/shared-version'}))));
+  assert.equal(withSharedDoi.length, 1);
+  assert.equal(withSharedDoi[0].versionRelations.length, 1);
+});
+
+test('PubMed search rejects a non-MED provider record before caching or candidate publication', async () => {
+  let calls = 0;
+  const search = new api.LiteratureSearchService(async () => {
+    calls++;
+    return Response.json({resultList: {result: [{source: 'PMC', id: '123', title: 'Wrong PubMed namespace'}]}});
+  }, governanceFixture().governor);
+  try {
+    for (let index = 0; index < 2; index++) {
+      const result = await search.searchDetailed({query: 'non MED', sources: ['pubmed'], limit: 1});
+      assert.equal(result.status, 'failed');
+      assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+      assert.equal(result.records.length, 0);
+    }
+    assert.equal(calls, 2, 'invalid metadata cannot enter the response cache');
+  } finally { await search.shutdown(); }
+});
+
+test('candidate import retains all observed arXiv revisions after the search expires and skips archived identity', async () => {
+  const originals = ['http://arxiv.org/abs/2601.00001v1', 'https://arxiv.org/abs/2601.00001v3'].map((externalId, index) =>
+    ({...record(`revision-${index}`, null), source: 'arxiv', externalId}));
+  const f = setup({records: originals, prepare: async original => {
+    const metadata = {...original, title: original.title.toUpperCase(), authors: ['SMITH, Alice']};
+    return {metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())};
+  }});
+  try {
+    const {result, entry} = await candidate(f);
+    const imported = await f.run(() => f.service.add({entries: [entry], requestId: 'all-revisions'}));
+    assert.equal(imported.counts.created, 1);
+    const id = imported.items[0].libraryItemId;
+    assert.deepEqual(f.repo.library.get(id).sources.map(source => source.providerRecord), originals);
+    f.setTime('2026-11-03T00:00:00.000Z');
+    assert.throws(() => f.run(() => f.service.readSearch({searchId: result.searchId})), /literature_search_expired/u);
+    const saved = f.repo.library.get(id);
+    assert.equal(saved.metadata.title, originals[0].title.toUpperCase());
+    assert.deepEqual(saved.metadata.authors, ['SMITH, Alice']);
+    assert.deepEqual(saved.sources.map(source => source.providerRecord), originals);
+    assert.deepEqual(api.fuseLiterature(rankedRecords(saved.sources.map(source => source.providerRecord)))[0].versionRelations,
+      result.candidates[0].versionRelations);
+    f.repo.library.archive(id, saved.revision, true);
+    const next = await candidate(f);
+    assert.equal(next.result.candidates[0].matchedLibraryItemId, id);
+    assert.equal(next.result.candidates[0].archived, true);
+    const skipped = await f.run(() => f.service.add({entries: [next.entry], requestId: 'skip-revisions'}));
+    assert.equal(skipped.counts.skippedArchived, 1);
+    assert.equal(f.repo.library.get(id).archived, true);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 1);
+  } finally { f.close(); }
+});
+
+test('one failing alternate source preparation rolls back the complete candidate import', async () => {
+  const sources = [record('primary'), {...record('alternate', '10.1234/primary'), source: 'openalex'}];
+  const f = setup({records: sources, prepare: async metadata => {
+    if (metadata.source === 'openalex') throw new Error('research_bibliography_response_count_invalid');
+    return {metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())};
+  }});
+  try {
+    const {entry} = await candidate(f);
+    const imported = await f.run(() => f.service.add({entries: [entry], requestId: 'alternate-failure'}));
+    assert.equal(imported.counts.failed, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_knowledge_documents').pluck().get(), 0);
+  } finally { f.close(); }
+});
+
+test('bibliography preparation cannot change an approved candidate identity', async () => {
+  const f = setup({prepare: async original => {
+    const metadata = {...original, doi: '10.1234/another-paper'};
+    return {metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())};
+  }});
+  try {
+    const {entry} = await candidate(f);
+    const imported = await f.run(() => f.service.add({entries: [entry], requestId: 'changed-identity'}));
+    assert.equal(imported.items[0].errorCode, 'literature_import_identity_changed');
+    assert.equal(imported.counts.failed, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 0);
+  } finally { f.close(); }
+});
+
+test('manual library import joins MED and PubMed identities while retaining separate original observations', () => {
+  const f = setup();
+  try {
+    const records = [
+      {...record('pubmed-observation', null), source: 'pubmed', externalId: 'PMID:123'},
+      {...record('med-observation', null), source: 'europe_pmc', externalId: 'MED:123'}
+    ];
+    const entries = records.map(metadata => ({metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}));
+    const imported = f.repo.library.import(entries, f.project.id);
+    assert.equal(imported.createdCount, 1);
+    assert.equal(imported.duplicateCount, 1);
+    assert.deepEqual(imported.items[0].sources.map(source => source.metadata), records);
+    assert.equal(f.repo.library.findByIdentity('pmid:123').id, imported.items[0].id);
+  } finally { f.close(); }
+});
+
+function insertHistoricalLibrary(f, id, metadata) {
+  const bibliography = api.bibliographyFromRecord(metadata, new Set());
+  const identity = metadata.doi === null ? `${metadata.source}:${metadata.externalId}` : `doi:${metadata.doi}`;
+  f.db.prepare(`INSERT INTO research_library VALUES (?,?,?,?,?,1,0,?,?)`)
+    .run(id, identity, JSON.stringify(metadata), JSON.stringify(bibliography),
+      JSON.stringify([{metadata, bibliography}]), timestamp, timestamp);
+  f.db.prepare('INSERT INTO research_library_projects VALUES (?,?)').run(id, f.project.id);
+}
+
+test('DB8 migrates actual source identities once, keeps namespace provenance and project links', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
+  const observations = [
+    {...record('old-arxiv', null), source: 'arxiv', externalId: 'http://arxiv.org/abs/2601.00001v2'},
+    {...record('old-pubmed', null), source: 'pubmed', externalId: '123'},
+    {...record('old-pmc', null), source: 'europe_pmc', externalId: '123', url: 'https://europepmc.org/article/PMC/123'}
+  ];
+  try {
+    observations.forEach((metadata, index) => insertHistoricalLibrary(f, `history-${index}`, metadata));
+    api.applyResearchDatabaseSchema(f.db);
+    const identities = ['arxiv:2601.00001', 'pmid:123', 'europe_pmc:PMC:123'];
+    identities.forEach((identity, index) => {
+      const saved = f.repo.library.findByIdentity(identity);
+      assert.equal(saved.id, `history-${index}`);
+      assert.deepEqual(saved.projectIds, [f.project.id]);
+      assert.deepEqual(saved.sources[0].metadata, observations[index]);
+      assert.equal(saved.sources[0].providerRecord, null);
+    });
+    assert.equal(f.repo.library.get('history-2').metadata.externalId, 'PMC:123');
+    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+    const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
+    api.applyResearchDatabaseSchema(f.db);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 8);
+  } finally { f.close(); }
+});
+
+test('DB8 preserves colliding historical rows and refuses automatic library reconciliation', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
+  try {
+    for (const version of [1, 2]) insertHistoricalLibrary(f, `collision-${version}`,
+      {...record(`collision-${version}`, null), source: 'arxiv', externalId: `http://arxiv.org/abs/2601.00001v${version}`});
+    api.applyResearchDatabaseSchema(f.db);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 2);
+    assert.throws(() => f.repo.library.findByIdentity('arxiv:2601.00001'), /research_literature_identity_ambiguous/u);
+    const metadata = {...record('new-collision', null), source: 'arxiv', externalId: '2601.00001v3'};
+    assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
+      /research_literature_identity_ambiguous/u);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+  } finally { f.close(); }
+});
+
+test('DB8 refuses missing historical namespace evidence and restores schema, rows, links and FK setting', () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
+  try {
+    insertHistoricalLibrary(f, 'unresolved', {...record('unresolved', null), source: 'europe_pmc', externalId: '123', url: null});
+    const rows = f.db.prepare('SELECT * FROM research_library').all();
+    assert.throws(() => api.applyResearchDatabaseSchema(f.db), /research_literature_migration_namespace_missing/u);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), rows);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 1);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 7);
+    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+  } finally { f.close(); }
 });

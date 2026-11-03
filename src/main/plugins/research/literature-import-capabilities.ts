@@ -22,6 +22,8 @@ export function registerLiteratureImportCapabilities(context: RocPluginContext, 
         if (code === 'import_request_conflict') throw new RocDomainError({ code, message: '请求标识已用于其他导入，请使用新的请求标识。', category: 'conflict', retryable: false });
         if (/^literature_(search|candidate|import)_not_found$/u.test(code)) throw new RocDomainError({ code, message: '候选或导入操作不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false });
         if (code === 'literature_search_expired') throw new RocDomainError({ code, message: '检索候选已过期，请重新检索。', category: 'validation', retryable: false });
+        if (code === 'research_literature_identity_ambiguous') throw new RocDomainError({code,
+          message: '同一文献身份对应多个文库条目，请先人工核对并整理。', category: 'conflict', retryable: false});
         throw error;
       }
     });

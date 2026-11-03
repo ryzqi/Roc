@@ -12,7 +12,8 @@ export const researchBibliographyEntrySchema = z.object({
 
 export const researchLibraryItemSchema = z.object({
   id: z.string(), metadata: researchLiteratureSchema, bibliography: researchBibliographyEntrySchema,
-  sources: z.array(z.object({ metadata: researchLiteratureSchema, bibliography: researchBibliographyEntrySchema }).strict()), projectIds: z.array(z.string()),
+  sources: z.array(z.object({ metadata: researchLiteratureSchema, bibliography: researchBibliographyEntrySchema,
+    providerRecord: researchLiteratureSchema.nullable() }).strict()), projectIds: z.array(z.string()),
   revision: z.number().int().positive(), archived: z.boolean(), createdAt: z.string(), updatedAt: z.string()
 }).strict();
 export const researchLibraryListRequestSchema = z.object({

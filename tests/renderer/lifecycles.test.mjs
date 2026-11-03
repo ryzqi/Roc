@@ -132,7 +132,7 @@ after(async () => {
 test('literature search action keeps page failures visible and sends a bounded project-scoped request', async () => {
   const outcome = await page.evaluate(async () => {
     window.literatureCalls = [];
-    const partial = {schemaVersion: 9, strategy: null, status: 'partial', searchId: 'partial-search',
+    const partial = {schemaVersion: 10, strategy: null, status: 'partial', searchId: 'partial-search',
       sources: [{source: 'crossref', status: 'partial', errorCode: 'literature_provider_response_invalid',
         stopReason: 'failed', pages: [{position: {kind: 'offset', value: 0}, cache: {state: 'hit'}},
           {position: {kind: 'offset', value: 1}, coverage: {state: 'failed'}}]}]};
@@ -148,7 +148,7 @@ test('literature search action keeps page failures visible and sends a bounded p
     const failed = await latest.searchLiterature('second query', ['openalex'], 1);
     return {result, failed, calls: literatureCalls};
   });
-  assert.equal(outcome.result.result.schemaVersion, 9);
+  assert.equal(outcome.result.result.schemaVersion, 10);
   assert.equal(outcome.result.result.status, 'partial');
   assert.equal(outcome.result.result.sources[0].pages[1].coverage.state, 'failed');
   assert.deepEqual(outcome.failed, {ok: false, message: 'search audit refused'});

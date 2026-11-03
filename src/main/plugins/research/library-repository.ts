@@ -35,8 +35,10 @@ export class ResearchLibraryRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
   findByIdentity(identity: string): LibraryItem | null {
-    const row = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ?').get(identity) as { id: string } | undefined;
-    return row === undefined ? null : this.get(row.id);
+    const rows = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ? ORDER BY id LIMIT 2')
+      .all(identity) as Array<{id: string}>;
+    if (rows.length > 1) throw new Error('research_literature_identity_ambiguous');
+    return rows.length === 0 ? null : this.get(rows[0].id);
   }
 
   flushIndex(): void { this.research.flushKnowledgeFromSource(); }
@@ -74,7 +76,7 @@ export class ResearchLibraryRepository {
       .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
-  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry }[], projectId: string | null,
+  import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry; providerRecord?: ResearchLiterature }[], projectId: string | null,
     options: { flush?: boolean; notify?: boolean; skipArchived?: boolean } = {}): {
     items: LibraryItem[]; createdCount: number; duplicateCount: number;
   } {
@@ -85,7 +87,10 @@ export class ResearchLibraryRepository {
       metadata.doi = metadata.doi === null ? null : normalizeResearchDoi(metadata.doi);
       bibliography.doi = bibliography.doi === null ? null : normalizeResearchDoi(bibliography.doi);
       if (metadata.doi !== bibliography.doi || metadata.title !== bibliography.title) throw new Error('research_library_metadata_mismatch');
-      return { metadata, bibliography, identity: literatureIdentity(metadata) };
+      const identity = literatureIdentity(metadata);
+      const providerRecord = entry.providerRecord === undefined ? null : researchLiteratureSchema.parse(entry.providerRecord);
+      if (providerRecord !== null && literatureIdentity(providerRecord) !== identity) throw new Error('research_library_metadata_mismatch');
+      return { metadata, bibliography, identity, providerRecord };
     });
     const imported = this.db.transaction(() => {
       let createdCount = 0;
@@ -93,24 +98,25 @@ export class ResearchLibraryRepository {
       const ids: string[] = [];
       const restoredIds = new Set<string>();
       for (const entry of parsed) {
-        const existing = this.db.prepare('SELECT id FROM research_library WHERE identity_key = ?').get(entry.identity) as { id: string } | undefined;
+        const existing = this.findByIdentity(entry.identity);
         const timestamp = this.now();
         let id: string;
-        if (existing === undefined) {
+        if (existing === null) {
           id = `paper_${randomUUID()}`;
           this.db.prepare(`INSERT INTO research_library (id,identity_key,metadata_json,bibliography_json,sources_json,revision,archived,created_at,updated_at)
             VALUES (?,?,?,?,?,1,0,?,?)`).run(id, entry.identity, JSON.stringify(entry.metadata), JSON.stringify(entry.bibliography),
-              JSON.stringify([{ metadata: entry.metadata, bibliography: entry.bibliography }]), timestamp, timestamp);
+              JSON.stringify([{ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord }]), timestamp, timestamp);
           createdCount += 1;
         } else {
           id = existing.id;
-          const current = this.get(id);
+          const current = existing;
           if (current.archived && options.skipArchived === true) throw new Error('research_library_item_archived');
           if (current.archived) restoredIds.add(id);
           const sources = [...current.sources];
           const fingerprint = bibliographyIdentity(entry.bibliography);
-          if (!sources.some((source) => sameMetadata(source.metadata, entry.metadata) && bibliographyIdentity(source.bibliography) === fingerprint)) {
-            sources.push({ metadata: entry.metadata, bibliography: entry.bibliography });
+          if (!sources.some((source) => sameMetadata(source.metadata, entry.metadata) && bibliographyIdentity(source.bibliography) === fingerprint
+              && JSON.stringify(source.providerRecord) === JSON.stringify(entry.providerRecord))) {
+            sources.push({ metadata: entry.metadata, bibliography: entry.bibliography, providerRecord: entry.providerRecord });
           }
           const metadata = { ...current.metadata,
             authors: current.metadata.authors.length === 0 ? entry.metadata.authors : current.metadata.authors,

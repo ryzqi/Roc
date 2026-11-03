@@ -7,7 +7,7 @@ import { researchLiteratureSchema } from '../../../shared/schemas/research';
 import { literatureSearchInputSchema, type LiteraturePagePosition, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature } from '../../../shared/types';
-import { normalizeResearchDoi } from './literature-identity';
+import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import { fuseLiterature, literatureSourcePriority, type RankedLiteratureRecord } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
@@ -107,6 +107,7 @@ export class LiteratureSearchService {
         providerSignal.throwIfAborted();
         const found = await this.requests.run(context, () => this.searchSource(source, request.query, request.limit, position));
         const valid = found.map(record => researchLiteratureSchema.parse(record));
+        for (const record of valid) literatureIdentity(record);
         if (valid.length > request.limit) throw new Error('literature_provider_response_invalid');
         if (context.coverage === null || context.url === null) throw new Error('literature_provider_coverage_missing');
         providerSignal.throwIfAborted();
@@ -132,7 +133,8 @@ export class LiteratureSearchService {
         this.lifetime.signal.throwIfAborted();
         signal?.throwIfAborted();
         const rateLimited = error instanceof ProviderError && error.status === 429;
-        const invalidPayload = error instanceof z.ZodError || error instanceof Error && error.message === 'literature_provider_response_invalid';
+        const invalidPayload = error instanceof z.ZodError || error instanceof Error &&
+          (error.message === 'literature_provider_response_invalid' || /^research_(?:arxiv|pmid|europe_pmc)_identifier_invalid$/u.test(error.message));
         if (invalidPayload) this.governor.failure(host, null);
         if (context.url !== null) pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: 0, cache: pageCache(context),
           coverage: {state: 'failed', apiHitCount: null, validatedPages: 0, nextPage: null}});
@@ -268,21 +270,24 @@ export class LiteratureSearchService {
     this.observeCoverage(payload.hitCount ?? null, payload.resultList.result.length,
       payload.nextCursorMark === undefined ? null : {kind: 'cursor', value: payload.nextCursorMark});
     const timestamp = this.providerTimestamp();
-    return payload.resultList.result.map((item) => ({
-      id: `${source}:${item.id}`,
-      source,
-      externalId: item.id,
-      doi: optionalResearchDoi(item.doi),
-      title: item.title,
-      authors: item.authorString === undefined ? [] : item.authorString.split(',').map((author) => author.trim()).filter(Boolean),
-      abstract: item.abstractText ?? null,
-      publishedYear: item.pubYear === undefined ? null : Number(item.pubYear),
-      citationCount: item.citedByCount ?? null,
-      url: `https://europepmc.org/article/${item.source}/${item.id}`,
-      openAccessUrl: item.isOpenAccess === 'Y' ? `https://europepmc.org/article/${item.source}/${item.id}` : null,
-      importedAt: timestamp,
-      updatedAt: timestamp
-    }));
+    return payload.resultList.result.map((item) => {
+      if (source === 'pubmed' && item.source !== 'MED') throw new Error('literature_provider_response_invalid');
+      return {
+        id: `${source}:${item.source}:${item.id}`,
+        source,
+        externalId: source === 'pubmed' ? item.id : `${item.source}:${item.id}`,
+        doi: optionalResearchDoi(item.doi),
+        title: item.title,
+        authors: item.authorString === undefined ? [] : item.authorString.split(',').map((author) => author.trim()).filter(Boolean),
+        abstract: item.abstractText ?? null,
+        publishedYear: item.pubYear === undefined ? null : Number(item.pubYear),
+        citationCount: item.citedByCount ?? null,
+        url: `https://europepmc.org/article/${item.source}/${item.id}`,
+        openAccessUrl: item.isOpenAccess === 'Y' ? `https://europepmc.org/article/${item.source}/${item.id}` : null,
+        importedAt: timestamp,
+        updatedAt: timestamp
+      };
+    });
   }
 
   private async getJson(url: string): Promise<unknown> {

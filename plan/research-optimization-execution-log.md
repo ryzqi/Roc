@@ -1161,3 +1161,58 @@ Current official LangChain structured-output and LangGraph interrupt docs were c
 Context7; installed packages remain pinned. Tests execute deterministic local tools and real
 native workers, with no paid model or new live provider request. Reviewed200-task/L2 blockers
 remain unchanged; no scientific-quality claim follows from these engineering tests.
+
+## PR-04.4A — declared scholarly IDs, observed revisions and durable source records
+
+Status: `Verified passing` for this declared-ID increment. PR-04 remains in progress.
+Research DB8, agent DB15, search snapshot10.
+
+Normalize modern and old arXiv IDs with exact observed vN. Four/five-digit sequence rules,
+valid months, historical archive dates and positive safe revision numbers are enforced.
+An unversioned ID retains version:null. Equivalent arXiv revisions contribute once; original
+records/ranks remain in the candidate, and hash-linked version relationships connect only
+adjacent observed revisions. PubMed and Europe PMC MED share PMID; Europe PMC retains all
+other source namespaces. Non-MED PubMed results fail before cache/publication. Distinct DOIs
+stay distinct; no publication/preprint relation is inferred from equal IDs or titles.
+
+Candidate import freezes every distinct provider record. All bibliography preparations must
+succeed without changing identity before one atomic library write. Sources retain the raw
+providerRecord separately from normalized metadata/bibliography, including original hashes
+and observed versions after the preview expires. File/DOI imports and historical observations
+use providerRecord:null when original provider bytes/records were not retained.
+
+DB8 replaces the obsolete unique identity constraint with an indexed canonical identity.
+One-time data migration retains item IDs, bibliography, source metadata, archive state and
+project/attachment references. Europe PMC's historical namespace comes only from the exact
+retained article URL; absent matching evidence aborts and rolls back. Colliding historical
+rows remain separate and automatic lookup/import fails with an actionable conflict.
+There is no old-key fallback scan. Table replacement runs with FK enforcement temporarily
+off outside the transaction, validates all references before commit and restores its prior
+setting. Existing migration checksums remain unchanged; DB8 dataVersion is part of its ledger.
+
+Changed: identity/migration/fusion/search/import/library consumers and failure messages,
+library/search schemas, regression fixtures, renderer snapshot fixture and scoped docs.
+
+Commands from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`
+(also exposed at `/Users/Apple_501/Desktop/Roc/Roc`):
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/literature-import.test.mjs` | Red: MED/PMC namespace collision and arXiv revisions split |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | Initial58/58, expanded67/67 passed |
+| `pnpm test:unit` | Final699/699 passed; raw-provider normalization and identity-change regressions included |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Generated files unchanged; contracts current |
+| `pnpm test:research-p0` | Final fresh build/typecheck and12/12 actual native cases passed |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual Electron hook1/1 passed |
+| `pnpm check:renderer-chunks` | Passed, eager JS1131076bytes/6files |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Application startup/UI12/12, zero renderer errors, exit0 |
+| `git diff --check` | Passed |
+
+Evidence: `.artifacts/research-optimization/pr04-identifiers-*.log`. Tests cover actual DB7→8
+upgrade, repeated migration, missing namespace rollback, colliding row preservation, project
+links, archive refusal, alternate-preparation failure and foreign-key-invalid rollback.
+Current arXiv/NLM identity documentation was verified; pinned better-sqlite3 13.0.3 transaction
+and pragma API docs checked via Context7. No new live literature query, paid model call,
+remote write or real-user database migration. External-ID graph, complete review metadata/UI,
+independent annotated retrieval metrics and all L2 prerequisites remain unfinished.

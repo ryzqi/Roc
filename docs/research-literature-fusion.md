@@ -5,7 +5,7 @@
 
 ## 冻结排序合同
 
-当前快照版本为 9，排序方法为 RRF v1：
+当前快照版本为 10，排序方法为 RRF v1：
 
 ```text
 score(paper) = sum(1 / (60 + source_rank(paper)))
@@ -16,15 +16,29 @@ score(paper) = sum(1 / (60 + source_rank(paper)))
 完成顺序与用户选择来源的顺序不改变排序；改变来源内部排名则会改变贡献。
 同分按规范化文献 identity 的 UTF-16 码元顺序排序，不依赖操作系统 locale。
 
-当前归并依据是规范化 DOI；没有 DOI 时采用来源与外部 ID。标题相同或近似不
-构成归并依据。arXiv/PMID 跨来源别名与预印本/正式版关系属于后续身份工作，
-当前不能声称已经解决。
+当前归并依据首先是规范化 DOI；没有 DOI 时采用规范化 arXiv、PMID 或来源与
+外部 ID。标题相同或近似不构成归并依据。不同 DOI 不因同一个 arXiv/PMID 自动
+合并；OpenAlex/Semantic 外部标识图及预印本/正式版关系仍待后续增量。
+
+arXiv 规范化支持现代 ID、旧 archive/subject ID 和 `/abs/` URL。0704–1412 序号
+为 4 位，1501 起为 5 位，版本必须为正整数。候选保留完整原始 ID 和记录；
+同一 arXiv 的多次修订只贡献一次来源分数。`arxiv_later_version` 关系只连接实际
+观察到的相邻版本及其元数据 hash；v1/v3 不推测 v2，无版本 ID 不推测具体最新版本。
+格式依据 [arXiv identifier](https://info.arxiv.org/help/arxiv_identifier.html)。
+
+PubMed 使用 `pmid:<id>`，Europe PMC 的 MED 来源映射到同一 PMID。其余 Europe
+PMC 记录保留 `<namespace>:<id>`，PMC 与 MED 即使编号相同也不归并。PubMed
+查询返回非 MED 来源会在缓存前失败。PMID 不经浮点转换，依据
+[NLM PubMed help](https://pubmed.ncbi.nlm.nih.gov/help/) 的稳定唯一标识合同。
 
 ## 元数据与审查
 
 主记录按 Crossref、OpenAlex、Semantic Scholar、PubMed、Europe PMC、arXiv 的
-固定顺序选择，同一来源再按 rank 和元数据 hash 选择。此顺序只决定展示和收录的
-元数据，不代表可信度、研究质量或排序权重。
+固定顺序选择，同一来源再按 rank 和元数据 hash 选择。此顺序决定展示及收录的
+主记录，不代表可信度、研究质量或排序权重。收录同时准备所有不同来源观察，
+全部成功后才在一个事务写入文库 `sources`，其中 `providerRecord` 保留规范化
+之前的原始 Provider 记录；不会因候选快照过期丢失修订记录及其原始 hash。
+任何来源准备失败或改变身份均取消该候选的全部写入。
 
 每个候选保存 identity、稳定 candidateId、score、逐来源贡献、全部来源记录、
 元数据 hash、来源 rank 和抓取时间。DOI、标题、作者、年份、引用量与访问 URL
@@ -38,7 +52,16 @@ score(paper) = sum(1 / (60 + source_rank(paper)))
 页面。不能把空结果解释为成功或穷尽检索。
 
 旧版本搜索快照不转换、不补猜测字段。读取不符合当前合同的快照显式失败。
-正式文献、证据和科研历史没有被删除或重写。
+正式文献、证据和科研历史不随候选有效期删除。
+
+科研数据库 8 对文库身份执行一次性迁移。保留条目 ID、书目、原始 `sources`、
+归档状态和项目/附件引用，移除旧唯一身份约束，建立规范身份索引。不同历史条目
+落到同一身份时全部保留，查询和收录显式拒绝自动整理，不静默合并。
+旧 Europe PMC 的主记录命名空间仅从已保留的准确 article URL 重建，已有来源
+metadata 和书目内容仍不改写。旧来源 `providerRecord:null`，不将可能已规范化的
+历史数据冒充原始抓取；没有匹配 URL 时迁移失败且整体回滚，不推测 MED。
+表替换在事务外临时关闭外键执行，提交前校验所有引用，结束后恢复原设置。
+没有旧键回查路径。迁移失败的文库需要补齐真实来源记录后才能升级。
 
 ## 原始问题与确认检索计划
 
@@ -183,7 +206,7 @@ list query 1 次/秒要求并观察响应头：
 
 这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
 分页回执、有界缓存、进程内配额/健康度、持久化请求账本和确认检索计划已接入。
-跨来源别名、完整文献类型/版本/许可/撤稿展示仍待后续增量。
+OpenAlex/Semantic 外部标识归并、完整文献类型/版本/许可/撤稿展示仍待后续增量。
 
 官方合同核对日期：2026-11-03。OpenAlex 当前支持无 key 的基本查询；cursor
 翻页需要 key，不能自动创建账号或读取凭证。参数和分页依据

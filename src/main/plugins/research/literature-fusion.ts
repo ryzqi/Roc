@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { literatureNetworkSourceSchema, type LiteratureCandidate, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 import type { ResearchLiterature } from '../../../shared/types';
-import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { literatureIdentity, normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
@@ -56,8 +56,31 @@ export function fuseLiterature(records: readonly RankedLiteratureRecord[]): Fuse
       if (new Set(distinct).size > 1) conflicts.push({field, values});
     }
     result.push({candidateId: `candidate_${hash(identity)}`, identity, record: primary.record,
-      origins, contributions, conflicts, score: contributions.reduce((score, contribution) => score + contribution.score, 0),
+      origins, contributions, conflicts, versionRelations: arxivVersionRelations(origins),
+      score: contributions.reduce((score, contribution) => score + contribution.score, 0),
       selectionReason: 'source_priority_then_rank_then_metadata_hash'});
   }
   return result.sort((left, right) => right.score - left.score || compare(left.identity, right.identity));
+}
+
+function arxivVersionRelations(origins: LiteratureCandidate['origins']): LiteratureCandidate['versionRelations'] {
+  const observed = new Map<string, Map<number, LiteratureCandidate['versionRelations'][number]['older']>>();
+  for (const origin of origins.filter(origin => origin.source === 'arxiv')) {
+    const identifier = normalizeResearchArxiv(origin.externalId);
+    if (identifier.version === null) continue;
+    let versions = observed.get(identifier.id);
+    if (versions === undefined) { versions = new Map(); observed.set(identifier.id, versions); }
+    const current = versions.get(identifier.version);
+    if (current === undefined || compare(origin.metadataHash, current.metadataHash) < 0) {
+      versions.set(identifier.version, {version: identifier.version, externalId: origin.externalId, metadataHash: origin.metadataHash});
+    }
+  }
+  const relations: LiteratureCandidate['versionRelations'] = [];
+  for (const [arxivId, versions] of [...observed].sort(([left], [right]) => compare(left, right))) {
+    const ordered = [...versions.values()].sort((left, right) => left.version - right.version);
+    for (let index = 1; index < ordered.length; index++) {
+      relations.push({kind: 'arxiv_later_version', arxivId, older: ordered[index - 1], newer: ordered[index]});
+    }
+  }
+  return relations;
 }

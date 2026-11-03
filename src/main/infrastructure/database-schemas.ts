@@ -2,6 +2,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import { applyDatabaseMigrations, type RocDatabaseMigration } from './database-migrations';
 import type { RocLogicalDatabaseName } from './database-pragmas';
+import { migrateLiteratureIdentity } from '../plugins/research/literature-identity-migration';
 
 type Clock = () => string;
 
@@ -1511,6 +1512,25 @@ CREATE TABLE research_literature_request_receipts (
   state TEXT NOT NULL CHECK (state IN ('dispatched','received','unknown')),
   receipt_json TEXT NOT NULL, PRIMARY KEY (execution_id,source,attempt)
 );
+`
+});
+
+researchMigrations.push({
+  version: 8,
+  name: 'canonical_literature_identity',
+  rebuild: {dataVersion: 'canonical_literature_identity_v1', migrate: migrateLiteratureIdentity},
+  sql: `
+CREATE TABLE research_library_next (
+  id TEXT PRIMARY KEY, identity_key TEXT NOT NULL,
+  metadata_json TEXT NOT NULL, bibliography_json TEXT NOT NULL, sources_json TEXT NOT NULL,
+  revision INTEGER NOT NULL, archived INTEGER NOT NULL CHECK(archived IN (0,1)),
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+INSERT INTO research_library_next SELECT * FROM research_library;
+DROP TABLE research_library;
+ALTER TABLE research_library_next RENAME TO research_library;
+CREATE INDEX idx_research_library_identity ON research_library(identity_key);
+CREATE INDEX idx_research_library_citation_key ON research_library(json_extract(bibliography_json, '$.citationKey'));
 `
 });
 

@@ -15,7 +15,9 @@ import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
 
-type FrozenEntry = { entry: LiteratureAdd['entries'][number]; record: LiteratureCandidate['record'] | null; result: LiteratureImportItem };
+type ProviderRecords = [LiteratureCandidate['record'], ...LiteratureCandidate['record'][]];
+type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; records: ProviderRecords};
+type FrozenEntry = { entry: LiteratureAdd['entries'][number]; source: FrozenSource; result: LiteratureImportItem };
 type OperationRow = { id: string; owner: string; scope_project: string; input_hash: string; frozen_json: string; result_json: string; cancel_requested: number };
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function decode<T>(value: string, schema: z.ZodType<T>): T {
@@ -84,7 +86,7 @@ export class LiteratureImportService {
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 9, ranking: literatureRanking(request.sources), executionId, strategy,
+      const result: LiteratureSearchResult = { schemaVersion: 10, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
@@ -132,15 +134,24 @@ export class LiteratureImportService {
     // Resolve all candidate references before creating an operation or mutating the library.
     const frozen: FrozenEntry[] = [];
     for (const [position, entry] of entries.entries()) {
-      let record: LiteratureCandidate['record'] | null = null;
-      if (entry.kind === 'candidate') {
-        record = this.loadSearch(entry.searchId, context).candidates.find((candidate) => candidate.candidateId === entry.candidateId)?.record ?? null;
-        if (record === null) throw new Error('literature_candidate_not_found');
+      let source: FrozenSource;
+      if (entry.kind === 'doi') source = {kind: 'doi', doi: entry.doi};
+      else {
+        const candidate = this.loadSearch(entry.searchId, context).candidates.find((candidate) => candidate.candidateId === entry.candidateId);
+        if (candidate === undefined) throw new Error('literature_candidate_not_found');
+        source = {kind: 'records', records: uniqueRecords(candidate.record, candidate.origins.map(origin => origin.record))};
       }
-      const key = record === null ? `doi:${entry.kind === 'doi' ? entry.doi : ''}` : literatureIdentity(record);
+      const key = source.kind === 'doi' ? `doi:${source.doi}` : literatureIdentity(source.records[0]);
       const duplicate = frozen.find((item) => item.result.entryKey === key);
-      if (duplicate !== undefined) { duplicate.result.inputPositions.push(position); continue; }
-      frozen.push({ entry, record, result: { entryKey: key, inputPositions: [position], libraryItemId: null, citationKey: null,
+      if (duplicate !== undefined) {
+        duplicate.result.inputPositions.push(position);
+        if (source.kind === 'records') {
+          duplicate.source = duplicate.source.kind === 'doi' ? source :
+            {kind: 'records', records: uniqueRecords(duplicate.source.records[0], [...duplicate.source.records.slice(1), ...source.records])};
+        }
+        continue;
+      }
+      frozen.push({ entry, source, result: { entryKey: key, inputPositions: [position], libraryItemId: null, citationKey: null,
         disposition: 'not_processed', metadataUpdated: false, errorCode: null, retryable: false, metadata: 'not_requested',
         attachment: 'not_requested', parse: 'not_requested', index: { scope: 'metadata', keyword: 'not_requested', vector: 'not_requested' } } });
     }
@@ -207,20 +218,28 @@ export class LiteratureImportService {
       let committed = false;
       try {
         this.requireActive({ ...context, signal });
-        const prepared = entry.record === null && entry.entry.kind === 'doi'
-          ? await this.prepare.prepareDoi(entry.entry.doi, signal)
-          : await this.prepare.prepareRecord(entry.record!, signal);
+        const prepared: (Awaited<ReturnType<ResearchLibraryService['prepareRecord']>> & {providerRecord?: LiteratureCandidate['record']})[] = [];
+        if (entry.source.kind === 'doi') {
+          prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
+        } else {
+          for (const record of entry.source.records) {
+            this.requireActive({ ...context, signal });
+            prepared.push({...await this.prepare.prepareRecord(record, signal), providerRecord: record});
+          }
+        }
+        if (prepared.some(record => literatureIdentity(record.metadata) !== item.entryKey)) throw new Error('literature_import_identity_changed');
         this.db.transaction(() => {
           this.requireActive({ ...context, signal });
           this.library.validateDestination(context.projectId);
           const row = this.db.prepare('SELECT cancel_requested FROM research_literature_imports WHERE id = ?').get(result.operationId) as { cancel_requested: number };
           if (row.cancel_requested === 1) throw new Error('literature_import_cancelled');
-          const current = this.library.findByIdentity(literatureIdentity(prepared.metadata));
+          const current = this.library.findByIdentity(item.entryKey);
           if (current?.archived === true) {
             Object.assign(item, { disposition: 'skipped_archived', libraryItemId: current.id, citationKey: current.bibliography.citationKey });
           } else {
-            prepared.bibliography.citationKey = current?.bibliography.citationKey ?? betterBibtexKey(prepared.metadata, this.library.usedCitationKeys());
-            const imported = this.library.import([prepared], result.destinationProjectId, { flush: false, notify: false, skipArchived: true });
+            const citationKey = current?.bibliography.citationKey ?? betterBibtexKey(prepared[0].metadata, this.library.usedCitationKeys());
+            for (const source of prepared) source.bibliography.citationKey = citationKey;
+            const imported = this.library.import(prepared, result.destinationProjectId, { flush: false, notify: false, skipArchived: true });
             const saved = imported.items[0];
             Object.assign(item, { disposition: current === null ? 'created' : result.destinationProjectId !== null && !current.projectIds.includes(result.destinationProjectId) ? 'linked' : 'already_present',
               libraryItemId: saved.id, citationKey: saved.bibliography.citationKey, metadata: 'ready', metadataUpdated: current !== null && current.revision !== saved.revision,
@@ -264,6 +283,15 @@ export class LiteratureImportService {
     if (this.closed) throw new Error('literature_import_closed');
     assertLiteratureActive(context);
   }
+}
+function uniqueRecords(primary: LiteratureCandidate['record'], records: LiteratureCandidate['record'][]): ProviderRecords {
+  const seen = new Set<string>([hash(primary)]);
+  return [primary, ...records.filter(record => {
+    const fingerprint = hash(record);
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  })];
 }
 function safeFailure(error: unknown): string {
   const code = error instanceof Error ? error.message : '';

@@ -25,7 +25,12 @@ export const literatureCandidateSchema = z.object({
   conflicts: z.array(z.object({ field: z.enum(['doi', 'title', 'authors', 'publishedYear', 'citationCount', 'url', 'openAccessUrl']),
     values: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(),
       value: z.union([z.string(), z.number(), z.array(z.string())]) }).strict()).min(2) }).strict()),
-  matchedLibraryItemId: z.string().nullable(), archived: z.boolean(), missingFields: z.array(z.string())
+  matchedLibraryItemId: z.string().nullable(), archived: z.boolean(), missingFields: z.array(z.string()),
+  versionRelations: z.array(z.object({
+    kind: z.literal('arxiv_later_version'), arxivId: z.string().min(1),
+    older: z.object({externalId: z.string().min(1), metadataHash: z.string().regex(/^[a-f0-9]{64}$/u), version: z.number().int().positive()}).strict(),
+    newer: z.object({externalId: z.string().min(1), metadataHash: z.string().regex(/^[a-f0-9]{64}$/u), version: z.number().int().positive()}).strict()
+  }).strict().refine(relation => relation.older.version < relation.newer.version, 'literature_version_order_invalid'))
 }).strict();
 export const literatureRankingSchema = z.object({
   method: z.literal('rrf'), version: z.literal(1), k: z.literal(60),
@@ -58,7 +63,7 @@ export const literatureProviderCoverageSchema = z.object({
   nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(9), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(10), ranking: literatureRankingSchema, executionId: z.string().min(1),
   strategy: literatureSearchStrategyReceiptSchema.nullable(),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
