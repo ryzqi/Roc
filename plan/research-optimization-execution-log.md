@@ -597,3 +597,49 @@ unknown-usage/MCP/hostile-document matrix and packaged-worker checks.
 Final P0.2 isolated Electron smoke:
 `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs`
 passed 12/12, zero renderer errors, exit 0.
+
+## P0.3 — built worker isolation and strict worker availability
+
+Status: `Verified passing` for native metadata/PDF/figure/preview workers. The remaining
+P0 fault matrix and live L2 evaluation are still unfinished.
+
+The P0 command now builds current production output and launches its test runner under
+Electron's Node runtime. Fixtures copy the actual built CLI/chunks into an isolated module
+directory. Metadata import, PDF parsing, Skia rendering and PDF previews run real child
+processes under the native sandbox. The same full workflow and failed-report cases pass
+without an in-process rendering/parser substitute. This verifies built-worker behavior,
+not a signed release bundle or OCR model quality.
+
+Real isolation found two product errors. Figure source paths are relative on the wire,
+but the sandbox read list required absolute paths. The source is already inside the
+readable frozen projectRoot, so the duplicate source grant was removed. The handwritten
+package list omitted static/transitive CLI dependencies (the first refusal was yauzl).
+Worker reads now use the application's package.json and installed node_modules code
+directory, including pnpm links. Write, network, process and model-data boundaries are
+unchanged. Missing application package scope fails explicitly.
+
+The old jobInProcess downgrade and its ignored package-resolution errors were removed.
+Every missing production worker now rejects with research_worker_unavailable. A regression
+went red against the old path (metadata processing executed and raised a data error), then
+passed after removal. Fixture cleanup hooks now remain at module scope; registration
+inside before had removed worker files before the scenarios could exercise them.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:research-p0` | Fresh production build/typecheck passed; initial final run passed 2/3 before a fixture preview-path correction |
+| `node scripts/run-research-p0.mjs` | Final 3/3 native worker scenarios passed after moving fixture preview output under its writable job directory |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false pnpm test:unit` | 642 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm check:ipc` | Passed |
+| `git diff --check` | Passed |
+
+The sandbox correctly rejected a fixture preview outside jobDir; the fixture was corrected
+without granting additional writes. Host Homebrew Node was unsuitable for an Electron
+worker test due to dylib paths; tests now use the actual Electron executable. All temporary
+DEBUG-p0-worker instrumentation was removed. Logs: `.artifacts/research-optimization/p0-worker-*.log`.
+Native outputs, task/accounting/event receipts and both DB backups remain in the P0
+production artifact directory. No paid model request, tracing upload or remote write.
+
+- P0.3 final isolated Electron smoke: `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` passed 12/12, zero renderer errors, exit 0.

@@ -1,13 +1,18 @@
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { cp, writeFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import Database from 'better-sqlite3';
 
-export async function loadResearchTestApi() {
+async function loadApi(productionWorkers) {
   const directory = mkdtempSync(join(tmpdir(), 'roc-research-contract-'));
   try {
     symlinkSync(join(process.cwd(), 'node_modules'), join(directory, 'node_modules'), 'dir');
+    if (productionWorkers) {
+      await cp(join(process.cwd(), 'dist/main'), directory, {recursive: true});
+      await writeFile(join(directory, 'package.json'), JSON.stringify({type: 'module'}));
+    }
     const outfile = join(directory, 'api.mjs');
     await build({
       entryPoints: ['tests/unit/fixtures/research-test-api.ts'],
@@ -21,6 +26,9 @@ export async function loadResearchTestApi() {
     throw error;
   }
 }
+
+export function loadResearchTestApi() { return loadApi(false); }
+export function loadResearchWorkerTestApi() { return loadApi(true); }
 
 export function createResearchFixture(api, stage = 'figure', workspacePath = '/tmp/roc-research-fixture') {
   const db = new Database(':memory:');

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { lstat, mkdir, readFile, readdir, readlink, realpath, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { dirname, extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -325,23 +324,7 @@ export class ResearchToolchain {
   private async job<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
     const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir };
     const packagedCli = fileURLToPath(new URL('./research-job-cli.js', import.meta.url));
-    if (!existsSync(packagedCli)) {
-      if (operation.operation === 'parse_document') throw new ResearchProcessError('research_worker_unavailable');
-      return await this.jobInProcess(input, operation, schema);
-    }
-    const require = createRequire(import.meta.url);
-    const canvasRequire = createRequire(require.resolve('@napi-rs/canvas/package.json'));
-    const optionalNative = (specifier: string): string[] => {
-      try { return [dirname(canvasRequire.resolve(`${specifier}/package.json`))]; }
-      catch { return []; }
-    };
-    const packageRoot = (specifier: string): string[] => {
-      try {
-        let current = dirname(require.resolve(specifier));
-        while (!existsSync(join(current, 'package.json')) && dirname(current) !== current) current = dirname(current);
-        return existsSync(join(current, 'package.json')) ? [current] : [];
-      } catch { return []; }
-    };
+    if (!existsSync(packagedCli)) throw new ResearchProcessError('research_worker_unavailable');
     const modelFiles = operation.operation === 'parse_document' && operation.modelFiles !== null && typeof operation.modelFiles === 'object'
       ? operation.modelFiles as Partial<ResearchModelFiles> : null;
     const modelPaths = modelFiles === null ? [] : Object.values(modelFiles).filter((path): path is string => typeof path === 'string');
@@ -351,24 +334,15 @@ export class ResearchToolchain {
     while (!existsSync(join(packageScope, 'package.json')) && dirname(packageScope) !== packageScope) {
       packageScope = dirname(packageScope);
     }
-    const packageScopeFiles = existsSync(join(packageScope, 'package.json')) ? [join(packageScope, 'package.json')] : [];
+    if (!existsSync(join(packageScope, 'package.json'))) throw new ResearchProcessError('research_worker_package_scope_missing');
     const readablePaths = [
       dirname(packagedCli),
-      ...packageScopeFiles,
-      dirname(require.resolve('zod/package.json')),
-      dirname(require.resolve('pdfjs-dist/package.json')),
-      dirname(require.resolve('@napi-rs/canvas/package.json')),
-      ...packageRoot('vega'),
-      ...packageRoot('vega-lite'),
-      ...packageRoot('paddleocr'),
-      ...packageRoot('onnxruntime-node'),
-      ...packageRoot('htmlparser2'),
-      ...packageRoot('utif'),
-      // Only the arm64 native canvas package is shipped in the macOS release.
-      ...optionalNative('@napi-rs/canvas-darwin-arm64'),
+      join(packageScope, 'package.json'),
+      // Resolve transitive imports from the application's installed code, including pnpm links.
+      join(packageScope, 'node_modules'),
       process.execPath,
       join(dirname(process.execPath), '..'),
-      input.sourcePath,
+      // The figure wire uses a relative source path; projectRoot already grants its frozen files.
       input.projectRoot,
       ...modelPaths
     ];
@@ -408,44 +382,6 @@ export class ResearchToolchain {
     if (!envelope.data.ok) throw new ResearchProcessError(envelope.data.error.code, '', result.stderr);
     if (result.exitCode !== 0) throw new ResearchProcessError('research_worker_failed', '', result.stderr);
     return envelope.data.result;
-  }
-
-  private async jobInProcess<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
-    const { extractResearchTemplate } = await import('./template-archive');
-    const { normalizeResearchBibliography, readResearchBibliography, writeResearchBibliography } = await import('./bibliography');
-    const { renderResearchPdf } = await import('./pdf-render');
-    const base = { projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir, signal: input.signal, timeoutMs: 60_000 };
-    const name = operation.operation;
-    if (name === 'parse_document') {
-      const { parseResearchDocument } = await import('./document-parser');
-      return schema.parse(await parseResearchDocument({
-        projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
-        signal: input.signal, timeoutMs: 600_000,
-        options: researchParseOptionsSchema.parse(operation.options),
-        modelFiles: operation.modelFiles as ResearchModelFiles | null,
-        modelManifest: typeof operation.modelManifest === 'string' ? operation.modelManifest : ''
-      }));
-    }
-    if (name === 'render_figure') {
-      const { renderResearchFigure } = await import('./figure-renderer');
-      const request = researchFigureRenderJobSchema.parse({
-        operation: 'render_figure', projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
-        inputPaths: operation.inputPaths, label: operation.label, timeoutMs: operation.timeoutMs, figure: operation.figure
-      });
-      return schema.parse(await renderResearchFigure(request, input.signal));
-    }
-    if (name === 'extract_template') return schema.parse(await extractResearchTemplate(base));
-    if (name === 'render_pdf') {
-      return schema.parse(await renderResearchPdf({ ...base, page: Number(operation.page), scale: Number(operation.scale) }));
-    }
-    if (name === 'read_bibliography') {
-      return schema.parse(await readResearchBibliography({ ...base, format: operation.format as 'bibtex' | 'biblatex' | 'csl-json' }));
-    }
-    if (name === 'normalize_bibliography') return schema.parse(await normalizeResearchBibliography(base));
-    if (name === 'write_bibliography') {
-      return schema.parse(await writeResearchBibliography({ ...base, format: operation.format as 'bibtex' | 'biblatex' | 'csl-json' }));
-    }
-    throw new ResearchProcessError('research_operation_unknown');
   }
 
   private async baseEnvironment(root: string, jobDir: string, includeRuntimeTools: boolean): Promise<NodeJS.ProcessEnv> {

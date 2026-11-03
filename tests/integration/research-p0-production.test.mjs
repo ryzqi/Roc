@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
@@ -10,23 +9,20 @@ import { tmpdir } from 'node:os';
 import { setTimeout as wait } from 'node:timers/promises';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import electronPath from 'electron';
-import { createResearchFixture, loadResearchTestApi } from '../unit/fixtures/research-test-kit.mjs';
+import { createResearchFixture, loadResearchWorkerTestApi } from '../unit/fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {
-  api = await loadResearchTestApi();
-  after(() => api.dispose());
+  api = await loadResearchWorkerTestApi();
 });
+after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 async function runtimeDescription() {
-  const executable = await realpath(electronPath);
-  const probe = spawnSync(executable, ['-e', 'console.log(JSON.stringify({nodeVersion:process.versions.node,electronVersion:process.versions.electron,platform:process.platform,architecture:process.arch,typescript:process.features.typescript}))'], {
-    env: {...process.env, ELECTRON_RUN_AS_NODE: '1'}, encoding: 'utf8'
-  });
-  assert.equal(probe.status, 0, probe.stderr);
-  const metadata = JSON.parse(probe.stdout);
+  const executable = await realpath(process.execPath);
+  const metadata = {nodeVersion: process.versions.node, electronVersion: process.versions.electron,
+    platform: process.platform, architecture: process.arch, typescript: process.features.typescript};
+  assert.ok(metadata.electronVersion, 'integration must run inside Electron');
   assert.equal(metadata.typescript, 'strip');
   const runnerPath = await realpath('resources/research-runtime/typescript-experiment-runner.mts');
   const runnerHash = hash(await readFile(runnerPath));
@@ -95,25 +91,15 @@ async function runScenario(stages, reportFailure = false) {
   const description = await runtimeDescription();
   const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description});
   const experiments = new api.ResearchExperimentService(f.repository, environments, root, logger);
-  const figures = new api.ResearchFigureService(f.repository, {
-    renderFigure: request => api.renderResearchFigure({
-      operation: 'render_figure', projectRoot: request.projectRoot, sourcePath: request.sourcePath,
-      outputDir: request.outputDir, inputPaths: request.inputPaths, label: request.label,
-      timeoutMs: request.timeoutMs, figure: request.figure
-    }, request.signal)
-  }, root, logger);
-  const files = new api.ResearchWorkspaceFileService(f.db, f.repository, () => new Date().toISOString());
   const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const figures = new api.ResearchFigureService(f.repository, tools, root, logger);
+  const files = new api.ResearchWorkspaceFileService(f.db, f.repository, () => new Date().toISOString());
   if (reportFailure) tools.compileTypst = async () => ({exitCode: 1, stdout: '', stderr: 'fixture_typst_failure'});
   const templates = new api.ResearchTemplateService(f.repository, tools);
   const exports = new api.ResearchExportService(f.repository,
     new api.ResearchExportSourceService(f.repository, figures, experiments, templates), tools, root, logger);
   const effects = new api.ResearchProductionEffectService(f.repository, files, experiments, figures, templates, exports);
-  const documents = new api.ResearchDocumentService(f.repository, {
-    normalizeBibliography: request => tools.normalizeBibliography(request),
-    defaultParseOptions: mediaType => tools.defaultParseOptions(mediaType),
-    parseDocument: request => api.parseResearchDocument({...request, modelFiles: null, modelManifest: ''})
-  }, root);
+  const documents = new api.ResearchDocumentService(f.repository, tools, root);
   const library = new api.ResearchLibraryService(f.repository.library, tools, root);
   const imports = new api.LiteratureImportService(f.db, f.repository.library,
     new api.LiteratureSearchService(async (_url, init) => {
@@ -406,7 +392,7 @@ async function runScenario(stages, reportFailure = false) {
       produced.previews = {};
       for (const name of ['paper', 'report']) {
         const preview = await tools.renderPdf({projectRoot: artifactRoot, sourcePath: join(artifactRoot, `${name}.pdf`),
-          outputDir: join(artifactRoot, `${name}-preview`), jobDir, page: 1, scale: 1});
+          outputDir: join(jobDir, `${name}-preview`), jobDir, page: 1, scale: 1});
         assert.equal(preview.sourceHash, record.files.find(file => file.path === `${name}.pdf`).sha256);
         assert.ok(preview.text.length > 0);
         produced.previews[name] = preview;
@@ -425,7 +411,7 @@ async function runScenario(stages, reportFailure = false) {
       delivery: produced.delivery,
       previews: produced.previews,
       runtime: {...description, environment: undefined},
-      limits: fullWorkflow ? 'No live model quality evaluation, OCR model run, packaged worker or fault matrix.' :
+      limits: fullWorkflow ? 'No live model quality evaluation, OCR model run or remaining fault matrix.' :
         'Retrieval, PDF capture, manuscript/review/export and the remaining fault matrix are not exercised here.'
     }, null, 2));
     assert.deepEqual(persistenceErrors, []);

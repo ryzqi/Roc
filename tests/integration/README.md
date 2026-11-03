@@ -5,13 +5,16 @@ installation and preparation of the locked runtime at
 `.runtime/research-toolchain/darwin-arm64`. Preparation and manifest verification are
 documented in [the runtime guide](../../resources/research-runtime/README.md).
 The suite requires the real runtime; it does not skip missing tools or replace compiled
-PDFs with fixture bytes.
+PDFs with fixture bytes. The command builds fresh production workers and launches the
+test runner with Electron's Node runtime. Fixtures copy those built workers into an
+isolated module directory with access to the installed application dependencies.
 
 The scenarios run trusted chat dispatch, the real role SDK and budget ledger, native
 TypeScript execution, native-text PDF parsing, Skia figures, manuscript/review repositories,
 human approval and locked Tectonic/Typst compilation. Search responses and model decisions
-are local fixtures. PDF parsing and figure/PDF rendering run their production implementations
-in process; packaged worker isolation, OCR and live model quality are separate checks.
+are local fixtures. Metadata processing, PDF parsing, figure rendering and PDF previews
+run the built CLI in the native subprocess sandbox. Missing workers fail explicitly;
+there is no in-process fallback. OCR and live model quality are separate checks.
 
 Reports, execution trees, source evidence, budgets/events, file hashes, both database backups,
 compiled PDFs, first-page previews and the approved ZIP remain under

@@ -40,4 +40,3 @@ export { LiteratureSearchService } from '../../../src/main/plugins/research/lite
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
-export { parseResearchDocument } from '../../../src/main/plugins/research/document-parser';
