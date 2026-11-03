@@ -42,6 +42,7 @@ export function verifyQualityEvaluation(): Record<string, unknown> {
   assert.throws(() => lockQualityProtocol(draft, {
     executionMode: 'full', authorizationLevel: 'L2', providerId: 'fixture-provider',
     baselineModelId: 'fixture-baseline', candidateModelId: 'fixture-candidate',
+    baselineCommitSha: '3'.repeat(40), candidateCommitSha: '4'.repeat(40),
     toolManifestHash: '0'.repeat(64), promptSetHash: '1'.repeat(64), environmentHash: '2'.repeat(64),
     taskTimeoutMs: 10000, maxTotalCostUsd: 1, maxPerTaskCostUsd: 0.1,
     userAuthorized: true, approvalReference: 'fixture-approval'

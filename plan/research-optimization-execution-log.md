@@ -173,3 +173,42 @@ exercised actual public IPC parsing and all affected contracts, and production b
 Logs: `.artifacts/research-optimization/pr02a-{unit,harness,ipc,build,contracts-final}.log`.
 This increment establishes execution identity, not unified budget admission or task cancellation.
 Those remain ROC-PR-02B/02C. Real-model L2 and scientific review remain unrun.
+
+## ROC-PR-03A — offline protocol and runner foundation
+
+Status: `Verified passing` for offline protocol, runner and data audit.
+The full reviewed corpus and live Harness adapter remain `Blocked, not run`.
+
+Protocol v2 requires complete baseline/candidate commit SHAs and permits same-model
+comparisons across different commits. Active runner configuration is copied and frozen.
+Each task receives three fixed paired repetitions, with counterbalanced arm order.
+Adapters receive only the public task view. Independent validators never execute output scripts.
+Null, invalid, oversized and failed outputs remain classified in the fixed denominator.
+Unsent calls have zero spend; dispatched calls with unknown consumption retain their full ceiling.
+Cost ceiling violations and unconfirmed aborts block later dispatch.
+
+Exclusive journals are synced before each call and refuse rerun after process restart.
+Reports distinguish fixture execution from live-model evidence.
+No live adapter, model call, external account access or external write occurred.
+Trusted adapter ceilings alone do not prove Provider enforcement or sandbox fidelity.
+
+The current pilot has 16 tasks, all in the pilot split. Literature/evidence/memory/file/script
+families have one source cluster each; the other three families have two clusters each.
+The audit reports these actual deficits. No task duplicates or fabricated human reviews
+were added to reach the target of 200. Domain review and independent train/dev/holdout
+data remain necessary before full quality claims.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/quality-evaluation.test.mjs tests/unit/quality-runner.test.mjs` | Final 17 passed, 0 failed |
+| `pnpm typecheck` | Passed, includes runner |
+| `pnpm harness:quality:check` | Passed, reports actual pilot deficits, zero model/network calls |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm check:ipc` | Passed |
+| `git diff --check` | Passed |
+
+Logs: `.artifacts/research-optimization/pr03a-{contracts,typecheck,audit,harness,ipc}.log`.
+Continue authorized offline PR-02B/02C while the independent corpus, live adapter,
+isolated credentials, attributable prices and spending authorization are prepared.

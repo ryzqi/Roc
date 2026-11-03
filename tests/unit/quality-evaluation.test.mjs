@@ -174,6 +174,8 @@ test('locked protocol binds model and budget conditions, rejects incomplete data
     providerId: 'provider-test',
     baselineModelId: 'baseline-v1',
     candidateModelId: 'candidate-v1',
+    baselineCommitSha: '3'.repeat(40),
+    candidateCommitSha: '4'.repeat(40),
     toolManifestHash: 'a'.repeat(64),
     promptSetHash: 'b'.repeat(64),
     environmentHash: 'c'.repeat(64),

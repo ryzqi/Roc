@@ -24,7 +24,11 @@ The prompts include short attributed excerpts, not article full text. Other pilo
 
 ## Statistical preregistration
 
-Protocol id: `roc-agent-harness-pr06-v1`. The protocol is currently draft-only and bound to the SHA-256 of the frozen sources/tasks. If a provider run is later authorized, lock the provider and model identifiers, tool/prompt/environment hashes, timeout, per-task and total spend caps, authorization reference, and repeat count before dispatch. Do not edit a locked protocol after dispatch; create a new version instead.
+Protocol id: `roc-agent-harness-pr06-v2`. Status: Draft; no live trial authorized or run.
+The protocol is bound to the SHA-256 of the frozen sources/tasks. Before provider dispatch,
+lock full baseline/candidate commit SHAs, provider/model identifiers, tool/prompt/environment
+hashes, timeout, finite task/total spend caps, approval reference and repeat count.
+Same-model comparisons require different commits. Do not amend a lock after dispatch.
 
 The planned comparison pairs baseline and candidate on each task/repeat with the same models, fixed task data, tools, permissions, budgets, and environment. Default plan: three repeats per task, 2,000 seeded paired-cluster bootstrap resamples, 95% percentile intervals, at least five independent clusters per task family, and a 0.05 non-inferiority margin. The eight family quotas total 200. Family comparisons are exploratory and unadjusted for multiplicity; any family regression blocks an overall gain claim. Report failures by class, pass rate, P95 latency, and known/unknown cost. Null output and failed runs score zero; infrastructure/provider/verifier/operator failures remain separately classified.
 
@@ -34,7 +38,30 @@ Subjective writing quality requires blinded human review and retained disagreeme
 
 L1 may run in ordinary CI. It makes zero external calls, uses no live provider credential or user project, and writes generated reports only under `.artifacts/harness-eval/`. L2 must run only with isolated provider credentials, fixed data/tools, a locked protocol and finite per-task/total caps. L3 additionally requires explicit L3 approval, a rollback plan, a named operator, a finite rollout, and stop thresholds. Never place credential values in this dataset, task prompts, reports, or test output. If cost cannot be estimated and hard-capped, keep live evaluation blocked and cost unknown.
 
-## Task inventory
+## Offline runner and remaining data work
+
+`pnpm harness:quality:check` reports the actual pilot counts, source clusters, missing full
+dataset conditions and exact public prompt hash. It makes no model or network calls.
+
+`runner.ts` executes each frozen task/arm/repeat once and passes only `AgentTaskView` to a
+trusted adapter. It counterbalances arm order, binds adapter identity to the lock and writes
+events before dispatch. Null output, invalid/unsafe output, adapter failures and withheld calls
+remain in the fixed denominator. Unknown cost retains the complete quoted ceiling.
+No arbitrary output script is executed. An unconfirmed abort or cost-ceiling violation stops
+further dispatch. Event failures propagate.
+
+`runQualityPilotWithJournal` creates an exclusive journal, syncs each event before dispatch
+and writes a final report. An existing journal blocks rerun, including after process restart;
+reconcile its dispatched calls before creating another explicitly authorized protocol.
+
+Adapter quotes and request caps are a trusted host contract. No live adapter ships with
+this increment. Runner tests exercise fixtures; they do not prove provider enforcement,
+tool/sandbox isolation, full trajectories or scientific quality.
+The actual application Harness adapter, isolated credentials, attributable prices, explicit
+L2 spending limits and reviewed independent 200-task corpus remain required.
+Do not manufacture source independence by duplicating or paraphrasing the pilot.
+
+### Existing pilot inventory
 
 - Literature verification: `literature-release-windows`, `literature-fatigue-ranking`.
 - Multi-paper evidence: `multi-paper-dental-outcomes`, `multi-paper-release-and-periodontal`.

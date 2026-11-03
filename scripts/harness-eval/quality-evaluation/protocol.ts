@@ -13,8 +13,8 @@ export const QUALITY_TARGETS: Readonly<Record<(typeof QUALITY_FAMILIES)[number],
 });
 
 export type QualityEvaluationProtocol = {
-  schemaVersion: 1;
-  id: 'roc-agent-harness-pr06-v1';
+  schemaVersion: 2;
+  id: 'roc-agent-harness-pr06-v2';
   status: 'draft' | 'locked';
   datasetHash: string;
   sourceIds: readonly string[];
@@ -39,6 +39,8 @@ export type QualityEvaluationProtocol = {
     providerId: string;
     baselineModelId: string;
     candidateModelId: string;
+    baselineCommitSha: string;
+    candidateCommitSha: string;
     toolManifestHash: string;
     promptSetHash: string;
     environmentHash: string;
@@ -59,6 +61,8 @@ export type QualityProtocolLockInput = {
   providerId: string;
   baselineModelId: string;
   candidateModelId: string;
+  baselineCommitSha: string;
+  candidateCommitSha: string;
   toolManifestHash: string;
   promptSetHash: string;
   environmentHash: string;
@@ -80,6 +84,7 @@ const STOP_RULES = [
 
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
+const COMMIT_SHA = /^[a-f0-9]{40}$/u;
 
 function digest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -96,8 +101,8 @@ function protocolWithoutHash(protocol: QualityEvaluationProtocol): Omit<QualityE
 
 export function createQualityProtocolDraft(): QualityEvaluationProtocol {
   return {
-    schemaVersion: 1,
-    id: 'roc-agent-harness-pr06-v1',
+    schemaVersion: 2,
+    id: 'roc-agent-harness-pr06-v2',
     status: 'draft',
     datasetHash: qualityDatasetHash(),
     sourceIds: QUALITY_SOURCES.map(source => source.id),
@@ -137,7 +142,12 @@ export function lockQualityProtocol(
   assertIdentifier(input.baselineModelId, 'quality_protocol_baseline_invalid');
   assertIdentifier(input.candidateModelId, 'quality_protocol_candidate_invalid');
   assertIdentifier(input.approvalReference, 'quality_protocol_approval_reference_invalid');
-  if (input.baselineModelId === input.candidateModelId) throw new Error('quality_protocol_models_must_differ');
+  if (!COMMIT_SHA.test(input.baselineCommitSha) || !COMMIT_SHA.test(input.candidateCommitSha)) {
+    throw new Error('quality_protocol_commit_invalid');
+  }
+  if (input.baselineModelId === input.candidateModelId && input.baselineCommitSha === input.candidateCommitSha) {
+    throw new Error('quality_protocol_comparison_identical');
+  }
   if (!SHA256.test(input.toolManifestHash) || !SHA256.test(input.promptSetHash) || !SHA256.test(input.environmentHash)) {
     throw new Error('quality_protocol_environment_hash_invalid');
   }
@@ -161,6 +171,8 @@ export function lockQualityProtocol(
       providerId: input.providerId,
       baselineModelId: input.baselineModelId,
       candidateModelId: input.candidateModelId,
+      baselineCommitSha: input.baselineCommitSha,
+      candidateCommitSha: input.candidateCommitSha,
       toolManifestHash: input.toolManifestHash,
       promptSetHash: input.promptSetHash,
       environmentHash: input.environmentHash,
@@ -181,6 +193,9 @@ export function assertQualityProtocolAuthorized(protocol: QualityEvaluationProto
   lock: NonNullable<QualityEvaluationProtocol['lock']>;
   lockHash: string;
 } {
+  if (protocol.schemaVersion !== 2 || protocol.id !== 'roc-agent-harness-pr06-v2') {
+    throw new Error('quality_protocol_version_invalid');
+  }
   if (protocol.status !== 'locked' || protocol.lock === undefined || protocol.lockHash === undefined) {
     throw new Error('quality_eval_authorization_required');
   }
