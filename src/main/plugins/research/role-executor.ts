@@ -52,6 +52,9 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter): R
                 '生产工具已绑定当前项目和本次运行。修改脚本或模板必须提供 expectedHash；启动、发布实验或图稿使用服务返回的真实 ID。取消或替换后不得继续提交副作用。不能调用人工批准或最终交付。',
                 '完成本阶段前必须发布真实实验或图稿。结构化输出会记录到这些已发布工件，系统不会另造空产物。'
               ] : []),
+              ...(input.run.toolNames.includes('start_figure') ? [
+                '图稿启动返回 runId。仅用 get_figure({runId}) 查询图稿，completed 后用 publish_figure({runId,replacesFigureId}) 发布；failed、cancelled、interrupted 时停止轮询并报告真实错误。'
+              ] : []),
               ...(input.run.toolNames.includes('prepare_export') ? [
                 '导出工具已绑定当前项目和本次运行。可准备、查看和发布导出作业，不能写入最终 ZIP 或宣称已通过人工审核。',
                 '完成本阶段前必须发布真实导出作业。结构化输出会记录到已发布的交付工件。'

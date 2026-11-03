@@ -139,6 +139,15 @@ export class ResearchFigureRunRepository {
     return run;
   }
 
+  attachArtifact(projectId: string, id: string, artifactId: string): void {
+    const run = this.get(projectId, id);
+    if (run.status !== 'completed') throw new Error('research_figure_completed_required');
+    if (run.artifactId !== null && run.artifactId !== artifactId) throw new Error('research_figure_publish_conflict');
+    const artifact = this.research.getArtifact(artifactId);
+    if (artifact.projectId !== projectId || artifact.kind !== 'figure') throw new Error('research_figure_artifact_invalid');
+    this.save({ ...run, artifactId });
+  }
+
   private row(id: string): RunRow {
     const row = this.db.prepare('SELECT snapshot_json,root_path FROM research_figure_runs WHERE run_id = ?').get(id) as RunRow | undefined;
     if (row === undefined) throw new Error('research_figure_run_not_found');

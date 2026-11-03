@@ -116,23 +116,27 @@ export function createResearchRoleTools(input: {
       schema: researchOwnedExperimentStartSchema }),
     start_figure: () => tool(async (request) => {
       const started = await effects().startFigure(input.run.id, input.run.projectId, request);
-      return after(summarizeExperiment(started));
+      return after(summarizeFigure(started));
     }, { name: 'start_figure', description: '启动当前项目的图稿渲染。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
       schema: researchOwnedFigureStartSchema }),
     get_experiment: () => tool(async ({ experimentId }) => {
       return after(summarizeExperiment(effects().getExperiment(input.run.id, input.run.projectId, experimentId)));
-    }, { name: 'get_experiment', description: '读取本次运行创建的实验或绘图执行状态，不含二进制内容。',
+    }, { name: 'get_experiment', description: '读取本次运行创建的脚本实验状态，不含二进制内容。',
       schema: z.object({ experimentId: z.string().min(1) }).strict() }),
+    get_figure: () => tool(async ({ runId }) => {
+      return after(summarizeFigure(effects().getFigure(input.run.id, input.run.projectId, runId)));
+    }, { name: 'get_figure', description: '使用 start_figure 返回的 runId 查询本次阶段创建的图稿。返回真实状态、错误、文件数和工件关联，不含二进制。failed、cancelled、interrupted 为终态，应停止轮询。',
+      schema: z.object({ runId: z.string().min(1) }).strict() }),
     publish_experiment: () => tool(async ({ experimentId }) => {
       const published = await effects().publishExperiment(input.run.id, input.run.projectId, experimentId);
       return after(summarizeExperiment(published));
     }, { name: 'publish_experiment', description: '发布本次运行完成的实验。取消或替换后的迟到发布会被拒绝。',
       schema: z.object({ experimentId: z.string().min(1) }).strict() }),
-    publish_figure: () => tool(async ({ experimentId, replacesFigureId }) => {
-      const published = await effects().publishFigure(input.run.id, input.run.projectId, experimentId, replacesFigureId);
+    publish_figure: () => tool(async ({ runId, replacesFigureId }) => {
+      const published = await effects().publishFigure(input.run.id, input.run.projectId, runId, replacesFigureId);
       return after({ figureId: published.id, artifactId: published.artifactId, runId: published.runId, status: published.status, replacesFigureId: published.replacesFigureId });
-    }, { name: 'publish_figure', description: '把本次运行完成的绘图执行为图稿。replacesFigureId 指向被替换的草稿；取消后不能发布。',
-      schema: z.object({ experimentId: z.string().min(1), replacesFigureId: z.string().min(1).nullable() }).strict() }),
+    }, { name: 'publish_figure', description: '使用 get_figure 已确认 completed 的 runId 发布本次阶段图稿。replacesFigureId 指向被替换的草稿；取消后不能发布。',
+      schema: z.object({ runId: z.string().min(1), replacesFigureId: z.string().min(1).nullable() }).strict() }),
     read_template_file: () => tool(async ({ templateId, path, offset, limit }) => {
       const file = await effects().readTemplateFile(input.run.id, input.run.projectId, { templateId, path });
       return after({ path: file.path, sha256: file.sha256, ...page(file.content, offset, limit) });
@@ -182,6 +186,11 @@ function page(content: string, offset: number, limit: number) {
 
 function summarizeExperiment(run: { id: string; request: { requestId: string }; ownerRunId: string | null; status: string; error: string | null; artifactId: string | null; files: unknown[] }) {
   return { experimentId: run.id, requestId: run.request.requestId, ownerRunId: run.ownerRunId, status: run.status, error: run.error,
+    artifactId: run.artifactId, fileCount: run.files.length };
+}
+
+function summarizeFigure(run: { id: string; request: { requestId: string }; ownerRunId: string | null; status: string; error: string | null; artifactId: string | null; files: unknown[] }) {
+  return { runId: run.id, requestId: run.request.requestId, ownerRunId: run.ownerRunId, status: run.status, error: run.error,
     artifactId: run.artifactId, fileCount: run.files.length };
 }
 

@@ -10,7 +10,7 @@ const rendererVersions = {
   vegaLiteVersion: '6.4.1',
   renderer: '@napi-rs/canvas' as const,
   rendererVersion: '1.0.13',
-  pipelineVersion: 'roc-vega-pipeline/1',
+  pipelineVersion: 'roc-vega-pipeline/2',
 };
 
 export function getResearchFigureRendererEnvironment(): ResearchFigureRendererEnvironment {

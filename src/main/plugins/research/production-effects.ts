@@ -87,6 +87,10 @@ export class ResearchProductionEffectService {
     return this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
   }
 
+  getFigure(ownerRunId: string, projectId: string, runId: string): ResearchFigureRun {
+    return this.requireOwnedFigure(ownerRunId, projectId, runId);
+  }
+
   async publishExperiment(ownerRunId: string, projectId: string, experimentId: string): Promise<ResearchExperimentExecution> {
     this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
     const published = await this.experiments.publish(projectId, experimentId);
@@ -95,9 +99,9 @@ export class ResearchProductionEffectService {
     return published;
   }
 
-  async publishFigure(ownerRunId: string, projectId: string, experimentId: string, replacesFigureId: string | null): Promise<ResearchFigurePublication> {
-    this.requireOwnedFigure(ownerRunId, projectId, experimentId);
-    const published = await this.figures.publish(projectId, experimentId, replacesFigureId);
+  async publishFigure(ownerRunId: string, projectId: string, runId: string, replacesFigureId: string | null): Promise<ResearchFigurePublication> {
+    this.requireOwnedFigure(ownerRunId, projectId, runId);
+    const published = await this.figures.publish(projectId, runId, replacesFigureId);
     this.requireOwner(ownerRunId, projectId);
     return published;
   }

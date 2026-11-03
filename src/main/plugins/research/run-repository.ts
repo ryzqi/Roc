@@ -129,6 +129,9 @@ export class ResearchRunRepository {
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
     const previous = this.get(request.runId, request.projectId);
+    if (previous.stage === 'figure' && !previous.toolNames.includes('get_figure')) {
+      throw new Error('research_run_tool_contract_changed');
+    }
     if (previous.parentRunId !== null) throw new Error('research_run_retry_parent_required');
     if (!['failed', 'cancelled', 'interrupted'].includes(previous.status)) throw new Error('research_run_not_retryable');
     if (request.requestId === previous.requestId) throw new Error('research_run_request_conflict');
@@ -226,6 +229,9 @@ export class ResearchRunRepository {
 
   markRunning(id: string, projectId: string, model: { providerId: string; modelId: string }): ResearchStageRun {
     const run = this.requireActive(id, projectId);
+    if (run.stage === 'figure' && !run.toolNames.includes('get_figure')) {
+      throw new Error('research_run_tool_contract_changed');
+    }
     if (run.status !== 'queued') throw new Error('research_run_already_started');
     const running: ResearchStageRun = {
       ...run, providerId: model.providerId, modelId: model.modelId, status: 'running', startedAt: this.now()

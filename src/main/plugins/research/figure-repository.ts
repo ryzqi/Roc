@@ -81,6 +81,7 @@ export class ResearchFigureRepository {
         sourcePath: run.request.sourcePath, inputPaths: run.request.inputPaths, replacesFigureId, validation, manifestHash, status: 'rendered', createdAt: this.now() });
       this.db.prepare(`INSERT INTO research_figure_publications (figure_id,project_id,run_id,artifact_id,snapshot_json,created_at)
         VALUES (?,?,?,?,?,?)`).run(id, projectId, runId, artifact.id, JSON.stringify(record), record.createdAt);
+      this.research.figureRuns.attachArtifact(projectId, runId, artifact.id);
       for (const subjectType of ['figure', 'artifact'] as const) this.research.addProvenance({ projectId, artifactId: artifact.id,
         subjectType, subjectId: subjectType === 'figure' ? id : artifact.id, sourceType: 'experiment', sourceId: runId,
         locator: `inputs:${run.inputHash}; manifest:${manifestHash}`, excerpt: figure.title });

@@ -22,7 +22,7 @@ export async function loadResearchTestApi() {
   }
 }
 
-export function createResearchFixture(api, stage = 'figure') {
+export function createResearchFixture(api, stage = 'figure', workspacePath = '/tmp/roc-research-fixture') {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   const now = () => '2026-11-03T00:00:00.000Z';
@@ -30,7 +30,7 @@ export function createResearchFixture(api, stage = 'figure') {
   const repository = new api.ResearchRepository(db, now);
   const project = repository.createProject({
     title: 'Synthetic reproducibility study', description: 'Contract fixture',
-    workspacePath: '/tmp/roc-research-fixture'
+    workspacePath
   });
   db.prepare('UPDATE research_projects SET current_stage = ? WHERE id = ?').run(stage, project.id);
   db.prepare("UPDATE research_stage_states SET status = 'ready' WHERE project_id = ? AND stage = ?")

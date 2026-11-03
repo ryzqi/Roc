@@ -45,6 +45,12 @@
 
 `startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf` 和 `figure-validation.json`。PDF 使用现有 `@napi-rs/canvas` PDF 后端，页面尺寸和输出 DPI 来自 `figure` 选项。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
 
+阶段角色使用 `start_figure → get_figure → publish_figure`，三个工具统一采用真实图稿运行 `runId`。`get_figure` 只读取当前项目、当前有效阶段所拥有的图稿，返回状态、错误、文件数和 `artifactId`，不返回二进制。`failed`、`cancelled`、`interrupted` 是终态，不能继续轮询或发布。`get_experiment` 只查询脚本实验；图稿工具不接受 `experimentId` 别名。
+
+渲染 pipeline `/2` 在作业入口将 spec 相对路径解析到冻结项目目录，并使用 Vega-Lite `autosize: { type: "fit", contains: "padding" }`，按指定物理尺寸容纳坐标轴和留白。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸。单图和 layered 图适用 fit；复杂组合或显式 step 不能满足固定尺寸时，输出校验失败，不改变请求尺寸或放宽验证。发布与运行的 `artifactId` 在同一数据库事务中关联。
+
+运行快照固化工具清单。包含旧图稿查询合同的快照不原地扩权；执行或重试会报 `research_run_tool_contract_changed`，须使用新 `requestId` 新建阶段运行。历史记录保留用于审计。
+
 运行成功后，在可编辑的绘图阶段发布：
 
 ```typescript
@@ -67,4 +73,4 @@ await research.publishFigure({ projectId, runId, replacesFigureId: null });
 roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf}/{sha256}
 ```
 
-图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。图稿域没有单独界面（[ADR 0024](adr/0024-stage-surface-removed.md)）：渲染、读日志与发布由对话 agent 调用 `research.figure.startOwned` / `publishOwned`；深链到 `?view=figures` 会明确失败。审核与替换仍经过人工审批闸门 `research_approve_gate`。
+图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。图稿域没有单独界面（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调度图稿阶段，阶段角色通过内部 `research.figure.startOwned` / `getOwned` / `publishOwned` 映射调用生产工具。Owned 映射不增加公开 IPC 能力；深链到 `?view=figures` 会明确失败。审核与替换仍经过人工审批闸门 `research_approve_gate`。

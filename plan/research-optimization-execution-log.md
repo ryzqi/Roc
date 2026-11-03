@@ -81,6 +81,55 @@ No remote writes, public publication or model spending performed.
 
 ## Remaining scope
 
-ROC-PR-01, ROC-PR-02A/B/C, ROC-PR-03A/B, P0 integration, ROC-PR-04/05,
+ROC-PR-02A/B/C, ROC-PR-03A/B, P0 integration, ROC-PR-04/05,
 X-UI, ROC-PR-06/07/09, X-SAFE, ROC-PR-08, X-NB/X-EXP, X-IDEA/X-WRITE,
 ROC-PR-10, X-ECO/X-MON and X-PERF/X-CONTEXT/X-OBS remain pending.
+
+## ROC-PR-01 — owned figure polling and publication
+
+Status: `Verified passing` for local tool contracts and real figure service integration.
+Baseline: M0 commits `525b1ae2` and `5805839`.
+
+The figure stage now exposes `get_figure` through the internal
+`research.figure.getOwned` mapping. Start/query/publish all use `runId`; obsolete
+`experimentId` figure inputs fail strict schema validation. Experiment tools keep their own
+experiment contract. The effects boundary checks active stage, project and owner before reading.
+No new public Owned IPC capability was registered; generated IPC remains current.
+Old frozen figure snapshots cannot execute/retry with a changed contract; a new request is required.
+
+The first regression failed against baseline. Real integration then found three additional
+blockers needed to satisfy the planned start/query/publish path:
+
+- Relative spec paths reached a job boundary requiring absolute paths.
+- Default Vega padding expanded a requested 216×144 figure to 256×189 pixels/points.
+- Published figures left their run snapshot's `artifactId` null.
+
+Path resolution remains inside the existing file ownership boundary. Pipeline `/2` uses
+fixed overall fit sizing and preserves physical SVG/PDF dimensions at high and fractional DPI.
+Publication now attaches its artifact in the same SQLite transaction.
+Original failure output is retained under
+`.artifacts/research-optimization/figure-dimensions-before/`.
+No validator was weakened. Fit limitations for composed/step-based Vega charts are documented.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/research-figure-owned.test.mjs tests/unit/research-figure-integration.test.mjs` | 9 passed before the additional fractional-size case |
+| `node --test tests/unit/research-figure-integration.test.mjs` | Latest 3 passed: real render/publish, 300-DPI fractional dimensions, cancellation |
+| `pnpm test:unit` | 582 passed, 0 failed |
+| `pnpm check:ipc` | Passed, generated files current |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm build` | Passed, includes typecheck and Electron production build |
+
+Logs: `.artifacts/research-optimization/pr01-{before,contracts,integration,unit,ipc,harness,build}.log`.
+The full unit run began before the additional fractional-size test was added; that final case
+was independently exercised in the latest 3-case integration run.
+Tests cover foreign project/owner rejection, terminal errors, restart interruption, stage
+cancellation, request drift, duplicate starts/publication and immutable old snapshots.
+Real renderer tests use original CC0 inputs and Skia PNG/SVG/PDF outputs. Human scientific
+approval and real-model quality remain outside these deterministic checks.
+
+Changed modules: role profiles/tools/prompts, production effects, stage snapshot execution,
+figure renderer fingerprint/sizing, figure publication/run repositories, figure documentation
+and focused tests. No model spending or external writes.

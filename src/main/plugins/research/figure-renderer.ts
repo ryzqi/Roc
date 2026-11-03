@@ -212,7 +212,7 @@ function svgDimensions(svg: string): { width: number; height: number } {
     const value = root.match(new RegExp(`\\b${name}=["']([^"']+)["']`, 'iu'))?.[1];
     if (value === undefined) return null;
     const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.ceil(parsed) : null;
+    return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : null;
   };
   let width = attribute('width');
   let height = attribute('height');
@@ -242,7 +242,7 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
   const request = researchFigureRenderJobSchema.parse(input);
   return withSeededVegaRandom(request.figure.seed, () => runResearchJob({
     projectRoot: request.projectRoot,
-    sourcePath: request.sourcePath,
+    sourcePath: resolve(request.projectRoot, request.sourcePath),
     outputDir: request.outputDir,
     maxSourceBytes: MAX_FIGURE_SPEC_BYTES,
     timeoutMs: request.timeoutMs,
@@ -265,7 +265,8 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
 
     const baseWidth = request.figure.widthInches * 72;
     const baseHeight = request.figure.heightInches * 72;
-    const spec = { ...inlineSpec, width: baseWidth, height: baseHeight } as TopLevelSpec;
+    const spec = { ...inlineSpec, width: baseWidth, height: baseHeight,
+      autosize: { type: 'fit', contains: 'padding' } } as TopLevelSpec;
     let svg: string;
     const view = new View(parse(compile(spec).spec), { renderer: 'none', loader: loader() });
     try {
@@ -287,8 +288,8 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
     pngContext.drawImage(image, 0, 0, dimensions.width, dimensions.height);
     const pngBytes = pngCanvas.toBuffer('image/png');
 
-    const widthPoints = dimensions.width * 72 / request.figure.dpi;
-    const heightPoints = dimensions.height * 72 / request.figure.dpi;
+    const widthPoints = baseWidth;
+    const heightPoints = baseHeight;
     const pdf = new PDFDocument({ title: request.label, creator: 'Roc', producer: '@napi-rs/canvas', rasterDPI: request.figure.dpi });
     const pdfContext = pdf.beginPage(widthPoints, heightPoints);
     // SAFETY: `PDFDocument.beginPage()` returns Skia's drawing context at runtime, although the declaration exposes the DOM base type.
