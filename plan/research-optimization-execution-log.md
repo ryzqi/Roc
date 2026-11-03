@@ -2560,3 +2560,33 @@ traces removed; settings source/test unchanged; intermittent cause not establish
 fixed. Name-filtered directory probe hung in an unmatched before hook and was terminated;
 not counted as verification. Frozen research-workflow fixtures remain untouched. No remote
 writes, paid models or live literature requests.
+
+## ROC-PR-06A3A — trusted human relation IPC and exact source reads
+
+Generated source inspection, relation listing/history and human proposal/review APIs. Main
+adapter binds sender window+project+capability in asynchronous context; schemas accept no
+caller-provided actor. Missing sender/direct capability calls/cross-scope context refuse.
+Actual source digest and actionable permission/conflict/not_found/degraded errors remain
+explicit. Concurrent windows keep separate requester identities. No agent review capability
+added to role tools; model proposals, matrix UI and strict semantic consumers remain next.
+
+Verification from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm generate:ipc` |Generated source contract and preload methods |
+| `node --test tests/unit/research-evidence-relation-ipc.test.mjs tests/unit/research-evidence-relations.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/ipc-*.test.mjs` |Initial21/21 passed before extra forgery/no-write assertions |
+| `pnpm test:unit` |Final845/845 passed |
+| `pnpm harness:eval` |Final94/94 passed |
+| `pnpm test:research-p0` |Final fresh build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs` |Final22/22 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final12/12; zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Logs pr06-relation-ipc-*.log. Native full workflow now invokes actual registered capabilities
+through generated adapter for actual parsed-PDF source→proposal→review; direct capability
+refusal/no-write checked, proposer window91/reviewer window92 recorded. Window IDs are
+explicit synthetic main inputs; actual renderer user path is the next UI increment. Existing
+old-gate refusal and new exact-version approval remain verified. No frozen fixture changes,
+paid/live requests or remote writes. PR-06 and overall plan remain incomplete.

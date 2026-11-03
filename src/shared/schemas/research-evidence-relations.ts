@@ -70,6 +70,7 @@ export const researchEvidenceRelationReviewSchema = z.object({
   decision: z.enum(['confirm', 'reject']), note: condition
 }).strict();
 export const researchEvidenceRelationListSchema = z.object({projectId: identifier, claimId: identifier.nullable()}).strict();
+export const researchEvidenceRelationHistorySchema = z.object({projectId: identifier, relationId: identifier}).strict();
 export const researchEvidenceRelationRevisionSchema = z.object({
   relation: researchEvidenceRelationSchema,
   actor: z.union([researchRelationActorSchema, z.object({kind: z.literal('system'), id: identifier}).strict()]).nullable(),

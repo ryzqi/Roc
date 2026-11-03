@@ -1,4 +1,8 @@
 import { withLiteratureContext } from '../services/literature-context';
+import {withResearchRelationHumanContext} from '../services/research-relation-context';
+import {
+  researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
+} from '../../shared/schemas/research-evidence-relations';
 import {
   pluginCapabilityMappings,
   type GeneratedPluginCapabilityMapping
@@ -35,6 +39,13 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.relations.propose' || target.capabilityName === 'research.relations.review') {
+          const request = target.capabilityName === 'research.relations.propose' ?
+            researchEvidenceRelationProposalSchema.parse(input) : researchEvidenceRelationReviewSchema.parse(input);
+          return withResearchRelationHumanContext({
+            capability: target.capabilityName, projectId: request.projectId, windowId
+          }, () => invoker.invokeCapability(target.capabilityName, request));
+        }
         const scoped = ['research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature',
           'research.library.getImportOperation', 'research.library.cancelImportOperation', 'research.literature.getPool',
           'research.zotero.preview', 'research.zotero.getPreview', 'research.zotero.sources', 'research.zotero.review',

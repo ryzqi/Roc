@@ -29,8 +29,9 @@ agent 提议者必须对应实际项目的阶段 run，默认 proposed。
 审核仅接受 user actor，必须显式提交 relation version、claim version 和 source
 digest。confirm/reject 追加审核人、时间、说明及不可替换的修订快照。
 supersedes 仅在用户确认时撤销旧关系；拒绝或未审核提议不改变旧关系。
-仓库当前接受可信 main 调用者提供的 actor；后续能力/IPC 与角色工具负责绑定
-真实调用身份，当前增量不声称已经接通模型或检查器审核按钮。
+仓库接受可信 main 调用者提供的 actor。用户 IPC 的 actor 由 main 从实际
+sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核人。
+模型提议工具及检查器审核按钮仍属于后续增量。
 
 主张修改和证据失效在原写入事务中撤销 proposed/confirmed/historical 关系，
 保留原始来源和审核人，追加 system 原因。修订写入失败时，原主张/证据更新及
@@ -46,6 +47,21 @@ supersedes 仅在用户确认时撤销旧关系；拒绝或未审核提议不改
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
 整个迁移回滚，数据库保持 DB20。新语义消费者准入、失效传播、历史导出和
 检查器矩阵属于下一增量，不能以仓库完成代替 PR-06 整体验收。
+
+## 可信用户 IPC
+
+`research.inspectEvidence` 返回保存的完整来源及规范化 digest；失效来源仍能
+读取旧片段，但明确标为 superseded。`research.listEvidenceRelations` 和
+`research.evidenceRelationHistory` 返回真实关系及历史，读取不写库。
+`research.proposeEvidenceRelation` 与 `research.reviewEvidenceRelation` 只在
+main IPC adapter 建立的窗口/项目/能力上下文中写入。缺少 sender、直接调用
+注册能力、跨项目或复用另一能力的上下文均拒绝；并发窗口的身份互不串用。
+
+版本或来源变化返回 conflict；身份/项目/工件状态错误返回 permission；
+缺少端点返回 not_found；破损来源或关系快照返回 degraded。未知失败继续
+抛出，不包装为成功。generated preload/IPC 合同来自单一 ipc-registry。
+原生验收已通过真实 SQLite、PDF parser 和 registry/adapter；测试 sender
+为明确的 synthetic main 输入，尚未声称真人窗口或模型调用已验收。
 
 真实区域保留原坐标及 origin；当前 HTML 的零面积坐标转为仅页定位（bbox/origin
 均 null）。没有 locations 时保持空数组，不从任意来源字符串猜页码或矩形。
