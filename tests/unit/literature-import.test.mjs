@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -106,7 +107,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 2);
+    assert.equal(result.schemaVersion, 3);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -134,7 +135,7 @@ function setup(options = {}) {
   const changes = [];
   const prepare = options.prepare ?? (async (metadata) => ({ metadata, bibliography: api.bibliographyFromRecord(metadata, new Set()) }));
   const search = options.search ?? { searchDetailed: async () => ({ records: options.records ?? [record()], sources: [
-    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null }
+    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [] }
   ], status: 'complete', truncated: false, warnings: [] }) };
   const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
     prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
@@ -353,12 +354,76 @@ test('arXiv parses located Atom records and DOI but refuses error feeds and inva
   }
 });
 
+test('Provider request receipts persist exact query, page, retries, response hashes and transport failures', async () => {
+  let attempts = 0;
+  const body = JSON.stringify({message: {items: [{DOI: '10.1234/receipt', title: ['Receipt paper']}]}});
+  const service = new api.LiteratureSearchService(async (_url, init) => {
+    assert.equal(init.method, 'GET');
+    attempts++;
+    return attempts === 1 ? new Response('rate limited', {status: 429, headers: {'retry-after': '0'}}) : new Response(body);
+  });
+  const f = setup({search: service});
+  try {
+    const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
+    const requests = result.sources[0].requests;
+    assert.equal(result.schemaVersion, 3);
+    assert.equal(requests.length, 2);
+    assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
+    assert.equal(requests[0].retryAfterMs, 0);
+    assert.equal(requests[0].errorCode, 'literature_provider_http_429');
+    assert.equal(requests[1].responseHash, createHash('sha256').update(body).digest('hex'));
+    assert.equal(requests[1].errorCode, null);
+    const url = new URL(requests[1].url);
+    assert.equal(url.searchParams.get('query'), 'exact query');
+    assert.equal(url.searchParams.get('offset'), '0');
+    assert.equal(url.searchParams.get('rows'), '5');
+    assert.ok(requests.every(request => Number.isFinite(Date.parse(request.startedAt)) &&
+      Number.isFinite(Date.parse(request.endedAt))));
+    const reread = f.run(() => f.service.readSearch({searchId: result.searchId, offset: 0, limit: 10}));
+    assert.deepEqual(reread.sources, result.sources);
+    const storedRequest = JSON.parse(f.db.prepare('SELECT request_json FROM research_literature_searches WHERE id=?')
+      .pluck().get(result.searchId));
+    assert.equal(storedRequest.yearFrom, 2020);
+  } finally { f.close(); }
+  const invalid = await new api.LiteratureSearchService(async () => Response.json({error: 'invalid response'}))
+    .searchDetailed({query: 'error payload', sources: ['openalex'], limit: 5});
+  assert.equal(invalid.sources[0].errorCode, 'literature_provider_response_invalid');
+  assert.equal(invalid.sources[0].requests[0].status, 200);
+  assert.ok(invalid.sources[0].requests[0].responseHash);
+  assert.equal(invalid.sources[0].requests[0].errorCode, null, 'HTTP receipt must not pretend payload validation was a transport error');
+  const networkFailure = await new api.LiteratureSearchService(async () => { throw new Error('offline fixture'); })
+    .searchDetailed({query: 'network error', sources: ['openalex'], limit: 5});
+  assert.equal(networkFailure.status, 'failed');
+  assert.equal(networkFailure.sources[0].requests[0].status, null);
+  assert.equal(networkFailure.sources[0].requests[0].responseHash, null);
+  assert.equal(networkFailure.sources[0].requests[0].errorCode, 'literature_provider_transport_error');
+});
+
+test('concurrent Provider responses cannot attach their request receipts to another source', async () => {
+  const service = new api.LiteratureSearchService(async url => {
+    if (url.includes('crossref')) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return Response.json({message: {items: [{DOI: '10.1234/shared', title: ['Shared paper']}]}});
+    }
+    return Response.json({results: [{id: 'W1', doi: '10.1234/shared', title: 'Shared paper'}]});
+  });
+  const result = await service.searchDetailed({query: 'shared', sources: ['openalex', 'crossref'], limit: 5});
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(result.sources.map(source => source.source), ['crossref', 'openalex']);
+  for (const source of result.sources) {
+    assert.equal(source.requests.length, 1);
+    assert.equal(new URL(source.requests[0].url).hostname, `api.${source.source}.org`);
+    assert.equal(source.requests[0].status, 200);
+    assert.ok(source.requests[0].responseHash);
+  }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 2, ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 3, ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);

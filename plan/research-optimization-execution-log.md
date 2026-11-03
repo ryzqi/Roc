@@ -847,3 +847,40 @@ Official arXiv Atom/error/DOI documentation and matching Zod/fast-xml-parser pri
 Context7 docs were checked. Europe PMC and Semantic Scholar documentation fetch limits
 remain recorded; no live API availability or academic coverage claim is made. All Provider
 responses were local fixtures. Logs: `.artifacts/research-optimization/pr04-provider-contract-*.log`.
+
+## PR-04.2B — per-source HTTP request receipts
+
+Status: `Verified passing` for returned search outcomes and the complete native consumer
+chain. Cache/quota/health, later paging and independently durable cancelled-inflight
+request records remain pending, along with the rest of PR-04.
+
+Search snapshot v3 retains each actual GET attempt: exact query URL and first-page
+parameters, start/end times, HTTP status, Retry-After, raw-response-byte SHA-256 and
+transport/HTTP failure code. Every source has its own AsyncLocal request context. HTTP
+backoff waits occur outside each attempt; retries remain separate. HTTP200 schema errors
+retain their actual transport receipt while the source records payload failure. Network
+failure has no invented status or hash. Missing internal request context refuses explicitly.
+The duplicate default fetch wrapper was removed; all requests still cross the common
+URL allowlist and explicit GET/redirect:error boundary. Headers/credentials and response
+bodies are not added to the receipts. Old snapshots are not upgraded with guessed fields.
+
+Changed: literature-service.ts, literature-import-service.ts, literature-import schema,
+focused regressions and research-literature-fusion.md. No dependency or migration added.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/literature-import.test.mjs` | Focused 17/17 passed |
+| `pnpm typecheck` | Passed; final repeated inside production build |
+| `pnpm test:unit` | Final 650/650 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Current generated contracts |
+| `pnpm test:research-p0` | Fresh production build/typecheck and 12/12 native P0 passed |
+| `git diff --check` | Passed |
+
+Tests query actual persisted snapshots after HTTP429/200 retry, verify exact response
+hashes, distinguish transport and payload errors, and force out-of-order concurrent
+responses without cross-source receipts. Native P0 retained updated searches in its DB
+backups. Logs: `.artifacts/research-optimization/pr04-provider-receipt-*.log`.
+No live Provider/model request, credential access or external write.

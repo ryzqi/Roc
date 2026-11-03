@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { z } from 'zod';
@@ -13,13 +14,14 @@ import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 
-  constructor(private readonly fetchImpl: FetchLike = fetchLiteratureProvider) {}
+  constructor(private readonly fetchImpl: FetchLike = fetch) {}
 
-  private readonly requests = new AsyncLocalStorage<AbortSignal>();
+  private readonly requests = new AsyncLocalStorage<ProviderContext>();
 
   async search(request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
     const result = await this.searchDetailed(request);
@@ -37,11 +39,13 @@ export class LiteratureSearchService {
     for (let offset = 0; offset < selected.length; offset += 3) {
       await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
         const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
+        const receipts: ProviderContext['receipts'] = [];
         try {
-          const found = await this.requests.run(providerSignal, () => this.searchSource(source, request.query, request.limit));
+          const found = await this.requests.run({signal: providerSignal, receipts}, () => this.searchSource(source, request.query, request.limit));
           const valid = found.map((record) => researchLiteratureSchema.parse(record));
           records.push(...valid);
-          sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length, errorCode: null, retryAfterMs: null });
+          sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length,
+            errorCode: null, retryAfterMs: null, requests: receipts });
         } catch (error) {
           signal?.throwIfAborted();
           const rateLimited = error instanceof ProviderError && error.status === 429;
@@ -50,7 +54,7 @@ export class LiteratureSearchService {
           sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
             errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
               invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
-            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null });
+            retryAfterMs: error instanceof ProviderError ? error.retryAfterMs : null, requests: receipts });
           return undefined;
         }
         return undefined;
@@ -81,7 +85,7 @@ export class LiteratureSearchService {
   }
 
   private async searchOpenAlex(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}`));
+    const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}&page=1`));
     return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
       source: 'openalex' as const,
@@ -100,7 +104,7 @@ export class LiteratureSearchService {
   }
 
   private async searchCrossref(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}`));
+    const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&offset=0`));
     return payload.message.items.map((item) => ({
       id: `crossref:${item.DOI}`,
       source: 'crossref' as const,
@@ -119,7 +123,7 @@ export class LiteratureSearchService {
   }
 
   private async searchSemanticScholar(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
+    const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&offset=0&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
     return payload.data.map((item) => ({
       id: `semantic_scholar:${item.paperId}`,
       source: 'semantic_scholar' as const,
@@ -138,7 +142,7 @@ export class LiteratureSearchService {
   }
 
   private async searchArxiv(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const xml = await this.getText(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}`);
+    const xml = await this.getText(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&start=0`);
     if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
     const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
     const entries = normalizeArray(payload.feed.entry);
@@ -161,7 +165,7 @@ export class LiteratureSearchService {
 
   private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc'): Promise<ResearchLiterature[]> {
     const medQuery = source === 'pubmed' ? `(${query}) AND SRC:MED` : query;
-    const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}`));
+    const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}&cursorMark=*`));
     return payload.resultList.result.map((item) => ({
       id: `${source}:${item.id}`,
       source,
@@ -192,20 +196,33 @@ export class LiteratureSearchService {
   private async readResponse(url: string, accept: string): Promise<string> {
     const allowed = ['https://api.openalex.org/', 'https://api.crossref.org/', 'https://api.semanticscholar.org/', 'https://export.arxiv.org/', 'https://www.ebi.ac.uk/'];
     if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
-    const signal = this.requests.getStore() ?? AbortSignal.timeout(15_000);
+    const context = this.requests.getStore();
+    if (context === undefined) throw new Error('literature_provider_context_missing');
     for (let attempt = 0; ; attempt += 1) {
-      signal.throwIfAborted();
-      const response = await this.fetchImpl(url, { headers: { accept }, signal, redirect: 'error' });
+      context.signal.throwIfAborted();
+      try { return await this.readAttempt(url, accept, context); }
+      catch (error) {
+        if (!(error instanceof ProviderError) || (error.status !== 429 && error.status < 500) || attempt >= 2) throw error;
+        await delay(error.retryAfterMs ?? 250 * 2 ** attempt, undefined, {signal: context.signal});
+      }
+    }
+  }
+
+  private async readAttempt(url: string, accept: string, context: ProviderContext): Promise<string> {
+    const receipt: ProviderContext['receipts'][number] = {attempt: context.receipts.length + 1, method: 'GET', url,
+      startedAt: new Date().toISOString(), endedAt: null, status: null, retryAfterMs: null, responseHash: null, errorCode: null};
+    context.receipts.push(receipt);
+    const {signal} = context;
+    try {
+      const response = await this.fetchImpl(url, {method: 'GET', headers: { accept }, signal, redirect: 'error'});
+      receipt.status = response.status;
       if (!response.ok) {
         const header = response.headers.get('retry-after');
         const seconds = header === null ? NaN : Number(header);
         const retryAfterMs = header === null ? null : Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Math.max(0, Date.parse(header) - Date.now());
         await response.body?.cancel();
-        if ((response.status === 429 || response.status >= 500) && attempt < 2) {
-          await delay(retryAfterMs !== null && Number.isFinite(retryAfterMs) ? retryAfterMs : 250 * 2 ** attempt, undefined, { signal });
-          continue;
-        }
-        throw new ProviderError(response.status, retryAfterMs !== null && Number.isFinite(retryAfterMs) ? retryAfterMs : null);
+        receipt.retryAfterMs = retryAfterMs !== null && Number.isFinite(retryAfterMs) ? retryAfterMs : null;
+        throw new ProviderError(response.status, receipt.retryAfterMs);
       }
       if (response.body === null) throw new Error('literature_provider_body_missing');
       const reader = response.body.getReader();
@@ -221,15 +238,15 @@ export class LiteratureSearchService {
           chunks.push(next.value);
         }
       } finally { await reader.cancel(); }
-      return Buffer.concat(chunks).toString('utf8');
-    }
+      const bytes = Buffer.concat(chunks);
+      receipt.responseHash = createHash('sha256').update(bytes).digest('hex');
+      return bytes.toString('utf8');
+    } catch (error) {
+      receipt.errorCode = signal.aborted ? 'literature_provider_timeout' :
+        error instanceof ProviderError ? `literature_provider_http_${error.status}` : 'literature_provider_transport_error';
+      throw error;
+    } finally { receipt.endedAt = new Date().toISOString(); }
   }
-}
-
-function fetchLiteratureProvider(url: string, init?: RequestInit): Promise<Response> {
-  const allowed = ['https://api.openalex.org/', 'https://api.crossref.org/', 'https://api.semanticscholar.org/', 'https://export.arxiv.org/', 'https://www.ebi.ac.uk/'];
-  if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
-  return fetch(url, { ...init, redirect: 'error' });
 }
 
 class ProviderError extends Error {

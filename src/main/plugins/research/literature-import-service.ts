@@ -51,7 +51,7 @@ export class LiteratureImportService {
       return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
         missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
     });
-    const result: LiteratureSearchResult = { schemaVersion: 2, ranking: literatureRanking(request.sources),
+    const result: LiteratureSearchResult = { schemaVersion: 3, ranking: literatureRanking(request.sources),
       searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
       status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
       warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
