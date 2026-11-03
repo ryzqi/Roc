@@ -42,6 +42,8 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.review | research.reviewZotero | 冻结来源与当前文库字段、对象版本及范围内原始来源的只读核对 |
 | research.zotero.sourceObserve | research.observeZoteroSource | 校验本范围原始收录回执后，显式读取当前对象并保存来源状态观察 |
 | research.zotero.sourceState | research.readZoteroSourceState | 只读同原始收录回执与集合范围的最后有效观察 |
+| research.zotero.attachmentInspect | research.inspectZoteroAttachment | 验证原收录回执与当前子附件关系，保存路径/访问/文件身份检查 |
+| research.zotero.attachmentRead | research.readZoteroAttachment | 只读当前会话/项目的附件检查记录 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -353,3 +355,30 @@ hash 保留于 `pr05-zotero-primary-contract.json`。未运行真实 Zotero 客�
 audit保留。暗色1099截图已检查，状态/版本/时间和保留文案可见，cut0/hidden0。
 首轮新增3项因父详情未可见时聚焦子标题而失败；等待真实可见后保持原键盘断言通过。
 实际 Zotero 客户端互操作与附件授权仍待验收。
+
+## 附件引用检查后端
+
+Research DB17 追加不可变附件检查，与真实父对象收录回执建立复合外键。
+输入携带 projectId、实例/库、父对象 operationId/itemKey 与 attachmentKey。
+先校验当前会话/项目的实际原始回执，再 GET 当前附件；type、parentItem 与 linkMode
+必须真实对应该父对象。关系或模式错误不读取路径，其他会话/项目的回执不触发 HTTP。
+
+固定官方源码 `attachments.js` 的 linkModeToName 核对于2026-11-04，明确支持
+imported_file、imported_url、linked_file、linked_url、embedded_image。仅前3种读取
+file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到来源分别记录原因，
+不请求文件路径、不下载网址。链接文件单独保留其类型，不伪装成 Zotero 管理文件。
+
+本地引用只做 lstat/realpath/access 检查，记录引用路径、真实路径、设备/inode、
+大小与修改/变更时间；不打开内容、不创建文档、不授予文件权限。缺失、无权读取、
+符号链接/非文件与不支持文档格式/大小分别报告。路径或文件身份在检查过程中变化
+显式失败。记录保留当前原始附件、来源 hash、原收录对象版本与实际检查时间。
+只读回放检查 hash、父对象/回执链接与当前会话/项目；预览过期不抹除已收录历史。
+传输/写入失败不替代原记录。服务关闭中止 HTTP 并拒绝迟到检查写入。
+
+本增量是后端/API 检查，原生选择文件授权、附件内容导入与界面仍待下一步。
+最终unit794/794、相关51/51、Harness94/94、fresh build/typecheck/native13/13、
+现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过；
+原生CSL收录后检查真实linked_file并只读回放，规范题录修订不变且文档数为0。
+日志 `pr05-attachment-*.log`；数据库与回执保留于`pr05-attachment-native-csl/`。
+官方附件源码读件及hash保留于`pr05-attachment-source-read.txt`和
+`pr05-zotero-primary-contract.json`。实际 Zotero 客户端互操作未运行。

@@ -1950,7 +1950,7 @@ Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
 | --- | --- |
 | `pnpm typecheck` / `pnpm build` | Passed |
 | `node --test --test-concurrency=1 tests/renderer/` | Final69/69 passed |
-| `node --test --test-name-pattern='source-state details\|source-state UI' tests/renderer/zotero-import.test.mjs` | Final keyboard/layout2/2 passed |
+| `node --test --test-name-pattern='source-state details|source-state UI' tests/renderer/zotero-import.test.mjs` | Final keyboard/layout2/2 passed |
 | `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
 | `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
 | `git diff --check` | Passed |
@@ -1964,3 +1964,45 @@ probe showed outer summary stayed focused. Await visible state retains native En
 No checks weakened, task-only debug removed. Full PR-05 remains unfinished; attachment
 input grants and actual-client acceptance follow. No actual Zotero/user library, new live
 literature query, paid model, remote write or frozen workflow-fixture changes.
+
+## PR-05F1 — owned attachment reference and file inspection
+
+Status: `Verified passing` for this backend/API increment. Research DB17 appends immutable
+inspection observations linked to actual parent import receipts. Owner/project/operation
+validation happens before HTTP; current child type/parent/linkMode are verified before
+requesting the file reference. No source path grants permission to read bytes or import.
+
+Imported file/imported URL/linked file remain distinct. Linked URL/embedded image/trash/
+not-found skip file-path requests. Actual lstat/realpath/access distinguish ready/missing/
+denied/invalid/unsupported document format or size. Captured file identity includes device,
+inode, size and modification/change times; inspection drift fails. Raw/hash/parent/source
+receipts and real time are retained. Scoped replay verifies integrity, remains valid after
+preview expiry and never issues HTTP. Transport/write failure preserves earlier records;
+shutdown aborts actual HTTP and prevents late publication. No canonical/document change.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-sync.test.mjs` |51/51 passed |
+| `pnpm test:unit` |794/794 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |15/15 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-attachment-*.log`, `pr05-attachment-native-csl/` DB/receipt. Regressions use
+actual chmod0 denial, real missing/symlink/unsupported files, sender bridge and migration16→17
+history preservation, parent/type/mode refusal, corruption, expiry, writes/transport failure
+and shutdown cancellation. Native CSL import inspects a real linked-file identity with
+readonly replay, unchanged paper revision and zero documents. Prior15→16 regression explicitly
+applies migrations through16 to preserve its named scope. Corrected the earlier ledger's
+escaped regex separator to the exact executed keyboard/layout command; no product change.
+
+Pinned official attachments.js read via Agent Reach/Jina verifies five exact linkMode names;
+Item and Local API source establish parent fields and file/view/url reference semantics.
+Source/read hashes retained. No actual Zotero client/user library, new live literature query,
+paid model, remote write or frozen workflow-fixture edits. Next F2: native selected-file input
+authorization, exact file validation and content import with provenance; UI follows.

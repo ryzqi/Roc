@@ -189,7 +189,8 @@ test('registered read-only capability and generated IPC contracts expose actual 
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
   }}}, adapter(), imports);
-  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.collections', 'research.zotero.getPreview',
+  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.attachmentInspect', 'research.zotero.attachmentRead',
+    'research.zotero.collections', 'research.zotero.getPreview',
     'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review',
     'research.zotero.sourceObserve', 'research.zotero.sourceState', 'research.zotero.sources', 'research.zotero.status',
     'research.zotero.syncAcknowledge', 'research.zotero.syncControl', 'research.zotero.syncFind', 'research.zotero.syncPage',

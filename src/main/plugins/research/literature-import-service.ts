@@ -28,6 +28,8 @@ import {ZoteroSyncStore} from './zotero-sync-store';
 import {zoteroSyncPageSchema, type ZoteroSync, type ZoteroSyncCapturedPage} from '../../../shared/schemas/research-zotero-sync';
 import {ZoteroSourceStateStore} from './zotero-source-state-store';
 import {zoteroSourceStateRequestSchema, type ZoteroSourceState} from '../../../shared/schemas/research-zotero-source-state';
+import {zoteroAttachmentRequestSchema, type ZoteroAttachmentInspection, type ZoteroAttachmentFile} from '../../../shared/schemas/research-zotero-attachment';
+import {ZoteroAttachmentStore, inspectZoteroAttachmentFile, zoteroAttachmentLinkModeSchema} from './zotero-attachment-store';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -54,6 +56,8 @@ export class LiteratureImportService {
   private readonly syncReads = new Map<string, AbortController>();
   private readonly zoteroSourceStates: ZoteroSourceStateStore;
   private readonly sourceStateJobs = new Set<Promise<ZoteroSourceState>>();
+  private readonly zoteroAttachments: ZoteroAttachmentStore;
+  private readonly attachmentJobs = new Set<Promise<ZoteroAttachmentInspection>>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -64,6 +68,7 @@ export class LiteratureImportService {
     this.zoteroObjects = new ZoteroObjectStore(db, now);
     this.zoteroSyncs = new ZoteroSyncStore(db, this.zoteroPreviews, now);
     this.zoteroSourceStates = new ZoteroSourceStateStore(db, this.zoteroObjects, now);
+    this.zoteroAttachments = new ZoteroAttachmentStore(db, this.zoteroObjects, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -212,6 +217,47 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     return this.zoteroSourceStates.read(context, input);
+  }
+
+  readZoteroAttachment(inspectionId: string): ZoteroAttachmentInspection {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroAttachments.read(context, inspectionId);
+  }
+
+  async inspectZoteroAttachment(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroAttachmentInspection> {
+    const request = zoteroAttachmentRequestSchema.parse(input);
+    const {attachmentKey, ...parent} = request;
+    const context = literatureContext();
+    this.requireActive(context);
+    const original = this.zoteroObjects.imported(context, {...parent, collectionKey: null});
+    const pending = (async (): Promise<ZoteroAttachmentInspection> => {
+      const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+      const remote = await adapter.inspectObject(original.scope, attachmentKey, signal);
+      this.requireActive(context);
+      let linkMode: ZoteroAttachmentInspection['linkMode'] = null;
+      let file: ZoteroAttachmentFile;
+      if (remote.status === 'not_found') file = {status: 'not_requested', reason: 'source_not_found'};
+      else {
+        if (remote.item.data.itemType !== 'attachment' || remote.item.data.parentItem !== original.itemKey ||
+          attachmentKey === original.itemKey) throw new Error('zotero_attachment_parent_mismatch');
+        const mode = zoteroAttachmentLinkModeSchema.safeParse(remote.item.data.linkMode);
+        if (!mode.success) throw new Error('zotero_response_invalid');
+        linkMode = mode.data;
+        if (remote.status === 'trashed') file = {status: 'not_requested', reason: 'trashed'};
+        else if (linkMode === 'linked_url' || linkMode === 'embedded_image') file = {status: 'not_requested', reason: linkMode};
+        else {
+          const path = await adapter.attachmentPath(original.scope, attachmentKey, signal);
+          this.requireActive(context);
+          file = await inspectZoteroAttachmentFile(path);
+        }
+      }
+      this.requireActive(context);
+      return this.zoteroAttachments.record(context, request, {remote, linkMode, file});
+    })();
+    this.attachmentJobs.add(pending);
+    try {return await pending;}
+    finally {this.attachmentJobs.delete(pending);}
   }
 
   async observeZoteroSource(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroSourceState> {
@@ -423,7 +469,7 @@ export class LiteratureImportService {
     this.closed = true;
     this.lifetime.abort(new Error('literature_service_closed'));
     for (const task of this.active.values()) task.controller.abort();
-    await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs,
+    await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs, ...this.attachmentJobs,
       ...[...this.active.values()].map((task) => task.promise)]);
   }
 

@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {pathToFileURL} from 'node:url';
 import { setTimeout as wait } from 'node:timers/promises';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
@@ -118,6 +119,31 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     await f.db.backup(join(stateEvidence, 'research.sqlite'));
     await writeFile(join(stateEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
       electron: process.versions.electron, sourceState, requests}, null, 2) + '\n');
+    const attachmentPath=join(root,'native-attachment.pdf');
+    await writeFile(attachmentPath,'%PDF-synthetic-reference-not-yet-authorized');
+    const attachment={key:'FILE2345',version:9,data:{key:'FILE2345',version:9,itemType:'attachment',parentItem:key,linkMode:'linked_file'}};
+    const attachmentCalls=[];
+    const attachmentAdapter=new api.ZoteroAdapter(async(url,init)=>{
+      attachmentCalls.push(url);assert.equal(init.method,'GET');
+      const headers={'Zotero-API-Version':'3','Zotero-Schema-Version':'40','Zotero-Server-ID':'native-fixture','Last-Modified-Version':'9'};
+      return new URL(url).pathname.endsWith('/file/view/url') ? new Response(pathToFileURL(attachmentPath).href,{headers}) :
+        Response.json(attachment,{headers});
+    });
+    try{
+      const {collectionKey:_collection,...parent}=sourceInput;
+      const inspection=await run(()=>imports.inspectZoteroAttachment({...parent,attachmentKey:attachment.key},attachmentAdapter));
+      assert.equal(inspection.file.status,'ready');assert.equal(inspection.linkMode,'linked_file');
+      assert.equal(inspection.file.resolvedPath,attachmentPath);
+      assert.equal(attachmentCalls.length,2);
+      assert.deepEqual(run(()=>imports.readZoteroAttachment(inspection.inspectionId)),inspection);
+      assert.equal(f.repository.library.get(saved.id).revision,saved.revision);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+      const evidence=join(process.cwd(),'.artifacts/research-optimization/pr05-attachment-native-csl');
+      await mkdir(evidence,{recursive:true});
+      await f.db.backup(join(evidence,'research.sqlite'));
+      await writeFile(join(evidence,'receipt.json'),JSON.stringify({node:process.versions.node,electron:process.versions.electron,
+        inspection,attachmentCalls},null,2)+'\n');
+    }finally{await attachmentAdapter.shutdown();}
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();
     await rm(root, {recursive: true, force: true});
