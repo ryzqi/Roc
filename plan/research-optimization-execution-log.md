@@ -704,3 +704,26 @@ Command from `/Users/Apple_501/Desktop/Roc/Roc`:
 Log: `.artifacts/research-optimization/p0-restart.log`. Before/after DB snapshots,
 original running identities, recovered file/hash lists, diagnostics and events are retained
 under `.artifacts/research-optimization/p0-production/<taskId>/`.
+
+## P0.6 — hostile PDF and native secret boundaries
+
+Status: `Verified passing` for the offline hostile-document contract scenario. MCP
+unknown-side-effect integration is still pending; live model attack quality is untested.
+
+An original Tectonic PDF contains actual authority-escalation and secret-exfiltration
+instructions. The isolated parser reads those instructions, but the parent manifest and
+issued grant count remain unchanged. Cross-project dispatch, cross-project production
+read, out-of-workspace traversal and unavailable reading-stage shell/MCP/write tools
+are refused. The real experiment then attempts to read and overwrite a synthetic secret
+outside its frozen inputs. Node permission denies both accesses; the secret is unchanged
+and no secret bytes appear in outputs/logs. This deterministic adversarial fixture proves
+hard boundaries, not live-model prompt-injection success rates or a network attack trial.
+
+From `/Users/Apple_501/Desktop/Roc/Roc`:
+`node scripts/run-research-p0.mjs '--test-name-pattern=hostile PDF'` finally passed 1/1,
+including retained PDF/parsed content. `git diff --check` passed. No product code changed.
+Earlier fixture assertions guessed project/path denial names and omitted Node's
+ERR_ACCESS_DENIED; all were corrected to real contracts without weakening any guard.
+Logs: `.artifacts/research-optimization/p0-hostile-pdf-*.log`. Native denials, frozen source
+hash, original PDF, actual parsed content, diagnostics, events and both DBs remain under
+the P0 production artifact directory. No real credentials or remote writes were used.
