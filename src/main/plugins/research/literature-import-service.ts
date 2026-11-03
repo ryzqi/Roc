@@ -9,6 +9,7 @@ import type { z } from 'zod';
 import { assertLiteratureActive, literatureContext, type LiteratureExecutionContext } from '../../services/literature-context';
 import { betterBibtexKey } from './cite-key';
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { fuseLiterature, literatureRanking } from './literature-fusion';
 import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
@@ -38,25 +39,21 @@ export class LiteratureImportService {
     const found = await this.searchService.searchDetailed(request, context.signal);
     this.requireActive(context);
     const createdAt = this.now();
-    const grouped = new Map<string, LiteratureCandidate>();
     let unknownYear = false;
-    for (const record of found.records) {
-      if (request.yearFrom !== undefined || request.yearTo !== undefined) {
-        if (record.publishedYear === null) { unknownYear = true; continue; }
-        if ((request.yearFrom !== undefined && record.publishedYear < request.yearFrom) || (request.yearTo !== undefined && record.publishedYear > request.yearTo)) continue;
-      }
-      const identity = literatureIdentity(record);
-      const origin = { source: record.source as LiteratureCandidate['origins'][number]['source'], externalId: record.externalId,
-        retrievedAt: createdAt, metadataHash: hash(record) };
-      const existing = grouped.get(identity);
-      if (existing !== undefined) { existing.origins.push(origin); continue; }
-      const match = this.library.findByIdentity(identity);
-      grouped.set(identity, { candidateId: `candidate_${randomUUID()}`, record, origins: [origin], matchedLibraryItemId: match?.id ?? null,
-        archived: match?.archived ?? false, missingFields: ['doi', 'abstract', 'publishedYear'].filter((field) => record[field as 'doi' | 'abstract' | 'publishedYear'] === null) });
-    }
-    const candidates = [...grouped.values()].slice(0, request.limit);
-    const result: LiteratureSearchResult = { searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
-      status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.size > request.limit,
+    const grouped = fuseLiterature(found.records).filter(candidate => {
+      if (request.yearFrom === undefined && request.yearTo === undefined) return true;
+      if (candidate.record.publishedYear === null) { unknownYear = true; return false; }
+      return (request.yearFrom === undefined || candidate.record.publishedYear >= request.yearFrom)
+        && (request.yearTo === undefined || candidate.record.publishedYear <= request.yearTo);
+    });
+    const candidates: LiteratureCandidate[] = grouped.slice(0, request.limit).map(candidate => {
+      const match = this.library.findByIdentity(candidate.identity);
+      return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
+        missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
+    });
+    const result: LiteratureSearchResult = { schemaVersion: 2, ranking: literatureRanking(request.sources),
+      searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
+      status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
       warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
     this.db.prepare('DELETE FROM research_literature_searches WHERE expires_at <= ?').run(createdAt);
     this.db.prepare('INSERT INTO research_literature_searches (id,owner,project_id,request_json,result_json,expires_at) VALUES (?,?,?,?,?,?)')

@@ -19,6 +19,7 @@ before(async () => {
     export { ResearchTaskRepository } from './src/main/plugins/research/research-task-repository';
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
+    export { fuseLiterature, literatureRanking } from './src/main/plugins/research/literature-fusion';
     export { withLiteratureContext } from './src/main/services/literature-context';
     export { createLiteratureTools } from './src/main/plugins/agent/literature-tools';
   `, resolveDir: process.cwd() }, outfile, bundle: true, format: 'esm', platform: 'node', target: 'node22',
@@ -31,6 +32,96 @@ function record(id = '1', doi = `10.1234/${id}`) {
   return { id: `crossref:${id}`, source: 'crossref', externalId: id, doi, title: `Literature ${id}`, authors: ['Alice Smith'],
     abstract: 'A source abstract.', publishedYear: 2024, citationCount: 4, url: null, openAccessUrl: null, importedAt: timestamp, updatedAt: timestamp };
 }
+
+test('RRF gives one contribution per source, keeps provider ranks and resolves ties without arrival order', () => {
+  const sharedCrossref = record('shared');
+  const duplicateCrossref = {...sharedCrossref, id: 'crossref:duplicate', externalId: 'duplicate', title: 'Conflicting source title'};
+  const soloCrossref = record('solo-crossref', null);
+  const sharedOpenalex = {...sharedCrossref, source: 'openalex', id: 'openalex:shared', externalId: 'shared',
+    publishedYear: 2023, authors: ['Another Author']};
+  const soloOpenalex = {...record('solo-openalex', null), source: 'openalex'};
+  const first = api.fuseLiterature([sharedCrossref, duplicateCrossref, soloCrossref, sharedOpenalex, soloOpenalex]);
+  const interleaved = api.fuseLiterature([sharedOpenalex, sharedCrossref, soloOpenalex, duplicateCrossref, soloCrossref]);
+  assert.deepEqual(first, interleaved);
+  const shared = first.find(candidate => candidate.identity === 'doi:10.1234/shared');
+  assert.equal(shared.score, 2 / 61);
+  assert.equal(shared.origins.length, 3);
+  assert.deepEqual(shared.contributions, [
+    {source: 'crossref', rank: 1, score: 1 / 61},
+    {source: 'openalex', rank: 1, score: 1 / 61}
+  ]);
+  assert.deepEqual(shared.record, sharedCrossref);
+  assert.equal(shared.selectionReason, 'source_priority_then_rank_then_metadata_hash');
+  assert.deepEqual(shared.conflicts.map(conflict => conflict.field), ['title', 'authors', 'publishedYear']);
+  assert.deepEqual(shared.origins.map(origin => origin.record), [sharedCrossref, duplicateCrossref, sharedOpenalex]);
+  assert.equal(first.find(candidate => candidate.identity === 'crossref:solo-crossref').contributions[0].rank, 3);
+  const sameTitles = api.fuseLiterature([
+    {...record('a', null), title: 'Identical title'}, {...record('b', null), title: 'Identical title'}
+  ]);
+  assert.equal(sameTitles.length, 2, 'titles cannot merge distinct papers');
+  const tied = api.fuseLiterature([record('z'), {...record('a'), source: 'openalex'}]);
+  assert.deepEqual(tied.map(candidate => candidate.identity), ['doi:10.1234/a', 'doi:10.1234/z']);
+  const doiVariants = api.fuseLiterature([record('case', '10.1234/CASE'),
+    {...record('case', 'https://doi.org/10.1234/case'), source: 'openalex'}]);
+  assert.equal(doiVariants.length, 1);
+  assert.equal(doiVariants[0].conflicts.some(conflict => conflict.field === 'doi'), false);
+});
+
+test('model tools preview fused metadata while retaining the complete scoped source snapshots', async () => {
+  const original = {...record(), abstract: 'x'.repeat(5000)};
+  const f = setup({records: [original]});
+  try {
+    const tools = api.createLiteratureTools({invoke: (name, input) => {
+      assert.equal(name, 'research.literature.search');
+      return f.service.search(input);
+    }}, f.scope, {search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel'});
+    const preview = await tools[0].invoke({query: 'preview', sources: ['crossref'], limit: 5});
+    assert.equal(preview.candidates[0].record.abstract.length, 800);
+    assert.equal('record' in preview.candidates[0].origins[0], false);
+    const snapshot = f.run(() => f.service.readSearch({searchId: preview.searchId, offset: 0, limit: 10}));
+    assert.equal(snapshot.candidates[0].record.abstract.length, 5000);
+    assert.deepEqual(snapshot.candidates[0].origins[0].record, original);
+  } finally { f.close(); }
+});
+
+test('an old search snapshot fails explicitly and is retained without fabricated ranking fields', async () => {
+  const f = setup();
+  try {
+    const {result} = await candidate(f);
+    const old = structuredClone(result);
+    delete old.schemaVersion;
+    delete old.ranking;
+    f.db.prepare('UPDATE research_literature_searches SET result_json=? WHERE id=?')
+      .run(JSON.stringify(old), result.searchId);
+    assert.throws(() => f.run(() => f.service.readSearch({searchId: result.searchId, offset: 0, limit: 10})),
+      /literature_storage_invalid/u);
+    assert.deepEqual(JSON.parse(f.db.prepare('SELECT result_json FROM research_literature_searches WHERE id=?')
+      .pluck().get(result.searchId)), old);
+  } finally { f.close(); }
+});
+
+test('fused candidate snapshots retain score, conflicts and original records through manual import', async () => {
+  const primary = record('shared');
+  const alternate = {...primary, source: 'openalex', id: 'openalex:shared', externalId: 'W1', publishedYear: 2023};
+  const f = setup({records: [alternate, primary]});
+  try {
+    const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
+    assert.equal(result.schemaVersion, 2);
+    assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
+      sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
+    assert.equal(result.candidates.length, 1);
+    assert.equal(f.repo.library.list({projectId: f.project.id, query: '', limit: 10, includeArchived: false}).length, 0);
+    const reread = f.run(() => f.service.readSearch({searchId: result.searchId, offset: 0, limit: 10}));
+    assert.deepEqual(reread.candidates, result.candidates);
+    assert.deepEqual(reread.candidates[0].record, primary);
+    assert.equal(reread.candidates[0].conflicts[0].field, 'publishedYear');
+    const imported = await f.run(() => f.service.add({entries: [{kind: 'candidate',
+      searchId: result.searchId, candidateId: result.candidates[0].candidateId}], requestId: 'fused-manual-import'}));
+    assert.equal(imported.counts.created, 1);
+    assert.deepEqual(f.run(() => f.service.readSearch({searchId: result.searchId, offset: 0, limit: 10})).candidates,
+      result.candidates, 'import cannot mutate the frozen source records');
+  } finally { f.close(); }
+});
 function setup(options = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
@@ -200,8 +291,9 @@ test('provider outcomes distinguish partial, empty, rate limiting and invalid re
   });
   const result = await service.searchDetailed({ query: 'x', sources: ['openalex', 'crossref', 'semantic_scholar'], limit: 5 });
   assert.equal(result.status, 'partial');
-  assert.deepEqual(result.sources.map((s) => s.status), ['empty', 'rate_limited', 'error']);
-  assert.equal(result.sources[1].retryAfterMs, 2000);
+  assert.deepEqual(result.sources.map((s) => [s.source, s.status]),
+    [['crossref', 'rate_limited'], ['openalex', 'empty'], ['semantic_scholar', 'error']]);
+  assert.equal(result.sources.find(source => source.source === 'crossref').retryAfterMs, 2000);
 });
 
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
@@ -209,7 +301,8 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
+    return { schemaVersion: 2, ranking: api.literatureRanking(['crossref']),
+      searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);
   await tools[0].invoke({ query: 'x', limit: 30 });

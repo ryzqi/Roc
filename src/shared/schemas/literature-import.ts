@@ -11,11 +11,23 @@ export const literatureSearchToolSchema = z.object({
 }).strict().refine((input) => input.yearFrom === undefined || input.yearTo === undefined || input.yearFrom <= input.yearTo, 'literature_year_range_invalid');
 export const literatureSearchInputSchema = literatureSearchToolSchema.safeExtend({ projectId: z.string().min(1).nullable().optional() });
 export const literatureCandidateSchema = z.object({
-  candidateId: z.string(), record: researchLiteratureSchema,
-  origins: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(), retrievedAt: z.string(), metadataHash: z.string() }).strict()),
+  candidateId: z.string(), identity: z.string(), record: researchLiteratureSchema,
+  score: z.number().nonnegative(),
+  selectionReason: z.literal('source_priority_then_rank_then_metadata_hash'),
+  origins: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(), rank: z.number().int().positive(),
+    retrievedAt: z.string(), metadataHash: z.string(), record: researchLiteratureSchema }).strict()),
+  contributions: z.array(z.object({ source: literatureNetworkSourceSchema, rank: z.number().int().positive(), score: z.number().positive() }).strict()),
+  conflicts: z.array(z.object({ field: z.enum(['doi', 'title', 'authors', 'publishedYear', 'citationCount', 'url', 'openAccessUrl']),
+    values: z.array(z.object({ source: literatureNetworkSourceSchema, externalId: z.string(),
+      value: z.union([z.string(), z.number(), z.array(z.string())]) }).strict()).min(2) }).strict()),
   matchedLibraryItemId: z.string().nullable(), archived: z.boolean(), missingFields: z.array(z.string())
 }).strict();
+export const literatureRankingSchema = z.object({
+  method: z.literal('rrf'), version: z.literal(1), k: z.literal(60),
+  sourceWeights: z.array(z.object({source: literatureNetworkSourceSchema, weight: z.literal(1)}).strict())
+}).strict();
 export const literatureSearchResultSchema = z.object({
+  schemaVersion: z.literal(2), ranking: literatureRankingSchema,
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'timeout', 'rate_limited', 'error']),

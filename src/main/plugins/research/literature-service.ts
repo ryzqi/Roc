@@ -5,7 +5,8 @@ import { researchLiteratureSchema } from '../../../shared/schemas/research';
 import type { LiteratureSearchInput, LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature, ResearchLiteratureSearchRequest } from '../../../shared/types';
-import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { normalizeResearchDoi } from './literature-identity';
+import { fuseLiterature, literatureSourcePriority } from './literature-fusion';
 import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
@@ -20,7 +21,7 @@ export class LiteratureSearchService {
 
   async search(request: ResearchLiteratureSearchRequest): Promise<ResearchLiterature[]> {
     const result = await this.searchDetailed(request);
-    return dedupeLiterature(result.records).slice(0, request.limit);
+    return fuseLiterature(result.records).slice(0, request.limit).map(candidate => candidate.record);
   }
 
   async searchDetailed(request: LiteratureSearchInput | ResearchLiteratureSearchRequest, signal?: AbortSignal): Promise<{
@@ -29,7 +30,7 @@ export class LiteratureSearchService {
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
     const sources: LiteratureSearchResult['sources'] = [];
     const records: ResearchLiterature[] = [];
-    const selected = [...new Set(request.sources)].filter((source) => source !== 'local');
+    const selected = literatureSourcePriority.filter(source => request.sources.includes(source));
     for (let offset = 0; offset < selected.length; offset += 3) {
       await Promise.all(selected.slice(offset, offset + 3).map(async (source) => {
         const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
@@ -55,7 +56,7 @@ export class LiteratureSearchService {
     sources.sort((a, b) => selected.indexOf(a.source) - selected.indexOf(b.source));
     const failures = sources.filter((source) => source.status !== 'ok' && source.status !== 'empty').length;
     return { records, sources, status: failures === 0 ? 'complete' : failures === sources.length ? 'failed' : 'partial',
-      truncated: dedupeLiterature(records).length > request.limit, warnings: failures === 0 ? [] : ['部分来源不可用；结果不代表穷尽检索。'] };
+      truncated: fuseLiterature(records).length > request.limit, warnings: failures === 0 ? [] : ['部分来源不可用；结果不代表穷尽检索。'] };
   }
 
   private async searchSource(
@@ -227,15 +228,6 @@ function fetchLiteratureProvider(url: string, init?: RequestInit): Promise<Respo
 
 class ProviderError extends Error {
   constructor(readonly status: number, readonly retryAfterMs: number | null) { super(`literature_provider_http_${status}`); }
-}
-
-function dedupeLiterature(records: ResearchLiterature[]): ResearchLiterature[] {
-  const byIdentity = new Map<string, ResearchLiterature>();
-  for (const record of records) {
-    const identity = literatureIdentity({ doi: record.doi, source: record.source, externalId: record.externalId });
-    if (!byIdentity.has(identity)) byIdentity.set(identity, record);
-  }
-  return Array.from(byIdentity.values());
 }
 
 function optionalResearchDoi(doi: string | null | undefined): string | null {
