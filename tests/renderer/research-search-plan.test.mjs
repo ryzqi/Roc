@@ -8,7 +8,9 @@ import electronPath from 'electron';
 import { _electron } from '@playwright/test';
 import { researchSearchPlanFixture } from '../unit/fixtures/research-test-kit.mjs';
 
-let directory, app, page;
+let directory, app, page, gateResult, finishGate;
+const gateRequests=[];
+let deferGate=false;
 const errors = [];
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/search-plan-ui');
 before(async () => {
@@ -23,10 +25,11 @@ before(async () => {
     window.decisions = [];
     window.mount = (searchPlan, searchPlanHash, artifactLinks = [{projectId:'synthetic-project',artifactId:'synthetic-artifact',expectedVersion:'a'.repeat(64),title:'检索计划',kind:'search_strategy'}]) => flushSync(() => root.render(React.createElement(ResearchGateApprovalCard, {
       approval: {kind: 'approval', interruptId: 'plan-gate', actionRequests: [{name: 'research_approve_gate',
-        args: {stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactLinks,
+        args: {projectId:'synthetic-project',stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactLinks,
           ...(searchPlan === null ? {} : {searchPlan}), searchPlanHash}}],
         reviewConfigs: [{actionName: 'research_approve_gate', allowedDecisions: ['approve', 'reject']}]},
       onOpenArtifact: request => window.openedArtifact=request,
+      onReadGateContext: request => window.readGateFromMain(request),
       onApprovalDecision: (id, values) => decisions.push({id, values})
     })));
   `, resolveDir: process.cwd(), loader: 'js'}, outfile: join(directory, 'app.js'),
@@ -46,6 +49,13 @@ before(async () => {
   page = await app.firstWindow();
   page.setDefaultTimeout(5000);
   page.on('pageerror', error => errors.push(error.message));
+  await page.exposeFunction('readGateFromMain',async request=>{
+    gateRequests.push(request);
+    assert.notEqual(gateResult,undefined,'test must configure explicit gate response');
+    const result=gateResult;
+    if(deferGate)return new Promise(resolve=>{finishGate=()=>resolve(result);});
+    return result;
+  });
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
@@ -131,4 +141,33 @@ test('malformed artifact links explicitly disable all gate decisions', async () 
     assert.match(await page.locator('[role="alert"]').first().innerText(), /闸门决定已禁用/u);
     assert.deepEqual(await page.evaluate(()=>decisions), []);
   }
+});
+
+
+test('explicit whole-stage refresh repairs malformed links, blocks decisions during failed reads and uses newly displayed plan and versions', async () => {
+  const plan=researchSearchPlanFixture('新的完整检索问题',[{query:'New explicit query',sources:['crossref'],limit:3,maxPages:2}]);
+  gateResult={ok:false,error:{code:'gate_read_failed',message:'实际阶段读取失败',category:'internal',retryable:true}};
+  await page.evaluate(()=>{decisions=[];mount(null,'invalid',null);});
+  await page.getByTestId('assistant-gate-refresh').focus();await page.keyboard.press('Enter');
+  await page.getByText('实际阶段读取失败',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('assistant-gate-approve').isDisabled(),true);
+  assert.equal(await page.getByTestId('assistant-gate-reject').isDisabled(),true);
+  gateResult={ok:true,data:{projectId:'synthetic-project',stage:'discovery',artifactLinks:[{
+    projectId:'synthetic-project',artifactId:'new-artifact',expectedVersion:'c'.repeat(64),title:'新计划',kind:'search_strategy'}],
+    searchPlan:plan,searchPlanHash:'d'.repeat(64),readAt:'2026-11-04T00:00:00.000Z'}};
+  deferGate=true;
+  await page.getByTestId('assistant-gate-refresh').click();
+  await page.getByText('正在读取全部阶段工件…',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('assistant-gate-approve').isDisabled(),true);
+  assert.equal(await page.getByTestId('assistant-gate-reject').isDisabled(),true);
+  while(typeof finishGate!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  deferGate=false;finishGate();
+  await page.getByTestId('assistant-gate-reviewed-at').waitFor();
+  assert.match(await page.getByTestId('assistant-gate-search-plan').innerText(),/New explicit query/u);
+  assert.equal(await page.getByTestId('assistant-gate-approve').isDisabled(),false);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.deepEqual(gateRequests.at(-1),{projectId:'synthetic-project',expectedStage:'discovery',artifactId:null});
+  await page.getByTestId('assistant-gate-approve').focus();await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(()=>decisions),[{id:'plan-gate',values:[{type:'approve',
+    reviewedArtifactVersions:[{artifactId:'new-artifact',version:'c'.repeat(64)}],reviewedSearchPlanHash:'d'.repeat(64)}]}]);
 });

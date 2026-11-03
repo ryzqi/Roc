@@ -2298,3 +2298,45 @@ strict superseded getter retained. Final13 passes. Last repository status/select
 verified by final6/fresh native and assembled UI. No frozen workflow fixtures, new live queries,
 model spending, client operations or remote writes. Next A3B inspector/card whole-context refresh
 and return to original confirmation, then production type views/reading location. Full plan pending.
+
+
+## X-UIA3B — explicit whole-stage reread and return to assistant confirmation
+
+Status: `Verified passing` for the version-bound inspector/assistant UI. Inspector explicitly
+reads all stage artifacts and versions, then returns that context only on a separate action.
+The displayed selected snapshot must match captured review version before return; stale body
+requires explicit refresh and actual new content inspection. Card state is keyed by real
+interrupt/project/stage, replaces all links/versions/discovery plan/hash, and requires another
+explicit decision through existing chat resume. Pending/failed card reads disable all decisions;
+malformed links can recover from real project/stage only. No title aliases or guessed identities.
+
+Type-only open/context callbacks stay outside eager inspector graph; stable reader crosses
+AssistantPanel/transcript/message memo. Escape returns actual source focus. Context return
+focuses original card's reread control with preventScroll. Selection/project/interrupt changes
+reject late response scope. No renderer direct approval API, DB write/model/worker on reads.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm typecheck` / `pnpm build` | Final production build/typecheck passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/research-search-plan.test.mjs` | Final13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/` | Final87/87 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1132803bytes/6files passed |
+| `git diff --check` |Passed |
+
+A3A unit819/Harness94/native13 backend evidence applies unchanged; no backend files changed.
+Evidence `xui-review-ui-*.log` and artifact-inspector-ui/gate-whole-context.png plus returned card.
+Actual repository/registered/generated read bridge and real parent+child LangGraph interruptions
+are called via declared Playwright-to-Node seam, not production chat/preload transport. Explicit
+whole reread/return keeps total_changes unchanged and original interrupt ID; keyboard approval
+then commits actual stage advancement. Stale original click returns a new actual interrupt with
+no writes; explicit reread and rejection succeeds. Late context reads drop on selection/project.
+Discovery synthetic reader covers malformed-link repair, read failure/pending refusal and complete
+new plan/hash/versions. Light/dark1100/1099/800,reduced-motion,keyboard/actual source focus and
+strict full-height cut0/three physical-edge hidden audit remain passing. Final screenshot exposed
+new gate hashes with old body; added return guard, explicit new-body regression and rebuilt/reran
+full87/startup. Final screenshot inspected: selected review/display hashes and latest body match.
+No frozen fixtures/client/model/live queries/remote writes. Next production type views and reading
+location; X-UI/full plan unfinished.

@@ -1,4 +1,4 @@
-import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
+import type {OpenResearchArtifact, ReadResearchGateContext} from '../artifacts/artifact-interactions';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
@@ -43,7 +43,8 @@ export type ChatTranscriptPanelProps = {
   loadOlder(): Promise<void>;
   onJumpToLatest(): Promise<void>;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
+  onOpenArtifact: OpenResearchArtifact;
+  onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
   onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
@@ -80,6 +81,7 @@ export function ChatTranscriptPanel({
   scrollContainerRef,
   onApprovalDecision,
   onOpenArtifact,
+  onReadGateContext,
   onResumeCheckpoint
 }: ChatTranscriptPanelProps): React.JSX.Element {
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
@@ -143,7 +145,7 @@ export function ChatTranscriptPanel({
         increaseViewportBy={240}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
-        itemContent={(_index, message) => <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onApprovalDecision={onApprovalDecision}
+        itemContent={(_index, message) => <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision}
           onResumeCheckpoint={onResumeCheckpoint} />}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {

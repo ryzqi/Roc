@@ -1,3 +1,4 @@
+import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -25,22 +26,29 @@ before(async()=>{
     import {ResearchGateApprovalCard} from './src/renderer/assistant/blocks/approval-cards';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
-    const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input)}}};
-    function Harness({link}) {
+    const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input)}}};
+    function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
+      const [reviewCallback,setReviewCallback]=useState(null);
       window.selectArtifact=value=>flushSync(()=>setRequest(value));
-      const approval={kind:'approval',interruptId:'fixture-gate',actionRequests:[{name:'research_approve_gate',
-        args:{stage:'reading',summary:'核对保存的阅读产物',artifactLinks:[link]}}],
-        reviewConfigs:[{actionName:'research_approve_gate',allowedDecisions:['approve','reject']}]};
-      return <main className="p-4"><ResearchGateApprovalCard approval={approval} onOpenArtifact={setRequest}
-        onApprovalDecision={(id,decisions)=>window.decisions.push({id,decisions})}/>
+      const [approval,setApproval]=useState(initialApproval);
+      window.replaceApproval=value=>flushSync(()=>setApproval(value));
+      return <main className="p-4"><ResearchGateApprovalCard key={approval.interruptId} approval={approval} onReadGateContext={client.api.research.getGateReviewContext}
+        onOpenArtifact={(request,callback)=>{setReviewCallback(()=>callback);setRequest(request);}}
+        onApprovalDecision={(id,decisions)=>{
+          window.decisions.push({id,decisions});
+          window.submitGateFromMain(id,decisions).then(result=>{
+            window.resumeResult=result;
+            if(result.approval!==null) window.replaceApproval(result.approval);
+          }).catch(error=>window.resumeError=error.message);
+        }}/>
         {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client} request={request}
-          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
+          onReviewContext={context=>reviewCallback(context)} onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
     }
     let generation=0;
-    window.mount=link=>{window.decisions=[];window.tasks=[];flushSync(()=>root.render(
+    window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
       <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
-        <Harness key={++generation} link={link}/></LazyMotion></MotionConfig>));};
+        <Harness key={++generation} link={link} initialApproval={approval}/></LazyMotion></MotionConfig>));};
   `,resolveDir:process.cwd(),loader:'tsx'},outfile:join(directory,'app.js'),bundle:true,platform:'browser',format:'iife',logLevel:'silent'});
   const assets=join(process.cwd(),'dist/renderer/assets');
   writeFileSync(join(directory,'app.css'),readdirSync(assets).filter(file=>file.endsWith('.css')).map(file=>readFileSync(join(assets,file),'utf8')).join('\n'));
@@ -61,6 +69,23 @@ before(async()=>{
     const result=await f.bridge.invoke('research.inspectArtifact',[input],windowId);
     if(f.defer) return new Promise(resolve=>{f.finish=()=>resolve(result);});
     return result;
+  });
+  await page.exposeFunction('readGateFromMain',async input=>{
+    const f=active;
+    reads.push({gateReview:input});
+    api.parseIpcRequestArgs('roc:research:gate-review',[input]);
+    const result=await f.bridge.invoke('research.getGateReviewContext',[input],windowId);
+    if(f.deferGate) return new Promise(resolve=>{f.finishGate=()=>resolve(result);});
+    return result;
+  });
+  await page.exposeFunction('submitGateFromMain',async(id,decisions)=>{
+    const f=active;
+    assert.equal(id,f.approval.interruptId);
+    const result=await f.graph.invoke(new Command({resume:{decisions}}),f.graphConfig);
+    const pending=result.__interrupt__?.[0];
+    const approval=pending===undefined?null:{kind:'approval',interruptId:pending.id,...pending.value.request};
+    if(approval!==null) f.approval=approval;
+    return {done:result.done,approval};
   });
   await page.waitForFunction(()=>typeof mount==='function');
 });
@@ -86,11 +111,26 @@ async function scene({long=false}={}) {
   f.bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
   f.link={projectId:f.project.id,artifactId,expectedVersion:snapshot.version,title:snapshot.artifact.title,kind:snapshot.artifact.kind};
   f.empty=empty;f.snapshot=snapshot;
-  await page.evaluate(link=>mount(link),f.link);
+  const gate=api.createResearchHumanGate({repository:f.repository});
+  const tools=api.createResearchTools({projectId:f.project.id,signal:new AbortController().signal,
+    dispatchStage:async()=>assert.fail('UI gate cannot dispatch a model'),capabilities:{invoke:async(name,input)=>{
+      if(name==='research.workflow.get')return f.repository.getWorkflow(f.project.id);
+      if(name==='research.workflow.gateReview')return f.repository.readGateReviewContext(input);
+      if(name==='research.workflow.transition')return input.action==='approve'?gate.approve(input):gate.reject(input);
+      assert.fail(name);
+    }}});
+  const tool=tools.find(tool=>tool.name==='research_approve_gate');
+  f.graph=new StateGraph(Annotation.Root({done:Annotation()})).addNode('gate',async()=>{
+    await tool.invoke({});return{done:true};
+  }).addEdge(START,'gate').addEdge('gate',END).compile({checkpointer:new MemorySaver()});
+  f.graphConfig={configurable:{thread_id:`inspector-${f.project.id}`}};
+  const pending=(await f.graph.invoke({done:false},f.graphConfig)).__interrupt__[0];
+  f.approval={kind:'approval',interruptId:pending.id,...pending.value.request};
+  await page.evaluate(({link,approval})=>mount(link,approval),{link:f.link,approval:f.approval});
   return f;
 }
 async function openArtifact() {
-  await page.getByTestId('assistant-gate-artifact').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('assistant-gate-artifact').last().focus();await page.keyboard.press('Enter');
   await page.getByTestId('artifact-inspector-content').waitFor({state:'visible'});
   await page.waitForFunction(()=>{
     const panel=document.querySelector('[data-testid="artifact-inspector-panel"]');
@@ -166,7 +206,7 @@ test('real empty missing denied and damaged-source states do not become placehol
 
 test('late real bridge response cannot replace another artifact selection',async()=>{
   const f=await scene();f.defer=true;
-  await page.getByTestId('assistant-gate-artifact').click();
+  await page.getByTestId('assistant-gate-artifact').last().click();
   await page.getByText('正在读取工件…',{exact:true}).waitFor();
   while(typeof f.finish!=='function') await new Promise(resolve=>setTimeout(resolve,5));
   const finish=f.finish;f.defer=false;
@@ -194,4 +234,79 @@ test('source drawer supports keyboard reading and fixed chrome at light dark 110
   await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));
   await page.evaluate(()=>document.documentElement.dataset.theme='light');
+});
+
+
+test('inspector rereads the entire stage and returns to the original real interrupt before explicit keyboard approval',async()=>{
+  const f=await scene();
+  const original=f.approval.interruptId;
+  await openArtifact();
+  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Reviewed latest body') WHERE artifact_id=?").run(f.link.artifactId);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await page.getByTestId('artifact-inspector-review').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-inspector-gate-context').waitFor();
+  assert.match(await page.getByTestId('artifact-inspector-gate-context').innerText(),/Empty real artifact/u);
+  assert.match(await page.getByTestId('artifact-inspector-gate-context').innerText(),/真实保存的阅读产物/u);
+  assert.equal(await page.getByTestId('artifact-inspector-return-review').isDisabled(),true);
+  await page.getByTestId('artifact-inspector-refresh').click();
+  await page.getByTestId('artifact-inspector-content').getByText('Reviewed latest body',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('artifact-inspector-return-review').isDisabled(),false);
+  await audit('gate-whole-context');
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  await page.getByTestId('artifact-inspector-return-review').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.activeElement.dataset.testid==='assistant-gate-refresh');
+  assert.match(await page.getByTestId('assistant-gate-reviewed-at').innerText(),/已重读 2 个工件，需重新确认/u);
+  await page.screenshot({path:join(artifacts,'gate-returned-card.png')});
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  await page.getByTestId('assistant-gate-approve').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>window.resumeResult?.done===true||window.resumeError!==null);
+  assert.equal(await page.evaluate(()=>window.resumeError),null);
+  assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'ideation');
+  const decision=(await page.evaluate(()=>decisions))[0];
+  assert.equal(decision.id,original);
+  assert.equal(decision.decisions[0].reviewedArtifactVersions.length,2);
+  assert.notEqual(decision.decisions[0].reviewedArtifactVersions.find(value=>value.artifactId===f.link.artifactId).version,f.link.expectedVersion);
+});
+
+test('old card approval refuses stale data and displays a new real interrupt before a new human decision',async()=>{
+  const f=await scene(),original=f.approval.interruptId;
+  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Changed after review') WHERE artifact_id=?").run(f.link.artifactId);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await page.getByTestId('assistant-gate-approve').click();
+  await page.getByTestId('assistant-gate-review-error').waitFor();
+  assert.notEqual(f.approval.interruptId,original);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
+  assert.equal((await page.evaluate(()=>decisions)).length,1);
+  await page.getByTestId('assistant-gate-refresh').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('assistant-gate-reviewed-at').waitFor();
+  assert.equal((await page.evaluate(()=>decisions)).length,1);
+  await page.getByTestId('assistant-gate-reject').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>window.resumeResult?.done===true||window.resumeError!==null);
+  assert.equal(await page.evaluate(()=>window.resumeError),null);
+  assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'reading');
+  assert.equal(f.repository.getWorkflow(f.project.id).stages.find(value=>value.stage==='reading').status,'running');
+});
+
+test('late whole-context reads are discarded on selection or project replacement and never submit decisions',async()=>{
+  const f=await scene();await openArtifact();f.deferGate=true;
+  await page.getByTestId('artifact-inspector-review').click();
+  await page.getByText('正在读取整个阶段的审核上下文…',{exact:true}).waitFor();
+  while(typeof f.finishGate!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finish=f.finishGate;f.deferGate=false;
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.empty.id,expectedVersion:null});
+  await page.getByText('该工件尚无已保存的角色正文。',{exact:true}).waitFor();finish();
+  assert.equal(await page.getByTestId('artifact-inspector-gate-context').count(),0);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  f.deferGate=true;delete f.finishGate;
+  await page.getByTestId('artifact-inspector-review').click();
+  while(typeof f.finishGate!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const last=f.finishGate;
+  const next=await scene();last();
+  assert.equal(await page.getByTestId('assistant-gate-reviewed-at').count(),0);
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),0);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.equal(next.repository.getWorkflow(next.project.id).currentStage,'reading');
 });

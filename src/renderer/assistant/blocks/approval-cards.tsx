@@ -1,4 +1,8 @@
-import {researchArtifactLinksSchema, type ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {researchArtifactLinksSchema} from '../../../shared/schemas/research-artifact-inspector';
+import {researchGateReviewRequestSchema, type ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
+import type {OpenResearchArtifact, ReadResearchGateContext} from '../../artifacts/artifact-interactions';
+import {useAsyncResource} from '../../app/use-async-resource';
 import { ShieldCheck } from 'lucide-react';
 import type { ChatPendingApproval, ChatResumeDecision } from '../../../shared/types';
 import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
@@ -187,10 +191,12 @@ function defaultRejectLabel(isReview: boolean): string {
 export function ResearchGateApprovalCard({
   approval,
   onOpenArtifact,
+  onReadGateContext,
   onApprovalDecision
 }: {
   approval: ChatPendingApproval;
-  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
+  onOpenArtifact: OpenResearchArtifact;
+  onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 }): React.JSX.Element {
   const action = approval.actionRequests[0];
@@ -202,14 +208,34 @@ export function ResearchGateApprovalCard({
   const reviewError = readString(args, 'reviewError');
   const isReview = stage === 'review';
   const isDiscovery = stage === 'discovery';
-  const plan = isDiscovery ? researchSearchPlanSchema.safeParse(args !== null && typeof args === 'object' ? args.searchPlan : undefined) : null;
-  const planHash = readString(args, 'searchPlanHash');
-  const links = researchArtifactLinksSchema.safeParse(args?.artifactLinks);
-  const canApprovePlan = links.success && (!isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash));
+  const gateRequest = researchGateReviewRequestSchema.safeParse({projectId: readString(args, 'projectId'), expectedStage: stage, artifactId: null});
+  const approvalKey = JSON.stringify([approval.interruptId, readString(args, 'projectId'), stage]);
+  const [reviewed, setReviewed] = useState<{key: string; context: ResearchGateReviewContext} | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const refreshed = useAsyncResource(gateRequest.success && refreshNonce > 0 ? `${approvalKey}:${refreshNonce}` : null,
+    () => onReadGateContext(researchGateReviewRequestSchema.parse({projectId: readString(args, 'projectId'), expectedStage: stage, artifactId: null})),
+    {label: '读取阶段审核上下文'});
+  const acceptContext = useCallback((context: ResearchGateReviewContext): void => {
+    setReviewed({key: approvalKey, context});
+    setRefreshNonce(0);
+    // Restore the gate control after the drawer and its original opener finish unmounting.
+    requestAnimationFrame(() => refreshButton.current?.focus({preventScroll: true}));
+  }, [approvalKey]);
+  useEffect(() => {
+    if (refreshed.status === 'ready' && refreshed.data !== null) acceptContext(refreshed.data);
+  }, [refreshed.status, refreshed.data, acceptContext]);
+  const context = reviewed?.key === approvalKey ? reviewed.context : null;
+  const plan = isDiscovery ? researchSearchPlanSchema.safeParse(context === null ? args?.searchPlan : context.searchPlan) : null;
+  const planHash = context === null ? readString(args, 'searchPlanHash') : context.searchPlanHash ?? '';
+  const links = researchArtifactLinksSchema.safeParse(context === null ? args?.artifactLinks : context.artifactLinks);
+  const canDecide = links.success && gateRequest.success &&
+    links.data.every(link => link.projectId === gateRequest.data.projectId) && refreshNonce === 0;
+  const canApprovePlan = canDecide && (!isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash));
   const approveLabel = decisionLabel === '' ? defaultApproveLabel(isReview) : decisionLabel;
   const rejectLabel = rejectNote === '' ? defaultRejectLabel(isReview) : rejectNote;
   const decide = (type: GateDecisionType): void => {
-    if (!links.success) return;
+    if (!links.success || !canDecide) return;
     const reviewedArtifactVersions = links.data.map(link => ({artifactId: link.artifactId, version: link.expectedVersion}));
     if (type === 'approve') {
       if (!canApprovePlan) return;
@@ -242,7 +268,7 @@ export function ResearchGateApprovalCard({
       {links.success ? <ul className="mt-1.5 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
           <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-            data-testid="assistant-gate-artifact" onClick={() => onOpenArtifact({projectId: link.projectId, artifactId: link.artifactId, expectedVersion: link.expectedVersion})}>
+            data-testid="assistant-gate-artifact" onClick={() => onOpenArtifact({projectId: link.projectId, artifactId: link.artifactId, expectedVersion: link.expectedVersion}, acceptContext)}>
             {link.title}
           </button>
         </li>)}
@@ -268,6 +294,18 @@ export function ResearchGateApprovalCard({
           </ol>
         </div>
       ) : <p role="alert" className="mt-2 text-[var(--st-bad)]">检索计划缺失或无效，请退回重做。</p> : null}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" ref={refreshButton} data-testid="assistant-gate-refresh"
+          disabled={!gateRequest.success || refreshed.status === 'loading'}
+          className={`${approvalButtonClass('neutral')} disabled:cursor-not-allowed disabled:opacity-50`}
+          onClick={() => setRefreshNonce(value => value + 1)}>重新读取本阶段审核上下文</button>
+        {refreshNonce > 0 && refreshed.status === 'loading' ? <span role="status" className="text-muted">正在读取全部阶段工件…</span> : null}
+        {context === null ? null : <span className="text-muted text-[var(--font-meta-size)]" data-testid="assistant-gate-reviewed-at">
+          已重读 {context.artifactLinks.length} 个工件，需重新确认 · {context.readAt}
+        </span>}
+      </div>
+      {refreshNonce > 0 && refreshed.error !== null ? <p role="alert" className="mt-2 text-[var(--st-bad)]">{refreshed.error}</p> : null}
+      {!gateRequest.success ? <p className="mt-1 text-muted">项目或阶段标识无效，请在助手中重新请求人工闸门。</p> : null}
       <div className="mt-2 flex items-center gap-2">
         {decisions.includes('approve') ? (
           <button
@@ -284,7 +322,7 @@ export function ResearchGateApprovalCard({
           <button
             type="button"
             data-testid="assistant-gate-revise"
-            disabled={!links.success}
+            disabled={!canDecide}
             className={`${approvalButtonClass('neutral')} disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => decide('revise')}
           >
@@ -295,7 +333,7 @@ export function ResearchGateApprovalCard({
           <button
             type="button"
             data-testid="assistant-gate-reject"
-            disabled={!links.success}
+            disabled={!canDecide}
             className={`${approvalButtonClass('reject')} disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => decide('reject')}
           >

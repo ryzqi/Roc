@@ -1,4 +1,4 @@
-import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
+import type {OpenResearchArtifact, ReadResearchGateContext} from '../artifacts/artifact-interactions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
 import type { ChatRunMode, RunBudgetStatus, SettingsSnapshot } from '../../shared/types';
@@ -90,7 +90,7 @@ export type AssistantPanelProps = {
   threadId: string | null;
   onThreadIdChange: (threadId: string | null) => void;
   onOpenTask: (taskId: string) => void;
-  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
+  onOpenArtifact: OpenResearchArtifact;
   /** Bound workspace path, so a run is scoped to the directory the user is looking at. */
   workspacePath: string | null;
   projectName: string | null;
@@ -293,6 +293,8 @@ export function AssistantPanel({
                 ? '已取消'
                 : '运行失败';
 
+  const onReadGateContext = useCallback<ReadResearchGateContext>(request => client.api.research.getGateReviewContext(request), [client]);
+
   const onApprovalDecision = useCallback(
     (interruptId: string, decisions: Parameters<typeof session.resumeApproval>[1]) => {
       void session.resumeApproval(interruptId, decisions);
@@ -448,6 +450,7 @@ export function AssistantPanel({
             scrollContainerRef={scrollContainerRef}
             onApprovalDecision={onApprovalDecision}
             onOpenArtifact={onOpenArtifact}
+            onReadGateContext={onReadGateContext}
             onResumeCheckpoint={onResumeCheckpoint}
           />
         )}

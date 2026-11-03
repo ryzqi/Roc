@@ -1,3 +1,5 @@
+import type {OpenResearchArtifact} from '../artifacts/artifact-interactions';
+import type {ResearchGateReviewContext} from '../../shared/schemas/research-gate-review';
 import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';
@@ -120,7 +122,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     setSearchToken((current) => current + 1);
     setSearchOpen(true);
   }, []);
-  const [artifactSelection, setArtifactSelection] = useState<ResearchArtifactInspectRequest | null>(null);
+  const [artifactSelection, setArtifactSelection] = useState<{request: ResearchArtifactInspectRequest; onReviewContext: (context: ResearchGateReviewContext) => void} | null>(null);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
@@ -146,9 +148,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
-  const openArtifact = useCallback((request: ResearchArtifactInspectRequest): void => {
+  const openArtifact = useCallback<OpenResearchArtifact>((request, onReviewContext): void => {
     if (request.projectId !== route.projectId) throw new Error('research_artifact_project_mismatch');
-    setArtifactSelection(request);
+    setArtifactSelection({request, onReviewContext});
   }, [route.projectId]);
   const layout = useLayoutState();
   useContentPreferenceSync();
@@ -787,11 +789,12 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         groups={searchGroups}
       />
 
-      {artifactSelection === null || artifactSelection.projectId !== route.projectId ? null : (
+      {artifactSelection === null || artifactSelection.request.projectId !== route.projectId ? null : (
         <Suspense fallback={<DelayedFallback label="正在加载工件检查器…" />}>
-          <ArtifactInspector key={JSON.stringify(artifactSelection)} client={client} request={artifactSelection}
+          <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} request={artifactSelection.request}
+            onReviewContext={artifactSelection.onReviewContext}
             onClose={() => setArtifactSelection(null)} onOpenTask={(taskId) => {
-              setResearchTaskSelection({projectId: artifactSelection.projectId, taskId});
+              setResearchTaskSelection({projectId: artifactSelection.request.projectId, taskId});
               setArtifactSelection(null);
               openManagementSection('tasks');
             }} />
