@@ -559,7 +559,7 @@ test('plugin shutdown interrupts the actual parent stage before closing search a
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     const current = runtime.retry({projectId: f.project.id, runId: f.run.id, requestId: 'shutdown-parent'});
     await started;
-    await api.shutdownResearchPlugin({stageRuntime: runtime, literature: search, literatureImports: null,
+    await api.shutdownResearchPlugin({stageRuntime: runtime, literature: search, zotero: null, literatureImports: null,
       productionInputs: null, exports: null, figures: null, experiments: null, indexer: null,
       embeddings: null, templates: null, documents: null, library: null, prose: null});
     await new Promise(resolve => setImmediate(resolve));

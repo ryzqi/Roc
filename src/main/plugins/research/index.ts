@@ -55,6 +55,8 @@ import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../ke
 import { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { ResearchEmbeddingService } from './embedding-service';
 import { LiteratureSearchService } from './literature-service';
+import {ZoteroAdapter} from './zotero-adapter';
+import {zoteroCapabilities, registerZoteroCapabilities} from './zotero-capabilities';
 import { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
@@ -128,6 +130,7 @@ const provenanceCapabilities = {
 const researchCapabilityDescriptors = [
   ...Object.values(workbenchCapabilities),
   ...literatureImportCapabilities,
+  ...zoteroCapabilities,
   ...Object.values(knowledgeCapabilities),
   ...Object.values(provenanceCapabilities)
 ];
@@ -156,6 +159,7 @@ export type ResearchPluginOptions = {
   modelsRoot?: string;
   roleExecutor?: ResearchRoleExecutor;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
+  zoteroFetch?: ConstructorParameters<typeof ZoteroAdapter>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
 };
 
@@ -175,6 +179,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   let literatureImports: LiteratureImportService | null = null;
   const literatureService = new LiteratureSearchService(options.literatureFetch);
+  const zotero = new ZoteroAdapter(options.zoteroFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
   return {
     manifest: {
@@ -245,6 +250,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchProseCapabilities(context, researchProse);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
+      registerZoteroCapabilities(context, zotero);
       const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key', operationId: string | null = null) => {
         await context.eventBus.publish({ type: 'research.library.changed', source: pluginId, createdAt: new Date().toISOString(),
           payload: { eventId: randomUUID(), operationId, affectedItemIds: items.map((item) => item.id),
@@ -408,7 +414,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, zotero, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
       } finally {
         productionInputs = null;
         exports = null;

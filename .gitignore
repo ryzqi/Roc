@@ -22,6 +22,7 @@ docs/reports/*
 !docs/research-ideas.md
 !docs/research-prose.md
 !docs/research-literature-fusion.md
+!docs/research-zotero.md
 !docs/builtin-skills.md
 !docs/rtk-integration.md
 !docs/architecture-repair-plan.md

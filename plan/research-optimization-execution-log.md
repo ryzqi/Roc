@@ -1487,3 +1487,46 @@ duplicates, false merges, failed queries and topic weighting. Evidence:
 engineering corpus/report/unlabeled-packet JSON files. No live literature query/model call,
 remote write, credentials read or frozen workflow fixture edit. Next independent authorized
 increment: Zotero read-only adapter and import; PR-04's scientific acceptance remains open.
+
+
+## PR-05A — instance-bound Zotero read-only local API
+
+Status: `Verified passing` for adapter/capability/IPC foundation; full Zotero import and
+real-client interoperability remain pending. Research DB12, agent DB15 unchanged.
+
+Verified current primary Local API/Basics docs (updated2026-07-29), then pinned Zotero main
+commit1ca9d58c9aa9aeca1032d3966f3765d4d40ab7b2 source. API3/Zotero10+ server IDs partition
+local versions; older missing-ID clients explicitly unsupported. Personal library users/0,
+group IDs distinct from local internal IDs. Group metadata has synced versions and no
+aggregate Last-Modified-Version, unlike local item/collection pages.
+
+Fixed127.0.0.1:23119 GET-only adapter, no keys/auth/Connector/write calls/redirect following.
+Probe reports connected/disabled/unreachable/unsupported/invalid_response, never infers
+installation from refused transport. Explicit20/default50/max paging, source raw fields,
+local version/instance checks, byte hashes/time/total/next offset. Invalid/incomplete/duplicate
+pages fail. Caller cancellation and plugin shutdown abort/drain requests, no late page;
+10s timeout/8MiB bytes. Main-only attachment path reference uses file/view/url, validates
+local file URI, does not read bytes or confer filesystem authority. Registered4 read-only
+capabilities and generated preload IPC; startup itself performs no Zotero read.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-adapter.test.mjs` | Final10/10 passed, actual local HTTP fixture included |
+| `pnpm test:unit` | Final744/744 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Generated contracts current, passed |
+| `pnpm test:research-p0` | Fresh typecheck/build plus12/12 native scenarios passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Actual startup/UI12/12, zero renderer error, exit0 |
+| `pnpm check:renderer-chunks` |1131076bytes/6files, passed |
+| `git diff --check` | Passed |
+
+Evidence `.artifacts/research-optimization/pr05-adapter-*.log`. Initial fixture export/error
+field guesses failed and were corrected to actual ipcRegistry/RocDomainError; guards/checks
+unchanged. Primary Jina guessed page401 and old source path404; switched to official docs
+and current pinned tree. Standard /Applications/Zotero.app absent; no actual user library,
+DB/profile, credentials or global settings read/modified. No Zotero/plugin installation.
+No paid model, remote write or frozen workflow fixture edit. Next: durable preview/import
+object mapping through existing bounded metadata jobs, then settings/selection/attachments
+and incremental checkpoints. Real Zotero client contract acceptance remains unrun.
