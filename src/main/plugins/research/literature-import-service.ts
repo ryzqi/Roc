@@ -12,6 +12,8 @@ import { normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import type {LiteratureProviderIdentifierRecord} from '../../../shared/schemas/literature-identifiers';
 import type {LiteratureReviewRecord} from '../../../shared/schemas/literature-review';
+import {literatureReadPoolSchema, literatureSearchPoolBodySchema, literatureSearchPoolSchema,
+  type literatureSearchPoolPageSchema} from '../../../shared/schemas/literature-search-pool';
 import { fuseLiterature, literatureRanking } from './literature-fusion';
 import { LiteratureSearchLedger, LiteratureRequestAuditError } from './literature-search-ledger';
 import type { LiteratureSearchService } from './literature-service';
@@ -77,6 +79,8 @@ export class LiteratureImportService {
       });
       this.requireActive(context);
       const createdAt = this.now();
+      const pool = literatureSearchPoolBodySchema.parse({schemaVersion: 1, executionId, createdAt,
+        request: scopedRequest, strategy, status: found.status, sources: found.sources, records: found.records});
       let unknownYear = false;
       const grouped = fuseLiterature(found.records).filter(candidate => {
         if (request.yearFrom === undefined && request.yearTo === undefined) return true;
@@ -94,6 +98,8 @@ export class LiteratureImportService {
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };
       this.db.transaction(() => {
+        this.db.prepare('INSERT INTO research_literature_search_pools(execution_id,pool_json) VALUES (?,?)')
+          .run(executionId, JSON.stringify({...pool, contentHash: hash(pool)}));
         this.db.prepare('DELETE FROM research_literature_searches WHERE expires_at <= ?').run(createdAt);
         this.db.prepare('INSERT INTO research_literature_searches (id,owner,project_id,request_json,result_json,expires_at) VALUES (?,?,?,?,?,?)')
           .run(result.searchId, context.owner, context.projectId, JSON.stringify(scopedRequest), JSON.stringify(result), result.expiresAt);
@@ -117,6 +123,22 @@ export class LiteratureImportService {
     const result = this.loadSearch(request.searchId, literatureContext());
     return { ...result, candidates: result.candidates.slice(request.offset, request.offset + request.limit),
       nextOffset: request.offset + request.limit < result.total ? request.offset + request.limit : null };
+  }
+
+  readPool(input: unknown): z.infer<typeof literatureSearchPoolPageSchema> {
+    const request = literatureReadPoolSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    const row = this.db.prepare(`SELECT p.pool_json FROM research_literature_search_pools p
+      JOIN research_literature_search_executions e ON e.id=p.execution_id
+      WHERE p.execution_id=? AND e.owner=? AND e.project_id IS ?`)
+      .get(request.executionId, context.owner, context.projectId) as {pool_json: string} | undefined;
+    if (row === undefined) throw new Error('literature_pool_not_found');
+    const {contentHash, ...pool} = decode(row.pool_json, literatureSearchPoolSchema);
+    if (hash(pool) !== contentHash) throw new Error('literature_pool_integrity_invalid');
+    const total = pool.records.length;
+    return {...pool, contentHash, records: pool.records.slice(request.offset, request.offset + request.limit),
+      total, nextOffset: request.offset + request.limit < total ? request.offset + request.limit : null};
   }
 
   async add(input: unknown): Promise<LiteratureImportResult> {

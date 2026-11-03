@@ -1394,3 +1394,53 @@ Swagger4.5.1, as linked in docs/research-literature-fusion.md. No new live paper
 model, remote write, real-user DB migration or fixture corpus modification. Source plan
 still requires independent retrieval annotations/Recall@20/nDCG@10/duplicate metrics and
 later plan increments. L2/full reviewed task corpus remains externally blocked.
+
+
+## PR-04.5A — complete captured pools for independent ranking evaluation
+
+Status: `Verified passing` for captured-pool infrastructure. Full PR-04 remains incomplete.
+Research DB12, agent DB15, search snapshot13, pool schema1.
+
+Previously, only final top-limit RRF candidates survived; year-excluded records and lower
+ranks were lost, and expired candidate snapshots were deleted on a later search. Comparing
+source order with RRF using that selected subset would bias the baseline. Successful capture
+now saves all validated original ranked records before year filtering/candidate limiting,
+including identifiers/review metadata and original ranks. The immutable pool also freezes
+request, confirmed strategy, source status/coverage/page/HTTP evidence and observation time.
+A SHA-256 content hash covers the full schema1 body. Pool, candidate publication and search
+execution completion commit atomically; pool write failure publishes no candidate and leaves
+an explicit failed execution. Existing historical executions receive no fabricated pool.
+
+New readonly research.literature.getPool / research.getLiteraturePool paginates by trusted
+owner/project and executionId, default20/max30. Candidate expiry/deletion does not delete the
+pool; each read verifies the complete pool hash before slicing. Missing/other-owner/other-
+project pools fail explicitly and tampered storage is nonretryable degraded data. This API
+is not expanded by the model's candidate preview tools and does not import library papers.
+Ranked record type now comes from the same shared persisted schema, removing a duplicate
+handwritten contract. No candidate-snapshot compatibility branch or inferred old pool.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `ROC_POOL_BASELINE=1 node --test --test-name-pattern='complete captured pool retains' tests/unit/literature-import.test.mjs` | Fixedaf32a2c red: zero captured pools after valid search, expected one |
+| `node --test tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs` | 98/98 passed |
+| `pnpm test:unit` | 728/728 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm typecheck` | Passed |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Generated contracts current; check passed |
+| `pnpm test:research-p0` | Fresh build/typecheck and12/12 native cases passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Application startup/UI12/12, zero renderer errors, exit0 |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual hook1/1 passed |
+| `pnpm check:renderer-chunks` | Eager JS1131076bytes/6files passed |
+| `git diff --check` | Passed |
+
+Four new actual DB regressions cover retained exclusions/lower ranks, stable pagination and
+hash reconstruction, expiry/deletion, owner/project isolation, integrity refusal, atomic
+publication rollback, DB11→12 without historical fabrication and actual capability/IPC.
+Evidence: `.artifacts/research-optimization/pr04-pool-*.log`. No new live literature query,
+paid model, remote write, real-user DB migration or frozen workflow-fixture edit.
+
+This is input/provenance preparation, not a Recall/nDCG/duplicate-rate result or independent
+annotation. An independently reviewed query set and relevance labels are still missing;
+complete scientific retrieval validation and later plan increments remain pending.

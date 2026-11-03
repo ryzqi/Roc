@@ -4,10 +4,12 @@ import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types'
 import { RocDomainError } from '../../services/errors';
 import type { z } from 'zod';
 import type { LiteratureImportService } from './literature-import-service';
+import {literatureReadPoolSchema, literatureSearchPoolPageSchema} from '../../../shared/schemas/literature-search-pool';
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> => ({ name, version: '2.0.0', inputSchema, outputSchema });
 const capabilities = {
   search: descriptor('research.literature.search', literatureSearchInputSchema, literatureSearchResultSchema),
   read: descriptor('research.literature.getSearch', literatureReadSearchSchema, literatureSearchResultSchema),
+  pool: descriptor('research.literature.getPool', literatureReadPoolSchema, literatureSearchPoolPageSchema),
   add: descriptor('research.library.addLiterature', literatureAddSchema, literatureImportResultSchema),
   get: descriptor('research.library.getImportOperation', literatureGetImportSchema, literatureImportResultSchema),
   cancel: descriptor('research.library.cancelImportOperation', literatureCancelImportSchema, literatureImportResultSchema)
@@ -20,7 +22,8 @@ export function registerLiteratureImportCapabilities(context: RocPluginContext, 
       catch (error) {
         const code = error instanceof Error ? error.message : '';
         if (code === 'import_request_conflict') throw new RocDomainError({ code, message: '请求标识已用于其他导入，请使用新的请求标识。', category: 'conflict', retryable: false });
-        if (/^literature_(search|candidate|import)_not_found$/u.test(code)) throw new RocDomainError({ code, message: '候选或导入操作不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false });
+        if (/^literature_(search|candidate|import|pool)_not_found$/u.test(code)) throw new RocDomainError({ code, message: '候选、检索池或导入操作不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false });
+        if (code === 'literature_pool_integrity_invalid') throw new RocDomainError({code, message: '保存的检索池与内容 hash 不一致，无法用于评估。', category: 'degraded', retryable: false});
         if (code === 'literature_search_expired') throw new RocDomainError({ code, message: '检索候选已过期，请重新检索。', category: 'validation', retryable: false });
         if (code === 'research_literature_identity_ambiguous') throw new RocDomainError({code,
           message: '同一文献身份对应多个文库条目，请先人工核对并整理。', category: 'conflict', retryable: false});
@@ -30,6 +33,7 @@ export function registerLiteratureImportCapabilities(context: RocPluginContext, 
   }
   register(capabilities.search, (input) => service.search(input));
   register(capabilities.read, (input) => service.readSearch(input));
+  register(capabilities.pool, (input) => service.readPool(input));
   register(capabilities.add, (input) => service.add(input));
   register(capabilities.get, (input) => service.get(input));
   register(capabilities.cancel, (input) => service.cancel(input.operationId));

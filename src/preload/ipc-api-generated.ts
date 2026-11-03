@@ -170,6 +170,7 @@ export const rocApi: RocPreloadApi = {
     readLiteratureSearch: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureReadSearch, ...args),
     addLiterature: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureAdd, ...args),
     getLiteratureImport: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureGetImport, ...args),
+    getLiteraturePool: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteraturePool, ...args),
     cancelLiteratureImport: (...args) => ipcRenderer.invoke(ipcChannels.researchLiteratureCancelImport, ...args),
     listEmbeddingConfigs: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingList, ...args),
     saveEmbeddingConfig: (...args) => ipcRenderer.invoke(ipcChannels.researchEmbeddingSave, ...args),

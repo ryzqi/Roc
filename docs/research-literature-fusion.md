@@ -188,6 +188,23 @@ executionId、会话 owner、项目、执行 runId、冻结请求和 running 状
 
 ## 验证与后续范围
 
+数据库 12 保存融合前完整的已验证检索池，包含每条原始来源排名、元数据、
+标识字典、审查观察、请求、确认策略和逐来源回执。年份筛选、最终候选上限和
+旧候选过期删除不会删掉池中的记录。检索池与候选发布、执行完成在同一事务
+提交；池写入失败不发布候选，执行仍留下失败记录。
+
+`research.literature.getPool` / `research.getLiteraturePool` 按 executionId 分页读取，
+默认 20、最多 30 条，权限继续由可信会话/项目上下文决定。每页带完整池的
+contentHash、total 和 nextOffset，hash 覆盖固定版本、执行、时间、请求、策略、
+来源状态与全部记录。读取先校验完整池，内容篡改显式失败。此接口不在模型
+搜索工具中自动展开，也不修改正式文库。旧执行缺少原始池时显式不存在，
+不能从最终 RRF 候选反推完整池。
+
+完整池是后续独立人工标注及来源排序/RRF 比较的输入准备。仅拿 RRF 已选中的
+前 N 个候选做来源排序基线会产生选择偏差；完整池解决记录丢失，尚不构成独立
+标注或学术质量验收。当前仍没有独立查询集与人工相关性标签，不能报告真实
+Recall@20、nDCG@10 或质量提升。
+
 当前来源 coverage 保存实际响应声明的 API 命中数、通过校验的页数、分页范围和
 后续页标识。OpenAlex 使用 meta.count；Crossref 使用 total-results；Semantic
 Scholar 使用 total/next；Europe PMC 使用 hitCount/nextCursorMark；arXiv 使用

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import { after, before, test } from 'node:test';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,9 +34,16 @@ before(async () => {
     export { providerIdentifierObservations } from './src/main/plugins/research/literature-provider-identifiers';
     export { unknownLiteratureReview } from './src/main/plugins/research/literature-provider-review';
     export { registerResearchLibraryCapabilities } from './src/main/plugins/research/library-capabilities';
+    export { registerLiteratureImportCapabilities } from './src/main/plugins/research/literature-import-capabilities';
     export { parseIpcRequestArgs } from './src/shared/ipc-registry';
   `, resolveDir: process.cwd() }, outfile, bundle: true, format: 'esm', platform: 'node', target: 'node22',
-    packages: 'external', loader: { '.md': 'text' }, logLevel: 'silent' });
+    packages: 'external', loader: { '.md': 'text' }, logLevel: 'silent',
+    plugins: process.env.ROC_POOL_BASELINE === '1' ? [{name: 'fixed-pool-baseline', setup(build) {
+      build.onLoad({filter: /literature-import-service\.ts$/}, () => ({
+        contents: execFileSync('git', ['show', 'af32a2c:src/main/plugins/research/literature-import-service.ts'], {encoding: 'utf8'}),
+        loader: 'ts', resolveDir: join(process.cwd(), 'src/main/plugins/research')
+      }));
+    }}] : [] });
   api = await import(outfile);
 });
 after(() => rmSync(directory, { recursive: true, force: true }));
@@ -1448,7 +1456,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
     const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
   } finally { f.close(); }
 });
 
@@ -1888,7 +1896,7 @@ test('DB10 upgrades DB9 without inferring historical external identifiers or rew
     insertHistoricalLibrary(f, 'history-external', metadata);
     const before = f.db.prepare('SELECT * FROM research_library').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getIdentifiers({id: 'history-external'}).total, 0);
     api.applyResearchDatabaseSchema(f.db);
@@ -2037,11 +2045,92 @@ test('DB11 adds review storage without rewriting DB10 papers or inventing histor
     insertHistoricalLibrary(f, 'review-history', record('history-review'));
     const before = f.db.prepare('SELECT * FROM research_library').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 11);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 12);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getReviews({id: 'review-history'}).total, 0);
     api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
+    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+  } finally { f.close(); }
+});
+
+test('complete captured pool retains excluded and lower-ranked records beyond candidate limit and expiry', async () => {
+  const records = [
+    {...record('old'), publishedYear: 2019}, {...record('first'), publishedYear: 2026},
+    {...record('second'), publishedYear: 2026}, {...record('unknown-year'), publishedYear: null}
+  ];
+  const f = setup({records});
+  try {
+    const result = await f.run(() => f.service.search({query: 'complete pool', sources: ['crossref'],
+      limit: 1, yearFrom: 2020}));
+    assert.equal(result.candidates.length, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools WHERE execution_id=?').pluck().get(result.executionId), 1);
+    const first = f.run(() => f.service.readPool({executionId: result.executionId, limit: 2}));
+    assert.equal(first.total, 4);
+    assert.deepEqual(first.records.map(item => item.record), records.slice(0, 2));
+    assert.equal(first.nextOffset, 2);
+    const next = f.run(() => f.service.readPool({executionId: result.executionId, offset: 2, limit: 2}));
+    assert.deepEqual(next.records.map(item => item.record), records.slice(2));
+    assert.equal(next.nextOffset, null);
+    assert.equal(next.contentHash, first.contentHash);
+    const {contentHash, total: _total, nextOffset: _next, ...body} = {...first, records: [...first.records, ...next.records]};
+    assert.equal(contentHash, createHash('sha256').update(JSON.stringify(body)).digest('hex'));
+    assert.equal(first.request.yearFrom, 2020);
+    f.setTime('2026-11-12T00:00:00.000Z');
+    await f.run(() => f.service.search({query: 'next query', sources: ['crossref'], limit: 1}));
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches WHERE id=?').pluck().get(result.searchId), 0);
+    assert.deepEqual(f.run(() => f.service.readPool({executionId: result.executionId, limit: 2})), first);
+    assert.throws(() => f.run(() => f.service.readPool({executionId: result.executionId}), {owner: 'thread:other'}), /literature_pool_not_found/u);
+    assert.throws(() => f.run(() => f.service.readPool({executionId: result.executionId}), {projectId: 'other-project'}), /literature_pool_not_found/u);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 0);
+  } finally { f.close(); }
+});
+
+test('pool reads reject tampered data and historical missing pools instead of inventing originals', async () => {
+  const f = setup();
+  try {
+    const {result} = await candidate(f);
+    const row = f.db.prepare('SELECT pool_json FROM research_literature_search_pools WHERE execution_id=?').pluck().get(result.executionId);
+    const pool = JSON.parse(row);
+    pool.records[0].rank = 99;
+    f.db.prepare('UPDATE research_literature_search_pools SET pool_json=? WHERE execution_id=?').run(JSON.stringify(pool), result.executionId);
+    assert.throws(() => f.run(() => f.service.readPool({executionId: result.executionId})), /literature_pool_integrity_invalid/u);
+    f.db.prepare('DELETE FROM research_literature_search_pools WHERE execution_id=?').run(result.executionId);
+    assert.throws(() => f.run(() => f.service.readPool({executionId: result.executionId})), /literature_pool_not_found/u);
+    assert.deepEqual(api.parseIpcRequestArgs('roc:research:literature-pool', [{executionId: result.executionId}]),
+      [{executionId: result.executionId, offset: 0, limit: 20}]);
+  } finally { f.close(); }
+});
+
+test('pool insertion failure atomically prevents candidate publication and preserves failed execution receipts', async () => {
+  const f = setup();
+  try {
+    f.db.exec(`CREATE TRIGGER reject_pool BEFORE INSERT ON research_literature_search_pools
+      BEGIN SELECT RAISE(ABORT,'pool_write_failure'); END`);
+    await assert.rejects(f.run(() => f.service.search({query: 'rollback pool', sources: ['crossref'], limit: 5})), /pool_write_failure/u);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools').pluck().get(), 0);
+    assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions').pluck().get(), 'failed');
+  } finally { f.close(); }
+});
+
+test('DB12 creates no synthetic pool for old search executions and scoped capability returns the real pool', async () => {
+  const f = setup({migrations: api.researchMigrations.slice(0, 11)});
+  try {
+    f.db.prepare(`INSERT INTO research_literature_search_executions
+      (id,owner,project_id,request_json,status,created_at) VALUES ('old-exec','thread:a',?,'{}','complete',?)`).run(f.project.id, timestamp);
+    api.applyResearchDatabaseSchema(f.db);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools').pluck().get(), 0);
+    const {result} = await candidate(f);
+    const handlers = new Map();
+    api.registerLiteratureImportCapabilities({pluginId: 'research',
+      capabilities: {register: (_plugin, descriptor, handler) => handlers.set(descriptor.name, handler)}}, f.service);
+    const read = handlers.get('research.literature.getPool');
+    const pool = await f.run(() => read({executionId: result.executionId}));
+    assert.equal(pool.total, 1);
+    assert.equal(pool.records[0].record.title, 'Literature 1');
+    await assert.rejects(f.run(() => read({executionId: 'old-exec'})),
+      error => error.code === 'literature_pool_not_found' && error.retryable === false);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
   } finally { f.close(); }
 });

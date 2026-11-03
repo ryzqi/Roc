@@ -1,15 +1,12 @@
 import { createHash } from 'node:crypto';
 import { literatureNetworkSourceSchema, type LiteratureCandidate, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
-import type { ResearchLiterature } from '../../../shared/types';
 import { normalizeResearchArxiv, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
-import type {LiteratureIdentifierObservation, LiteratureRawIdentifiers} from '../../../shared/schemas/literature-identifiers';
-import type {LiteratureReview} from '../../../shared/schemas/literature-review';
+import type {RankedLiteratureRecord} from '../../../shared/schemas/literature-search-pool';
+export type {RankedLiteratureRecord} from '../../../shared/schemas/literature-search-pool';
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
-export type RankedLiteratureRecord = {record: ResearchLiterature; rank: number;
-  identifiers: LiteratureIdentifierObservation[]; rawIdentifiers: LiteratureRawIdentifiers | null; review: LiteratureReview};
 
 /** This ordering selects metadata; every selected source has equal ranking weight. */
 export const literatureSourcePriority: readonly Source[] = ['crossref', 'openalex', 'semantic_scholar', 'pubmed', 'europe_pmc', 'arxiv'];

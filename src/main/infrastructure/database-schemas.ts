@@ -1581,6 +1581,16 @@ CREATE INDEX idx_research_library_provider_reviews_item
 `
 });
 
+researchMigrations.push({
+  version: 12, name: 'literature_complete_captured_search_pools',
+  sql: `
+CREATE TABLE research_literature_search_pools (
+  execution_id TEXT PRIMARY KEY REFERENCES research_literature_search_executions(id),
+  pool_json TEXT NOT NULL
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

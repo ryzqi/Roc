@@ -3,6 +3,7 @@ import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportS
   literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
 import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from './schemas/literature-identifiers';
 import {literatureReadReviewsSchema, literatureReviewRecordsResultSchema} from './schemas/literature-review';
+import {literatureReadPoolSchema, literatureSearchPoolPageSchema} from './schemas/literature-search-pool';
 
 import { menuPages } from './surfaces';
 import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
@@ -461,6 +462,7 @@ export const ipcRegistry = {
     request({ key: 'researchLiteratureReadSearch', channel: 'roc:research:literature-read-search', domain: 'research', method: 'readLiteratureSearch', kind: 'plugin', capabilityName: 'research.literature.getSearch', inputTransform: first, contract: methodContract(oneArg(literatureReadSearchSchema), literatureSearchResultSchema) }),
     request({ key: 'researchLiteratureAdd', channel: 'roc:research:literature-add', domain: 'research', method: 'addLiterature', kind: 'plugin', capabilityName: 'research.library.addLiterature', inputTransform: first, contract: methodContract(oneArg(literatureAddSchema), literatureImportResultSchema) }),
     request({ key: 'researchLiteratureGetImport', channel: 'roc:research:literature-get-import', domain: 'research', method: 'getLiteratureImport', kind: 'plugin', capabilityName: 'research.library.getImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureGetImportSchema), literatureImportResultSchema) }),
+    request({ key: 'researchLiteraturePool', channel: 'roc:research:literature-pool', domain: 'research', method: 'getLiteraturePool', kind: 'plugin', capabilityName: 'research.literature.getPool', inputTransform: first, contract: methodContract(oneArg(literatureReadPoolSchema), literatureSearchPoolPageSchema) }),
     request({ key: 'researchLiteratureCancelImport', channel: 'roc:research:literature-cancel-import', domain: 'research', method: 'cancelLiteratureImport', kind: 'plugin', capabilityName: 'research.library.cancelImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureCancelImportSchema), literatureImportResultSchema) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),
