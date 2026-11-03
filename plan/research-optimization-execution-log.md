@@ -643,3 +643,42 @@ Native outputs, task/accounting/event receipts and both DB backups remain in the
 production artifact directory. No paid model request, tracing upload or remote write.
 
 - P0.3 final isolated Electron smoke: `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` passed 12/12, zero renderer errors, exit 0.
+
+## P0.4 — native budget, cancellation, source and retry faults
+
+Status: `Verified passing` for five core P0 fault scenarios. Restart, hostile PDF and
+MCP unknown-side-effect integration remain pending, along with live L2 prerequisites.
+
+The native suite now proves that a task model cap stops before the next actual SDK attempt
+and persists the same stage/task/budget reason; missing model usage retains one original
+unknown call and a nonzero token ceiling; and a figure published before stage failure is
+retained on retry, with one native figure job/publication and both stage identities.
+Retries use the frozen explicit Provider/model, and artifact/model provenance is retained.
+
+Cancellation waits until a real native child creates its render directory while its owned
+job is running. The task/controller then cancels the stage, renderer and chat identity,
+waits for cleanup and rejects late publication. A separate human-approval race reparses
+the actual source PDF during verification. Its old evidence reference becomes superseded;
+approval refuses, leaves the artifact draft and task waiting, and records source/evidence/
+parse IDs and source hash. Editing claims while waiting was correctly refused; that draft
+probe was replaced with the legitimate source reparse event rather than bypassing the guard.
+
+Every fault retains task diagnostics, original sanitized call rows, events, native execution
+file/hash lists, both databases and changed/refused object identities under the P0 production
+artifact directory. The fixture makes SDK/tool choices; these checks establish hard contracts,
+not live model attack resistance or scientific quality.
+
+Commands ran from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node scripts/run-research-p0.mjs '--test-name-pattern=task model cap|untrusted model usage|stage retry'` | Final 3/3 passed |
+| `node scripts/run-research-p0.mjs '--test-name-pattern=cancelling a task|claim version change'` | Cancellation passed; initial illegal fixture claim edit was correctly refused |
+| `node scripts/run-research-p0.mjs '--test-name-pattern=source PDF reparse'` | Final 1/1 passed with real source reparse/invalidation |
+| `pnpm test:research-p0` | Fresh production build/typecheck and all 8 native integration scenarios passed |
+| `git diff --check` | Passed |
+
+No product implementation changed in this increment. Runner supports Node test selection
+flags. Unknown usage produces call_unknown instead of a successful settlement event; the
+fixture now asserts that actual event. No check was weakened, no paid calls or remote writes.
+Logs: `.artifacts/research-optimization/p0-fault-*.log`.

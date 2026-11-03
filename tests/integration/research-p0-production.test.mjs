@@ -77,7 +77,8 @@ function seedChat(f, budget) {
   return {manifest, broker: new api.ExecutionGrantBroker(f.agentDb)};
 }
 
-async function runScenario(stages, reportFailure = false) {
+async function runScenario(stages, fault = null) {
+  const reportFailure = fault === 'report_failure';
   const fullWorkflow = stages[0] === 'discovery';
   const temporary = await mkdtemp(join(tmpdir(), 'roc-p0-production-'));
   const root = await realpath(temporary), workspace = join(root, 'workspace');
@@ -120,10 +121,19 @@ async function runScenario(stages, reportFailure = false) {
       default: throw new Error(`unexpected P0 capability: ${name}`);
     }
   }};
-  const gate = api.createResearchHumanGate({repository: f.repository, production: {verifyStage: projectId =>
-    f.repository.getWorkflow(projectId).currentStage === 'figure' ? figures.verifyStage(projectId) : exports.verifyStage(projectId)}});
+  let injectApprovalChange = false;
+  const gate = api.createResearchHumanGate({repository: f.repository, production: {async verifyStage(projectId) {
+    if (f.repository.getWorkflow(projectId).currentStage !== 'figure') return exports.verifyStage(projectId);
+    await figures.verifyStage(projectId);
+    if (injectApprovalChange) {
+      injectApprovalChange = false;
+      produced.priorParseId = produced.document.currentParseId;
+      produced.document = await documents.parse(produced.document.id);
+      assert.equal(produced.document.status, 'ready', produced.document.error);
+    }
+  }}});
   const budget = {...api.createRunBudget({contextBudgetTokens: 1000, maxOutputTokens: 250}),
-    maxCallTokens: 1400, maxTotalTokens: 40000, maxModelCalls: 20};
+    maxCallTokens: 1400, maxTotalTokens: 40000, maxModelCalls: fault === 'task_cap' ? 2 : 20};
   f.tasks.projectBudgets.save({projectId: f.project.id, expectedRevision: 1,
     limits: {maxTotalTokens: 60000, maxModelCalls: 30, maxConcurrentModelCalls: 4, maxCostMicrousd: null}});
   const ledger = new api.RunBudgetLedger(f.agentDb);
@@ -131,12 +141,14 @@ async function runScenario(stages, reportFailure = false) {
   let providerAttempts = 0, currentRun;
   const produced = {};
   const executionErrors = [];
+  const finishedExecutions = new Set();
   const fixedOutput = stage => {
     const output = {title: `Fixed ${stage}`, markdown: 'Original synthetic engineering fixture.',
       claims: [], sections: [], verdict: 'ready'};
     if (stage === 'figure') output.claims.push({
       subjectType: 'figure', content: 'The fixed data means are A=2 and B=4.',
-      status: 'supported', evidenceIds: [produced.evidence.id]
+      status: 'supported', evidenceIds: fault === 'stale_approval' ?
+        [produced.evidence.id, produced.paperEvidence.id] : [produced.evidence.id]
     });
     if (stage === 'writing') {
       output.claims.push(
@@ -169,13 +181,17 @@ async function runScenario(stages, reportFailure = false) {
       return {generations: [{text: '', message: new AIMessage({
         content: '', tool_calls: [{id: `output-${providerAttempts}`, name: this.responseToolName, type: 'tool_call',
           args: fixedOutput(currentRun.stage)}],
-        usage_metadata: {input_tokens: 12, output_tokens: 8, total_tokens: 20}
+        usage_metadata: fault === 'unknown_usage' && currentRun.stage === 'figure' ? undefined :
+          {input_tokens: 12, output_tokens: 8, total_tokens: 20}
       })}]};
     }
   }
-  const delegate = api.createResearchRoleExecutor({createDefaultModelHandle: async () => ({
+  const modelHandle = async () => ({
     providerId: 'p0-fixture', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}
-  })}, ledger);
+  });
+  const delegate = api.createResearchRoleExecutor({
+    createDefaultModelHandle: modelHandle, createModelHandleByProviderAndModel: modelHandle
+  }, ledger);
   const executor = {
     async prepare(selection, limits) {
       const prepared = await delegate.prepare(selection, limits);
@@ -230,7 +246,7 @@ async function runScenario(stages, reportFailure = false) {
             assert.equal(output.bytes.toString(), 'group,mean\nA,2\nB,4');
             produced.experiment = await tool('publish_experiment').invoke({experimentId: started.experimentId});
             produced.means = output;
-          } else if (input.run.stage === 'figure') {
+          } else if (input.run.stage === 'figure' && input.run.retryOfRunId === null) {
             const chunk = f.db.prepare(`SELECT c.id FROM research_knowledge_chunks c
               JOIN research_knowledge_documents d ON d.id=c.document_id
               WHERE d.project_id=? AND d.source_type='experiment' AND d.source_id=?
@@ -238,9 +254,13 @@ async function runScenario(stages, reportFailure = false) {
             assert.ok(chunk, 'the real experiment must index its output as located evidence');
             produced.evidence = await tool('capture_evidence').invoke({chunkId: chunk.id});
             assert.equal(produced.evidence.excerpt, produced.means.bytes.toString());
-            const values = produced.means.bytes.toString().split('\n').slice(1).map(line => {
+            let values = produced.means.bytes.toString().split('\n').slice(1).map(line => {
               const [group, mean] = line.split(','); return {group, mean: Number(mean)};
             });
+            if (fault === 'figure_cancel') {
+              const original = values;
+              values = Array.from({length: 30000}, (_, index) => original[index % original.length]);
+            }
             const specification = JSON.stringify({data: {values}, mark: 'bar', encoding: {
               x: {field: 'group', type: 'nominal'}, y: {field: 'mean', type: 'quantitative'}
             }});
@@ -251,10 +271,12 @@ async function runScenario(stages, reportFailure = false) {
               engine: 'vega-lite', sourceVersion: 1, sourcePath: 'figure.vl.json', inputPaths: ['means.csv'],
               timeoutMs: 15000, figure: {widthInches: 3, heightInches: 2, dpi: 72, seed: 42}
             });
+            produced.figureRunId = started.runId;
             await until(() => !['preparing', 'running'].includes(figures.getRun(f.project.id, started.runId).status));
             const status = await tool('get_figure').invoke({runId: started.runId});
             assert.equal(status.status, 'completed', status.error);
             produced.figure = await tool('publish_figure').invoke({runId: started.runId, replacesFigureId: null});
+            if (fault === 'published_stage_failure') throw new Error('research_fixture_after_publication');
           } else if (input.run.stage === 'export') {
             const started = await tool('prepare_export').invoke({requestId: 'fixed-export',
               title: 'Synthetic reproducibility fixture', manuscriptArtifactId: produced.manuscriptId,
@@ -281,11 +303,37 @@ async function runScenario(stages, reportFailure = false) {
         } catch (error) {
           executionErrors.push(error);
           throw error;
+        } finally {
+          finishedExecutions.add(input.run.id);
         }
       }};
     }
   };
   const runtime = new api.ResearchStageRuntime(f.repository, capabilities, executor, gate, effects);
+  const controller = new api.ResearchTaskController(f.tasks, {
+    stages: runtime,
+    async cancelChat(runId) {
+      f.agentDb.prepare("UPDATE agent_runs SET status='cancelled' WHERE id=?").run(runId);
+    },
+    async cancelJob() { throw new Error('unexpected_direct_production_job'); }
+  });
+  const saveFault = async (taskId, details) => {
+    assert.deepEqual(persistenceErrors, []);
+    const artifactRoot = join(process.cwd(), '.artifacts/research-optimization/p0-production', taskId);
+    await mkdir(artifactRoot, {recursive: true});
+    const experimentRuns = f.repository.experiments.list(f.project.id, 20);
+    const figureRuns = f.repository.figureRuns.list(f.project.id, 20);
+    await writeFile(join(artifactRoot, `${fault}.json`), JSON.stringify({
+      taskId, fault, details,
+      diagnostics: new api.ResearchTaskDiagnosticsService(f.repository, ledger).get({projectId: f.project.id, taskId}),
+      calls: f.agentDb.prepare(`SELECT run_id,call_id,execution_kind,state,reserved_tokens,actual_tokens,
+        reserved_cost_microusd,actual_cost_microusd FROM agent_budget_calls WHERE task_id=? ORDER BY created_at,call_id`).all(taskId),
+      events: f.tasks.events({projectId: f.project.id, taskId, afterSequence: 0, limit: 200}).events,
+      files: [...experimentRuns, ...figureRuns].map(run => ({executionId: run.id, status: run.status, files: run.files}))
+    }, null, 2));
+    await f.db.backup(join(artifactRoot, 'research.db'));
+    await f.agentDb.backup(join(artifactRoot, 'agent.db'));
+  };
   try {
     await new api.RunBudgetObserver(ledger, 'chat', budget, 'p0-fixture', {providerId: 'p0-fixture', modelId: 'fixture-model'}).invoke({
       purpose: 'agent', messages: [new HumanMessage('Reproduce the fixed synthetic means.')], responseMessage: value => value,
@@ -299,10 +347,56 @@ async function runScenario(stages, reportFailure = false) {
     for (const stage of stages) {
       const request = {projectId: f.project.id, expectedStage: stage, instruction: 'Reproduce the fixed synthetic means.', requestId: `p0-${stage}`};
       const token = chat.broker.issueResearchDispatch({runId: 'chat', threadId: 'thread', manifest: chat.manifest, request});
-      const run = runtime.start(request, chat.broker.consumeResearchDispatch(token, request));
+      let run = runtime.start(request, chat.broker.consumeResearchDispatch(token, request));
       taskId ??= run.taskId;
       assert.equal(run.taskId, taskId);
+      if (stage === 'figure' && fault === 'figure_cancel') {
+        await until(() => produced.figureRunId !== undefined &&
+          figures.getRun(f.project.id, produced.figureRunId).status === 'running' &&
+          existsSync(join(f.repository.figureRuns.root(f.project.id, produced.figureRunId), 'scratch/render-output')));
+        await controller.cancel({projectId: f.project.id, taskId});
+        await runtime.waitForIdle();
+        await until(() => finishedExecutions.has(run.id));
+        assert.equal(f.tasks.get(taskId, f.project.id).status, 'cancelled');
+        assert.equal(f.repository.runs.get(run.id, f.project.id).status, 'cancelled');
+        assert.equal(figures.getRun(f.project.id, produced.figureRunId).status, 'cancelled');
+        assert.equal(f.repository.figures.list(f.project.id, 20).length, 0);
+        assert.equal(providerAttempts, 2);
+        await assert.rejects(figures.publish(f.project.id, produced.figureRunId, null), /research_figure_completed_required/u);
+        await saveFault(taskId, {cancelledFigureRunId: produced.figureRunId, providerAttempts});
+        return;
+      }
       await runtime.waitForIdle();
+      if (stage === 'figure' && fault === 'task_cap') {
+        assert.equal(providerAttempts, 2, 'task cap must stop before the next actual model attempt');
+        assert.equal(f.repository.runs.get(run.id, f.project.id).status, 'failed');
+        const reason = f.repository.runs.get(run.id, f.project.id).error;
+        assert.equal(reason, 'run_model_call_budget_exhausted');
+        const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger).get({projectId: f.project.id, taskId});
+        assert.equal(diagnostics.task.statusReason, reason);
+        assert.equal(diagnostics.budget.stopReason, reason);
+        assert.equal(diagnostics.budget.calls.models.total, 2);
+        assert.equal(f.repository.getArtifact(produced.figure.artifactId).status, 'draft');
+        await saveFault(taskId, {refusal: reason, providerAttempts});
+        return;
+      }
+      if (stage === 'figure' && fault === 'published_stage_failure') {
+        assert.equal(executionErrors.length, 1);
+        assert.equal(executionErrors[0].message, 'research_fixture_after_publication');
+        assert.equal(f.repository.runs.get(run.id, f.project.id).status, 'failed');
+        const artifactId = produced.figure.artifactId;
+        const originalRunId = run.id;
+        executionErrors.length = 0;
+        run = runtime.retry({projectId: f.project.id, runId: originalRunId, requestId: 'p0-figure-retry'});
+        assert.equal(run.taskId, taskId);
+        assert.equal(run.retryOfRunId, originalRunId);
+        await runtime.waitForIdle();
+        assert.deepEqual(executionErrors, []);
+        assert.equal(f.repository.figureRuns.list(f.project.id, 20).length, 1);
+        assert.equal(f.repository.figures.list(f.project.id, 20).length, 1);
+        assert.deepEqual(f.repository.runs.get(run.id, f.project.id).outputArtifactIds, [artifactId]);
+        await saveFault(taskId, {originalRunId, retryRunId: run.id, retainedArtifactId: artifactId});
+      }
       if (reportFailure && stage === 'export') {
         assert.equal(executionErrors.length, 1);
         assert.equal(executionErrors[0].message, 'research_p0_expected_report_failure');
@@ -338,6 +432,21 @@ async function runScenario(stages, reportFailure = false) {
       if (stage === 'discovery') assert.equal(task.status, 'active');
       else {
         assert.equal(task.status, 'waiting_approval', `${stage}: ${task.statusReason}`);
+        if (stage === 'figure' && fault === 'stale_approval') {
+          injectApprovalChange = true;
+          await assert.rejects(gate.approve({projectId: f.project.id, expectedStage: stage, action: 'approve'}),
+            /research_evidence_reference_superseded/u);
+          assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'figure');
+          assert.equal(f.repository.getArtifact(produced.figure.artifactId).status, 'draft');
+          assert.equal(f.tasks.get(taskId, f.project.id).status, 'waiting_approval');
+          assert.notEqual(produced.document.currentParseId, produced.priorParseId);
+          assert.ok(f.db.prepare('SELECT invalidated_at FROM research_evidence WHERE id=?')
+            .pluck().get(produced.paperEvidence.id));
+          await saveFault(taskId, {changedArtifactId: produced.figure.artifactId,
+            supersededEvidenceId: produced.paperEvidence.id, priorParseId: produced.priorParseId,
+            newParseId: produced.document.currentParseId, sourceHash: produced.document.sourceHash});
+          return;
+        }
         if (stage === 'export') await assert.rejects(exports.write({projectId: f.project.id,
           exportId: produced.export.exportId, destinationPath: join(workspace, 'before-approval.zip')}), /research_export_approval_required/u);
         await gate.approve({projectId: f.project.id, expectedStage: stage, action: 'approve',
@@ -350,8 +459,14 @@ async function runScenario(stages, reportFailure = false) {
     assert.equal(providerAttempts, calls);
     assert.equal(f.repository.getWorkflow(f.project.id).currentStage, fullWorkflow ? 'export' : 'writing');
     const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger).get({projectId: f.project.id, taskId});
-    assert.equal(diagnostics.executions.length, fullWorkflow ? 17 : 5);
-    assert.equal(diagnostics.budget.tokens.settled, calls * 20);
+    assert.equal(diagnostics.executions.length, (fullWorkflow ? 17 : 5) + (fault === 'published_stage_failure' ? 1 : 0));
+    assert.equal(diagnostics.budget.tokens.settled, fault === 'unknown_usage' ? 40 : calls * 20);
+    if (fault === 'unknown_usage') {
+      assert.ok(diagnostics.budget.tokens.unknown > 0);
+      assert.equal(f.agentDb.prepare("SELECT COUNT(*) FROM agent_budget_calls WHERE task_id=? AND state='unknown'")
+        .pluck().get(taskId), 1);
+      await saveFault(taskId, {providerAttempts, unknownTokens: diagnostics.budget.tokens.unknown});
+    }
     assert.equal(diagnostics.budget.calls.models.total, calls);
     assert.equal(diagnostics.budget.cost.state, 'unknown');
     assert.equal(f.tasks.projectBudgets.status(f.project.id).models.total, calls);
@@ -360,7 +475,8 @@ async function runScenario(stages, reportFailure = false) {
     assert.equal(figureRun.files.find(file => file.area === 'input' && file.path === 'means.csv').sha256, produced.means.file.sha256);
     const events = f.tasks.events({projectId: f.project.id, taskId, afterSequence: 0, limit: 200}).events;
     assert.equal(events.filter(event => event.eventType === 'call_linked').length, 1);
-    assert.equal(events.filter(event => event.eventType === 'call_settled').length, calls - 1);
+    assert.equal(events.filter(event => event.eventType === 'call_settled').length, calls - (fault === 'unknown_usage' ? 2 : 1));
+    if (fault === 'unknown_usage') assert.ok(events.some(event => event.eventType === 'call_unknown'));
     assert.ok(events.some(event => event.executionKind === 'experiment'));
     assert.ok(events.some(event => event.executionKind === 'figure'));
     const artifactRoot = join(process.cwd(), '.artifacts/research-optimization/p0-production', taskId);
@@ -436,4 +552,19 @@ test('standard offline task parses PDF evidence, plans, experiments, reviews and
   () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure', 'writing', 'review', 'export']));
 
 test('a failed Typst report fails the real export job and prevents publication, approval and local delivery',
-  () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure', 'writing', 'review', 'export'], true));
+  () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure', 'writing', 'review', 'export'], 'report_failure'));
+
+test('a task model cap stops the next actual attempt and persists the same task and stage refusal',
+  () => runScenario(['experiment', 'figure'], 'task_cap'));
+
+test('untrusted model usage retains a nonzero unknown token ceiling in the original task ledger',
+  () => runScenario(['experiment', 'figure'], 'unknown_usage'));
+
+test('a stage retry retains its published figure and provenance without creating another production run',
+  () => runScenario(['experiment', 'figure'], 'published_stage_failure'));
+
+test('cancelling a task during native figure rendering terminates the owned job and rejects late publication',
+  () => runScenario(['experiment', 'figure'], 'figure_cancel'));
+
+test('a source PDF reparse during human approval refuses superseded evidence and retains the changed source identity',
+  () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment', 'figure'], 'stale_approval'));
