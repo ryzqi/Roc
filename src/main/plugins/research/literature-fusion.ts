@@ -5,6 +5,7 @@ import { literatureIdentity, normalizeResearchDoi } from './literature-identity'
 
 type Source = LiteratureCandidate['origins'][number]['source'];
 type FusedPaper = Omit<LiteratureCandidate, 'matchedLibraryItemId' | 'archived' | 'missingFields'>;
+export type RankedLiteratureRecord = {record: ResearchLiterature; rank: number};
 
 /** This ordering selects metadata; every selected source has equal ranking weight. */
 export const literatureSourcePriority: readonly Source[] = ['crossref', 'openalex', 'semantic_scholar', 'pubmed', 'europe_pmc', 'arxiv'];
@@ -22,13 +23,10 @@ export function literatureRanking(sources: readonly string[]): LiteratureSearchR
  * records retain their metadata, but a source contributes only its first paper rank.
  * Titles never establish identity. Ties use the normalized identity, without locale.
  */
-export function fuseLiterature(records: readonly ResearchLiterature[]): FusedPaper[] {
-  const ranks = new Map<Source, number>();
+export function fuseLiterature(records: readonly RankedLiteratureRecord[]): FusedPaper[] {
   const papers = new Map<string, LiteratureCandidate['origins']>();
-  for (const record of records) {
+  for (const {record, rank} of records) {
     const source = literatureNetworkSourceSchema.parse(record.source);
-    const rank = (ranks.get(source) ?? 0) + 1;
-    ranks.set(source, rank);
     const identity = literatureIdentity(record);
     const origin = {source, externalId: record.externalId, rank, retrievedAt: record.importedAt,
       metadataHash: hash(record), record};

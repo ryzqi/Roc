@@ -4,11 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { z } from 'zod';
 import { researchLiteratureSchema } from '../../../shared/schemas/research';
-import { literatureNetworkSourceSchema, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
+import { literatureSearchInputSchema, type LiteraturePagePosition, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature } from '../../../shared/types';
 import { normalizeResearchDoi } from './literature-identity';
-import { fuseLiterature, literatureSourcePriority } from './literature-fusion';
+import { fuseLiterature, literatureSourcePriority, type RankedLiteratureRecord } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
 import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, literatureProviderHosts, type LiteratureProviderGovernor } from './literature-provider-governor';
@@ -17,28 +17,32 @@ import { betterBibtexKey } from './cite-key';
 import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+type SourceOutcome = LiteratureSearchResult['sources'][number];
+type SearchOutcome = {
+  records: RankedLiteratureRecord[]; sources: SourceOutcome[]; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
+};
 export type LiteratureRequestAudit = (phase: 'started' | 'finished', source: LiteratureSearchResult['sources'][number]['source'],
   receipt: LiteratureSearchResult['sources'][number]['requests'][number]) => void;
 type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']; projectId: string | null;
   cacheHit: CachedLiteratureResponse | null; pendingCache: {key: string; response: CachedLiteratureResponse} | null;
   fetchedAt: string | null; host: string; release: (() => void) | null;
   coverage: LiteratureSearchResult['sources'][number]['coverage'] | null;
+  position: LiteraturePagePosition; rankOffset: number; url: string | null; visited: Set<string>;
   source: LiteratureSearchResult['sources'][number]['source']; audit: LiteratureRequestAudit | undefined};
 
 export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
   private readonly cache = new LiteratureResponseCache({maxEntries: 32, maxBytes: 8 * 1024 * 1024, ttlMs: 5 * 60_000}, Date.now);
   private readonly lifetime = new AbortController();
-  private readonly active = new Set<Promise<Awaited<ReturnType<LiteratureSearchService['executeSearch']>>>>();
+  private readonly active = new Set<Promise<SearchOutcome>>();
 
   constructor(private readonly fetchImpl: FetchLike = fetch, private readonly governor: LiteratureProviderGovernor = createLiteratureProviderGovernor()) {}
 
   private readonly requests = new AsyncLocalStorage<ProviderContext>();
 
-  async searchDetailed(request: LiteratureSearchInput, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<{
-    records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
-  }> {
+  async searchDetailed(input: unknown, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<SearchOutcome> {
     this.lifetime.signal.throwIfAborted();
+    const request = literatureSearchInputSchema.parse(input);
     const pending = this.executeSearch(request, signal, audit);
     this.active.add(pending);
     try { return await pending; }
@@ -51,92 +55,126 @@ export class LiteratureSearchService {
     this.cache.clear();
   }
 
-  private async executeSearch(request: LiteratureSearchInput, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<{
-    records: ResearchLiterature[]; sources: LiteratureSearchResult['sources']; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
-  }> {
+  private async executeSearch(request: LiteratureSearchInput, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<SearchOutcome> {
     const deadline = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]), AbortSignal.timeout(30_000)]);
-    const projectId = request.projectId ?? null;
     const sources: LiteratureSearchResult['sources'] = [];
-    const records: ResearchLiterature[] = [];
-    const requestedSources = z.array(literatureNetworkSourceSchema).min(1).parse(request.sources);
-    const selected = literatureSourcePriority.filter(source => requestedSources.includes(source));
+    const records: RankedLiteratureRecord[] = [];
+    const selected = literatureSourcePriority.filter(source => request.sources.includes(source));
     for (let offset = 0; offset < selected.length; offset += 3) {
-      const outcomes = await Promise.allSettled(selected.slice(offset, offset + 3).map(async (source) => {
-        const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
-        const receipts: ProviderContext['receipts'] = [];
-        const host = literatureProviderHosts[source];
-        const providerContext: ProviderContext = {signal: providerSignal, receipts, projectId,
-          cacheHit: null, pendingCache: null, fetchedAt: null, host, release: null, source, audit, coverage: null};
-        const cacheObservation = (): LiteratureSearchResult['sources'][number]['cache'] => providerContext.cacheHit === null ?
-          {state: 'miss'} : {state: 'hit', fetchedAt: providerContext.cacheHit.fetchedAt, responseHash: providerContext.cacheHit.responseHash};
-        try {
-          const found = await this.requests.run(providerContext, () => this.searchSource(source, request.query, request.limit));
-          const valid = found.map((record) => researchLiteratureSchema.parse(record));
-          if (valid.length > request.limit) throw new Error('literature_provider_response_invalid');
-          if (providerContext.coverage === null) throw new Error('literature_provider_coverage_missing');
-          providerSignal.throwIfAborted();
-          if (providerContext.cacheHit === null) this.governor.success(host);
-          if (providerContext.pendingCache !== null) this.cache.put(providerContext.pendingCache.key, providerContext.pendingCache.response);
-          records.push(...valid);
-          sources.push({ source, status: valid.length === 0 ? 'empty' : 'ok', returnedCount: valid.length,
-            errorCode: null, retryAfterMs: null, requests: receipts, cache: cacheObservation(), governance: this.governor.observe(host),
-            coverage: providerContext.coverage });
-        } catch (error) {
-          if (error instanceof LiteratureRequestAuditError) throw error;
-          this.lifetime.signal.throwIfAborted();
-          signal?.throwIfAborted();
-          const rateLimited = error instanceof ProviderError && error.status === 429;
-          const invalidPayload = error instanceof z.ZodError ||
-            error instanceof Error && error.message === 'literature_provider_response_invalid';
-          if (invalidPayload) this.governor.failure(host, null);
-          sources.push({ source, status: providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error', returnedCount: 0,
-            errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
-              error instanceof LiteratureProviderAdmissionError ? error.code :
-                invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
-            retryAfterMs: error instanceof ProviderError || error instanceof LiteratureProviderAdmissionError ? error.retryAfterMs : null,
-            requests: receipts, cache: cacheObservation(), governance: this.governor.observe(host),
-            coverage: {state: 'failed', apiHitCount: null, validatedPages: 0, nextPage: null} });
-          return undefined;
-        } finally { providerContext.release?.(); }
-        return undefined;
-      }));
+      const outcomes = await Promise.allSettled(selected.slice(offset, offset + 3)
+        .map(source => this.executeSource(request, source, deadline, signal, audit)));
       const rejection = outcomes.find(outcome => outcome.status === 'rejected');
       if (rejection?.status === 'rejected') throw rejection.reason;
+      for (const outcome of outcomes) {
+        if (outcome.status !== 'fulfilled') continue;
+        sources.push(outcome.value.source);
+        records.push(...outcome.value.records);
+      }
     }
     signal?.throwIfAborted();
     this.lifetime.signal.throwIfAborted();
-    // Promise completion order must not change candidate ordering or identity.
-    records.sort((a, b) => selected.indexOf(a.source as typeof selected[number]) - selected.indexOf(b.source as typeof selected[number]));
-    sources.sort((a, b) => selected.indexOf(a.source) - selected.indexOf(b.source));
+    // allSettled preserves requested priority; arrival order cannot change ranks.
     const failures = sources.filter((source) => source.status !== 'ok' && source.status !== 'empty').length;
-    const limited = sources.some(source => source.coverage.state === 'limited');
+    const limited = sources.some(source => source.coverage.state === 'limited' || source.status === 'partial' ||
+      source.coverage.apiHitCount !== null && source.returnedCount < source.coverage.apiHitCount);
     const unknown = sources.some(source => source.coverage.state === 'unknown');
-    return { records, sources, status: failures === 0 ? 'complete' : failures === sources.length ? 'failed' : 'partial',
+    return { records, sources, status: failures === 0 ? 'complete' : records.length === 0 && failures === sources.length ? 'failed' : 'partial',
       truncated: limited || fuseLiterature(records).length > request.limit,
       warnings: [...(failures === 0 ? [] : ['部分来源不可用；结果不代表穷尽检索。']),
         ...(limited ? ['当前候选未覆盖全部 API 命中；需要后续分页。'] : []),
         ...(unknown ? ['部分来源未报告总命中数或可核验的分页终点。'] : [])] };
   }
 
+  private async executeSource(request: LiteratureSearchInput, source: typeof literatureSourcePriority[number], deadline: AbortSignal,
+    signal: AbortSignal | undefined, audit: LiteratureRequestAudit | undefined): Promise<{source: SourceOutcome; records: RankedLiteratureRecord[]}> {
+    const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
+    const host = literatureProviderHosts[source];
+    let position = initialPage(source);
+    const receipts: ProviderContext['receipts'] = [];
+    const visited = new Set<string>();
+    const records: RankedLiteratureRecord[] = [];
+    const pages: SourceOutcome['pages'] = [];
+    let coverage: SourceOutcome['coverage'] = {apiHitCount: null, validatedPages: 0, state: 'unknown', nextPage: position};
+    let stopReason: SourceOutcome['stopReason'] = 'page_limit';
+    const pageCache = (context: ProviderContext): SourceOutcome['pages'][number]['cache'] => context.cacheHit === null ? {state: 'miss'} :
+      {state: 'hit', fetchedAt: context.cacheHit.fetchedAt, responseHash: context.cacheHit.responseHash};
+    for (let page = 0; page < request.maxPages; page++) {
+      const rankOffset = position.kind === 'page' ? (position.value - 1) * request.limit : position.kind === 'offset' ? position.value : records.length;
+      const context: ProviderContext = {signal: providerSignal, receipts, projectId: request.projectId ?? null, source, host, audit,
+        cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null, position, rankOffset, url: null, visited};
+      visited.add(JSON.stringify(position));
+      try {
+        providerSignal.throwIfAborted();
+        const found = await this.requests.run(context, () => this.searchSource(source, request.query, request.limit, position));
+        const valid = found.map(record => researchLiteratureSchema.parse(record));
+        if (valid.length > request.limit) throw new Error('literature_provider_response_invalid');
+        if (context.coverage === null || context.url === null) throw new Error('literature_provider_coverage_missing');
+        providerSignal.throwIfAborted();
+        if (context.cacheHit === null) this.governor.success(host);
+        if (context.pendingCache !== null) this.cache.put(context.pendingCache.key, context.pendingCache.response);
+        records.push(...valid.map((record, index) => ({record, rank: context.rankOffset + index + 1})));
+        pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: valid.length, cache: pageCache(context), coverage: context.coverage});
+        coverage = {...context.coverage, validatedPages: coverage.validatedPages + 1};
+        if (coverage.state === 'reported_end') {
+          if (coverage.apiHitCount !== records.length) coverage = {...coverage, state: 'unknown'};
+          stopReason = 'reported_end';
+          break;
+        }
+        if (coverage.nextPage === null) { stopReason = 'continuation_unavailable'; break; }
+        if (page + 1 === request.maxPages) break;
+        if (source === 'semantic_scholar' && coverage.nextPage.kind === 'offset' && coverage.nextPage.value + request.limit > 1000) {
+          stopReason = 'provider_limit';
+          break;
+        }
+        position = coverage.nextPage;
+      } catch (error) {
+        if (error instanceof LiteratureRequestAuditError) throw error;
+        this.lifetime.signal.throwIfAborted();
+        signal?.throwIfAborted();
+        const rateLimited = error instanceof ProviderError && error.status === 429;
+        const invalidPayload = error instanceof z.ZodError || error instanceof Error && error.message === 'literature_provider_response_invalid';
+        if (invalidPayload) this.governor.failure(host, null);
+        if (context.url !== null) pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: 0, cache: pageCache(context),
+          coverage: {state: 'failed', apiHitCount: null, validatedPages: 0, nextPage: null}});
+        return {records, source: {source, status: records.length > 0 ? 'partial' : providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error',
+          returnedCount: records.length, errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
+            error instanceof LiteratureProviderAdmissionError ? error.code : invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
+          retryAfterMs: error instanceof ProviderError || error instanceof LiteratureProviderAdmissionError ? error.retryAfterMs : null,
+          requests: receipts, pages, governance: this.governor.observe(host), stopReason: 'failed',
+          coverage: {...coverage, state: 'failed', nextPage: position}}};
+      } finally { context.release?.(); context.release = null; }
+    }
+    return {records, source: {source, status: records.length === 0 ? 'empty' : 'ok', returnedCount: records.length,
+      errorCode: null, retryAfterMs: null, requests: receipts, pages, coverage, stopReason, governance: this.governor.observe(host)}};
+  }
+
   private async searchSource(
     source: typeof literatureSourcePriority[number],
     query: string,
-    limit: number
+    limit: number,
+    position: LiteraturePagePosition
   ): Promise<ResearchLiterature[]> {
     switch (source) {
-      case 'openalex': return this.searchOpenAlex(query, limit);
-      case 'crossref': return this.searchCrossref(query, limit);
-      case 'semantic_scholar': return this.searchSemanticScholar(query, limit);
-      case 'arxiv': return this.searchArxiv(query, limit);
-      case 'pubmed': return this.searchEuropePmc(query, limit, 'pubmed');
-      case 'europe_pmc': return this.searchEuropePmc(query, limit, 'europe_pmc');
+      case 'openalex':
+        if (position.kind !== 'page') throw new Error('literature_provider_response_invalid');
+        return this.searchOpenAlex(query, limit, position.value);
+      case 'crossref':
+      case 'semantic_scholar':
+      case 'arxiv':
+        if (position.kind !== 'offset') throw new Error('literature_provider_response_invalid');
+        return source === 'crossref' ? this.searchCrossref(query, limit, position.value) :
+          source === 'semantic_scholar' ? this.searchSemanticScholar(query, limit, position.value) : this.searchArxiv(query, limit, position.value);
+      case 'pubmed':
+      case 'europe_pmc':
+        if (position.kind !== 'cursor') throw new Error('literature_provider_response_invalid');
+        return this.searchEuropePmc(query, limit, source, position.value);
     }
   }
 
-  private async searchOpenAlex(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}&page=1`));
+  private async searchOpenAlex(query: string, limit: number, page: number): Promise<ResearchLiterature[]> {
+    const payload = openAlexSearchPayload.parse(await this.getJson(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${limit}&page=${page}`));
     const total = payload.meta?.count ?? null;
-    this.observeCoverage(total, payload.results.length, total !== null && total > payload.results.length ? {kind: 'page', value: 2} : null);
+    this.observeCoverage(total, payload.results.length, total !== null && total > (page - 1) * limit + payload.results.length ? {kind: 'page', value: page + 1} : null);
     const timestamp = this.providerTimestamp();
     return payload.results.map((item) => ({
       id: `openalex:${item.id}`,
@@ -155,11 +193,11 @@ export class LiteratureSearchService {
     }));
   }
 
-  private async searchCrossref(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&offset=0`));
+  private async searchCrossref(query: string, limit: number, offset: number): Promise<ResearchLiterature[]> {
+    const payload = crossrefSearchPayload.parse(await this.getJson(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${limit}&offset=${offset}`));
     const total = payload.message['total-results'] ?? null;
     this.observeCoverage(total, payload.message.items.length,
-      total !== null && total > payload.message.items.length ? {kind: 'offset', value: payload.message.items.length} : null);
+      total !== null && total > offset + payload.message.items.length ? {kind: 'offset', value: offset + payload.message.items.length} : null);
     const timestamp = this.providerTimestamp();
     return payload.message.items.map((item) => ({
       id: `crossref:${item.DOI}`,
@@ -178,8 +216,8 @@ export class LiteratureSearchService {
     }));
   }
 
-  private async searchSemanticScholar(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&offset=0&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
+  private async searchSemanticScholar(query: string, limit: number, offset: number): Promise<ResearchLiterature[]> {
+    const payload = semanticScholarSearchPayload.parse(await this.getJson(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}&fields=title,authors,abstract,year,citationCount,externalIds,openAccessPdf,url`));
     this.observeCoverage(payload.total ?? null, payload.data.length, payload.next === undefined ? null : {kind: 'offset', value: payload.next});
     const timestamp = this.providerTimestamp();
     return payload.data.map((item) => ({
@@ -199,13 +237,13 @@ export class LiteratureSearchService {
     }));
   }
 
-  private async searchArxiv(query: string, limit: number): Promise<ResearchLiterature[]> {
-    const xml = await this.getText(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&start=0`);
+  private async searchArxiv(query: string, limit: number, offset: number): Promise<ResearchLiterature[]> {
+    const xml = await this.getText(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&start=${offset}`);
     if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
     const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
     const entries = normalizeArray(payload.feed.entry);
     this.observeCoverage(payload.feed.totalResults, entries.length,
-      payload.feed.totalResults > entries.length ? {kind: 'offset', value: entries.length} : null);
+      payload.feed.totalResults > offset + entries.length ? {kind: 'offset', value: offset + entries.length} : null);
     const timestamp = this.providerTimestamp();
     return entries.map((item) => ({
       id: `arxiv:${item.id}`,
@@ -224,9 +262,9 @@ export class LiteratureSearchService {
     }));
   }
 
-  private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc'): Promise<ResearchLiterature[]> {
+  private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc', cursor: string): Promise<ResearchLiterature[]> {
     const medQuery = source === 'pubmed' ? `(${query}) AND SRC:MED` : query;
-    const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}&cursorMark=*`));
+    const payload = europePmcSearchPayload.parse(await this.getJson(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(medQuery)}&format=json&pageSize=${limit}&cursorMark=${encodeURIComponent(cursor)}`));
     this.observeCoverage(payload.hitCount ?? null, payload.resultList.result.length,
       payload.nextCursorMark === undefined ? null : {kind: 'cursor', value: payload.nextCursorMark});
     const timestamp = this.providerTimestamp();
@@ -262,6 +300,7 @@ export class LiteratureSearchService {
     if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
     const context = this.requests.getStore();
     if (context === undefined) throw new Error('literature_provider_context_missing');
+    context.url = url;
     context.signal.throwIfAborted();
     const key = JSON.stringify([context.projectId, url, accept]);
     const cached = this.cache.get(key);
@@ -298,11 +337,16 @@ export class LiteratureSearchService {
     nextPage: LiteratureSearchResult['sources'][number]['coverage']['nextPage']): void {
     const context = this.requests.getStore();
     if (context === undefined) throw new Error('literature_provider_context_missing');
-    if (apiHitCount !== null && (apiHitCount < returnedCount || apiHitCount > 0 && returnedCount === 0)) {
+    if (apiHitCount !== null && (apiHitCount < returnedCount || apiHitCount > context.rankOffset && returnedCount === 0)) {
+      throw new Error('literature_provider_response_invalid');
+    }
+    if (nextPage !== null && (context.visited.has(JSON.stringify(nextPage)) ||
+      nextPage.kind === 'offset' && context.position.kind === 'offset' &&
+        (nextPage.value <= context.position.value || nextPage.value < context.rankOffset + returnedCount))) {
       throw new Error('literature_provider_response_invalid');
     }
     context.coverage = {apiHitCount, validatedPages: 1, nextPage,
-      state: nextPage !== null || apiHitCount !== null && apiHitCount > returnedCount ? 'limited' :
+      state: nextPage !== null || apiHitCount !== null && apiHitCount > context.rankOffset + returnedCount ? 'limited' :
         apiHitCount === null ? 'unknown' : 'reported_end'};
   }
 
@@ -354,6 +398,11 @@ export class LiteratureSearchService {
       context.audit?.('finished', context.source, receipt);
     }
   }
+}
+
+function initialPage(source: typeof literatureSourcePriority[number]): LiteraturePagePosition {
+  return source === 'openalex' ? {kind: 'page', value: 1} :
+    source === 'pubmed' || source === 'europe_pmc' ? {kind: 'cursor', value: '*'} : {kind: 'offset', value: 0};
 }
 
 class ProviderError extends Error {

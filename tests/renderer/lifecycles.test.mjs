@@ -27,6 +27,7 @@ before(async () => {
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
       import { buildTranscriptVirtuosoWindow, ChatTranscriptPanel, useTranscriptFirstItemIndex } from './src/renderer/assistant/transcript-panel';
       import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
+      import { useLiteratureImportActions } from './src/renderer/literature/use-literature-import-actions';
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
       window.validateIndexWrite = request => researchIndexSettingsSaveSchema.parse(request);
       const actionContainer = document.createElement('div');
@@ -70,7 +71,8 @@ before(async () => {
         mcpPair: p => { window.authorization = useMcp(p.client, null); return useMcp(p.client, p.skills ?? []); },
         chat: p => useChatSession(p),
         transcriptIndex: p => useTranscriptFirstItemIndex(p),
-        git: p => useGitWorkspace(p.client, p.workspacePath)
+        git: p => useGitWorkspace(p.client, p.workspacePath),
+        literatureImport: p => useLiteratureImportActions(p)
       };
       window.buildTranscriptVirtuosoWindow = buildTranscriptVirtuosoWindow;
       function TranscriptHarness(props) {
@@ -125,6 +127,35 @@ after(async () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   }
   assert.deepEqual(rendererErrors, [], 'renderer must not throw during lifecycle tests');
+});
+
+test('literature search action keeps page failures visible and sends a bounded project-scoped request', async () => {
+  const outcome = await page.evaluate(async () => {
+    window.literatureCalls = [];
+    const partial = {schemaVersion: 8, status: 'partial', searchId: 'partial-search',
+      sources: [{source: 'crossref', status: 'partial', errorCode: 'literature_provider_response_invalid',
+        stopReason: 'failed', pages: [{position: {kind: 'offset', value: 0}, cache: {state: 'hit'}},
+          {position: {kind: 'offset', value: 1}, coverage: {state: 'failed'}}]}]};
+    const store = {projectId: 'project-a', reload: () => {}, client: {api: {research: {
+      searchLiterature: async request => { literatureCalls.push(request); return ok(partial); }
+    }}}};
+    mount('literatureImport', {store}, true);
+    const result = await latest.searchLiterature('page query', ['crossref'], 2);
+    mount('literatureImport', {store: {...store, projectId: 'project-b',
+      client: {api: {research: {searchLiterature: async request => {
+        literatureCalls.push(request); return fail('search audit refused');
+      }}}}}});
+    const failed = await latest.searchLiterature('second query', ['openalex'], 1);
+    return {result, failed, calls: literatureCalls};
+  });
+  assert.equal(outcome.result.result.schemaVersion, 8);
+  assert.equal(outcome.result.result.status, 'partial');
+  assert.equal(outcome.result.result.sources[0].pages[1].coverage.state, 'failed');
+  assert.deepEqual(outcome.failed, {ok: false, message: 'search audit refused'});
+  assert.deepEqual(outcome.calls, [
+    {query: 'page query', sources: ['crossref'], limit: 2, maxPages: 1, projectId: 'project-a'},
+    {query: 'second query', sources: ['openalex'], limit: 1, maxPages: 1, projectId: 'project-b'}
+  ]);
 });
 
 test('async action survives StrictMode effect replay and preserves a null success value', async () => {

@@ -39,6 +39,14 @@ function record(id = '1', doi = `10.1234/${id}`) {
   return { id: `crossref:${id}`, source: 'crossref', externalId: id, doi, title: `Literature ${id}`, authors: ['Alice Smith'],
     abstract: 'A source abstract.', publishedYear: 2024, citationCount: 4, url: null, openAccessUrl: null, importedAt: timestamp, updatedAt: timestamp };
 }
+function rankedRecords(records) {
+  const ranks = new Map();
+  return records.map(record => {
+    const rank = (ranks.get(record.source) ?? 0) + 1;
+    ranks.set(record.source, rank);
+    return {record, rank};
+  });
+}
 
 test('RRF gives one contribution per source, keeps provider ranks and resolves ties without arrival order', () => {
   const sharedCrossref = record('shared');
@@ -47,8 +55,8 @@ test('RRF gives one contribution per source, keeps provider ranks and resolves t
   const sharedOpenalex = {...sharedCrossref, source: 'openalex', id: 'openalex:shared', externalId: 'shared',
     publishedYear: 2023, authors: ['Another Author']};
   const soloOpenalex = {...record('solo-openalex', null), source: 'openalex'};
-  const first = api.fuseLiterature([sharedCrossref, duplicateCrossref, soloCrossref, sharedOpenalex, soloOpenalex]);
-  const interleaved = api.fuseLiterature([sharedOpenalex, sharedCrossref, soloOpenalex, duplicateCrossref, soloCrossref]);
+  const first = api.fuseLiterature(rankedRecords([sharedCrossref, duplicateCrossref, soloCrossref, sharedOpenalex, soloOpenalex]));
+  const interleaved = api.fuseLiterature(rankedRecords([sharedOpenalex, sharedCrossref, soloOpenalex, duplicateCrossref, soloCrossref]));
   assert.deepEqual(first, interleaved);
   const shared = first.find(candidate => candidate.identity === 'doi:10.1234/shared');
   assert.equal(shared.score, 2 / 61);
@@ -62,14 +70,14 @@ test('RRF gives one contribution per source, keeps provider ranks and resolves t
   assert.deepEqual(shared.conflicts.map(conflict => conflict.field), ['title', 'authors', 'publishedYear']);
   assert.deepEqual(shared.origins.map(origin => origin.record), [sharedCrossref, duplicateCrossref, sharedOpenalex]);
   assert.equal(first.find(candidate => candidate.identity === 'crossref:solo-crossref').contributions[0].rank, 3);
-  const sameTitles = api.fuseLiterature([
+  const sameTitles = api.fuseLiterature(rankedRecords([
     {...record('a', null), title: 'Identical title'}, {...record('b', null), title: 'Identical title'}
-  ]);
+  ]));
   assert.equal(sameTitles.length, 2, 'titles cannot merge distinct papers');
-  const tied = api.fuseLiterature([record('z'), {...record('a'), source: 'openalex'}]);
+  const tied = api.fuseLiterature(rankedRecords([record('z'), {...record('a'), source: 'openalex'}]));
   assert.deepEqual(tied.map(candidate => candidate.identity), ['doi:10.1234/a', 'doi:10.1234/z']);
-  const doiVariants = api.fuseLiterature([record('case', '10.1234/CASE'),
-    {...record('case', 'https://doi.org/10.1234/case'), source: 'openalex'}]);
+  const doiVariants = api.fuseLiterature(rankedRecords([record('case', '10.1234/CASE'),
+    {...record('case', 'https://doi.org/10.1234/case'), source: 'openalex'}]));
   assert.equal(doiVariants.length, 1);
   assert.equal(doiVariants[0].conflicts.some(conflict => conflict.field === 'doi'), false);
 });
@@ -113,7 +121,7 @@ test('fused candidate snapshots retain score, conflicts and original records thr
   const f = setup({records: [alternate, primary]});
   try {
     const result = await f.run(() => f.service.search({query: 'shared', sources: ['openalex', 'crossref'], limit: 5}));
-    assert.equal(result.schemaVersion, 7);
+    assert.equal(result.schemaVersion, 8);
     assert.deepEqual(result.ranking, {method: 'rrf', version: 1, k: 60,
       sourceWeights: [{source: 'crossref', weight: 1}, {source: 'openalex', weight: 1}]});
     assert.equal(result.candidates.length, 1);
@@ -140,10 +148,12 @@ function setup(options = {}) {
   let time = timestamp;
   const changes = [];
   const prepare = options.prepare ?? (async (metadata) => ({ metadata, bibliography: api.bibliographyFromRecord(metadata, new Set()) }));
-  const search = options.search ?? { searchDetailed: async () => ({ records: options.records ?? [record()], sources: [
-    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [], cache: {state: 'miss'},
+  const search = options.search ?? { searchDetailed: async () => ({ records: rankedRecords(options.records ?? [record()]), sources: [
+    { source: 'crossref', status: 'ok', returnedCount: 1, errorCode: null, retryAfterMs: null, requests: [],
       governance: api.createLiteratureProviderGovernor().observe('api.crossref.org'),
-      coverage: {state: 'unknown', apiHitCount: null, validatedPages: 1, nextPage: null} }
+      coverage: {state: 'unknown', apiHitCount: null, validatedPages: 1, nextPage: null}, stopReason: 'continuation_unavailable',
+      pages: [{position: {kind: 'offset', value: 0}, rankOffset: 0, url: 'https://api.crossref.org/works?query=fixture',
+        returnedCount: 1, cache: {state: 'miss'}, coverage: {state: 'unknown', apiHitCount: null, validatedPages: 1, nextPage: null}}] }
   ], status: 'complete', truncated: false, warnings: [] }) };
   const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
     prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
@@ -355,9 +365,9 @@ test('arXiv parses located Atom records and DOI but refuses error feeds and inva
     assert.equal(result.records.length, count);
     if (expectedStatus === 'failed') assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
     if (count === 1) {
-      assert.equal(result.records[0].doi, '10.1234/located');
-      assert.equal(result.records[0].publishedYear, 2026);
-      assert.equal(result.records[0].title, 'Located paper');
+      assert.equal(result.records[0].record.doi, '10.1234/located');
+      assert.equal(result.records[0].record.publishedYear, 2026);
+      assert.equal(result.records[0].record.title, 'Located paper');
     }
   }
 });
@@ -374,7 +384,7 @@ test('Provider request receipts persist exact query, page, retries, response has
   try {
     const result = await f.run(() => f.service.search({query: 'exact query', sources: ['crossref'], limit: 5, yearFrom: 2020}));
     const requests = result.sources[0].requests;
-    assert.equal(result.schemaVersion, 7);
+    assert.equal(result.schemaVersion, 8);
     assert.equal(requests.length, 2);
     assert.deepEqual(requests.map(request => [request.attempt, request.status]), [[1, 429], [2, 200]]);
     assert.equal(requests[0].retryAfterMs, 0);
@@ -459,17 +469,17 @@ test('cached searches retain original timestamps and hashes under the trusted pr
     const first = await f.run(() => f.service.search(request));
     const cached = await f.run(() => f.service.search(request));
     assert.equal(calls, 1);
-    assert.equal(first.sources[0].cache.state, 'miss');
+    assert.equal(first.sources[0].pages[0].cache.state, 'miss');
     assert.equal(cached.sources[0].requests.length, 0);
     assert.deepEqual(cached.candidates, first.candidates);
-    assert.deepEqual(cached.sources[0].cache, {state: 'hit',
+    assert.deepEqual(cached.sources[0].pages[0].cache, {state: 'hit',
       fetchedAt: first.candidates[0].record.importedAt, responseHash: first.sources[0].requests[0].responseHash});
     const persisted = JSON.parse(f.db.prepare('SELECT request_json FROM research_literature_searches WHERE id=?')
       .pluck().get(cached.searchId));
     assert.equal(persisted.projectId, f.project.id);
     const other = f.repo.createProject({title: 'Another cache scope', description: '', workspacePath: '/tmp/roc-other-cache-scope'});
     const otherResult = await f.run(() => f.service.search(request), {projectId: other.id});
-    assert.equal(otherResult.sources[0].cache.state, 'miss');
+    assert.equal(otherResult.sources[0].pages[0].cache.state, 'miss');
     assert.equal(calls, 2);
     await f.run(() => f.service.search({...request, limit: 6}));
     assert.equal(calls, 3, 'different source page sizes cannot share a response');
@@ -492,7 +502,7 @@ test('failed payloads do not enter cache and service shutdown aborts work and re
   const request = {query: 'cache failure', sources: ['openalex'], limit: 5, projectId: 'project'};
   assert.equal((await search.searchDetailed(request)).status, 'failed');
   assert.equal((await search.searchDetailed(request)).status, 'complete');
-  assert.equal((await search.searchDetailed(request)).sources[0].cache.state, 'hit');
+  assert.equal((await search.searchDetailed(request)).sources[0].pages[0].cache.state, 'hit');
   assert.equal(calls, 2);
   const pending = search.searchDetailed({...request, query: 'inflight shutdown'});
   const rejected = assert.rejects(pending, /literature_service_closed/u);
@@ -711,7 +721,7 @@ test('cached responses cannot clear failures and caller cancellation cannot pois
     for (let i = 0; i < 3; i++) await search.searchDetailed({...warm, query: `bad health ${i}`});
     const hit = await search.searchDetailed(warm);
     assert.equal(hit.status, 'complete');
-    assert.equal(hit.sources[0].cache.state, 'hit');
+    assert.equal(hit.sources[0].pages[0].cache.state, 'hit');
     assert.equal(hit.sources[0].governance.state, 'cooldown');
     assert.equal(hit.sources[0].governance.consecutiveFailures, 3);
     assert.equal(calls, 4);
@@ -955,7 +965,7 @@ test('cached and persisted coverage retains the reported API count and original 
     const request = {query: 'cached continuation', sources: ['europe_pmc'], limit: 1};
     const first = await f.run(() => f.service.search(request));
     const hit = await f.run(() => f.service.search(request));
-    assert.equal(hit.sources[0].cache.state, 'hit');
+    assert.equal(hit.sources[0].pages[0].cache.state, 'hit');
     assert.deepEqual(hit.sources[0].requests, []);
     assert.deepEqual(hit.sources[0].coverage, first.sources[0].coverage);
     const stored = f.run(() => f.service.readSearch({searchId: hit.searchId}));
@@ -965,12 +975,265 @@ test('cached and persisted coverage retains the reported API count and original 
   } finally { await search.shutdown(); f.close(); }
 });
 
+test('bounded search fetches later pages and preserves exact source ranks and every page receipt', async () => {
+  const g = governanceFixture();
+  const offsets = [];
+  const search = new api.LiteratureSearchService(async url => {
+    const offset = Number(new URL(url).searchParams.get('offset'));
+    offsets.push(offset);
+    const items = offset === 0 ?
+      [{DOI: '10.1234/page-a', title: ['First']}, {DOI: '10.1234/page-a', title: ['Repeated first']}]:
+      [{DOI: '10.1234/page-b', title: ['Second distinct']}, {DOI: '10.1234/page-c', title: ['Third distinct']}];
+    return Response.json({message: {'total-results': 4, items}});
+  }, g.governor);
+  const f = setup({search});
+  try {
+    const result = await f.run(() => f.service.search({query: 'paged ranks', sources: ['crossref'], limit: 2, maxPages: 2}));
+    assert.deepEqual(offsets, [0, 2]);
+    assert.equal(result.sources[0].pages.length, 2);
+    assert.equal(result.sources[0].coverage.validatedPages, 2);
+    assert.equal(result.sources[0].coverage.state, 'reported_end');
+    assert.deepEqual(result.candidates.map(candidate => candidate.contributions[0].rank), [1, 3]);
+    assert.equal(result.candidates[0].origins.length, 2);
+    assert.deepEqual(result.sources[0].requests.map(receipt => new URL(receipt.url).searchParams.get('offset')), ['0', '2']);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts WHERE execution_id=?')
+      .pluck().get(result.executionId), 2);
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('OpenAlex page cap keeps the query and page size frozen and reports the uncollected continuation', async () => {
+  const urls = [];
+  const search = new api.LiteratureSearchService(async url => {
+    urls.push(new URL(url));
+    const page = Number(urls.at(-1).searchParams.get('page'));
+    return Response.json({meta: {count: 20}, results: [{id: `W${page}`, title: `Page ${page}`}]});
+  }, governanceFixture().governor);
+  try {
+    const result = await search.searchDetailed({query: 'frozen + query/字段', sources: ['openalex'], limit: 1, maxPages: 3});
+    assert.deepEqual(urls.map(url => url.searchParams.get('page')), ['1', '2', '3']);
+    assert.ok(urls.every(url => url.searchParams.get('search') === 'frozen + query/字段' && url.searchParams.get('per_page') === '1'));
+    assert.deepEqual(result.records.map(item => item.rank), [1, 2, 3]);
+    assert.equal(result.sources[0].stopReason, 'page_limit');
+    assert.deepEqual(result.sources[0].coverage, {apiHitCount: 20, validatedPages: 3, state: 'limited', nextPage: {kind: 'page', value: 4}});
+    assert.equal(result.truncated, true);
+    await assert.rejects(search.searchDetailed({query: 'cap', sources: ['openalex'], maxPages: 4}));
+    assert.equal(urls.length, 3);
+  } finally { await search.shutdown(); }
+});
+
+test('Semantic Scholar offset gaps preserve actual ranks and cannot establish complete API coverage', async () => {
+  const offsets = [];
+  const search = new api.LiteratureSearchService(async url => {
+    const offset = Number(new URL(url).searchParams.get('offset'));
+    offsets.push(offset);
+    return Response.json({total: 10, ...(offset === 0 ? {next: 8} : {}),
+      data: [{paperId: `S${offset}`, title: `Rank ${offset + 1}`}, {paperId: `S${offset + 1}`, title: `Rank ${offset + 2}`}]});
+  }, governanceFixture().governor);
+  try {
+    const result = await search.searchDetailed({query: 'offset gap', sources: ['semantic_scholar'], limit: 2, maxPages: 3});
+    assert.deepEqual(offsets, [0, 8]);
+    assert.deepEqual(result.records.map(item => item.rank), [1, 2, 9, 10]);
+    assert.equal(result.sources[0].stopReason, 'reported_end');
+    assert.equal(result.sources[0].coverage.state, 'unknown');
+    assert.equal(result.sources[0].coverage.apiHitCount, 10);
+    assert.equal(result.sources[0].returnedCount, 4);
+    assert.equal(result.truncated, true);
+    assert.match(result.warnings.join(' '), /未报告/u);
+  } finally { await search.shutdown(); }
+});
+
+test('Semantic Scholar stops before dispatching a page that exceeds its 1000-result provider cap', async () => {
+  let calls = 0;
+  const search = new api.LiteratureSearchService(async () => {
+    calls++;
+    return Response.json({total: 3000, next: 999, data: [{paperId: 'S1', title: 'Capped paper'}]});
+  }, governanceFixture().governor);
+  try {
+    const result = await search.searchDetailed({query: 'provider cap', sources: ['semantic_scholar'], limit: 2, maxPages: 3});
+    assert.equal(calls, 1);
+    assert.equal(result.sources[0].stopReason, 'provider_limit');
+    assert.deepEqual(result.sources[0].coverage.nextPage, {kind: 'offset', value: 999});
+    assert.equal(result.truncated, true);
+  } finally { await search.shutdown(); }
+});
+
+test('EBI opaque cursors retain exact bytes and the original query and host across pages', async () => {
+  for (const source of ['pubmed', 'europe_pmc']) {
+    const urls = [];
+    const cursor = 'opaque+cursor/=&? 字段';
+    const search = new api.LiteratureSearchService(async url => {
+      urls.push(new URL(url));
+      return Response.json({hitCount: 2, ...(urls.length === 1 ? {nextCursorMark: cursor} : {}),
+        resultList: {result: [{id: `${urls.length}`, source: source === 'pubmed' ? 'MED' : 'PMC', title: 'Cursor paper'}]}});
+    }, governanceFixture().governor);
+    try {
+      const query = 'query + term/字段';
+      const result = await search.searchDetailed({query, sources: [source], limit: 1, maxPages: 3});
+      assert.deepEqual(urls.map(url => url.searchParams.get('cursorMark')), ['*', cursor]);
+      assert.ok(urls.every(url => url.origin === 'https://www.ebi.ac.uk' &&
+        url.pathname === '/europepmc/webservices/rest/search' && url.searchParams.get('pageSize') === '1' &&
+        url.searchParams.get('query') === (source === 'pubmed' ? `(${query}) AND SRC:MED` : query)));
+      assert.deepEqual(result.records.map(item => item.rank), [1, 2]);
+      assert.equal(result.sources[0].coverage.state, 'reported_end');
+      assert.equal(result.sources[0].stopReason, 'reported_end');
+      assert.deepEqual(result.sources[0].pages[1].position, {kind: 'cursor', value: cursor});
+    } finally { await search.shutdown(); }
+  }
+});
+
+test('arXiv offsets preserve ranks and every page obeys the three-second host spacing', async () => {
+  const g = governanceFixture({minIntervalMs: 3000});
+  const starts = [], urls = [];
+  const search = new api.LiteratureSearchService(async url => {
+    starts.push(g.now());
+    urls.push(new URL(url));
+    const offset = Number(urls.at(-1).searchParams.get('start'));
+    return new Response(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+      <opensearch:totalResults>2</opensearch:totalResults><entry><id>http://arxiv.org/abs/2601.0000${offset + 1}v1</id>
+      <title>Page ${offset + 1}</title><summary>Abstract</summary><published>2026-01-01T00:00:00Z</published><author><name>Author</name></author></entry></feed>`);
+  }, g.governor);
+  try {
+    const result = await search.searchDetailed({query: 'frozen query', sources: ['arxiv'], limit: 1, maxPages: 3});
+    assert.deepEqual(urls.map(url => url.searchParams.get('start')), ['0', '1']);
+    assert.ok(urls.every(url => url.searchParams.get('search_query') === 'all:frozen query'));
+    assert.equal(starts[1] - starts[0], 3000);
+    assert.deepEqual(result.records.map(item => item.rank), [1, 2]);
+    assert.equal(result.sources[0].coverage.state, 'reported_end');
+  } finally { await search.shutdown(); }
+});
+
+test('per-page cache provenance keeps original ranks while retries create separate durable receipts', async () => {
+  const g = governanceFixture();
+  let calls = 0, secondPageAttempts = 0;
+  const search = new api.LiteratureSearchService(async url => {
+    calls++;
+    const offset = Number(new URL(url).searchParams.get('offset'));
+    if (offset === 1 && ++secondPageAttempts === 1) return new Response('retry later', {status: 429, headers: {'Retry-After': '0'}});
+    return Response.json({message: {'total-results': 2, items: [{DOI: `10.1234/cache-page-${offset}`, title: [`Page ${offset}`]}]}});
+  }, g.governor);
+  const f = setup({search});
+  try {
+    const request = {query: 'page cache', sources: ['crossref'], limit: 1};
+    const first = await f.run(() => f.service.search({...request, maxPages: 1}));
+    const extended = await f.run(() => f.service.search({...request, maxPages: 2}));
+    assert.deepEqual(extended.sources[0].pages.map(page => page.cache.state), ['hit', 'miss']);
+    assert.deepEqual(extended.sources[0].pages[0].cache,
+      {state: 'hit', fetchedAt: first.candidates[0].origins[0].retrievedAt, responseHash: first.sources[0].requests[0].responseHash});
+    assert.deepEqual(extended.sources[0].requests.map(receipt => [receipt.attempt, receipt.status]), [[1, 429], [2, 200]]);
+    assert.equal(extended.sources[0].pages[1].rankOffset, 1);
+    assert.equal(extended.sources[0].governance.remainingRequests, 297);
+    const stored = f.run(() => f.service.readSearch({searchId: extended.searchId}));
+    assert.deepEqual(stored.sources, extended.sources);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts WHERE execution_id=?').pluck().get(extended.executionId), 2);
+    const hit = await f.run(() => f.service.search({...request, maxPages: 2}));
+    assert.deepEqual(hit.sources[0].pages.map(page => page.cache.state), ['hit', 'hit']);
+    assert.deepEqual(hit.sources[0].requests, []);
+    assert.equal(calls, 3);
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('later-page HTTP or schema failure retains validated candidates and publishes an audited partial outcome', async () => {
+  for (const kind of ['http', 'schema']) {
+    let calls = 0;
+    const search = new api.LiteratureSearchService(async () => {
+      calls++;
+      return calls === 1 ? Response.json({message: {'total-results': 2, items: [{DOI: '10.1234/partial-page', title: ['Retained page']}]}}) :
+        kind === 'http' ? new Response('unavailable', {status: 403}) : Response.json({message: {items: [{title: ['No DOI']}] }});
+    }, governanceFixture().governor);
+    const f = setup({search});
+    try {
+      const result = await f.run(() => f.service.search({query: `partial ${kind}`, sources: ['crossref'], limit: 1, maxPages: 3}));
+      assert.equal(calls, 2);
+      assert.equal(result.status, 'partial');
+      assert.equal(result.candidates[0].identity, 'doi:10.1234/partial-page');
+      const source = result.sources[0];
+      assert.equal(source.status, 'partial');
+      assert.equal(source.stopReason, 'failed');
+      assert.equal(source.coverage.validatedPages, 1);
+      assert.equal(source.coverage.apiHitCount, 2);
+      assert.deepEqual(source.coverage.nextPage, {kind: 'offset', value: 1});
+      assert.equal(source.pages[1].coverage.state, 'failed');
+      assert.equal(source.errorCode, kind === 'schema' ? 'literature_provider_response_invalid' : 'literature_provider_error');
+      assert.deepEqual(source.requests.map(receipt => receipt.status), [200, kind === 'http' ? 403 : 200]);
+      assert.ok(source.requests[0].responseHash !== null);
+      if (kind === 'schema') assert.ok(source.requests[1].responseHash !== null);
+      else assert.equal(source.requests[1].responseHash, null, 'HTTP failure body is cancelled without reading');
+      assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions WHERE id=?').pluck().get(result.executionId), 'partial');
+      assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts WHERE execution_id=?').pluck().get(result.executionId), 2);
+      assert.deepEqual(f.run(() => f.service.readSearch({searchId: result.searchId})).sources, result.sources);
+    } finally { await search.shutdown(); f.close(); }
+  }
+});
+
+test('repeated cursors and backward or overlapping offsets fail before another page is dispatched', async () => {
+  for (const source of ['europe_pmc', 'semantic_scholar']) {
+    for (const next of source === 'europe_pmc' ? ['*', 'cursor-a'] : [0, 1]) {
+      let calls = 0;
+      const search = new api.LiteratureSearchService(async () => {
+        calls++;
+        return Response.json(source === 'europe_pmc' ?
+          {hitCount: 20, nextCursorMark: calls === 1 ? (next === '*' ? '*' : 'cursor-a') : next,
+            resultList: {result: [{id: `${calls}`, source: 'PMC', title: 'Cursor'}]}} :
+          {total: 20, next: calls === 1 && next === 0 ? 2 : next, data: [{paperId: `S${calls}a`, title: 'One'}, {paperId: `S${calls}b`, title: 'Two'}]});
+      }, governanceFixture().governor);
+      try {
+        const result = await search.searchDetailed({query: 'bad continuation', sources: [source], limit: 2, maxPages: 3});
+        assert.equal(result.sources[0].stopReason, 'failed');
+        assert.equal(result.sources[0].errorCode, 'literature_provider_response_invalid');
+        assert.equal(calls, source === 'europe_pmc' && next === '*' || source === 'semantic_scholar' && next === 1 ? 1 : 2);
+      } finally { await search.shutdown(); }
+    }
+  }
+});
+
+test('cancellation between pages or during a later page stops dispatch and retains receipts without a snapshot', async () => {
+  for (const when of ['between', 'during']) {
+    const controller = new AbortController();
+    const g = governanceFixture();
+    let calls = 0, reachedResolve;
+    const reached = new Promise(resolve => { reachedResolve = resolve; });
+    const search = new api.LiteratureSearchService(async (_url, init) => {
+      calls++;
+      if (calls === 2) {
+        reachedResolve();
+        return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true}));
+      }
+      const response = Response.json({message: {'total-results': 3, items: [{DOI: '10.1234/cancel-page', title: ['Cancel page']}] }});
+      if (when === 'between') {
+        const getReader = response.body.getReader.bind(response.body);
+        response.body.getReader = () => {
+          const reader = getReader();
+          const cancel = reader.cancel.bind(reader);
+          reader.cancel = async () => { await cancel(); controller.abort(new Error('paging_cancelled')); };
+          return reader;
+        };
+      }
+      return response;
+    }, g.governor);
+    const f = setup({search});
+    const pending = f.run(() => f.service.search({query: `cancel ${when}`, sources: ['crossref'], limit: 1, maxPages: 3}), {signal: controller.signal});
+    const rejected = assert.rejects(pending, /paging_cancelled/u);
+    try {
+      if (when === 'during') { await reached; controller.abort(new Error('paging_cancelled')); }
+      await rejected;
+      assert.equal(calls, when === 'between' ? 1 : 2);
+      assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions').pluck().get(), 'cancelled');
+      assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
+      const receipts = f.db.prepare('SELECT state, receipt_json FROM research_literature_request_receipts ORDER BY attempt').all();
+      assert.equal(receipts.length, calls);
+      assert.ok(receipts.every(row => row.state === 'received' && JSON.parse(row.receipt_json).endedAt !== null));
+      if (when === 'during') assert.equal(JSON.parse(receipts[1].receipt_json).status, null);
+      assert.equal(g.governor.observe('api.crossref.org').consecutiveFailures, 0);
+    } finally { await Promise.allSettled([pending, rejected]); await search.shutdown(); f.close(); }
+  }
+});
+
 test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
     calls.push({ name, input });
-    return { schemaVersion: 7, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
+    return { schemaVersion: 8, executionId: 'search_exec_fixture', ranking: api.literatureRanking(['crossref']),
       searchId: 'search_fixture', createdAt: timestamp, expiresAt: timestamp, status: 'complete', candidates: [], sources: [], truncated: false, warnings: [], total: 0, nextOffset: null };
   } }, { owner: 'thread:a', projectId: 'project_a', signal: controller.signal }, { search: 'search', read: 'read', add: 'add', get: 'get', cancel: 'cancel' });
   assert.equal('projectId' in tools[0].schema.shape, false);

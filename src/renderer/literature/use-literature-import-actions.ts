@@ -49,7 +49,7 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
 
   const searchLiterature = useCallback(
     async (query: string, sources: LiteratureSearchSource[], limit: number) => {
-      const result = await client.api.research.searchLiterature({ query, sources, limit, projectId });
+      const result = await client.api.research.searchLiterature({ query, sources, limit, maxPages: 1, projectId });
       if (!result.ok) {
         return { ok: false as const, message: result.error.message };
       }

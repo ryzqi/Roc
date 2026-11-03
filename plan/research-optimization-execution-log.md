@@ -1060,3 +1060,47 @@ probe evidence. The same raw bytes then passed the actual adapter offline. This 
 one response shape, not a production-network integration or scientific quality score.
 Sanitized evidence: `.artifacts/research-optimization/pr04-coverage-live-contract.json`;
 logs: `.artifacts/research-optimization/pr04-coverage-*.log`. No model/credential/write call.
+
+## PR-04.3B — bounded provider paging and exact cross-page ranks
+
+Status: `Verified passing` for bounded paging. Frozen questions/confirmed plans, identity
+aliases, candidate review UI and independent retrieval annotations remain subsequent work.
+
+Snapshot8 replaces source-level cache with per-page position, exact URL, rankOffset,
+returned count, coverage and cache provenance. maxPages defaults1 and caps3; limit caps
+both each source page and final candidates. OpenAlex page, Crossref/arXiv offset,
+Semantic reported offset and EBI opaque cursors retain the original query and page size.
+RRF consumes explicit original ranks, including duplicates and offset gaps. Repeated
+cursors and backward/overlapping offsets fail. Semantic stops before crossing1000.
+Page caps, provider caps, unavailable continuation, reported endpoint and failed pages
+have distinct stopReason values. Endpoint count mismatch downgrades aggregate coverage
+to unknown. Later failures retain validated earlier records and publish partial,
+with every attempt audited. Cancellation prevents later dispatch and snapshot publication.
+Cached pages preserve original hashes/timestamps and create no new HTTP receipts.
+
+Changed: search/fusion/import service, shared schema, tools, existing renderer action,
+unit and renderer regressions, fusion documentation. Research DB7 and agent DB15;
+no migration, new dependency or compatibility adapter.
+
+Commands from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='bounded search fetches' tests/unit/literature-import.test.mjs` | Initial red: maxPages rejected |
+| `node --test --test-name-pattern='repeated cursors' tests/unit/literature-import.test.mjs` | Regression red: overlapping offset dispatched an extra page |
+| `node --test tests/unit/literature-import.test.mjs` | Final46/46 passed |
+| `pnpm typecheck` | Passed |
+| `pnpm test:unit` | 679/679 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm check:ipc` | Generated contracts current |
+| `node --test --test-name-pattern='literature search action' tests/renderer/lifecycles.test.mjs` | Actual Electron hook/IPC seam1/1 passed, no renderer errors |
+| `pnpm test:research-p0` | Fresh production build/typecheck and12/12 native cases passed |
+| `git diff --check` | Passed |
+
+Initial draft type errors were resolved with independent per-page contexts and explicit
+renderer maxPages1. Three new test fixtures were corrected to actual contracts: required
+arXiv author, null unread HTTP error body hashes, cancellation at the streamed-body
+cleanup boundary. No timeout or existing safety assertion was weakened. Native build
+ran after fullunit, avoiding the unrelated archive deadline contention. No new live
+Provider/model call; current official contracts were verified in PR-04.3A.
+Evidence: `.artifacts/research-optimization/pr04-paging-*.log`.

@@ -6,6 +6,7 @@ export const literatureSearchToolSchema = z.object({
   query: z.string().trim().min(1).max(1000),
   sources: z.array(literatureNetworkSourceSchema).min(1).max(6).default(['openalex', 'crossref', 'arxiv']),
   limit: z.number().int().min(1).max(30).default(10),
+  maxPages: z.number().int().min(1).max(3).default(1),
   yearFrom: z.number().int().min(1000).max(9999).optional(),
   yearTo: z.number().int().min(1000).max(9999).optional()
 }).strict().refine((input) => input.yearFrom === undefined || input.yearTo === undefined || input.yearFrom <= input.yearTo, 'literature_year_range_invalid');
@@ -38,28 +39,36 @@ export const literatureProviderGovernanceSchema = z.object({
   quotaResetAt: z.string(), minIntervalMs: z.number().nonnegative(), cooldownUntil: z.string().nullable(),
   lastSuccessAt: z.string().nullable(), lastFailureAt: z.string().nullable()
 }).strict();
-export const literatureProviderCoverageSchema = z.object({
-  apiHitCount: z.number().int().nonnegative().nullable(), validatedPages: z.number().int().nonnegative(),
-  state: z.enum(['unknown', 'limited', 'reported_end', 'failed']),
-  nextPage: z.discriminatedUnion('kind', [
+export const literaturePagePositionSchema = z.discriminatedUnion('kind', [
     z.object({kind: z.literal('page'), value: z.number().int().positive()}).strict(),
     z.object({kind: z.literal('offset'), value: z.number().int().nonnegative()}).strict(),
     z.object({kind: z.literal('cursor'), value: z.string().min(1).max(2048)}).strict()
-  ]).nullable()
+  ]);
+export const literatureCacheObservationSchema = z.discriminatedUnion('state', [
+  z.object({state: z.literal('miss')}).strict(),
+  z.object({state: z.literal('hit'), fetchedAt: z.string(), responseHash: z.string().regex(/^[a-f0-9]{64}$/u)}).strict()
+]);
+export const literatureProviderCoverageSchema = z.object({
+  apiHitCount: z.number().int().nonnegative().nullable(), validatedPages: z.number().int().nonnegative(),
+  state: z.enum(['unknown', 'limited', 'reported_end', 'failed']),
+  nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(7), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  schemaVersion: z.literal(8), ranking: literatureRankingSchema, executionId: z.string().min(1),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
-  sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'timeout', 'rate_limited', 'error']),
+  sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'partial', 'timeout', 'rate_limited', 'error']),
     returnedCount: z.number().int().nonnegative(), errorCode: z.string().nullable(), retryAfterMs: z.number().nullable(),
     requests: z.array(literatureProviderRequestSchema),
     governance: literatureProviderGovernanceSchema,
     coverage: literatureProviderCoverageSchema,
-    cache: z.discriminatedUnion('state', [
-      z.object({state: z.literal('miss')}).strict(),
-      z.object({state: z.literal('hit'), fetchedAt: z.string(), responseHash: z.string().regex(/^[a-f0-9]{64}$/u)}).strict()
-    ]) }).strict()),
+    stopReason: z.enum(['reported_end', 'page_limit', 'provider_limit', 'continuation_unavailable', 'failed']),
+    pages: z.array(z.object({
+      position: literaturePagePositionSchema, rankOffset: z.number().int().nonnegative(), url: z.string().url(),
+      returnedCount: z.number().int().nonnegative(), cache: literatureCacheObservationSchema,
+      coverage: literatureProviderCoverageSchema
+    }).strict())
+  }).strict()),
   truncated: z.boolean(), warnings: z.array(z.string()), total: z.number().int().nonnegative(), nextOffset: z.number().int().nullable()
 }).strict();
 const page = { offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(30).default(10) };
@@ -96,6 +105,7 @@ export const literatureLibraryChangedSchema = z.object({ eventId: z.string(), op
   affectedProjectIds: z.array(z.string()), changeKind: z.enum(['import', 'link', 'archive', 'citation_key']), occurredAt: z.string() }).strict();
 export type LiteratureLibraryChanged = z.infer<typeof literatureLibraryChangedSchema>;
 export type LiteratureSearchInput = z.infer<typeof literatureSearchInputSchema>;
+export type LiteraturePagePosition = z.infer<typeof literaturePagePositionSchema>;
 export type LiteratureSearchResult = z.infer<typeof literatureSearchResultSchema>;
 export type LiteratureCandidate = z.infer<typeof literatureCandidateSchema>;
 export type LiteratureAdd = z.infer<typeof literatureAddSchema>;
