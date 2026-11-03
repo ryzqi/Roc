@@ -2053,3 +2053,49 @@ contract verified using Context7 official Electron docs/local45 types; actual bi
 No real Zotero client/user library, new live literature query, paid model, remote write or
 frozen workflow-fixture change. Next F3: validate/consume grant, read exact file bytes and
 import through existing document service with atomic provenance, then attachment UI.
+
+## PR-05F3 — granted file bytes and atomic document provenance
+
+Status: `Verified passing` for this backend/API import increment. Research DB19 adds scoped
+attachment/document receipts linked to actual grants. Explicit library_only/current_project
+input, owned grant/inspection/original linkage and nonarchived target are required before
+bytes. Canonical O_RDONLY/O_NOFOLLOW descriptor identity is checked before/after bounded read;
+missing/denied/changed/cancelled inputs fail. Verified bytes go to existing document persistence
+without reopening the original source. No Zotero HTTP, auto parse/index or model work.
+
+Document/source SHA-256/size and scoped raw-parent/inspection/grant/destination/time/hash
+receipt commit together. Failed receipt rolls back document/project link and deletes this
+operation's private copy, preserving the grant for explicit retry. Project change notification
+is deferred until receipt commit; observer failure logs without invalidating committed files.
+Request replay reads committed provenance despite later original-file deletion; new requests
+for the same paper/content reuse its document with separate receipts. Request rebinding,
+foreign scope or corrupt receipts refuse. Cancel signals active copy/publication, and shutdown
+propagates into the prepared document job; no late receipt or fake parse completion.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-sync.test.mjs tests/unit/zotero-preview.test.mjs tests/unit/zotero-attachment-dialog.test.mjs tests/unit/research-evidence-invalidation.test.mjs` |76/76 passed |
+| `pnpm test:unit` |806/806 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |15/15 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-attachment-import-*.log`, `pr05-attachment-import-native-csl/` DB/receipt.
+Actual native CSL grant consumption copies and reads identical file bytes/hash, retains paper
+revision and replays its receipt. Selection remains an explicitly declared injected synthetic
+chooser; no actual native panel or real Zotero client is claimed. Regressions cover actual
+sender API import/read/cancel and foreign refusal, content reuse/private-copy cleanup, original
+loss, permission/change/archival refusal, write-trigger rollback/no early association event,
+retry, cancellation/late prepared document, shutdown and native18→19 grant/ledger preservation.
+Old17→18 test stays pinned to its named range. Existing direct document import consumers now
+supply explicit notification policy; no compatibility alias or obsolete path added.
+
+No real Zotero user library, new live literature query, paid model, remote write or frozen
+workflow-fixture edits. Next: scoped attachment child discovery and original-source UI for
+check/explicit selected-file grant/content import, then actual-client acceptance and X-UI.
+Full PR-05 and overall plan remain unfinished.

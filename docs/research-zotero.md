@@ -46,6 +46,9 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.attachmentRead | research.readZoteroAttachment | 只读当前会话/项目的附件检查记录 |
 | research.zotero.attachmentGrant | research.grantZoteroAttachment | 原生选择并授权检查记录中的一个真实附件文件 |
 | research.zotero.attachmentGrantRead | research.readZoteroAttachmentGrant | 只读当前会话/项目的单文件输入授权回执 |
+| research.zotero.attachmentImport | research.importZoteroAttachment | 使用真实单文件授权读取附件，事务保存文档与来源回执 |
+| research.zotero.attachmentImportRead | research.readZoteroAttachmentImport | 只读当前会话/项目的已提交附件导入回执 |
+| research.zotero.attachmentImportCancel | research.cancelZoteroAttachmentImport | 对本范围进行中的附件导入请求发出实际取消信号 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -141,7 +144,7 @@ HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机�
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
 逐页检查点、冲突审查 UI 与来源状态后端已实现，详见下文。
-来源状态 UI 已接入原始来源详情；附件授权后内容导入/UI及真实客户端验收仍待后续增量。V1 没有任何 Zotero
+来源状态 UI 已接入原始来源详情；附件授权/内容导入后端已接入，附件UI及真实客户端验收仍待后续增量。V1 没有任何 Zotero
 写请求，V3 写回继续另行授权。
 
 对象收录增量最终验证：单测 761/761、对象相关 26/26、Harness 94/94、原生 P0
@@ -303,7 +306,7 @@ reset_required状态提供「按当前来源重新建立检查点」，明确按
 实际UI12/12（Zotero9、原候选3）、最终键盘/暗色1099恢复1/1、启动12/12、
 IPC/chunks通过。截图`sync-paused`、`sync-paused-dark-1099`、`sync-complete`
 和光暗1100/1099/800长内容审计保留，cut0/hidden0。日志`pr05-sync-ui-*.log`。
-实际Zotero客户端及附件内容导入/授权UI仍待后续实现与验收。
+实际Zotero客户端及附件发现/授权导入UI仍待后续实现与验收。
 
 ## 原始收录回执对应的来源状态
 
@@ -377,7 +380,7 @@ file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到
 只读回放检查 hash、父对象/回执链接与当前会话/项目；预览过期不抹除已收录历史。
 传输/写入失败不替代原记录。服务关闭中止 HTTP 并拒绝迟到检查写入。
 
-本增量是后端/API 检查，原生选择文件授权见下文，附件内容导入与界面仍待下一步。
+本增量是后端/API 检查，原生选择文件授权和内容导入见下文；附件界面仍待下一步。
 最终unit794/794、相关51/51、Harness94/94、fresh build/typecheck/native13/13、
 现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过；
 原生CSL收录后检查真实linked_file并只读回放，规范题录修订不变且文档数为0。
@@ -412,5 +415,35 @@ BrowserWindow，再调用单 openFile 的
 `pr05-attachment-grant-native-csl/receipt.json` 标明这一测试边界。
 模拟原生 API 的2项合同检查覆盖正确父窗口/单文件选项/取消/迟到返回；
 真实桌面绑定报告为 `pr05-attachment-grant-native-api-complete.json`。
-日志 `pr05-attachment-grant-*.log`。实际原生面板选择、附件字节导入、附件UI及
+日志 `pr05-attachment-grant-*.log`。附件字节导入见下文；实际原生面板选择、附件UI及
 真实 Zotero 客户端互操作仍待实现或验收。
+
+## 按单文件授权导入附件内容
+
+Research DB19 追加拥有 owner/project 的附件导入回执，关联实际授权与文档。
+输入显式携带 projectId、grantId、requestId 和 library_only/current_project 目标。
+原授权、检查记录和原收录回执必须同范围；归档文献不能新增附件。renderer不能指定
+另一 sourcePath 或提交文件字节绕过授权。本步骤没有 Zotero HTTP、worker解析或自动索引。
+
+读取先验证真实路径，再使用 O_RDONLY/O_NOFOLLOW 打开已授权文件。在读取任何字节前
+确认实际文件描述符的设备/inode/大小/时间等于授权记录；限定大小，读取后再核对身份及
+实际字节数。缺失、无权读取、路径/身份变化和取消分别失败。已验证字节直接传入既有
+ResearchDocumentService，保存过程不会重新打开原来源路径，避免核对后换文件的窗口。
+
+文档 ID、实际内容 SHA-256/大小、原始附件检查、父对象来源、授权 hash、目标项目、
+导入时间与自身内容 hash 一起保留。文档与回执共用事务；回执写失败回滚文档/项目关联，
+清除本次临时私有副本，保留输入授权以便显式重试。新项目关联通知在事务提交后才发布；
+通知错误会记录日志，不删除已提交的文档或回执。其他手动文档导入继续使用其明确入口。
+
+相同请求重放只读已提交回执，即使外部原文件后来丢失也不重读；不同请求的同文献/内容
+复用既有文档，追加独立来源回执。requestId不能换绑授权或目标。只读回放核对范围、
+hash、来源/授权/文档链接。当前请求可取消；cancelRequested表示信号已发出，原请求退出
+后才结束。服务关闭会中止实际读/复制和迟到事务，不伪造已导入或解析完成。
+
+最终unit806/806、相关76/76、Harness94/94、fresh build/typecheck/native13/13、
+现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。
+原生CSL回归显式注入授权选择后真实复制附件、校验 sourceHash、只读/请求重放且题录修订
+不变；`pr05-attachment-import-native-csl/`保留数据库与回执，日志`pr05-attachment-import-*.log`。
+回归还覆盖损坏回执、实际sender隔离、文件删除/权限/变动、归档、事务失败副本清理、
+项目关联无早发通知、取消/关闭和DB18→19历史保留。附件发现/授权/导入UI及真实客户端
+互操作仍待后续验收，原生面板选择仍未实际操作。

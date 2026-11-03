@@ -1713,6 +1713,18 @@ CREATE TABLE research_zotero_attachment_grants (
 `
 });
 
+researchMigrations.push({
+  version: 19, name: 'zotero_owned_attachment_document_receipts',
+  sql: `
+CREATE TABLE research_zotero_attachment_imports (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, scope_project TEXT NOT NULL, request_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL REFERENCES research_zotero_attachment_grants(id),
+  document_id TEXT NOT NULL REFERENCES research_documents(id), receipt_json TEXT NOT NULL, imported_at TEXT NOT NULL,
+  UNIQUE(owner,scope_project,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

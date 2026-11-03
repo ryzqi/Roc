@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {zoteroItemKeySchema} from './research-zotero';
 import {zoteroObjectReadSchema, zoteroSourceStateRequestSchema} from './research-zotero-source-state';
+import {researchDocumentSchema} from './research-documents';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const zoteroAttachmentFileIdentitySchema = z.object({device: z.number().int().nonnegative(), inode: z.number().int().nonnegative(),
@@ -40,3 +41,15 @@ export const zoteroAttachmentGrantOutcomeSchema = z.discriminatedUnion('status',
 ]);
 export type ZoteroAttachmentGrant = z.infer<typeof zoteroAttachmentGrantSchema>;
 export type ZoteroAttachmentGrantOutcome = z.infer<typeof zoteroAttachmentGrantOutcomeSchema>;
+export const zoteroAttachmentImportRequestSchema = z.object({grantId: z.string().min(1), requestId: z.string().min(1),
+  destination: z.enum(['library_only', 'current_project'])}).strict();
+export const zoteroAttachmentImportIpcSchema = zoteroAttachmentImportRequestSchema.extend({projectId: z.string().min(1).nullable()});
+export const zoteroAttachmentImportReadIpcSchema = z.object({projectId: z.string().min(1).nullable(), requestId: z.string().min(1)}).strict();
+export const zoteroAttachmentImportBodySchema = z.object({
+  operationId: z.string().min(1), requestId: z.string().min(1), grantId: z.string().min(1), grantHash: hash,
+  inspectionId: z.string().min(1), source: zoteroAttachmentRequestSchema, libraryItemId: z.string().min(1),
+  destinationProjectId: z.string().min(1).nullable(), document: researchDocumentSchema, importedAt: z.string()
+}).strict();
+export const zoteroAttachmentImportSchema = zoteroAttachmentImportBodySchema.extend({contentHash: hash});
+export const zoteroAttachmentImportCancelSchema = z.object({requestId: z.string().min(1), cancelRequested: z.boolean()}).strict();
+export type ZoteroAttachmentImport = z.infer<typeof zoteroAttachmentImportSchema>;

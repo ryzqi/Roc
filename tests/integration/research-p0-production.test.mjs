@@ -157,6 +157,22 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
       await f.db.backup(join(grantEvidence,'research.sqlite'));
       await writeFile(join(grantEvidence,'receipt.json'),JSON.stringify({node:process.versions.node,electron:process.versions.electron,
         chooser:'injected explicit synthetic selection; native dialog not opened',inspection,grant,selected},null,2)+'\n');
+      const documents=new api.ResearchDocumentService(f.repository,tools,root);
+      try{
+        const input={grantId:grant.grant.grantId,requestId:'native-granted-content',destination:'current_project'};
+        const imported=await run(()=>imports.importZoteroAttachment(input,documents));
+        assert.equal(imported.document.status,'imported');
+        assert.equal(imported.document.sourceHash,hash(await readFile(attachmentPath)));
+        assert.deepEqual((await documents.source({documentId:imported.document.id,sourceHash:imported.document.sourceHash})).bytes,await readFile(attachmentPath));
+        assert.deepEqual(await run(()=>imports.importZoteroAttachment(input,documents)),imported);
+        assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),1);
+        assert.equal(f.repository.library.get(saved.id).revision,saved.revision);
+        const importEvidence=join(process.cwd(),'.artifacts/research-optimization/pr05-attachment-import-native-csl');
+        await mkdir(importEvidence,{recursive:true});
+        await f.db.backup(join(importEvidence,'research.sqlite'));
+        await writeFile(join(importEvidence,'receipt.json'),JSON.stringify({node:process.versions.node,electron:process.versions.electron,
+          chooser:'injected explicit synthetic selection; native dialog not opened',grant,imported},null,2)+'\n');
+      }finally{await documents.shutdown();}
     }finally{await attachmentAdapter.shutdown();}
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();

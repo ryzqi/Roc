@@ -265,13 +265,13 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       literatureImports.recover();
       registerLiteratureImportCapabilities(context, literatureImports);
-      registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
       if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {
         context.logger.info('research_derivation_generation_switched', { generationVersion: researchDerivationGenerationVersion });
       }
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
+      registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment, documents);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

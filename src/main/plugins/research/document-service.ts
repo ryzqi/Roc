@@ -36,6 +36,20 @@ export class ResearchDocumentService {
     finally { this.tasks.delete(task); }
   }
 
+  /** Main-process prepared input: its caller already validated the explicit single-file grant. */
+  async importPrepared(request: Extract<z.infer<typeof researchDocumentImportRequestSchema>, {target: 'library-item'}>,
+    bytes: Buffer, record: (document: ResearchDocument) => void, parentSignal: AbortSignal): Promise<ResearchDocument> {
+    this.requireOpen();
+    this.repository.library.validateDestination(request.projectId);
+    if (this.repository.library.get(request.libraryItemId).archived) throw new Error('research_library_item_archived');
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, parentSignal]);
+    const task: ImportTask = {controller, promise: this.persistFile(request, bytes, record, signal)};
+    this.tasks.add(task);
+    try {return await task.promise;}
+    finally {this.tasks.delete(task);}
+  }
+
   async parse(documentId: string, tier: ResearchParseTier | null = null): Promise<ResearchDocument> {
     this.requireOpen();
     const active = this.parses.get(documentId);
@@ -115,6 +129,15 @@ export class ResearchDocumentService {
     const mediaType = documentMediaTypes[extension];
     if (mediaType === undefined) throw new Error('research_source_format_unsupported');
     const bytes = await readResearchFile(await researchWorkspace(dirname(request.sourcePath)), basename(request.sourcePath), maximumDocumentBytes);
+    return this.persistFile(request, bytes, null, signal);
+  }
+
+  private async persistFile(request: z.infer<typeof researchDocumentImportRequestSchema>, bytes: Buffer,
+    record: ((document: ResearchDocument) => void) | null, signal: AbortSignal): Promise<ResearchDocument> {
+    this.requireActive(signal);
+    const extension = extname(request.sourcePath).toLowerCase();
+    const mediaType = documentMediaTypes[extension];
+    if (mediaType === undefined || bytes.length > maximumDocumentBytes) throw new Error('research_source_format_unsupported');
     const sourceHash = researchContentHash(bytes);
     const root = await documentStorageRoot(this.rootPath);
     const documentsRoot = await createResearchDirectory(root, 'documents');
@@ -139,8 +162,9 @@ export class ResearchDocumentService {
         entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors }, bibliography: entries[0] };
       }
       this.requireActive(signal);
-      const result = this.repository.documents.import({ id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry,
-        projectId: request.projectId, filename: basename(request.sourcePath), mediaType, sourcePath: researchRelativePath(relative(root, sourcePath)), sourceHash, size: bytes.length });
+      const input = { id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry,
+        projectId: request.projectId, filename: basename(request.sourcePath), mediaType, sourcePath: researchRelativePath(relative(root, sourcePath)), sourceHash, size: bytes.length };
+      const result = record === null ? this.repository.documents.import(input, true) : this.repository.documents.importWithReceipt(input, record);
       persisted = result.created;
       return result.document;
     } finally { if (!persisted) await rm(directory, { recursive: true, force: true }); }

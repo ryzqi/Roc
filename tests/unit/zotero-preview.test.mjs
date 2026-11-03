@@ -10,6 +10,8 @@ import {createResearchFixture} from './fixtures/research-test-kit.mjs';
 
 const unusedAttachmentPicker = async () => assert.fail('Native attachment grants are separately verified');
 
+const unusedAttachmentDocuments = {importPrepared: async () => assert.fail('Attachment document imports are separately verified')};
+
 let directory, api;
 const timestamp = '2026-11-03T00:00:00.000Z';
 const headers = {'Zotero-API-Version': '3', 'Zotero-Server-ID': 'preview-instance',
@@ -62,7 +64,7 @@ test('owned preview freezes all original objects before review, paginates readba
     const handlers = new Map();
     api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
       handlers.set(descriptor.name, handler);
-    }}}, f.adapter, f.service, unusedAttachmentPicker);
+    }}}, f.adapter, f.service, unusedAttachmentPicker, unusedAttachmentDocuments);
     const snapshot = await f.run(() => handlers.get('research.zotero.preview')({...request, projectId: f.project.id}));
     assert.equal(snapshot.sourcePage.records.length, 20);
     assert.equal(snapshot.capturedTotal, 25);
@@ -95,7 +97,7 @@ test('actual preload capability bridge scopes Zotero previews by sender and expl
     const handlers = new Map();
     api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
       handlers.set(descriptor.name, handler);
-    }}}, f.adapter, f.service, unusedAttachmentPicker);
+    }}}, f.adapter, f.service, unusedAttachmentPicker, unusedAttachmentDocuments);
     const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
     const captured = await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 88);
     assert.equal(captured.ok, true, JSON.stringify(captured));

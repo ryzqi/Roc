@@ -33,6 +33,10 @@ import {zoteroAttachmentRequestSchema, zoteroAttachmentGrantRequestSchema, type 
   type ZoteroAttachmentFile, type ZoteroAttachmentGrant, type ZoteroAttachmentGrantOutcome} from '../../../shared/schemas/research-zotero-attachment';
 import {ZoteroAttachmentStore, inspectZoteroAttachmentFile, zoteroAttachmentLinkModeSchema} from './zotero-attachment-store';
 import {ZoteroAttachmentGrantStore, type ZoteroAttachmentPicker} from './zotero-attachment-grant-store';
+import {zoteroAttachmentImportRequestSchema, type ZoteroAttachmentImport} from '../../../shared/schemas/research-zotero-attachment';
+import {ZoteroAttachmentImportStore} from './zotero-attachment-import-store';
+import {readZoteroGrantedFile} from './zotero-granted-file';
+import type {ResearchDocumentService} from './document-service';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -63,6 +67,8 @@ export class LiteratureImportService {
   private readonly attachmentJobs = new Set<Promise<ZoteroAttachmentInspection>>();
   private readonly zoteroAttachmentGrants: ZoteroAttachmentGrantStore;
   private readonly attachmentGrantJobs = new Map<string, Promise<ZoteroAttachmentGrantOutcome>>();
+  private readonly zoteroAttachmentImports: ZoteroAttachmentImportStore;
+  private readonly attachmentImportJobs = new Map<string, {controller: AbortController; promise: Promise<ZoteroAttachmentImport>}>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -75,6 +81,7 @@ export class LiteratureImportService {
     this.zoteroSourceStates = new ZoteroSourceStateStore(db, this.zoteroObjects, now);
     this.zoteroAttachments = new ZoteroAttachmentStore(db, this.zoteroObjects, now);
     this.zoteroAttachmentGrants = new ZoteroAttachmentGrantStore(db, this.zoteroAttachments, now);
+    this.zoteroAttachmentImports = new ZoteroAttachmentImportStore(db, this.zoteroAttachmentGrants, this.zoteroAttachments, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -235,6 +242,70 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     return this.zoteroAttachmentGrants.read(context, grantId);
+  }
+
+  readZoteroAttachmentImport(requestId: string): ZoteroAttachmentImport {
+    const context = literatureContext();
+    this.requireActive(context);
+    const result = this.zoteroAttachmentImports.find(context, requestId);
+    if (result === null) throw new Error('zotero_attachment_import_not_found');
+    return result;
+  }
+
+  cancelZoteroAttachmentImport(requestId: string): {requestId: string; cancelRequested: boolean} {
+    const context = literatureContext();
+    this.requireActive(context);
+    const active = this.attachmentImportJobs.get(JSON.stringify([context.owner, context.projectId, requestId]));
+    if (active !== undefined) {
+      active.controller.abort(new Error('zotero_attachment_import_cancelled'));
+      return {requestId, cancelRequested: true};
+    }
+    this.readZoteroAttachmentImport(requestId);
+    return {requestId, cancelRequested: false};
+  }
+
+  async importZoteroAttachment(input: unknown, documents: Pick<ResearchDocumentService, 'importPrepared'>): Promise<ZoteroAttachmentImport> {
+    const request = zoteroAttachmentImportRequestSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    const existing = this.zoteroAttachmentImports.find(context, request.requestId);
+    const destinationProjectId = request.destination === 'current_project' ? context.projectId : null;
+    if (request.destination === 'current_project' && destinationProjectId === null) throw new Error('literature_project_required');
+    if (existing !== null) {
+      if (existing.grantId !== request.grantId || existing.destinationProjectId !== destinationProjectId) throw new Error('zotero_attachment_import_request_conflict');
+      return existing;
+    }
+    const grant = this.zoteroAttachmentGrants.read(context, request.grantId);
+    const inspection = this.zoteroAttachments.read(context, grant.inspectionId);
+    this.library.validateDestination(destinationProjectId);
+    if (this.library.get(inspection.libraryItemId).archived) throw new Error('research_library_item_archived');
+    const key = JSON.stringify([context.owner, context.projectId, request.requestId]);
+    if (this.attachmentImportJobs.has(key)) throw new Error('zotero_attachment_import_active');
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+    const pending = (async (): Promise<ZoteroAttachmentImport> => {
+      const bytes = await readZoteroGrantedFile(grant, signal);
+      this.requireActive(context);
+      let receipt!: ZoteroAttachmentImport;
+      await documents.importPrepared({target: 'library-item', sourcePath: grant.selectedPath,
+        libraryItemId: inspection.libraryItemId, projectId: destinationProjectId}, bytes, document => {
+          this.requireActive(context);
+          signal.throwIfAborted();
+          receipt = this.zoteroAttachmentImports.record(context, request.requestId, grant, inspection, destinationProjectId, document);
+        }, signal);
+      return receipt;
+    })();
+    this.attachmentImportJobs.set(key, {controller, promise: pending});
+    try {return await pending;}
+    catch (error) {
+      if (signal.aborted) throw new Error('zotero_attachment_import_cancelled', {cause: error});
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') throw new Error('zotero_attachment_source_missing', {cause: error});
+      if (code === 'EACCES' || code === 'EPERM') throw new Error('zotero_attachment_source_denied', {cause: error});
+      if (code === 'ELOOP') throw new Error('zotero_attachment_file_changed', {cause: error});
+      throw error;
+    }
+    finally {this.attachmentImportJobs.delete(key);}
   }
 
   async grantZoteroAttachment(input: unknown, pick: ZoteroAttachmentPicker): Promise<ZoteroAttachmentGrantOutcome> {
@@ -518,6 +589,7 @@ export class LiteratureImportService {
     for (const task of this.active.values()) task.controller.abort();
     await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs, ...this.attachmentJobs,
       ...this.attachmentGrantJobs.values(),
+      ...[...this.attachmentImportJobs.values()].map(job => job.promise),
       ...[...this.active.values()].map((task) => task.promise)]);
   }
 

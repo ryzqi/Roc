@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
-import {mkdtempSync, rmSync, symlinkSync, writeFileSync, readFileSync, chmodSync} from 'node:fs';
+import {mkdtempSync, rmSync, symlinkSync, writeFileSync, readFileSync, chmodSync, readdirSync, unlinkSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import * as esbuild from 'esbuild';
 import {createResearchFixture} from './fixtures/research-test-kit.mjs';
 
 const unusedAttachmentPicker = async () => assert.fail('Native attachment grants are separately verified');
+
+const unusedAttachmentDocuments = {importPrepared: async () => assert.fail('Attachment document imports are separately verified')};
 
 let directory, api;
 const timestamp = '2026-11-03T00:00:00.000Z';
@@ -24,6 +27,7 @@ before(async () => {
     export {applyDatabaseMigrations} from './src/main/infrastructure/database-migrations';
     export {LiteratureImportService} from './src/main/plugins/research/literature-import-service';
     export {ResearchLibraryService} from './src/main/plugins/research/library-service';
+    export {ResearchDocumentService} from './src/main/plugins/research/document-service';
     export {readResearchBibliography} from './src/main/plugins/research/bibliography';
     export {ZoteroAdapter} from './src/main/plugins/research/zotero-adapter';
     export {withLiteratureContext} from './src/main/services/literature-context';
@@ -54,11 +58,138 @@ async function grantFixture(options = {}) {
   const f=fixture([item('GRNT5678')],options.api || api);
   const path=join(directory,'grant-'+crypto.randomUUID()+'.pdf');writeFileSync(path,'synthetic-grant-input');
   const remote=attachmentAdapter(path,{parent:'GRNT5678'});
-  const imported=await f.add(await f.preview(),['GRNT5678'],'grant-parent');
+  const preview=await f.preview();
+  const imported=options.libraryOnly ? await f.run(()=>f.service.add({requestId:'grant-parent',destination:'library_only',
+    entries:[{kind:'zotero',previewId:preview.previewId,itemKey:'GRNT5678'}]})) : await f.add(preview,['GRNT5678'],'grant-parent');
   const source={serverId:request.serverId,library:request.library,operationId:imported.operationId,itemKey:'GRNT5678',attachmentKey:'FILE2345'};
   const inspection=await f.run(()=>f.service.inspectZoteroAttachment(source,remote.adapter));
-  return {...f,path,remote,inspection,source,async closeGrant(){await remote.adapter.shutdown();await f.dispose();}};
+  const documentRoot=join(directory,'attachment-documents-'+crypto.randomUUID());
+  const documents=new api.ResearchDocumentService(f.repository,{},documentRoot);
+  return {...f,path,remote,inspection,source,documents,documentRoot,async closeGrant(){await documents.shutdown();await remote.adapter.shutdown();await f.dispose();}};
 }
+
+async function selectedGrant(f) {
+  return (await f.run(()=>f.service.grantZoteroAttachment({inspectionId:f.inspection.inspectionId,requestId:crypto.randomUUID()},
+    async(_context,path)=>path))).grant;
+}
+
+test('granted attachment bytes import through the real document service with atomic raw provenance and filesystem-free replay',async()=>{
+  const f=await grantFixture();
+  try{
+    const grant=await selectedGrant(f), bytes=readFileSync(f.path);
+    const input={grantId:grant.grantId,requestId:'content-import',destination:'current_project'};
+    const before=f.db.prepare('SELECT * FROM research_library').all();
+    const result=await f.run(()=>f.service.importZoteroAttachment(input,f.documents));
+    assert.equal(result.document.status,'imported');assert.equal(result.libraryItemId,f.inspection.libraryItemId);
+    assert.equal(result.document.sourceHash,createHash('sha256').update(bytes).digest('hex'));
+    assert.equal(result.document.size,bytes.length);assert.equal(result.destinationProjectId,f.project.id);
+    assert.deepEqual((await f.documents.source({documentId:result.document.id,sourceHash:result.document.sourceHash})).bytes,bytes);
+    assert.deepEqual(result.source,f.source);assert.equal(result.grantHash,grant.contentHash);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(),before);
+    const second=await f.run(()=>f.service.importZoteroAttachment({...input,requestId:'same-content-new-receipt'},f.documents));
+    assert.equal(second.document.id,result.document.id);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),2);
+    assert.equal(readdirSync(join(f.documentRoot,'documents')).length,1);
+    unlinkSync(f.path);
+    assert.deepEqual(await f.run(()=>f.service.importZoteroAttachment(input,f.documents)),result);
+    assert.deepEqual(f.run(()=>f.service.readZoteroAttachmentImport(input.requestId)),result);
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment({...input,destination:'library_only'},f.documents)),/zotero_attachment_import_request_conflict/u);
+    assert.deepEqual(f.run(()=>f.service.cancelZoteroAttachmentImport(input.requestId)),{requestId:input.requestId,cancelRequested:false});
+    assert.equal(f.workerCalls(),1);
+  }finally{await f.closeGrant();}
+});
+
+test('grant ownership and archived destination refuse before any byte import; source missing denied and changed are exact errors',async()=>{
+  const f=await grantFixture();
+  try{
+    const grant=await selectedGrant(f), input={grantId:grant.grantId,requestId:'refused-content',destination:'library_only'};
+    for(const context of [{owner:'thread:foreign'},{projectId:null}]){
+      await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments),context),/zotero_attachment_grant_not_found/u);
+    }
+    const saved=f.repository.library.get(f.inspection.libraryItemId);
+    f.repository.library.archive(saved.id,saved.revision,true);
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments)),/research_library_item_archived/u);
+    const archived=f.repository.library.get(saved.id);f.repository.library.archive(saved.id,archived.revision,false);
+    chmodSync(f.path,0);
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments)),/zotero_attachment_source_denied/u);
+    chmodSync(f.path,0o600);
+    writeFileSync(f.path,'changed after user input grant');
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments)),/zotero_attachment_file_changed/u);
+    unlinkSync(f.path);
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments)),/zotero_attachment_source_missing/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
+  }finally{await f.closeGrant();}
+});
+
+test('receipt rollback removes its private document copy and project link without a published notification; retry keeps the input grant',async()=>{
+  const f=await grantFixture({libraryOnly:true});
+  try{
+    const grant=await selectedGrant(f),input={grantId:grant.grantId,requestId:'receipt-rollback',destination:'current_project'};
+    const before=f.repository.library.get(f.inspection.libraryItemId),notifications=[];
+    f.repository.library.onChanged=(...event)=>notifications.push(event);
+    f.db.exec(`CREATE TRIGGER refuse_attachment_receipt BEFORE INSERT ON research_zotero_attachment_imports BEGIN SELECT RAISE(ABORT,'synthetic receipt failure'); END;`);
+    await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,f.documents)),/synthetic receipt failure/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
+    assert.equal(readdirSync(join(f.documentRoot,'documents')).length,0);
+    assert.deepEqual(f.repository.library.get(before.id),before);assert.deepEqual(notifications,[]);
+    assert.deepEqual(f.run(()=>f.service.readZoteroAttachmentGrant(grant.grantId)),grant);
+    f.db.exec('DROP TRIGGER refuse_attachment_receipt');
+    const result=await f.run(()=>f.service.importZoteroAttachment(input,f.documents));
+    assert.equal(notifications.length,1);assert.equal(notifications[0][1],'link');
+    assert.equal(f.repository.library.get(before.id).projectIds.includes(f.project.id),true);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),1);
+    assert.deepEqual(f.run(()=>f.service.readZoteroAttachmentImport(input.requestId)),result);
+  }finally{await f.closeGrant();}
+});
+
+test('content import cancellation and shutdown abort prepared document publication and retain the grant without a false receipt',async()=>{
+  for(const stop of ['cancel','shutdown']){
+    const f=await grantFixture();
+    let started,release;
+    const received=new Promise(resolve=>{started=resolve;});
+    try{
+      const grant=await selectedGrant(f),input={grantId:grant.grantId,requestId:'stopped-content',destination:'current_project'};
+      const delayed={async importPrepared(...args){started();await new Promise(resolve=>{release=resolve;});return f.documents.importPrepared(...args);}};
+      const pending=f.run(()=>f.service.importZoteroAttachment(input,delayed));
+      const refused=assert.rejects(pending,/zotero_attachment_import_cancelled/u);await received;
+      await assert.rejects(f.run(()=>f.service.importZoteroAttachment(input,unusedAttachmentDocuments)),/zotero_attachment_import_active/u);
+      let stopping;
+      if(stop==='cancel'){
+        assert.deepEqual(f.run(()=>f.service.cancelZoteroAttachmentImport(input.requestId)),{requestId:input.requestId,cancelRequested:true});
+      }else stopping=f.service.shutdown();
+      release();await refused;if(stopping)await stopping;
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_grants').pluck().get(),1);
+    }finally{await f.closeGrant();}
+  }
+});
+
+test('DB18 to19 preserves explicit grants and receipts validate their hash and source document linkage',async()=>{
+  const prior={...api,applyResearchDatabaseSchema(db,now){api.applyDatabaseMigrations(db,{
+    dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=18),now});}};
+  const f=await grantFixture({api:prior});
+  try{
+    const grant=await selectedGrant(f),before=f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all();
+    const ledger=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
+    api.applyResearchDatabaseSchema(f.db,()=> '2026-12-01T00:00:00.000Z');
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all(),before);
+    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=18 ORDER BY version').all('plugin:@roc/plugin-research'),ledger);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
+    const input={grantId:grant.grantId,requestId:'after-content-migration',destination:'library_only'};
+    const result=await f.run(()=>f.service.importZoteroAttachment(input,f.documents));
+    f.setTime('2026-12-01T00:00:00.000Z');
+    assert.deepEqual(f.run(()=>f.service.readZoteroAttachmentImport(input.requestId)),result);
+    f.db.prepare('UPDATE research_zotero_attachment_imports SET receipt_json=? WHERE id=?')
+      .run(JSON.stringify({...result,libraryItemId:'wrong-item'}),result.operationId);
+    assert.throws(()=>f.run(()=>f.service.readZoteroAttachmentImport(input.requestId)),/zotero_attachment_import_storage_invalid/u);
+    assert.throws(()=>f.run(()=>f.service.readZoteroAttachmentImport(input.requestId),{owner:'thread:foreign'}),/zotero_attachment_import_not_found/u);
+    assert.deepEqual(f.db.pragma('foreign_key_check'),[]);
+  }finally{await f.closeGrant();}
+});
 
 test('selected-file grants authorize exactly the inspected file and replay scoped immutable receipts without reopening or byte import',async()=>{
   const f=await grantFixture();
@@ -119,15 +250,15 @@ test('grant bridge binds actual sender and project, refuses duplicate active sel
     selections++;assert.equal(context.owner,'window:301');started();await new Promise(resolve=>{release=resolve;});return path;
   };
   try{
-    api.registerZoteroCapabilities(registry,f.remote.adapter,f.service,pick);
+    api.registerZoteroCapabilities(registry,f.remote.adapter,f.service,pick,unusedAttachmentDocuments);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
     const refused=await bridge.invoke('research.grantZoteroAttachment',[{projectId:f.project.id,inspectionId:f.inspection.inspectionId,requestId:'foreign'}],301);
     assert.equal(refused.ok,false);assert.equal(selections,0);
-    api.registerZoteroCapabilities(registry,f.adapter,f.service,pick);api.registerLiteratureImportCapabilities(registry,f.service);
+    api.registerZoteroCapabilities(registry,f.adapter,f.service,pick,unusedAttachmentDocuments);api.registerLiteratureImportCapabilities(registry,f.service);
     const preview=await bridge.invoke('research.previewZotero',[{...request,projectId:f.project.id}],301);
     const imported=await bridge.invoke('research.addLiterature',[{projectId:f.project.id,requestId:'grant-window-parent',entries:[
       {kind:'zotero',previewId:preview.data.previewId,itemKey:'GRNT5678'}]}],301);
-    api.registerZoteroCapabilities(registry,f.remote.adapter,f.service,pick);
+    api.registerZoteroCapabilities(registry,f.remote.adapter,f.service,pick,unusedAttachmentDocuments);
     const inspection=await bridge.invoke('research.inspectZoteroAttachment',[{...f.source,operationId:imported.data.operationId,projectId:f.project.id}],301);
     const input={projectId:f.project.id,inspectionId:inspection.data.inspectionId,requestId:'window-select'};
     const invalid=await bridge.invoke('research.grantZoteroAttachment',[{...input,selectedPath:f.path}],301);
@@ -141,6 +272,15 @@ test('grant bridge binds actual sender and project, refuses duplicate active sel
     const foreign=await bridge.invoke('research.readZoteroAttachmentGrant',[{projectId:f.project.id,grantId:granted.data.grant.grantId}],302);
     assert.equal(foreign.ok,false);assert.equal(foreign.error.code,'zotero_attachment_grant_not_found');
     assert.equal(selections,1);
+    api.registerZoteroCapabilities(registry,f.remote.adapter,f.service,pick,f.documents);
+    const contentInput={projectId:f.project.id,grantId:granted.data.grant.grantId,requestId:'window-content',destination:'current_project'};
+    const content=await bridge.invoke('research.importZoteroAttachment',[contentInput],301);
+    assert.equal(content.ok,true);assert.equal(content.data.document.status,'imported');
+    assert.deepEqual((await bridge.invoke('research.readZoteroAttachmentImport',[{projectId:f.project.id,requestId:contentInput.requestId}],301)).data,content.data);
+    const deniedContent=await bridge.invoke('research.readZoteroAttachmentImport',[{projectId:f.project.id,requestId:contentInput.requestId}],302);
+    assert.equal(deniedContent.ok,false);assert.equal(deniedContent.error.code,'zotero_attachment_import_not_found');
+    const stopped=await bridge.invoke('research.cancelZoteroAttachmentImport',[{projectId:f.project.id,requestId:contentInput.requestId}],301);
+    assert.deepEqual(stopped.data,{requestId:contentInput.requestId,cancelRequested:false});
   }finally{await f.closeGrant();}
 });
 
@@ -176,7 +316,7 @@ test('DB17 to18 preserves owned inspections and migration receipts; authorizatio
   try{
     const before=f.db.prepare('SELECT * FROM research_zotero_attachment_inspections').all();
     const receipts=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    api.applyResearchDatabaseSchema(f.db,()=> '2026-12-01T00:00:00.000Z');
+    api.applyDatabaseMigrations(f.db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=18),now:()=> '2026-12-01T00:00:00.000Z'});
     assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_attachment_inspections').all(),before);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=17 ORDER BY version').all('plugin:@roc/plugin-research'),receipts);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_grants').pluck().get(),0);
@@ -263,18 +403,18 @@ test('attachment scope refuses foreign receipts before HTTP and refuses wrong ch
       }finally{await wrong.adapter.shutdown();}
     }
     const handlers=new Map();
-    api.registerZoteroCapabilities({pluginId:'fixture',capabilities:{register(_owner,descriptor,handler){handlers.set(descriptor.name,handler);}}},remote.adapter,f.service,unusedAttachmentPicker);
+    api.registerZoteroCapabilities({pluginId:'fixture',capabilities:{register(_owner,descriptor,handler){handlers.set(descriptor.name,handler);}}},remote.adapter,f.service,unusedAttachmentPicker,unusedAttachmentDocuments);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
     const denied=await bridge.invoke('research.inspectZoteroAttachment',[{...input,projectId:f.project.id}],201);
     assert.equal(denied.ok,false);assert.equal(denied.error.code,'zotero_source_observation_not_found');
     assert.equal(remote.calls.length,0);
     const registry={pluginId:'fixture',capabilities:{register(_owner,descriptor,handler){handlers.set(descriptor.name,handler);}}};
-    api.registerZoteroCapabilities(registry,f.adapter,f.service,unusedAttachmentPicker);
+    api.registerZoteroCapabilities(registry,f.adapter,f.service,unusedAttachmentPicker,unusedAttachmentDocuments);
     const preview=await bridge.invoke('research.previewZotero',[{...request,projectId:f.project.id}],201);
     api.registerLiteratureImportCapabilities(registry,f.service);
     const imported=await bridge.invoke('research.addLiterature',[{projectId:f.project.id,requestId:'window-attachment',entries:[
       {kind:'zotero',previewId:preview.data.previewId,itemKey:'ITEM2345'}]}],201);
-    api.registerZoteroCapabilities(registry,remote.adapter,f.service,unusedAttachmentPicker);
+    api.registerZoteroCapabilities(registry,remote.adapter,f.service,unusedAttachmentPicker,unusedAttachmentDocuments);
     const inspected=await bridge.invoke('research.inspectZoteroAttachment',[{...input,operationId:imported.data.operationId,projectId:f.project.id}],201);
     assert.equal(inspected.ok,true);assert.equal(inspected.data.file.status,'missing');
     const read=await bridge.invoke('research.readZoteroAttachment',[{projectId:f.project.id,inspectionId:inspected.data.inspectionId}],201);
@@ -506,7 +646,7 @@ test('source state bridge requires owned import receipts before HTTP and rejects
   try {
     const handlers = new Map();
     const context = {pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {handlers.set(descriptor.name, handler);}}};
-    api.registerZoteroCapabilities(context, f.adapter, f.service, unusedAttachmentPicker);
+    api.registerZoteroCapabilities(context, f.adapter, f.service, unusedAttachmentPicker, unusedAttachmentDocuments);
     api.registerLiteratureImportCapabilities(context, f.service);
     const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
     const preview = (await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 9)).data;
@@ -609,7 +749,7 @@ test('actual preload bridge imports a scoped preview and reads durable sources o
     const context = {pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
       handlers.set(descriptor.name, handler);
     }}};
-    api.registerZoteroCapabilities(context, f.adapter, f.service, unusedAttachmentPicker);
+    api.registerZoteroCapabilities(context, f.adapter, f.service, unusedAttachmentPicker, unusedAttachmentDocuments);
     api.registerLiteratureImportCapabilities(context, f.service);
     const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
     const preview = await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 88);
@@ -756,7 +896,7 @@ test('Zotero review capability reports ambiguous canonical identity as a nonretr
     const handlers = new Map();
     api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
       handlers.set(descriptor.name, handler);
-    }}}, f.adapter, f.service, unusedAttachmentPicker);
+    }}}, f.adapter, f.service, unusedAttachmentPicker, unusedAttachmentDocuments);
     await assert.rejects(f.run(() => handlers.get('research.zotero.review')({
       projectId: f.project.id, previewId: preview.previewId, itemKeys: [original.key]
     })), error => error.code === 'research_literature_identity_ambiguous' && error.category === 'conflict' && error.retryable === false);

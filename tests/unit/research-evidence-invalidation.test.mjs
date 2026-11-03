@@ -83,7 +83,7 @@ function setup({ chunks = ['First paragraph.', 'Second paragraph.'], chunkIndex 
         csl: null, title: 'A paper', authors: ['A. Author'], doi: null, publishedYear: 2024, abstract: null, url: null }
     },
     filename: 'a.pdf', mediaType: 'pdf', sourcePath: 'docs/a.pdf', sourceHash: hashOf('pdf'), size: 3
-  });
+  }, true);
 
   const parseId = `parse_${randomUUID()}`;
   repo.knowledge.upsertFromSource({

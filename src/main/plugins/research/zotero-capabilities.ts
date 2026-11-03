@@ -20,10 +20,16 @@ import {zoteroAttachmentIpcSchema, zoteroAttachmentReadIpcSchema, zoteroAttachme
   zoteroAttachmentGrantIpcSchema, zoteroAttachmentGrantReadIpcSchema, zoteroAttachmentGrantOutcomeSchema,
   zoteroAttachmentGrantSchema} from '../../../shared/schemas/research-zotero-attachment';
 import type {ZoteroAttachmentPicker} from './zotero-attachment-grant-store';
+import type {ResearchDocumentService} from './document-service';
+import {zoteroAttachmentImportIpcSchema, zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportSchema,
+  zoteroAttachmentImportCancelSchema} from '../../../shared/schemas/research-zotero-attachment';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
+  attachmentImport: descriptor('research.zotero.attachmentImport', zoteroAttachmentImportIpcSchema, zoteroAttachmentImportSchema),
+  attachmentImportRead: descriptor('research.zotero.attachmentImportRead', zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportSchema),
+  attachmentImportCancel: descriptor('research.zotero.attachmentImportCancel', zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportCancelSchema),
   attachmentGrant: descriptor('research.zotero.attachmentGrant', zoteroAttachmentGrantIpcSchema, zoteroAttachmentGrantOutcomeSchema),
   attachmentGrantRead: descriptor('research.zotero.attachmentGrantRead', zoteroAttachmentGrantReadIpcSchema, zoteroAttachmentGrantSchema),
   attachmentInspect: descriptor('research.zotero.attachmentInspect', zoteroAttachmentIpcSchema, zoteroAttachmentInspectionSchema),
@@ -53,13 +59,28 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero' |
     'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync' |
     'findZoteroSync' | 'readZoteroSyncPage' | 'observeZoteroSource' | 'readZoteroSourceState' |
-    'inspectZoteroAttachment' | 'readZoteroAttachment' | 'grantZoteroAttachment' | 'readZoteroAttachmentGrant'>,
-  pick: ZoteroAttachmentPicker): void {
+    'inspectZoteroAttachment' | 'readZoteroAttachment' | 'grantZoteroAttachment' | 'readZoteroAttachmentGrant' |
+    'importZoteroAttachment' | 'readZoteroAttachmentImport' | 'cancelZoteroAttachmentImport'>,
+  pick: ZoteroAttachmentPicker, documents: Pick<ResearchDocumentService, 'importPrepared'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
         const code = error instanceof Error ? error.message : '';
+        if (code === 'zotero_attachment_source_missing' || code === 'zotero_attachment_source_denied') {
+          throw new RocDomainError({code, message: code === 'zotero_attachment_source_missing' ? '授权的附件文件已缺失，请重新检查来源。' :
+            '无法读取已授权的附件文件，请检查文件访问权限。', category: code === 'zotero_attachment_source_missing' ? 'not_found' : 'permission', retryable: false});
+        }
+        if (code === 'zotero_attachment_import_not_found') {
+          throw new RocDomainError({code, message: '附件导入回执不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false});
+        }
+        if (code === 'zotero_attachment_import_storage_invalid') {
+          throw new RocDomainError({code, message: '附件导入回执损坏，无法读取。', category: 'degraded', retryable: false});
+        }
+        if (['zotero_attachment_import_active', 'zotero_attachment_import_request_conflict', 'zotero_attachment_import_cancelled'].includes(code)) {
+          throw new RocDomainError({code, message: '附件导入请求正在执行、已取消或与原回执冲突，请核对当前作业。',
+            category: 'conflict', retryable: false});
+        }
         if (code === 'zotero_attachment_grant_not_found') {
           throw new RocDomainError({code, message: '附件输入授权不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false});
         }
@@ -163,4 +184,7 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.attachmentRead, async input => imports.readZoteroAttachment(input.inspectionId));
   register(capabilities.attachmentGrant, ({projectId: _scope, ...input}) => imports.grantZoteroAttachment(input, pick));
   register(capabilities.attachmentGrantRead, async input => imports.readZoteroAttachmentGrant(input.grantId));
+  register(capabilities.attachmentImport, ({projectId: _scope, ...input}) => imports.importZoteroAttachment(input, documents));
+  register(capabilities.attachmentImportRead, async input => imports.readZoteroAttachmentImport(input.requestId));
+  register(capabilities.attachmentImportCancel, async input => imports.cancelZoteroAttachmentImport(input.requestId));
 }

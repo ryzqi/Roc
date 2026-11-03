@@ -4,6 +4,7 @@ import { researchDocumentContentSchema, researchDocumentRunSchema, researchDocum
 import type { ResearchRepository } from './repository';
 import type { BibliographyEntry } from './library-repository';
 import type { ResearchLiterature } from '../../../shared/types';
+import {logWarn} from '../../services/errors';
 
 export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
 export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
@@ -31,17 +32,17 @@ export class ResearchDocumentRepository {
   }
 
   import(input: { id: string; libraryItemId: string | null; entry: { metadata: ResearchLiterature; bibliography: BibliographyEntry } | null;
-    projectId: string | null; filename: string; mediaType: string; sourcePath: string; sourceHash: string; size: number }): { document: ResearchDocument; created: boolean } {
+    projectId: string | null; filename: string; mediaType: string; sourcePath: string; sourceHash: string; size: number }, notify: boolean): { document: ResearchDocument; created: boolean } {
     return this.db.transaction(() => {
       this.research.library.validateDestination(input.projectId);
       let libraryItemId = input.libraryItemId;
       if (libraryItemId === null) {
         if (input.entry === null) throw new Error('research_document_metadata_required');
-        libraryItemId = this.research.library.import([input.entry], input.projectId).items[0].id;
+        libraryItemId = this.research.library.import([input.entry], input.projectId, {notify}).items[0].id;
       } else {
         if (input.entry !== null) throw new Error('research_document_target_invalid');
         if (this.research.library.get(libraryItemId).archived) throw new Error('research_library_item_archived');
-        if (input.projectId !== null) this.research.library.link(libraryItemId, input.projectId, true, {notify: true});
+        if (input.projectId !== null) this.research.library.link(libraryItemId, input.projectId, true, {notify});
       }
       const existing = this.db.prepare('SELECT id FROM research_documents WHERE library_item_id = ? AND source_hash = ?').get(libraryItemId, input.sourceHash) as { id: string } | undefined;
       if (existing !== undefined) return { document: this.get(existing.id), created: false };
@@ -55,6 +56,21 @@ export class ResearchDocumentRepository {
   }
 
   sourcePath(id: string): string { return this.row(id).source_path; }
+
+  importWithReceipt(input: Parameters<ResearchDocumentRepository['import']>[0], record: (document: ResearchDocument) => void): {document: ResearchDocument; created: boolean} {
+    const previous = input.libraryItemId === null ? null : this.research.library.get(input.libraryItemId);
+    const result = this.db.transaction(() => {
+      const result = this.import(input, false);
+      record(result.document);
+      return result;
+    })();
+    if (previous === null || (input.projectId !== null && !previous.projectIds.includes(input.projectId))) {
+      // The document and its receipt already committed; an observer error cannot roll them back.
+      try {this.research.library.onChanged?.([this.research.library.get(result.document.libraryItemId)], previous === null ? 'import' : 'link');}
+      catch {logWarn('research_document_library_change_notify_failed', {metadata: {documentId: result.document.id}});}
+    }
+    return result;
+  }
 
   begin(documentId: string, parseId: string): void {
     this.db.transaction(() => {
