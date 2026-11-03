@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "license": "CC0-1.0",
+  "files": [
+    {
+      "path": "README.md",
+      "size": 798,
+      "sha256": "606627f003cfbeff1c38fa2a96f456d15489aa1efab755a250663ebcf9a98ab2"
+    },
+    {
+      "path": "experiment.mts",
+      "size": 362,
+      "sha256": "7aef3b36f651097f857a5c17d79f3c56d189c865e520bb949067822703bedef3"
+    },
+    {
+      "path": "figure.vl.json",
+      "size": 292,
+      "sha256": "357aa37652de563588d0e8776442d63012ff43d4eb17deba68bcf90fc34c2cae"
+    },
+    {
+      "path": "literature.json",
+      "size": 315,
+      "sha256": "e00c5a70eef311e88ae3932a819c4f6245f58eff91776d42643ff894a12e9353"
+    },
+    {
+      "path": "manuscript.tex",
+      "size": 237,
+      "sha256": "39e0c3fefc5a816d148ee2e6798c0149a9086310e607e6bd80a1125a7291a14f"
+    },
+    {
+      "path": "measurements.csv",
+      "size": 36,
+      "sha256": "fc55df7e776ce1a1572d29ca979563ff2ae573fa114f5a04c6edadb9066b5226"
+    },
+    {
+      "path": "references.bib",
+      "size": 173,
+      "sha256": "4e497b90a8de42594b1c868b3d9e52eeb642ca720ec19740bf5de39855e409ab"
+    },
+    {
+      "path": "source.pdf",
+      "size": 632,
+      "sha256": "9bfe7b4e6359167cae1bbbb9148f7cb10a8b8c4802a437833e0fa3c4f44a108e"
+    }
+  ]
+}

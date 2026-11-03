@@ -1,0 +1,12 @@
+{
+  "id": "roc-synthetic-fixture",
+  "title": "Synthetic reproducibility fixture",
+  "authors": ["Roc fixture"],
+  "year": 2026,
+  "version": "1",
+  "license": "CC0-1.0",
+  "doi": null,
+  "source": "source.pdf",
+  "locator": { "page": 1 },
+  "excerpt": "Synthetic group A mean is 2. Synthetic group B mean is 4."
+}
