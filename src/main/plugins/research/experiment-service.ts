@@ -158,6 +158,25 @@ export class ResearchExperimentService {
     });
   }
 
+  async verifyPublication(projectId: string, artifactId: string): Promise<ResearchExperimentExecution> {
+    return this.session.run(async signal => {
+      const artifact = this.repository.getArtifact(artifactId);
+      if (artifact.projectId !== projectId) throw new Error('research_experiment_project_mismatch');
+      const run = this.repository.experiments.forArtifact(artifact);
+      const {artifactId: _artifactId, ...manifest} = run;
+      const bytes = await readResearchFile(this.repository.experiments.root(projectId, run.id), 'manifest.json', experimentFileLimit);
+      if (researchContentHash(bytes) !== researchContentHash(JSON.stringify(manifest, null, 2))) {
+        throw new Error('research_experiment_manifest_changed');
+      }
+      for (const file of run.files) {
+        signal.throwIfAborted();
+        await this.source({projectId, runId: run.id, area: file.area, path: file.path});
+      }
+      signal.throwIfAborted();
+      return run;
+    });
+  }
+
   async publish(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
     await this.snapshot(projectId, runId);
     this.session.requireOpen();

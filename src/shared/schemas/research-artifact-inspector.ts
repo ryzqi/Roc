@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {researchArtifactSchema, researchStageStateSchema, researchProvenanceSchema, researchProjectSchema} from './research';
 import {researchArtifactContentSchema, researchStageRunSchema} from './research-runs';
 import {researchClaimSchema, researchEvidenceSchema} from './research-evidence';
+import {researchProductionInputSchema} from './research-production-inputs';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
@@ -25,6 +26,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   currentStage: researchStageStateSchema.shape.stage, stage: researchStageStateSchema,
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
+  production: researchProductionInputSchema.shape.source.nullable(),
   provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task', 'review_gate']).array().max(2)
 }).strict();
 export const researchArtifactInspectionSchema = researchArtifactInspectionBodySchema.extend({version: hash});

@@ -51,6 +51,7 @@ import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchem
 import {researchGateReviewContextSchema, type ResearchGateReviewRequest, type ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
 import {researchArtifactVersionsSchema, type ResearchArtifactVersion} from '../../../shared/schemas/research-artifact-version';
 import {requireSearchPlanContent, searchPlanApprovalHash} from './search-strategy';
+import type {ResearchProductionInput} from '../../../shared/schemas/research-production-inputs';
 
 export const researchStages = [
   'discovery',
@@ -312,9 +313,16 @@ export class ResearchRepository {
       if (origin !== null && origin.taskId !== null) availableActions.push('return_to_task');
       if (project.status !== 'archived' && project.currentStage === artifact.stage && stage.status === 'waiting_approval' &&
         stage.gateRequired && !stage.gateApproved && stage.artifactIds.includes(artifact.id)) availableActions.push('review_gate');
+      let production: ResearchProductionInput['source'] | null = null;
+      if (artifact.kind === 'experiment_run') production = {kind: 'experiment', execution: this.experiments.forArtifact(artifact)};
+      if (artifact.kind === 'figure') {
+        const figure = this.figures.forArtifact(artifact);
+        production = {kind: 'figure', figure, execution: this.figureRuns.get(project.id, figure.runId)};
+      }
+      if (artifact.kind === 'export_package') production = {kind: 'export', execution: this.exports.forArtifact(artifact)};
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
-        stage, content, origin, claims, evidence, provenance: rows.map(toProvenance), availableActions
+        stage, content, origin, claims, evidence, production, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({

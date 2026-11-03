@@ -134,3 +134,31 @@ IPC/chunks1132803bytes6files和diff通过。A3A unit819/Harness94/native13后端
 交给自己的读取器。旧图稿路由到实验仓库导致真实PNG失败，已由native红/绿回归
 覆盖。最终unit819/Harness94/fresh build/type/native13/startup12/IPC/chunks通过；
 每类真实已批准文件均校验bytes/SHA/size且DB无写入，未批准角色读取继续拒绝。
+
+
+## 生产来源版本与人工只读文件检查
+
+工件快照增加 nullable `production`，保存真实实验执行、图稿发布/验证/执行或导出
+执行及文件 metadata。生产工件必须有对应真实发布记录；不存在时明确失败。
+这些保存值参加工件 SHA，同时间戳修改来源参数或文件校验值也会改变版本。
+元数据检查仍不读取文件；保存的文件 hash 不等于已经验证当前磁盘字节。
+
+`research.artifacts.inspectProductionReview` / `research.inspectProductionReview` 输入显式
+project/artifact/非空 expectedVersion，校验版本后核对实际生产文件。只读文件入口
+`research.artifacts.readProductionReviewFile` / `research.readProductionReviewFile` 还要求
+area、manifest 内相对 path 和 expectedFileHash。保存的发布源决定实际读取器和根，
+renderer 不能指定任意路径。读前和异步读后分别验证工件版本；返回 bytes/文件
+SHA/size 必须匹配捕获值和当前 metadata。单文件预览上限 4 MiB。
+
+未批准工件只有在当前实际等待人工闸门时可供人工核对；已批准工件可读取。
+归档、被替代、范围错误、阶段不可核对或旧版本均拒绝。角色工具原有生产入口
+仍要求已批准工件，新人工入口未加入角色 capability allowlist。检查不会批准、
+运行模型、启动生产 worker 或写数据库。实验核对直接验证保存 manifest；缺失时
+失败，不重建。snapshot 写入器仍只属于实际发布流程。
+
+新入口返回明确 validation/permission/conflict/not_found/degraded 错误，未知失败
+继续传播。最终unit824/Harness94/finalreview5/fresh build/type/native13/renderer87、
+最终相关UI13/startup12/IPC/chunks通过。日志`xui-production-review-*.log`；原生
+`production-review-previews.json` 保留真实未批准三类生产文件的 bytes/SHA/size 和
+无 DB 写入证据。只有 task-created 临时 manifest 被删除/按原字节恢复以验证
+缺失拒绝；冻结科研 fixtures 没有改动。生产类型 UI 与阅读位置仍待下一增量。

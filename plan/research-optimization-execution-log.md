@@ -2369,3 +2369,52 @@ preapproval reads. Figure selection requires actual output PNG. Existing rendere
 applies unchanged; no renderer files changed. No frozen workflow fixture modifications, client
 operations, live queries, paid model or remote writes. Production reviewer contract/type views
 and reading location still pending; full plan unfinished.
+
+
+## X-UIA4B1 — source-aware versions and readonly human production inspection
+
+Status: `Verified passing` for this backend contract increment. Artifact snapshots include
+actual saved experiment/figure/export source/execution/publication/validation/file metadata;
+SHA covers it without filesystem reads. Real production kinds require their saved publication,
+no empty production fallback. Human production inspection/read accepts explicit current artifact
+SHA and file read also requires exact selected file SHA. Draft access requires actual current
+waiting gate, approved access remains available; archived/superseded/foreign/stale/nonwaiting
+refuse before IO. Artifact SHA is checked again after async verify/read; current file metadata
+and actual returned bytes must match. Existing role endpoints remain approved-only; new human
+review capabilities are not added to role allowlists.
+
+Experiment inspection verifies the existing published manifest and file hashes read-only.
+It no longer calls the publication snapshot writer; missing manifest cannot regenerate.
+Publication writer remains in the actual publish flow. New review IPC errors retain specific
+validation/permission/conflict/not_found/degraded categories; unknown errors still propagate.
+No DB migration, model, worker launch, arbitrary renderer path or production write introduced.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm generate:ipc` / `pnpm typecheck` |Generated;final build/typecheck passed |
+| `node --test tests/unit/research-production-review.test.mjs tests/unit/research-gate-review.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-search-plan.test.mjs` |22/22 passed |
+| `pnpm test:unit` |824/824 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `node --test tests/unit/research-production-review.test.mjs` |Final5/5 with generated-bridge error category assertions |
+| `pnpm test:research-p0` |Final fresh production build/type/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/` |87/87 passed before final error mapping refinement |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/research-search-plan.test.mjs` |Final13/13 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132803bytes/6files passed |
+| `git diff --check` |Passed |
+
+Evidence xui-production-review-*.log and real native production-review-previews.json. New unit5
+uses actual local renderer, saved publication and captured fixed input evidence. Source metadata
+edits at same clock change review SHA; actual draft PNG bytes hash/size and zero DB changes,
+strict role refusal, invalid/foreign/stale/out-of-gate before-IO refusals, during-read/version
+changes and real generated bridge contracts/categories pass. Previous synthetic timing source
+is replaced by actual saved figure source. Initial fixture omitted required evidence; added
+actual capture of copied synthetic input, without loosening figure evidence guards. Test-only
+run_id typo and strict inspect/read envelope misuse corrected. Native reviewer reads actual
+experiment/figure/export before approval with matching bytes/SHA/size and no writes. Removes
+only its own resolved temporary experiment manifest, asserts ENOENT and no regeneration, then
+restores exact bytes. Approved original role reads continue passing. No frozen fixture changes,
+live clients/queries/model spending or remote writes. Lazy production type UI and reading position
+remain next; X-UI/full plan unfinished.

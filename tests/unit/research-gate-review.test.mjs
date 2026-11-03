@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
 import {createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
@@ -134,14 +135,8 @@ test('successful approve and reject audits preserve the exact human-reviewed ver
 
 test('human gate refuses stale versions before production IO and rechecks after asynchronous verification',async()=>{
   for(const timing of ['before','during','archived','running']) {
-    const f=waiting();
+    const f=await createPublishedFigureFixture(api);
     try {
-      // This isolates orchestration timing. Native production tests cover actual figure verification.
-      f.db.prepare("UPDATE research_projects SET current_stage='figure' WHERE id=?").run(f.project.id);
-      f.db.prepare("UPDATE research_artifacts SET stage='figure',kind='figure' WHERE id=?").run(f.artifactId);
-      f.db.prepare("UPDATE research_stage_states SET status='waiting_approval',gate_required=1,artifact_ids_json=? WHERE project_id=? AND stage='figure'")
-        .run(JSON.stringify([f.artifactId]),f.project.id);
-      f.repository.figures.reviewSignature=()=> 'synthetic-stable-production-signature';
       const reviewed=request(f);
       let calls=0;
       const edit=()=>f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Changed during review') WHERE artifact_id=?").run(f.artifactId);
@@ -158,7 +153,7 @@ test('human gate refuses stale versions before production IO and rechecks after 
       assert.equal(f.repository.getArtifact(f.artifactId).status,'draft');
       assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'figure');
       assert.equal(f.db.prepare("SELECT COUNT(*) FROM research_workflow_events WHERE type='approval_granted'").pluck().get(),0);
-    }finally{f.close();}
+    }finally{await f.dispose();}
   }
 });
 

@@ -52,3 +52,4 @@ export {registerResearchArtifactInspectorCapability, researchArtifactInspectorCa
 export {createPluginCapabilityAdapter} from '../../../src/main/ipc/plugin-capability-adapter';
 export {researchWorkflowTransitionRequestSchema} from '../../../src/shared/schemas/research';
 export {ResearchProductionInputService} from '../../../src/main/plugins/research/production-input-service';
+export {registerResearchProductionInputCapabilities} from '../../../src/main/plugins/research/production-input-capabilities';
