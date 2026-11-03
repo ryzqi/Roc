@@ -135,6 +135,8 @@ test('cleanup failures are reported after other jobs finish and cancelled identi
     assert.equal(completed, true);
     const restarted = new api.ResearchTaskRepository(f.agentDb);
     assert.equal(restarted.get(execution.taskId, f.project.id).status, 'cancelled');
+    assert.equal(restarted.get(execution.taskId, f.project.id).statusReason, 'research_task_cleanup_failed');
+    assert.throws(() => restarted.continueWith(execution.taskId, f.project.id, () => {}), /research_task_cleanup_unconfirmed/);
     f.tasks.cancel(f.run.taskId, f.project.id);
     const ledger = new api.RunBudgetLedger(f.agentDb);
     assert.throws(() => ledger.reserve(f.run.id, budget, {
@@ -196,7 +198,8 @@ test('actual agent cancellation capability propagates through a trusted chat ass
       eventBus: { publish: async () => {} }, logger: { warn: () => {}, error: () => {} }
     });
     const stages = new api.ResearchStageRuntime(f.repository, capabilities, undefined, { complete: async () => {} });
-    api.registerResearchTaskCapabilities({ pluginId: '@roc/plugin-research', capabilities }, f.tasks,
+    api.registerResearchTaskCapabilities({ pluginId: '@roc/plugin-research', capabilities,
+      eventBus: { publish: async () => {} }, logger: { warn: () => {} } }, f.tasks,
       new api.ResearchTaskController(f.tasks, {
         stages, cancelChat: async runId => await capabilities.invoke('agent.run.cancel', { runId }),
         cancelJob: async () => { throw new Error('no_job_expected'); }
@@ -213,7 +216,8 @@ test('task IPC and capability requests reject trusted parent fields and cross-pr
   const f = createResearchFixture(api, 'discovery');
   const handlers = new Map();
   try {
-    api.registerResearchTaskCapabilities({ pluginId: 'fixture', capabilities: {
+    api.registerResearchTaskCapabilities({ pluginId: 'fixture',
+      eventBus: { publish: async () => {} }, logger: { warn: () => {} }, capabilities: {
       register(_plugin, descriptor, handler) { handlers.set(descriptor.name, handler); }
     } }, f.tasks, new api.ResearchTaskController(f.tasks, {
       stages: { cancelTask: async () => {} }, cancelChat: async () => {}, cancelJob: async () => {}

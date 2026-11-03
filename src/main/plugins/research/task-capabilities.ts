@@ -9,6 +9,7 @@ import type { ResearchTaskRepository } from './research-task-repository';
 import type { ResearchTaskController } from './task-controller';
 import type { ResearchTaskDiagnosticsService } from './task-diagnostics';
 import { researchTaskDiagnosticsSchema, researchTaskForChatRequestSchema } from '../../../shared/schemas/research-task-diagnostics';
+import { notifyResearchTaskChanged } from './task-notifications';
 
 const capabilities = {
   get: descriptor('research.task.get', researchTaskSchema),
@@ -41,20 +42,27 @@ export function registerResearchTaskCapabilities(
     const request = researchTaskRequestSchema.parse(input);
     return tasks.executions(request.taskId, request.projectId);
   });
-  context.capabilities.register(context.pluginId, capabilities.cancel, async input =>
-    await controller.cancel(researchTaskRequestSchema.parse(input)));
-  context.capabilities.register(context.pluginId, capabilities.pause, async input =>
-    await controller.pause(researchTaskRequestSchema.parse(input)));
-  context.capabilities.register(context.pluginId, capabilities.continueTask, async input =>
-    controller.continueTask(researchTaskContinueRequestSchema.parse(input)));
-  context.capabilities.register(context.pluginId, capabilities.restoreApproval, async input =>
-    controller.restoreApproval(researchTaskRequestSchema.parse(input)));
+  action(capabilities.cancel, request => controller.cancel(request));
+  action(capabilities.pause, request => controller.pause(request));
+  action(capabilities.continueTask, request => controller.continueTask(request));
+  action(capabilities.restoreApproval, request => controller.restoreApproval(request));
   context.capabilities.register(context.pluginId, capabilities.diagnostics, async input =>
     diagnostics.get(researchTaskRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, capabilities.forChat, async input =>
     diagnostics.forChat(researchTaskForChatRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, capabilities.events, async input =>
     tasks.events(researchTaskEventsRequestSchema.parse(input)));
+
+  function action<TInput extends { taskId: string; projectId: string }, TOutput>(
+    capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput | Promise<TOutput>
+  ): void {
+    context.capabilities.register(context.pluginId, capability, async input => {
+      const request = capability.inputSchema.parse(input);
+      tasks.get(request.taskId, request.projectId);
+      try { return await run(request); }
+      finally { notifyResearchTaskChanged(context, request.taskId, request.projectId); }
+    });
+  }
 }
 
 function descriptor<T>(name: string, outputSchema: z.ZodType<T>): CapabilityDescriptor<

@@ -61,3 +61,5 @@ export const researchTaskEventsPageSchema = z.object({
   hasMore: z.boolean()
 }).strict();
 export type ResearchTaskEvent = z.infer<typeof researchTaskEventSchema>;
+export const researchTaskUpdatedSchema = researchTaskRequestSchema;
+export type ResearchTaskUpdated = z.infer<typeof researchTaskUpdatedSchema>;

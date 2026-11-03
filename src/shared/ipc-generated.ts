@@ -234,6 +234,7 @@ export const ipcChannels = {
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute',
   shellConfirm: 'roc:shell:confirm',
+  researchTaskUpdated: 'roc:research:task-updated',
   researchLibraryChanged: 'roc:research:library-changed',
   appearanceUpdated: 'roc:appearance:updated',
   navigate: 'roc:navigate',
@@ -481,6 +482,7 @@ export const ipcRequestChannelKeys = [
 ] as const;
 
 export const ipcEventChannelKeys = [
+  'researchTaskUpdated',
   'researchLibraryChanged',
   'appearanceUpdated',
   'navigate',
@@ -728,6 +730,7 @@ export const ipcRequestDefinitions = [
 ] as const;
 
 export const ipcEventDefinitions = [
+  { key: 'researchTaskUpdated', channel: ipcChannels.researchTaskUpdated, domain: 'research', method: 'onTaskUpdated' },
   { key: 'researchLibraryChanged', channel: ipcChannels.researchLibraryChanged, domain: 'research', method: 'onLibraryChanged' },
   { key: 'appearanceUpdated', channel: ipcChannels.appearanceUpdated, domain: 'app', method: 'onAppearanceUpdated' },
   { key: 'navigate', channel: ipcChannels.navigate, domain: 'app', method: 'onNavigate' },

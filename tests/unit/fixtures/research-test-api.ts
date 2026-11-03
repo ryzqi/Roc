@@ -26,3 +26,4 @@ export { registerResearchTaskCapabilities } from '../../../src/main/plugins/rese
 export { createAgentPlugin } from '../../../src/main/plugins/agent';
 export { createResearchHumanGate } from '../../../src/main/plugins/research/human-gate';
 export { ResearchTaskDiagnosticsService } from '../../../src/main/plugins/research/task-diagnostics';
+export { notifyResearchTaskChanged } from '../../../src/main/plugins/research/task-notifications';

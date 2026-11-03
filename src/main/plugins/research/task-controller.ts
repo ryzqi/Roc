@@ -41,7 +41,9 @@ export class ResearchTaskController {
   }
 
   restoreApproval(request: { taskId: string; projectId: string }) {
-    this.tasks.get(request.taskId, request.projectId);
+    if (this.tasks.get(request.taskId, request.projectId).statusReason === 'research_task_cleanup_failed') {
+      throw new Error('research_task_cleanup_unconfirmed');
+    }
     if (this.cancellations.has(request.taskId) || this.cancellations.has(`${request.taskId}:paused`)) {
       throw new Error('research_task_cleanup_pending');
     }
@@ -62,7 +64,11 @@ export class ResearchTaskController {
       })
     ]).then((results) => {
       const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (errors.length > 0) throw new AggregateError(errors, 'research_task_cleanup_failed');
+      if (errors.length > 0) {
+        const current = this.tasks.get(task.id, task.projectId);
+        this.tasks.setStatus(task.id, task.projectId, current.status, 'research_task_cleanup_failed', [current.status]);
+        throw new AggregateError(errors, 'research_task_cleanup_failed');
+      }
       return this.tasks.get(task.id, task.projectId);
     }).finally(() => this.cancellations.delete(key));
     this.cancellations.set(key, cleanup);

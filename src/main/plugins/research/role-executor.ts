@@ -2,7 +2,7 @@ import { createAgent, toolStrategy } from 'langchain';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 
 import { researchStageOutputSchema } from '../../../shared/schemas/research-runs';
-import type { ResearchModelSelection, ResearchStageRun } from '../../../shared/types';
+import type { ResearchModelSelection, ResearchStageRun, RunBudgetStatus } from '../../../shared/types';
 import type { AgentModelFactoryAdapter } from '../agent/model-factory-adapter';
 import type { ResearchExecutionContext } from './run-repository';
 import type { RunBudgetLedger, RunLimits } from '../../services/deep-agent/run-budget-ledger';
@@ -14,6 +14,7 @@ export type ResearchRoleExecution = {
   context: ResearchExecutionContext;
   tools: StructuredToolInterface[];
   signal: AbortSignal;
+  onBudgetStatus?: (status: RunBudgetStatus) => void;
 };
 
 export type PreparedResearchRole = {
@@ -41,7 +42,7 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
           input.signal.throwIfAborted();
           const limits = { ...budget, maxModelCalls: Math.min(budget.maxModelCalls, input.run.policy.maxSteps) };
           const observer = new RunBudgetObserver(ledger, input.run.id, limits, input.run.skillHash, {
-            providerId: handle.providerId, modelId: handle.modelId
+            providerId: handle.providerId, modelId: handle.modelId, onStatus: input.onBudgetStatus
           });
           const agent = createAgent({
             model,

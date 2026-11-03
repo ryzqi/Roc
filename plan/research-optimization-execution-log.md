@@ -381,3 +381,29 @@ Coverage includes actual createAgent success/failure correlation, prior billed c
 startup unknown conversion, rollback, duplicate attempts, pagination/project isolation and
 the real v13 database upgrade. Logs: `.artifacts/research-optimization/pr02c-events-*.log`.
 No model/network calls; integration model attempts use local fixtures.
+
+## ROC-PR-02C.5 — live invalidation and cleanup refusal
+
+Status: `Verified passing` for backend notifications and persistent cleanup failure.
+Shell presentation remains pending.
+
+Native task notifications carry only task and project identifiers. Trusted linkage,
+model budget observations, terminal stage state and task actions invalidate persisted
+diagnostics. Delivery failure logs a warning without changing accounting or execution.
+Cleanup failures persist their reason; continuation and approval restoration refuse
+unconfirmed cleanup. Foreign-project requests produce no notification.
+
+Commands ran from `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | 633 passed, 0 failed |
+| `pnpm harness:eval` | 94 deterministic cases passed |
+| `pnpm generate:ipc` and `pnpm check:ipc` | Passed |
+| `pnpm build` | Production build and typecheck passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | 12/12 passed, zero renderer errors, exit 0 |
+| `git diff --check` | Passed |
+
+Logs: `.artifacts/research-optimization/pr02c-notifications-*.log`.
+Smoke used temporary application data/workspace and a local stub Provider.
+No paid model requests or tracing exports.

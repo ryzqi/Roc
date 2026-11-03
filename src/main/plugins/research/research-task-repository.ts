@@ -129,6 +129,9 @@ export class ResearchTaskRepository {
 
   continueWith<T>(taskId: string, projectId: string, operation: () => T): T {
     return this.db.transaction(() => {
+      if (this.get(taskId, projectId).statusReason === 'research_task_cleanup_failed') {
+        throw new Error('research_task_cleanup_unconfirmed');
+      }
       this.setStatus(taskId, projectId, 'active', null, ['paused', 'interrupted', 'failed', 'cancelled']);
       return operation();
     }).immediate();

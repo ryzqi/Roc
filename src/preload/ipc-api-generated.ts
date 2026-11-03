@@ -239,6 +239,11 @@ export const rocApi: RocPreloadApi = {
     listIndexedFiles: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexFiles, ...args),
     listIndexJobs: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexJobs, ...args),
     getEvidenceIndexSource: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexEvidenceSource, ...args),
+    onTaskUpdated: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.researchTaskUpdated, listener);
+      return () => ipcRenderer.off(ipcChannels.researchTaskUpdated, listener);
+    },
     onLibraryChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on(ipcChannels.researchLibraryChanged, listener);

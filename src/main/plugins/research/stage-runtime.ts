@@ -22,7 +22,8 @@ export class ResearchStageRuntime {
     private readonly capabilities: RocCapabilityRegistry,
     private readonly executor: ResearchRoleExecutor | undefined,
     gate: ResearchHumanGate,
-    private readonly effects?: ResearchProductionEffectService
+    private readonly effects?: ResearchProductionEffectService,
+    private readonly onChanged?: (taskId: string, projectId: string) => void
   ) {
     if (gate === undefined || gate === null) throw new Error('research_human_gate_required');
     this.gate = gate;
@@ -148,6 +149,7 @@ export class ResearchStageRuntime {
       }
     }
     const run = this.repository.runs.terminate(request.runId, request.projectId, status, reason);
+    this.notify(run);
     const active = this.active.get(run.id);
     active?.controller.abort(new Error(reason));
     if (['queued', 'running'].includes(previous.status) && this.effects !== undefined) {
@@ -162,6 +164,7 @@ export class ResearchStageRuntime {
     const controller = new AbortController();
     const pending = Promise.resolve().then(() => this.execute(run, controller)).finally(() => {
       this.active.delete(run.id);
+      this.notify(run);
     });
     this.active.set(run.id, { controller, pending, cleanup: pending, projectId: run.projectId });
   }
@@ -171,6 +174,7 @@ export class ResearchStageRuntime {
       this.repository.tasks.linkStage(run, dispatch);
       const linked = this.repository.runs.bindTask(run.id, run.projectId);
       this.schedule(linked);
+      this.notify(linked);
       return linked;
     } catch (error) {
       if (run.taskId === null && ['queued', 'running'].includes(run.status)) {
@@ -225,7 +229,9 @@ export class ResearchStageRuntime {
   private async executeOutput(run: ResearchStageRun, prepared: PreparedResearchRole, signal: AbortSignal): Promise<ResearchStageRun> {
     const context = this.repository.runs.getContext(run.id);
     const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal, effects: this.effects });
-    const result = await withAbort(prepared.execute({ run, context, tools, signal }), signal);
+    const result = await withAbort(prepared.execute({
+      run, context, tools, signal, onBudgetStatus: () => this.notify(run)
+    }), signal);
     signal.throwIfAborted();
     this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);
     const completed = this.repository.runs.complete(run.id, run.projectId, result.output);
@@ -236,6 +242,10 @@ export class ResearchStageRuntime {
       this.synchronizeTaskState(completed.taskId, completed.projectId);
     }
     return completed;
+  }
+
+  private notify(run: ResearchStageRun): void {
+    if (run.taskId !== null) this.onChanged?.(run.taskId, run.projectId);
   }
 
   synchronizeTaskState(taskId: string | null, projectId: string): void {

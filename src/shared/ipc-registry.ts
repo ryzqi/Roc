@@ -6,7 +6,7 @@ import { menuPages } from './surfaces';
 import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
 import { researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema } from './schemas/research-tasks';
 import { researchTaskForChatRequestSchema, researchTaskDiagnosticsSchema } from './schemas/research-task-diagnostics';
-import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema } from './schemas/research-tasks';
+import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskUpdatedSchema } from './schemas/research-tasks';
 
 import {
   agentCapabilityPreviewRequestSchema,
@@ -573,6 +573,7 @@ export const ipcRegistry = {
     request({ key: 'shellConfirm', channel: 'roc:shell:confirm', domain: 'shell', method: 'confirm', kind: 'direct', contract: methodContract(oneArg(shellConfirmationRequestSchema), shellConfirmationResultSchema) })
   ],
   events: [
+    event({ key: 'researchTaskUpdated', channel: 'roc:research:task-updated', domain: 'research', method: 'onTaskUpdated', contract: eventContract(researchTaskUpdatedSchema) }),
     event({ key: 'researchLibraryChanged', channel: 'roc:research:library-changed', domain: 'research', method: 'onLibraryChanged', contract: eventContract(literatureLibraryChangedSchema) }),
     event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),
     event({ key: 'navigate', channel: 'roc:navigate', domain: 'app', method: 'onNavigate', contract: eventContract(z.string()) }),

@@ -5,6 +5,7 @@ import { ResearchTaskController } from './task-controller';
 import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
 import { ResearchTaskDiagnosticsService } from './task-diagnostics';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import { notifyResearchTaskChanged } from './task-notifications';
 import { LiteratureImportService } from './literature-import-service';
 import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
 import { z } from 'zod';
@@ -268,7 +269,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
         researchExperiments, researchFigures, researchTemplates, researchExports);
       const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
-      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects);
+      const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects,
+        (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
       stageRuntime = runtime;
       const taskController = new ResearchTaskController(options.tasks, {
         stages: runtime,
@@ -374,6 +376,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
             const run = researchRepository.runs.get(runId, request.projectId);
             if (run.taskId === null) throw new Error('research_task_execution_unlinked');
             await taskController.pause({ taskId: run.taskId, projectId: request.projectId });
+            notifyResearchTaskChanged(context, run.taskId, request.projectId);
             return researchRepository.getWorkflow(request.projectId);
           }
         }
@@ -381,6 +384,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         if (['complete', 'approve', 'reject'].includes(request.action)) {
           for (const taskId of researchRepository.runs.taskIdsForStage(request.projectId, request.expectedStage)) {
             runtime.synchronizeTaskState(taskId, request.projectId);
+            notifyResearchTaskChanged(context, taskId, request.projectId);
           }
         }
         return snapshot;
