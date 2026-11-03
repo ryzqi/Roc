@@ -15,7 +15,7 @@ export { registerResearchFigureCapabilities } from '../../../src/main/plugins/re
 export { registerResearchExportCapabilities } from '../../../src/main/plugins/research/export-capabilities';
 export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';
 export { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
-export { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
+export { compileRunCapabilityManifest, bindMcpToolContracts } from '../../../src/main/plugins/agent/run-capability-manifest';
 export { createRunBudget, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
 export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';
 export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budget-ledger';
@@ -40,3 +40,6 @@ export { LiteratureSearchService } from '../../../src/main/plugins/research/lite
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
+export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';
+export { createToolEffectIdempotencyMiddleware } from '../../../src/main/services/deep-agent/tool-effect-idempotency';
+export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client-adapter';

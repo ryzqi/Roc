@@ -727,3 +727,34 @@ ERR_ACCESS_DENIED; all were corrected to real contracts without weakening any gu
 Logs: `.artifacts/research-optimization/p0-hostile-pdf-*.log`. Native denials, frozen source
 hash, original PDF, actual parsed content, diagnostics, events and both DBs remain under
 the P0 production artifact directory. No real credentials or remote writes were used.
+
+## P0.7 — actual MCP timeout, receipt query and no-resend replay
+
+Status: `Verified passing` for the complete 12-scenario offline native P0 suite.
+Live L2 remains `Blocked, not run`: no isolated credentials, attributable prices,
+spending authorization/limits or independently reviewed 200-task corpus.
+
+A real local stdio MCP server commits one write, withholds the response, and exposes
+its durable receipt through a query tool. The actual client adapter, discovered frozen
+contracts and effect middleware retain the timeout as unknown. Another middleware call
+refuses before invoking the handler; deleting unresolved history is also refused. A
+queried receipt must match the input digest and operation identity. A different valid
+operation hash is rejected. After reconciliation, the original tool result replays through
+the middleware with no resend: one write, one receipt query and one handler invocation.
+The actual MCP child exits after adapter cleanup. No shared remote service was written.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node scripts/run-research-p0.mjs '--test-name-pattern=MCP timeout'` | Final 1/1 passed |
+| `node scripts/run-research-p0.mjs` | Complete offline/native P0 matrix 12/12 passed |
+| `pnpm typecheck` | Passed |
+| `git diff --check` | Passed |
+
+The first fixture used runtime names in the remote allowlist; corrected to write/query
+and bound actual discovered contracts. A malformed mismatch ID was corrected to a valid
+different digest so the semantic mismatch check was exercised. No product behavior or
+checks were weakened. Logs: `.artifacts/research-optimization/p0-mcp-timeout-*.log` and
+`p0-fault-matrix-final.log`. Server receipts, unknown/resolved identities and both DBs are
+retained under the P0 production artifact directory. Next: PR-04 academic search fusion.

@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as wait } from 'node:timers/promises';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import Database from 'better-sqlite3';
 import { createResearchFixture, loadResearchWorkerTestApi } from '../unit/fixtures/research-test-kit.mjs';
 
@@ -758,3 +758,99 @@ test('restart during native figure rendering preserves interrupted ownership and
 
 test('hostile PDF text cannot expand project tools or expose a synthetic secret through the native experiment sandbox',
   () => runScenario(['discovery', 'retrieval', 'reading', 'ideation', 'planning', 'experiment'], 'hostile_pdf'));
+
+test('MCP timeout after a local external write requires a matching receipt and replays without resending',
+  async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'roc-p0-mcp-'));
+    const root = await realpath(temporary);
+    const f = createResearchFixture(api, 'discovery', root);
+    const adapter = api.createMcpClientAdapter();
+    const receiptsPath = join(root, 'receipts.jsonl');
+    const server = {id: 'receipt', name: 'Local receipt fixture', enabled: true,
+      transport: 'stdio', preset: false, riskLevel: 'medium',
+      command: `"${process.execPath}" "${await realpath('tests/fixtures/research-workflow/mcp-receipt-server.mjs')}" "${receiptsPath}"`,
+      allowedTools: ['write', 'query'], status: 'ready', tools: 2};
+    try {
+      const compiled = api.compileRunCapabilityManifest({
+        mode: 'chat', deleteFileApprovalMode: 'fully_automatic', mcpApprovalMode: 'fully_automatic',
+        mcpServers: [server], skills: [], workflowHint: null,
+        requestedCapabilities: {mcpServers: [server.id], skills: []}
+      }).manifest;
+      const loaded = await adapter.loadTools(f.run.id, [server], new AbortController().signal);
+      const write = loaded.find(tool => tool.name === 'receipt_write');
+      const query = loaded.find(tool => tool.name === 'receipt_query');
+      assert.ok(write);
+      assert.ok(query);
+      const manifest = api.bindMcpToolContracts(compiled, loaded.map(tool => tool.metadata.mcpContract));
+      const store = new api.AgentToolEffectStore(f.agentDb);
+      const middleware = api.createToolEffectIdempotencyMiddleware({
+        runId: f.run.id, threadId: 'p0-mcp-thread', store, capabilityManifest: manifest
+      });
+      const request = {toolCall: {id: 'p0-write', name: 'write', args: {requestId: 'p0-committed-write'}},
+        runtime: {configurable: {checkpoint_ns: 'tools:p0', checkpoint_map: {'': 'p0-checkpoint'}, ls_agent_type: 'root'}}};
+      const policy = manifest.tools.find(tool => tool.modelVisibleName === request.toolCall.name);
+      assert.equal(policy.reconcileStrategy, 'manual_confirmation');
+      const operation = {runId: f.run.id, threadId: 'p0-mcp-thread', executionPath: 'main',
+        checkpointId: 'p0-checkpoint', toolCallId: request.toolCall.id, toolName: request.toolCall.name,
+        canonicalToolIdentity: policy.canonicalIdentity, toolVersion: policy.toolVersion,
+        args: request.toolCall.args, effectClass: policy.effectClass, reconcileStrategy: policy.reconcileStrategy};
+      let handlerCalls = 0;
+      const timeout = AbortSignal.timeout(300);
+      await assert.rejects(middleware.wrapToolCall(request, async () => {
+        handlerCalls++;
+        const content = await write.invoke(request.toolCall.args, {signal: timeout});
+        return new ToolMessage({name: request.toolCall.name, tool_call_id: request.toolCall.id, content, status: 'success'});
+      }));
+      assert.equal(timeout.aborted, true);
+      const unknown = store.readState(operation);
+      assert.equal(unknown.status, 'unknown');
+      assert.equal(unknown.attemptCount, 1);
+      const deniedRetry = () => middleware.wrapToolCall(request, async () => {
+        handlerCalls++;
+        throw new Error('unauthorized_repeat_write');
+      });
+      await assert.rejects(deniedRetry(), /agent_tool_effect_unknown_manual_confirmation/u);
+      assert.equal(handlerCalls, 1);
+      assert.throws(() => store.deleteForRunIds([f.run.id]), /agent_tool_effect_pending_reconciliation/u);
+      const receiptText = await query.invoke(request.toolCall.args);
+      const receipts = JSON.parse(receiptText);
+      assert.equal(receipts.length, 1);
+      assert.equal(api.hashToolInput(receipts[0].args), api.hashToolInput(operation.args));
+      const receipt = {schemaVersion: 1, kind: 'resolution', source: 'provider', outcome: 'applied',
+        operationId: unknown.operationId, reference: receipts[0].receiptId,
+        evidenceHash: api.hashToolInput(receipts[0]), recordedAt: new Date().toISOString()};
+      const result = {kind: 'tool_message', name: request.toolCall.name, toolCallId: request.toolCall.id,
+        content: `Receipt ${receipt.reference}`, status: 'success'};
+      assert.throws(() => store.reconcile({operation, expectedLeaseGeneration: unknown.leaseGeneration,
+        receipt: {...receipt, operationId: hash('unrelated-operation')}, result}), /agent_tool_effect_receipt_mismatch/u);
+      assert.equal(store.readState(operation).status, 'unknown');
+      store.reconcile({operation, expectedLeaseGeneration: unknown.leaseGeneration, receipt, result});
+      const replay = await deniedRetry();
+      assert.ok(ToolMessage.isInstance(replay));
+      assert.equal(replay.content, result.content);
+      assert.equal(handlerCalls, 1);
+      const history = (await readFile(receiptsPath, 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.equal(history.filter(row => row.event === 'write').length, 1);
+      assert.equal(history.filter(row => row.event === 'query').length, 1);
+      assert.equal(store.readState(operation).status, 'succeeded');
+      const artifactRoot = join(process.cwd(), '.artifacts/research-optimization/p0-production', f.run.taskId);
+      await mkdir(artifactRoot, {recursive: true});
+      await copyFile(receiptsPath, join(artifactRoot, 'mcp-receipts.jsonl'));
+      await writeFile(join(artifactRoot, 'mcp-timeout.json'), JSON.stringify({
+        taskId: f.run.taskId, executionId: f.run.id, unknown, receipt, result, handlerCalls,
+        state: store.readState(operation), history
+      }, null, 2));
+      await f.db.backup(join(artifactRoot, 'research.db'));
+      await f.agentDb.backup(join(artifactRoot, 'agent.db'));
+      await adapter.close();
+      const pid = history.find(row => row.event === 'started').pid;
+      await until(() => {
+        try { process.kill(pid, 0); return false; }
+        catch (error) { assert.equal(error.code, 'ESRCH'); return true; }
+      });
+    } finally {
+      await adapter.close();
+      f.close();
+      await rm(temporary, {recursive: true, force: true});
+    }
+  });
