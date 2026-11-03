@@ -6,6 +6,7 @@ import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import type {ZoteroImportJob} from './use-zotero-import-job';
 import type {ZoteroSync, ZoteroSyncCapturedPage} from '../../shared/schemas/research-zotero-sync';
+import {ZoteroOriginalSource} from './ZoteroSourceStatePanel';
 
 const buttonClass = `${formSecondaryButtonClass} border-[0.5px]`;
 const inputClass = `${formInputClass} border-[0.5px] text-[var(--font-meta-size)]`;
@@ -277,7 +278,7 @@ function LibraryPreview({client, scope, libraryName, job}: {
       </div>
       {selected.size > 0 && reviewed === null && review.error === null ? <p role="status" className="text-muted">正在核对选中题录与本地字段…</p> : null}
       {review.error === null ? null : <Failure message={review.error} />}
-      {reviewed === null ? null : <SourceReview review={reviewed} />}
+      {reviewed === null ? null : <SourceReview review={reviewed} client={client} projectId={job.projectId} collectionKey={collection?.key ?? null} />}
       {sync?.status !== 'active' || sync.pendingPreviewId !== snapshot.page.previewId ? null : <div className="flex flex-col gap-2">
         <p className="text-muted">本页已收录 {snapshot.importedKeys.length} 个，确认时跳过 {snapshot.page.capturedTotal - snapshot.importedKeys.length} 个。</p>
         {snapshot.page.capturedTotal === snapshot.importedKeys.length ? null : <label className="flex flex-col gap-1 text-muted">
@@ -324,7 +325,9 @@ function ObjectRow({item, checked, disabled, imported, onSelect}: {
   </li>;
 }
 
-function SourceReview({review}: {review: ZoteroReview}): React.JSX.Element {
+function SourceReview({review, client, projectId, collectionKey}: {
+  review: ZoteroReview; client: RocClient; projectId: string | null; collectionKey: string | null
+}): React.JSX.Element {
   const states: Record<ZoteroReview['items'][number]['objectState'], string> = {
     new: '新来源对象', unchanged: '来源版本未变化', new_version: '新来源版本',
     version_regressed: '来源版本回退，不能收录', version_conflict: '同版本内容不同，不能收录',
@@ -359,12 +362,7 @@ function SourceReview({review}: {review: ZoteroReview}): React.JSX.Element {
           <summary className="cursor-pointer">本地书目字段</summary>
           <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.local.bibliography.fields, null, 2)}</pre>
         </details>}
-        <details className="mt-2 text-muted" data-testid="literature-zotero-previous-source"><summary className="cursor-pointer">已收录的原始来源</summary>
-          {item.previousScopedSource === null ? <p>当前范围没有已收录的原始来源。</p> : <>
-            <p>来源版本 {item.previousScopedSource.version}，收录时间 {item.previousScopedSource.importedAt}</p>
-            <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.previousScopedSource.item, null, 2)}</pre>
-          </>}
-        </details>
+        <ZoteroOriginalSource client={client} projectId={projectId} collectionKey={collectionKey} original={item.previousScopedSource} />
       </details>)}
     </div>
   </section>;

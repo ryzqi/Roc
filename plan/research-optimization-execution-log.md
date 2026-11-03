@@ -1933,3 +1933,34 @@ on2026-11-04 verifies single-item object clientVersion, authenticated404 headers
 collections/child omission and boolean deleted. Contract/read hashes retained. No actual
 Zotero user library/client, new live literature query, paid model, remote write or frozen
 workflow-fixture changes.
+
+## PR-05E3B — current-source state in original-source details
+
+Status: `Verified passing` for this UI increment. Existing dialog details read the last
+owned local observation only on expansion; checking Zotero is an explicit action. Shows
+true presence/trash/not-found, membership, original/current object versions and checked time.
+Missing source does not prove permanent deletion; library/evidence/attachments stay intact.
+Read damage differs from no observation. Check failure retains the valid observation and error.
+Reopening reads saved state; scope/receipt keys prevent late old responses replacing current.
+No original receipt means no source-check action. No automatic source read/import/checkpoint.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm typecheck` / `pnpm build` | Passed |
+| `node --test --test-concurrency=1 tests/renderer/` | Final69/69 passed |
+| `node --test --test-name-pattern='source-state details\|source-state UI' tests/renderer/zotero-import.test.mjs` | Final keyboard/layout2/2 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Prior backend789 unit/13 native/94 Harness results remain applicable: no service/schema changes.
+Evidence `pr05-source-state-ui-*.log`, source-state screenshots/audits in zotero-import-ui/.
+Light/dark1100/1099/800 observation states pass cut0/hidden0. Dark1099 inspected: source
+status, membership unknown, versions, checked time and preservation copy visible; title fixed.
+Initial new3 failures came from focusing the nested summary before parent details visibility;
+probe showed outer summary stayed focused. Await visible state retains native Enter assertions.
+No checks weakened, task-only debug removed. Full PR-05 remains unfinished; attachment
+input grants and actual-client acceptance follow. No actual Zotero/user library, new live
+literature query, paid model, remote write or frozen workflow-fixture changes.

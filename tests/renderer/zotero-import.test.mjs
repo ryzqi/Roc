@@ -48,9 +48,35 @@ before(async () => {
     function createClient(scenario) {
       const snapshots = new Map();
       const imported = new Map();
+      const observations = new Map();
+      function observation(input, options={}) {
+        const status=options.status || 'present';
+        const version=options.version === undefined ? 8 : options.version;
+        const {projectId, ...source}=input;
+        const item=originals.find(item=>item.key===input.itemKey);
+        return {stateId:'state-'+window.calls.length,source,libraryItemId:'local-paper',importedObjectVersion:7,
+          remote:{status,scope:{serverId:input.serverId,library:input.library},
+            item:status==='not_found' ? null : {...item,version,data:{...item.data,version}},
+            objectVersion:status==='not_found' ? null : version,responseHash:'a'.repeat(64),checkedAt:at},
+          membership:options.membership || (input.collectionKey===null ? 'not_requested' : status==='present' ? 'listed' : 'unknown'),
+          versionState:options.versionState || (status==='not_found' ? 'missing' : 'newer'),recordedAt:at,contentHash:'b'.repeat(64)};
+      }
       let sync = null;
       const call = (method,input,work) => {window.calls.push({method,input});return work();};
       const client = {api:{research:{
+        readZoteroSourceState: input => call('sourceState',input,async()=>{
+          if(scenario.sourceReadError) return fail('Synthetic saved observation damaged');
+          const value=observations.get(JSON.stringify(input)) || (scenario.sourceStored ? observation(input,scenario.sourceStored) : null);
+          if(scenario.sourceReadDeferred) return new Promise(resolve=>window.finishSourceRead=()=>resolve(ok(value)));
+          return ok(value);
+        }),
+        observeZoteroSource: input => call('sourceObserve',input,async()=>{
+          if(scenario.sourceObserveError) return fail('Synthetic current source disconnected');
+          const value=observation(input,scenario.sourceCurrent);
+          const publish=()=>{observations.set(JSON.stringify(input),value);return ok(value);};
+          if(scenario.sourceObserveDeferred) return new Promise(resolve=>window.finishSourceObserve=()=>resolve(publish()));
+          return publish();
+        }),
         findZoteroSync: input => call('syncFind',input,async()=>{
           if(scenario.staleSyncFind && input.collectionKey===null) return new Promise(resolve=>{
             window.finishSyncFind=()=>resolve(ok({syncId:'old-find',scope:{serverId:input.serverId,library:input.library},
@@ -584,4 +610,148 @@ test('late sync lookup from the previous collection cannot replace the current s
   await page.waitForFunction(()=>document.querySelector('[data-testid="literature-zotero-sync"]').textContent.includes('核对中'));
   assert.equal(await page.evaluate(()=>calls.find(call=>call.method==='syncStart').input.collectionKey),'COLL0001');
   assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add' || call.method==='syncPage').length),0);
+});
+
+async function originalSource() {
+  await row('ITEM0000').locator('input').check();
+  const reviewed=page.getByTestId('literature-zotero-reviewed-object').first();
+  await reviewed.locator(':scope > summary').click();
+  const previous=reviewed.getByTestId('literature-zotero-previous-source');
+  await previous.locator(':scope > summary').waitFor({state:'visible'});
+  await previous.locator(':scope > summary').focus();
+  await page.keyboard.press('Enter');
+  await previous.getByTestId('literature-zotero-source-state').waitFor({state:'visible'});
+  await page.waitForFunction(()=>calls.some(call=>call.method==='sourceState'));
+  return previous;
+}
+
+test('source-state details read saved observations and only explicit checking records current source; reopen preserves receipt scope',async()=>{
+  await open({reviewDifference:true});
+  await preview();
+  await row('ITEM0000').locator('input').check();
+  await page.getByTestId('literature-zotero-source-review').waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>['sourceState','sourceObserve'].includes(call.method)).length),0);
+  await row('ITEM0000').locator('input').uncheck();
+  const previous=await originalSource();
+  await page.getByText('尚无来源状态观察。',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='sourceObserve').length),0);
+  const check=previous.getByTestId('literature-zotero-source-check');
+  await check.focus();
+  await page.keyboard.press('Enter');
+  await previous.getByTestId('literature-zotero-source-observation').waitFor();
+  assert.match(await previous.innerText(),/来源存在/u);
+  assert.match(await previous.innerText(),/未核对集合/u);
+  assert.match(await previous.innerText(),/原收录对象版本 7，当前对象版本 8/u);
+  assert.match(await previous.innerText(),/2026-11-04T00:00:00.000Z/u);
+  assert.deepEqual(await page.evaluate(()=>calls.find(call=>call.method==='sourceObserve').input),
+    {serverId:'synthetic-instance',library:{kind:'user',id:0},projectId:'project-a',
+      operationId:'prior-operation',itemKey:'ITEM0000',collectionKey:null});
+  await previous.getByTestId('literature-zotero-source-observation').scrollIntoViewIfNeeded();
+  await inspect('source-state-present');
+  await page.getByTestId('literature-import-dialog-close').click();
+  await reopen();
+  await preview();
+  const restored=await originalSource();
+  await restored.getByTestId('literature-zotero-source-observation').waitFor();
+  assert.match(await restored.innerText(),/来源存在/u);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='sourceObserve').length),1);
+});
+
+test('source-state UI displays truthful membership trash missing and version outcomes without deleting or importing',async()=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
+  const cases=[
+    [{membership:'listed'}, /仍在所选集合/u],
+    [{membership:'not_listed'}, /已不在所选集合/u],
+    [{status:'trashed'}, /来源在回收站/u],
+    [{status:'not_found'}, /来源未找到/u],
+    [{membership:'unknown',version:6,versionState:'regressed'}, /对象版本回退/u],
+    [{version:7,versionState:'version_conflict'}, /同版本内容不同/u],
+    [{version:7,versionState:'unchanged'}, /对象版本与内容未变化/u]
+  ];
+  for(const [sourceCurrent,expected] of cases){
+    await open({reviewDifference:true,sourceCurrent});
+    await connect();
+    await page.getByTestId('literature-zotero-collection').selectOption('COLL0000');
+    await page.getByTestId('literature-zotero-preview').click();
+    await row('ITEM0000').waitFor();
+    const previous=await originalSource();
+    await previous.getByText('尚无来源状态观察。',{exact:true}).waitFor();
+    await previous.getByTestId('literature-zotero-source-check').click();
+    await previous.getByTestId('literature-zotero-source-observation').waitFor();
+    assert.match(await previous.innerText(),expected);
+    if(sourceCurrent.status==='not_found'){
+      assert.match(await previous.innerText(),/不能据此确认永久删除/u);
+      assert.match(await previous.innerText(),/当前对象版本 未知/u);
+    }
+    if(sourceCurrent.status || sourceCurrent.membership==='not_listed') assert.match(await previous.innerText(),/题录、证据与附件保留/u);
+    assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),0);
+    assert.equal(await page.evaluate(()=>calls.find(call=>call.method==='sourceObserve').input.collectionKey),'COLL0000');
+    if(sourceCurrent.status==='not_found'){
+      for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+        for(const width of [1100,1099,800]){
+          await page.setViewportSize({width,height:900});
+          await previous.getByTestId('literature-zotero-source-check').focus();
+          await previous.getByTestId('literature-zotero-source-observation').scrollIntoViewIfNeeded();
+          await inspect('source-state-missing-'+theme+'-'+width);
+          const layout=await page.getByRole('dialog').evaluate(panel=>({
+            scroll:panel.scrollTop,header:panel.children[0].getBoundingClientRect().top,
+            top:panel.getBoundingClientRect().top,horizontal:panel.scrollWidth>panel.clientWidth
+          }));
+          assert.equal(layout.scroll,0);assert.equal(layout.header,layout.top+1);assert.equal(layout.horizontal,false);
+        }
+      }
+      await page.setViewportSize({width:1100,height:900});
+      await page.evaluate(()=>document.documentElement.dataset.theme='light');
+    }
+  }
+});
+
+test('failed current-source checks preserve valid observations; damaged reads remain errors and scopes drop late responses',async()=>{
+  await open({reviewDifference:true,sourceStored:{status:'trashed'},sourceObserveError:true});
+  await preview();
+  let previous=await originalSource();
+  await previous.getByTestId('literature-zotero-source-observation').waitFor();
+  await previous.getByTestId('literature-zotero-source-check').click();
+  await previous.getByRole('alert').waitFor();
+  assert.match(await previous.innerText(),/Synthetic current source disconnected/u);
+  assert.match(await previous.innerText(),/来源在回收站/u);
+  assert.doesNotMatch(await previous.innerText(),/来源未找到/u);
+  await open({reviewDifference:true,sourceReadError:true});
+  await preview();
+  previous=await originalSource();
+  await previous.getByRole('alert').waitFor();
+  assert.match(await previous.innerText(),/Synthetic saved observation damaged/u);
+  assert.equal(await previous.getByTestId('literature-zotero-source-observation').count(),0);
+  assert.equal(await previous.getByText('尚无来源状态观察。',{exact:true}).count(),0);
+  await previous.getByTestId('literature-zotero-source-check').click();
+  await previous.getByTestId('literature-zotero-source-observation').waitFor();
+  assert.match(await previous.innerText(),/来源存在/u);
+  for(const deferred of ['sourceReadDeferred','sourceObserveDeferred']){
+    await open({reviewDifference:true,sourceStored:{status:'trashed'},[deferred]:true});
+    await preview();
+    previous=await originalSource();
+    if(deferred==='sourceObserveDeferred'){
+      await previous.getByTestId('literature-zotero-source-check').click();
+      await page.waitForFunction(()=>typeof finishSourceObserve==='function');
+    }else await page.waitForFunction(()=>typeof finishSourceRead==='function');
+    await page.evaluate(deferred=>window.finishOldSource=deferred==='sourceReadDeferred' ? window.finishSourceRead : window.finishSourceObserve,deferred);
+    await page.getByTestId('literature-zotero-collection').selectOption('COLL0001');
+    await page.evaluate(()=>finishOldSource());
+    assert.equal(await page.getByTestId('literature-zotero-source-state').count(),0);
+    await page.getByTestId('literature-zotero-preview').click();
+    previous=await originalSource();
+    const lastRead=await page.evaluate(()=>calls.filter(call=>call.method==='sourceState').at(-1).input);
+    assert.equal(lastRead.collectionKey,'COLL0001');
+    if(deferred==='sourceReadDeferred') await page.evaluate(()=>finishSourceRead());
+    await previous.getByTestId('literature-zotero-source-observation').waitFor();
+    assert.match(await previous.innerText(),/来源在回收站/u);
+  }
+  await open({});
+  await preview();
+  await row('ITEM0000').locator('input').check();
+  await page.getByTestId('literature-zotero-reviewed-object').locator(':scope > summary').click();
+  await page.getByTestId('literature-zotero-previous-source').locator(':scope > summary').click();
+  assert.equal(await page.getByTestId('literature-zotero-source-state').count(),0);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>['sourceState','sourceObserve'].includes(call.method)).length),0);
 });
