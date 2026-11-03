@@ -24,6 +24,9 @@ before(async () => {
     export {readResearchBibliography} from './src/main/plugins/research/bibliography';
     export {ZoteroAdapter} from './src/main/plugins/research/zotero-adapter';
     export {withLiteratureContext} from './src/main/services/literature-context';
+    export {registerZoteroCapabilities} from './src/main/plugins/research/zotero-capabilities';
+    export {registerLiteratureImportCapabilities} from './src/main/plugins/research/literature-import-capabilities';
+    export {createPluginCapabilityAdapter} from './src/main/ipc/plugin-capability-adapter';
   `, resolveDir: process.cwd()}, outfile, bundle: true, packages: 'external', platform: 'node',
     format: 'esm', loader: {'.md': 'text'}, logLevel: 'silent'});
   api = await import(outfile);
@@ -106,6 +109,40 @@ test('same DOI objects have independent mappings; real CSL codec preserves journ
     assert.equal(f.urls.length, 1);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_object_versions').pluck().get(), 2);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
+  } finally {await f.dispose();}
+});
+
+test('actual preload bridge imports a scoped preview and reads durable sources only for the same sender/project', async () => {
+  const f = fixture([item('ITEM2345')]);
+  try {
+    const handlers = new Map();
+    const context = {pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
+      handlers.set(descriptor.name, handler);
+    }}};
+    api.registerZoteroCapabilities(context, f.adapter, f.service);
+    api.registerLiteratureImportCapabilities(context, f.service);
+    const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
+    const preview = await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 88);
+    assert.equal(preview.ok, true, JSON.stringify(preview));
+    const added = await bridge.invoke('research.addLiterature', [{projectId: f.project.id, requestId: 'bridge-source-import',
+      entries: [{kind: 'zotero', previewId: preview.data.previewId, itemKey: 'ITEM2345'}]}], 88);
+    assert.equal(added.ok, true, JSON.stringify(added));
+    assert.equal(added.data.counts.created, 1);
+    const input = {id: added.data.items[0].libraryItemId, projectId: f.project.id};
+    const sources = await bridge.invoke('research.getZoteroSources', [input], 88);
+    assert.equal(sources.ok, true, JSON.stringify(sources));
+    assert.equal(sources.data.total, 1);
+    assert.equal(sources.data.records[0].operationId, added.data.operationId);
+    assert.deepEqual(sources.data.records[0].item, item('ITEM2345'));
+    for (const [requestInput, windowId] of [[input, 89], [{...input, projectId: null}, 88]]) {
+      const result = await bridge.invoke('research.getZoteroSources', [requestInput], windowId);
+      assert.equal(result.ok, true);
+      assert.equal(result.data.total, 0);
+    }
+    const replay = await bridge.invoke('research.addLiterature', [{projectId: f.project.id, requestId: 'bridge-source-import',
+      entries: [{kind: 'zotero', previewId: preview.data.previewId, itemKey: 'ITEM2345'}]}], 88);
+    assert.deepEqual(replay, added);
+    assert.equal(f.workerCalls(), 1);
   } finally {await f.dispose();}
 });
 

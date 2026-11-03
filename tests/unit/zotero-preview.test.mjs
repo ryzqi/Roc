@@ -33,6 +33,8 @@ before(async () => {
     export {ZoteroAdapter} from './src/main/plugins/research/zotero-adapter';
     export {registerZoteroCapabilities} from './src/main/plugins/research/zotero-capabilities';
     export {withLiteratureContext} from './src/main/services/literature-context';
+    export {literatureContext} from './src/main/services/literature-context';
+    export {createPluginCapabilityAdapter} from './src/main/ipc/plugin-capability-adapter';
   `, resolveDir: process.cwd()}, outfile, bundle: true, packages: 'external',
     platform: 'node', format: 'esm', loader: {'.md': 'text'}, logLevel: 'silent'});
   api = await import(outfile);
@@ -59,7 +61,7 @@ test('owned preview freezes all original objects before review, paginates readba
     api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
       handlers.set(descriptor.name, handler);
     }}}, f.adapter, f.service);
-    const snapshot = await f.run(() => handlers.get('research.zotero.preview')(request));
+    const snapshot = await f.run(() => handlers.get('research.zotero.preview')({...request, projectId: f.project.id}));
     assert.equal(snapshot.sourcePage.records.length, 20);
     assert.equal(snapshot.capturedTotal, 25);
     assert.equal(snapshot.nextPreviewOffset, 20);
@@ -83,6 +85,47 @@ test('owned preview freezes all original objects before review, paginates readba
     assert.equal(f.calls(), 1);
     await reopened.shutdown();
   } finally {await f.adapter.shutdown(); f.db.close(); f.agentDb.close();}
+});
+
+test('actual preload capability bridge scopes Zotero previews by sender and explicit project', async () => {
+  const f = fixture();
+  try {
+    const handlers = new Map();
+    api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
+      handlers.set(descriptor.name, handler);
+    }}}, f.adapter, f.service);
+    const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
+    const captured = await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id}], 88);
+    assert.equal(captured.ok, true, JSON.stringify(captured));
+    const row = f.db.prepare('SELECT owner,project_id FROM research_zotero_previews WHERE id=?').get(captured.data.previewId);
+    assert.deepEqual(row, {owner: 'window:88', project_id: f.project.id});
+    const input = {previewId: captured.data.previewId, projectId: f.project.id};
+    const owned = await bridge.invoke('research.getZoteroPreview', [input], 88);
+    assert.equal(owned.ok, true);
+    assert.equal(owned.data.contentHash, captured.data.contentHash);
+    const foreignWindow = await bridge.invoke('research.getZoteroPreview', [input], 89);
+    assert.equal(foreignWindow.ok, false);
+    assert.equal(foreignWindow.error.code, 'zotero_preview_not_found');
+    const foreignProject = await bridge.invoke('research.getZoteroPreview', [{...input, projectId: null}], 88);
+    assert.equal(foreignProject.ok, false);
+    assert.equal(foreignProject.error.code, 'zotero_preview_not_found');
+    const noProject = await bridge.invoke('research.previewZotero', [request], 88);
+    assert.equal(noProject.ok, false, 'project scope is required even when null');
+    const spoofedOwner = await bridge.invoke('research.previewZotero', [{...request, projectId: f.project.id, owner: 'window:89'}], 88);
+    assert.equal(spoofedOwner.ok, false);
+    assert.equal(f.calls(), 1, 'readback and rejected scope envelopes do not refetch');
+  } finally {await f.service.shutdown(); await f.adapter.shutdown(); f.close();}
+});
+
+test('actual preload bridge establishes the same sender/project scope for captured retrieval pools', async () => {
+  const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => {
+    assert.equal(name, 'research.literature.getPool');
+    assert.equal(input.executionId, 'pool-fixture');
+    return Promise.resolve(api.literatureContext());
+  }});
+  const result = await bridge.invoke('research.getLiteraturePool', [{executionId: 'pool-fixture', projectId: 'project-fixture'}], 77);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(result.data, {owner: 'window:77', projectId: 'project-fixture'});
 });
 
 test('preview owner/project/expiry and complete-body corruption fail without re-fetching or library writes', async () => {

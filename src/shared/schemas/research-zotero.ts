@@ -95,6 +95,10 @@ export const zoteroSourcesPageSchema = z.object({
   itemId: z.string().min(1), records: z.array(zoteroImportedObjectSchema),
   total: version, nextOffset: version.nullable()
 }).strict();
+const ipcScope = {projectId: z.string().min(1).nullable()};
+export const zoteroPreviewIpcSchema = zoteroItemsRequestSchema.extend(ipcScope);
+export const zoteroPreviewReadIpcSchema = zoteroPreviewReadSchema.extend(ipcScope);
+export const zoteroSourcesIpcSchema = zoteroSourcesRequestSchema.extend(ipcScope);
 export type ZoteroScope = z.infer<typeof zoteroScopeSchema>;
 export type ZoteroPageRequest = z.infer<typeof zoteroPageRequestSchema>;
 export type ZoteroItemsRequest = z.infer<typeof zoteroItemsRequestSchema>;

@@ -1680,3 +1680,36 @@ connected default and final dark1099 inspected. Initial full-border utility corr
 border-t-[0.5px], final production build and actual component checks rerun. No new literature
 query, model call, external write or fixture corpus edit. Actual Zotero interoperability,
 selection/conflict UI, sync checkpoints/deletions and attachment authorization remain pending.
+
+
+## PR-05 prerequisite — scope actual preview/source and retrieval-pool IPC
+
+Status: `Verified passing` for this bridge fix. Research DB14/preview2 unchanged.
+Actual sender/project bridge tests reproduced failure for Zotero previews and retrieval pools:
+the adapter only scoped search/add/get/cancel, leaving new context-dependent methods without
+literatureContext. Structural generated-mapping checks did not exercise this runtime boundary.
+Now pool and Zotero preview/read/source capabilities receive window sender ownership and
+project scope. Required nullable projectId lives in Zotero IPC envelopes; capability entry
+strips only that field before core service validation. Core snapshot request/hash stays intact.
+No owner/run identity inputs, absent-project fallback, legacy alias or data migration.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc` (source includes separately uncommitted UI draft):
+
+| Command | Actual result |
+| --- | --- |
+| `node --test --test-name-pattern='actual preload' tests/unit/zotero-preview.test.mjs` | Before-fix2/2 failed with internal errors, retained red |
+| `node --test tests/unit/zotero-preview.test.mjs tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs` | 30/30 passed |
+| `pnpm test:unit` | 765/765 passed |
+| `pnpm harness:eval` | 94/94 passed |
+| `pnpm test:research-p0` | Fresh typecheck/build and13/13 native passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Startup12/12, zero renderer errors, exit0 |
+| `pnpm generate:ipc` / `pnpm check:ipc` | Generated contracts current, passed |
+| `pnpm check:renderer-chunks` | Eager1131135bytes/6files passed with UI draft |
+| `git diff --check` | Passed |
+
+Evidence `.artifacts/research-optimization/pr05-ipc-scope-*.log`. New actual bridge checks
+include sender/project row values, foreign window/project refusal, required scope and owner
+spoofing refusal, no second HTTP on readback, durable scoped sources and unchanged-object
+replay with one CSL worker. UI draft remains separate and uncommitted; its initial renderer
+run6/7 passed, native details test must wait for actual expansion. No real Zotero user library,
+live paper query, model call, remote write or frozen workflow-fixture edit.

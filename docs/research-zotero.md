@@ -163,3 +163,17 @@ UI 独立显示应用目录与 API：已连接、未启用通信、不可达、�
 前通过；最终新组件再次运行3/3并更新光暗1100/1099/800截图与阴影审计，全部
 cut0/hidden0。证据 `pr05-settings-*.log`、`zotero-settings-ui/`。真实 Zotero 客户端
 互操作仍未运行。
+
+## Renderer 预览边界
+
+previewZotero、getZoteroPreview、getZoteroSources 的 IPC 请求显式要求
+projectId（库范围用 null）。主进程 bridge 使用真实 sender ID 构造 window owner
+和项目上下文，输入不能提供 owner/runId。能力入口剥离 IPC 项目字段后，核心服务
+仍验证 scope-neutral 请求；原始快照请求与内容 hash 格式保持不变。检索池
+getLiteraturePool 同样通过文献上下文读取。
+
+实际 bridge 回归曾复现这些能力缺少上下文导致内部错误；结构映射检查未覆盖
+这条执行路径。修复后验证真实 sender/project 预览保存与隔离、原生 CSL codec
+收录/来源回执、请求重放和检索池上下文。765/765 单测、30/30 相关回归、
+Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 IPC/chunks
+通过。UI 草稿单独验证，不包含在此边界修复的完成状态中。

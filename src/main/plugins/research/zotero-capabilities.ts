@@ -2,8 +2,8 @@ import type {z} from 'zod';
 import {
   zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
   zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
-  zoteroPreviewReadSchema, zoteroPreviewPageSchema, zoteroSourcesRequestSchema, zoteroSourcesPageSchema,
-  zoteroStatusSchema
+  zoteroPreviewPageSchema, zoteroSourcesPageSchema,
+  zoteroStatusSchema, zoteroPreviewIpcSchema, zoteroPreviewReadIpcSchema, zoteroSourcesIpcSchema
 } from '../../../shared/schemas/research-zotero';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import {RocDomainError} from '../../services/errors';
@@ -19,9 +19,9 @@ const capabilities = {
   groups: descriptor('research.zotero.groups', zoteroGroupsRequestSchema, zoteroGroupsPageSchema),
   collections: descriptor('research.zotero.collections', zoteroPageRequestSchema, zoteroCollectionsPageSchema),
   items: descriptor('research.zotero.items', zoteroItemsRequestSchema, zoteroItemsPageSchema),
-  preview: descriptor('research.zotero.preview', zoteroItemsRequestSchema, zoteroPreviewPageSchema),
-  readPreview: descriptor('research.zotero.getPreview', zoteroPreviewReadSchema, zoteroPreviewPageSchema),
-  sources: descriptor('research.zotero.sources', zoteroSourcesRequestSchema, zoteroSourcesPageSchema)
+  preview: descriptor('research.zotero.preview', zoteroPreviewIpcSchema, zoteroPreviewPageSchema),
+  readPreview: descriptor('research.zotero.getPreview', zoteroPreviewReadIpcSchema, zoteroPreviewPageSchema),
+  sources: descriptor('research.zotero.sources', zoteroSourcesIpcSchema, zoteroSourcesPageSchema)
 };
 export const zoteroCapabilities = Object.values(capabilities);
 
@@ -64,7 +64,7 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.groups, input => adapter.groups(input));
   register(capabilities.collections, input => adapter.collections(input));
   register(capabilities.items, input => adapter.items(input));
-  register(capabilities.preview, input => imports.previewZotero(input, adapter));
-  register(capabilities.readPreview, async input => imports.readZoteroPreview(input));
-  register(capabilities.sources, async input => imports.readZoteroSources(input));
+  register(capabilities.preview, ({projectId: _scope, ...input}) => imports.previewZotero(input, adapter));
+  register(capabilities.readPreview, async ({projectId: _scope, ...input}) => imports.readZoteroPreview(input));
+  register(capabilities.sources, async ({projectId: _scope, ...input}) => imports.readZoteroSources(input));
 }
