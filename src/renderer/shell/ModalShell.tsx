@@ -56,6 +56,8 @@ export type ModalShellProps = {
   widthClassName?: string;
   testId?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /** Allows the owning view to preserve its reading position across closing. */
+  bodyRef?: RefObject<HTMLDivElement | null>;
   /**
    * Where focus returns when the overlay closes, as a CSS selector.
    *
@@ -103,6 +105,7 @@ export function ModalShell({
   widthClassName,
   testId,
   initialFocusRef,
+  bodyRef,
   returnFocusSelector,
   beforeClose,
   closeOnBackdrop = true,
@@ -208,6 +211,7 @@ export function ModalShell({
 
             <div
               id={bodyId}
+              ref={bodyRef}
               className={
                 bodyPadding === 'none'
                   ? 'min-h-0 flex-1 overflow-hidden'

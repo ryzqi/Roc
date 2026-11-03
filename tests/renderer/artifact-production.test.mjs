@@ -22,7 +22,7 @@ before(async()=>{
   api=await loadResearchTestApi();
   directory=mkdtempSync(join(tmpdir(),'roc-artifact-production-ui-'));mkdirSync(artifacts,{recursive:true});
   await esbuild.build({stdin:{contents:`
-    import React from 'react';
+    import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
@@ -31,11 +31,19 @@ before(async()=>{
     const client={api:{research:Object.fromEntries(['inspectArtifact','inspectProductionReview','readProductionReviewFile','getGateReviewContext']
       .map(method=>[method,input=>window.callMain(method,input)]))}};
     const root=createRoot(document.getElementById('root'));
+    function Harness({request,inspector}) {
+      const [readingLocations]=useState(()=>new Map());
+      const [open,setOpen]=useState(true);
+      window.reopen=()=>flushSync(()=>setOpen(true));
+      return <main className="p-4"><button data-testid="artifact-reopen" onClick={()=>setOpen(true)}>重新打开工件</button>
+        {!open?null:inspector?<ArtifactInspector client={client} request={request} readingLocations={readingLocations}
+          onClose={()=>setOpen(false)} onOpenTask={()=>{}} onReviewContext={()=>{}}/>:
+          <ArtifactProductionView client={client} request={request} initialLocation={null} onLocationChange={()=>{}}/>}
+      </main>;
+    }
     let generation=0;
     window.mount=(request,inspector=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
-      <main className="p-4" key={++generation}>{inspector?<ArtifactInspector client={client} request={request}
-        onClose={()=>root.render(null)} onOpenTask={()=>{}} onReviewContext={()=>{}}/>:
-        <ArtifactProductionView client={client} request={request}/>}</main>
+      <Harness key={++generation} request={request} inspector={inspector}/>
     </LazyMotion></MotionConfig>));
   `,resolveDir:process.cwd(),loader:'tsx'},outfile:join(directory,'app.js'),bundle:true,platform:'browser',format:'iife',logLevel:'silent'});
   const assets=join(process.cwd(),'dist/renderer/assets');
@@ -65,6 +73,7 @@ before(async()=>{
         result=f.readError??{ok:true,data:api.researchProductionInputContentSchema.parse({file,content:f.contents[file.path],encoding:'utf8'})};
       }
     }else result=await f.bridge.invoke(methodNames[method][1],[input],windowId);
+    if(f.deferInspection&&method==='inspectProductionReview')return new Promise(resolve=>{f.finishInspection=()=>resolve(result);});
     if(f.defer&&method==='readProductionReviewFile')return new Promise(resolve=>{f.finish=()=>resolve(result);});
     return result;
   });
@@ -77,7 +86,7 @@ after(async()=>{
   }
   assert.deepEqual(errors,[]);
 });
-async function realScene() {
+async function realScene({long=false}={}) {
   const f=await createPublishedFigureFixture(api);fixtures.push(f);active=f;calls.length=0;
   f.inputs=new api.ResearchProductionInputService(f.repository,{
     verifyPublication:async()=>assert.fail('figure cannot verify experiment'),read:async()=>assert.fail('figure cannot read experiment')
@@ -86,6 +95,8 @@ async function realScene() {
   api.registerResearchArtifactInspectorCapability(context,f.repository);
   api.registerResearchProductionInputCapabilities(context,f.inputs);
   f.bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
+  if(long)f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown',?) WHERE artifact_id=?")
+    .run('# Long saved body\n\n'+'Persisted synthetic measurement explanation.\n\n'.repeat(120),f.artifactId);
   f.request={projectId:f.project.id,artifactId:f.artifactId,
     expectedVersion:f.repository.inspectArtifact({projectId:f.project.id,artifactId:f.artifactId,expectedVersion:null}).snapshot.version};
   await page.evaluate(request=>mount(request),f.request);
@@ -136,6 +147,8 @@ test('a source change refuses the old file version; refreshing the actual artifa
   assert.equal(await page.getByTestId('artifact-production-content').count(),0);
   await page.getByTestId('artifact-inspector-refresh').click();
   await page.getByText('Revised body for same saved figure',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('artifact-production').count(),0);
+  await page.getByTestId('artifact-inspector-production').click();
   await page.getByTestId('artifact-production-figure').waitFor();
   assert.equal(await page.getByTestId('artifact-production-content').count(),0);
   await readPng();
@@ -240,6 +253,56 @@ test('production errors keep failed content empty and require explicit retry; ov
   assert.equal(await page.getByRole('alert').count(),0);
   assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,2);
   assert.deepEqual(calls.at(-1).input,calls.at(-2).input);
+});
+
+test('same-version actual production reading rechecks selected bytes and restores file area focus and scroll after Escape',async()=>{
+  const f=await realScene({long:true});await openProduction();
+  await page.getByTestId('artifact-production-area-input').click();
+  await file('measurements.csv').click();await page.getByTestId('artifact-production-text').waitFor();
+  await page.getByTestId('artifact-production-text').focus();
+  const before=await page.getByTestId('artifact-inspector-panel').evaluate(panel=>{
+    const body=panel.querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement;
+    return {top:body.scrollTop,focus:document.activeElement.dataset.readingKey,text:document.querySelector('[data-testid="artifact-production-text"]').textContent,
+      width:body.clientWidth,scrollWidth:body.scrollWidth,overflow:[...body.querySelectorAll('*')].filter(element=>element.scrollWidth>element.clientWidth+2)
+        .map(element=>({tag:element.tagName,class:element.className,width:element.clientWidth,scrollWidth:element.scrollWidth}))};
+  });
+  writeFileSync(join(artifacts,'reading-layout.json'),JSON.stringify(before,null,2));
+  assert.equal(before.scrollWidth,before.width);
+  assert.ok(before.top>900);
+  const readCount=calls.filter(call=>call.method==='readProductionReviewFile').length;
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector').waitFor({state:'detached'});
+  await page.getByTestId('artifact-reopen').click();await page.getByTestId('artifact-production-text').waitFor();
+  await page.waitForFunction(top=>{
+    const body=document.querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement;
+    return Math.abs(body.scrollTop-top)<2&&document.activeElement.dataset.readingKey==='production-text';
+  },before.top);
+  assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,readCount+1);
+  assert.deepEqual(calls.at(-1).input,{...f.request,area:'input',path:'measurements.csv',expectedFileHash:f.productionRun.files.find(file=>file.path==='measurements.csv').sha256});
+  assert.equal(await page.getByTestId('artifact-production-area-input').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.getByTestId('artifact-production-text').textContent(),before.text);
+  await page.getByTestId('artifact-inspector-panel').screenshot({path:join(artifacts,'restored-reading.png'),scale:'css'});
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector').waitFor({state:'detached'});
+  f.defer=true;delete f.finish;
+  await page.getByTestId('artifact-reopen').click();
+  while(typeof f.finish!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  await page.getByTestId('artifact-inspector-content').click({position:{x:10,y:10}});
+  const manual=await page.getByTestId('artifact-inspector-content').evaluate(element=>element.parentElement.parentElement.scrollTop);
+  f.finish();f.defer=false;await page.getByTestId('artifact-production-text').waitFor();
+  assert.equal(await page.getByTestId('artifact-inspector-content').evaluate(element=>element.parentElement.parentElement.scrollTop),manual);
+  assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,readCount+2);
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector').waitFor({state:'detached'});
+  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','New body invalidates saved location') WHERE artifact_id=?").run(f.artifactId);
+  await page.getByTestId('artifact-reopen').click();await page.getByTestId('artifact-inspector-content').waitFor();
+  assert.equal(await page.getByTestId('artifact-production').count(),0);
+  assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,readCount+2);
+  f.deferInspection=true;
+  await page.getByTestId('artifact-inspector-production').click();
+  while(typeof f.finishInspection!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector').waitFor({state:'detached'});
+  f.deferInspection=false;f.finishInspection();
+  await page.getByTestId('artifact-reopen').click();await page.getByTestId('artifact-production-figure').waitFor();
+  assert.equal(await page.getByTestId('artifact-production-content').count(),0);
+  assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,readCount+2);
 });
 
 test('actual production drawer remains readable in light dark 1100 1099 and 800, with fixed chrome and reduced motion',async()=>{

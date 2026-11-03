@@ -29,6 +29,7 @@ before(async()=>{
     const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input)}}};
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
+      const [readingLocations]=useState(()=>new Map());
       const [reviewCallback,setReviewCallback]=useState(null);
       window.selectArtifact=value=>flushSync(()=>setRequest(value));
       const [approval,setApproval]=useState(initialApproval);
@@ -43,6 +44,7 @@ before(async()=>{
           }).catch(error=>window.resumeError=error.message);
         }}/>
         {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client} request={request}
+          readingLocations={readingLocations}
           onReviewContext={context=>reviewCallback(context)} onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
     }
     let generation=0;
@@ -184,6 +186,26 @@ test('source invalidation changes the actual snapshot and requires explicit new-
   await page.getByText('An actual retained synthetic source excerpt.',{exact:true}).waitFor();
   assert.throws(()=>f.repository.evidence.getEvidence('inspector-evidence',f.project.id),/research_evidence_reference_superseded/u);
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('same saved version restores native source expansion reading scroll and focus without restoring a human decision',async()=>{
+  const f=await scene({long:true});await openArtifact();
+  const summary=page.locator('details > summary').filter({hasText:'Original synthetic source'});
+  await summary.click();await page.getByText('原始来源长段落与定位说明。'.repeat(120),{exact:true}).waitFor();
+  await page.getByText('原始来源长段落与定位说明。'.repeat(120),{exact:true}).scrollIntoViewIfNeeded();
+  await summary.focus();
+  const before=await summary.evaluate(element=>({top:element.closest('[aria-describedby]').querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement.scrollTop,
+    key:document.activeElement.dataset.readingKey}));
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector').waitFor({state:'detached'});
+  await page.getByTestId('assistant-gate-artifact').last().focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-inspector-content').waitFor();
+  await page.waitForFunction(({top,key})=>{
+    const body=document.querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement;
+    return Math.abs(body.scrollTop-top)<2&&document.activeElement.dataset.readingKey===key;
+  },before);
+  assert.equal(await summary.evaluate(element=>element.parentElement.open),true);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
 });
 
 test('real empty missing denied and damaged-source states do not become placeholder content or approval',async()=>{

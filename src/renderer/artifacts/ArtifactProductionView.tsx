@@ -5,6 +5,7 @@ import {useAsyncResource} from '../app/use-async-resource';
 import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ProductionFiles} from './production/ProductionFiles';
+import type {ProductionFileLocation} from './artifact-reading-location';
 
 const ExperimentSourceView=lazy(async()=>({default:(await import('./production/ExperimentSourceView')).ExperimentSourceView}));
 const FigureSourceView=lazy(async()=>({default:(await import('./production/FigureSourceView')).FigureSourceView}));
@@ -18,7 +19,10 @@ function SourceView({input}: {input: ResearchProductionInput}): React.JSX.Elemen
   }
 }
 
-export function ArtifactProductionView({client,request}: {client: RocClient;request: ResearchArtifactInspectRequest}): React.JSX.Element {
+export function ArtifactProductionView({client,request,initialLocation,onLocationChange}: {
+  client: RocClient;request: ResearchArtifactInspectRequest;initialLocation: ProductionFileLocation | null;
+  onLocationChange: (location: ProductionFileLocation) => void
+}): React.JSX.Element {
   const production=useAsyncResource(`production:review:${JSON.stringify(request)}`,()=>{
     if(request.expectedVersion===null) throw new Error('research_production_review_version_required');
     return client.api.research.inspectProductionReview({...request,expectedVersion:request.expectedVersion});
@@ -33,7 +37,7 @@ export function ArtifactProductionView({client,request}: {client: RocClient;requ
     {input===null?null:<>
       <p className="text-muted">已校验保存的文件版本。工件{input.artifact.status==='approved'?'已批准':'仍等待人工决定'}。</p>
       <Suspense fallback={<p role="status">正在加载生产来源…</p>}><SourceView input={input}/></Suspense>
-      <ProductionFiles client={client} input={input} request={request}/>
+      <ProductionFiles client={client} input={input} request={request} initialLocation={initialLocation} onLocationChange={onLocationChange}/>
     </>}
   </section>;
 }

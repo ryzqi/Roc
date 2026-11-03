@@ -2449,3 +2449,40 @@ passed. Final light800 and dark1099 source/PNG screenshots inspected; keyboard f
 fixed title/close, wrap and nested scroll readable. Audit cut0, only full-height physical
 panel top/right/bottom shadows hidden. Frozen workflow fixtures and unrelated docs untouched.
 Full plan unfinished; reading-location recovery then evidence relationships next.
+
+
+## X-UIA4B3 — version-bound window-local reading recovery
+
+Status: `Verified passing`. One AppShell-owned Map retains per-project/artifact current-version
+scroll, expanded native details, focus and production area/file metadata. Close/task/review
+return captures position; reopening always inspects and re-reads actual production bytes.
+Only verified identical SHA restores. New-version pending inspection cannot retain old file
+metadata. Actual DOM/size changes restore lazy content; reader pointer/key/wheel stops
+observers so delayed file delivery cannot overwrite a manual position. Shared ModalShell
+accepts an explicit bodyRef, preserving existing overlay stack/Escape/return-focus behavior.
+No localStorage, cached source bytes, review decisions, backend or role permission changes.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm typecheck` |Initial undefined Map entry error fixed;second/final passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` |Third17/17 passed |
+| `pnpm build` |Final2 fresh build/type passed |
+| `node --test --test-concurrency=1 tests/renderer/` |Final2 96/96 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |Final2 12/12;zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` |Current;1132980bytes/6files passed |
+| `git diff --check` |Passed |
+
+Evidence xui-reading-*.log. Same-version real source details restore expansion/scroll/focus
+without a decision. Actual draft figure selected CSV revalidates bytes, restores area/body
+and focus after Escape, retains manual pointer position on delayed response, rejects old
+reading state after source changes and close-during-new-inspection. First broader UI test
+expected old production visibility across a version change; updated it to require explicit
+new-version opening. Early screenshot suspicion resolved by actual553/553px scroll-container
+measurement with no overflow descendants, and final CSS-scale panel screenshot inspected.
+All light/dark1100/1099/800 audits remain cut0 with only three physical full-height edge
+shadows hidden. A4B1 unit824/Harness94/native13 backend evidence applies unchanged.
+X-UI local offline acceptance complete; actual repository/parent-child gate path uses a named
+Playwright-to-Node seam and does not claim production chat/preload transport. Next PR-06 evidence
+semantics/locators; whole plan and external scientific/live-client acceptance remain unfinished.

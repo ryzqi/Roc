@@ -13,7 +13,7 @@ export function ExperimentSourceView({source}: {source: Extract<ResearchProducti
       <dt>结束时间</dt><dd className="break-words">{run.endedAt??'未记录'}</dd>
       <dt>输入 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{run.inputHash??'未记录'}</dd>
     </dl>
-    <details className="text-muted"><summary className="cursor-pointer">保存的运行参数</summary>
+    <details data-reading-key="experiment-request" className="text-muted"><summary data-reading-key="experiment-request-summary" className="cursor-pointer">保存的运行参数</summary>
       <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>
     </details>
   </section>;

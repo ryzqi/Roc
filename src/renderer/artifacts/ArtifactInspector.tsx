@@ -5,14 +5,16 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {ModalShell} from '../shell/ModalShell';
 import {formSecondaryButtonClass} from '../shared/form-ui';
+import type {ArtifactReadingLocations} from './artifact-reading-location';
+import {useArtifactReadingLocation} from './use-artifact-reading-location';
 
 const StageContent = lazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
-export function ArtifactInspector({client, request, onClose, onOpenTask, onReviewContext}: {
+export function ArtifactInspector({client, request, onClose, onOpenTask, onReviewContext, readingLocations}: {
   client: RocClient; request: ResearchArtifactInspectRequest; onClose: () => void; onOpenTask: (taskId: string) => void;
-  onReviewContext: (context: ResearchGateReviewContext) => void
+  onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations
 }): React.JSX.Element {
   const baseline = useRef(request.expectedVersion);
   const read = useAsyncResource(`artifact:inspect:${JSON.stringify(request)}`,
@@ -20,7 +22,12 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
   const result = read.status === 'ready' ? read.data : null;
   const snapshot = result?.snapshot;
   const [reviewNonce, setReviewNonce] = useState(0);
-  const [productionOpen,setProductionOpen] = useState(false);
+  const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
+  const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
+  const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
+    productionChoice.open : savedLocation !== undefined && savedLocation.version === snapshot.version && savedLocation.productionOpen);
+  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen);
+  const close = (): void => {reading.save(); onClose();};
   const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
     () => {
       if (snapshot === undefined) throw new Error('research_artifact_snapshot_required');
@@ -33,26 +40,26 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
     if (result?.status === 'current') baseline.current = result.snapshot.version;
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
-  return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={onClose}
+  return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
     widthClassName="w-[560px]" testId="artifact-inspector">
     <div className="flex flex-col gap-3 text-[var(--font-body-size)]">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={button} disabled={read.status === 'loading'}
-          data-testid="artifact-inspector-refresh" onClick={read.reload}>刷新工件</button>
+          data-testid="artifact-inspector-refresh" data-reading-key="refresh" onClick={()=>{reading.save(); read.reload();}}>刷新工件</button>
         {result?.status !== 'stale' ? null : <button type="button" className={button}
           data-testid="artifact-inspector-recapture" onClick={() => {baseline.current = result.snapshot.version; read.reload();}}>
           按当前版本重新核对
         </button>}
         {snapshot?.origin === null || snapshot?.origin === undefined || snapshot.origin.taskId === null ||
           !snapshot.availableActions.includes('return_to_task') ? null : <button type="button" className={button}
-          data-testid="artifact-inspector-task" onClick={() => onOpenTask(snapshot.origin!.taskId!)}>查看关联任务</button>}
+          data-testid="artifact-inspector-task" onClick={() => {reading.save(); onOpenTask(snapshot.origin!.taskId!);}}>查看关联任务</button>}
         {snapshot?.availableActions.includes('review_gate') ? <button type="button" className={button}
           disabled={review.status === 'loading'} data-testid="artifact-inspector-review"
           onClick={() => setReviewNonce(value => value + 1)}>读取本阶段全部审核工件</button> : null}
         {snapshot?.production===null||snapshot===undefined||snapshot.projectStatus==='archived'||snapshot.artifact.status==='superseded' ? null :
           snapshot.artifact.status==='approved'||snapshot.availableActions.includes('review_gate') ? <button type="button"
             className={button} data-testid="artifact-inspector-production" aria-expanded={productionOpen}
-            onClick={()=>setProductionOpen(value=>!value)}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
+            data-reading-key="production-toggle" onClick={()=>setProductionChoice({version:snapshot.version,open:!productionOpen})}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
       </div>
       {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
@@ -75,7 +82,7 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
         <button type="button" disabled={!matchesDisplayedSnapshot || read.status !== 'ready' || review.status !== 'ready'}
           className={`${button} self-start disabled:cursor-not-allowed disabled:opacity-50`} data-testid="artifact-inspector-return-review" onClick={() => {
           onReviewContext(review.data!);
-          onClose();
+          close();
         }}>返回助手重新确认</button>
       </section>}
       {snapshot === undefined ? null : <>
@@ -90,13 +97,14 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
         </Suspense>
         {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
           <ProductionView key={snapshot.version} client={client} request={{projectId:request.projectId,
-            artifactId:request.artifactId,expectedVersion:snapshot.version}}/>
+            artifactId:request.artifactId,expectedVersion:snapshot.version}}
+            initialLocation={reading.location?.productionFile ?? null} onLocationChange={reading.setProductionFile}/>
         </Suspense>}
         <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="工件证据来源">
           <h2 className="font-medium text-ink">证据来源</h2>
           {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :
-            snapshot.evidence.map(source => <details key={source.evidence.id} className="border-b-[0.5px] border-line py-2">
-              <summary className="cursor-pointer break-words text-ink">{source.evidence.title}
+            snapshot.evidence.map(source => <details key={source.evidence.id} data-reading-key={`evidence:${source.evidence.id}`} className="border-b-[0.5px] border-line py-2">
+              <summary data-reading-key={`evidence-summary:${source.evidence.id}`} className="cursor-pointer break-words text-ink">{source.evidence.title}
                 <span className="ml-2 text-muted">{source.referenceStatus === 'superseded' ? '旧定位已失效' : '已保存的来源片段'}</span>
               </summary>
               <p className="mt-2 break-words text-muted">{source.evidence.locator}</p>
@@ -106,7 +114,7 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
               <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {source.evidence.contentHash}</p>
             </details>)}
         </section>
-        <details className="text-muted"><summary className="cursor-pointer">工件与来源快照原文</summary>
+        <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>
           <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
         </details>
       </>}

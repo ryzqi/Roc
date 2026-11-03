@@ -185,3 +185,24 @@ renderer输入是明确标注的typed synthetic展示fixture；三类实际执�
 依赖A4B1 native13证据，不将合成UI称为真实完整执行。截图与审计保留在
 .artifacts/research-optimization/artifact-production-ui/，明暗1100/1099/800均cut0；
 仅共享全高面板物理上/右/下边的阴影完全隐藏。关闭后的阅读位置恢复仍待完成。
+
+
+## 关闭后的阅读恢复
+
+唯一AppShell持有当前窗口的reading-location Map。按实际project/artifact定位，值
+只保存当前工件SHA、正文滚动、生产文本滚动、native details展开、焦点key与
+生产区域/选定文件metadata。关闭、返回助手或打开关联任务前捕获。不开localStorage，
+不缓存原文bytes、审核上下文或人工决定；重启窗口不恢复这份临时阅读状态。
+
+重开必须先通过真实工件检查，只有返回的SHA与保存版本一致才恢复。生产文件
+再次经过实际inspect/read合同，不把保存位置当读取授权。新版本丢弃旧展开和
+文件选择；关闭在新版本核对中也不能把旧文件metadata保存到新版。DOM/layout
+观察器随真实异步模块和文件挂载恢复阅读位置，用户的pointer/key/wheel立即停止
+恢复，迟到内容不能抢回手动位置。Escape继续由共享overlay恢复原助手入口焦点。
+
+最终fresh build/type、串行renderer96、启动12/zero errors、IPC/chunks
+1132980bytes/6files通过；新增同版本来源展开/焦点和实际CSV重读/滚动检查，
+迟到文件期间手动阅读不跳动，新版本与核对中关闭不恢复旧文件。长正文容器
+client/scroll width均553px，没有overflow后代。restored-reading.png按CSS像素
+截取真实面板，已检查完整source/hash/CSV可读。X-UI本地离线链路验证完成；
+生产PDF定位属于后续PR-07，不将此检查器称为PDF阅读器。

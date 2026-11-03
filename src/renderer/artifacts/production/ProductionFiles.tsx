@@ -1,9 +1,10 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import type {ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
 import type {ResearchProductionInput} from '../../../shared/schemas/research-production-inputs';
 import type {RocClient} from '../../shared/roc-client';
 import {useAsyncResource} from '../../app/use-async-resource';
 import {formSecondaryButtonClass} from '../../shared/form-ui';
+import type {ProductionFileLocation} from '../artifact-reading-location';
 
 type File=ResearchProductionInput['files'][number];
 const areas: Record<File['area'],string>={input:'输入',output:'输出',log:'日志',bundle:'交付文件'};
@@ -12,9 +13,13 @@ const areaOrder=['input','output','log','bundle'] as const;
 const extension=(path: string): string=>path.split('.').at(-1)?.toLowerCase()??'';
 const previewLimit=4*1024*1024;
 
-export function ProductionFiles({client,input,request}: {client: RocClient;input: ResearchProductionInput;request: ResearchArtifactInspectRequest}): React.JSX.Element {
-  const [area,setArea]=useState<File['area']>(input.source.kind==='export'?'bundle':'output');
-  const [selected,setSelected]=useState<File|null>(null);
+export function ProductionFiles({client,input,request,initialLocation,onLocationChange}: {
+  client: RocClient;input: ResearchProductionInput;request: ResearchArtifactInspectRequest;
+  initialLocation: ProductionFileLocation | null;onLocationChange: (location: ProductionFileLocation) => void
+}): React.JSX.Element {
+  const [area,setArea]=useState<File['area']>(initialLocation?.area ?? (input.source.kind==='export'?'bundle':'output'));
+  const [selected,setSelected]=useState<File|null>(initialLocation?.selected ?? null);
+  useEffect(()=>{onLocationChange({area,selected});},[area,selected,onLocationChange]);
   const read=useAsyncResource(selected===null?null:`production:file:${JSON.stringify([request,selected])}`,()=>{
     if(selected===null||request.expectedVersion===null) throw new Error('research_production_file_selection_required');
     return client.api.research.readProductionReviewFile({projectId:request.projectId,artifactId:request.artifactId,
@@ -26,6 +31,7 @@ export function ProductionFiles({client,input,request}: {client: RocClient;input
     <div className="flex flex-wrap gap-1" aria-label="文件区域">
       {areaOrder.filter(value=>input.files.some(file=>file.area===value)).map(value=>
         <button type="button" key={value} aria-pressed={area===value} data-testid={`artifact-production-area-${value}`}
+          data-reading-key={`production-area:${value}`}
           className={`${formSecondaryButtonClass} ${area===value?'border-[var(--accent)] bg-[var(--accent-soft)] text-ink':''}`}
           onClick={()=>{setArea(value);setSelected(null);}}>{areas[value]}</button>)}
     </div>
@@ -36,6 +42,7 @@ export function ProductionFiles({client,input,request}: {client: RocClient;input
           <div className="flex items-start justify-between gap-2">
             <button type="button" disabled={file.size>previewLimit||unsupported} data-testid="artifact-production-file"
               data-path={file.path} data-area={file.area} aria-pressed={selected?.path===file.path&&selected.area===file.area}
+              data-reading-key={`production-file:${file.area}:${file.path}`}
               className={`${formSecondaryButtonClass} min-w-0 break-all text-left disabled:cursor-not-allowed disabled:opacity-50`}
               onClick={()=>setSelected(file)}>{file.path}</button>
             <span className="shrink-0 text-muted text-[var(--font-meta-size)]">{file.size.toLocaleString()} B</span>
@@ -57,6 +64,7 @@ export function ProductionFiles({client,input,request}: {client: RocClient;input
       <h3 className="break-all font-medium">{content.file.path}</h3>
       <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">已校验 SHA-256 {content.file.sha256}</p>
       {content.encoding==='utf8'?<pre tabIndex={0} aria-label="保存的生产文件正文" data-testid="artifact-production-text"
+        data-reading-key="production-text"
         className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">{content.content}</pre>:
         rasterTypes.get(extension(content.file.path))===undefined?<p className="text-muted">文件是二进制内容，当前没有对应预览类型。</p>:
           <img data-testid="artifact-production-image" className="max-h-[480px] max-w-full self-start object-contain"
