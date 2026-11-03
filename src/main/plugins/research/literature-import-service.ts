@@ -20,7 +20,7 @@ import type { LiteratureSearchService } from './literature-service';
 import type { ResearchLibraryService } from './library-service';
 import type { ResearchLibraryRepository } from './library-repository';
 import {zoteroItemsRequestSchema, zoteroSourcesRequestSchema, type zoteroSourcesPageSchema,
-  type ZoteroPreviewPage, type ZoteroFrozenObject} from '../../../shared/schemas/research-zotero';
+  zoteroReviewRequestSchema, type ZoteroReview, type ZoteroPreviewPage, type ZoteroFrozenObject} from '../../../shared/schemas/research-zotero';
 import type {ZoteroAdapter} from './zotero-adapter';
 import {ZoteroPreviewStore} from './zotero-preview-store';
 import {ZoteroObjectStore, freezeZoteroObject} from './zotero-object-store';
@@ -90,6 +90,41 @@ export class LiteratureImportService {
     this.requireActive(context);
     this.library.get(request.id);
     return this.zoteroObjects.read(context, request);
+  }
+
+  reviewZotero(input: unknown): ZoteroReview {
+    const request = zoteroReviewRequestSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    const preview = this.zoteroPreviews.load(context, request.previewId);
+    const items = request.itemKeys.map(key => {
+      const source = freezeZoteroObject(preview, key);
+      const mapped = this.zoteroObjects.current(source);
+      const target = this.library.findByIdentity(literatureIdentity(source.metadata), []);
+      const localItem = mapped === null ? target : this.library.get(mapped.item_id);
+      let objectState: ZoteroReview['items'][number]['objectState'] = mapped === null ? 'new' :
+        mapped.object_version === source.item.version ? 'unchanged' : 'new_version';
+      if (mapped !== null) {
+        if (mapped.object_version > source.item.version) objectState = 'version_regressed';
+        else if (mapped.object_version === source.item.version && mapped.item_hash !== source.itemHash) objectState = 'version_conflict';
+        else if (target?.id !== mapped.item_id) objectState = 'identity_changed';
+      }
+      const fields = ['title', 'authors', 'doi', 'abstract', 'url'] as const;
+      const present = (value: string | string[] | null): boolean =>
+        Array.isArray(value) ? value.length > 0 : value !== null && value.trim() !== '';
+      const differences = localItem === null ? [] : fields.flatMap(field => {
+        const remote = source.metadata[field], local = localItem.metadata[field];
+        return present(remote) && present(local) && JSON.stringify(remote) !== JSON.stringify(local) ? [{field, source: remote, local}] : [];
+      });
+      const local = localItem === null ? null : {
+        id: localItem.id, revision: localItem.revision, archived: localItem.archived,
+        metadata: localItem.metadata, bibliography: localItem.bibliography, updatedAt: localItem.updatedAt
+      };
+      return {source, objectState, mappedVersion: mapped?.object_version ?? null, local, differences,
+        previousScopedSource: this.zoteroObjects.latestScoped(context, source)};
+    });
+    return {previewId: preview.previewId, scope: {serverId: preview.sourcePage.serverId, library: preview.sourcePage.library},
+      libraryVersion: preview.sourcePage.libraryVersion, reviewedAt: this.now(), policy: 'retain_existing_fill_missing', items};
   }
 
   private async executeSearch(input: unknown): Promise<LiteratureSearchResult> {

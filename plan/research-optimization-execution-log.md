@@ -1760,3 +1760,47 @@ No new live literature query, paid model, actual Zotero user library read, exter
 frozen workflow-fixture edit. Next: source/local conflict review, incremental checkpoints and
 remote deletion state, attachment input authorization. Actual Zotero interoperability and
 independent scientific/L2/full-reviewed-corpus acceptance remain externally blocked.
+
+## PR-05D — readonly source/local comparison
+
+Status: `Verified passing` for this increment. Research DB14 and preview2 unchanged.
+Full PR-05 and overall plan remain in progress.
+
+Added scoped `research.zotero.review` / `reviewZotero`: frozen source, canonical current
+metadata/bibliography/revision/archive, recorded object version, exact populated-field
+differences and latest original receipt from this owner/project. Review performs no HTTP,
+worker or DB write. Object states distinguish new/unchanged/new-version/regressed/conflicting/
+identity-changed. Direct scoped SQL supports history beyond50; corrupt originals and ambiguous
+canonical identity fail explicitly. Global canonical metadata remains distinct from scoped
+raw source history.
+
+Existing import dialog waits for current preview/selection review, retains local notes/tags
+and both field values, and refuses conflicted/regressed/identity-changed/archived entries.
+Stale or failed review cannot enable import. Review is a current read, not a durable approval
+or semantic bibliography equivalence claim. Existing main import invariants still apply.
+
+Runtime focus reproduced an outer ModalShell scroll144px and clipped title. The modal outer
+panel uses overflow-clip; body remains independently scrollable. Keyboard expansion/wheel
+regressions prove panel0, body414 and unchanged title position. Screenshot/audit retained.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `pnpm test:unit` | Final769/769 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh build/typecheck and actual native13/13 passed |
+| `pnpm build` | Final shared-shell production build/typecheck passed |
+| `node --test tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |9/9 passed after shell fix |
+| `node --test tests/renderer/zotero-import.test.mjs` | Final wheel/keyboard6/6 passed |
+| `node --test --test-concurrency=1 tests/renderer/` | Final shared-shell63/63 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` | Final12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-review-*.log`, `pr05-review-native-csl/` and zotero-import-ui/ scroll/
+screenshots/audits. Parallel full renderer initially62/63 exposed a pre-existing immediate
+disabled-state assertion; now it awaits real DOM disabled state before the same assertion.
+Next parallel run had Radix Escape contention across Electron windows; serial63/63 passed.
+No checks weakened. No live paper query, real Zotero library, paid model call, remote write
+or frozen workflow-fixture edit. Next: version checkpoints/recovery/deletion and attachments.

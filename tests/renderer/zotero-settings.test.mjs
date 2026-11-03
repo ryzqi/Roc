@@ -99,6 +99,7 @@ test('Zotero settings probes only on explicit action and keeps installation sepa
   await page.getByTestId('settings-zotero-check').focus();
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => calls.length === 1);
+  await page.waitForFunction(() => document.querySelector('[data-testid="settings-zotero-check"]').disabled);
   assert.equal(await page.getByTestId('settings-zotero-check').isDisabled(), true);
   await page.evaluate(value => reply({ok: true, data: value}), status(connected));
   await page.getByTestId('settings-zotero-status').waitFor();

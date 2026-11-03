@@ -45,12 +45,43 @@ export class ZoteroObjectStore {
   constructor(private readonly db: Database, private readonly now: () => string) {}
 
   validate(frozen: ZoteroFrozenObject): Row | null {
-    const row = this.db.prepare(`SELECT item_id,object_version,item_hash FROM research_zotero_objects
-      WHERE server_id=? AND library_kind=? AND library_id=? AND item_key=?`).get(...this.key(frozen)) as Row | undefined;
-    if (row === undefined) return null;
+    const row = this.current(frozen);
+    if (row === null) return null;
     if (row.object_version > frozen.item.version) throw new Error('zotero_object_version_regressed');
     if (row.object_version === frozen.item.version && row.item_hash !== frozen.itemHash) throw new Error('zotero_object_version_conflict');
     return row;
+  }
+
+  current(frozen: ZoteroFrozenObject): Row | null {
+    const row = this.db.prepare(`SELECT item_id,object_version,item_hash FROM research_zotero_objects
+      WHERE server_id=? AND library_kind=? AND library_id=? AND item_key=?`).get(...this.key(frozen)) as Row | undefined;
+    return row ?? null;
+  }
+
+  /** Prior originals are visible only in the owner/project that observed them. */
+  latestScoped(context: LiteratureExecutionContext, frozen: ZoteroFrozenObject): z.infer<typeof zoteroImportedObjectSchema> | null {
+    const row = this.db.prepare(`SELECT v.item_id,v.item_hash,v.item_json,v.object_version,
+      o.operation_id,o.library_version,o.preview_id,o.captured_at,o.imported_at
+      FROM research_zotero_object_versions v JOIN research_zotero_import_observations o
+      ON o.server_id=v.server_id AND o.library_kind=v.library_kind AND o.library_id=v.library_id
+      AND o.item_key=v.item_key AND o.object_version=v.object_version
+      JOIN research_zotero_previews p ON p.id=o.preview_id
+      WHERE v.server_id=? AND v.library_kind=? AND v.library_id=? AND v.item_key=? AND p.owner=? AND p.project_id IS ?
+      ORDER BY v.object_version DESC,o.imported_at DESC,o.operation_id DESC LIMIT 1`)
+      .get(...this.key(frozen), context.owner, context.projectId) as {
+        item_id: string; item_hash: string; item_json: string; object_version: number;
+        operation_id: string; library_version: number; preview_id: string; captured_at: string; imported_at: string
+      } | undefined;
+    if (row === undefined) return null;
+    try {
+      const record = zoteroImportedObjectSchema.parse({scope: frozen.scope, itemKey: frozen.item.key, version: row.object_version,
+        libraryItemId: row.item_id, itemHash: row.item_hash, item: JSON.parse(row.item_json), operationId: row.operation_id,
+        libraryVersion: row.library_version, previewId: row.preview_id, capturedAt: row.captured_at, importedAt: row.imported_at});
+      if (record.item.key !== record.itemKey || record.item.version !== record.version || hash(record.item) !== record.itemHash) {
+        throw new Error('zotero_object_integrity_invalid');
+      }
+      return record;
+    } catch (cause) {throw new Error('zotero_object_storage_invalid', {cause});}
   }
 
   record(frozen: ZoteroFrozenObject, itemId: string, operationId: string): void {

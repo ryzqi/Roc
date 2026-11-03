@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {researchLiteratureSchema} from './research';
+import {researchLibraryItemSchema} from './research-library';
 
 const version = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const zoteroServerIdSchema = z.string().min(1).max(256).regex(/^[\x21-\x7e]+$/u);
@@ -99,6 +100,26 @@ const ipcScope = {projectId: z.string().min(1).nullable()};
 export const zoteroPreviewIpcSchema = zoteroItemsRequestSchema.extend(ipcScope);
 export const zoteroPreviewReadIpcSchema = zoteroPreviewReadSchema.extend(ipcScope);
 export const zoteroSourcesIpcSchema = zoteroSourcesRequestSchema.extend(ipcScope);
+export const zoteroReviewRequestSchema = z.object({
+  previewId: z.string().min(1), itemKeys: z.array(zoteroItemKeySchema).min(1).max(30)
+    .refine(keys => new Set(keys).size === keys.length, 'zotero_review_duplicate_key')
+}).strict();
+export const zoteroReviewIpcSchema = zoteroReviewRequestSchema.extend(ipcScope);
+export const zoteroReviewSchema = z.object({
+  previewId: z.string().min(1), scope: zoteroScopeSchema, libraryVersion: version, reviewedAt: z.string(),
+  policy: z.literal('retain_existing_fill_missing'),
+  items: z.array(z.object({
+    source: zoteroFrozenObjectSchema,
+    objectState: z.enum(['new', 'unchanged', 'new_version', 'version_regressed', 'version_conflict', 'identity_changed']),
+    mappedVersion: version.nullable(),
+    local: researchLibraryItemSchema.pick({id: true, revision: true, archived: true, metadata: true, bibliography: true, updatedAt: true}).nullable(),
+    previousScopedSource: zoteroImportedObjectSchema.nullable(),
+    differences: z.array(z.object({
+      field: z.enum(['title', 'authors', 'doi', 'abstract', 'url']), source: z.json(), local: z.json()
+    }).strict())
+  }).strict()).max(30)
+}).strict();
+export type ZoteroReview = z.infer<typeof zoteroReviewSchema>;
 export type ZoteroScope = z.infer<typeof zoteroScopeSchema>;
 export type ZoteroPageRequest = z.infer<typeof zoteroPageRequestSchema>;
 export type ZoteroItemsRequest = z.infer<typeof zoteroItemsRequestSchema>;

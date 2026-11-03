@@ -39,6 +39,7 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.preview | research.previewZotero | 按可信会话/项目保存完整来源页并返回审查预览 |
 | research.zotero.getPreview | research.getZoteroPreview | 按预览 ID 读取已冻结的来源对象 |
 | research.zotero.sources | research.getZoteroSources | 指定文献在当前会话/项目中的 Zotero 收录回执及原始对象 |
+| research.zotero.review | research.reviewZotero | 冻结来源与当前文库字段、对象版本及范围内原始来源的只读核对 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -204,3 +205,28 @@ Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 
 和reduced-motion截图审计全部cut0/hidden0，字体至少12px。日志
 `pr05-ui-*.log`，截图/审计`zotero-import-ui/`。共享后端的765单测和原生13场景
 在前一IPC边界修复中通过；最后修改仅涉及renderer。真实Zotero客户端未运行。
+
+## 来源与本地差异核对
+
+`reviewZotero` 要求明确 projectId、当前范围的 previewId 和1–30个不重复 itemKey。
+仅读取已有冻结预览、文库与映射，不请求 Zotero、不运行书目 worker、不写数据库。
+返回冻结原始来源、规范文库现值/书目字段/归档状态、已记录对象版本和当前文库修订。
+对象状态区分新对象、未变化、新版本、版本回退、同版本内容冲突与文献身份改变。
+原始旧来源仅返回同 owner/project 的最新收录回执；其他范围可见规范文库元数据，
+不能读取这里的原始来源历史。损坏来源和歧义文献身份明确失败。
+
+界面按当前预览与选择核对，迟到结果不能替代新选择。核对完成后才能收录；
+版本回退、同版本冲突、身份改变、归档或读取失败阻止收录。题名、作者、DOI、
+摘要和 URL 仅在双方都有值时展示精确差异；没有语义书目等价判断。
+键盘 details 展示两侧值、本地注释/标签和本范围原始旧来源。核对是当前只读
+视图，不是持久化批准；收录仍在主进程按原有版本/身份合同检查并保留已有字段、
+补齐缺值、另存原始来源。没有字段覆盖接口或 Zotero 写回。
+
+展开长详情曾使 `overflow-hidden` 的弹窗外层被焦点滚动144px，标题移出可见区。
+共用 ModalShell 的模态外层改为 `overflow-clip`，正文仍滚动；实际键盘展开与
+滚轮回归确认外层 scrollTop0、标题位置不变、正文可滚动。截图
+`zotero-import-ui/source-local-differences.png` 与 scroll/audit JSON 保留。
+
+单测769/769、Harness94/94、实际原生P0 13/13、最终 build/typecheck、
+新界面6/6及原候选3/3、启动12/12、IPC/chunks通过。日志 `pr05-review-*.log`。
+实际 Zotero 客户端、整库增量检查点和附件授权仍待后续验收。

@@ -134,6 +134,14 @@ test('actual preload bridge imports a scoped preview and reads durable sources o
     assert.equal(sources.data.total, 1);
     assert.equal(sources.data.records[0].operationId, added.data.operationId);
     assert.deepEqual(sources.data.records[0].item, item('ITEM2345'));
+    const reviewInput = {previewId: preview.data.previewId, itemKeys: ['ITEM2345'], projectId: f.project.id};
+    const reviewed = await bridge.invoke('research.reviewZotero', [reviewInput], 88);
+    assert.equal(reviewed.ok, true, JSON.stringify(reviewed));
+    assert.equal(reviewed.data.items[0].objectState, 'unchanged');
+    assert.equal(reviewed.data.items[0].previousScopedSource.operationId, added.data.operationId);
+    const foreignReview = await bridge.invoke('research.reviewZotero', [reviewInput], 89);
+    assert.equal(foreignReview.ok, false);
+    assert.equal(foreignReview.error.code, 'zotero_preview_not_found');
     for (const [requestInput, windowId] of [[input, 89], [{...input, projectId: null}, 88]]) {
       const result = await bridge.invoke('research.getZoteroSources', [requestInput], windowId);
       assert.equal(result.ok, true);
@@ -143,6 +151,125 @@ test('actual preload bridge imports a scoped preview and reads durable sources o
       entries: [{kind: 'zotero', previewId: preview.data.previewId, itemKey: 'ITEM2345'}]}], 88);
     assert.deepEqual(replay, added);
     assert.equal(f.workerCalls(), 1);
+  } finally {await f.dispose();}
+});
+
+test('read-only Zotero review retains both field values, originals and local notes without worker or database writes', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const first = await f.preview();
+    const initial = f.run(() => f.service.reviewZotero({previewId: first.previewId, itemKeys: [original.key]}));
+    assert.equal(initial.items[0].objectState, 'new');
+    assert.equal(initial.items[0].local, null);
+    const imported = await f.add(first, [original.key], 'review-first');
+    const id = imported.items[0].libraryItemId;
+    const bibliography = f.repository.library.get(id).bibliography;
+    bibliography.fields.note = 'User-owned local note';
+    bibliography.fields.keywords = 'user-owned-keyword';
+    f.db.prepare('UPDATE research_library SET bibliography_json=? WHERE id=?').run(JSON.stringify(bibliography), id);
+    const updated = item(original.key, {title: 'Changed synthetic title', version: 9});
+    f.setSource([updated]);
+    const preview = await f.preview();
+    const changes = f.db.prepare('SELECT total_changes()').pluck().get();
+    const urls = f.urls.length, workerCalls = f.workerCalls();
+    const review = f.run(() => f.service.reviewZotero({previewId: preview.previewId, itemKeys: [original.key]}));
+    assert.equal(review.policy, 'retain_existing_fill_missing');
+    assert.equal(review.items[0].objectState, 'new_version');
+    assert.equal(review.items[0].mappedVersion, 8);
+    assert.deepEqual(review.items[0].differences, [{field: 'title', source: updated.data.title, local: original.data.title}]);
+    assert.deepEqual(review.items[0].source.item, updated);
+    assert.deepEqual(review.items[0].previousScopedSource.item, original);
+    assert.equal(review.items[0].local.id, id);
+    assert.equal(review.items[0].local.bibliography.fields.note, 'User-owned local note');
+    assert.equal(review.items[0].local.bibliography.fields.keywords, 'user-owned-keyword');
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), changes);
+    assert.equal(f.urls.length, urls);
+    assert.equal(f.workerCalls(), workerCalls);
+    assert.throws(() => f.run(() => f.service.reviewZotero({previewId: preview.previewId, itemKeys: [original.key, original.key]})), /zotero_review_duplicate_key/u);
+    const importedUpdate = await f.add(preview, [original.key], 'review-update');
+    assert.equal(importedUpdate.status, 'completed');
+    assert.equal(f.repository.library.get(id).metadata.title, original.data.title);
+    assert.equal(f.repository.library.get(id).bibliography.fields.note, 'User-owned local note');
+  } finally {await f.dispose();}
+});
+
+test('Zotero review reveals version and object-identity conflicts while prior source originals remain scope isolated', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const old = await f.preview();
+    await f.add(old, [original.key], 'review-state-first');
+    f.setSource([item(original.key, {title: 'Conflicting same version'})]);
+    const conflicting = await f.preview();
+    const read = preview => f.run(() => f.service.reviewZotero({previewId: preview.previewId, itemKeys: [original.key]}));
+    assert.equal(read(conflicting).items[0].objectState, 'version_conflict');
+    assert.deepEqual(read(conflicting).items[0].previousScopedSource.item, original);
+    f.setSource([item(original.key, {doi: '10.1234/different', version: 9})]);
+    const different = await f.preview();
+    assert.equal(read(different).items[0].objectState, 'identity_changed');
+    f.setSource([item(original.key, {version: 9})]);
+    const next = await f.preview();
+    await f.add(next, [original.key], 'review-state-next');
+    assert.equal(read(old).items[0].objectState, 'version_regressed');
+    assert.equal(read(next).items[0].objectState, 'unchanged');
+    const scope = {owner: 'thread:another', projectId: null};
+    const foreign = await f.run(() => f.service.previewZotero(request, f.adapter), scope);
+    const foreignReview = f.run(() => f.service.reviewZotero({previewId: foreign.previewId, itemKeys: [original.key]}), scope);
+    assert.equal(foreignReview.items[0].objectState, 'unchanged');
+    assert.equal(foreignReview.items[0].mappedVersion, 9);
+    assert.equal(foreignReview.items[0].previousScopedSource, null);
+    f.setSource([original]);
+    const olderForeign = await f.run(() => f.service.previewZotero(request, f.adapter), scope);
+    const olderReview = f.run(() => f.service.reviewZotero({previewId: olderForeign.previewId, itemKeys: [original.key]}), scope);
+    assert.equal(olderReview.items[0].objectState, 'version_regressed');
+    assert.equal(olderReview.items[0].mappedVersion, 9);
+    assert.equal(olderReview.items[0].previousScopedSource, null);
+    assert.throws(() => f.run(() => f.service.reviewZotero({previewId: next.previewId, itemKeys: [original.key]}), scope), /zotero_preview_not_found/u);
+  } finally {await f.dispose();}
+});
+
+test('Zotero review reads the latest scoped receipt beyond the source API page and refuses damaged originals', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const preview = await f.preview();
+    let latest;
+    for (let index = 0; index < 55; index++) {
+      f.setTime(new Date(Date.parse(timestamp) + index * 1000).toISOString());
+      latest = await f.add(preview, [original.key], `review-many-${index}`);
+    }
+    const read = () => f.run(() => f.service.reviewZotero({previewId: preview.previewId, itemKeys: [original.key]}));
+    assert.equal(read().items[0].previousScopedSource.operationId, latest.operationId);
+    assert.equal(f.workerCalls(), 1);
+    f.db.prepare('UPDATE research_zotero_object_versions SET item_json=?').run(JSON.stringify({...original, version: 9}));
+    assert.throws(read, /zotero_object_storage_invalid/u);
+  } finally {await f.dispose();}
+});
+
+test('Zotero review capability reports ambiguous canonical identity as a nonretryable conflict', async () => {
+  const original = item('ITEM2345');
+  const f = fixture([original]);
+  try {
+    const preview = await f.preview();
+    await f.add(preview, [original.key], 'review-ambiguous-first');
+    const otherItem = item('ITEM6789');
+    delete otherItem.data.DOI;
+    const csl = JSON.parse(otherItem.csljson);
+    delete csl[0].DOI;
+    otherItem.csljson = JSON.stringify(csl);
+    f.setSource([otherItem]);
+    const otherPreview = await f.preview();
+    const other = await f.add(otherPreview, ['ITEM6789'], 'review-ambiguous-other');
+    f.db.prepare('INSERT INTO research_library_aliases(item_id,identity) VALUES (?,?)')
+      .run(other.items[0].libraryItemId, 'doi:10.1234/same');
+    const handlers = new Map();
+    api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
+      handlers.set(descriptor.name, handler);
+    }}}, f.adapter, f.service);
+    await assert.rejects(f.run(() => handlers.get('research.zotero.review')({
+      projectId: f.project.id, previewId: preview.previewId, itemKeys: [original.key]
+    })), error => error.code === 'research_literature_identity_ambiguous' && error.category === 'conflict' && error.retryable === false);
   } finally {await f.dispose();}
 });
 

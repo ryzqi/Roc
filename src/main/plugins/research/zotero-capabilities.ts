@@ -3,7 +3,8 @@ import {
   zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
   zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
   zoteroPreviewPageSchema, zoteroSourcesPageSchema,
-  zoteroStatusSchema, zoteroPreviewIpcSchema, zoteroPreviewReadIpcSchema, zoteroSourcesIpcSchema
+  zoteroStatusSchema, zoteroPreviewIpcSchema, zoteroPreviewReadIpcSchema, zoteroSourcesIpcSchema,
+  zoteroReviewIpcSchema, zoteroReviewSchema
 } from '../../../shared/schemas/research-zotero';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import {RocDomainError} from '../../services/errors';
@@ -16,6 +17,7 @@ const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema:
 const capabilities = {
   probe: descriptor('research.zotero.probe', zoteroProbeRequestSchema, zoteroProbeSchema),
   status: descriptor('research.zotero.status', zoteroProbeRequestSchema, zoteroStatusSchema),
+  review: descriptor('research.zotero.review', zoteroReviewIpcSchema, zoteroReviewSchema),
   groups: descriptor('research.zotero.groups', zoteroGroupsRequestSchema, zoteroGroupsPageSchema),
   collections: descriptor('research.zotero.collections', zoteroPageRequestSchema, zoteroCollectionsPageSchema),
   items: descriptor('research.zotero.items', zoteroItemsRequestSchema, zoteroItemsPageSchema),
@@ -26,7 +28,7 @@ const capabilities = {
 export const zoteroCapabilities = Object.values(capabilities);
 
 export function registerZoteroCapabilities(context: RocPluginContext, adapter: ZoteroAdapter,
-  imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources'>): void {
+  imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero'>): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
@@ -44,7 +46,15 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
           throw new RocDomainError({code, message: 'Zotero 预览不存在，或不属于当前会话与项目。',
             category: 'not_found', retryable: false});
         }
-        if (['zotero_preview_storage_invalid', 'zotero_preview_integrity_invalid', 'zotero_object_storage_invalid'].includes(code)) {
+        if (code === 'research_literature_identity_ambiguous') {
+          throw new RocDomainError({code, message: '同一文献身份对应多个文库条目，请先人工核对。',
+            category: 'conflict', retryable: false});
+        }
+        if (code === 'zotero_object_storage_invalid') {
+          throw new RocDomainError({code, message: '已保存的 Zotero 来源记录损坏，无法审查原始版本。',
+            category: 'degraded', retryable: false});
+        }
+        if (['zotero_preview_storage_invalid', 'zotero_preview_integrity_invalid'].includes(code)) {
           throw new RocDomainError({code, message: 'Zotero 预览内容损坏，请重新读取来源。',
             category: 'degraded', retryable: false});
         }
@@ -67,4 +77,5 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.preview, ({projectId: _scope, ...input}) => imports.previewZotero(input, adapter));
   register(capabilities.readPreview, async ({projectId: _scope, ...input}) => imports.readZoteroPreview(input));
   register(capabilities.sources, async ({projectId: _scope, ...input}) => imports.readZoteroSources(input));
+  register(capabilities.review, async ({projectId: _scope, ...input}) => imports.reviewZotero(input));
 }

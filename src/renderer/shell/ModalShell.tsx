@@ -188,7 +188,7 @@ export function ModalShell({
             className={
               kind === 'drawer'
                 ? `relative z-10 ml-auto flex h-full max-w-full flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-                : `relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+                : `relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-clip rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
             <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">

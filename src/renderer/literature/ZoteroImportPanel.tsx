@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {AlertTriangle} from 'lucide-react';
-import type {ZoteroItem, ZoteroPageRequest, ZoteroPreviewPage, ZoteroScope} from '../../shared/schemas/research-zotero';
+import type {ZoteroItem, ZoteroPageRequest, ZoteroPreviewPage, ZoteroScope, ZoteroReview} from '../../shared/schemas/research-zotero';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
@@ -81,6 +81,12 @@ function LibraryPreview({client, scope, libraryName, job}: {
   const collectionPage = collections.status === 'ready' ? collections.data : null;
   const capture = useAsyncAction(client.api.research.previewZotero, {label: '预览 Zotero 题录'});
   const readMore = useAsyncAction(client.api.research.getZoteroPreview, {label: '读取已保存的 Zotero 预览'});
+  const review = useAsyncResource(snapshot === null || selected.size === 0 ? null :
+    `zotero:review:${JSON.stringify([job.projectId, snapshot.page.previewId, [...selected]])}`,
+  () => client.api.research.reviewZotero({projectId: job.projectId, previewId: snapshot!.page.previewId, itemKeys: [...selected]}),
+  {label: '审查 Zotero 与本地字段'});
+  const reviewed = review.status === 'ready' ? review.data : null;
+  const blocked = reviewed?.items.some(item => item.local?.archived || !['new', 'unchanged', 'new_version'].includes(item.objectState)) === true;
   const busy = job.pending || job.cancelling || capture.pending || readMore.pending;
   const reset = (): void => {setSnapshot(null); setSelected(new Set()); capture.reset(); readMore.reset();};
 
@@ -153,7 +159,7 @@ function LibraryPreview({client, scope, libraryName, job}: {
       <div className="flex flex-wrap items-center gap-2">
         {snapshot.page.nextPreviewOffset === null ? null : <button type="button" className={buttonClass} disabled={busy}
           data-testid="literature-zotero-more-preview" onClick={() => void more()}>显示本次预览更多对象</button>}
-        <button type="button" className={`${formPrimaryButtonClass} border-[0.5px]`} disabled={busy || selected.size === 0}
+        <button type="button" className={`${formPrimaryButtonClass} border-[0.5px]`} disabled={busy || selected.size === 0 || reviewed === null || blocked}
           data-testid="literature-zotero-import" onClick={() => void job.submit(snapshot.records
             .filter(item => selected.has(item.key)).map(item => ({previewId: snapshot.page.previewId, itemKey: item.key, title: String(item.data.title)}))).then(imported => {if (imported) setSelected(new Set());})}>
           收录选中 {selected.size} 篇
@@ -164,6 +170,9 @@ function LibraryPreview({client, scope, libraryName, job}: {
           disabled={busy || snapshot.page.sourcePage.nextOffset === null || selected.size > 0}
           data-testid="literature-zotero-next-source" onClick={() => void preview(snapshot.page.sourcePage.nextOffset!)}>下一页来源</button>
       </div>
+      {selected.size > 0 && reviewed === null && review.error === null ? <p role="status" className="text-muted">正在核对选中题录与本地字段…</p> : null}
+      {review.error === null ? null : <Failure message={review.error} />}
+      {reviewed === null ? null : <SourceReview review={reviewed} />}
       <p className="text-subtle">每次最多收录 30 篇。翻页前先收录或取消本页选择；附件需另行授权。</p>
     </>}
   </div>;
@@ -193,6 +202,52 @@ function ObjectRow({item, checked, disabled, onSelect}: {
       <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)] text-muted">{JSON.stringify(item, null, 2)}</pre>
     </details>
   </li>;
+}
+
+function SourceReview({review}: {review: ZoteroReview}): React.JSX.Element {
+  const states: Record<ZoteroReview['items'][number]['objectState'], string> = {
+    new: '新来源对象', unchanged: '来源版本未变化', new_version: '新来源版本',
+    version_regressed: '来源版本回退，不能收录', version_conflict: '同版本内容不同，不能收录',
+    identity_changed: '来源对象的文献身份改变，不能收录'
+  };
+  const fields = {title: '题名', authors: '作者', doi: 'DOI', abstract: '摘要', url: 'URL'};
+  const value = (input: unknown): string => typeof input === 'string' ? input : JSON.stringify(input);
+  return <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="来源与本地字段" data-testid="literature-zotero-source-review">
+    <p className="text-muted">题名、已有作者与本地注释保留；缺失字段可补齐，原始来源另存。</p>
+    <div className="max-h-60 overflow-y-auto px-1" tabIndex={0} aria-label="选中来源差异">
+      {review.items.map(item => <details key={item.source.item.key} className="border-b-[0.5px] border-line py-2"
+        data-testid="literature-zotero-reviewed-object" data-item-key={item.source.item.key}>
+        <summary className="cursor-pointer break-words text-ink">
+          {item.source.metadata.title}{' '}
+          <span className="ml-2 text-muted">{states[item.objectState]}</span>{' '}
+          {item.mappedVersion === null ? null : <><span className="ml-2 text-subtle">已记录对象版本 {item.mappedVersion}</span>{' '}</>}
+          {item.local === null ? null : <><span className="ml-2 text-subtle">本地版本 {item.local.revision}</span>{' '}</>}
+          {item.local?.archived ? <><span className="ml-2 text-muted">已归档，不能收录</span>{' '}</> : null}
+          <span className="ml-2 text-subtle">{item.differences.length} 个字段不同</span>
+        </summary>
+        {item.local?.archived ? <p className="mt-1 text-muted">本地文献已归档，恢复后才能收录。</p> : null}
+        {item.differences.length === 0 ? null : <table className="mt-2 w-full table-fixed text-left">
+          <caption className="sr-only">Zotero 来源原值与 Roc 本地现值</caption>
+          <thead className="text-subtle"><tr><th className="w-14 font-normal">字段</th><th className="font-normal">Zotero</th><th className="font-normal">Roc</th></tr></thead>
+          <tbody>{item.differences.map(difference => <tr key={difference.field} className="border-t-[0.5px] border-line align-top">
+            <th className="py-1 font-normal text-muted">{fields[difference.field]}</th>
+            <td className="whitespace-pre-wrap break-all px-1 py-1 text-muted">{value(difference.source)}</td>
+            <td className="whitespace-pre-wrap break-all px-1 py-1 text-muted">{value(difference.local)}</td>
+          </tr>)}</tbody>
+        </table>}
+        {item.local === null ? null : <details className="mt-2 text-muted" data-testid="literature-zotero-local-fields">
+          <summary className="cursor-pointer">本地书目字段</summary>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.local.bibliography.fields, null, 2)}</pre>
+        </details>}
+        <details className="mt-2 text-muted" data-testid="literature-zotero-previous-source"><summary className="cursor-pointer">已收录的原始来源</summary>
+          {item.previousScopedSource === null ? <p>当前范围没有已收录的原始来源。</p> : <>
+            <p>来源版本 {item.previousScopedSource.version}，收录时间 {item.previousScopedSource.importedAt}</p>
+            <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.previousScopedSource.item, null, 2)}</pre>
+          </>}
+        </details>
+      </details>)}
+    </div>
+  </section>;
 }
 
 function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null {

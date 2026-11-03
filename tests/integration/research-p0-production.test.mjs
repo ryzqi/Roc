@@ -54,6 +54,14 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     assert.equal(saved.metadata.doi, '10.1234/native-zotero');
     const sources = run(() => imports.readZoteroSources({id: saved.id}));
     assert.deepEqual(sources.records[0].item, original);
+    const changesBeforeReview = f.db.prepare('SELECT total_changes()').pluck().get();
+    const review = run(() => imports.reviewZotero({previewId: preview.previewId, itemKeys: [key]}));
+    assert.equal(review.items[0].objectState, 'unchanged');
+    assert.equal(review.items[0].mappedVersion, original.version);
+    assert.equal(review.items[0].local.bibliography.fields.journal, 'Synthetic Native Journal');
+    assert.deepEqual(review.items[0].previousScopedSource.item, original);
+    assert.equal(review.items[0].previousScopedSource.operationId, result.operationId);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), changesBeforeReview);
     assert.equal(requests, 1);
     assert.deepEqual(await run(() => imports.add(input)), result);
     const evidence = join(process.cwd(), '.artifacts/research-optimization/pr05-object-native-csl');
@@ -62,6 +70,12 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
     await writeFile(join(evidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
       electron: process.versions.electron, previewId: preview.previewId, contentHash: preview.contentHash,
       result, bibliography: saved.bibliography, sources, requests}, null, 2) + '\n');
+    const reviewEvidence = join(process.cwd(), '.artifacts/research-optimization/pr05-review-native-csl');
+    await mkdir(reviewEvidence, {recursive: true});
+    await f.db.backup(join(reviewEvidence, 'research.sqlite'));
+    await writeFile(join(reviewEvidence, 'receipt.json'), JSON.stringify({node: process.versions.node,
+      electron: process.versions.electron, previewId: preview.previewId, contentHash: preview.contentHash,
+      result, review, requests}, null, 2) + '\n');
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();
     await rm(root, {recursive: true, force: true});

@@ -29,7 +29,7 @@ before(async () => {
       const itemType = i===2 ? 'attachment' : i===3 ? 'note' : 'journalArticle';
       return {key,version:8,data:{key,version:8,itemType,title:i===4 ? null : 'Synthetic object '+i,
         DOI:'10.1234/synthetic',creators:[{creatorType:'author',name:'Synthetic Author'}],
-        tags:[{tag:'external-tag'}],collections:['COLL0000'],parentItem:i===2 ? 'ITEM0000' : undefined,
+        tags:[{tag:'external-tag'}],collections:['COLL0000'],...(i===2 ? {parentItem:'ITEM0000'} : {}),
         unknownFutureField:{retained:true}},csljson:JSON.stringify([{id:key,type:'article-journal',title:'Synthetic object '+i}])};
     });
     function result(input, mode) {
@@ -80,6 +80,37 @@ before(async () => {
           const end = input.offset+input.limit;
           return ok({...snapshot,nextPreviewOffset:end<snapshot.capturedTotal ? end : null,
             sourcePage:{...snapshot.sourcePage,records:snapshot.sourcePage.records.slice(input.offset,end)}});
+        }),
+        reviewZotero: input => call('review',input,async()=>{
+          if(scenario.reviewError) return fail('Synthetic scoped source review failed');
+          const snapshot=snapshots.get(input.previewId);
+          const items=input.itemKeys.map(key=>{
+            const item=snapshot.sourcePage.records.find(item=>item.key===key);
+            const metadata={id:'zotero:'+key,externalId:key,source:'zotero',doi:'10.1234/synthetic',title:item.data.title,
+              authors:['Synthetic Author'],abstract:null,publishedYear:null,citationCount:null,url:null,openAccessUrl:null,
+              importedAt:at,updatedAt:at};
+            const local=scenario.reviewDifference || scenario.reviewState || scenario.archived ? {
+              id:'local-paper',revision:3,archived:scenario.archived===true,updatedAt:at,
+              metadata:{...metadata,title:'Existing canonical title'},
+              bibliography:{citationKey:'LocalKey',entryType:'article',title:'Existing canonical title',authors:metadata.authors,
+                doi:metadata.doi,abstract:null,publishedYear:2024,url:null,preambles:[],csl:null,
+                fields:{note:'User local note',keywords:'user-local-tag'}}
+            } : null;
+            return {source:{previewId:input.previewId,scope:{serverId:snapshot.sourcePage.serverId,library:snapshot.sourcePage.library},
+                libraryVersion:20,item,itemHash:'e'.repeat(64),metadata,cslJson:item.csljson,capturedAt:at},
+              objectState:scenario.reviewState || (local===null ? 'new' : 'new_version'),
+              mappedVersion:local===null ? null : scenario.reviewState==='version_regressed' ? 9 : scenario.reviewState==='version_conflict' ? 8 : 7,local,
+              previousScopedSource:local===null ? null : {scope:{serverId:snapshot.sourcePage.serverId,library:snapshot.sourcePage.library},
+                itemKey:key,version:7,libraryVersion:19,operationId:'prior-operation',libraryItemId:local.id,itemHash:'f'.repeat(64),
+                previewId:'prior-preview',capturedAt:at,importedAt:at,item:{...item,version:7,data:{...item.data,version:7}}},
+              differences:local===null ? [] : [{field:'title',source:item.data.title,local:local.metadata.title}]};
+          });
+          const output={previewId:input.previewId,scope:{serverId:snapshot.sourcePage.serverId,library:snapshot.sourcePage.library},
+            libraryVersion:20,reviewedAt:at,policy:'retain_existing_fill_missing',items};
+          if(scenario.staleReview && input.itemKeys.length===1 && window.calls.filter(call=>call.method==='review').length===1) {
+            return new Promise(resolve=>window.finishReview=()=>resolve(ok({...output,items:output.items.map(item=>({...item,objectState:'version_conflict'}))})));
+          }
+          return ok(output);
         }),
         addLiterature: input => call('add',input,async()=>{
           window.lastAdd = input;
@@ -287,6 +318,67 @@ test('transport retry keeps the same request, library-only scope is explicit and
   assert.equal(await page.getByTestId('literature-zotero-import-result').count(),0);
   assert.equal(await page.evaluate(()=>reloads),0);
   assert.deepEqual(await page.evaluate(()=>calls),[]);
+});
+test('local/source differences retain both sides and stale or failed comparison never authorizes selected import',async()=>{
+  await open({reviewDifference:true});
+  await preview();
+  await row('ITEM0000').locator('input').check();
+  await page.getByTestId('literature-zotero-source-review').waitFor();
+  const reviewed=page.getByTestId('literature-zotero-reviewed-object');
+  await reviewed.locator(':scope > summary').click();
+  await reviewed.getByRole('table').waitFor({state:'visible'});
+  const text=await reviewed.innerText();
+  assert.match(text,/Synthetic object 0/u);
+  assert.match(text,/Existing canonical title/u);
+  assert.match(text,/本地版本 3/u);
+  await reviewed.getByText('本地书目字段',{exact:true}).click();
+  await page.getByTestId('literature-zotero-local-fields').locator('pre').waitFor({state:'visible'});
+  assert.match(await reviewed.innerText(),/User local note/u);
+  await reviewed.getByText('已收录的原始来源',{exact:true}).click();
+  await page.getByTestId('literature-zotero-previous-source').locator('pre').waitFor({state:'visible'});
+  assert.match(await reviewed.innerText(),/来源版本 7/u);
+  const scrollLayout=await page.getByRole('dialog').evaluate(panel=>{
+    const body=panel.children[1];
+    const header=panel.children[0];
+    return {panelScroll:panel.scrollTop,bodyScroll:body.scrollTop,
+      panelTop:panel.getBoundingClientRect().top,headerTop:header.getBoundingClientRect().top,
+      panelHeight:panel.clientHeight,panelContent:panel.scrollHeight,bodyHeight:body.clientHeight,bodyContent:body.scrollHeight,
+      bodyStyle:{overflow:getComputedStyle(body).overflowY,minHeight:getComputedStyle(body).minHeight,flex:getComputedStyle(body).flex},
+      children:[...panel.children].map(child=>({class:child.className,height:child.clientHeight,scroll:child.scrollHeight}))};
+  });
+  writeFileSync(join(artifacts,'source-local-scroll.json'),JSON.stringify(scrollLayout,null,2));
+  assert.equal(scrollLayout.panelScroll,0);
+  assert.equal(scrollLayout.headerTop,scrollLayout.panelTop+1);
+  assert.ok(scrollLayout.bodyScroll>0);
+  const dialogBody=page.getByRole('dialog').locator(':scope > div').nth(1);
+  await dialogBody.evaluate(body=>{body.scrollTop=0;});
+  const bodyBox=await dialogBody.boundingBox();
+  await page.mouse.move(bodyBox.x+2,bodyBox.y+40);
+  await page.mouse.wheel(0,300);
+  await page.waitForFunction(()=>document.querySelector('[role="dialog"]').children[1].scrollTop>0);
+  assert.equal(await page.getByRole('dialog').evaluate(panel=>panel.scrollTop),0);
+  await reviewed.locator(':scope > summary').focus();
+  await page.getByTestId('literature-import-dialog-close').isVisible().then(visible=>assert.equal(visible,true));
+  await inspect('source-local-differences');
+  assert.equal(await page.getByTestId('literature-zotero-import').isDisabled(),false);
+  for(const scenario of [{reviewState:'version_conflict'},{reviewState:'identity_changed'},{reviewState:'version_regressed'},{archived:true},{reviewError:true}]){
+    await open(scenario);
+    await preview();
+    await row('ITEM0000').locator('input').check();
+    await page.waitForFunction(()=>calls.some(call=>call.method==='review'));
+    assert.equal(await page.getByTestId('literature-zotero-import').isDisabled(),true);
+    assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),0);
+  }
+  await open({staleReview:true});
+  await preview();
+  await row('ITEM0000').locator('input').check();
+  await page.waitForFunction(()=>typeof finishReview==='function');
+  assert.equal(await page.getByTestId('literature-zotero-import').isDisabled(),true);
+  await row('ITEM0001').locator('input').check();
+  await page.waitForFunction(()=>document.querySelectorAll('[data-testid="literature-zotero-reviewed-object"]').length===2);
+  await page.evaluate(()=>finishReview());
+  assert.equal(await page.getByTestId('literature-zotero-reviewed-object').count(),2);
+  assert.equal(await page.getByTestId('literature-zotero-import').isDisabled(),false);
 });
 test('source page and selection caps are distinct and long originals remain usable across light dark drawer widths',async()=>{
   await page.emulateMedia({reducedMotion:'reduce'});
