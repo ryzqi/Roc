@@ -57,6 +57,7 @@ import { ResearchEmbeddingService } from './embedding-service';
 import { LiteratureSearchService } from './literature-service';
 import {ZoteroAdapter} from './zotero-adapter';
 import {zoteroCapabilities, registerZoteroCapabilities} from './zotero-capabilities';
+import {pickZoteroAttachment} from './zotero-attachment-dialog';
 import { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
@@ -264,7 +265,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       literatureImports.recover();
       registerLiteratureImportCapabilities(context, literatureImports);
-      registerZoteroCapabilities(context, zotero, literatureImports);
+      registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
       if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {

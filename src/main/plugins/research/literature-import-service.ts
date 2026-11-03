@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 import type { Database } from 'better-sqlite3';
 import {
   literatureAddSchema, literatureGetImportSchema, literatureReadSearchSchema, literatureSearchInputSchema,
@@ -28,8 +29,10 @@ import {ZoteroSyncStore} from './zotero-sync-store';
 import {zoteroSyncPageSchema, type ZoteroSync, type ZoteroSyncCapturedPage} from '../../../shared/schemas/research-zotero-sync';
 import {ZoteroSourceStateStore} from './zotero-source-state-store';
 import {zoteroSourceStateRequestSchema, type ZoteroSourceState} from '../../../shared/schemas/research-zotero-source-state';
-import {zoteroAttachmentRequestSchema, type ZoteroAttachmentInspection, type ZoteroAttachmentFile} from '../../../shared/schemas/research-zotero-attachment';
+import {zoteroAttachmentRequestSchema, zoteroAttachmentGrantRequestSchema, type ZoteroAttachmentInspection,
+  type ZoteroAttachmentFile, type ZoteroAttachmentGrant, type ZoteroAttachmentGrantOutcome} from '../../../shared/schemas/research-zotero-attachment';
 import {ZoteroAttachmentStore, inspectZoteroAttachmentFile, zoteroAttachmentLinkModeSchema} from './zotero-attachment-store';
+import {ZoteroAttachmentGrantStore, type ZoteroAttachmentPicker} from './zotero-attachment-grant-store';
 
 type FrozenOrigin = {origin: LiteratureCandidate['origins'][number]; executionId: string};
 type FrozenSource = {kind: 'doi'; doi: string} | {kind: 'records'; origins: FrozenOrigin[]} |
@@ -58,6 +61,8 @@ export class LiteratureImportService {
   private readonly sourceStateJobs = new Set<Promise<ZoteroSourceState>>();
   private readonly zoteroAttachments: ZoteroAttachmentStore;
   private readonly attachmentJobs = new Set<Promise<ZoteroAttachmentInspection>>();
+  private readonly zoteroAttachmentGrants: ZoteroAttachmentGrantStore;
+  private readonly attachmentGrantJobs = new Map<string, Promise<ZoteroAttachmentGrantOutcome>>();
   private readonly previewJobs = new Set<Promise<ZoteroPreviewPage>>();
   private closed = false;
   constructor(private readonly db: Database, private readonly library: ResearchLibraryRepository,
@@ -69,6 +74,7 @@ export class LiteratureImportService {
     this.zoteroSyncs = new ZoteroSyncStore(db, this.zoteroPreviews, now);
     this.zoteroSourceStates = new ZoteroSourceStateStore(db, this.zoteroObjects, now);
     this.zoteroAttachments = new ZoteroAttachmentStore(db, this.zoteroObjects, now);
+    this.zoteroAttachmentGrants = new ZoteroAttachmentGrantStore(db, this.zoteroAttachments, now);
   }
 
   async search(input: unknown): Promise<LiteratureSearchResult> {
@@ -223,6 +229,47 @@ export class LiteratureImportService {
     const context = literatureContext();
     this.requireActive(context);
     return this.zoteroAttachments.read(context, inspectionId);
+  }
+
+  readZoteroAttachmentGrant(grantId: string): ZoteroAttachmentGrant {
+    const context = literatureContext();
+    this.requireActive(context);
+    return this.zoteroAttachmentGrants.read(context, grantId);
+  }
+
+  async grantZoteroAttachment(input: unknown, pick: ZoteroAttachmentPicker): Promise<ZoteroAttachmentGrantOutcome> {
+    const request = zoteroAttachmentGrantRequestSchema.parse(input);
+    const context = literatureContext();
+    this.requireActive(context);
+    const inspection = this.zoteroAttachments.read(context, request.inspectionId);
+    const existing = this.zoteroAttachmentGrants.find(context, request.requestId);
+    if (existing !== null) {
+      if (existing.inspectionId !== request.inspectionId) throw new Error('zotero_attachment_grant_request_conflict');
+      return {status: 'granted', grant: existing};
+    }
+    const key = JSON.stringify([context.owner, context.projectId, request.requestId]);
+    if (this.attachmentGrantJobs.has(key)) throw new Error('zotero_attachment_grant_active');
+    if (inspection.file.status !== 'ready') throw new Error('zotero_attachment_file_not_ready');
+    const file = inspection.file;
+    const pending = (async (): Promise<ZoteroAttachmentGrantOutcome> => {
+      const current = await inspectZoteroAttachmentFile(file.resolvedPath);
+      this.requireActive(context);
+      if (current.status !== 'ready' || current.resolvedPath !== file.resolvedPath || !isDeepStrictEqual(current.identity, file.identity)) {
+        throw new Error('zotero_attachment_file_changed');
+      }
+      const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
+      const selected = await pick(context, file.resolvedPath, signal);
+      this.requireActive(context);
+      if (selected === null) return {status: 'cancelled', grant: null};
+      const chosen = await inspectZoteroAttachmentFile(selected);
+      this.requireActive(context);
+      if (chosen.status !== 'ready' || chosen.resolvedPath !== file.resolvedPath) throw new Error('zotero_attachment_selected_file_mismatch');
+      if (!isDeepStrictEqual(chosen.identity, file.identity)) throw new Error('zotero_attachment_file_changed');
+      return {status: 'granted', grant: this.zoteroAttachmentGrants.record(context, request.requestId, inspection)};
+    })();
+    this.attachmentGrantJobs.set(key, pending);
+    try {return await pending;}
+    finally {this.attachmentGrantJobs.delete(key);}
   }
 
   async inspectZoteroAttachment(input: unknown, adapter: ZoteroAdapter): Promise<ZoteroAttachmentInspection> {
@@ -470,6 +517,7 @@ export class LiteratureImportService {
     this.lifetime.abort(new Error('literature_service_closed'));
     for (const task of this.active.values()) task.controller.abort();
     await Promise.allSettled([...this.searches, ...this.previewJobs, ...this.syncJobs, ...this.sourceStateJobs, ...this.attachmentJobs,
+      ...this.attachmentGrantJobs.values(),
       ...[...this.active.values()].map((task) => task.promise)]);
   }
 

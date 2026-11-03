@@ -7,6 +7,8 @@ import Database from 'better-sqlite3';
 import * as esbuild from 'esbuild';
 import {createResearchFixture} from './fixtures/research-test-kit.mjs';
 
+const unusedAttachmentPicker = async () => assert.fail('Native attachment grants are separately verified');
+
 let directory, api;
 const at='2026-11-04T00:00:00.000Z';
 const scope={serverId:'synthetic-sync-instance',library:{kind:'user',id:0}};
@@ -272,7 +274,7 @@ test('actual sender IPC scopes sync state and receipts; foreign project and owne
     const handlers=new Map();
     api.registerZoteroCapabilities({pluginId:'fixture',capabilities:{register(_plugin,descriptor,handler){
       handlers.set(descriptor.name,handler);
-    }}},f.adapter,f.service);
+    }}},f.adapter,f.service,unusedAttachmentPicker);
     api.registerLiteratureImportCapabilities({pluginId:'fixture',capabilities:{register(_plugin,descriptor,handler){
       handlers.set(descriptor.name,handler);
     }}},f.service);

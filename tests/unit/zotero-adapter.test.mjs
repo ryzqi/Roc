@@ -7,6 +7,8 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import * as esbuild from 'esbuild';
 
+const unusedAttachmentPicker = async () => assert.fail('Native attachment grants are separately verified');
+
 let directory, api;
 const timestamp = '2026-11-03T00:00:00.000Z';
 const headers = {'Zotero-API-Version': '3', 'Zotero-Server-ID': 'fixture-instance',
@@ -188,8 +190,9 @@ test('registered read-only capability and generated IPC contracts expose actual 
     readZoteroSources: () => assert.fail('source provenance is verified by the import fixture')};
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
-  }}}, adapter(), imports);
-  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.attachmentInspect', 'research.zotero.attachmentRead',
+  }}}, adapter(), imports, unusedAttachmentPicker);
+  assert.deepEqual([...handlers.keys()].sort(), ['research.zotero.attachmentGrant', 'research.zotero.attachmentGrantRead',
+    'research.zotero.attachmentInspect', 'research.zotero.attachmentRead',
     'research.zotero.collections', 'research.zotero.getPreview',
     'research.zotero.groups', 'research.zotero.items', 'research.zotero.preview', 'research.zotero.probe', 'research.zotero.review',
     'research.zotero.sourceObserve', 'research.zotero.sourceState', 'research.zotero.sources', 'research.zotero.status',
@@ -202,7 +205,7 @@ test('registered read-only capability and generated IPC contracts expose actual 
   assert.deepEqual((await handlers.get('research.zotero.items')(input())).records, [item]);
   api.registerZoteroCapabilities({pluginId: 'fixture', capabilities: {register(_owner, descriptor, handler) {
     handlers.set(descriptor.name, handler);
-  }}}, adapter([], headers, 412), imports);
+  }}}, adapter([], headers, 412), imports, unusedAttachmentPicker);
   await assert.rejects(handlers.get('research.zotero.items')(input()), error =>
     error.code === 'zotero_server_changed' && error.retryable === false);
   for (const descriptor of api.zoteroCapabilities) {

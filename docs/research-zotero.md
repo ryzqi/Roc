@@ -44,6 +44,8 @@ unreachable 只表示本地请求未完成，不能单凭它推断未安装。
 | research.zotero.sourceState | research.readZoteroSourceState | 只读同原始收录回执与集合范围的最后有效观察 |
 | research.zotero.attachmentInspect | research.inspectZoteroAttachment | 验证原收录回执与当前子附件关系，保存路径/访问/文件身份检查 |
 | research.zotero.attachmentRead | research.readZoteroAttachment | 只读当前会话/项目的附件检查记录 |
+| research.zotero.attachmentGrant | research.grantZoteroAttachment | 原生选择并授权检查记录中的一个真实附件文件 |
+| research.zotero.attachmentGrantRead | research.readZoteroAttachmentGrant | 只读当前会话/项目的单文件输入授权回执 |
 
 读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
 expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
@@ -139,7 +141,7 @@ HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机�
 本地 fixture 不等于已安装 Zotero 的实际互操作验收。
 
 逐页检查点、冲突审查 UI 与来源状态后端已实现，详见下文。
-来源状态 UI 已接入原始来源详情；附件输入授权及真实客户端验收仍待后续增量。V1 没有任何 Zotero
+来源状态 UI 已接入原始来源详情；附件授权后内容导入/UI及真实客户端验收仍待后续增量。V1 没有任何 Zotero
 写请求，V3 写回继续另行授权。
 
 对象收录增量最终验证：单测 761/761、对象相关 26/26、Harness 94/94、原生 P0
@@ -265,7 +267,7 @@ UI按当前范围查找并恢复，见下一节。
 官方固定源码再次核对于2026-11-04：since按本地clientVersion筛选，
 format=versions返回对象本地版本；includeTrashed=1和items/trash可报告软删除，
 源码没有/deleted接口。增量结果中缺席不能证明永久删除或集合移除；本阶段不标记
-这种推测，也不删除本地题录、证据或附件。单对象状态观察见下文，附件授权仍待实现。
+这种推测，也不删除本地题录、证据或附件。单对象状态观察与附件检查/授权后端见下文。
 依据仍为本文固定官方源码，新增读件hash保存在`pr05-zotero-primary-contract.json`。
 
 最终unit780/780、相关37/37、Harness94/94、生产build/typecheck、
@@ -301,7 +303,7 @@ reset_required状态提供「按当前来源重新建立检查点」，明确按
 实际UI12/12（Zotero9、原候选3）、最终键盘/暗色1099恢复1/1、启动12/12、
 IPC/chunks通过。截图`sync-paused`、`sync-paused-dark-1099`、`sync-complete`
 和光暗1100/1099/800长内容审计保留，cut0/hidden0。日志`pr05-sync-ui-*.log`。
-实际Zotero客户端及附件路径/访问授权仍待后续实现与验收。
+实际Zotero客户端及附件内容导入/授权UI仍待后续实现与验收。
 
 ## 原始收录回执对应的来源状态
 
@@ -375,10 +377,40 @@ file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到
 只读回放检查 hash、父对象/回执链接与当前会话/项目；预览过期不抹除已收录历史。
 传输/写入失败不替代原记录。服务关闭中止 HTTP 并拒绝迟到检查写入。
 
-本增量是后端/API 检查，原生选择文件授权、附件内容导入与界面仍待下一步。
+本增量是后端/API 检查，原生选择文件授权见下文，附件内容导入与界面仍待下一步。
 最终unit794/794、相关51/51、Harness94/94、fresh build/typecheck/native13/13、
 现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过；
 原生CSL收录后检查真实linked_file并只读回放，规范题录修订不变且文档数为0。
 日志 `pr05-attachment-*.log`；数据库与回执保留于`pr05-attachment-native-csl/`。
 官方附件源码读件及hash保留于`pr05-attachment-source-read.txt`和
 `pr05-zotero-primary-contract.json`。实际 Zotero 客户端互操作未运行。
+
+## 原生选择的单文件输入授权
+
+Research DB18 追加拥有 owner/project 的不可变授权回执，关联实际附件检查记录。
+输入只有 projectId、inspectionId 和 requestId；renderer 不能提交 selectedPath 来授予权限。
+调用前检查记录必须属于当前范围且文件 ready；真实路径/文件身份必须仍与检查时一致。
+用户通过当前发送窗口的原生单文件选择框选取该文件，授权按钮与路径明确标注读取范围。
+链接文件同样需要显式选择。取消返回 cancelled/null，没有授权回执；选错文件、符号链接、
+缺失或文件身份变化明确拒绝。该过程仍不读取附件字节、不创建文档。
+
+授权只允许 read_one_file，保留已选真实路径、设备/inode/大小/修改与变更时间、
+检查记录 hash、真实授权时间及自身内容 hash。只读回放验证范围、hash和检查记录对应。
+同请求重放返回原回执，不再打开选择框；重复进行中请求拒绝。requestId不能换绑检查记录。
+数据损坏、写入失败和服务关闭不能成为授权成功。内容读取/导入将单独校验授权与文件身份。
+
+主进程原生适配器动态加载 Electron，校验真实 window owner 与 webContents 对应的
+BrowserWindow，再调用单 openFile 的
+[showOpenDialog](https://github.com/electron/electron/blob/main/docs/api/dialog.md)。
+框架合同经 Context7 官方文档及本地 Electron45 类型核对；真实 Electron45 进程验证
+动态导入、发送窗口查询、父窗口归属和原生选择 API。取消任务结束授权等待并拒绝迟到返回；
+原生选择框本身沿所属窗口生命周期关闭，不声称主动撤销原生 sheet。
+
+最终unit801/801、相关66/66、Harness94/94、fresh build/typecheck/native13/13、
+现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。
+原生CSL集成显式注入合成用户选择，记录/只读回放授权并保留文档数0；
+`pr05-attachment-grant-native-csl/receipt.json` 标明这一测试边界。
+模拟原生 API 的2项合同检查覆盖正确父窗口/单文件选项/取消/迟到返回；
+真实桌面绑定报告为 `pr05-attachment-grant-native-api-complete.json`。
+日志 `pr05-attachment-grant-*.log`。实际原生面板选择、附件字节导入、附件UI及
+真实 Zotero 客户端互操作仍待实现或验收。

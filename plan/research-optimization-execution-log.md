@@ -2006,3 +2006,50 @@ Item and Local API source establish parent fields and file/view/url reference se
 Source/read hashes retained. No actual Zotero client/user library, new live literature query,
 paid model, remote write or frozen workflow-fixture edits. Next F2: native selected-file input
 authorization, exact file validation and content import with provenance; UI follows.
+
+## PR-05F2 — explicit native selected-file input grants
+
+Status: `Verified passing` for this backend/API grant increment. Research DB18 appends
+immutable scoped single-file grants linked to actual owned attachment inspections. Input
+contains inspectionId/requestId/projectId only; renderer-selectedPath cannot authorize reads.
+Validates current real path/file identity before opening the trusted sender's native picker,
+then verifies the selected file is exactly the captured ready input before storing a grant.
+Cancel has no grant; wrong/missing/symlink/changed file refuses. No file bytes or document import.
+
+Grants retain read_one_file/path/device/inode/size/timestamps/inspection hash/granted time and
+content hash. Readback validates owner/project/linkage/hash. Same request replays without
+reopening; conflicting request reuse and active duplicate selections refuse. Write damage or
+shutdown cannot become success. The picker dependency is explicit in production and tests;
+agent thread owners cannot open the default native chooser. Electron loaded on user action.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/zotero-import.test.mjs tests/unit/zotero-adapter.test.mjs tests/unit/zotero-sync.test.mjs tests/unit/zotero-preview.test.mjs tests/unit/zotero-attachment-dialog.test.mjs` | Final66/66 passed |
+| `pnpm test:unit` |801/801 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/zotero-import.test.mjs tests/renderer/literature-review.test.mjs` |15/15 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1131133bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `pr05-attachment-grant-*.log`, native-csl/ DB/declared-chooser receipt and actual
+native-api-complete.json. The native desktop probe runs Electron45 with a real hidden window
+and confirms dynamic API import/actual sender lookup/owning window/native dialog function;
+its task-created temporary script/report directory was removed. Native CSL grant uses an
+explicit synthetic selection seam and keeps zero documents. Two mocked native API contract
+tests verify parent/options/cancel/late response. Actual native panel selection is unrun.
+Abort ends the job's native-choice wait and refuses publication; the native sheet follows its
+owning-window lifecycle, not a claimed active dismissal handle.
+
+First focused63/64 expected the wrong shutdown code; corrected to the actual core closed
+refusal. Initial dialog-contract build used unsupported Unicode flags in esbuild Go filters;
+removed those flags while retaining the exact match and tests. Final66/66 passes; no product
+checks weakened. Migration17→18 preserves inspections and applied ledger without fictional
+authorizations; earlier16→17 test explicitly keeps its named migration range. Framework
+contract verified using Context7 official Electron docs/local45 types; actual binding proved.
+No real Zotero client/user library, new live literature query, paid model, remote write or
+frozen workflow-fixture change. Next F3: validate/consume grant, read exact file bytes and
+import through existing document service with atomic provenance, then attachment UI.

@@ -143,6 +143,20 @@ test('Zotero captured CSL imports through the actual native bibliography worker 
       await f.db.backup(join(evidence,'research.sqlite'));
       await writeFile(join(evidence,'receipt.json'),JSON.stringify({node:process.versions.node,electron:process.versions.electron,
         inspection,attachmentCalls},null,2)+'\n');
+      let selected=0;
+      const grant=await run(()=>imports.grantZoteroAttachment({inspectionId:inspection.inspectionId,requestId:'native-fixture-selected-file'},
+        async(context,path,signal)=>{
+          assert.equal(context.owner,'thread:native-zotero');assert.equal(signal.aborted,false);
+          assert.equal(path,attachmentPath);selected++;return path;
+        }));
+      assert.equal(grant.status,'granted');assert.equal(selected,1);
+      assert.deepEqual(run(()=>imports.readZoteroAttachmentGrant(grant.grant.grantId)),grant.grant);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
+      const grantEvidence=join(process.cwd(),'.artifacts/research-optimization/pr05-attachment-grant-native-csl');
+      await mkdir(grantEvidence,{recursive:true});
+      await f.db.backup(join(grantEvidence,'research.sqlite'));
+      await writeFile(join(grantEvidence,'receipt.json'),JSON.stringify({node:process.versions.node,electron:process.versions.electron,
+        chooser:'injected explicit synthetic selection; native dialog not opened',inspection,grant,selected},null,2)+'\n');
     }finally{await attachmentAdapter.shutdown();}
   } finally {
     await imports.shutdown(); await library.shutdown(); await zotero.shutdown(); f.close();

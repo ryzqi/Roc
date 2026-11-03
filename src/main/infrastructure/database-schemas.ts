@@ -1701,6 +1701,18 @@ CREATE INDEX idx_research_zotero_attachment_inspections_scope ON research_zotero
 `
 });
 
+researchMigrations.push({
+  version: 18, name: 'zotero_scoped_selected_file_input_grants',
+  sql: `
+CREATE TABLE research_zotero_attachment_grants (
+  id TEXT PRIMARY KEY, owner TEXT NOT NULL, scope_project TEXT NOT NULL,
+  request_id TEXT NOT NULL, inspection_id TEXT NOT NULL REFERENCES research_zotero_attachment_inspections(id),
+  grant_json TEXT NOT NULL, granted_at TEXT NOT NULL,
+  UNIQUE(owner,scope_project,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

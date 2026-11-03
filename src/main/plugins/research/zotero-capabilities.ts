@@ -16,11 +16,16 @@ import {
   zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema, zoteroSyncFindIpcSchema
 } from '../../../shared/schemas/research-zotero-sync';
 import {zoteroSourceStateIpcSchema, zoteroSourceStateSchema} from '../../../shared/schemas/research-zotero-source-state';
-import {zoteroAttachmentIpcSchema, zoteroAttachmentReadIpcSchema, zoteroAttachmentInspectionSchema} from '../../../shared/schemas/research-zotero-attachment';
+import {zoteroAttachmentIpcSchema, zoteroAttachmentReadIpcSchema, zoteroAttachmentInspectionSchema,
+  zoteroAttachmentGrantIpcSchema, zoteroAttachmentGrantReadIpcSchema, zoteroAttachmentGrantOutcomeSchema,
+  zoteroAttachmentGrantSchema} from '../../../shared/schemas/research-zotero-attachment';
+import type {ZoteroAttachmentPicker} from './zotero-attachment-grant-store';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
+  attachmentGrant: descriptor('research.zotero.attachmentGrant', zoteroAttachmentGrantIpcSchema, zoteroAttachmentGrantOutcomeSchema),
+  attachmentGrantRead: descriptor('research.zotero.attachmentGrantRead', zoteroAttachmentGrantReadIpcSchema, zoteroAttachmentGrantSchema),
   attachmentInspect: descriptor('research.zotero.attachmentInspect', zoteroAttachmentIpcSchema, zoteroAttachmentInspectionSchema),
   attachmentRead: descriptor('research.zotero.attachmentRead', zoteroAttachmentReadIpcSchema, zoteroAttachmentInspectionSchema),
   sourceObserve: descriptor('research.zotero.sourceObserve', zoteroSourceStateIpcSchema, zoteroSourceStateSchema),
@@ -48,12 +53,28 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   imports: Pick<LiteratureImportService, 'previewZotero' | 'readZoteroPreview' | 'readZoteroSources' | 'reviewZotero' |
     'startZoteroSync' | 'readZoteroSync' | 'captureZoteroSyncPage' | 'controlZoteroSync' | 'acknowledgeZoteroSync' |
     'findZoteroSync' | 'readZoteroSyncPage' | 'observeZoteroSource' | 'readZoteroSourceState' |
-    'inspectZoteroAttachment' | 'readZoteroAttachment'>): void {
+    'inspectZoteroAttachment' | 'readZoteroAttachment' | 'grantZoteroAttachment' | 'readZoteroAttachmentGrant'>,
+  pick: ZoteroAttachmentPicker): void {
   function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
         const code = error instanceof Error ? error.message : '';
+        if (code === 'zotero_attachment_grant_not_found') {
+          throw new RocDomainError({code, message: '附件输入授权不存在，或不属于当前会话与项目。', category: 'not_found', retryable: false});
+        }
+        if (code === 'zotero_attachment_grant_storage_invalid') {
+          throw new RocDomainError({code, message: '附件输入授权记录损坏，无法使用。', category: 'degraded', retryable: false});
+        }
+        if (['zotero_attachment_file_not_ready', 'zotero_attachment_file_changed', 'zotero_attachment_selected_file_mismatch',
+          'zotero_attachment_grant_request_conflict', 'zotero_attachment_grant_active'].includes(code)) {
+          throw new RocDomainError({code, message: '所选附件、检查记录或授权请求不匹配，请重新核对该文件。',
+            category: 'conflict', retryable: false});
+        }
+        if (code === 'zotero_attachment_window_required' || code === 'zotero_attachment_single_file_required') {
+          throw new RocDomainError({code, message: '请在当前窗口的原生文件选择框中选择一个附件文件。',
+            category: 'permission', retryable: false});
+        }
         if (code === 'zotero_attachment_inspection_not_found') {
           throw new RocDomainError({code, message: '附件检查记录不存在，或不属于当前会话与项目。',
             category: 'not_found', retryable: false});
@@ -140,4 +161,6 @@ export function registerZoteroCapabilities(context: RocPluginContext, adapter: Z
   register(capabilities.sourceState, async ({projectId: _scope, ...input}) => imports.readZoteroSourceState(input));
   register(capabilities.attachmentInspect, ({projectId: _scope, ...input}) => imports.inspectZoteroAttachment(input, adapter));
   register(capabilities.attachmentRead, async input => imports.readZoteroAttachment(input.inspectionId));
+  register(capabilities.attachmentGrant, ({projectId: _scope, ...input}) => imports.grantZoteroAttachment(input, pick));
+  register(capabilities.attachmentGrantRead, async input => imports.readZoteroAttachmentGrant(input.grantId));
 }
