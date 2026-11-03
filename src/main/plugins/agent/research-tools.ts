@@ -1,3 +1,4 @@
+import type {ResearchArtifactInspectResult} from '../../../shared/schemas/research-artifact-inspector';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { interrupt } from '@langchain/langgraph';
@@ -228,7 +229,10 @@ export function createResearchTools(input: {
           throw new Error(`research_gate_not_waiting_approval:${current.status}`);
         }
         const isReview = current.stage === 'review';
-        const artifacts = await invoke<ResearchArtifact[]>('research.artifacts.list', { projectId, stage: current.stage });
+        const inspections = await Promise.all(current.artifactIds.map(artifactId =>
+          invoke<ResearchArtifactInspectResult>('research.artifacts.inspect', {projectId, artifactId, expectedVersion: null})));
+        const artifactLinks = inspections.map(({snapshot}) => ({projectId, artifactId: snapshot.artifact.id,
+          expectedVersion: snapshot.version, title: snapshot.artifact.title, kind: snapshot.artifact.kind}));
         let searchPlanReview: {searchPlan: z.infer<typeof researchSearchPlanSchema>; searchPlanHash: string} | null = null;
         if (current.stage === 'discovery') {
           if (current.artifactIds.length !== 1) throw new Error('research_search_plan_required');
@@ -246,7 +250,7 @@ export function createResearchTools(input: {
               args: {
                 projectId,
                 stage: current.stage,
-                artifactTitles: artifacts.map((artifact) => artifact.title),
+                artifactLinks,
                 ...(searchPlanReview === null ? {} : searchPlanReview),
                 summary: isReview
                   ? '确认审稿结论：接受正文则进入导出，要求修订则回到修订阶段，退回则重跑本阶段。'

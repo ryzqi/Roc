@@ -2211,3 +2211,45 @@ source refusal, explicit input/actual sender bridge and permission/not_found err
 error-category refinement does not mutate records; final4/build/startup establish that branch.
 No frozen fixtures, live literature/model/client/user-data read or remote writes. X-UI and full
 plan remain unfinished; next actual artifact references from assistant gate and readonly overlay.
+
+## X-UIA2 — real assistant artifact links and lazy readonly drawer
+
+Status: `Verified passing` for this readonly UI increment. Gate tool emits unique actual
+project/artifact/version/title/kind links from current stage snapshots. Title-only payload and
+obsolete helpers removed; malformed links cannot authorize approval or invent identity. Required
+open callback traverses assistant/transcript/memoized message to AppShell. Project switch drops
+old selection. Existing ModalShell hosts the lazy drawer and separately lazy saved Markdown,
+real claims/evidence/invalidation/raw source. Refresh preserves reviewed baseline; changed data
+requires explicit recapture. Escape restores source focus; actual task link uses management
+drawer. No new approval/edit/automatic model/file request, second shell/navigation or route.
+
+Commands from `/Users/Apple_501/Desktop/Roc/Roc`:
+
+| Command | Actual result |
+| --- | --- |
+| `node --test tests/unit/research-search-plan.test.mjs tests/unit/research-artifact-inspector.test.mjs` |11/11 passed |
+| `pnpm test:unit` |813/813 passed |
+| `pnpm harness:eval` |94/94 passed |
+| `pnpm test:research-p0` | Fresh production build/typecheck/native13/13 passed |
+| `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/research-search-plan.test.mjs` |8/8 passed after targeted harness corrections |
+| `node --test --test-concurrency=1 tests/renderer/` |82/82 passed |
+| `LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false ROC_SMOKE_TARGET=dist node scripts/smoke-electron.mjs` |12/12, zero renderer errors |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | Current;1132666bytes/6files passed |
+| `git diff --check` | Passed |
+
+Evidence `xui-overlay-*.log`, `artifact-inspector-ui/` light/dark1100/1099/800/source screenshot
+and audit. Electron checks call actual repository/registered capability/generated bridge from
+a Playwright exposure seam in the Node test host with the true desktop sender ID; this is not
+a claim of production preload transport. Actual persisted IDs/source/task, zero DB changes,
+empty/missing/permission/integrity, invalidation/stale recapture, late response, focus/task
+return without approving, keyboard and reduced-motion verified. Native13 covers runtime
+persistence; production startup covers assembled shell.
+
+Initial8 run5 passed: native summary text also matched closed raw JSON, selector corrected.
+Second8 run6 passed: newly imposed hidden0 audit expectation conflicted with shared full-height
+drawer physical top/right/bottom edges. Mandatory cut0 retained; exact3 hidden panel edges/gap0
+asserted and all other issues refused. Left shadow visible; dark1099 screenshot inspected. Final
+8 and full82 pass. No shared shadow/style changed or source/action guard weakened. Last source
+changes only whitespace/comment attachment. No live client/model/literature, remote writes or
+frozen workflow fixtures. Next X-UIA3: version-bound human gate context/approve/reject and refresh
+back to assistant confirmation, then production type views/reading position. Full plan unfinished.

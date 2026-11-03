@@ -178,6 +178,7 @@ test('actual gate interrupt carries the visible plan and requires its original h
         capabilities: {invoke: async (name, request) => {
           if (name === 'research.workflow.get') return f.repository.getWorkflow(f.project.id);
           if (name === 'research.artifacts.list') return f.repository.listArtifacts(f.project.id);
+          if (name === 'research.artifacts.inspect') return f.repository.inspectArtifact(request);
           if (name === 'research.artifacts.content') return f.repository.runs.getArtifactContent(f.project.id, request.artifactId);
           if (name === 'research.workflow.transition') return gate.approve(request);
           assert.fail(name);
@@ -192,6 +193,11 @@ test('actual gate interrupt carries the visible plan and requires its original h
       assert.deepEqual(args.searchPlan.queries, [query]);
       assert.equal(args.searchPlan.researchQuestion, f.run.instruction);
       assert.match(args.searchPlanHash, /^[a-f0-9]{64}$/u);
+      assert.equal(args.artifactLinks.length,1);
+      assert.equal(args.artifactLinks[0].artifactId,artifactId);
+      assert.equal(args.artifactLinks[0].projectId,f.project.id);
+      assert.match(args.artifactLinks[0].expectedVersion,/^[a-f0-9]{64}$/u);
+      assert.equal(args.artifactTitles,undefined);
       if (change === 'valid_content') {
         const stored = f.repository.runs.getArtifactContent(f.project.id, artifactId).output;
         stored.title = 'Changed title after review';

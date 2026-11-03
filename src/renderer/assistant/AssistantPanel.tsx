@@ -1,3 +1,4 @@
+import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
 import type { ChatRunMode, RunBudgetStatus, SettingsSnapshot } from '../../shared/types';
@@ -89,6 +90,7 @@ export type AssistantPanelProps = {
   threadId: string | null;
   onThreadIdChange: (threadId: string | null) => void;
   onOpenTask: (taskId: string) => void;
+  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
   /** Bound workspace path, so a run is scoped to the directory the user is looking at. */
   workspacePath: string | null;
   projectName: string | null;
@@ -116,6 +118,7 @@ export function AssistantPanel({
   threadId,
   onThreadIdChange,
   onOpenTask,
+  onOpenArtifact,
   workspacePath,
   projectName,
   stageLabel = null,
@@ -444,6 +447,7 @@ export function AssistantPanel({
             onJumpToLatest={session.history.reloadLatest}
             scrollContainerRef={scrollContainerRef}
             onApprovalDecision={onApprovalDecision}
+            onOpenArtifact={onOpenArtifact}
             onResumeCheckpoint={onResumeCheckpoint}
           />
         )}

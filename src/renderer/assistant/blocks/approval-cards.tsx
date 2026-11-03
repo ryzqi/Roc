@@ -1,3 +1,4 @@
+import {researchArtifactLinksSchema, type ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
 import { ShieldCheck } from 'lucide-react';
 import type { ChatPendingApproval, ChatResumeDecision } from '../../../shared/types';
 import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
@@ -185,9 +186,11 @@ function defaultRejectLabel(isReview: boolean): string {
 
 export function ResearchGateApprovalCard({
   approval,
+  onOpenArtifact,
   onApprovalDecision
 }: {
   approval: ChatPendingApproval;
+  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 }): React.JSX.Element {
   const action = approval.actionRequests[0];
@@ -200,7 +203,8 @@ export function ResearchGateApprovalCard({
   const isDiscovery = stage === 'discovery';
   const plan = isDiscovery ? researchSearchPlanSchema.safeParse(args !== null && typeof args === 'object' ? args.searchPlan : undefined) : null;
   const planHash = readString(args, 'searchPlanHash');
-  const canApprovePlan = !isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash);
+  const links = researchArtifactLinksSchema.safeParse(args?.artifactLinks);
+  const canApprovePlan = links.success && (!isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash));
   const approveLabel = decisionLabel === '' ? defaultApproveLabel(isReview) : decisionLabel;
   const rejectLabel = rejectNote === '' ? defaultRejectLabel(isReview) : rejectNote;
   const decide = (type: GateDecisionType): void => {
@@ -214,13 +218,6 @@ export function ResearchGateApprovalCard({
       'approve',
       'reject'
     ];
-  const artifactTitles =
-    action === undefined
-      ? []
-      : uniqueNonEmpty([
-          ...readStringArray(args, 'artifactTitles'),
-          ...(readString(args, 'artifactTitle') === '' ? [] : [readString(args, 'artifactTitle')])
-        ]);
 
   return (
     <ApprovalShell
@@ -236,15 +233,14 @@ export function ResearchGateApprovalCard({
       <p className="text-muted text-[var(--font-meta-size)]" data-testid="assistant-gate-summary">
         {summary === '' ? '确认通过本阶段产物并进入下一阶段。' : summary}
       </p>
-      {artifactTitles.length === 0 ? null : (
-        <ul className="mt-1.5 flex flex-col gap-0.5" data-testid="assistant-gate-artifacts">
-          {artifactTitles.map((title) => (
-            <li key={title} className="text-ink text-[var(--font-meta-size)]">
-              {title}
-            </li>
-          ))}
-        </ul>
-      )}
+      {links.success ? <ul className="mt-1.5 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
+        {links.data.map(link => <li key={link.artifactId}>
+          <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            data-testid="assistant-gate-artifact" onClick={() => onOpenArtifact({projectId: link.projectId, artifactId: link.artifactId, expectedVersion: link.expectedVersion})}>
+            {link.title}
+          </button>
+        </li>)}
+      </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，请退回重新核对。</p>}
       {isDiscovery ? plan?.success && canApprovePlan ? (
         <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
@@ -383,27 +379,8 @@ function stageLabel(stage: string): string {
   return labels[stage] ?? stage;
 }
 
-function uniqueNonEmpty(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value.trim();
-    if (trimmed.length === 0 || seen.has(trimmed)) {
-      continue;
-    }
-    seen.add(trimmed);
-    result.push(trimmed);
-  }
-  return result;
-}
-
 /** 闸门参数来自 interrupt payload，属于未类型化输入：只按名字取需要的字段。 */
 function readString(value: Record<string, unknown> | null, key: string): string {
   const field = value === null ? undefined : value[key];
   return typeof field === 'string' ? field : '';
-}
-
-function readStringArray(value: Record<string, unknown> | null, key: string): string[] {
-  const field = value === null ? undefined : value[key];
-  return Array.isArray(field) ? field.filter((item): item is string => typeof item === 'string') : [];
 }

@@ -1,3 +1,4 @@
+import type {ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
 import { memo, useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import type { ChatPendingInterrupt, ChatResumeDecision } from '../../../shared/types';
@@ -51,6 +52,7 @@ import { ToolCallBlock } from './tool-call-block';
 
 export type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
+  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
   onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
@@ -119,7 +121,7 @@ function resolveActivityBlocks(
   ];
 }
 
-function ChatMessageRowImpl({ message, onApprovalDecision, onResumeCheckpoint }: ChatMessageRowProps): React.JSX.Element {
+function ChatMessageRowImpl({ message, onApprovalDecision, onResumeCheckpoint, onOpenArtifact }: ChatMessageRowProps): React.JSX.Element {
   const isAssistant = message.role === 'assistant';
   const attachments = message.attachments ?? [];
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
@@ -148,6 +150,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision, onResumeCheckpoint }:
               interrupt={interrupt}
               key={interrupt.interruptId}
               onApprovalDecision={onApprovalDecision}
+              onOpenArtifact={onOpenArtifact}
               source={message.source}
             />
           ))}
@@ -199,6 +202,7 @@ export const ChatMessageRow = memo(
     prev.message.interrupts === next.message.interrupts &&
     prev.message.isStreaming === next.message.isStreaming &&
     prev.onApprovalDecision === next.onApprovalDecision &&
+    prev.onOpenArtifact === next.onOpenArtifact &&
     prev.onResumeCheckpoint === next.onResumeCheckpoint
 );
 
@@ -250,6 +254,7 @@ function CopyAnswerButton({ content }: { content: string }): React.JSX.Element {
 
 function ChatInterruptView(input: {
   interrupt: ChatPendingInterrupt;
+  onOpenArtifact: (request: ResearchArtifactInspectRequest) => void;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
   source: ChatTranscriptMessage['source'];
 }): React.JSX.Element {
@@ -277,7 +282,7 @@ function ChatInterruptView(input: {
   if (isResearchGateApproval(interrupt)) {
     return (
       <div className={motionClass}>
-        <ResearchGateApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />
+        <ResearchGateApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} onOpenArtifact={input.onOpenArtifact} />
       </div>
     );
   }

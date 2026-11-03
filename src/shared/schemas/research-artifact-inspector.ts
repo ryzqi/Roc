@@ -7,6 +7,11 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
   projectId: z.string().min(1), artifactId: z.string().min(1), expectedVersion: hash.nullable()
 }).strict();
+export const researchArtifactLinkSchema = researchArtifactInspectRequestSchema.extend({
+  expectedVersion: hash, title: z.string().min(1), kind: researchArtifactSchema.shape.kind
+});
+export const researchArtifactLinksSchema = researchArtifactLinkSchema.array().min(1).refine(
+  links => new Set(links.map(link => link.artifactId)).size === links.length, 'Artifact links must be unique.');
 export const researchInspectedEvidenceSchema = z.object({
   evidence: researchEvidenceSchema, referenceStatus: z.enum(['recorded', 'superseded']),
   invalidatedAt: z.string().nullable()

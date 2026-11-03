@@ -1,3 +1,4 @@
+import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';
 import { canvasViewForDrawerSection, isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
@@ -104,6 +105,7 @@ const ManagementPanel = lazy(async () => ({ default: (await import('../managemen
  * fetched when the drawer actually opens.
  */
 const GitPanel = lazy(async () => ({ default: (await import('../canvas/git/GitPanel')).GitPanel }));
+const ArtifactInspector = lazy(async () => ({default: (await import('../artifacts/ArtifactInspector')).ArtifactInspector}));
 
 export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
@@ -118,6 +120,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     setSearchToken((current) => current + 1);
     setSearchOpen(true);
   }, []);
+  const [artifactSelection, setArtifactSelection] = useState<ResearchArtifactInspectRequest | null>(null);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
@@ -143,6 +146,10 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
+  const openArtifact = useCallback((request: ResearchArtifactInspectRequest): void => {
+    if (request.projectId !== route.projectId) throw new Error('research_artifact_project_mismatch');
+    setArtifactSelection(request);
+  }, [route.projectId]);
   const layout = useLayoutState();
   useContentPreferenceSync();
 
@@ -198,6 +205,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
    * project exists (a stale deep link or a deleted project is the common case).
    */
   const projectLoadFailed = inProject && currentProject.status === 'error';
+
+  useEffect(() => {setArtifactSelection(null);}, [route.projectId]);
 
   // A conversation belongs to one project, so a project switch drops the selection.
   useEffect(() => {
@@ -716,6 +725,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   projectId={route.projectId}
                   threadId={assistantThreadId}
                   onThreadIdChange={setAssistantThreadId}
+                  onOpenArtifact={openArtifact}
                   onOpenTask={(taskId) => {
                     if (route.projectId === null) throw new Error('research_task_project_required');
                     setResearchTaskSelection({ projectId: route.projectId, taskId });
@@ -776,6 +786,17 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         onQueryChange={setSearchQuery}
         groups={searchGroups}
       />
+
+      {artifactSelection === null || artifactSelection.projectId !== route.projectId ? null : (
+        <Suspense fallback={<DelayedFallback label="正在加载工件检查器…" />}>
+          <ArtifactInspector key={JSON.stringify(artifactSelection)} client={client} request={artifactSelection}
+            onClose={() => setArtifactSelection(null)} onOpenTask={(taskId) => {
+              setResearchTaskSelection({projectId: artifactSelection.projectId, taskId});
+              setArtifactSelection(null);
+              openManagementSection('tasks');
+            }} />
+        </Suspense>
+      )}
 
       {managementMounted ? (
         <Suspense fallback={<DelayedFallback label="正在加载管理面板…" />}>

@@ -23,9 +23,10 @@ before(async () => {
     window.decisions = [];
     window.mount = (searchPlan, searchPlanHash) => flushSync(() => root.render(React.createElement(ResearchGateApprovalCard, {
       approval: {kind: 'approval', interruptId: 'plan-gate', actionRequests: [{name: 'research_approve_gate',
-        args: {stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactTitles: ['检索计划'],
+        args: {stage: 'discovery', summary: '确认本阶段产物是否可以进入下一阶段。', artifactLinks: [{projectId:'synthetic-project',artifactId:'synthetic-artifact',expectedVersion:'a'.repeat(64),title:'检索计划',kind:'search_strategy'}],
           ...(searchPlan === null ? {} : {searchPlan}), searchPlanHash}}],
         reviewConfigs: [{actionName: 'research_approve_gate', allowedDecisions: ['approve', 'reject']}]},
+      onOpenArtifact: request => window.openedArtifact=request,
       onApprovalDecision: (id, values) => decisions.push({id, values})
     })));
   `, resolveDir: process.cwd(), loader: 'js'}, outfile: join(directory, 'app.js'),
