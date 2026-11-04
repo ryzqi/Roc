@@ -1,5 +1,5 @@
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
-import type {ResearchReviewScreeningDecisionSave} from '../../shared/schemas/research-review-screening';
+import type {ResearchReviewScreeningDecisionSave, ResearchReviewScreeningArbitrationSave} from '../../shared/schemas/research-review-screening';
 import {formInputClass} from '../shared/form-ui';
 
 type Outcome = ResearchReviewScreeningDecisionSave['outcome'];
@@ -16,9 +16,17 @@ export function screeningOutcomeDraft(outcome: Outcome | null): ScreeningOutcome
 }
 export function screeningOutcome(decision: Outcome['decision'], draft: ScreeningOutcomeDraft): Outcome {
   switch (decision) {
+    case 'include':
+    case 'exclude': return screeningFinalOutcome(decision, draft);
+    case 'uncertain': return {decision, reason: draft.reason};
+  }
+}
+export function screeningFinalOutcome(
+  decision: ResearchReviewScreeningArbitrationSave['outcome']['decision'], draft: ScreeningOutcomeDraft
+): ResearchReviewScreeningArbitrationSave['outcome'] {
+  switch (decision) {
     case 'include': return {decision, inclusionCriterionIds: draft.inclusionCriterionIds, reason: draft.reason};
     case 'exclude': return {decision, exclusionCriterionId: draft.exclusionCriterionId, reason: draft.reason};
-    case 'uncertain': return {decision, reason: draft.reason};
   }
 }
 export function ReviewScreeningOutcome({protocol, value, onChange, allowUncertain}: {

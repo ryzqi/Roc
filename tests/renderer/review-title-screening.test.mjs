@@ -129,10 +129,10 @@ async function select(f,index=0,reviewer=0) {
   await tid('artifact-review-title-decision').waitFor();
 }
 async function fill(outcome=include) {
-  await page.getByLabel('筛选决定',{exact:true}).selectOption(outcome.decision);
+  await tid('artifact-review-title-decision').getByLabel('筛选决定',{exact:true}).selectOption(outcome.decision);
   if(outcome.decision==='include')await tid('artifact-review-title-form').getByRole('checkbox').check();
-  if(outcome.decision==='exclude')await page.getByLabel('主要排除准则',{exact:true}).selectOption(outcome.exclusionCriterionId);
-  await page.getByLabel('筛选理由',{exact:true}).fill(outcome.reason);
+  if(outcome.decision==='exclude')await tid('artifact-review-title-decision').getByLabel('主要排除准则',{exact:true}).selectOption(outcome.exclusionCriterionId);
+  await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).fill(outcome.reason);
 }
 async function save() {
   await tid('artifact-review-title-save').click();await tid('artifact-review-title-current').waitFor();
@@ -190,7 +190,7 @@ test('considering a real independent model suggestion records its hash without f
   const f=await fixture({screening:{titleAbstractReviewers:1,fullTextReviewers:1,conflictResolution:'human_adjudication'}});
   const proposal=f.decisions.suggest({...f.target(0,'proposal'),outcome:include},origin);
   await mount(f);assert.equal(f.freezing.getPhase(f.phase).counts.included,0);await select(f);
-  await tid('artifact-review-title-consider').click();assert.equal(await page.getByLabel('筛选决定',{exact:true}).inputValue(),'');
+  await tid('artifact-review-title-consider').click();assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选决定',{exact:true}).inputValue(),'');
   await fill(uncertain);await save();const phase=f.freezing.getPhase(f.phase),human=phase.items[0].decisions[0];
   assert.deepEqual(human.snapshot.request.outcome,uncertain);
   assert.deepEqual(human.snapshot.request.consideredSuggestion,{id:proposal.snapshot.id,expectedHash:proposal.snapshotHash});
@@ -209,7 +209,7 @@ test('independent current decision defeats a stale null parent and a reread pres
   const actual=f.decisions.save(f.decision(0,f.input.titleAbstractReviewers[0].id,'independent',exclude),{kind:'user',id:'other-author'});
   const before=f.changes();await tid('artifact-review-title-save').click();
   await tid('artifact-review-title-decision').getByRole('alert').filter({hasText:'状态已变化'}).waitFor();
-  assert.equal(f.changes(),before);assert.equal(await page.getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  assert.equal(f.changes(),before);assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
   await tid('artifact-review-title-refresh').click();await tid('artifact-review-title-current').waitFor();
   assert.match(await tid('artifact-review-title-current').innerText(),/other-author/u);
   assert.equal(f.freezing.getPhase(f.phase).items[0].decisions[0].snapshotHash,actual.snapshotHash);
@@ -219,7 +219,7 @@ test('held actual human commit keeps its own form visible and blocks reviewer, r
   const f=await fixture();await mount(f);await select(f);await fill();
   const begun=new Promise(resolve=>{f.started=resolve;});f.deferMethod='saveReviewScreeningDecision';
   await tid('artifact-review-title-save').click();await begun;
-  assert.equal(await tid('artifact-review-title-form').count(),1);assert.equal(await page.getByLabel('筛选理由',{exact:true}).isDisabled(),true);
+  assert.equal(await tid('artifact-review-title-form').count(),1);assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).isDisabled(),true);
   assert.equal(await page.getByLabel('标题摘要审核人',{exact:true}).isDisabled(),true);
   assert.equal(await tid('artifact-review-title-select').first().isDisabled(),true);
   assert.equal(await tid('artifact-review-title-refresh').isDisabled(),true);assert.equal(await tid('artifact-review-screening-plan-refresh').isDisabled(),true);
@@ -233,7 +233,7 @@ test('phase read failure retains labeled old receipts and prohibits writes until
   await tid('artifact-review-title-refresh').click();await page.getByRole('alert').filter({hasText:'Synthetic original phase'}).waitFor();
   assert.match(await tid('artifact-review-title').innerText(),/上次成功读取/u);assert.equal(await tid('artifact-review-title-form').count(),0);
   f.readFailure=null;await tid('artifact-review-title-refresh').click();await tid('artifact-review-title-form').waitFor();
-  assert.equal(await page.getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
 });
 
 test('frozen and archived title decisions stay readable with exact metadata and history but no mutable form at dark narrow size',async()=>{

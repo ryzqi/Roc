@@ -1,10 +1,11 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
-import type {ResearchReviewScreeningFrozenPhase, ResearchReviewScreeningPlanInspection} from '../../shared/schemas/research-review-screening';
+import type {ResearchReviewScreeningFrozenPhase, ResearchReviewScreeningPlanInspection, ResearchReviewScreeningFreezeRequest} from '../../shared/schemas/research-review-screening';
 import type {RocClient} from '../shared/roc-client';
-import {useAsyncResource} from '../app/use-async-resource';
-import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
+import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewTitleDecision} from './ReviewTitleDecision';
+import {ReviewTitleArbitration} from './ReviewTitleArbitration';
 import {screeningStatuses} from './ReviewScreeningOutcome';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -16,7 +17,12 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
   const phaseRead = useAsyncResource(`review:title-phase:${plan.snapshotHash}`,
     () => client.api.research.getReviewScreeningPhase({projectId, corpusId, phase: 'title_abstract'}), {label: '读取标题摘要人工筛选'});
   const phase = phaseRead.data;
-  const [hitId, setHitId] = useState<string | null>(null), [pending, setPending] = useState(false);
+  const [hitId, setHitId] = useState<string | null>(null), [recordPending, setRecordPending] = useState(false);
+  const [reviewNote, setReviewNote] = useState('');
+  const freeze = useAsyncAction((request: ResearchReviewScreeningFreezeRequest) => client.api.research.freezeReviewScreeningPhase(request),
+    {label: '冻结标题摘要人工筛选'});
+  const pending = recordPending || freeze.pending;
+  const busy = useRef(false), requests = useRef(new Map<string, string>());
   const [offset, setOffset] = useState(0);
   const focus = useRef<HTMLDivElement>(null);
   const selected = phase?.items.find(item => item.hit.id === hitId);
@@ -59,9 +65,30 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
       </div>
       {selected === undefined ? null : <div ref={focus} tabIndex={-1} aria-label="标题摘要原始记录核查" data-testid="artifact-review-title-focus">
         <ReviewTitleRecord key={`title-record:${selected.hit.id}`}
-          client={client} protocol={protocol} phase={phase} item={selected} writable={editable}
-          onPending={value => {setPending(value); onPending(value);}} onSaved={phaseRead.reload} />
+          client={client} protocol={protocol} phase={phase} item={selected} writable={editable && !freeze.pending}
+          onPending={value => {setRecordPending(value); onPending(value);}} onSaved={phaseRead.reload} />
       </div>}
+      {!editable ? null : <form className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2"
+        data-testid="artifact-review-title-freeze-form" onSubmit={event => {
+          event.preventDefault();
+          if (busy.current || !editable || pending || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0) return;
+          const body = {projectId, corpusId, phase: 'title_abstract' as const, expectedReviewHash: phase.reviewHash, reviewNote};
+          const signature = JSON.stringify(body);
+          let requestId = requests.current.get(signature);
+          if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
+          busy.current = true; onPending(true);
+          void freeze.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) phaseRead.reload();});
+        }}>
+        <label className="flex flex-col gap-1 text-muted">标题摘要整轮审核说明
+          <textarea required aria-label="标题摘要整轮审核说明" disabled={pending} maxLength={10000} rows={3}
+            className={`${formInputClass} border-[0.5px] h-auto resize-y py-1`} value={reviewNote}
+            onChange={event => {setReviewNote(event.target.value); freeze.reset();}} />
+        </label>
+        <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
+          disabled={pending || reviewNote.trim() === '' || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0}
+          data-testid="artifact-review-title-freeze">确认并冻结整轮标题摘要筛选</button>
+      </form>}
+      {freeze.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{freeze.error}</p>}
     </>}
   </section>;
 }
@@ -74,7 +101,9 @@ function ReviewTitleRecord({client, protocol, phase, item, writable, onPending, 
   const plan = phase.plan, {projectId, corpusId} = plan.snapshot.request;
   const read = useAsyncResource(`review:title-record:${plan.snapshotHash}:${item.hit.id}`,
     () => client.api.research.getReviewCorpusHit({projectId, corpusId, hitId: item.hit.id}), {label: '读取标题摘要原始记录'});
-  const [reviewerId, setReviewerId] = useState(''), [pending, setPending] = useState(false);
+  const [reviewerId, setReviewerId] = useState(''), [decisionPending, setDecisionPending] = useState(false);
+  const [arbitrationPending, setArbitrationPending] = useState(false);
+  const pending = decisionPending || arbitrationPending;
   const parent = item.decisions.find(decision => decision.snapshot.request.reviewerId === reviewerId) ?? null;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-title-record">
     <h3 className="font-medium">原始标题摘要 {screeningStatuses[item.status]}</h3>
@@ -100,7 +129,10 @@ function ReviewTitleRecord({client, protocol, phase, item, writable, onPending, 
       </label>
       {reviewerId === '' ? null : <ReviewTitleDecision key={`title-decision:${reviewerId}:${parent?.snapshotHash ?? 'new'}`}
         client={client} protocol={protocol} plan={plan} hitId={item.hit.id} reviewerId={reviewerId} parent={parent}
-        writable={writable} onPending={value => {setPending(value); onPending(value);}} onSaved={onSaved} />}
+        writable={writable && !arbitrationPending} onPending={value => {setDecisionPending(value); onPending(value);}} onSaved={onSaved} />}
+      <ReviewTitleArbitration key={`title-arbitration:${item.hit.id}:${item.arbitration?.snapshotHash ?? 'new'}:${item.decisions.map(decision => decision.snapshotHash).join(':')}`}
+        client={client} protocol={protocol} phase={phase} item={item} writable={writable && !decisionPending}
+        onPending={value => {setArbitrationPending(value); onPending(value);}} onSaved={onSaved} />
     </>}
   </section>;
 }
