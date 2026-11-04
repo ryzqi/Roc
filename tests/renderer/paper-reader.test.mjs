@@ -1,18 +1,17 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
-import {build as buildVite} from 'vite';
-import react from '@vitejs/plugin-react';
+import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
-let api, directory, inputDirectory, app, page, active;
+let api, directory, app, page, active;
 const fixtures = [], calls = [], errors = [];
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/pr07-reader-selection');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -20,17 +19,20 @@ before(async () => {
   api = await loadResearchTestApi();
   directory = await mkdtemp(join(tmpdir(), 'roc-paper-reader-'));
   await mkdir(artifacts, {recursive: true});
-  inputDirectory = await mkdtemp(join(process.cwd(), '.runtime/tmp/roc-reader-vite-'));
-  await writeFile(join(inputDirectory, 'app.tsx'), `
+  await buildViteRenderer({directory,script:`
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {PaperReader} from ${JSON.stringify(join(process.cwd(),'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/workspace-scope'))};
+    import {ArtifactEvidenceSource} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/ArtifactEvidenceSource'))};
+    import {ModalShell} from ${JSON.stringify(join(process.cwd(),'src/renderer/shell/ModalShell'))};
+    import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     const root=createRoot(document.getElementById('root'));
     const client={api:{research:{
       resolveDocumentParse:input=>window.readFromHost('resolveDocumentParse',input),
       previewDocument:input=>window.readFromHost('previewDocument',input),
+      getDocumentContent:input=>window.readFromHost('getDocumentContent',input),
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}})
     }}};
     const loadDocumentContent=input=>window.readFromHost('getDocumentContent',input);
@@ -47,20 +49,25 @@ before(async () => {
     }
     let generation=0;
     window.mountReader=(snapshot,focus)=>flushSync(()=>root.render(<Harness key={++generation} initial={snapshot} initialFocus={focus}/>));
-  `);
-  const assets = join(process.cwd(), 'dist/renderer/assets');
-  const styles = await Promise.all((await readdir(assets)).filter(file => file.endsWith('.css')).map(file => readFile(join(assets, file), 'utf8')));
-  await writeFile(join(inputDirectory, 'app.css'), styles.join('\n'));
-  await writeFile(join(inputDirectory, 'index.html'), `<html data-theme="light"><link rel="stylesheet" href="/app.css"><style>
+    function SourceHarness({initial}) {
+      const [source,setSource]=useState(initial),[open,setOpen]=useState(true);
+      window.updateSource=source=>flushSync(()=>setSource(source));
+      return <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+        <ModalShell open={open} kind="drawer" title="固定来源验证" testId="source-inspector"
+          widthClassName="w-[560px]" onClose={()=>setOpen(false)}>
+          <ArtifactEvidenceSource client={client} source={source} canDecide={false} onChanged={()=>{}}/>
+        </ModalShell>
+      </LazyMotion></MotionConfig>;
+    }
+    window.mountSource=source=>flushSync(()=>root.render(<SourceHarness key={++generation} initial={source}/>));
+  `,style:`
     html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-    </style><div id="root"></div><script>
+  `,setup:`
       const NativeWorker=window.Worker;window.liveWorkers=0;window.createdWorkers=0;
       window.workerUrls=[];
       window.Worker=class extends NativeWorker{constructor(...args){super(...args);window.liveWorkers++;window.createdWorkers++;window.workerUrls.push(String(args[0]));this.closed=false;}
         terminate(){if(!this.closed){this.closed=true;window.liveWorkers--;}super.terminate();}};
-    </script><script type="module" src="/app.tsx"></script></html>`);
-  await buildVite({configFile:false,root:inputDirectory,base:'./',plugins:[react()],logLevel:'silent',
-    build:{outDir:directory,emptyOutDir:false,manifest:true}});
+  `});
   await build({entryPoints: ['src/main/pdf-preview-protocol.ts'], outfile: join(directory, 'protocol.cjs'),
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'], logLevel: 'silent'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
@@ -102,7 +109,6 @@ after(async () => {
   for (const fixture of fixtures) if (fixture.root) await rm(fixture.root, {recursive: true, force: true});
   api?.dispose();
   if (directory) await rm(directory, {recursive: true, force: true});
-  if (inputDirectory) await rm(inputDirectory, {recursive: true, force: true});
 });
 
 function scene() {
@@ -226,6 +232,18 @@ async function publishReverseLayout(f, {crossPage = false, pageOnly = false} = {
 async function mount(f, focus = {parseId: null, locator: null}) {
   active = f; calls.length = 0;
   await page.evaluate(({snapshot, focus}) => window.mountReader(snapshot, focus), {snapshot: f.snapshot(), focus});
+}
+function captureOriginalSource(f) {
+  const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:actual-original-parse:chunk:0'});
+  return f.repository.evidence.inspectEvidence(evidence.id,f.project.id);
+}
+async function mountSource(f, source) {
+  active=f;calls.length=0;
+  await page.evaluate(source=>window.mountSource(source),source);
+  const summary=page.locator('summary').first();
+  await summary.focus();await page.keyboard.press('Enter');
+  const open=page.getByTestId(`artifact-document-source-toggle-${source.evidence.id}`);
+  await open.waitFor();await open.focus();await page.keyboard.press('Enter');
 }
 async function textEquals(text) {
   await page.waitForFunction(text => document.querySelector('[data-testid="reader-blocks"]')?.textContent.includes(text), text);
@@ -592,4 +610,116 @@ test('PDF without measured regions offers page-block choices and never infers a 
   assert.equal(f.changes(),before);
   await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
   assert.deepEqual(errors,[]);
+});
+
+test('captured Evidence opens its original parse and source even after a new parse supersedes its reference',async()=>{
+  const f=await realPdfScene(), original=captureOriginalSource(f);
+  await publishReverseLayout(f);
+  const source=f.repository.evidence.inspectEvidence(original.evidence.id,f.project.id), before=f.changes();
+  assert.equal(source.referenceStatus,'superseded');
+  assert.equal(source.sourceLocator.parseId,'actual-original-parse');
+  await mountSource(f,source);await waitForOriginal();
+  await page.waitForFunction(()=>{
+    const panel=document.querySelector('[data-testid="source-inspector-panel"]');
+    return panel && getComputedStyle(panel).opacity==='1' && getComputedStyle(panel).transform==='none';
+  });
+  assert.equal(await page.getByTestId('artifact-document-source-block').innerText().then(text=>text.includes('Explicit synthetic Left')),false);
+  assert.match(await page.getByTestId('artifact-document-source-block').innerText(),/Synthetic group A mean is 2/);
+  for(const call of calls.filter(call=>call.method==='getDocumentContent'||call.method==='previewDocument')) {
+    assert.equal(call.input.parseId,source.sourceLocator.parseId);assert.equal(call.input.sourceHash,source.sourceLocator.sourceHash);
+    assert.equal(call.input.parseHash,source.sourceLocator.parseHash);assert.equal(call.input.projectId,f.project.id);
+  }
+  assert.ok(calls.some(call=>call.method==='source'));
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  for(const [width,theme] of [[1100,'light'],[1099,'dark'],[800,'light']]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,850),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await waitForOriginal();
+    await page.getByTestId('reader-pdf-page-blocks').hover();
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);audits.push({width,theme,...audit});
+    const layout=await page.getByTestId('source-inspector-panel').evaluate(panel=>({overflow:panel.scrollWidth-panel.clientWidth,
+      bounds:panel.getBoundingClientRect().toJSON()}));
+    assert.equal(layout.overflow,0);
+    await page.screenshot({path:join(artifacts,`evidence-original-${theme}-${width}.png`)});
+  }
+  await page.getByTestId('reader-pdf-page-blocks').click();
+  const target=page.getByTestId('reader-pdf-block-candidate').first();await target.focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='artifact-document-source-block');
+  await writeFile(join(artifacts,'evidence-original-clip-audit.json'),JSON.stringify(audits,null,2));
+  assert.equal(f.changes(),before);
+  await page.getByTestId(`artifact-document-source-toggle-${source.evidence.id}`).click();
+  await page.waitForFunction(()=>window.liveWorkers===0);
+  assert.equal(await page.getByTestId('artifact-document-source').count(),0);
+  await writeFile(join(artifacts,'evidence-fixed-original.json'),JSON.stringify({source,calls,
+    seam:'actual captured Evidence, superseding parse and generated readonly bridge/PDF protocol; synthetic Node-host window98'},null,2));
+});
+
+test('fixed-source reader rejects foreign project, parse hash, parser, block text and captured region mismatches',async()=>{
+  const f=await realPdfScene(), source=captureOriginalSource(f), before=f.changes();
+  const foreign=f.repository.createProject({title:'Unlinked source project',description:'',workspacePath:'/tmp/source-unlinked'});
+  const variants=[
+    value=>{value.evidence.projectId=foreign.id;},
+    value=>{value.sourceLocator.documentId='missing-captured-document';},
+    value=>{value.sourceLocator.sourceHash='b'.repeat(64);},
+    value=>{value.sourceLocator.parseHash='b'.repeat(64);},
+    value=>{value.sourceLocator.parserFingerprint='b'.repeat(64);},
+    value=>{value.sourceLocator.blockId='missing-captured-block';},
+    value=>{value.evidence.excerpt+=' Changed text';},
+    value=>{value.sourceLocator.locations[0].bbox[0]+=1;}
+  ];
+  for(const mutate of variants) {
+    const value=structuredClone(source);mutate(value);
+    await mountSource(f,value);
+    await page.getByTestId('error-blocked').waitFor();
+    assert.equal(await page.getByTestId('artifact-document-source-block').count(),0);
+    assert.equal(await page.getByTestId('reader-pdf').count(),0);
+    assert.equal(await page.evaluate(()=>window.liveWorkers),0);
+    assert.equal(calls.some(call=>call.method==='previewDocument'||call.method==='source'),false);
+  }
+  // The added independent project is the only write in this scenario.
+  const afterProject=f.changes();
+  await mountSource(f,source);await waitForOriginal();
+  assert.equal(f.changes(),afterProject);
+  assert.ok(afterProject>before);
+  await page.getByTestId(`artifact-document-source-toggle-${source.evidence.id}`).click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('late fixed-source reads cannot publish the previous project under a new Evidence selection',async()=>{
+  const f=await realPdfScene(), next=await realPdfScene({pdfOptions:{pageCount:2}});
+  const oldSource=captureOriginalSource(f), nextSource=captureOriginalSource(next);
+  const ready=new Promise(resolve=>{f.deferReady=resolve;});f.defer='getDocumentContent';
+  await mountSource(f,oldSource);await ready;
+  active=next;
+  await page.evaluate(source=>window.updateSource(source),nextSource);
+  await waitForOriginal();
+  const before=next.changes();f.finish();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.notEqual(oldSource.sourceLocator.parseHash,nextSource.sourceLocator.parseHash);
+  assert.equal(await page.getByTestId('artifact-document-source').innerText().then(text=>text.includes(oldSource.sourceLocator.parseHash)),false);
+  assert.match(await page.getByTestId('artifact-document-source-block').innerText(),/Original generated page 1/);
+  const previewCalls=calls.filter(call=>call.method==='previewDocument');
+  assert.equal(previewCalls.length,1);assert.equal(previewCalls[0].input.projectId,next.project.id);
+  assert.equal(await page.evaluate(()=>window.liveWorkers),1);assert.equal(next.changes(),before);
+  await page.getByTestId(`artifact-document-source-toggle-${nextSource.evidence.id}`).click();await page.waitForFunction(()=>window.liveWorkers===0);
+  assert.deepEqual(errors,[]);
+});
+
+test('captured cross-page source preserves its selected location through original PDF context navigation',async()=>{
+  const f=await realPdfScene({pdfOptions:{pageCount:2},pageRange:'1-2'});
+  await publishReverseLayout(f,{crossPage:true});
+  const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:synthetic-reverse-parse:chunk:0'});
+  const source=f.repository.evidence.inspectEvidence(evidence.id,f.project.id),before=f.changes();
+  assert.equal(source.sourceLocator.locations.length,2);
+  await mountSource(f,source);await waitForOriginal();
+  await page.getByRole('combobox',{name:'证据原文位置',exact:true}).selectOption('1');await waitForOriginal();
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).inputValue(),'2');
+  await page.getByTestId('reader-pdf-page-blocks').click();
+  const target=page.getByRole('button',{name:'定位到Left synthetic:reverse-left 位置2',exact:true});
+  await target.focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='artifact-document-source-block');
+  await waitForOriginal();
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).inputValue(),'2');
+  assert.equal(await page.getByRole('combobox',{name:'证据原文位置',exact:true}).inputValue(),'1');
+  assert.equal(f.changes(),before);
+  await page.getByTestId(`artifact-document-source-toggle-${evidence.id}`).click();await page.waitForFunction(()=>window.liveWorkers===0);
 });

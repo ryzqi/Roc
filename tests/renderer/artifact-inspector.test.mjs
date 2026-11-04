@@ -2,10 +2,10 @@ import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langcha
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import * as esbuild from 'esbuild';
+import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
@@ -18,7 +18,7 @@ before(async()=>{
   api=await loadResearchTestApi();
   directory=mkdtempSync(join(tmpdir(),'roc-artifact-inspector-ui-'));
   mkdirSync(artifacts,{recursive:true});
-  await esbuild.build({stdin:{contents:`
+  await buildViteRenderer({directory,script:`
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
@@ -62,13 +62,10 @@ before(async()=>{
     window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
       <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
         <Harness key={++generation} link={link} initialApproval={approval}/></LazyMotion></MotionConfig>));};
-  `,resolveDir:process.cwd(),loader:'tsx'},outfile:join(directory,'app.js'),bundle:true,platform:'browser',format:'iife',logLevel:'silent'});
-  const assets=join(process.cwd(),'dist/renderer/assets');
-  writeFileSync(join(directory,'app.css'),readdirSync(assets).filter(file=>file.endsWith('.css')).map(file=>readFileSync(join(assets,file),'utf8')).join('\n'));
-  writeFileSync(join(directory,'index.html'),`<html data-theme="light"><link rel="stylesheet" href="app.css"><style>
+  `,style:`
     body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
     main>section{width:min(420px,100%)}
-    </style><div id="root"></div><script src="app.js"></script></html>`);
+  `});
   writeFileSync(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory,'data'))});
     app.whenReady().then(()=>new BrowserWindow({show:false,width:1100,height:900}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);

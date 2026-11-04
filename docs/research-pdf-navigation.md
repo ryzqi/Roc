@@ -1,6 +1,6 @@
 # 原 PDF 与解析定位
 
-PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据和原 PDF/解析文本并排阅读。块与 PDF 的双向定位已接入；Evidence/Claim 固定来源深链及标注捕获仍待完成。
+PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据、原 PDF/解析文本并排阅读及工件 Evidence 的固定来源阅读。块与 PDF 的双向定位已接入；Claim 关系记录的直接原文入口及标注捕获仍待完成。
 
 ## 坐标与版本
 
@@ -99,3 +99,15 @@ git diff --check
 返回解析块后，焦点移到可程序聚焦的块 section，并滚动到该块。选择块有背景与可见焦点；目标是内容组，避免一次 Enter 又激活块内「原文位置」按钮。
 
 反向测试使用真实 PDF/worker 和实测 crop/rotation/UserUnit frame，非重叠、重叠及跨页布局明确为合成测试块，并发布独立 SHA-256 工件。此证据建立坐标交互，不声称解析器已经精确识别这些区域。实际交互保持数据库零写入。`reverse-clip-audit.json` 保存展开、明暗、hover 和键盘目标状态；`reverse-overlap-*.png` 保存候选列表布局。
+
+## 工件 Evidence 的原文固定版本
+
+工件证据展开区的「查看原文固定版本」读取已保存 SourceLocator。请求显式绑定 projectId、documentId、parseId、sourceHash 和 parseHash；显示前核对返回文档、解析身份、规范化内容哈希、parserFingerprint、唯一 blockId、原始 locator、证据 excerpt 及完整页/区域数组。内容不一致时拒绝显示，不读取当前解析替代。
+
+同一原文件已重解析、该 Evidence 引用已失效时，仍可以读取原始 ready parse 和原 PDF。失效状态、旧证据文本及版本保持可见；阅读不会更改 Evidence、Claim 或审核记录。多位置来源可选确切位置；PDF 上下文选择保持同一个固定解析，并将键盘焦点移到对应的解析文本组。
+
+非 PDF 来源显示保存版本的解析块，不加载 PDF 引擎。PDF 模块和 worker 在文档类型确认后继续懒加载；关闭、重读或换项目释放原有视图资源。读取错误可明确重试同一版本，迟到响应不能覆盖另一 Evidence。
+
+阅读器测试包含实际 Evidence 捕获、真实重解析失效后的旧 parse/source 读取、八种身份/哈希/内容/位置不匹配拒绝、不同原文件/项目的迟到读取，以及显式合成跨页块的固定位置。Node-host 适配器窗口98是测试接缝。来源视图在现有 560px ModalShell 抽屉中验收，源码不新增 shell、路由或前端。
+
+工件检查器、生产检查器和阅读器测试共享 Vite 实际构建入口，直接产出 lazy 模块及 worker 文件。`evidence-fixed-original.json` 保存固定来源和实际请求，`evidence-original-clip-audit.json` 保存三个窗口/主题的裁切记录；`evidence-original-*.png` 保存明暗布局。

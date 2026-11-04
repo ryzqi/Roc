@@ -5,12 +5,14 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 
 const SourceMigrations = lazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
 const SourceReplacements = lazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
+const DocumentSource = lazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
 
 export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean; onChanged: () => void
 }): React.JSX.Element {
   const [showMigrations, setShowMigrations] = useState(false);
   const [showReplacements, setShowReplacements] = useState(false);
+  const [showDocument, setShowDocument] = useState(false);
   const evidence = source.evidence;
   return <details data-reading-key={`evidence:${evidence.id}`} className="border-b-[0.5px] border-line py-2 [&::details-content]:overflow-clip!">
     <summary data-reading-key={`evidence-summary:${evidence.id}`} className="cursor-pointer break-words text-ink">{evidence.title}
@@ -21,6 +23,16 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
     {source.invalidatedAt === null ? null : <p className="text-muted">失效时间 {source.invalidatedAt}</p>}
     <p className="break-all text-muted">来源版本 {evidence.sourceVersion}</p>
     <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p>
+    {source.sourceLocator === null ? null : <>
+      <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
+        aria-expanded={showDocument} data-testid={`artifact-document-source-toggle-${evidence.id}`}
+        data-reading-key={`document-source-toggle:${evidence.id}`} onClick={() => setShowDocument(open => !open)}>
+        {showDocument ? '收起原文固定版本' : '查看原文固定版本'}
+      </button>
+      {!showDocument ? null : <Suspense fallback={<p role="status">加载原文阅读器…</p>}>
+        <DocumentSource client={client} evidence={evidence} locator={source.sourceLocator}/>
+      </Suspense>}
+    </>}
     {source.referenceStatus !== 'superseded' || source.sourceLocator === null ? null : <>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
         aria-expanded={showMigrations} data-testid={`artifact-source-migrations-toggle-${evidence.id}`}

@@ -3307,3 +3307,43 @@ inspected; final screenshots and audit stored in pr07-reader-selection/reverse-*
 
 Next: Evidence/Claim fixed parse/source links, annotations/capture, table/formula assets and full
 PR07 resource/scanned-source acceptance. Remaining roadmap and external acceptance unfinished.
+
+## ROC-PR-07A4A — captured Evidence original-source reading
+
+Verified passing. Existing artifact Evidence disclosure opens its captured document/parse/source/
+parseHash, checks normalized returned hash/parser/unique block/excerpt/locator/full location array,
+then uses the shared lazy original-PDF view. A newer parse never replaces the captured version.
+Superseded reference state and old excerpt remain visible; readonly context navigation/cross-page
+selection never restores scientific approval or writes Evidence/Claim records. No second shell,
+route, frontend or unscoped source URL. Non-PDF logical sources use saved block text and do not
+load the PDF engine. Browser content hash helper is shared by both actual document consumers.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm build (includes typecheck) | Final fresh production build passed |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |65/65; reader19, inspector25, production8 plus related13 |
+| node --test --test-name-pattern='captured Evidence\|fixed-source\|late fixed-source' tests/renderer/paper-reader.test.mjs | Initial3/3, then actual ModalShell3/3 |
+| node scripts/smoke-electron.mjs | Final12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+UI-only change: preceding backend unit894/Harness94/native13 still apply to unchanged backend
+contracts, and are not reported as new runs. Final source coverage uses actual parser/captured
+Evidence and real reparse invalidation, exact original request/hash/bytes, eight wrong project/doc/
+source/parse/parser/block/text/region refusals, different-project/original late-result suppression,
+and explicit synthetic crosspage source location1/page2 with group focus. Reads assert zero writes.
+Original/crosspage tests use actual Vite/Chromium/protocol and shared560px ModalShell; Node-host
+registry/window98 transport is explicitly synthetic, not full production kernel/preload user E2E.
+
+Inspector, production and reader fixtures now share Vite compilation so nested lazy PDF/worker
+imports run through actual emitted assets rather than esbuild worker emulation. Owned build input
+folders are removed after build; fixture outputs/original copies cleaned by existing teardown.
+Dark1099 source screenshot inspected; source/hash/invalidation/page controls remain visible with
+bounded native scrolling. Three drawer hover/theme/width clip states cut0/hidden0 and no horizontal
+overflow. Artifacts: pr07-reader-selection/evidence-fixed-original.json, evidence-original-*.png,
+evidence-original-clip-audit.json and pr07-a4a-* logs. Final change after checks only JSX indentation
+and documentation; no semantic source change or fixture alteration.
+
+Next: direct original-source entry from Claim relation records, research annotations/capture,
+parsed table/formula asset comparison and remaining full PR07 acceptance. Roadmap still open.

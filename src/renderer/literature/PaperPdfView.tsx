@@ -7,6 +7,7 @@ import type {ResearchDocumentPreview} from '../../shared/schemas/research-docume
 import type {RocClient} from '../shared/roc-client';
 import {projectParsedRegionToPdf} from '../../shared/research-document-coordinates';
 import {ErrorBar} from '../shell/ErrorBar';
+import {documentContentHash} from './document-content-hash';
 
 type Location = ResearchDocumentParse['content']['blocks'][number]['locations'][number];
 type Props = {
@@ -60,8 +61,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
     };
     setError(null);
     void (async () => {
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(parsed.content)));
-      const parseHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      const parseHash = await documentContentHash(parsed.content);
       const result = await client.api.research.previewDocument({
         projectId, documentId: document.id, parseId: parsed.run.id, sourceHash: document.sourceHash, parseHash
       });
