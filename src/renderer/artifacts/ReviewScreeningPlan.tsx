@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {lazy, Suspense, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewCorpusInspection} from '../../shared/schemas/research-review-corpus';
 import type {ResearchReviewDeduplicationInspection} from '../../shared/schemas/research-review-deduplication';
@@ -9,6 +9,7 @@ import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '
 
 const input = `${formInputClass} border-[0.5px]`;
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+const ReviewTitleScreening = lazy(async () => ({default: (await import('./ReviewTitleScreening')).ReviewTitleScreening}));
 type Reviewer = ResearchReviewScreeningPlanCreate['adjudicator'];
 const blankReviewer = (): Reviewer => ({id: '', name: ''});
 
@@ -27,6 +28,7 @@ export function ReviewScreeningPlan({client, protocol, corpus, dedup, writable, 
     Array.from({length: protocol.version.body.screening.fullTextReviewers}, blankReviewer));
   const [adjudicator, setAdjudicator] = useState<Reviewer>(blankReviewer);
   const [reviewNote, setReviewNote] = useState('');
+  const [titleOpen, setTitleOpen] = useState(false), [titlePending, setTitlePending] = useState(false);
   const busy = useRef(false), requests = useRef(new Map<string, string>());
   const missing = read.status === 'error' && read.errorCode === 'research_review_screening_plan_not_found';
   const editable = writable && corpus.currentProtocol && dedup.currentProtocol && dedup.freezeHash !== null &&
@@ -34,7 +36,7 @@ export function ReviewScreeningPlan({client, protocol, corpus, dedup, writable, 
   const plan = read.status === 'ready' ? read.data : null;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-screening-plan">
     <h2 className="font-medium">审核人声明</h2>
-    <button type="button" className={`${button} self-start`} disabled={save.pending || read.status === 'loading'}
+    <button type="button" className={`${button} self-start`} disabled={save.pending || titlePending || read.status === 'loading'}
       data-testid="artifact-review-screening-plan-refresh" onClick={read.reload}>重读审核人声明</button>
     {read.status !== 'loading' ? null : <p role="status">正在读取准确审核人声明…</p>}
     {read.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{read.error}</p>}
@@ -85,6 +87,12 @@ export function ReviewScreeningPlan({client, protocol, corpus, dedup, writable, 
       </section>)}
       <p className="break-words">{plan.snapshot.request.reviewNote}</p>
       <p className="text-muted break-all">声明记录人 {plan.snapshot.actor.id} {plan.snapshot.recordedAt}</p>
+      <button type="button" className={`${button} self-start`} disabled={titlePending}
+        data-testid="artifact-review-title-inspect" onClick={() => setTitleOpen(true)}>核查标题摘要筛选</button>
+      {!titleOpen ? null : <Suspense fallback={<p role="status">正在加载标题摘要筛选…</p>}>
+        <ReviewTitleScreening key={`title:${plan.snapshotHash}`} client={client} protocol={protocol} plan={plan}
+          writable={editable && !save.pending} onPending={value => {setTitlePending(value); onPending(value);}} />
+      </Suspense>}
     </section>}
   </section>;
 }
