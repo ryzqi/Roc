@@ -3599,3 +3599,21 @@ Logs pr09-a4c1-* retained. Actual offline Provider/corpus/dedup/main adapter71/S
 Verified passing. Existing test started its30ms close/error deadline before filesystem/archive enumeration. Full-unit975/976 exposed timeout before close invocation; focused original passed1/1. A controlled50ms delay in the actual ZipFile.eachEntry prototype reproduced red. Retain this delay in the regression, wait for actual close invocation with bounded5s setup, then keep the unchanged30ms rejection deadline and exact primary/cleanup-error assertions. Add explicit no-close-event assertion. No product ZIP or security changes.
 
 From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: controlled red/green1 and node --test tests/unit/research-archive-libraries.test.mjs10/10; clean pnpm test:unit976/976. Logs pr09-archive-close-* and pr09-a4c2a-unit-clean-final.log retained. The first rerun accidentally discovered the task-only repro copy (986, failed only that red-copy file); deleted the exact task-created copy and reran clean976, without changing production or weakening assertions.
+
+
+## ROC-PR-09A4C2A — immutable title-abstract reviewer decisions and separate agent suggestions
+
+Verified passing. DB32 separate phase-keyed reviewer decision revisions and agent proposal rows. Strict frozen plan/raw hit/source/record/pool/receipt/declared reviewer/criterion refs, explicit include/exclude/uncertain reason and nullable considered-suggestion hash. Actual missing abstract preserved. Human save main-gated; proposal capability derives actual operation/tool-call/capability-version provenance from main context, never wire model/run identity. Four new generated human/read APIs and independent tool-only suggestion capability registered. Suggestions cannot become reviewer decisions or counts; human may explicitly disagree. Current phase states conserve counts, show missing reviewer/uncertainty/verdict conflict/different primary exclusion reasons, and retain history across shutdown/reopen. Arbitration/phase freeze/fulltext still next.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Final passed; fresh generated/type/build |
+| node --test tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | Final73/73; decisions13 |
+| pnpm test:unit / pnpm harness:eval | Clean final976/976 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c2a-* retained. Actual offline Provider/raw pool/DB31 migration/reopen, post-insert corruption/lost row rollback and main window81/operation-context registry seam covered; no external model call/spending or review UI E2E. Initial72/type/build passed; final review added explicit DB phase keys/read contract/capability-version replay and different-primary-reason conflict before final73. Full-unit prior ZIP deadline issue corrected separatelye2dbfb2 with controlled red/green and same30ms actual-close assertion; final976 run excludes cleaned task-only repro. Shared screening-plan fixture extracted without changing preserved data/security assertions. NextA4C2B human adjudication/current version binding and immutable whole title-abstract freeze, followed by full-text source binding/decisions, extraction/quality/inspector/reporting. Whole roadmap remains open.

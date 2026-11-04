@@ -78,6 +78,7 @@ import {registerResearchReviewCorpusCapabilities, researchReviewCorpusCapabiliti
 import {ResearchReviewDeduplicationRepository} from './review-deduplication-repository';
 import {registerResearchReviewDeduplicationCapabilities, researchReviewDeduplicationCapabilities} from './review-deduplication-capabilities';
 import {ResearchReviewScreeningRepository} from './review-screening-repository';
+import {ResearchReviewScreeningDecisions} from './review-screening-decisions';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
@@ -285,7 +286,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewDeduplication = new ResearchReviewDeduplicationRepository(db, researchRepository, reviewCorpora, () => new Date().toISOString());
       registerResearchReviewDeduplicationCapabilities(context, reviewDeduplication);
       const reviewScreening = new ResearchReviewScreeningRepository(db, researchRepository, reviewCorpora, reviewDeduplication, () => new Date().toISOString());
-      registerResearchReviewScreeningCapabilities(context, reviewScreening);
+      const reviewScreeningDecisions = new ResearchReviewScreeningDecisions(db, researchRepository, reviewCorpora, reviewDeduplication, reviewScreening, () => new Date().toISOString());
+      registerResearchReviewScreeningCapabilities(context, reviewScreening, reviewScreeningDecisions);
       registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.

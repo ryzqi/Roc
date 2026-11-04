@@ -36,7 +36,7 @@ export function throwSystematicReviewError(error: unknown): never {
   if (!(error instanceof Error)) throw error;
   const code = error.message.split(':')[0];
   if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
-    'research_review_project_mismatch', 'research_project_archived'].includes(code)) {
+    'research_review_project_mismatch', 'research_project_archived', 'research_review_screening_tool_context_required'].includes(code)) {
     throw new RocDomainError({code, message: '当前窗口身份或项目不能执行这项综述操作。', category: 'permission', retryable: false});
   }
   if (['research_review_version_conflict', 'research_review_request_conflict', 'research_review_already_frozen',
@@ -46,11 +46,12 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_duplicate_version_conflict', 'research_review_duplicate_already_frozen', 'research_review_duplicate_not_frozen',
     'research_review_duplicate_decision_set_changed', 'research_review_duplicate_cycle', 'research_review_duplicate_ambiguous_removal',
     'research_review_duplicate_distinct_conflict', 'research_review_screening_version_conflict',
-    'research_review_screening_plan_exists', 'research_review_screening_reviewer_count_mismatch'].includes(code)) {
+    'research_review_screening_plan_exists', 'research_review_screening_reviewer_count_mismatch',
+    'research_review_screening_reviewer_not_declared', 'research_review_screening_criterion_not_declared', 'research_review_screening_hit_not_screenable'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
-    'research_review_query_not_declared', 'research_review_corpus_not_found', 'research_review_corpus_hit_not_found', 'research_review_duplicate_not_found', 'research_review_screening_plan_not_found'].includes(code)) {
+    'research_review_query_not_declared', 'research_review_corpus_not_found', 'research_review_corpus_hit_not_found', 'research_review_duplicate_not_found', 'research_review_screening_plan_not_found', 'research_review_screening_decision_not_found', 'research_review_screening_suggestion_not_found'].includes(code)) {
     throw new RocDomainError({code, message: '综述协议、已声明查询或检索记录不存在。', category: 'not_found', retryable: false});
   }
   if (['research_review_snapshot_invalid', 'research_review_search_snapshot_invalid', 'research_review_search_state_lost',

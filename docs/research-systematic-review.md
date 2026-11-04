@@ -74,3 +74,16 @@ DB30 增加不可变决定版本与独立冻结收据，语料的收据哈希标
 DB31 的 `research_review_screening_plans` 与语料收据标记同事务写入。一个语料仅有一个固定声明，不提供默认名单或原地替换；需要新安排时创建新语料，保留已有审查。相同请求/调用者重放零写入，来源/身份漂移明确失败。已标记声明丢失、字节损坏或上游固定去重改变时报错；历史协议/归档可读，禁止新声明。DB30升级保持原始语料/去重内容，不给已有记录生成审核人。
 
 专项9/9，和综述协议/检索/语料/去重合跑60/60；全量单元963/963、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。真实离线服务/池、事务故障、SQLite升级/重开和窗口71 main adapter覆盖；无筛选 UI 或独立人工科学审查验收。分阶段决定、建议与人工结果分离、冲突处理继续实施。
+
+
+## 标题摘要决定与独立建议
+
+`saveReviewScreeningDecision/getReviewScreeningDecisionHistory/getReviewScreeningPhase/listReviewScreeningSuggestions` 保存和读取逐项标题摘要审查。请求明确 phase、固定计划哈希、原始命中、声明审核人、纳入/排除/无法判断结果、理由及可空的已阅读建议引用。纳入必须指明协议内的纳入标准，排除必须指明一个协议内的主排除原因；未知标准、未声明审核人、已移除重复项、跨项目和来源漂移拒绝。每位审核人独立追加版本，修订带准确父 ID/哈希及原因，旧决定不覆盖。
+
+DB32 将人工决定与 agent 建议存入不同表，phase 是固定记录和索引键。每条决定固定声明审核人和真实窗口调用者、原始 hit/record/query/pool/receipt 引用及摘要实际存在状态。null/空摘要记录为 missing，不补写摘要，也不自动产生结论。历史读取重新验证父链、原池、协议、审核人和所考虑的建议。
+
+`research.reviewScreening.suggest` 是独立能力，主进程从实际 CapabilityOperationContext 派生 operation/tool-call/能力版本/首次尝试来源；wire 不接受 origin、modelId 或 runId。没有工具操作上下文就拒绝。重试可重放同一操作的首个固定建议，内容或能力版本漂移不能覆盖旧记录。这里记录的是实际工具建议出处，没有虚构已执行的模型请求或模型身份。建议不能调用人工决定入口，也不能增加已纳入/排除计数；人工即使引用某建议，仍明确填写自己的结果与理由。
+
+逐项状态来自协议要求的人数及实际决定：pending、uncertain、conflict、included、excluded。双人结果不一致或虽都排除但主原因不同均为 conflict；无法判断单独可见，少一个审核人仍为 pending。计数满足 `recordsToScreen = pending + uncertain + conflict + included + excluded`。这些是当前逐项状态；仲裁、整轮冻结、全文决定和最终 PRISMA 尚在后续，不能把当前共识当成完整综述。声明身份与窗口身份仍不能证明独立领域审核。
+
+专项13/13，和既有综述工作流合跑73/73；最终清理后的单元976/976、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。覆盖真实离线结果池、缺失/存在原始摘要、双人冲突/不同主原因、独立建议/人工改判、父/来源/阶段漂移、写后损坏/丢失回滚、DB31升级/磁盘重开以及窗口81与实际 main operation 接缝。没有外部模型消费或筛选 UI 端到端验收。旧 ZIP 计时测试边界修正单独提交 e2dbfb2，保持30ms关闭拒绝检查和原始错误断言。

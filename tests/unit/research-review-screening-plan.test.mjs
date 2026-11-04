@@ -6,27 +6,14 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import Database from 'better-sqlite3';
 import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
-import {createReviewDeduplicationFixture} from './fixtures/research-review-deduplication.mjs';
+import {createReviewScreeningPlanFixture, reviewScreeningActorFixture as actor,
+  reviewScreeningReviewerAFixture as reviewerA, reviewScreeningReviewerBFixture as reviewerB,
+  reviewScreeningAdjudicatorFixture as adjudicator} from './fixtures/research-review-screening.mjs';
 let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
-const actor={kind:'user',id:'synthetic-screening-plan-declarer'};
-const reviewerA={id:'declared-researcher-a',name:'Researcher A'};
-const reviewerB={id:'declared-researcher-b',name:'Researcher B'};
-const adjudicator={id:'declared-adjudicator',name:'Adjudicator C'};
 const hash=value=>createHash('sha256').update(value).digest('hex');
-async function scene({freeze=true,...options}={},selectedApi=api) {
-  const f=await createReviewDeduplicationFixture(api,options,selectedApi);
-  f.frozen=freeze?f.dedup.freeze(f.freeze(),actor):null;
-  f.screening=new api.ResearchReviewScreeningRepository(f.db,f.repository,f.corpora,f.dedup,()=>f.time);
-  const counts=f.protocol.version.body.screening;
-  f.input={...f.get,requestId:'declare-reviewers',expectedCorpusHash:f.corpus.snapshotHash,
-    expectedDedupFreezeHash:f.frozen===null?'a'.repeat(64):f.frozen.freezeHash,
-    titleAbstractReviewers:[reviewerA,reviewerB].slice(0,counts.titleAbstractReviewers),
-    fullTextReviewers:[reviewerB,reviewerA].slice(0,counts.fullTextReviewers),adjudicator,
-    reviewNote:'These are user-declared identities; main caller provenance is recorded separately.'};
-  return f;
-}
+const scene=(options,selectedApi)=>createReviewScreeningPlanFixture(api,options,selectedApi);
 
 test('fixed reviewer plan pins exact protocol/dedup hashes and declared identities independently from trusted caller',async()=>{
   const f=await scene();
@@ -156,7 +143,7 @@ test('generated plan API binds the main caller; declared names never grant tools
   try {
     const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.createPlan',f.input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-screening-createPlan',[{...f.input,actor}]));

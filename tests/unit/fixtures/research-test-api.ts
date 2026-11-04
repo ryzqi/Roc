@@ -74,3 +74,6 @@ export {registerResearchReviewDeduplicationCapabilities, researchReviewDeduplica
 
 export {ResearchReviewScreeningRepository} from '../../../src/main/plugins/research/review-screening-repository';
 export {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from '../../../src/main/plugins/research/review-screening-capabilities';
+
+export {ResearchReviewScreeningDecisions} from '../../../src/main/plugins/research/review-screening-decisions';
+export {createCapabilityOperationContext, runWithCapabilityOperationContext} from '../../../src/main/kernel/capability-operation-context';

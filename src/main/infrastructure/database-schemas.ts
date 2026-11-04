@@ -1986,6 +1986,41 @@ CREATE TABLE research_review_screening_plans (
 `
 });
 
+researchMigrations.push({
+  version: 32, name: 'separate_systematic_review_decisions_and_suggestions',
+  sql: `
+CREATE TABLE research_review_screening_decisions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  corpus_id TEXT NOT NULL REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  hit_id TEXT NOT NULL,
+  reviewer_id TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK(version > 0),
+  parent_id TEXT REFERENCES research_review_screening_decisions(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id),
+  UNIQUE(corpus_id,phase,hit_id,reviewer_id,version)
+);
+CREATE TABLE research_review_screening_suggestions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  corpus_id TEXT NOT NULL REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  hit_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX idx_review_screening_suggestions ON research_review_screening_suggestions(corpus_id,phase,hit_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
