@@ -213,8 +213,12 @@ test('DB36 upgrade and actual SQLite reopen preserve frozen review/source/Eviden
   try {
     const tables=['research_review_screening_freezes','research_review_screening_plans','research_review_fulltext_bindings',
       'research_evidence','research_evidence_source_locators','research_documents'];
+    const columns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
     const old=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());api.applyResearchDatabaseSchema(f.db);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),old[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all()
+      .map(row=>Object.fromEntries(columns[index].map(key=>[key,row[key]]))),old[index]));
+    assert.deepEqual(f.db.prepare('SELECT study_group_head_hash FROM research_review_screening_plans').all(),
+      old[1].map(()=>({study_group_head_hash:null})));
     assert.equal(count(f),0);
     const result=await f.extractions.save(f.extract(),actor),path=join(f.root,'extraction-reopen.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);

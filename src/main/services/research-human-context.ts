@@ -10,7 +10,7 @@ export type ResearchHumanCapability = 'research.relations.propose' | 'research.r
   'research.reviewDeduplication.save' | 'research.reviewDeduplication.freeze' |
   'research.reviewScreening.createPlan' | 'research.reviewScreening.save' | 'research.reviewScreening.adjudicate' | 'research.reviewScreening.freeze' |
   'research.reviewFullText.save' | 'research.reviewFullTextScreening.save' | 'research.reviewFullTextScreening.adjudicate' | 'research.reviewFullTextScreening.freeze' |
-  'research.reviewExtraction.save' | 'research.reviewQuality.createPlan' | 'research.reviewQuality.saveAssessment';
+  'research.reviewExtraction.save' | 'research.reviewQuality.createPlan' | 'research.reviewQuality.saveAssessment' | 'research.reviewStudies.save';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;

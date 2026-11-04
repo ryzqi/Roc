@@ -3788,3 +3788,24 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a5b2-* retained. Synchronous stages thread one verified context without persistent cache; byte-await/postinsert stages independently reread exact state. Initial multi-file patch context mismatch applied nothing and was corrected from actual source. No assertion weakening, source duplication, official quality-score/scientific independence or UI claim. Next explicit study/report membership for accurate PRISMA counts, report/query/exclusion sections and inspector; whole roadmap remains open.
+
+
+## ROC-PR-09A6A — explicit human study/report memberships and separate included counts
+
+Verified passing. DB40 independent screening-plan study_group_head_hash and immutable grouping revisions pin every included report's exact frozen hit/binding reference. User declares study IDs/labels/reasons and source-specific member notes. All frozen included reports covered, unique study IDs/members within group; unselected/gap/excluded/incorrect-source records refused. Many reports may belong to one declared study; explicit multiple studies within a report allowed. includedReports counts distinct frozen reports, includedStudies counts declared study IDs, no title/DOI inference or paper-library duplication. Null genuinely undeclared; empty reviewed grouping allowed only when no included reports. Main181 and fixed fulltext/adjudicator reviewer separate. Actual bytes for every included binding and exact postawait/postinsert current source/parent/head checked; canonical legal identity mutation, valid new group and source drift roll back. Independent human revision across await preserved while stale parent refuses. Historical source/protocol/archive memberships/counts retained, readonly sourcesCurrent is metadata status.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh current build/type; no later production changes |
+| node --check tests/unit/research-review-studies.test.mjs | Passed |
+| node --test tests/unit/research-review-studies.test.mjs tests/unit/research-review-fulltext-freeze.test.mjs tests/unit/research-review-fulltext.test.mjs | Initial29/29, before10th study race test |
+| pnpm test:unit | Initial1074/1075; only existing DB36 extraction migration full-row comparison failed on added null study marker |
+| node --test --test-name-pattern='DB36 upgrade' tests/unit/research-review-extraction.test.mjs | 1/1 after comparing every original column/row and separately checking null new marker |
+| pnpm test:unit / pnpm harness:eval | Corrected final1075/1075 (all192 scoped cases and10 study cases);94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a6a-* retained, including initial fullunit failure and corrected complete rerun. Migration checks retain all original values/counts, no old-schema runtime fallback or relaxed corruption assertions. Primary PRISMA2020 original glossary and official source-specific/new-update templates verified2026-11-04 and cited in docs; Jina401/BMJ403/PMC challenge changed to successfully read original PLOS article via connected Search Service. No official template/export, scientifically validated study identity, study-level effect aggregation or new UI claim. Next readonly count/query/exclusion/report Evidence data and existing inspector, then whole roadmap.

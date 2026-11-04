@@ -61,7 +61,9 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_quality_study_design_unjudgeable', 'research_review_quality_study_design_mismatch',
     'research_review_quality_framework_not_declared', 'research_review_quality_source_changed',
     'research_review_quality_assessment_version_conflict', 'research_review_quality_domains_incomplete',
-    'research_review_quality_domain_not_declared', 'research_review_quality_judgement_not_declared', 'research_review_quality_evidence_mismatch'].includes(code)) {
+    'research_review_quality_domain_not_declared', 'research_review_quality_judgement_not_declared', 'research_review_quality_evidence_mismatch',
+    'research_review_studies_version_conflict', 'research_review_studies_source_changed',
+    'research_review_studies_report_not_included', 'research_review_studies_incomplete'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
@@ -76,7 +78,7 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_extraction_snapshot_invalid', 'research_evidence_integrity_invalid', 'research_evidence_source_identity_invalid',
     'research_evidence_source_hash_invalid', 'research_evidence_source_block_invalid', 'research_evidence_source_page_invalid',
     'research_evidence_source_region_invalid', 'research_evidence_source_locator_conflict', 'research_review_quality_snapshot_invalid',
-    'research_review_quality_assessment_snapshot_invalid'].includes(code)) {
+    'research_review_quality_assessment_snapshot_invalid', 'research_review_studies_snapshot_invalid'].includes(code)) {
     throw new RocDomainError({code, message: '保存的综述版本、检索账本或结果校验失败。', category: 'degraded', retryable: false});
   }
   throw error;
