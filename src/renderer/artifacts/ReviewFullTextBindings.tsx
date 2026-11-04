@@ -1,19 +1,24 @@
 import {useEffect, useRef, useState} from 'react';
+import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewFullTextBinding} from './ReviewFullTextBinding';
+import {ReviewFullTextEligibility} from './ReviewFullTextEligibility';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const statuses = {retrieval_pending: '待获取', not_retrieved: '未获取', source_changed: '来源已变化',
   pending: '待资格筛选', uncertain: '无法判断', conflict: '决定冲突', included: '全文纳入', excluded: '全文排除'} as const;
-export function ReviewFullTextBindings({client, projectId, corpusId, writable, onPending}: {
-  client: RocClient; projectId: string; corpusId: string; writable: boolean; onPending: (pending: boolean) => void
+export function ReviewFullTextBindings({client, protocol, projectId, corpusId, writable, onPending}: {
+  client: RocClient; protocol: ResearchReviewProtocolInspection; projectId: string; corpusId: string;
+  writable: boolean; onPending: (pending: boolean) => void
 }): React.JSX.Element {
   const read = useAsyncResource(`review:fulltext-phase:${projectId}:${corpusId}`,
     () => client.api.research.getReviewFullTextScreeningPhase({projectId, corpusId, phase: 'full_text'}), {label: '读取全文获取与资格筛选'});
   const phase = read.data;
-  const [hitId, setHitId] = useState<string | null>(null), [pending, setPending] = useState(false);
+  const [hitId, setHitId] = useState<string | null>(null), [bindingPending, setBindingPending] = useState(false);
+  const [eligibilityPending, setEligibilityPending] = useState(false);
+  const pending = bindingPending || eligibilityPending;
   const [offset, setOffset] = useState(0);
   const selected = phase?.items.find(item => item.hit.id === hitId);
   const focus = useRef<HTMLDivElement>(null);
@@ -30,7 +35,8 @@ export function ReviewFullTextBindings({client, projectId, corpusId, writable, o
     {phase === null || read.status === 'ready' ? null : <p className="text-muted">以下为上次成功读取的全文回执。</p>}
     {phase === null ? null : <>
       <p data-testid="artifact-review-fulltext-counts">需获取报告 {phase.counts.reportsToSeek} 待获取 {phase.counts.retrieval_pending}
-        {' '}未获取 {phase.counts.not_retrieved} 来源变化 {phase.counts.source_changed} 待资格筛选 {phase.counts.pending}</p>
+        {' '}未获取 {phase.counts.not_retrieved} 来源变化 {phase.counts.source_changed} 待资格筛选 {phase.counts.pending}
+        {' '}无法判断 {phase.counts.uncertain} 冲突 {phase.counts.conflict} 全文纳入 {phase.counts.included} 全文排除 {phase.counts.excluded}</p>
       {phase.freeze === null ? null : <p data-testid="artifact-review-fulltext-frozen" className="text-muted">全文资格筛选已冻结</p>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) => <li key={item.hit.id}>
         <button type="button" className={`${button} h-auto py-1 text-left break-words`} disabled={pending}
@@ -46,8 +52,13 @@ export function ReviewFullTextBindings({client, projectId, corpusId, writable, o
       {selected === undefined ? null : <div ref={focus} tabIndex={-1} aria-label="全文来源核查" data-testid="artifact-review-fulltext-focus">
         <ReviewFullTextBinding key={`fulltext-binding:${selected.hit.id}:${selected.binding?.snapshotHash ?? 'new'}`}
           client={client} projectId={projectId} corpusId={corpusId} hitId={selected.hit.id} titleFreezeHash={phase.titleFreezeHash}
-          parent={selected.binding} writable={writable && read.status === 'ready' && phase.plan.currentProtocol && phase.freeze === null}
-          onPending={value => {setPending(value); onPending(value);}} onSaved={read.reload} />
+          parent={selected.binding} writable={writable && !eligibilityPending && read.status === 'ready' && phase.plan.currentProtocol && phase.freeze === null}
+          onPending={value => {setBindingPending(value); onPending(value);}} onSaved={read.reload} />
+        {selected.binding?.snapshot.source === null || selected.binding === null ? null : <ReviewFullTextEligibility
+          key={`full-eligibility:${selected.hit.id}:${selected.binding.snapshotHash}`}
+          client={client} protocol={protocol} phase={phase} item={selected}
+          writable={writable && !bindingPending && read.status === 'ready' && phase.plan.currentProtocol && phase.freeze === null}
+          onPending={value => {setEligibilityPending(value); onPending(value);}} onSaved={read.reload} />}
       </div>}
     </>}
   </section>;

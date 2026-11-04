@@ -27,7 +27,8 @@ const channels = {
   adjudicateReviewScreening:'roc:research:review-screening-adjudicate',getReviewScreeningArbitrationHistory:'roc:research:review-screening-arbitrations',freezeReviewScreeningPhase:'roc:research:review-screening-freeze',
   getReviewFullTextScreeningPhase:'roc:research:review-fulltext-phase',saveReviewFullTextBinding:'roc:research:review-fulltext-save',
   getReviewFullTextBindingHistory:'roc:research:review-fulltext-history',listLibrary:'roc:research:library-list',
-  listDocuments:'roc:research:document-list',previewDocument:'roc:research:document-preview'
+  listDocuments:'roc:research:document-list',previewDocument:'roc:research:document-preview',
+  getDocument:'roc:research:document-get',getDocumentContent:'roc:research:document-content'
 };
 const tid = id => page.getByTestId(id);
 before(async () => {

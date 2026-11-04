@@ -52,7 +52,7 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
         <button type="button" className={`${button} self-start`} disabled={pending}
           data-testid="artifact-review-fulltext-inspect" onClick={() => setFullOpen(true)}>核查全文获取与资格筛选</button>
         {!fullOpen ? null : <Suspense fallback={<p role="status">正在加载全文核查…</p>}>
-          <ReviewFullTextBindings key={`fulltext:${phase.freezeHash}`} client={client} projectId={projectId} corpusId={corpusId}
+          <ReviewFullTextBindings key={`fulltext:${phase.freezeHash}`} client={client} protocol={protocol} projectId={projectId} corpusId={corpusId}
             writable={writable && phaseRead.status === 'ready' && !recordPending && !freeze.pending}
             onPending={value => {setFullPending(value); onPending(value);}} />
         </Suspense>}
