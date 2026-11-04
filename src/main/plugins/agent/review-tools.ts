@@ -24,7 +24,12 @@ import {
   researchReviewFullTextSuggestionCreateSchema, researchReviewFullTextSuggestionListSchema,
   type ResearchReviewFullTextFrozenPhase
 } from '../../../shared/schemas/research-review-fulltext-screening';
-import {researchReviewFullTextBindingGetSchema} from '../../../shared/schemas/research-review-fulltext';
+import {
+  researchReviewFullTextBindingGetSchema, researchReviewFullTextBindingVerifySchema,
+  type ResearchReviewFullTextBindingInspection
+} from '../../../shared/schemas/research-review-fulltext';
+import type {ResearchDocumentParse} from '../../../shared/types';
+import type {ResearchDocumentPreview} from '../../../shared/schemas/research-document-preview';
 import {researchReviewExtractionGetSchema} from '../../../shared/schemas/research-review-extraction';
 import {
   researchReviewQualityPlanGetSchema, researchReviewQualityAssessmentGetSchema
@@ -57,6 +62,7 @@ const readSchema = z.discriminatedUnion('kind', [
   researchReviewScreeningSuggestionListSchema.omit({projectId: true, phase: true}).extend({kind: z.literal('title_suggestions')}),
   researchReviewFullTextSuggestionListSchema.omit({projectId: true, phase: true}).extend({kind: z.literal('fulltext_suggestions')}),
   researchReviewFullTextBindingGetSchema.omit({projectId: true}).extend({kind: z.literal('fulltext_binding')}),
+  researchReviewFullTextBindingVerifySchema.omit({projectId: true}).extend({kind: z.literal('fulltext_content'), ...pagination}),
   researchReviewExtractionGetSchema.omit({projectId: true}).extend({kind: z.literal('extraction')}),
   researchReviewQualityPlanGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_plan')}),
   researchReviewQualityAssessmentGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_assessment')}),
@@ -83,6 +89,7 @@ export function createReviewTools(input: {
       name: 'research_review_read',
       description: '读取当前项目真实的系统综述协议、查询回执、原始记录、筛选状态、全文绑定、人工提取/质量评价和报表。'
         + '先列协议，再用返回的精确版本/语料/条目 ID 读取；列表 capped=true 时不能推断遗漏项不存在。'
+        + 'fulltext_content 按准确 binding 哈希读取其原文解析块，核验真实文件与解析工件；尚无解析时明确失败，不替换来源或启动解析。'
         + '分页 total 是真实总数，page 只是所选部分；snapshotHash/bodyHash 校验完整保存内容，并非分页结果。'
         + 'missing、null、旧来源、未审核研究数和失败查询都必须保留；建议不算人工决定。counts 是内部计数，不表示正式 PRISMA 模板适用性。',
       schema: readSchema
@@ -100,7 +107,8 @@ export function createReviewTools(input: {
     }), {
       name: 'research_review_suggest_fulltext',
       description: '对标题轮已纳入、已明确绑定真实原文的准确报告提出全文资格建议。先读取协议、全文状态、精确 binding 和原文，'
-        + '携带准确计划/标题冻结/绑定哈希及声明准则；来源变化或未取回会失败。人工最终决定、仲裁、冻结由研究者完成。',
+        + '用 research_review_read 的 fulltext_content 逐页核对原文，携带准确计划/标题冻结/绑定哈希及声明准则；'
+        + '来源变化或未取回会失败。人工最终决定、仲裁、冻结由研究者完成。',
       schema: researchReviewFullTextSuggestionCreateSchema.omit({projectId: true, requestId: true, phase: true})
     })
   ];
@@ -177,6 +185,25 @@ async function read(
     case 'title_suggestions': return await invoke('research.reviewScreening.suggestions', {...request, phase: 'title_abstract'});
     case 'fulltext_suggestions': return await invoke('research.reviewFullTextScreening.suggestions', {...request, phase: 'full_text'});
     case 'fulltext_binding': return await invoke('research.reviewFullText.get', request);
+    case 'fulltext_content': {
+      const bindingRequest = {corpusId: target.corpusId, bindingId: target.bindingId};
+      const binding = await invoke<ResearchReviewFullTextBindingInspection>('research.reviewFullText.get', bindingRequest);
+      if (binding.snapshotHash !== target.expectedBindingHash) throw new Error('research_review_fulltext_version_conflict');
+      const source = binding.snapshot.source;
+      if (source === null) throw new Error('research_review_fulltext_not_retrieved');
+      if (source.parse === null) throw new Error('research_review_fulltext_parse_required');
+      const selection = {
+        documentId: source.documentId, sourceHash: source.sourceHash, parseId: source.parse.id, parseHash: source.parse.hash
+      };
+      const preview = await invoke<ResearchDocumentPreview>('research.document.preview', selection);
+      const parsed = await invoke<ResearchDocumentParse>('research.document.content', selection);
+      const current = await invoke<ResearchReviewFullTextBindingInspection>('research.reviewFullText.get', bindingRequest);
+      if (current.snapshotHash !== target.expectedBindingHash) throw new Error('research_review_fulltext_version_conflict');
+      return {
+        binding: current, selection, coordinateHash: preview.coordinates === null ? null : preview.coordinates.snapshotHash,
+        run: parsed.run, pageCount: parsed.content.pageCount, page: page(parsed.content.blocks, target)
+      };
+    }
     case 'extraction': return await invoke('research.reviewExtraction.get', request);
     case 'quality_plan': return await invoke('research.reviewQuality.getPlan', request);
     case 'quality_assessment': return await invoke('research.reviewQuality.getAssessment', request);

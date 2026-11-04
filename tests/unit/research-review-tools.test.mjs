@@ -23,6 +23,8 @@ function connect(f, signal = new AbortController().signal) {
     api.registerResearchReviewScreeningCapabilities(context, f.screening, f.decisions, f.arbitration, f.freezing));
   if (f.fulltexts) register(api.researchReviewFullTextCapabilities, () =>
     api.registerResearchReviewFullTextCapabilities(context, f.fulltexts));
+  if (f.service) register(api.researchDocumentCapabilities, () =>
+    api.registerResearchDocumentCapabilities(context, f.repository.documents, f.service));
   if (f.fullScreening) register(api.researchReviewFullTextScreeningCapabilities, () =>
     api.registerResearchReviewFullTextScreeningCapabilities(context, f.fullScreening, f.fullArbitration, f.fullFreezing));
   if (f.extractions) register(api.researchReviewExtractionCapabilities, () =>
@@ -289,4 +291,80 @@ test('cancellation after a real proposal commit preserves the receipt and exact 
     assert.deepEqual(await run(operation(title.name, key, 'attempt-2'), title, f.target), saved[0]);
     assert.equal(f.changes(), before); assert.equal(f.decisions.getPhase(f.phase).counts.included, 0);
   } finally {await f.dispose();}
+});
+
+const contentTarget = (f, binding, offset = 0, limit = 1) => ({
+  kind: 'fulltext_content', corpusId: f.get.corpusId, bindingId: binding.snapshot.id,
+  expectedBindingHash: binding.snapshotHash, offset, limit
+});
+
+test('bound original-content read verifies actual PDF and returns exact stored parse blocks with explicit pages', async () => {
+  const f = await createReviewFullTextScreeningFixture(api);
+  try {
+    const binding = await f.bind(), {read} = connect(f), before = f.changes(), network = f.calls.length;
+    const request = {projectId: f.project.id, ...f.selection};
+    const parsed = f.service.content(request);
+    const result = await read.invoke(contentTarget(f, binding));
+    assert.deepEqual(result.binding, binding); assert.deepEqual(result.selection, f.selection);
+    assert.deepEqual(result.run, parsed.run); assert.equal(result.pageCount, parsed.content.pageCount);
+    assert.equal(result.coordinateHash, (await f.service.preview(request)).coordinates.snapshotHash);
+    assert.equal(result.page.total, parsed.content.blocks.length);
+    assert.deepEqual(result.page.items, parsed.content.blocks.slice(0, 1));
+    const remainder = await read.invoke(contentTarget(f, binding, 1, 30));
+    assert.deepEqual(remainder.page.items, parsed.content.blocks.slice(1, 31));
+    assert.equal(remainder.page.total, result.page.total);
+    const beyond = await read.invoke(contentTarget(f, binding, parsed.content.blocks.length));
+    assert.deepEqual(beyond.page.items, []); assert.equal(beyond.page.hasMore, false);
+    assert.equal(f.changes(), before); assert.equal(f.calls.length, network);
+  } finally {await f.cleanup();}
+});
+
+test('content reader refuses guessed binding hash, unparsed source, unretrieved report and actual original-byte drift', async () => {
+  const f = await createReviewFullTextScreeningFixture(api);
+  try {
+    const binding = await f.bind(), sourceOnly = await f.bind(2, {...f.selection, parseId: null, parseHash: null});
+    const gap = await f.fulltexts.save(f.notRetrieved(3, 'content-gap'), actor), {read} = connect(f), before = f.changes();
+    await assert.rejects(read.invoke({...contentTarget(f, binding), expectedBindingHash: 'a'.repeat(64)}), /research_review_fulltext_version_conflict/u);
+    await assert.rejects(read.invoke(contentTarget(f, sourceOnly)), /research_review_fulltext_parse_required/u);
+    await assert.rejects(read.invoke(contentTarget(f, gap)), /research_review_fulltext_not_retrieved/u);
+    for (const extra of [{parseId: 'another-parse'}, {documentId: 'another-document'}, {sourceHash: 'a'.repeat(64)}]) {
+      await assert.rejects(read.invoke({...contentTarget(f, binding), ...extra}));
+    }
+    const {writeFile} = await import('node:fs/promises');
+    await writeFile(f.sourcePath, 'actual original file changed after human source binding');
+    await assert.rejects(read.invoke(contentTarget(f, binding)), error => error.code === 'research_document_source_changed');
+    assert.equal(f.changes(), before);
+  } finally {await f.cleanup();}
+});
+
+test('historical content reader retains the bound old parse after reparse and archive without changing scientific authority', async () => {
+  const f = await createReviewFullTextScreeningFixture(api);
+  try {
+    const binding = await f.bind(), {read} = connect(f), original = await read.invoke(contentTarget(f, binding));
+    f.reparse(); f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+    const before = f.changes(), old = await read.invoke(contentTarget(f, binding));
+    assert.equal(old.selection.parseId, 'fulltext-parse');
+    assert.notEqual(old.selection.parseId, f.repository.documents.get(f.document.id).currentParseId);
+    assert.deepEqual(old.page, original.page); assert.deepEqual(old.run, original.run);
+    assert.equal(old.binding.snapshotHash, binding.snapshotHash); assert.equal(old.binding.referenceStatus, 'superseded');
+    assert.equal(f.changes(), before); assert.equal(f.fullScreening.getPhase(f.fullPhase).counts.included, 0);
+  } finally {await f.cleanup();}
+});
+
+test('cancellation after real preview stops the bound-content read before returning any parsed blocks', async () => {
+  const f = await createReviewFullTextScreeningFixture(api);
+  try {
+    const binding = await f.bind(), {registry} = connect(f), controller = new AbortController(), calls = [], before = f.changes();
+    const read = api.createResearchTools({
+      projectId: f.project.id, signal: controller.signal, dispatchStage: async () => assert.fail('no dispatch'),
+      capabilities: {invoke: async (name, request) => {
+        calls.push(name); const result = await registry.invoke(name, request);
+        if (name === 'research.document.preview') controller.abort(new Error('cancel-after-source-preview'));
+        return result;
+      }}
+    }).find(value => value.name === 'research_review_read');
+    await assert.rejects(read.invoke(contentTarget(f, binding)), /cancel-after-source-preview/u);
+    assert.deepEqual(calls, ['research.reviewFullText.get', 'research.document.preview']);
+    assert.equal(f.changes(), before);
+  } finally {await f.cleanup();}
 });
