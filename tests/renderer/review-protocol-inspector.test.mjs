@@ -17,7 +17,9 @@ const methods = {
   getReviewProtocol: 'roc:research:review-protocol-get',
   getReviewProtocolHistory: 'roc:research:review-protocol-history',
   saveReviewProtocol: 'roc:research:review-protocol-save',
-  freezeReviewProtocol: 'roc:research:review-protocol-freeze'
+  freezeReviewProtocol: 'roc:research:review-protocol-freeze',
+  listReviewSearches: 'roc:research:review-search-list',
+  listReviewCorpora: 'roc:research:review-corpus-list'
 };
 const tid = id => page.getByTestId(id);
 before(async () => {
@@ -90,6 +92,12 @@ function fixture() {
   const registry = new api.CapabilityRegistry();
   for (const descriptor of api.researchSystematicReviewCapabilities) registry.declare('research', descriptor);
   api.registerResearchSystematicReviewCapabilities({pluginId: 'research', capabilities: registry}, f.repository.systematicReviews);
+  f.reviews = new api.ResearchReviewSearchService(f.db, f.repository,
+    {search: async () => {throw new Error('unexpected_search_in_protocol_test');}}, error => {throw error;});
+  const corpora = new api.ResearchReviewCorpusRepository(f.db, f.repository, f.reviews);
+  for (const descriptor of [...api.researchReviewSearchCapabilities, ...api.researchReviewCorpusCapabilities]) registry.declare('research', descriptor);
+  api.registerResearchReviewSearchCapabilities({pluginId: 'research', capabilities: registry}, f.reviews);
+  api.registerResearchReviewCorpusCapabilities({pluginId: 'research', capabilities: registry}, corpora);
   f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
   f.save = (body = reviewProtocolBodyFixture(), prior = null) => f.repository.systematicReviews.save({
     projectId: f.project.id, requestId: crypto.randomUUID(), protocolId: prior?.version.protocolId ?? null,

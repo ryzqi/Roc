@@ -6,6 +6,7 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 import type {ReviewInspectorRequest} from './artifact-interactions';
 import type {ReviewProtocolDrafts} from './review-protocol-draft';
 import {ReviewProtocolEditor} from './ReviewProtocolEditor';
+import {ReviewSearchCorpus} from './ReviewSearchCorpus';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
@@ -15,7 +16,9 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
 }): React.JSX.Element {
   const [selection, setSelection] = useState<Selection>(() => request.versionId === null ? null :
     {kind: 'version', versionId: request.versionId});
-  const [pending, setPending] = useState(false);
+  const [protocolPending, setProtocolPending] = useState(false);
+  const [searchPending, setSearchPending] = useState(false);
+  const pending = protocolPending || searchPending;
   const protocols = useAsyncResource(`review:protocols:${request.projectId}`,
     () => client.api.research.listReviewProtocols({projectId: request.projectId, limit: 100}), {label: '读取综述协议'});
   const versionId = selection?.kind === 'version' ? selection.versionId : null;
@@ -71,10 +74,13 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
           </li>)}
         </ul>}
       </section>}
+      {current?.freeze === null || current === null ? null :
+        <ReviewSearchCorpus key={`search:${current.version.id}:${current.freezeHash}`} client={client} protocol={current}
+          writable={writable && !protocolPending} onPending={setSearchPending} />}
       {selection?.kind === 'new' || current !== null ?
-        <ReviewProtocolEditor key={current === null ? 'new' : `${current.version.id}:${current.freezeHash}`}
-          client={client} projectId={request.projectId} current={current} writable={writable} drafts={drafts}
-          onPending={setPending} onSaved={saved => {
+        <ReviewProtocolEditor key={current === null ? 'protocol:new' : `protocol:${current.version.id}:${current.freezeHash}`}
+          client={client} projectId={request.projectId} current={current} writable={writable && !searchPending} drafts={drafts}
+          onPending={setProtocolPending} onSaved={saved => {
             setSelection({kind: 'version', versionId: saved.version.id});
             protocols.reload(); protocol.reload();
           }} /> : null}
