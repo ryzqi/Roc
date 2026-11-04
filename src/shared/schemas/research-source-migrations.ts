@@ -68,7 +68,12 @@ export const researchSourceMigrationInspectionSchema = z.object({
   proposal: researchSourceMigrationProposalSchema, proposalHash: digest, targetStatus: z.enum(['current', 'stale']),
   decision: researchSourceMigrationDecisionSchema.nullable(),
   capturedReferenceStatus: z.enum(['recorded', 'superseded']).nullable()
-}).strict();
+}).strict().superRefine((value, context) => {
+  const captured = value.decision !== null && value.decision.capturedSource !== null;
+  if (captured !== (value.capturedReferenceStatus !== null)) {
+    context.addIssue({code: 'custom', message: 'A captured decision requires its current reference status.'});
+  }
+});
 
 export type ResearchSourceMigrationProposal = z.infer<typeof researchSourceMigrationProposalSchema>;
 export type ResearchSourceMigrationInspection = z.infer<typeof researchSourceMigrationInspectionSchema>;

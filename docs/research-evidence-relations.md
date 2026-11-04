@@ -45,7 +45,7 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选与可信捕获已接通；检查器和明确替代/rerun lineage 仍待完成。
+整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选与可信捕获已接通；明确替代/rerun lineage 仍待完成。
 
 ## 可信用户 IPC
 
@@ -193,12 +193,12 @@ repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域�
 
 `evidenceIds` 是来源关联，不表示已经人工确认科学支持。明确关系、版本绑定、
 人工审核、修订历史、模型支持提议与关系 UI、严格语义消费者、历史导出封印
-及同文档定位候选/可信用户捕获已实现；候选检查器及明确来源替代/rerun lineage 待完成。来源完整性、科学语义和人工审核分别报告，PR-06
+及同文档定位候选/可信用户捕获已实现；候选检查器已接通；明确来源替代/rerun lineage 待完成。来源完整性、科学语义和人工审核分别报告，PR-06
 整体尚未完成。
 
 严格批准/当前导出增量已验证 focused32/unit857/Harness94/native13/UI37/startup12。
 导出审核封印增量已验证 unit858/final focused9/Harness94/native13/UI27/startup12、
-fresh build/type/IPC/chunks1132980bytes6files。候选检查器与明确来源替代/rerun lineage 仍未完成；上述离线
+fresh build/type/IPC/chunks1132980bytes6files。明确来源替代/rerun lineage 仍未完成；上述离线
 传输和来源验收不构成真实科学结论或整体计划完成。
 
 
@@ -226,5 +226,27 @@ capturedReferenceStatus，重解析不改原决定或旧证据。
 
 定位捕获不改 Claim evidenceIds、status、version、正文、图稿或科学关系/修订历史。
 旧 supports 审核继续 invalidated。需用户/助手另建主张版本与关系并重新科学审核，
-原批准/当前导出不能通过新位置捕获恢复。该增量仅实现后端与可信传输，候选
-检查器仍需下一增量。
+原批准/当前导出不能通过新位置捕获恢复。后端与可信传输已接入同一工件检查器；明确来源替代与实验 rerun lineage 仍待完成。
+
+
+## 候选检查器
+
+旧证据的托管文档来源详情提供按需加载的定位候选。新匹配保留原始解析块顺序、
+完整原文、原始 locator 与实际页信息，明确区分完整文本、仅规范空白、多个匹配、
+无匹配与旧目标。候选/source/parse SHA 放在原生详情中；不把原始区域称为已经
+投影到 PDF 的坐标，不自动选择单个或多个目标。
+
+用户核对当前工件后显式通过原生 radio 选择目标，再捕获或拒绝。无匹配与旧目标
+不能捕获；当前项目归档或工件快照未重新核对时，决定按钮禁用。动作使用既有
+异步状态模型，保留主进程错误，待保存时禁用字段和两种决定。相同完整选择/说明
+重试复用 requestId；成功后重读实际候选，不伪造前端成功记录。
+
+已捕获与已拒绝均可读取不可替换的用户、时间、说明、请求和完整决定。捕获记录
+与当前 capturedReferenceStatus 分开展示；后续解析只显示当前定位也已失效，
+不改原捕获的 recorded 快照。关闭、换工件、换项目后的晚到读/写响应不会刷新
+新选择或提交批准。定位确认继续不恢复任何科学关系。
+
+候选及外层来源的 ::details-content 使用局部 overflow:clip 覆盖，避免 Chromium
+在聚焦原生折叠内的输入框时把 overflow:hidden 匿名容器内部滚动，隐藏原 locator、
+原文或候选说明。沿用现有折叠动效；没有新时长、全局 CSS 或第二套布局。真实
+Electron 验证依据最终原生区域坐标，不仅依据 getAnimations().finished 或阴影审计。

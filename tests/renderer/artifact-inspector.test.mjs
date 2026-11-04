@@ -30,7 +30,10 @@ before(async()=>{
       inspectEvidence:input=>window.relationFromMain('inspectEvidence',input),
       proposeEvidenceRelation:input=>window.relationFromMain('proposeEvidenceRelation',input),
       reviewEvidenceRelation:input=>window.relationFromMain('reviewEvidenceRelation',input),
-      evidenceRelationHistory:input=>window.relationFromMain('evidenceRelationHistory',input)}}};
+      evidenceRelationHistory:input=>window.relationFromMain('evidenceRelationHistory',input),
+      listSourceMigrations:input=>window.relationFromMain('listSourceMigrations',input),
+      captureSourceMigration:input=>window.relationFromMain('captureSourceMigration',input),
+      rejectSourceMigration:input=>window.relationFromMain('rejectSourceMigration',input)}}};
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
       const [readingLocations]=useState(()=>new Map());
@@ -88,7 +91,9 @@ before(async()=>{
     const f=active;
     reads.push({relation:method,input});
     const channel={inspectEvidence:'roc:research:evidence-inspect',proposeEvidenceRelation:'roc:research:relations-propose',
-      reviewEvidenceRelation:'roc:research:relations-review',evidenceRelationHistory:'roc:research:relations-history'}[method];
+      reviewEvidenceRelation:'roc:research:relations-review',evidenceRelationHistory:'roc:research:relations-history',
+      listSourceMigrations:'roc:research:source-migrations-list',captureSourceMigration:'roc:research:source-migrations-capture',
+      rejectSourceMigration:'roc:research:source-migrations-reject'}[method];
     api.parseIpcRequestArgs(channel,[input]);
     const result=await f.bridge.invoke(`research.${method}`,[input],windowId);
     if(f.deferRelation===method)return new Promise(resolve=>{f.finishRelation=()=>resolve(result);});
@@ -109,16 +114,45 @@ after(async()=>{
   try {await app?.close();} finally {fixtures.forEach(f=>f.close());api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
-async function scene({long=false}={}) {
+async function scene({long=false,managed=false}={}) {
   const f=createResearchFixture(api,'reading');fixtures.push(f);active=f;reads.length=0;
   const excerpt=long ? '原始来源长段落与定位说明。'.repeat(120) : 'An actual retained synthetic source excerpt.';
-  f.db.prepare(`INSERT INTO research_evidence
+  let evidenceId='inspector-evidence';
+  if(managed) {
+    f.document=f.repository.documents.import({id:'inspector-managed-document',libraryItemId:null,projectId:f.project.id,
+      filename:'inspector.pdf',mediaType:'pdf',sourcePath:'documents/inspector.pdf',sourceHash:hash('synthetic original PDF'),size:22,
+      entry:{metadata:{id:'inspector-managed-literature',source:'local',externalId:'inspector-managed-fixture',doi:null,
+        title:'Managed source',authors:['Synthetic Author'],abstract:null,publishedYear:2026,citationCount:null,
+        url:null,openAccessUrl:null,importedAt:'2026-11-04T00:00:00.000Z',updatedAt:'2026-11-04T00:00:00.000Z'},
+        bibliography:{citationKey:'inspector2026',entryType:'article',fields:{title:'Managed source'},preambles:[],
+          csl:null,title:'Managed source',authors:['Synthetic Author'],doi:null,publishedYear:2026,abstract:null,url:null}}
+    },false).document;
+    f.sourceText=long?'原始迁移候选完整段落，用于逐块人工核对。'.repeat(80):'An actual retained synthetic migration source.';
+    f.reparse=(parseId,blocks=[
+      {id:'target-first',kind:'paragraph',label:'Synthetic paragraph',text:f.sourceText,locator:'page:1',imageAssetId:null,
+        locations:[{page:1,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]},
+      {id:'target-second',kind:'paragraph',label:'Synthetic paragraph',text:f.sourceText,locator:'page:3',imageAssetId:null,
+        locations:[{page:3,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]}
+    ])=>{
+      f.repository.documents.begin(f.document.id,parseId);
+      f.repository.documents.complete(f.document.id,parseId,{outputPath:'/tmp/synthetic-ui-parse',files:{},content:{
+        contractVersion:4,engine:'paddleocr.js',engineVersion:'synthetic-ui-test',parserVersion:'roc-research-parser/2',
+        parserFingerprint:hash('synthetic ui parser'),modelManifest:'',runtime:{node:'synthetic'},tier:'compact',
+        parseMode:'native-text',device:'cpu',sourceHash:f.document.sourceHash,pageCount:4,
+        content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],
+        artifacts:{middleJson:'artifacts/middle.json',markdown:'artifacts/document.md',structuredContent:'artifacts/structured.json'},warnings:[]
+      }});
+    };
+    f.reparse('inspector-old');
+    f.source=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:inspector-old:chunk:0'});
+    evidenceId=f.source.id;
+  } else f.db.prepare(`INSERT INTO research_evidence
     (id,project_id,document_id,chunk_id,source_type,source_id,source_version,title,locator,excerpt,content_hash,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run('inspector-evidence',f.project.id,'inspector-document','inspector-document:chunk:0',
     'file','synthetic-source','parse-v1','Original synthetic source','page:2',excerpt,hash(excerpt),'2026-11-04T00:00:00.000Z');
   const empty=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Empty real artifact',path:null});
   const completed=f.repository.runs.complete(f.run.id,f.project.id,{title:'真实保存的阅读产物',markdown:'# Saved result\n\nActual **persisted** markdown.',
-    claims:[{subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:['inspector-evidence']}],sections:[],verdict:'uncertain'});
+    claims:[{subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:[evidenceId]}],sections:[],verdict:'uncertain'});
   const artifactId=completed.outputArtifactIds[0];
   await api.createResearchHumanGate({repository:f.repository}).complete({projectId:f.project.id,expectedStage:'reading',action:'complete'});
   const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId,expectedVersion:null}).snapshot;
@@ -234,7 +268,8 @@ test('keyboard source selection creates a real proposal, human confirmation refr
   await page.getByTestId('artifact-inspector-return-review').waitFor();
   await page.getByTestId('artifact-inspector-return-review').focus();await page.keyboard.press('Enter');
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
-  await page.getByTestId('assistant-gate-approve').focus();await page.keyboard.press('Enter');
+  await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
+  await activateRendered(page.getByTestId('assistant-gate-approve'));
   await page.waitForFunction(()=>window.resumeResult?.done===true);
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'ideation');
 });
@@ -519,4 +554,245 @@ test('late whole-context reads are discarded on selection or project replacement
   assert.equal(await page.getByTestId('artifact-inspector-panel').count(),0);
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
   assert.equal(next.repository.getWorkflow(next.project.id).currentStage,'reading');
+});
+
+async function openMigrationSource(f,{current=true}={}) {
+  await openArtifact();
+  if(current) {
+    await page.getByTestId('artifact-inspector-recapture').waitFor();
+    await activateRendered(page.getByTestId('artifact-inspector-recapture'));
+    await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});
+  }
+  await expandMigrationSource(f);
+}
+async function expandMigrationSource(f) {
+  const summary=page.locator(`[data-reading-key="evidence-summary:${f.source.id}"]`);
+  await summary.waitFor({state:'visible'});
+  if(!await summary.evaluate(element=>element.parentElement.open)) await activateRendered(summary);
+  assert.equal(await summary.evaluate(element=>element.parentElement.open),true);
+  const toggle=page.getByTestId(`artifact-source-migrations-toggle-${f.source.id}`);
+  await toggle.waitFor({state:'visible'});
+  if(await toggle.getAttribute('aria-expanded')!=='true') await activateRendered(toggle);
+  assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+}
+async function openMigrationCandidate(f,proposalId) {
+  const inspection=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id});
+  const id=proposalId??inspection[0].proposal.id;
+  const details=page.getByTestId(`artifact-source-migration-${id}`);
+  await details.waitFor({state:'visible'});
+  if(!await details.evaluate(element=>element.open)) await activateRendered(details.locator(':scope > summary'));
+  await details.locator(':scope > div').waitFor({state:'visible'});
+  return details;
+}
+
+test('migration inspector requires current recapture and an explicit keyboard target, retaining the original scientific records',async()=>{
+  const f=await scene({managed:true});
+  const claim=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId})[0];
+  const proposed=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:claim.id,
+    expectedClaimVersion:claim.version,evidenceId:f.source.id,
+    expectedSourceDigest:api.relationSourceDigest(f.repository.evidence.inspectEvidence(f.source.id,f.project.id)),
+    kind:'supports',condition:null,supersedesRelationId:null},{kind:'user',id:'synthetic-before-ui-reparse'});
+  f.repository.evidence.relations.review({projectId:f.project.id,relationId:proposed.id,expectedVersion:proposed.version,
+    expectedClaimVersion:claim.version,expectedSourceDigest:proposed.sourceDigest,decision:'confirm',note:null},
+  {kind:'user',id:'synthetic-before-ui-reparse'});
+  f.reparse('inspector-new');
+  const original={claim:f.repository.evidence.getClaim(claim.id),
+    source:f.repository.evidence.inspectEvidence(f.source.id,f.project.id),
+    review:f.repository.evidence.relations.history(proposed.id,f.project.id)};
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await openMigrationSource(f,{current:false});
+  let candidate=await openMigrationCandidate(f);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-capture').isDisabled(),true);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-reject').isDisabled(),true);
+  assert.equal(await candidate.locator('input:checked').count(),0);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  await activateRendered(page.getByTestId('artifact-inspector-recapture'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});
+  await expandMigrationSource(f);
+  candidate=await openMigrationCandidate(f);
+  const target=candidate.getByTestId('artifact-source-migration-target-1');
+  await target.waitFor({state:'visible'});await target.focus();await page.keyboard.press('Space');
+  assert.equal(await target.isChecked(),true);
+  await candidate.getByTestId('artifact-source-migration-note').fill('人工选择第三页的第二个块。');
+  const sourceDetails=page.locator(`[data-reading-key="evidence:${f.source.id}"]`);
+  await sourceDetails.evaluate(async details=>{await Promise.all(details.getAnimations({subtree:true}).map(animation=>animation.finished));});
+  const sourceLayout=await sourceDetails.evaluate(details=>({
+    summaryBottom:details.querySelector(':scope > summary').getBoundingClientRect().bottom,
+    firstTop:details.querySelector(':scope > p').getBoundingClientRect().top,
+    pseudo:getComputedStyle(details,'::details-content').overflow
+  }));
+  await page.waitForFunction(id=>{
+    const details=document.querySelector(`[data-testid="artifact-source-migration-${id}"]`);
+    return details!==null&&details.querySelector(':scope > div').getBoundingClientRect().bottom<=details.getBoundingClientRect().bottom;
+  },f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].proposal.id);
+  const candidateLayout=await candidate.evaluate(details=>({
+    summaryBottom:details.querySelector(':scope > summary').getBoundingClientRect().bottom,
+    firstTop:details.querySelector(':scope > div > p').getBoundingClientRect().top,
+    bottom:details.getBoundingClientRect().bottom,
+    bodyBottom:details.querySelector(':scope > div').getBoundingClientRect().bottom,
+    blockSize:getComputedStyle(details,'::details-content').blockSize,
+    animations:details.getAnimations({subtree:true}).map(animation=>({state:animation.playState,current:animation.currentTime,
+      timing:animation.effect.getComputedTiming()})),
+    scrollTop:details.scrollTop,
+    pseudo:getComputedStyle(details,'::details-content').overflow
+  }));
+  writeFileSync(join(artifacts,'source-migration-candidate-layout.json'),JSON.stringify(candidateLayout,null,2));
+  writeFileSync(join(artifacts,'source-migration-source-layout.json'),JSON.stringify(sourceLayout,null,2));
+  assert.ok(sourceLayout.firstTop>=sourceLayout.summaryBottom,'source disclosure must retain its original locator and excerpt above the migration area');
+  assert.ok(candidateLayout.firstTop>=candidateLayout.summaryBottom,'expanded native details must show the beginning of the candidate above its target controls');
+  assert.ok(candidateLayout.bodyBottom<=candidateLayout.bottom,'expanded candidate must contain its target controls and notes after all ancestor animations finish');
+  await audit('source-migration-ambiguous-keyboard');
+  await activateRendered(candidate.getByTestId('artifact-source-migration-capture'));
+  await page.getByTestId('artifact-source-migrations').getByText('已捕获新证据',{exact:true}).waitFor();
+  candidate=await openMigrationCandidate(f);
+  await candidate.getByTestId('artifact-source-migration-decision').waitFor({state:'visible'});
+  const decision=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].decision;
+  assert.equal(decision.actor.id,`window:${windowId}`);
+  assert.equal(decision.request.chunkId,'document:inspector-new:chunk:1');
+  assert.equal(decision.request.note,'人工选择第三页的第二个块。');
+  assert.equal(decision.capturedSource.sourceLocator.blockId,'target-second');
+  assert.equal(decision.capturedSource.sourceLocator.locations[0].page,3);
+  assert.match(await candidate.innerText(),/当前定位仍有效/u);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-target-1').isChecked(),true);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-target-1').isDisabled(),true);
+  assert.deepEqual(f.repository.evidence.getClaim(claim.id),original.claim);
+  assert.deepEqual(f.repository.evidence.inspectEvidence(f.source.id,f.project.id),original.source);
+  assert.deepEqual(f.repository.evidence.relations.history(proposed.id,f.project.id),original.review);
+  assert.equal(original.review.at(-1).relation.status,'invalidated');
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  await candidate.scrollIntoViewIfNeeded();await audit('source-migration-captured-history');
+  const after=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId('artifact-source-migrations-refresh'));
+  candidate=await openMigrationCandidate(f);
+  await candidate.getByTestId('artifact-source-migration-decision').waitFor({state:'visible'});
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),after);
+  assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
+  f.reparse('inspector-later');
+  const changed=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId('artifact-source-migrations-refresh'));
+  candidate=await openMigrationCandidate(f,decision.proposalId);
+  await candidate.getByTestId('artifact-source-migration-decision').waitFor({state:'visible'});
+  assert.match(await candidate.innerText(),/该新证据的位置也已失效/u);
+  assert.deepEqual(f.repository.evidence.sourceMigrations.get({projectId:f.project.id,proposalId:decision.proposalId}).decision,decision);
+  assert.equal(decision.capturedSource.referenceStatus,'recorded');
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changed);
+});
+
+test('migration inspector refuses an obsolete selected target, rereads fixed history and explicitly rejects an unmatched proposal',async()=>{
+  const f=await scene({managed:true});f.reparse('inspector-new');
+  await openMigrationSource(f);
+  let candidate=await openMigrationCandidate(f);
+  const oldProposal=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].proposal;
+  await candidate.getByTestId('artifact-source-migration-target-0').check();
+  f.reparse('inspector-third',[{id:'changed',kind:'paragraph',label:'Changed scientific paragraph',text:'Different scientific statement.',
+    locator:'page:4',imageAssetId:null,locations:[]}]);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(candidate.getByTestId('artifact-source-migration-capture'));
+  await candidate.getByRole('alert').waitFor();
+  assert.match(await candidate.getByRole('alert').innerText(),/候选、请求或来源已改变/u);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  await activateRendered(page.getByTestId('artifact-source-migrations-refresh'));
+  candidate=await openMigrationCandidate(f,oldProposal.id);
+  assert.match(await candidate.innerText(),/旧目标已被新解析替换/u);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-capture').isDisabled(),true);
+  const latest=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id}).at(-1);
+  assert.equal(latest.proposal.match,'no_match');
+  candidate=await openMigrationCandidate(f,latest.proposal.id);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-target-0').count(),0);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-capture').isDisabled(),true);
+  await candidate.getByTestId('artifact-source-migration-note').fill('正文已变更，拒绝自动定位。');
+  await activateRendered(candidate.getByTestId('artifact-source-migration-reject'));
+  await page.getByTestId(`artifact-source-migration-${latest.proposal.id}`).getByText('已拒绝',{exact:true}).waitFor();
+  candidate=await openMigrationCandidate(f,latest.proposal.id);
+  await candidate.getByTestId('artifact-source-migration-decision').waitFor({state:'visible'});
+  assert.match(await candidate.innerText(),/未捕获新证据/u);
+  assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  assert.deepEqual(f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].proposal,oldProposal);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('late migration reads and successful pending capture cannot affect another artifact or project',async()=>{
+  const f=await scene({managed:true});f.reparse('inspector-new');f.deferRelation='listSourceMigrations';
+  await openMigrationSource(f);
+  await page.getByText('正在读取定位候选…',{exact:true}).waitFor();
+  while(typeof f.finishRelation!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finishRead=f.finishRelation;f.deferRelation=null;
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.empty.id,expectedVersion:null});
+  await page.getByText('该工件尚无已保存的角色正文。',{exact:true}).waitFor();finishRead();
+  assert.equal(await page.getByTestId('artifact-source-migrations').count(),0);
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.link.artifactId,expectedVersion:null});
+  await page.getByTestId('artifact-inspector-content').waitFor();
+  await activateRendered(page.locator(`[data-reading-key="evidence-summary:${f.source.id}"]`));
+  await activateRendered(page.getByTestId(`artifact-source-migrations-toggle-${f.source.id}`));
+  const candidate=await openMigrationCandidate(f);
+  await candidate.getByTestId('artifact-source-migration-target-1').check();
+  f.deferRelation='captureSourceMigration';delete f.finishRelation;
+  await activateRendered(candidate.getByTestId('artifact-source-migration-capture'));
+  await candidate.getByText('正在保存决定…',{exact:true}).waitFor();
+  assert.equal(await candidate.getByTestId('artifact-source-migration-reject').isDisabled(),true);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-note').isDisabled(),true);
+  while(typeof f.finishRelation!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finishCapture=f.finishRelation;
+  const decision=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].decision;
+  assert.ok(decision,'pending transport already committed the original project decision');
+  const next=await scene();finishCapture();
+  await page.getByTestId('assistant-gate-artifact').last().waitFor();
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),0);
+  assert.equal(await page.getByTestId('artifact-source-migrations').count(),0);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.equal(next.repository.evidence.list(next.project.id).length,1);
+  assert.equal(f.repository.evidence.list(f.project.id).length,2);
+});
+
+test('migration snapshot damage is an explicit error and only an actual restored snapshot can be reread',async()=>{
+  const f=await scene({managed:true});f.reparse('inspector-new');
+  const row=f.db.prepare('SELECT id,snapshot_json FROM research_source_migration_proposals').get();
+  f.db.prepare("UPDATE research_source_migration_proposals SET snapshot_json=json_set(snapshot_json,'$.targets[0].block.text','Corrupt target') WHERE id=?")
+    .run(row.id);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await openMigrationSource(f);
+  const panel=page.getByTestId('artifact-source-migrations');
+  await panel.getByRole('alert').waitFor();
+  assert.match(await panel.getByRole('alert').innerText(),/保存的候选、捕获或目标块校验失败/u);
+  assert.equal(await panel.getByTestId('artifact-source-migration-capture').count(),0);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  f.db.prepare('UPDATE research_source_migration_proposals SET snapshot_json=? WHERE id=?').run(row.snapshot_json,row.id);
+  const restored=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId('artifact-source-migrations-refresh'));
+  const candidate=await openMigrationCandidate(f);
+  assert.equal(await panel.getByRole('alert').count(),0);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-capture').isDisabled(),true);
+  assert.equal(await candidate.locator('input:checked').count(),0);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),restored);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('migration long targets remain keyboard readable at light800 and dark1099 with fixed chrome and no horizontal overflow',async()=>{
+  const f=await scene({managed:true,long:true});f.reparse('inspector-new');
+  await openMigrationSource(f);
+  const candidate=await openMigrationCandidate(f);
+  for(const [theme,width] of [['light',800],['dark',1099]]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,900),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    const note=candidate.getByTestId('artifact-source-migration-note');
+    await note.waitFor({state:'visible'});await note.focus();await page.keyboard.press('PageDown');
+    await note.scrollIntoViewIfNeeded();
+    await audit(`source-migration-${theme}-${width}`);
+    const layout=await page.evaluate(()=>{
+      const panel=document.querySelector('[data-testid="artifact-inspector-panel"]');
+      const migration=document.querySelector('[data-testid="artifact-source-migrations"]');
+      return {overflow:panel.scrollWidth>panel.clientWidth||migration.scrollWidth>migration.clientWidth,
+        title:panel.querySelector('h2').getBoundingClientRect().top,
+        small:[...migration.querySelectorAll('p,button,dd,summary,span')].some(element=>parseFloat(getComputedStyle(element).fontSize)<12),
+        selected:migration.querySelectorAll('input:checked').length};
+    });
+    assert.equal(layout.overflow,false);assert.ok(layout.title>=0);assert.equal(layout.small,false);assert.equal(layout.selected,0);
+    assert.equal(await note.evaluate(element=>element===document.activeElement),true);
+  }
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
 });

@@ -2838,3 +2838,59 @@ and review, and renewed gate refusal. Evidence saved in native fault.json; no fr
 Candidate inspector remains next, then explicit source replacement/experiment rerun lineage.
 PR-06 and full plan remain incomplete. Existing expanded P4 baseline defect and external
 scientific/client/L2 acceptance remain unresolved.
+
+
+## ROC-PR-06A5B2 — source migration candidate inspector
+
+Verified passing for this inspector/contract scope, with the independent broad unit defect
+recorded below. Superseded managed sources open lazy candidate details in the single inspector.
+Actual original-order matching outcomes/blocks/pages/locators/hashes stay readable; targets
+have no default selection. Current artifact recapture precedes capture/reject, stale/no_match
+targets refuse capture, pending fields/buttons disable, and saved decisions/history/current
+reference invalidation come from the real registry/generated adapter. Identical selection
+retries keep requestId; late reads/writes cannot refresh a different artifact or project.
+No new scientific support, claim replacement, approval, dependency, global CSS or motion preset.
+
+Screenshot review found a real native disclosure bug: focusing the note made the hidden
+::details-content anonymous scroll container hide candidate headings and then the outer source
+locator/excerpt. Geometry regressions were written before fixes. Candidate first paragraph
+430.37 versus summary658.37 and source first locator191.53 versus summary255.03 were red.
+Scoped important overflow:clip utilities on the two disclosures fix the internal scrolling;
+original motion is retained. Tests wait for actual body containment, because getAnimations().finished
+can report no animations while the native disclosure still has an intermediate block size.
+Final first-source/candidate paragraphs remain8px below summaries and all controls fit.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm build | Final sourceclip fresh typecheck/production build passed |
+| node --test tests/unit/research-source-migration-ipc.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs | 24/24 after strict captured/current-status contract |
+| node --test --test-name-pattern='migration inspector requires current' tests/renderer/artifact-inspector.test.mjs | Geometry red before fixes; final ready1/1 |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | Final3 clean32/32 |
+| node scripts/run-research-p0.mjs | 13/13 after final backend schema change; later changes only renderer/geometry |
+| pnpm harness:eval | 94/94 |
+| node scripts/smoke-electron.mjs | Final3 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Final3 passed, eager1132980bytes6files |
+| pnpm test:unit | 871/872; unchanged review-origin order defect reproduced at clean c520a0e baseline |
+
+Broad unit failure is literature-import1967: getReviews order intermittently flips the two
+actual observations relative to origins. Exact single test at clean detached c520a0e baseline
+passes twice then reproduces identical failure on third attempt. Evidence in
+pr06-a5b2-review-order-baseline.json/logs; task-owned symlink/worktree removed, library
+code/assertions unchanged. No claimed fix or blanket full-unit pass.
+
+Initial late-selection test supplied extra title/kind link fields to strict inspect input;
+fixed its request to declared fields. One same-SHA recapture test blindly retoggled expanded
+state; helper now checks/asserts actual native expansion before keyboard activation.
+One old relation/gate test tried approval before inspector closure; it now waits for detached
+panel and asserts rendered native focus before the original Enter/approval outcome.
+No backend assertions, timeouts or product gate behavior weakened. All DEBUG-a5b2 probes removed.
+
+Evidence under .artifacts/research-optimization/artifact-inspector-ui includes selected-target,
+captured-history, light800/dark1099 long-layout screenshots, shadow audits and source/candidate
+geometry JSON. Final screenshots inspected: original locator/excerpt retained, complete
+targets/note/decisions visible, no anonymous inner scrolling or horizontal overflow, title fixed.
+
+Explicit source replacement and experiment rerun lineage remain next, then PR-07 projection
+audit. PR-06 and full plan remain incomplete. Existing expanded P4 baseline defect and
+external independent scientific/client/L2 acceptance remain unresolved.

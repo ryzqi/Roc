@@ -7,6 +7,7 @@ import {ModalShell} from '../shell/ModalShell';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import type {ArtifactReadingLocations} from './artifact-reading-location';
 import {useArtifactReadingLocation} from './use-artifact-reading-location';
+import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
 
 const StageContent = lazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
@@ -106,16 +107,8 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
         <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="工件证据来源">
           <h2 className="font-medium text-ink">证据来源</h2>
           {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :
-            snapshot.evidence.map(source => <details key={source.evidence.id} data-reading-key={`evidence:${source.evidence.id}`} className="border-b-[0.5px] border-line py-2">
-              <summary data-reading-key={`evidence-summary:${source.evidence.id}`} className="cursor-pointer break-words text-ink">{source.evidence.title}
-                <span className="ml-2 text-muted">{source.referenceStatus === 'superseded' ? '旧定位已失效' : '已保存的来源片段'}</span>
-              </summary>
-              <p className="mt-2 break-words text-muted">{source.evidence.locator}</p>
-              <blockquote className="mt-1 whitespace-pre-wrap break-words text-ink">{source.evidence.excerpt}</blockquote>
-              {source.invalidatedAt === null ? null : <p className="text-muted">失效时间 {source.invalidatedAt}</p>}
-              <p className="break-all text-muted">来源版本 {source.evidence.sourceVersion}</p>
-              <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {source.evidence.contentHash}</p>
-            </details>)}
+            snapshot.evidence.map(source => <ArtifactEvidenceSource key={`${snapshot.version}:${source.evidence.id}`}
+              client={client} source={source} canDecide={result?.status === 'current' && snapshot.projectStatus !== 'archived'}/>)}
         </section>
         <Suspense fallback={<p role="status">正在加载证据关系…</p>}>
           <Relations key={snapshot.version} client={client} snapshot={snapshot} current={result?.status === 'current'}
