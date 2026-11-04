@@ -102,7 +102,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
     </section>
     {selectedCorpusId === null ? null : <Suspense fallback={<p role="status">正在加载语料核查…</p>}>
       <ReviewDedupInspector key={selectedCorpusId} client={client} projectId={projectId} corpusId={selectedCorpusId}
-        writable={writable && !queryPending && !create.pending} onPending={value => {setDedupPending(value); onPending(value);}} />
+        protocol={protocol} writable={writable && !queryPending && !create.pending}
+        onPending={value => {setDedupPending(value); onPending(value);}} />
     </Suspense>}
   </section>;
 }

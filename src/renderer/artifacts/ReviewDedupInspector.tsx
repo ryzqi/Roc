@@ -1,4 +1,5 @@
-import {useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewDeduplicationFreeze} from '../../shared/schemas/research-review-deduplication';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
@@ -7,8 +8,10 @@ import {ReviewCorpusRecords} from './ReviewCorpusRecords';
 import {ReviewDuplicateEditor} from './ReviewDuplicateEditor';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
-export function ReviewDedupInspector({client, projectId, corpusId, writable, onPending}: {
-  client: RocClient; projectId: string; corpusId: string; writable: boolean; onPending: (pending: boolean) => void
+const ReviewScreeningPlan = lazy(async () => ({default: (await import('./ReviewScreeningPlan')).ReviewScreeningPlan}));
+export function ReviewDedupInspector({client, protocol, projectId, corpusId, writable, onPending}: {
+  client: RocClient; protocol: ResearchReviewProtocolInspection; projectId: string; corpusId: string;
+  writable: boolean; onPending: (pending: boolean) => void
 }): React.JSX.Element {
   const corpusRead = useAsyncResource(`review:corpus:${projectId}:${corpusId}`,
     () => client.api.research.getReviewCorpus({projectId, corpusId}), {label: '读取准确固定语料'});
@@ -25,9 +28,10 @@ export function ReviewDedupInspector({client, projectId, corpusId, writable, onP
   }, [leftHitId, rightHitId]);
   const [reviewNote, setReviewNote] = useState('');
   const [pairPending, setPairPending] = useState(false);
+  const [screeningOpen, setScreeningOpen] = useState(false), [screeningPending, setScreeningPending] = useState(false);
   const freeze = useAsyncAction((request: ResearchReviewDeduplicationFreeze) => client.api.research.freezeReviewDeduplication(request), {label: '冻结人工去重结果'});
   const busy = useRef(false), requests = useRef(new Map<string, string>());
-  const pending = pairPending || freeze.pending;
+  const pending = pairPending || freeze.pending || screeningPending;
   const editable = writable && corpus?.currentProtocol === true && dedup?.currentProtocol === true && dedup.freeze === null;
   const parent = dedup?.decisions.find(item => {
     const request = item.snapshot.request;
@@ -95,6 +99,13 @@ export function ReviewDedupInspector({client, projectId, corpusId, writable, onP
         <p className="text-muted break-all">审核人 {dedup.freeze.actor.id} {dedup.freeze.frozenAt}</p>
         <p className="break-words">{dedup.freeze.request.reviewNote}</p>
       </section>}
+      {dedup.freeze === null ? null : <button type="button" className={`${button} self-start`} disabled={pending}
+        data-testid="artifact-review-screening-inspect" onClick={() => setScreeningOpen(true)}>核查审核人声明与筛选</button>}
+      {!screeningOpen || dedup.freeze === null ? null : <Suspense fallback={<p role="status">正在加载审核人声明…</p>}>
+        <ReviewScreeningPlan key={`screening:${corpus.snapshotHash}:${dedup.freezeHash}`} client={client} protocol={protocol}
+          corpus={corpus} dedup={dedup} writable={writable && !pairPending && !freeze.pending}
+          onPending={value => {setScreeningPending(value); onPending(value);}} />
+      </Suspense>}
     </>}
     {freeze.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{freeze.error}</p>}
   </section>;
