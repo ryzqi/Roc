@@ -84,6 +84,7 @@ import {ResearchReviewScreeningFreeze} from './review-screening-freeze';
 import {ResearchReviewFullTextRepository} from './review-fulltext-repository';
 import {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from './review-fulltext-capabilities';
 import {ResearchReviewFullTextScreening} from './review-fulltext-screening';
+import {ResearchReviewFullTextArbitration} from './review-fulltext-arbitration';
 import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
@@ -308,7 +309,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewFullTexts=new ResearchReviewFullTextRepository(db,researchRepository,reviewCorpora,reviewScreeningFreeze,documents,()=>new Date().toISOString());
       registerResearchReviewFullTextCapabilities(context,reviewFullTexts);
       const reviewFullTextScreening=new ResearchReviewFullTextScreening(db,researchRepository,reviewScreeningFreeze,reviewFullTexts,()=>new Date().toISOString());
-      registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening);
+      const reviewFullTextArbitration=new ResearchReviewFullTextArbitration(db,researchRepository,reviewFullTextScreening,reviewFullTexts,()=>new Date().toISOString());
+      registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening,reviewFullTextArbitration);
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

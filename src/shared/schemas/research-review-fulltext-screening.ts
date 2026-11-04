@@ -5,7 +5,7 @@ import {researchReviewFullTextBindingInspectionSchema} from './research-review-f
 import {
   researchReviewScreeningPlanGetSchema, researchReviewScreeningPlanInspectionSchema,
   researchReviewScreeningOutcomeSchema, researchReviewScreeningReviewerSchema,
-  researchReviewScreeningSuggestionOriginSchema
+  researchReviewScreeningSuggestionOriginSchema, researchReviewScreeningFinalOutcomeSchema
 } from './research-review-screening';
 
 const id=z.string().trim().min(1).max(300), hash=z.string().regex(/^[a-f0-9]{64}$/u);
@@ -67,3 +67,28 @@ export type ResearchReviewFullTextSuggestionCreate=z.infer<typeof researchReview
 export type ResearchReviewFullTextSuggestionOrigin=z.infer<typeof researchReviewFullTextSuggestionOriginSchema>;
 export type ResearchReviewFullTextSuggestionInspection=z.infer<typeof researchReviewFullTextSuggestionInspectionSchema>;
 export type ResearchReviewFullTextPhaseInspection=z.infer<typeof researchReviewFullTextPhaseInspectionSchema>;
+
+export const researchReviewFullTextArbitrationSaveSchema=target.extend({
+  reviewerId:id,outcome:researchReviewScreeningFinalOutcomeSchema,decisions:z.array(reference).min(1).max(2),
+  parentArbitrationId:id.nullable(),expectedParentHash:hash.nullable(),revisionReason:note.nullable()
+}).refine(value=>new Set(value.decisions.map(decision=>decision.id)).size===value.decisions.length,
+  'review_screening_arbitration_decision_duplicate')
+  .refine(value=>value.parentArbitrationId===null?
+    value.expectedParentHash===null&&value.revisionReason===null:
+    value.expectedParentHash!==null&&value.revisionReason!==null,'review_screening_arbitration_revision_requires_parent');
+export const researchReviewFullTextArbitrationSnapshotSchema=z.object({
+  id,version:z.number().int().positive(),request:researchReviewFullTextArbitrationSaveSchema,requestHash:hash,
+  adjudicator:researchReviewScreeningReviewerSchema,material,actor:researchRelationReviewerSchema,recordedAt:z.iso.datetime()
+}).strict();
+export const researchReviewFullTextArbitrationInspectionSchema=z.object({
+  snapshot:researchReviewFullTextArbitrationSnapshotSchema,snapshotHash:hash,isLatest:z.boolean(),currentDecisionSet:z.boolean()
+}).strict();
+export const researchReviewFullTextArbitrationHistorySchema=researchReviewScreeningPlanGetSchema.extend({arbitrationId:id});
+export const researchReviewFullTextResolvedPhaseSchema=researchReviewFullTextPhaseInspectionSchema.safeExtend({
+  items:z.array(researchReviewFullTextPhaseInspectionSchema.shape.items.element.extend({
+    arbitration:researchReviewFullTextArbitrationInspectionSchema.nullable()
+  }))
+});
+export type ResearchReviewFullTextArbitrationSave=z.infer<typeof researchReviewFullTextArbitrationSaveSchema>;
+export type ResearchReviewFullTextArbitrationInspection=z.infer<typeof researchReviewFullTextArbitrationInspectionSchema>;
+export type ResearchReviewFullTextResolvedPhase=z.infer<typeof researchReviewFullTextResolvedPhaseSchema>;

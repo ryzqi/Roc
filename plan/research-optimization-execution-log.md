@@ -3692,3 +3692,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c3b1-* retained. Real PDF/publication/source/preview, one/two reviewers/reasons conflict/replay/parent, unavailable and superseded source refusal, explicit all-reviewer source-version revision, physical/async drift and transaction corruption/rollback, main121 actual operation provenance and disk reopen covered. Initial12/build passed; synchronous repeated-title read cleanup then final133/freshbuild/fullchecks all passed. No new DB version/backfill, persistent cache, legacy alias, model spend or full review UI/scientific independence claim. Next exact-current-reviewer human arbitration then fulltext whole-round freeze; extraction/quality/inspector/count-conserving reporting and whole roadmap remain.
+
+
+## ROC-PR-09A4C3B2 — exact-current-reviewer/source fulltext adjudication
+
+Verified passing. Existing phase-keyed DB33 arbitration records pin all current declared fulltext votes, exact plan/title/binding hashes and declared adjudicator. Actual source bytes verified before transaction and entire current reviewer/source set rechecked after insert. Valid newly appended reviewer revision during storage causes complete arbitration/revision rollback. Only latest currentDecisionSet-matched arbitration resolves derived uncertain/conflict state; revised votes or sources retain stale adjudication/history. Explicit parents/replay and main131 async human authority.2 generated APIs; existing phase transport becomes resolved view. Incomplete/agreed/unavailable/superseded/strict-forged requests refuse without writes.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh current build/type |
+| node --test tests/unit/research-review-fulltext-arbitration.test.mjs tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs | Initial31/31; before10th arbitration disk reopen case was appended |
+| node --test tests/unit/research-review-fulltext-arbitration.test.mjs tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-document-annotations.test.mjs | Final143/143; fulltext arbitration10 |
+| pnpm test:unit / pnpm harness:eval | 1026/1026 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c3b2-* retained. Real byte verification, complete current votes, stale arbitration after valid reviewer revision/reparse/unavailable binding, immutable parents/ref-matched historical conclusions, exact declared adjudicator/main131, corrupt material/source drift and valid-new-vote transaction trigger rollback, actual disk reopening covered. First31/build passed;10th test added before final143/fullunit1026, runtime unchanged after build. No new DB/backfill, UI/scientific independence or model spend claim. Next fulltext whole-round freeze then extraction/quality/inspector/count-conserving reporting; whole roadmap remains open.

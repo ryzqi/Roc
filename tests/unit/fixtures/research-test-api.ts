@@ -87,3 +87,5 @@ export {ResearchReviewFullTextRepository} from '../../../src/main/plugins/resear
 export {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from '../../../src/main/plugins/research/review-fulltext-capabilities';
 export {ResearchReviewFullTextScreening} from '../../../src/main/plugins/research/review-fulltext-screening';
 export {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from '../../../src/main/plugins/research/review-fulltext-screening-capabilities';
+export {ResearchReviewFullTextArbitration} from '../../../src/main/plugins/research/review-fulltext-arbitration';
+export {researchReviewFullTextDecisionSaveSchema,researchReviewFullTextDecisionSnapshotSchema} from '../../../src/shared/schemas/research-review-fulltext-screening';

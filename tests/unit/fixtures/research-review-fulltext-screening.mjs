@@ -9,6 +9,7 @@ export const fullTextOrigin={kind:'agent_tool',operationId:'fulltext-proposal-op
 export async function createReviewFullTextScreeningFixture(api,options={}) {
   const f=await createReviewFullTextFixture(api,options);
   f.fullScreening=new api.ResearchReviewFullTextScreening(f.db,f.repository,f.freezing,f.fulltexts,()=>f.time);
+  f.fullArbitration=new api.ResearchReviewFullTextArbitration(f.db,f.repository,f.fullScreening,f.fulltexts,()=>f.time);
   f.fullPhase={...f.get,phase:'full_text'};
   f.reviewerIds=f.plan.snapshot.request.fullTextReviewers.map(reviewer=>reviewer.id);
   f.bound=new Map();
