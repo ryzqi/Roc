@@ -1858,6 +1858,36 @@ CREATE TABLE research_document_annotation_captures (
 `
 });
 
+researchMigrations.push({
+  version: 27, name: 'immutable_systematic_review_protocols',
+  sql: `
+CREATE TABLE research_review_protocol_versions (
+  id TEXT PRIMARY KEY,
+  protocol_id TEXT NOT NULL,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK(version > 0),
+  parent_version_id TEXT REFERENCES research_review_protocol_versions(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  freeze_hash TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(protocol_id,version),
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX idx_review_protocol_project ON research_review_protocol_versions(project_id,protocol_id,version);
+CREATE TABLE research_review_protocol_freezes (
+  version_id TEXT PRIMARY KEY REFERENCES research_review_protocol_versions(id),
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

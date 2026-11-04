@@ -3470,3 +3470,21 @@ PR07 local engineering scope is complete: safe metadata/URLs, lazy original PDF,
 Verified passing. Full unit run during PR09 detected that the new scan generator was placed inside the manifest-locked workflow corpus. Move it to tests/fixtures/research-scanned-source.mjs, retain frozen manifest and source bytes, update native import/documentation. No relaxed corpus assertion.
 
 Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: node --test tests/unit/research-workflow-fixture.test.mjs passed2/2; node scripts/verify-research-pdf-scanned.mjs --models-root .artifacts/research-optimization/pr07-scanned/models --evidence-root .artifacts/research-optimization/pr07-scanned/acceptance-corpus-layout passed1/1, actual OCR3.81s with10blocks/13images/2formulas/0tables. Logs pr07-a6b-corpus-layout*. Source/raw/image contract unchanged. PR09 DB27 migration test expectations handled in the separate PR09 commit.
+
+
+## ROC-PR-09A1 — immutable protocol versions and frozen human receipts
+
+Verified passing. Strict explicit systematic-review protocol content, append-only revisions with current-parent/hash/deviation, immutable snapshot/request identity and separate atomic confirmation receipt/marker. Archived history reads remain available; missing marked receipt, corrupt bytes, stale revision or request/actor drift refuse. No historical protocol/decision backfill, scientific mutation or compatibility aliases.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| node --test tests/unit/research-systematic-review.test.mjs |Final9/9; actual SQLite disk reopen/DB26→27 and marker transaction rollback |
+| pnpm test:unit |Final912/912 |
+| pnpm harness:eval |94/94 |
+| pnpm build |Final passed; fresh build/typecheck |
+| node scripts/run-research-p0.mjs |13/13; real native workflows retain boundaries |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
+
+First full unit found three older literature migration tests with expected latest26 rather than new27; corrected expectations while keeping all source preservation assertions. Separate PR07 fixture placement correction570187f restored frozen corpus. Final diff review removed non-null assertion chains and scoped historical version rows before returning them; focused9 and fresh build rerun, full912 uses final source. Protocol repository actors are explicit test users; public generated IPC human binding, actual search lineage, screening/extraction and UI still next. Full PR09 and later roadmap remain open.
