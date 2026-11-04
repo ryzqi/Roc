@@ -94,6 +94,21 @@ test('plan cards exclude local execution, deletion and self configuration', () =
   assert.equal(chat.toolCards.find(card => card.name === 'delete_file').requiresApproval, true);
 });
 
+test('project review reads share the frozen manifest and proposals use safe exact-operation reconciliation', () => {
+  const compiled = api.compileRunCapabilityManifest(input({researchProjectId: 'review-project'}));
+  const tools = compiled.manifest.tools.filter(tool => tool.modelVisibleName.startsWith('research_review_'));
+  assert.deepEqual(tools.map(tool => [tool.modelVisibleName, tool.idempotencyStrategy, tool.reconcileStrategy, tool.executionScopes]), [
+    ['research_review_read', 'none', 'none', ['main', 'subagent']],
+    ['research_review_suggest_title', 'tool_call', 'retry_safe', ['main']],
+    ['research_review_suggest_fulltext', 'tool_call', 'retry_safe', ['main']]
+  ]);
+  assert.equal(api.isRunCapabilityManifestIntegrityValid(compiled.manifest), true);
+  const unbound = api.compileRunCapabilityManifest(input());
+  assert.equal(unbound.manifest.tools.some(tool => tool.modelVisibleName.startsWith('research_review_')), false);
+  const plan = api.compileRunCapabilityManifest(input({researchProjectId: 'review-project', mode: 'plan'}));
+  assert.equal(plan.manifest.tools.some(tool => tool.modelVisibleName.startsWith('research_review_')), false);
+});
+
 test('execution profiles split isolated read/write from main-only trusted host approval', () => {
   const compiled = api.compileRunCapabilityManifest(input({ trustedHostAvailable: true }));
   const names = compiled.toolCards.map((card) => card.name);

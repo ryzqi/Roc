@@ -311,7 +311,10 @@ function createResearchManifestTools(input: {
     effectClass: descriptor.effectClass,
     approvalPolicy: { kind: 'none' as const },
     idempotencyStrategy: descriptor.effectClass === 'none' ? ('none' as const) : ('tool_call' as const),
-    reconcileStrategy: ['research_add_literature', 'research_cancel_literature_import'].includes(descriptor.name)
+    reconcileStrategy: [
+      'research_add_literature', 'research_cancel_literature_import',
+      'research_review_suggest_title', 'research_review_suggest_fulltext'
+    ].includes(descriptor.name)
       ? 'retry_safe' : resolveReconcileStrategy(descriptor.effectClass),
     resourceScope: descriptor.scope
   }));

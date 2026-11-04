@@ -362,3 +362,10 @@ DB40 在现有筛选计划上保存独立 `study_group_head_hash` 和不可变�
 2026-11-05 复核 [PRISMA 官方流程图](https://www.prisma-statement.org/prisma-2020-flow-diagram) 的四种模板范围及许可，并核对 [Page 等原文 Box 1](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1003583) 的 record/report/study 区别。当前只展示这些计数数据项，正式模板仍需人工确认新/更新综述及全部检索来源，不能从当前分库协议自动推断完整格式适用性。
 
 本部分 Verified passing：报表最终联合142/142、后端8/8、fresh build/type、实际启动13/13零renderer错误、IPC/chunks通过。初轮7/8仅原生details展开前读取innerText，未修改产品或原断言；等待真实条目可见后专项1/1及完整142通过。默认截图原停在入口附近，补滚动到计数正文后单独原生1/1核查截图；默认与归档暗色650px已视觉核查，所有cut0回执和展开附录/证据表图片保存于 `.artifacts/research-optimization/pr09-a7c6-ui/`。实际只读零写入、null/审核零研究、重复/null元数据、两轮主排除来源、missing单位/无法判断评价、分页与覆盖缺口、丢失收据/跨项目、重解析/归档保持正文和哈希均覆盖。助手执行与余下计划继续实施。
+## 助手综述读取与筛选建议
+
+绑定研究项目的助手通过 `research_review_read` 读取真实协议版本、查询与原始池、语料/命中、两轮筛选状态及冻结依据、全文绑定、人工提取、质量定义/评价、研究归组和报表。语料、筛选与报表附录明确返回分页总数、范围与是否还有下一页；协议/执行/语料列表达到请求上限时标记 `capped`，不能据此推断未展示项不存在。分页中的 `snapshotHash`、`reviewHash` 和 `bodyHash` 始终对应完整主进程记录，并不声称分页结果就是完整保存快照。报表保留真实计数守恒、查询缺口、研究数未审核的 `null`、来源失效、缺失提取和未评价质量。
+
+`research_review_suggest_title` 与 `research_review_suggest_fulltext` 只保存模型建议。项目身份由运行装配绑定，模型输入没有审核人、actor、来源身份或 requestId；建议 requestId 使用实际可信工具操作的 `idempotencyKey`，来源保留调用/操作/能力版本与尝试信息。精确重试返回原建议，载荷改变拒绝；取消发生在实际落盘后仍保留原回执供同操作重试。新请求必须通过现有冻结阶段、声明准则、准确计划/标题冻结/全文绑定哈希和真实原文校验。建议不计为人工决定，不仲裁、不冻结。清单仅允许主助手提交建议，现有重试机制采用 `retry_safe`；只读工具可供已授权阅读任务使用。
+
+当前增量尚不包含助手拥有的冻结查询执行或精确只读收据链接。人工终局审核继续使用原 main/window 边界；本地确定性工程验收不表示真实模型筛选质量或正式 PRISMA 模板适用性已验证。

@@ -2,6 +2,7 @@ export { ResearchRepository } from '../../../src/main/plugins/research/repositor
 export { ResearchProductionEffectService } from '../../../src/main/plugins/research/production-effects';
 export { createResearchRoleTools } from '../../../src/main/plugins/research/role-tools';
 export { createResearchTools } from '../../../src/main/plugins/agent/research-tools';
+export {RESEARCH_TOOL_DESCRIPTORS} from '../../../src/main/plugins/agent/research-tools';
 export { getResearchStageRoleProfile } from '../../../src/main/plugins/research/role-profiles';
 export { applyResearchDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 export { ResearchFigureService } from '../../../src/main/plugins/research/figure-service';
