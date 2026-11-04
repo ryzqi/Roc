@@ -262,7 +262,12 @@ test('template reader awaits archive descriptor close before returning', async (
 test('template reader preserves extraction errors when archive close also fails', async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-archive-library-close-error-'));
   const originalClose = yauzl.ZipFile.prototype.close;
+  const originalEachEntry = yauzl.ZipFile.prototype.eachEntry;
   const closeError = new Error('simulated_yauzl_close_failure');
+  let signalCloseRequested;
+  const closeRequested = new Promise(resolve => { signalCloseRequested = resolve; });
+  let setupTimer;
+  let closeObserved = false;
   let activeZip;
   let operation;
   try {
@@ -275,23 +280,40 @@ test('template reader preserves extraction errors when archive close also fails'
     const archive = await readFile(archivePath);
     await chmod(archivePath, 0o600);
     await writeFile(archivePath, setCentralMemberName(archive, '../x.txt'));
-    yauzl.ZipFile.prototype.close = function (...args) {
+    // Enumeration precedes close. Its latency must not consume the close/error settlement deadline.
+    yauzl.ZipFile.prototype.eachEntry = async function* () {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      yield* originalEachEntry.call(this);
+    };
+    yauzl.ZipFile.prototype.close = function () {
       activeZip = this;
+      this.once('close', () => { closeObserved = true; });
       this.emit('error', closeError);
+      signalCloseRequested();
     };
     operation = extractResearchTemplate({
         projectRoot: temporaryRoot,
         sourcePath: archivePath,
         outputDir: join(temporaryRoot, 'extracted')
       });
+    await Promise.race([
+      closeRequested,
+      new Promise((_, reject) => {
+        setupTimer = setTimeout(() => reject(new Error('archive_close_not_requested')), 5000);
+      })
+    ]);
+    clearTimeout(setupTimer);
     const outcome = await Promise.race([
       operation.then((value) => ({ status: 'resolved', value }), (error) => ({ status: 'rejected', error })),
       new Promise((resolve) => setTimeout(() => resolve({ status: 'timeout' }), 30))
     ]);
     assert.equal(outcome.status, 'rejected', 'archive close error should settle extraction without waiting for a close event');
+    assert.equal(closeObserved, false, 'extraction must reject before any close event');
     assert.equal(outcome.error.code, 'research_template_archive_entry_invalid');
     assert.ok(outcome.error.cleanupErrors?.some((cleanupError) => cleanupError.message === closeError.message));
   } finally {
+    clearTimeout(setupTimer);
+    yauzl.ZipFile.prototype.eachEntry = originalEachEntry;
     yauzl.ZipFile.prototype.close = originalClose;
     if (activeZip?.isOpen) originalClose.call(activeZip);
     await operation?.catch(() => undefined);

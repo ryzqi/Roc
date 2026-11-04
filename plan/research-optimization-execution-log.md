@@ -3592,3 +3592,10 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c1-* retained. Actual offline Provider/corpus/dedup/main adapter71/SQLite DB30 upgrade/reopen and fault injection covered. Shared actual corpus/dedup test fixture extracted; DB29 upgrade still compares every original column and new-null markers, preserving all byte/history assertions. Caller provenance and user-declared researcher IDs are separate; no verified independent reviewer identity/complete screening/UI claim. NextA4C2 phased immutable human decisions and separate model suggestions/conflict handling, then source extraction/quality/inspector/reporting. Whole roadmap remains in progress.
+
+
+## PR09 prerequisite — ZIP close-error test measures the actual close boundary
+
+Verified passing. Existing test started its30ms close/error deadline before filesystem/archive enumeration. Full-unit975/976 exposed timeout before close invocation; focused original passed1/1. A controlled50ms delay in the actual ZipFile.eachEntry prototype reproduced red. Retain this delay in the regression, wait for actual close invocation with bounded5s setup, then keep the unchanged30ms rejection deadline and exact primary/cleanup-error assertions. Add explicit no-close-event assertion. No product ZIP or security changes.
+
+From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: controlled red/green1 and node --test tests/unit/research-archive-libraries.test.mjs10/10; clean pnpm test:unit976/976. Logs pr09-archive-close-* and pr09-a4c2a-unit-clean-final.log retained. The first rerun accidentally discovered the task-only repro copy (986, failed only that red-copy file); deleted the exact task-created copy and reran clean976, without changing production or weakening assertions.
