@@ -3,6 +3,7 @@ import type { Database } from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
 import {captureEvidenceSourceLocator, inspectEvidenceSourceLocator} from './evidence-source-locator';
 import {ResearchEvidenceRelationRepository} from './evidence-relation-repository';
+import {ResearchSourceMigrationRepository} from './source-migration-repository';
 
 import {
   researchClaimCreateRequestSchema,
@@ -34,11 +35,15 @@ const claimColumns = `id, project_id AS projectId, artifact_id AS artifactId, su
 
 export class ResearchEvidenceRepository {
   readonly relations: ResearchEvidenceRelationRepository;
+  readonly sourceMigrations: ResearchSourceMigrationRepository;
   constructor(
     private readonly db: Database,
     private readonly artifacts: ArtifactAccess,
     private readonly now: () => string
-  ) {this.relations = new ResearchEvidenceRelationRepository(db, this, artifacts, now);}
+  ) {
+    this.relations = new ResearchEvidenceRelationRepository(db, this, artifacts, now);
+    this.sourceMigrations = new ResearchSourceMigrationRepository(db, this, now);
+  }
 
   capture(request: ResearchEvidenceCaptureRequest): ResearchEvidence {
     this.requireProject(request.projectId);

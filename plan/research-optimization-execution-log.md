@@ -2753,3 +2753,45 @@ No tracked dependency/lock change. Missing-runtime origin remains undetermined.
 
 PR-06 source migration candidates remain next, then PR-07. The earlier baseline-confirmed
 expanded P4 assistant smoke defect and external scientific/client/L2 acceptance remain unresolved.
+
+
+## ROC-PR-06A5A — immutable same-document source migration proposals
+
+Verified passing for the backend increment. DB22 adds proposal snapshots/SHA and indexed
+document locator lookup. Actual reparse completion creates candidates in the same transaction
+as parse/index replacement and evidence invalidation. Exact full text then whitespace-only
+matching is explicit; duplicates remain ambiguous in actual chunk order, changed prose no_match.
+Real old source/digest and target source/parse/fingerprint/raw block data remain fixed. No old
+evidence replacement, claim status upgrade, scientific confirmation or historical backfill.
+Readonly project/evidence list marks replaced target versions stale and rejects current source
+or parse hash drift and corrupt snapshots.
+
+Regression exposed delayed knowledge queue publication after candidate-write rollback. Old
+pre-commit queue placement goes red with externalWrites=['document:rollback-new']; queue now
+receives the indexed DTO only after successful transaction. Parse/index/invalidation and
+external queue all retain old state on failure. Task-only mutation backup removed; red log retained.
+
+Commands from /Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test --test-name-pattern='migration persistence failure' tests/unit/research-source-locator.test.mjs | Red on old queue placement; final focused green |
+| node --test tests/unit/research-source-locator.test.mjs tests/unit/research-evidence-relations.test.mjs | Final24/24 |
+| pnpm test:unit | 864/864 before final current sourceHash guard; final focused/native covers guard |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Final typecheck/fresh build passed |
+| node scripts/run-research-p0.mjs | Final13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | 27/27 actual Electron |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed, eager1132980bytes6files |
+
+Initial fullunit860/863 had only three old latest-version assertions expecting21 after all
+migrations; updated latest22 while preserving original history/no-invented-observation tests.
+New DB21→22 test proves sources/claims/locators unchanged and no backfilled proposals.
+Native stale-approval scenario reparses actual frozen PDF, retains old captured parse/new
+current target hashes and needs_review candidate data in task fault evidence, with zero list writes.
+Frozen research-workflow fixtures remain unchanged.
+
+Trusted user target capture/review, inspector presentation, explicit source replacement and
+experiment rerun lineage remain next. PR-06 and the whole plan remain incomplete. Earlier
+expanded P4 baseline defect and external scientific/client/L2 acceptance remain unresolved.

@@ -100,6 +100,174 @@ test('reparse keeps old evidence and its immutable source coordinates while new 
   }finally{f.close();}
 });
 
+test('same-document reparse proposes exact raw block targets without replacing evidence or upgrading a hypothesis',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'migration-old',[block('old-block',{page:1})]);
+    const old=capture(f,'migration-old');
+    const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Migration hypothesis',path:null});
+    const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+      content:'An unreviewed inference.',status:'hypothesis',evidenceIds:[old.id]});
+    const originalSource=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    const target=block('new-block',{page:4});
+    publishParse(f,document,'migration-new',[block('empty',{text:'',locations:[]}),target]);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const [candidate]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(candidate.targetStatus,'current');
+    assert.equal(candidate.proposal.status,'needs_review');
+    assert.equal(candidate.proposal.match,'exact_text');
+    assert.equal(candidate.proposal.sourceDigest,api.relationSourceDigest(candidate.proposal.source));
+    assert.deepEqual(candidate.proposal.source.sourceLocator,originalSource.sourceLocator);
+    assert.equal(candidate.proposal.source.referenceStatus,'superseded');
+    assert.deepEqual(candidate.proposal.targets,[{chunkId:'document:migration-new:chunk:0',block:target}]);
+    assert.equal(candidate.proposal.targetParseHash,hash(JSON.stringify(f.repository.documents.parsed(document.id,'migration-new').data.content)));
+    assert.deepEqual(f.repository.evidence.getClaim(claim.id),claim);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    f.db.transaction(()=>f.repository.evidence.sourceMigrations.proposeForParse(document.id,'migration-new'))();
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    assert.deepEqual(f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),[candidate]);
+  }finally{f.close();}
+});
+
+test('duplicate target paragraphs remain ambiguous in original indexed order, without choosing a nearby page',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'duplicate-old',[block('old',{page:2})]);
+    const old=capture(f,'duplicate-old');
+    const first=block('first',{page:1}),second=block('second',{page:3});
+    publishParse(f,document,'duplicate-new',[first,block('blank',{text:' ',locations:[]}),second]);
+    const [candidate]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(candidate.proposal.match,'ambiguous');
+    assert.deepEqual(candidate.proposal.targets,[{chunkId:'document:duplicate-new:chunk:0',block:first},
+      {chunkId:'document:duplicate-new:chunk:1',block:second}]);
+    assert.equal(candidate.proposal.status,'needs_review');
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+  }finally{f.close();}
+});
+
+test('whitespace matching is explicit, changed prose has no target, and later reparse preserves stale proposals',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'whitespace-old',[block('old')]);
+    const old=capture(f,'whitespace-old');
+    const normalized=block('normalized',{text:'  A repeated\n retained paragraph.  ',locations:[]});
+    publishParse(f,document,'whitespace-new',[normalized]);
+    const [first]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(first.proposal.match,'normalized_text');
+    assert.equal(first.proposal.matchingRule,'exact_text_then_whitespace/1');
+    assert.deepEqual(first.proposal.targets[0].block,normalized);
+    publishParse(f,document,'changed-prose',[block('changed',{text:'A different scientific statement.'})]);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const [stale,unmatched]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(stale.targetStatus,'stale');
+    assert.deepEqual(stale.proposal,first.proposal);
+    assert.equal(unmatched.targetStatus,'current');
+    assert.equal(unmatched.proposal.match,'no_match');
+    assert.deepEqual(unmatched.proposal.targets,[]);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{f.close();}
+});
+
+test('migration persistence failure rolls back the parse, index and invalidation together',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'rollback-old',[block('old')]);
+    const old=capture(f,'rollback-old'),original=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    const externalWrites=[];
+    f.repository.setKnowledgeWriter(async input=>{
+      externalWrites.push(input.id);
+      return f.repository.knowledge.upsertFromSource(input);
+    });
+    f.repository.documents.begin(document.id,'rollback-new');
+    f.db.exec(`CREATE TRIGGER reject_migration BEFORE INSERT ON research_source_migration_proposals
+      BEGIN SELECT RAISE(ABORT,'synthetic_migration_insert_failed'); END`);
+    assert.throws(()=>f.repository.documents.complete(document.id,'rollback-new',parsedContent(document,[block('new')])),
+      /synthetic_migration_insert_failed/u);
+    assert.equal(f.repository.documents.get(document.id).currentParseId,'rollback-old');
+    assert.deepEqual(f.repository.evidence.inspectEvidence(old.id,f.project.id),original);
+    assert.equal(f.repository.evidence.getEvidence(old.id,f.project.id).id,old.id);
+    assert.ok(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-old:chunk:0'").get());
+    assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_source_migration_proposals').pluck().get(),0);
+    f.repository.flushKnowledgeFromSource();
+    assert.deepEqual(externalWrites,[]);
+    assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
+  }finally{f.close();}
+});
+
+test('migration reads refuse foreign sources and corrupt snapshots or current target versions without writes',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'scope-old',[block('old')]);
+    const old=capture(f,'scope-old');
+    publishParse(f,document,'scope-new',[block('new')]);
+    const other=f.repository.createProject({title:'Other migration scope',description:'Synthetic',workspacePath:'/tmp/other-migration'});
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:other.id,evidenceId:old.id}),
+      /research_evidence_project_mismatch/u);
+    assert.throws(()=>f.repository.evidence.sourceMigrations.proposeForParse(document.id,'scope-new'),
+      /research_source_migration_transaction_required/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    const row=f.db.prepare('SELECT id,snapshot_json FROM research_source_migration_proposals').get();
+    f.db.prepare("UPDATE research_source_migration_proposals SET snapshot_json=json_set(snapshot_json,'$.targets[0].block.text','Forged target') WHERE id=?").run(row.id);
+    const damaged=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_snapshot_invalid/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),damaged);
+    f.db.prepare('UPDATE research_source_migration_proposals SET snapshot_json=? WHERE id=?').run(row.snapshot_json,row.id);
+    f.db.prepare('UPDATE research_documents SET source_hash=? WHERE id=?').run(hash('Changed source'),document.id);
+    const sourceChanged=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_source_changed/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),sourceChanged);
+    f.db.prepare('UPDATE research_documents SET source_hash=? WHERE id=?').run(document.sourceHash,document.id);
+    f.db.prepare("UPDATE research_document_parses SET data_json=json_set(data_json,'$.content.blocks[0].text','Changed same parse') WHERE id='scope-new'").run();
+    const changed=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_target_changed/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changed);
+  }finally{f.close();}
+});
+
+test('DB21 to22 retains captured sources and claims without inventing migration proposals',()=>{
+  const db=new Database(':memory:'),agentDb=new Database(':memory:');
+  db.pragma('foreign_keys=ON');
+  try {
+    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=21)});
+    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
+    const tasks=new api.ResearchTaskRepository(agentDb,()=>timestamp);
+    const repository=new api.ResearchRepository(db,tasks,()=>timestamp);
+    const project=repository.createProject({title:'Historical source migration',description:'Synthetic DB21 fixture',workspacePath:'/tmp/source-migration-history'});
+    db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
+    db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
+    const f={db,repository,project},document=importedDocument(f);
+    publishParse(f,document,'history-parse',[block('history-block')]);
+    const evidence=capture(f,'history-parse');
+    const artifact=repository.createArtifact({projectId:project.id,stage:'reading',kind:'reading_notes',title:'Historical hypothesis',path:null});
+    repository.evidence.createClaim({projectId:project.id,artifactId:artifact.id,subjectType:'claim',
+      content:'Historical unreviewed inference.',status:'hypothesis',evidenceIds:[evidence.id]});
+    const sourcesBefore=db.prepare('SELECT * FROM research_evidence').all();
+    const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
+    const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
+    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),22);
+    assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
+    assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
+    assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
+    assert.deepEqual(repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id}),[]);
+    const before=db.prepare('SELECT total_changes()').pluck().get();
+    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{db.close();agentDb.close();}
+});
+
 test('zero geometry preserves a page-only location and out-of-range pages or inverted regions cannot be captured',()=>{
   const f=createResearchFixture(api,'reading');
   try {

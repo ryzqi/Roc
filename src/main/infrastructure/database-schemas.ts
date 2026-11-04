@@ -1760,6 +1760,25 @@ CREATE TABLE research_evidence_relation_revisions (
   data: {dataVersion: 'historical-evidence-associations-v21/1', migrate: migrateHistoricalEvidenceRelationsV21}
 });
 
+researchMigrations.push({
+  version: 22, name: 'document_source_migration_proposals',
+  sql: `
+CREATE TABLE research_source_migration_proposals (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  evidence_id TEXT NOT NULL REFERENCES research_evidence(id),
+  document_id TEXT NOT NULL REFERENCES research_documents(id),
+  target_parse_id TEXT NOT NULL REFERENCES research_document_parses(id),
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(evidence_id,target_parse_id)
+);
+CREATE INDEX idx_research_source_migration_evidence ON research_source_migration_proposals(project_id,evidence_id);
+CREATE INDEX idx_research_evidence_locator_document ON research_evidence_source_locators(json_extract(locator_json,'$.documentId'));
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

@@ -86,7 +86,7 @@ export class ResearchDocumentRepository {
 
   complete(documentId: string, parseId: string, input: StoredDocumentContent): void {
     const data = storedDocumentContentSchema.parse(input);
-    this.db.transaction(() => {
+    const indexed = this.db.transaction(() => {
       const document = this.get(documentId);
       if (document.activeParseId !== parseId) throw new Error('research_document_parse_stale');
       if (this.research.library.get(document.libraryItemId).archived) throw new Error('research_library_item_archived');
@@ -98,8 +98,11 @@ export class ResearchDocumentRepository {
       this.db.prepare("UPDATE research_documents SET status = 'ready', current_parse_id = ?, active_parse_id = NULL, error = NULL, updated_at = ? WHERE id = ?")
         .run(parseId, timestamp, documentId);
       if (document.currentParseId !== null) this.removeIndex(document.currentParseId);
-      this.index(document, parseId, data);
+      const indexed = this.index(document, parseId, data);
+      this.research.evidence.sourceMigrations.proposeForParse(documentId, parseId);
+      return indexed;
     })();
+    this.research.queueKnowledgeFromSource(indexed);
     this.research.flushKnowledgeFromSource();
   }
 
@@ -138,7 +141,7 @@ export class ResearchDocumentRepository {
     for (const document of this.list(libraryItemId)) {
       if (document.currentParseId === null) continue;
       if (archived) this.removeIndex(document.currentParseId);
-      else this.index(document, document.currentParseId, this.parsed(document.id, document.currentParseId).data);
+      else this.research.queueKnowledgeFromSource(this.index(document, document.currentParseId, this.parsed(document.id, document.currentParseId).data));
     }
     this.research.flushKnowledgeFromSource();
   }
@@ -197,12 +200,12 @@ export class ResearchDocumentRepository {
     this.db.prepare('DELETE FROM research_knowledge_documents WHERE id = ?').run(`document:${parseId}`);
   }
 
-  private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent): void {
+  private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent) {
     const chunks = data.content.blocks.filter((block) => block.text.trim()).map((block) => ({ content: block.text, locator: block.locator }));
     const input = { id: `document:${parseId}`, projectId: null as string | null, sourceType: 'file' as const, sourceId: document.libraryItemId,
       title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' as const };
     this.research.knowledge.upsertFromSource(input);
-    this.research.queueKnowledgeFromSource(input);
+    return input;
   }
 }
 

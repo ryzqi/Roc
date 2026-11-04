@@ -154,6 +154,29 @@ PDF source/parse/block 定位、synthetic window:93 确认及修订历史均进�
 任务创建文件篡改后检查/读取拒绝；精确恢复后通过。来源失效后保存记录、审核
 文件及 PDF 保持原哈希；当前交付失败、目标不存在、所有读取与拒绝零 DB 写入。
 
+## 重解析后的定位候选
+
+DB22 保存不可替换的 source-migration proposal 与完整快照 SHA。同一文档的实际
+新解析完成后，在原 parse/index/证据失效事务中生成候选。原来源快照、digest、
+固定旧定位及新 parse/source/hash/fingerprint 均保留；不修改旧 Evidence、Claim
+或恢复旧科学审核。没有旧已捕获来源的解析不进行块匹配。迁移不回填历史候选。
+
+匹配规则公开为 exact_text_then_whitespace/1：先匹配完整原文，再仅规范化空白。
+多个同文块标 ambiguous，保留真实索引顺序，不按旧页距离选一个；正文变化
+标 no_match，targets 为空。每个目标保存实际 chunk ID 与原始解析 block，包含
+实际页/区域数据；它是待核查提议，不能把原始 bbox 当作已经校准的 PDF 投影。
+
+只读 list 按真实 project/evidence 限定。后续解析使旧提议的 targetStatus 为 stale，
+其原内容不改；当前目标的 document sourceHash 或 canonical parseHash 变化拒绝
+读取，破损提议 SHA 拒绝。所有候选保持 needs_review，没有科学确认或自动捕获。
+
+候选写入失败同时回滚 parse/index/失效标记。延迟知识写入移到事务提交后入队，
+避免后续 flush 发布已回滚的解析。真实回归在旧入队位置复现了 rollback-new
+幽灵索引；修正后 DB 与外部写入队列均保持原状态。
+
+本增量为同文档重解析的仓库基础。用户选择/捕获候选、检查器展示、显式来源
+替代和实验重跑 lineage 仍待后续完成；不把同一文献的另一个附件猜成替代来源。
+
 ## 已验证范围
 
 来源定位增量 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
