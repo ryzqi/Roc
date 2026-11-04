@@ -3538,3 +3538,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 Actual offline Provider processing retained raw4 records vs filtered preview2, source paging/request SHA/receipt state, limited/unknown/failed status, explicit retry cache reuse, pending cancel + actual abort, expiry reads, corrupted pools/ledger/cancel/terminal receipts, lost terminal write and recovery with actual completed pool, cross-project release and real SQLite crash-copy restart with zero new requests. DB27→28 preserves fixed protocol bytes and migration receipts without search backfill; older upgrade latest-version assertions now28 while keeping all preservation assertions. Main transport uses explicit synthetic windows; HTTP responses are offline, no independent scientific retrieval/actual-client/full-kernel review UI claim. Parent shutdown precedes child cleanup, and project deletion/archival awaits query release.
 
 Pre-existing watcher timing assumption fixed separately275746d; full930 final retains all assertions. Logs pr09-a3-* and pr09-watcher-order.log. NextA4 fixed review corpus and explicit dedup/screening decisions, then source-based extraction/quality evaluation, review inspector UI and count-conserving PRISMA/query appendices. Full PR09 and later roadmap remain open.
+
+
+## ROC-PR-09A4A — immutable raw corpus references
+
+Verified passing. DB29 captures exactly one terminal execution for every declared database/query, with frozen protocol/request/source receipt hashes and full original pool record references. Four generated/registered corpus create/get/list/hit capabilities bind human creation in main. Repeated/unknown-year/out-of-range hits remain; incomplete/failed sources remain explicit. Historical corpus reads verify actual pools/ledgers, archive forbids capture, request replay is readonly, source drift after insert rolls back the transaction. No second paper library or automatic deduplication.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh generated API/type/build |
+| node --test tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | 37/37; corpus10 |
+| pnpm test:unit / pnpm harness:eval | 940/940 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4a-* retained under .artifacts/research-optimization. Actual offline Provider/service/governor/ledger/pool/repositories and SQLite disk reopen exercised; window51 is main adapter seam. No external scientific retrieval or review UI E2E claim. Shared search fixture extracted; older latest migration expectations follow declared last version while preserving original data assertions. NextA4B explicit human duplicate decisions/freeze, followed by separate two-stage screening, extraction/quality, inspector and count-conserving reporting. Whole roadmap remains in progress.

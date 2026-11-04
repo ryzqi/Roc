@@ -103,12 +103,19 @@ export class ResearchReviewSearchService {
 
   readPool(input: {projectId: string; reviewSearchId: string; offset: number; limit: number}): ResearchReviewSearchPoolResult {
     const request = researchReviewSearchPoolRequestSchema.parse(input);
+    const {reviewSearch, pool} = this.readFullPool({projectId: request.projectId, reviewSearchId: request.reviewSearchId});
+    return {reviewSearch, pool: {...pool, records: pool.records.slice(request.offset, request.offset + request.limit),
+      total: pool.records.length, nextOffset: request.offset + request.limit < pool.records.length ? request.offset + request.limit : null}};
+  }
+
+  /** Main-process consumers can seal all original records without the paged renderer preview limit. */
+  readFullPool(input: {projectId: string; reviewSearchId: string}): {reviewSearch: ResearchReviewSearchInspection; pool: LiteratureSearchPool} {
+    const request = researchReviewSearchGetSchema.parse(input);
     const reviewSearch = this.get({projectId: request.projectId, reviewSearchId: request.reviewSearchId});
     if (reviewSearch.receipt === null || reviewSearch.receipt.poolHash === null) throw new Error('research_review_search_pool_unavailable');
     const pool = this.readPoolSnapshot(reviewSearch.snapshot, reviewSearch.receipt);
     if (pool === null) throw new Error('research_review_search_pool_unavailable');
-    return {reviewSearch, pool: {...pool, records: pool.records.slice(request.offset, request.offset + request.limit),
-      total: pool.records.length, nextOffset: request.offset + request.limit < pool.records.length ? request.offset + request.limit : null}};
+    return {reviewSearch, pool};
   }
 
   cancel(input: ResearchReviewSearchCancel, cancelledBy: ResearchRelationReviewer): ResearchReviewSearchInspection {

@@ -48,6 +48,8 @@ export {registerResearchDocumentCapabilities, researchDocumentCapabilities} from
 export {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from '../../../src/main/plugins/research/systematic-review-capabilities';
 export {ResearchReviewSearchService} from '../../../src/main/plugins/research/review-search-service';
 export {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from '../../../src/main/plugins/research/review-search-capabilities';
+export {ResearchReviewCorpusRepository} from '../../../src/main/plugins/research/review-corpus-repository';
+export {registerResearchReviewCorpusCapabilities, researchReviewCorpusCapabilities} from '../../../src/main/plugins/research/review-corpus-capabilities';
 export {LiteratureProviderGovernor} from '../../../src/main/plugins/research/literature-provider-governor';
 export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';
 export { createToolEffectIdempotencyMiddleware } from '../../../src/main/services/deep-agent/tool-effect-idempotency';

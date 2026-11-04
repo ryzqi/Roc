@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  researchReviewCorpusCreateSchema, researchReviewCorpusInspectionSchema, researchReviewCorpusGetSchema,
+  researchReviewCorpusListSchema, researchReviewCorpusHitRequestSchema, researchReviewCorpusHitResultSchema
+} from './schemas/research-review-corpus';
+import {
   researchReviewSearchStartSchema, researchReviewSearchGetSchema, researchReviewSearchListSchema,
   researchReviewSearchInspectionSchema, researchReviewSearchPoolRequestSchema, researchReviewSearchPoolResultSchema,
   researchReviewSearchCancelSchema
@@ -509,6 +513,10 @@ export const ipcRegistry = {
     request({ key: 'researchSourceReplacementsReplace', channel: 'roc:research:source-replacements-replace', domain: 'research', method: 'replaceEvidenceSource', kind: 'plugin', capabilityName: 'research.sourceReplacements.replace', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementRequestSchema), researchSourceReplacementSchema) }),
     request({ key: 'researchSourceReplacementsList', channel: 'roc:research:source-replacements-list', domain: 'research', method: 'listSourceReplacements', kind: 'plugin', capabilityName: 'research.sourceReplacements.list', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementListSchema), researchSourceReplacementInspectionSchema.array()) }),
     request({ key: 'researchSourceReplacementsGet', channel: 'roc:research:source-replacements-get', domain: 'research', method: 'getSourceReplacement', kind: 'plugin', capabilityName: 'research.sourceReplacements.get', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementGetSchema), researchSourceReplacementInspectionSchema) }),
+    request({key: 'researchReviewCorpusCreate', channel: 'roc:research:review-corpus-create', domain: 'research', method: 'createReviewCorpus', kind: 'plugin', capabilityName: 'research.reviewCorpus.create', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusCreateSchema), researchReviewCorpusInspectionSchema)}),
+    request({key: 'researchReviewCorpusGet', channel: 'roc:research:review-corpus-get', domain: 'research', method: 'getReviewCorpus', kind: 'plugin', capabilityName: 'research.reviewCorpus.get', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusGetSchema), researchReviewCorpusInspectionSchema)}),
+    request({key: 'researchReviewCorpusList', channel: 'roc:research:review-corpus-list', domain: 'research', method: 'listReviewCorpora', kind: 'plugin', capabilityName: 'research.reviewCorpus.list', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusListSchema), researchReviewCorpusInspectionSchema.array())}),
+    request({key: 'researchReviewCorpusHit', channel: 'roc:research:review-corpus-hit', domain: 'research', method: 'getReviewCorpusHit', kind: 'plugin', capabilityName: 'research.reviewCorpus.hit', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusHitRequestSchema), researchReviewCorpusHitResultSchema)}),
     request({key: 'researchReviewSearchStart', channel: 'roc:research:review-search-start', domain: 'research', method: 'startReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.start', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchStartSchema), researchReviewSearchInspectionSchema)}),
     request({key: 'researchReviewSearchGet', channel: 'roc:research:review-search-get', domain: 'research', method: 'getReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.get', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchGetSchema), researchReviewSearchInspectionSchema)}),
     request({key: 'researchReviewSearchList', channel: 'roc:research:review-search-list', domain: 'research', method: 'listReviewSearches', kind: 'plugin', capabilityName: 'research.reviewSearch.list', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchListSchema), researchReviewSearchInspectionSchema.array())}),

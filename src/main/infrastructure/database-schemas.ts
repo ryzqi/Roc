@@ -1922,6 +1922,23 @@ CREATE TABLE research_review_search_cancellations (
 `
 });
 
+researchMigrations.push({
+  version: 29, name: 'fixed_systematic_review_corpora',
+  sql: `
+CREATE TABLE research_review_corpora (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  protocol_version_id TEXT NOT NULL REFERENCES research_review_protocol_versions(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX idx_review_corpus_version ON research_review_corpora(project_id,protocol_version_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

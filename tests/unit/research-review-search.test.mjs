@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {setTimeout as delay} from 'node:timers/promises';
 import Database from 'better-sqlite3';
+import {createReviewSearchFixture,awaitReviewSearchFixture as terminal,reviewProviderGovernorFixture,
+  reviewBibliographyPreparationFixture as prepare,reviewSearchPayloadFixture as payload} from './fixtures/research-review-search.mjs';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {reviewProtocolBodyFixture} from './fixtures/research-review-protocol.mjs';
 
@@ -12,49 +13,8 @@ let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
 const actor={kind:'user',id:'synthetic-review-search-user'};
-const prepare={prepareDoi:async()=>{throw new Error('unexpected_import');},
-  prepareRecord:async()=>{throw new Error('unexpected_import');},prepareZotero:async()=>{throw new Error('unexpected_import');}};
-function governor() {
-  let now=Date.parse('2026-11-04T00:00:00Z');
-  const policy={minIntervalMs:1000,maxRequests:300,windowMs:3600000,failureThreshold:3,cooldownMs:60000};
-  return new api.LiteratureProviderGovernor({'api.openalex.org':policy},()=>now,
-    async(ms,signal)=>{signal.throwIfAborted();now+=ms;});
-}
-function payload(page,count=4) {
-  return {meta:{count,per_page:2,page},results:Array.from({length:Math.min(2,count-(page-1)*2)},(_,index)=>{
-    const n=(page-1)*2+index+1;
-    return {id:`https://openalex.org/W${n}`,doi:`https://doi.org/10.1234/review-${n}`,title:`Controlled paper ${n}`,
-      publication_year:n===1?null:n===2?2010:2023,authorships:[]};
-  })};
-}
-function scene({maxPages=2,fetch}={}) {
-  const f=createResearchFixture(api,'reading');f.errors=[];f.calls=[];f.time='2026-11-04T00:00:00.000Z';
-  f.search=new api.LiteratureSearchService(async(url,init)=>{
-    f.calls.push({url,init});
-    return fetch===undefined?Response.json(payload(Number(new URL(url).searchParams.get('page')))):fetch(url,init);
-  },governor());
-  f.imports=new api.LiteratureImportService(f.db,f.repository.library,f.search,prepare,async()=>{throw new Error('unexpected_library_mutation');},()=>f.time);
-  f.reviews=new api.ResearchReviewSearchService(f.db,f.repository,f.imports,error=>f.errors.push(error),()=>f.time);
-  const body=reviewProtocolBodyFixture();body.databases[0].pageSize=2;body.databases[0].maxPages=maxPages;
-  const draft=f.repository.systematicReviews.save({projectId:f.project.id,requestId:'protocol',protocolId:null,
-    expectedVersionId:null,expectedVersionHash:null,body,deviationReason:null},actor);
-  f.protocol=f.repository.systematicReviews.freeze({projectId:f.project.id,requestId:'confirm',versionId:draft.version.id,
-    expectedVersionHash:draft.versionHash,reviewNote:'Controlled offline query scope.'},actor);
-  f.request={projectId:f.project.id,requestId:'review-query',versionId:f.protocol.version.id,expectedFreezeHash:f.protocol.freezeHash,
-    databaseIndex:0,queryIndex:0,retryOf:null,expectedRetrySnapshotHash:null};
-  f.changes=()=>f.db.prepare('SELECT total_changes()').pluck().get();
-  f.dispose=async()=>{await f.reviews.shutdown();await f.imports.shutdown();await f.search.shutdown();f.close();};
-  return f;
-}
-async function terminal(f,started) {
-  const until=Date.now()+7000;
-  while(Date.now()<until) {
-    const read=f.reviews.get({projectId:f.project.id,reviewSearchId:started.snapshot.id});
-    if(read.status!=='running'&&read.status!=='cancelling')return read;
-    await delay(1);
-  }
-  throw new Error(`review_query_did_not_finish:${f.errors.map(error=>error.message).join(',')}`);
-}
+const scene=options=>createReviewSearchFixture(api,options);
+const governor=()=>reviewProviderGovernorFixture(api);
 
 test('actual provider paging/ledger/raw pool follows frozen parameters and retains records omitted by candidate year/preview filtering',async()=>{
   const f=scene();
@@ -313,7 +273,7 @@ test('DB27 upgrade preserves frozen protocol bytes and migration receipts withou
     const receipts=f.db.prepare('SELECT * FROM research_review_protocol_freezes').all();
     const migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),28);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_versions').all(),versions);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_freezes').all(),receipts);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=27').all(),migrations);

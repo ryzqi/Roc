@@ -39,3 +39,14 @@ DB27 新增 `research_review_protocol_versions` 与 `research_review_protocol_fr
 重试必须明确选择当前终态记录及其快照哈希，创建新请求；不覆盖旧结果、不扩展原协议页预算，不重放已完成覆盖的查询。候选预览过期后，已固定原始池仍可读。插件关闭先停止父任务与综述检索，再清理子服务；删除/归档项目先终止其查询。重启将当时运行/取消中的查询记为 interrupted，保留已完成池和已发请求账本，不自动重新请求或重做人工确认。
 
 DB28 新增查询执行和取消收据表，不给已有协议补造搜索。`research-review-search.test.mjs` 使用实际 Provider 解析、governor、分页/缓存、导入服务账本、原始池、协议仓库、生成 main adapter 和 SQLite 磁盘重开；HTTP 响应是明确离线夹具，未调用外部数据库或付费语言模型。专项14/14，与协议存储/人工 API 合跑27/27；全量单元930/930、Harness94/94、原生科研流程13/13、启动12/12、构建/type/IPC/chunks通过。检索界面、去重/筛选/提取和正式 PRISMA 输出仍未交付。
+
+
+## 固定原始语料
+
+`createReviewCorpus/getReviewCorpus/listReviewCorpora/getReviewCorpusHit` 固定所有声明的分库查询结果。人工捕获必须明确选择每个查询的一条终态执行及其快照/收据哈希；遗漏、重复、运行中或协议漂移均拒绝。主进程绑定创建窗口身份，模型直调和 wire actor 不能创建。
+
+DB29 的 `research_review_corpora` 只保存不可变来源引用与原始命中引用，不复制第二套论文库。来源带查询、执行、结果池、收据哈希、实际状态和覆盖情况；命中带原始池索引与记录哈希。重复返回、年份未知和范围外记录保留，尚无去重决定。partial/failed/cancelled/interrupted 可固定，但不能成为完整检索；失败零结果也保留实际来源。读取重新核对真实池、账本及来源收据。
+
+新协议使旧语料 `currentProtocol:false`，固定内容仍可读；归档允许历史读取，拒绝新捕获。相同请求与调用者重放零写入，内容/调用者漂移拒绝；事务内写入后复核来源，失败整事务回滚。DB28 升级不补造语料或决定。
+
+专项 `research-review-corpus.test.mjs` 10/10，和检索/协议/人工 API 合跑37/37；全量单元940/940、Harness94/94、原生科研流程13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。使用真实离线 Provider 服务、原始池和 SQLite 重开；窗口51是主进程适配器接缝，未声明外部科学检索或完整界面端到端验收。人工去重、两轮筛选、提取、质量评价和 PRISMA 输出继续实施。

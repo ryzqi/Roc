@@ -41,16 +41,17 @@ export function throwSystematicReviewError(error: unknown): never {
   }
   if (['research_review_version_conflict', 'research_review_request_conflict', 'research_review_already_frozen',
     'research_review_protocol_not_frozen', 'research_review_search_retry_conflict', 'research_review_search_not_active',
-    'research_review_search_pool_unavailable'].includes(code)) {
+    'research_review_search_pool_unavailable', 'research_review_corpus_source_changed',
+    'research_review_corpus_source_not_terminal', 'research_review_corpus_query_set_incomplete'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
-    'research_review_query_not_declared'].includes(code)) {
+    'research_review_query_not_declared', 'research_review_corpus_not_found', 'research_review_corpus_hit_not_found'].includes(code)) {
     throw new RocDomainError({code, message: '综述协议、已声明查询或检索记录不存在。', category: 'not_found', retryable: false});
   }
   if (['research_review_snapshot_invalid', 'research_review_search_snapshot_invalid', 'research_review_search_state_lost',
     'research_review_search_pool_invalid', 'research_review_search_ledger_conflict', 'research_review_search_ledger_missing',
-    'research_review_search_pool_missing', 'research_review_search_closed'].includes(code)) {
+    'research_review_search_pool_missing', 'research_review_search_closed', 'research_review_corpus_snapshot_invalid'].includes(code)) {
     throw new RocDomainError({code, message: '保存的综述版本、检索账本或结果校验失败。', category: 'degraded', retryable: false});
   }
   throw error;

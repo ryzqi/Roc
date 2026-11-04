@@ -5,6 +5,7 @@ import {researchSourceReplacementRequestSchema} from '../../shared/schemas/resea
 import {researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema} from '../../shared/schemas/research-document-annotations';
 import {researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeRequestSchema} from '../../shared/schemas/research-systematic-review';
 import {researchReviewSearchStartSchema, researchReviewSearchCancelSchema} from '../../shared/schemas/research-review-search';
+import {researchReviewCorpusCreateSchema} from '../../shared/schemas/research-review-corpus';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -44,6 +45,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.reviewCorpus.create') {
+          const request = researchReviewCorpusCreateSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.reviewSearch.start' || target.capabilityName === 'research.reviewSearch.cancel') {
           const request = target.capabilityName === 'research.reviewSearch.start' ?
             researchReviewSearchStartSchema.parse(input) : researchReviewSearchCancelSchema.parse(input);
