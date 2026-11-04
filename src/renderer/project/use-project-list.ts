@@ -47,11 +47,12 @@ export function useProjectList(client: RocClient): ProjectListResource {
   const data = resource.data ?? null;
   const error = resource.isValidating ? null : resource.error?.message ?? null;
   const failure = resource.isValidating ? null : resource.error?.rocError ?? null;
+  const errorCode = failure?.code ?? null;
   const reload = useCallback(() => {
     void resource.mutate().catch(() => undefined);
   }, [resource.mutate]);
 
-  return useMemo(() => ({ status, data, error, failure, reload }), [status, data, error, failure, reload]);
+  return useMemo(() => ({ status, data, error, errorCode, failure, reload }), [status, data, error, errorCode, failure, reload]);
 }
 
 /** Revalidates only the shared project list after a successful project write. */

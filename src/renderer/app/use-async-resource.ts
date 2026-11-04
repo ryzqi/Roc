@@ -9,9 +9,9 @@ import { errorMessage, runIpcAction, type ActionOutcome, type IpcLikeResult } fr
  *
  *   - the caller supplies a `key`; when it changes (new project, new workspace,
  *     new filter) the resource **drops the previous scope's data immediately**
- *     rather than showing it until the new call resolves
+ *     and error identity rather than showing them until the new call resolves
  *   - `{ ok: false }` becomes `status: 'error'` carrying the backend's own
- *     message — no component invents its own error text
+ *     message and code — no component invents its own error identity
  *   - a stale response never wins: results are dropped if the key changed or the
  *     component unmounted while the call was in flight
  *   - `reload()` re-runs the same call, which is what the error bar's retry does
@@ -25,12 +25,20 @@ export type AsyncResource<T> = {
   status: AsyncStatus;
   data: T | null;
   error: string | null;
+  errorCode: string | null;
   reload: () => void;
 };
 
 export type AsyncResourceOptions = {
   /** Human label used in the error message prefix, e.g. "读取科研项目". */
   label: string;
+};
+
+type AsyncReadState = {
+  key: string | null;
+  status: AsyncStatus;
+  error: string | null;
+  errorCode: string | null;
 };
 
 export function useAsyncResource<T>(
@@ -47,8 +55,12 @@ export function useAsyncResource<T>(
    * writability. Tagging the value makes staleness unrepresentable.
    */
   const [snapshot, setSnapshot] = useState<{ key: string; value: T } | null>(null);
-  const [status, setStatus] = useState<AsyncStatus>(key === null ? 'idle' : 'loading');
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<AsyncReadState>({
+    key,
+    status: key === null ? 'idle' : 'loading',
+    error: null,
+    errorCode: null
+  });
   const [nonce, setNonce] = useState(0);
 
   // Kept in a ref so `load` identity churn does not refetch on every render.
@@ -57,14 +69,12 @@ export function useAsyncResource<T>(
 
   useEffect(() => {
     if (key === null) {
-      setStatus('idle');
-      setError(null);
+      setState({ key, status: 'idle', error: null, errorCode: null });
       return;
     }
 
     let cancelled = false;
-    setStatus('loading');
-    setError(null);
+    setState({ key, status: 'loading', error: null, errorCode: null });
 
     void (async () => {
       try {
@@ -73,18 +83,16 @@ export function useAsyncResource<T>(
           return;
         }
         if (!result.ok) {
-          setStatus('error');
-          setError(result.error.message);
+          setState({ key, status: 'error', error: result.error.message, errorCode: result.error.code ?? null });
           return;
         }
-        setStatus('ready');
+        setState({ key, status: 'ready', error: null, errorCode: null });
         setSnapshot({ key, value: result.data });
       } catch (caught) {
         if (cancelled) {
           return;
         }
-        setStatus('error');
-        setError(errorMessage(caught));
+        setState({ key, status: 'error', error: errorMessage(caught), errorCode: null });
       }
     })();
 
@@ -98,10 +106,13 @@ export function useAsyncResource<T>(
   }, []);
 
   const data = snapshot !== null && snapshot.key === key ? snapshot.value : null;
+  const status = state.key === key ? state.status : key === null ? 'idle' : 'loading';
+  const error = state.key === key ? state.error : null;
+  const errorCode = state.key === key ? state.errorCode : null;
 
   // Memoised so `useEffect(..., [resource])` in a consumer cannot loop on a fresh
   // object identity every render.
-  return useMemo(() => ({ status, data, error, reload }), [status, data, error, reload]);
+  return useMemo(() => ({ status, data, error, errorCode, reload }), [status, data, error, errorCode, reload]);
 }
 
 /**
