@@ -3224,3 +3224,52 @@ EOF after deleting helper; trimmed it and diff now passes. No product debugging 
 Next: lazy original PDF/structured reader, measured region projection, evidence/claim source links,
 annotation capture and large-PDF resource records. Full PR-07/roadmap and external scientific,
 actual-client, independent reviewed200 corpus and model-spending acceptance remain unfinished.
+
+## ROC-PR-07A3B — lazy original PDF and structured comparison
+
+Verified passing. Existing reader now opens the exact original PDF beside its selected parsed
+content. Original/worker/PDF.js load only on comparison or block-source selection; pdfjs-dist is
+forbidden from the eager graph. Uses generated project/document/parse/source/content-hash preview
+request, protocol original bytes, one native PDFWorker and one visible page canvas. Block locations
+project through the sealed frame and actual PDF.js viewport, including crop/rotation/UserUnit.
+Missing frame is explicitly page-only; whole-page parser bounds are labelled whole-page, not a
+precise paragraph. Multiple locations, native page keys, page input and0.5–3x fit-width zoom added.
+Render/page/document/worker/fetch resources release on changes and close; bitmap<=4M pixels.
+
+A development-origin test exposed actual foreign HTTP fetch200 rather than refusal. Electron45
+custom protocol requests omit Origin headers, but expose native page-independent initiatorOrigin.
+The handler now refuses foreign/opaque initiators before capability invocation, allows file renderer,
+configured dev renderer and native/browser requests, and grants CORS only to configured dev origin.
+No header/referrer fallback, wildcard origin, webSecurity/CSP bypass or unscoped URL alias.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm build (includes typecheck) | Final2 fresh production build passed |
+| node --test tests/renderer/paper-reader.test.mjs | Final clean12/12 using actual Vite8.3.5 worker build |
+| node --test tests/renderer/document-preview-protocol.test.mjs |5/5; file/dev/foreign-no-referrer/opaque/native bytes |
+| pnpm test:unit |894/894 |
+| pnpm harness:eval |94/94 |
+| node scripts/run-research-p0.mjs |13/13 |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |46/46 |
+| node scripts/smoke-electron.mjs | Final2 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+PDF tests use actual frozen original or explicitly generated rotated/32-page originals, actual
+parser/collector/repository/registry/generated adapter and Chromium protocol/real compiled worker.
+Node-host registry transport and sender98 are explicitly synthetic; not full production kernel/
+preload user E2E. No Vite worker import shim remains. Large original has32 pages with only page1
+parsed; actual page2/8/16/24/32/1 bitmaps each735150pixels,67–77ms,one canvas/worker; close removes
+all DOM canvases/workers. Process memory records are observations, not a hard RSS limit.
+
+Initial resource sampling captured zero/default bitmaps during redraw. Native mutation investigation
+showed inline hidden state while immediate computed-style observations still reported visible.
+The attempted canvas-identity product change did not establish a cause and was removed. Final
+readiness/sample requires actual published visibility plus nonzero bitmap; retained observer records
+no published default canvas. No product diagnostics or speculative lifecycle patch remains.
+Seven compare/hover/zoom clip states cut0/hidden0; dark1099 screenshot inspected. Evidence retained
+under pr07-reader-selection/ and pr07-a3b-*; initial API/type/regex errors are in the local ledger.
+
+Next: reverse PDF→block location, fixed Evidence/Claim source deep links, research annotations,
+parsed table/formula assets and remaining PR07 acceptance. Full roadmap/external acceptance open.

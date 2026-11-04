@@ -9,3 +9,7 @@
  */
 
 declare module '*.css';
+declare module 'pdfjs-dist/build/pdf.worker.min.mjs?worker' {
+  const PdfWorkerPort: {new(): Worker};
+  export default PdfWorkerPort;
+}

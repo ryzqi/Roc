@@ -4,26 +4,39 @@ import {createHash} from 'node:crypto';
 import {mkdtemp, readFile, rm, writeFile, mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 
-let directory, app, page, sourceBytes, sourceHash;
+let directory, app, page, sourceBytes, sourceHash, server, otherServer, rendererOrigin, otherOrigin;
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/pr07-preview-protocol');
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-document-protocol-'));
   await mkdir(artifacts, {recursive: true});
   sourceBytes = await readFile('tests/fixtures/research-workflow/source.pdf');
   sourceHash = createHash('sha256').update(sourceBytes).digest('hex');
+  server=createServer((_request,response)=>response.end('<html><body>Local development renderer</body></html>'));
+  otherServer=createServer((_request,response)=>response.end('<html><body>Other origin</body></html>'));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  await new Promise(resolve=>otherServer.listen(0,'127.0.0.1',resolve));
+  rendererOrigin=`http://127.0.0.1:${server.address().port}`;
+  otherOrigin=`http://127.0.0.1:${otherServer.address().port}`;
   await build({entryPoints: ['src/main/pdf-preview-protocol.ts'], outfile: join(directory, 'protocol.cjs'),
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'], logLevel: 'silent'});
   await writeFile(join(directory, 'index.html'), '<html><body>Document protocol runtime check</body></html>');
   await writeFile(join(directory, 'main.cjs'), `
-    const {app,BrowserWindow}=require('electron');
+    const {app,BrowserWindow,protocol}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'user-data'))});
     global.requests=[];global.refuse=false;
     global.original=Buffer.from(${JSON.stringify(sourceBytes.toString('base64'))},'base64');
     const api=require(${JSON.stringify(join(directory, 'protocol.cjs'))});
+    global.protocolRequests=[];
+    const handle=protocol.handle.bind(protocol);
+    protocol.handle=(scheme,callback)=>handle(scheme,request=>{
+      global.protocolRequests.push({url:request.url,headers:Array.from(request.headers),referrer:request.referrer,initiatorOrigin:request.initiatorOrigin,mode:request.mode});
+      return callback(request);
+    });
     api.registerPdfPreviewScheme();
     app.whenReady().then(async()=>{
       api.registerPdfPreviewProtocol(()=>({invokeCapability:async(name,input)=>{
@@ -32,7 +45,7 @@ before(async () => {
         if(name==='research.document.source') return new Response(new Uint8Array(global.original),{
           headers:{'content-type':'application/pdf','cache-control':'no-store','x-content-type-options':'nosniff'}});
         return Response.json({name,input});
-      }}));
+      }}),${JSON.stringify(rendererOrigin)});
       await new BrowserWindow({show:false,width:800,height:600}).loadFile(${JSON.stringify(join(directory, 'index.html'))});
     });
   `);
@@ -41,6 +54,8 @@ before(async () => {
 });
 after(async () => {
   await app?.close();
+  if(server) await new Promise(resolve=>server.close(resolve));
+  if(otherServer) await new Promise(resolve=>otherServer.close(resolve));
   if (directory) await rm(directory, {recursive: true, force: true});
 });
 
@@ -85,4 +100,45 @@ test('capability failures become failed protocol responses and never successful 
     const response = await fetch(url); return {status: response.status, body: await response.text()};
   }, `roc-preview://research/projects/p/documents/d/source/${sourceHash}`);
   assert.equal(result.status, 404); assert.equal(result.body, 'Preview unavailable');
+});
+
+test('configured development renderer can fetch original bytes while another initiator is refused even without a referrer',async()=>{
+  await app.evaluate(()=>{global.refuse=false;});
+  await page.goto(rendererOrigin);
+  const url=`roc-preview://research/projects/p/documents/d/source/${sourceHash}`;
+  const response=await page.evaluate(async url=>{
+    const response=await fetch(url);
+    return {status:response.status,origin:response.headers.get('access-control-allow-origin'),bytes:Array.from(new Uint8Array(await response.arrayBuffer()))};
+  },url);
+  assert.equal(response.status,200);
+  assert.deepEqual(Buffer.from(response.bytes),sourceBytes);
+  await page.goto(otherOrigin);
+  const before=await app.evaluate(()=>global.requests.length);
+  const foreign=await page.evaluate(async url=>(await fetch(url,{referrerPolicy:'no-referrer'})).status,url);
+  await writeFile(join(artifacts,'origin-requests.json'),JSON.stringify(await app.evaluate(()=>global.protocolRequests),null,2));
+  assert.equal(foreign,403);assert.equal(await app.evaluate(()=>global.requests.length),before);
+  assert.equal(response.origin,rendererOrigin);
+});
+
+test('opaque iframe cannot invoke preview capabilities while a main-process request can read the original',async()=>{
+  await page.goto(rendererOrigin);
+  const url=`roc-preview://research/projects/p/documents/d/source/${sourceHash}`;
+  const before=await app.evaluate(()=>global.requests.length);
+  const opaque=await page.evaluate(url=>new Promise(resolve=>{
+    const frame=document.createElement('iframe');
+    frame.sandbox='allow-scripts';
+    const receive=event=>{
+      if(event.source!==frame.contentWindow) return;
+      window.removeEventListener('message',receive);frame.remove();resolve(event.data);
+    };
+    window.addEventListener('message',receive);
+    frame.srcdoc=`<script>fetch(${JSON.stringify(url)},{referrerPolicy:'no-referrer'}).then(response=>parent.postMessage(response.status,'*'))<\/script>`;
+    document.body.append(frame);
+  }),url);
+  assert.equal(opaque,403);assert.equal(await app.evaluate(()=>global.requests.length),before);
+  const native=await app.evaluate(async({net},url)=>{
+    const response=await net.fetch(url);
+    return {status:response.status,bytes:Array.from(new Uint8Array(await response.arrayBuffer()))};
+  },url);
+  assert.equal(native.status,200);assert.deepEqual(Buffer.from(native.bytes),sourceBytes);
 });

@@ -19,8 +19,8 @@ export function registerPdfPreviewScheme(): void {
   ]);
 }
 
-export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap | null): void {
-  protocol.handle(pdfPreviewScheme, (request) => {
+export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap | null, rendererOrigin: string | null): void {
+  const handleRequest = (request: Request): Response | Promise<Response> => {
     const kernel = getKernel();
     if (kernel === null) {
       return new Response('Preview service unavailable', { status: 503 });
@@ -83,5 +83,18 @@ export function registerPdfPreviewProtocol(getKernel: () => MainKernelBootstrap 
     }
     const relativePath = url.pathname.slice('/pdf/'.length);
     return kernel.invokeCapability<{ relativePath: string }, Response>('files.streamPdfPreviewResource', { relativePath });
+  };
+  protocol.handle(pdfPreviewScheme, async (request: Request & Pick<Electron.ProtocolRequest, 'initiatorOrigin'>) => {
+    // Electron supplies the initiator separately; custom-protocol requests can omit the Origin header.
+    const origin = request.initiatorOrigin;
+    if (origin !== undefined && origin !== 'file://' && origin !== rendererOrigin) {
+      return new Response('Forbidden preview origin', {status: 403});
+    }
+    const response = await handleRequest(request);
+    if (rendererOrigin !== null && origin === rendererOrigin) {
+      response.headers.set('access-control-allow-origin', rendererOrigin);
+      response.headers.set('vary', 'Origin');
+    }
+    return response;
   });
 }

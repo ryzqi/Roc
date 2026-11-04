@@ -53,6 +53,7 @@ export const EAGER_FORBIDDEN_PACKAGES = [
   'react-markdown',
   'streamdown',
   'react-virtuoso',
+  'pdfjs-dist',
   'zod'
 ];
 

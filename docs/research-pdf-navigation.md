@@ -1,6 +1,6 @@
 # 原 PDF 与解析定位
 
-PR-07 当前已完成测量坐标、原子解析快照和安全预览元数据。阅读器并排显示、双向选择及标注捕获仍待接入，不能将本节的接口验收当成完整阅读流程验收。
+PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据和原 PDF/解析文本并排阅读。块到原 PDF 的页/区域定位已接入；Evidence/Claim 固定来源深链、PDF 到块的反向选择和标注捕获仍待完成。
 
 ## 坐标与版本
 
@@ -43,6 +43,8 @@ roc-preview://research/projects/<projectId>/documents/<documentId>/parses/<parse
 
 `roc-preview` 注册 `supportFetchAPI` 和 `corsEnabled`。后者是 Chromium 支持跨协议 fetch 的必要条件，不关闭 webSecurity，也不绕过 CSP。
 
+协议在调用能力之前验证 Electron 提供的 `request.initiatorOrigin`。允许文件 renderer、明确配置的开发 renderer 来源和主进程/浏览器自身发起的请求；其他来源及不透明 iframe 拒绝。实际 Electron45 请求即使来自 HTTP 页面也可能没有 `Origin` header，不能用 header 或可由页面隐藏的 referrer 代替该检查。只有配置的开发来源获得对应的 CORS 响应，不使用通配来源。
+
 ## 验证与证据
 
 在仓库根目录运行：
@@ -72,4 +74,18 @@ git diff --check
 
 读取状态按项目、文献、文档、解析、来源哈希及重读次数绑定。选择变化立即阻止旧内容显示，迟到响应不能覆盖新选择。文档 tab 支持左右方向键、Home/End 和可见焦点；选择其他文档会清除历史深链。
 
-`node --test tests/renderer/paper-reader.test.mjs` 检查实际组件和生成适配器的版本、错误、键盘、迟到响应、显式重读及明暗/窄窗路径。解析数据在该测试中明确为合成版本快照，Node-host 桥和 sender98 也明确标记。真实 PDF 的版本/来源读取由原生 P0 验证。布局截图与读取请求记录保存在 `.artifacts/research-optimization/pr07-reader-selection/`。
+`node --test tests/renderer/paper-reader.test.mjs` 检查实际组件和生成适配器的版本、错误、键盘、迟到响应、显式重读及明暗/窄窗路径。版本选择场景明确使用合成解析快照；PDF 阅读场景使用冻结原文件或明确生成的多页/旋转 PDF，经实际解析器、工件收集器、repository、能力注册器及生成适配器读取。Node-host 桥和 sender98 是明确标记的测试接缝，不声称完整生产 kernel/preload E2E。布局截图与读取请求记录保存在 `.artifacts/research-optimization/pr07-reader-selection/`。
+
+## 并排阅读与资源
+
+现有阅读器通过「原 PDF / 解析文本」切换进入并排模式；块的「原文位置」按钮选择确切位置，多位置块可选择其中一页。原 PDF 先读取该解析内容的规范化 SHA-256，再请求同版本预览；没有新版或近似 locator 替代。PDF.js 和 worker 只在打开并排模式后加载，原 PDF 字节通过已有协议取得，不创建 Blob URL。
+
+读页提供上一页、下一页、明确页码，以及 PageUp/PageDown/Home/End。页码输入使用原文件实际页数；缩放为适宽的 0.5–3 倍。投影使用记录的仿射 frame 和当前 PDF.js viewport 的四角变换，覆盖 CropBox、UserUnit 与旋转；不使用固定缩放或假设原始 bbox 为 PDF points。
+
+缺少区域 frame 时明确提示仅页定位。解析器记录整页 bbox 时明确说明没有细分块区域；高亮整页不会被描述为精确段落。原文件、版本、坐标或页数不一致时显示可重试错误。
+
+每次只保留一个可见页的 DOM canvas，页位图上限为 400 万像素。翻页/缩放/重绘取消旧 render 并释放页资源；关闭或切换来源取消 fetch/loading，销毁 PDF 文档、PDF worker 和原生 Worker。尚未实现文本选择、研究标注及反向块定位。
+
+阅读器测试由 Vite8.3.5 实际构建并加载 Electron/Chromium，直接使用 `?worker` 生成的独立 worker 文件，不模拟 worker import。场景覆盖冻结 PDF 真实文本位图、缩放、三个窗口边界、无坐标历史、原文损坏、CropBox/90°/UserUnit2、32 页跳转与关闭清理。32 页 PDF 只解析第一页，测试仍可读取原文件其他页面，不制造未解析页的区域。
+
+`actual-pdf-bitmap.json` 保存真实位图和编译 worker URL；`rotated-original-projection.json` 保存测量 frame/投影；`large-original-resources.json` 保存六次跳页的实际非零位图/worker 数量、耗时和进程内存。内存记录是观测值，不声称 RSS 硬上限。`comparison-clip-audit.json` 覆盖并排、hover 和缩放最终状态；截图保存明暗模式及 800/1099/1100 宽度。

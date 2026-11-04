@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, CircleAlert, ClipboardCopy, Columns2, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -12,6 +12,8 @@ import { downloadModels, getModelsStatus } from '../shared/research-models-store
 import type { LiteratureStore } from './use-literature-store';
 import {useReaderDocument} from './use-reader-document';
 
+const PaperPdfView = lazy(() => import('./PaperPdfView'));
+
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
   { value: 'complete', label: '完整', title: '轻量解析加公式识别，约 330 MB' }
@@ -22,9 +24,8 @@ const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; tit
  * Scope, stated honestly: this renders what the contract can actually deliver —
  * metadata from the library record, and the parse's `blocks` (heading / paragraph /
  * table / formula / figure **as text**, each with its `locator`). It does **not**
- * draw figures or embed the original PDF yet. Verified source/asset metadata is
- * available through research.previewDocument; this component currently renders
- * structured text while the dual reader is introduced in a separate increment.
+ * render figures as interpreted markup. Original PDFs load only when the user
+ * opens the comparison; measured source/parse geometry stays version-bound.
  *
  * Parse progress is the backend's own `document.runs` statuses; the contract has no
  * stage names, so none are invented. The legacy `MINERU_PIPELINE_STAGES` progression
@@ -107,6 +108,8 @@ export function PaperReader({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
+  const [comparePdf, setComparePdf] = useState(false);
+  const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -191,6 +194,8 @@ export function PaperReader({
     const matches = blocks.filter(block => block.locator === focusLocator);
     return matches.length === 1 ? matches[0].id : null;
   }, [content, focusLocator]);
+  const selectedPdfBlock = pdfSelection !== null && pdfSelection.parseId === reader.parsed?.run.id ? pdfSelection.blockId : matchedBlockId;
+  const selectedPdfLocation = pdfSelection !== null && pdfSelection.parseId === reader.parsed?.run.id ? pdfSelection.locationIndex : 0;
 
   useEffect(() => {
     if (matchedBlockId === null || activeDocumentId === null) {
@@ -693,7 +698,35 @@ export function PaperReader({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
+          {activeDocument?.mediaType === 'application/pdf' && reader.parsed !== null ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1.5">
+              <button type="button" onClick={() => setComparePdf(compare => !compare)} aria-pressed={comparePdf}
+                data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border border-line px-2 py-1 text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
+                <Columns2 size={14}/>{comparePdf ? '仅解析文本' : '原文与解析'}
+              </button>
+              {comparePdf && selectedPdfBlock !== null && content !== null && content.blocks.find(block => block.id === selectedPdfBlock)!.locations.length > 1 ? (
+                <label className="flex items-center gap-1 text-[var(--font-meta-size)]">块位置
+                  <select aria-label="解析块位置" value={selectedPdfLocation} onChange={event => setPdfSelection({
+                    parseId: reader.parsed!.run.id, blockId: selectedPdfBlock, locationIndex: Number(event.target.value)
+                  })} className="rounded-control border border-line bg-surface px-1">
+                    {content.blocks.find(block => block.id === selectedPdfBlock)!.locations.map((location, index) => (
+                      <option key={index} value={index}>第 {location.page} 页，位置 {index + 1}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="flex min-h-0 flex-1">
+          {comparePdf && activeDocument?.mediaType === 'application/pdf' && reader.parsed !== null && literature.projectId !== null ? (
+            <div className="min-h-0 w-1/2 min-w-0 border-r border-line">
+              <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
+                <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
+                  selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}/>
+              </Suspense>
+            </div>
+          ) : null}
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
               <p role="note" className="mb-2 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="reader-jump-missed">
                 locator「{focusLocator}」没有唯一的精确位置，未跳转。
@@ -725,7 +758,7 @@ export function PaperReader({
                 data-testid="reader-blocks"
                 data-text-size={largeText ? 'large' : 'standard'}
               >
-                {blocks.map((block) => (
+                {blocks.map((block, index) => (
                   <section
                     key={block.id}
                     id={`reader-block-${block.id}`}
@@ -752,10 +785,19 @@ export function PaperReader({
                     <p className="mt-0.5 font-mono text-subtle text-[var(--font-micro-size)]">
                       <span>{block.label}</span>{' '}<span>{block.locator}</span>{' '}<span>第 {block.page ?? '?'} 页</span>
                     </p>
+                    {activeDocument?.mediaType === 'application/pdf' ? (
+                      <button type="button" disabled={content.blocks[index].locations.length === 0}
+                        aria-label={`查看${block.label}原文位置`} aria-pressed={selectedPdfBlock === block.id}
+                        data-testid="reader-block-source" className="mt-1 flex items-center gap-1 rounded-control px-1 py-0.5 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                        onClick={() => {setComparePdf(true); setPdfSelection({parseId: reader.parsed!.run.id, blockId: block.id, locationIndex: 0});}}>
+                        <ScanLine size={13}/>{selectedPdfBlock === block.id ? '所选位置' : '原文位置'}
+                      </button>
+                    ) : null}
                   </section>
                 ))}
               </article>
             )}
+          </div>
           </div>
 
         </div>

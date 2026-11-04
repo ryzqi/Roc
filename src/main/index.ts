@@ -370,7 +370,8 @@ async function createWindow(): Promise<void> {
     }
   });
   if (!pdfPreviewProtocolRegistered) {
-    registerPdfPreviewProtocol(() => pdfPreviewKernel);
+    registerPdfPreviewProtocol(() => pdfPreviewKernel,
+      isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined ? new URL(process.env.ELECTRON_RENDERER_URL).origin : null);
     pdfPreviewProtocolRegistered = true;
   }
 

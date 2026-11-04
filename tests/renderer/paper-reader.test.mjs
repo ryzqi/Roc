@@ -1,15 +1,18 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
+import {build as buildVite} from 'vite';
+import react from '@vitejs/plugin-react';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
-let api, directory, app, page, active;
+let api, directory, inputDirectory, app, page, active;
 const fixtures = [], calls = [], errors = [];
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/pr07-reader-selection');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -17,15 +20,17 @@ before(async () => {
   api = await loadResearchTestApi();
   directory = await mkdtemp(join(tmpdir(), 'roc-paper-reader-'));
   await mkdir(artifacts, {recursive: true});
-  await build({stdin: {contents: `
+  inputDirectory = await mkdtemp(join(process.cwd(), '.runtime/tmp/roc-reader-vite-'));
+  await writeFile(join(inputDirectory, 'app.tsx'), `
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
-    import {PaperReader} from './src/renderer/literature/PaperReader';
-    import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
+    import {PaperReader} from ${JSON.stringify(join(process.cwd(),'src/renderer/literature/PaperReader'))};
+    import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/workspace-scope'))};
     const root=createRoot(document.getElementById('root'));
     const client={api:{research:{
       resolveDocumentParse:input=>window.readFromHost('resolveDocumentParse',input),
+      previewDocument:input=>window.readFromHost('previewDocument',input),
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}})
     }}};
     const loadDocumentContent=input=>window.readFromHost('getDocumentContent',input);
@@ -42,24 +47,49 @@ before(async () => {
     }
     let generation=0;
     window.mountReader=(snapshot,focus)=>flushSync(()=>root.render(<Harness key={++generation} initial={snapshot} initialFocus={focus}/>));
-  `,resolveDir: process.cwd(), loader: 'tsx'}, outfile: join(directory, 'app.js'),
-    bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'});
+  `);
   const assets = join(process.cwd(), 'dist/renderer/assets');
   const styles = await Promise.all((await readdir(assets)).filter(file => file.endsWith('.css')).map(file => readFile(join(assets, file), 'utf8')));
-  await writeFile(join(directory, 'app.css'), styles.join('\n'));
-  await writeFile(join(directory, 'index.html'), `<html data-theme="light"><link rel="stylesheet" href="app.css"><style>
+  await writeFile(join(inputDirectory, 'app.css'), styles.join('\n'));
+  await writeFile(join(inputDirectory, 'index.html'), `<html data-theme="light"><link rel="stylesheet" href="/app.css"><style>
     html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-    </style><div id="root"></div><script src="app.js"></script></html>`);
+    </style><div id="root"></div><script>
+      const NativeWorker=window.Worker;window.liveWorkers=0;window.createdWorkers=0;
+      window.workerUrls=[];
+      window.Worker=class extends NativeWorker{constructor(...args){super(...args);window.liveWorkers++;window.createdWorkers++;window.workerUrls.push(String(args[0]));this.closed=false;}
+        terminate(){if(!this.closed){this.closed=true;window.liveWorkers--;}super.terminate();}};
+    </script><script type="module" src="/app.tsx"></script></html>`);
+  await buildVite({configFile:false,root:inputDirectory,base:'./',plugins:[react()],logLevel:'silent',
+    build:{outDir:directory,emptyOutDir:false,manifest:true}});
+  await build({entryPoints: ['src/main/pdf-preview-protocol.ts'], outfile: join(directory, 'protocol.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', external: ['electron'], logLevel: 'silent'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
+    const protocol=require(${JSON.stringify(join(directory, 'protocol.cjs'))});protocol.registerPdfPreviewScheme();
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
-    app.whenReady().then(()=>new BrowserWindow({show:false,width:1100,height:850}).loadFile(${JSON.stringify(join(directory, 'index.html'))}));`);
+    app.whenReady().then(()=>{
+      protocol.registerPdfPreviewProtocol(()=>({invokeCapability:async(name,input)=>{
+        if(name!=='research.document.source') throw new Error('unsupported test resource');
+        const result=await BrowserWindow.getAllWindows()[0].webContents.executeJavaScript('window.readFromHost(\"source\",'+JSON.stringify(input)+')');
+        if(!result.ok) throw new Error(result.message);
+        return new Response(new Uint8Array(result.bytes),{headers:result.headers});
+      }}),null);
+      return new BrowserWindow({show:false,width:1100,height:850}).loadFile(${JSON.stringify(join(directory, 'index.html'))});
+    });`);
   app = await _electron.launch({executablePath: electronPath, args: [join(directory, 'main.cjs')]});
   page = await app.firstWindow(); page.setDefaultTimeout(5000);
   page.on('pageerror', error => errors.push(error.message));
   await page.exposeFunction('readFromHost', async (method, input) => {
     const f = active;
     calls.push({fixture: f.project.id, method, input});
-    api.parseIpcRequestArgs(method === 'getDocumentContent' ? 'roc:research:document-content' : 'roc:research:document-resolve-parse', [input]);
+    if (method === 'source') {
+      try {
+        const response = await f.registry.invoke('research.document.source', input);
+        return {ok: true, bytes: Array.from(new Uint8Array(await response.arrayBuffer())), headers: Object.fromEntries(response.headers)};
+      } catch (error) {return {ok: false, message: error.message};}
+    }
+    const channel = {getDocumentContent: 'roc:research:document-content', resolveDocumentParse: 'roc:research:document-resolve-parse',
+      previewDocument: 'roc:research:document-preview'}[method];
+    api.parseIpcRequestArgs(channel, [input]);
     const result = await f.bridge.invoke(`research.${method}`, [input], 98);
     if (f.mismatchedResult && result.ok && method === 'getDocumentContent') result.data.run.id = 'wrong-returned-parse';
     if (f.defer === method) return new Promise(resolve => {f.finish = () => resolve(result); f.deferReady();});
@@ -69,8 +99,10 @@ before(async () => {
 after(async () => {
   await app?.close();
   for (const fixture of fixtures) fixture.close();
+  for (const fixture of fixtures) if (fixture.root) await rm(fixture.root, {recursive: true, force: true});
   api?.dispose();
   if (directory) await rm(directory, {recursive: true, force: true});
+  if (inputDirectory) await rm(inputDirectory, {recursive: true, force: true});
 });
 
 function scene() {
@@ -108,10 +140,58 @@ function scene() {
   const registry = new api.CapabilityRegistry();
   for (const descriptor of api.researchDocumentCapabilities) registry.declare('research', descriptor);
   api.registerResearchDocumentCapabilities({pluginId: 'research', capabilities: registry}, f.repository.documents, service);
+  f.registry = registry;
   f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
   f.snapshot = () => ({projectId: f.project.id, selected: f.repository.library.get(f.first.libraryItemId),
     documents: [f.repository.documents.get(f.first.id), f.repository.documents.get(f.second.id)]});
   f.changes = () => f.db.prepare('SELECT total_changes()').pluck().get();
+  return f;
+}
+
+function generatedPdf({pageCount = 1, crop = [0,0,612,792], rotation = 0, userUnit = 1} = {}) {
+  const font = 3 + 2*pageCount;
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${Array.from({length:pageCount},(_,i)=>`${3+2*i} 0 R`).join(' ')}] /Count ${pageCount} >>`];
+  for(let i=0;i<pageCount;i++){
+    const stream = `BT /F1 12 Tf 40 600 Td (Synthetic group A mean is 2. Original generated page ${i+1}.) Tj 0 -24 Td (Synthetic group B mean is 4. Independent source review.) Tj ET`;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [${crop.join(' ')}] /Rotate ${rotation} /UserUnit ${userUnit} /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${4+2*i} 0 R >>`,
+      `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+  }
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let text='%PDF-1.7\n';const offsets=[0];
+  for(let i=0;i<objects.length;i++){offsets.push(Buffer.byteLength(text));text+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`;}
+  const xref=Buffer.byteLength(text);
+  text+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map(offset=>`${String(offset).padStart(10,'0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(text);
+}
+
+async function realPdfScene({pageOnly = false, pdfOptions = null} = {}) {
+  const f = scene();
+  f.root = await realpath(await mkdtemp(join(tmpdir(), 'roc-reader-original-')));
+  const source = pdfOptions === null ? await readFile('tests/fixtures/research-workflow/source.pdf') : generatedPdf(pdfOptions);
+  const path = join(f.root, 'source.pdf'); await writeFile(path, source);
+  const {parseResearchDocument} = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
+    platform: 'node', external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: '.runtime/tmp'
+  });
+  const {collectDocumentContent} = await importTypeScriptModule('src/main/plugins/research/document-files.ts', {
+    platform: 'node', external: ['zod'], tempDir: '.runtime/tmp'
+  });
+  const raw = await parseResearchDocument({projectRoot: f.root, sourcePath: path, outputDir: join(f.root, 'output'),
+    options: {tier: 'compact', device: 'cpu', pageRange: '1'}, modelFiles: null, modelManifest: ''});
+  const collected = await collectDocumentContent(f.root, join(f.root, 'output'), raw);
+  const document = f.repository.documents.import({id: 'actual-original', libraryItemId: f.first.libraryItemId, projectId: f.project.id,
+    filename: 'source.pdf', mediaType: 'application/pdf', sourcePath: 'source.pdf', sourceHash: hash(source), size: source.length, entry: null}, false).document;
+  f.repository.documents.begin(document.id, 'actual-original-parse');
+  f.repository.documents.complete(document.id, 'actual-original-parse', collected.data, pageOnly ? null : collected.coordinates);
+  f.actual = document; f.collected = collected;
+  const registry = new api.CapabilityRegistry();
+  for (const descriptor of api.researchDocumentCapabilities) registry.declare('research', descriptor);
+  api.registerResearchDocumentCapabilities({pluginId: 'research', capabilities: registry}, f.repository.documents,
+    new api.ResearchDocumentService(f.repository, {}, f.root));
+  f.registry = registry;
+  f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name,input) => registry.invoke(name,input)});
+  f.snapshot = () => ({projectId: f.project.id, selected: f.repository.library.get(document.libraryItemId),
+    documents: [f.repository.documents.get(document.id)]});
   return f;
 }
 
@@ -235,4 +315,171 @@ test('wrong returned parse identity is rejected; selected layouts preserve reada
     transport: 'actual renderer component and generated registry/adapter via Node-host seam; explicit synthetic parse snapshots and window98',
     calls
   }, null, 2));
+});
+
+async function waitForOriginal() {
+  await page.waitForFunction(() => {
+    const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]');
+    return canvas !== null && canvas.width > 0 && canvas.height > 0 && canvas.parentElement.style.visibility === 'visible' &&
+      getComputedStyle(canvas).visibility === 'visible';
+  });
+}
+test('actual PDF comparison opens sealed bytes lazily with one native worker and measured region projection', async () => {
+  const f = await realPdfScene(), before = f.changes();
+  await mount(f); await textEquals('Synthetic group A mean is 2');
+  assert.equal(await page.evaluate(() => window.liveWorkers), 0);
+  assert.equal(calls.some(call => call.method === 'previewDocument'), false);
+  await page.getByTestId('reader-block-source').first().click();
+  await waitForOriginal();
+  assert.equal(await page.evaluate(() => window.liveWorkers), 1);
+  const workerUrls=await page.evaluate(()=>window.workerUrls);
+  assert.match(workerUrls.at(-1),/\/assets\/pdf\.worker\.min-[^/]+\.js$/u);
+  await page.getByTestId('reader-pdf-region').waitFor();
+  assert.deepEqual(calls.filter(call => call.method === 'previewDocument').map(call => call.input.parseId), ['actual-original-parse']);
+  assert.equal(calls.find(call => call.method === 'previewDocument').input.parseHash, hash(JSON.stringify(f.collected.data.content)));
+  assert.equal(calls.find(call => call.method === 'source').input.sourceHash, f.actual.sourceHash);
+  const bitmap = await page.getByTestId('reader-pdf-canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d'), image = context.getImageData(0,0,canvas.width,canvas.height);
+    let ink=0; for(let i=0;i<image.data.length;i+=4) if(image.data[i]<200 && image.data[i+3]>0) ink++;
+    return {width: canvas.width, height: canvas.height, ink};
+  });
+  assert.ok(bitmap.ink > 100, 'actual PDF worker paints source text, not an empty canvas');
+  assert.ok(bitmap.width * bitmap.height <= 4_000_000);
+  const normalWidth=await page.getByTestId('reader-pdf-canvas').evaluate(canvas=>canvas.getBoundingClientRect().width);
+  await page.getByRole('button',{name:'放大 PDF',exact:true}).click();
+  await page.getByRole('button',{name:'放大 PDF',exact:true}).click();await waitForOriginal();
+  const enlarged=await page.getByTestId('reader-pdf-canvas').evaluate(canvas=>({width:canvas.getBoundingClientRect().width,pixels:canvas.width*canvas.height}));
+  assert.ok(Math.abs(enlarged.width/normalWidth-1.5)<0.01);assert.ok(enlarged.pixels<=4_000_000);
+  assert.equal(await page.evaluate(()=>window.liveWorkers),1);
+  await page.getByRole('button',{name:'PDF 适宽',exact:true}).click();await waitForOriginal();
+  assert.equal(f.changes(), before);
+  await page.getByTestId('reader-compare-pdf').click();
+  await page.waitForFunction(() => window.liveWorkers === 0);
+  assert.equal(await page.getByTestId('reader-pdf-canvas').count(), 0);
+  await writeFile(join(artifacts,'actual-pdf-bitmap.json'),JSON.stringify({
+    bitmap, workerUrls, sourceHash:f.actual.sourceHash, coordinateSnapshot:f.collected.coordinates,
+    transport:'actual component/PDF.js worker/Chromium protocol with Node-host registry bridge; synthetic sender98', calls
+  },null,2));
+});
+
+test('uncaptured coordinate history provides page-only positioning; invalid page input and source corruption remain errors', async () => {
+  const f = await realPdfScene({pageOnly:true});
+  await mount(f); await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-block-source').first().click(); await waitForOriginal();
+  await page.getByTestId('reader-pdf-page-only').waitFor();
+  assert.equal(await page.getByTestId('reader-pdf-region').count(),0);
+  await page.getByRole('spinbutton',{name:'PDF 页码'}).fill('99');
+  await page.getByRole('button',{name:'前往',exact:true}).click();
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).evaluate(input=>input.validity.rangeOverflow),true);
+  assert.ok(await page.getByRole('spinbutton',{name:'PDF 页码'}).evaluate(input=>input.validationMessage.length>0));
+  assert.equal(await page.getByTestId('reader-pdf-canvas').getAttribute('aria-label'),'原 PDF 第 1 页');
+  await page.getByTestId('reader-compare-pdf').click();
+  await page.waitForFunction(() => window.liveWorkers===0);
+  await writeFile(join(f.root,'source.pdf'),'Task-owned changed original.');
+  const before=f.changes();
+  await page.getByTestId('reader-compare-pdf').click();
+  await page.waitForFunction(()=>document.querySelector('[data-testid="reader-pdf"] [data-testid="error-blocked"]')?.textContent.includes('版本不一致'));
+  assert.equal(await page.evaluate(()=>window.liveWorkers),0);
+  assert.equal(await page.getByTestId('reader-pdf-canvas').isVisible(),false);
+  assert.equal(f.changes(),before);
+});
+
+test('comparison remains readable at shell width boundaries and unload cancels pending preview before worker allocation', {timeout:10000}, async()=>{
+  const f=await realPdfScene();
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const audits=[];
+  const audit=async state=>{
+    const result=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    audits.push({state,...result});assert.equal(result.cut,0);
+  };
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
+  for(const [width,theme] of [[1100,'light'],[1099,'dark'],[800,'light']]){
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,850),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await waitForOriginal();
+    const layout=await page.getByTestId('paper-reader').evaluate(element=>({overflow:element.scrollWidth-element.clientWidth,
+      canvas:element.querySelector('canvas').width*element.querySelector('canvas').height,
+      canvases:element.querySelectorAll('canvas').length}));
+    assert.equal(layout.overflow,0);assert.ok(layout.canvas<=4_000_000);assert.equal(layout.canvases,1);
+    await audit(`expanded-${theme}-${width}`);
+    await page.getByRole('button',{name:'放大 PDF',exact:true}).hover();
+    await audit(`hover-${theme}-${width}`);
+    await page.screenshot({path:join(artifacts,`comparison-${theme}-${width}.png`)});
+  }
+  await page.getByRole('button',{name:'放大 PDF',exact:true}).click();await waitForOriginal();
+  await audit('zoom-final');
+  await writeFile(join(artifacts,'comparison-clip-audit.json'),JSON.stringify(audits,null,2));
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+  const ready=new Promise(resolve=>{f.deferReady=resolve;});f.defer='previewDocument';
+  await page.getByTestId('reader-compare-pdf').click();await ready;
+  await page.getByTestId('reader-compare-pdf').click();
+  f.finish();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(()=>window.liveWorkers),0);
+  assert.equal(await page.getByTestId('reader-pdf').count(),0);
+  assert.deepEqual(errors,[]);
+});
+
+test('actual crop rotation and UserUnit project the retained full-page region onto the rendered original',async()=>{
+  const f=await realPdfScene({pdfOptions:{crop:[20,30,500,700],rotation:90,userUnit:2}});
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-block-source').first().click();await waitForOriginal();
+  await page.getByTestId('reader-pdf-region').waitFor();
+  const frame=f.collected.coordinates.pages[0].frame;
+  assert.deepEqual(frame.viewport.viewBox,[20,30,500,700]);assert.equal(frame.viewport.rotation,90);assert.equal(frame.viewport.userUnit,2);
+  const geometry=await page.evaluate(()=>{
+    const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]').getBoundingClientRect();
+    const region=document.querySelector('[data-testid="reader-pdf-region"]').getBoundingClientRect();
+    return {left:region.left-canvas.left,top:region.top-canvas.top,width:region.width,height:region.height,
+      canvasWidth:canvas.width,canvasHeight:canvas.height};
+  });
+  assert.ok(Math.abs(geometry.left)<1 && Math.abs(geometry.top)<1);
+  assert.ok(Math.abs(geometry.width-geometry.canvasWidth)<1 && Math.abs(geometry.height-geometry.canvasHeight)<1);
+  assert.ok(Math.abs(geometry.canvasWidth/geometry.canvasHeight-670/480)<0.001);
+  await writeFile(join(artifacts,'rotated-original-projection.json'),JSON.stringify({frame,geometry},null,2));
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('32-page original retains one visible bitmap across real page navigation and releases worker and canvases on close',async()=>{
+  const f=await realPdfScene({pdfOptions:{pageCount:32}});
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
+  await page.evaluate(()=>{
+    window.visibleUnpaintedPdf=[];
+    window.pdfPaintObserver=new MutationObserver(()=>{
+      const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]');
+      if(canvas !== null && canvas.parentElement.style.visibility==='visible' && canvas.width===300 && canvas.height===150) {
+        window.visibleUnpaintedPdf.push({page:canvas.getAttribute('aria-label'),width:canvas.width,height:canvas.height});
+      }
+    });
+    window.pdfPaintObserver.observe(document.querySelector('[data-testid="reader-pdf"]'),{childList:true,subtree:true,attributes:true});
+  });
+  const initial=await app.evaluate(({app})=>app.getAppMetrics().map(({type,memory})=>({type,memory})));
+  const samples=[];
+  for(const pageNumber of [2,8,16,24,32,1]){
+    const start=Date.now();
+    await page.getByRole('spinbutton',{name:'PDF 页码'}).fill(String(pageNumber));
+    await page.getByRole('button',{name:'前往',exact:true}).click();await waitForOriginal();
+    await page.waitForFunction(pageNumber=>document.querySelector('[data-testid="reader-pdf-canvas"]')?.getAttribute('aria-label')===`原 PDF 第 ${pageNumber} 页`,pageNumber);
+    const snapshot=await page.waitForFunction(pageNumber=>{
+      const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]');
+      if(canvas?.getAttribute('aria-label')!==`原 PDF 第 ${pageNumber} 页` || canvas.width === 0 || canvas.height === 0 ||
+        canvas.parentElement.style.visibility!=='visible' || getComputedStyle(canvas).visibility!=='visible') return false;
+      return {pixels:canvas.width*canvas.height,canvases:document.querySelectorAll('canvas').length,workers:window.liveWorkers};
+    },pageNumber);
+    const sample=await snapshot.jsonValue();await snapshot.dispose();
+    assert.ok(sample.pixels>0 && sample.pixels<=4_000_000);assert.equal(sample.canvases,1);assert.equal(sample.workers,1);
+    samples.push({page:pageNumber,elapsedMs:Date.now()-start,...sample});
+  }
+  const steady=await app.evaluate(({app})=>app.getAppMetrics().map(({type,memory})=>({type,memory})));
+  const unpainted=await page.evaluate(()=>{window.pdfPaintObserver.disconnect();return window.visibleUnpaintedPdf;});
+  await writeFile(join(artifacts,'visible-unpainted-pdf.json'),JSON.stringify(unpainted,null,2));
+  assert.deepEqual(unpainted,[],'an earlier paint cannot make a new default canvas visible');
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+  assert.equal(await page.locator('canvas').count(),0);
+  const closed=await app.evaluate(({app})=>app.getAppMetrics().map(({type,memory})=>({type,memory})));
+  await writeFile(join(artifacts,'large-original-resources.json'),JSON.stringify({pageCount:32,
+    sourceHash:f.actual.sourceHash,parsedPages:f.collected.coordinates.pages.map(page=>page.page),
+    initial,steady,closed,samples,limits:'one DOM canvas, <=4M pixels per page, explicit worker teardown; no claim of process RSS hard cap'},null,2));
 });
