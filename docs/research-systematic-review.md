@@ -109,3 +109,16 @@ DB34 的独立冻结收据和计划 `title_freeze_hash` 同事务保存。冻结
 冻结保留每项主排除原因和实际审核/仲裁出处，满足 `recordsToScreen = included + excluded`。这些是标题摘要计数，重复移除和全文排除仍分开。历史协议/归档可读原收据；当前全文阶段必须使用准确、仍属当前协议的标题冻结哈希。它不是科学检索完整性或独立领域审查认证。
 
 专项9/9，合跑91/91；单元994/994、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。覆盖完整/未完成集合、建议不进入人工哈希、冻结后零新写入、原请求重放、收据丢失、损坏与合法新版本的事务回滚、历史/归档、窗口101 main API、DB33存量快照升级/SQLite重开及失败零命中的不完整覆盖。迁移夹具明确种入规范化旧快照，新代码升级后核验全部原始字段；运行时没有旧数据库写入回退。全文绑定/筛选、提取/质量、检查器和最终计数报表继续实施。
+
+
+## 全文取得与明确来源绑定
+
+`saveReviewFullTextBinding/getReviewFullTextBinding/listReviewFullTextBindings/getReviewFullTextBindingHistory` 只处理标题摘要整轮已冻结的纳入记录。用户明确选择现有 managed document、原始 SHA 和可空的准确 parse ID/hash；不推断 DOI/标题匹配，不复制论文库。`not_retrieved` 保存人工未取得理由，独立于全文 eligibility 排除。取得状态修订追加版本，必须带最新父 ID/哈希与理由，原记录不变。
+
+DB35 固定原始命中/检索来源、标题冻结哈希、文档/论文身份、原始字节 SHA、文件元数据、可选解析哈希/指纹/页数/坐标快照哈希、人工理由和 main 调用者。source-only 允许缺失或不可信解析，重解析不使固定原始字节绑定过期；明确选中的解析必须是已发布 `currentParseId`，不是运行中的 `activeParseId`。后来重解析使旧解析绑定显示 `superseded`，保留历史。
+
+保存实际调用现有 source/preview 读取原始文件及选中坐标工件；异步读取后在事务内复核项目、冻结、父版本和完整来源快照。即使实际 preview 返回后坐标元数据被替换成合法新哈希，也拒绝保存未经核验的快照。写后来源漂移整事务回滚。后续科学写入使用 main-only `verifyCurrent` 再次实际核验字节和当前绑定，来源损坏不能授权新决定。
+
+历史读取显示 `isLatest/currentProtocol/referenceStatus`，不重新抓取文件。`referenceStatus` 是保存来源与数据库引用的状态，不能证明当前磁盘文件已读取；物理文件损坏在实际 source/preview/verify 边界报错。工具直调、wire actor、跨项目和归档不能新写入，主进程在真实异步核验中保留窗口身份。
+
+专项10/10，连同综述、坐标与批注合跑121/121；全量单元1004/1004、Harness94/94、原生科研13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际 PDF→原生解析→现有文档发布→source/preview、异步漂移、历史修订/损坏/重解析、main窗口111和DB34升级/SQLite重开覆盖。坐标替换回归先复现失败后修正；无独立科学对应关系、全文资格决定或完整筛选 UI 验收声明。全文逐人决定/建议、仲裁/冻结、提取/质量、检查器及真实计数报表继续实施。

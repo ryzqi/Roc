@@ -82,3 +82,6 @@ export {ResearchReviewScreeningArbitration} from '../../../src/main/plugins/rese
 
 export {ResearchReviewScreeningFreeze} from '../../../src/main/plugins/research/review-screening-freeze';
 export {researchReviewScreeningDecisionSaveSchema, researchReviewScreeningDecisionSnapshotSchema, researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationSnapshotSchema} from '../../../src/shared/schemas/research-review-screening';
+
+export {ResearchReviewFullTextRepository} from '../../../src/main/plugins/research/review-fulltext-repository';
+export {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from '../../../src/main/plugins/research/review-fulltext-capabilities';

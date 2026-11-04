@@ -36,7 +36,8 @@ export function throwSystematicReviewError(error: unknown): never {
   if (!(error instanceof Error)) throw error;
   const code = error.message.split(':')[0];
   if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
-    'research_review_project_mismatch', 'research_project_archived', 'research_review_screening_tool_context_required'].includes(code)) {
+    'research_review_project_mismatch', 'research_project_archived', 'research_review_screening_tool_context_required',
+    'research_document_project_mismatch', 'research_library_item_archived'].includes(code)) {
     throw new RocDomainError({code, message: '当前窗口身份或项目不能执行这项综述操作。', category: 'permission', retryable: false});
   }
   if (['research_review_version_conflict', 'research_review_request_conflict', 'research_review_already_frozen',
@@ -50,16 +51,19 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_screening_reviewer_not_declared', 'research_review_screening_criterion_not_declared', 'research_review_screening_hit_not_screenable', 'research_review_screening_adjudicator_not_declared',
     'research_review_screening_arbitration_incomplete', 'research_review_screening_arbitration_not_needed',
     'research_review_screening_arbitration_decisions_changed', 'research_review_screening_already_frozen',
-    'research_review_screening_not_frozen', 'research_review_screening_incomplete'].includes(code)) {
+    'research_review_screening_not_frozen', 'research_review_screening_incomplete',
+    'research_review_fulltext_version_conflict', 'research_review_fulltext_source_changed', 'research_review_fulltext_hit_not_included',
+    'research_review_fulltext_not_retrieved', 'research_document_source_changed', 'research_document_preview_parse_changed'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
-    'research_review_query_not_declared', 'research_review_corpus_not_found', 'research_review_corpus_hit_not_found', 'research_review_duplicate_not_found', 'research_review_screening_plan_not_found', 'research_review_screening_decision_not_found', 'research_review_screening_suggestion_not_found', 'research_review_screening_arbitration_not_found'].includes(code)) {
+    'research_review_query_not_declared', 'research_review_corpus_not_found', 'research_review_corpus_hit_not_found', 'research_review_duplicate_not_found', 'research_review_screening_plan_not_found', 'research_review_screening_decision_not_found', 'research_review_screening_suggestion_not_found', 'research_review_screening_arbitration_not_found', 'research_review_fulltext_binding_not_found',
+    'research_document_not_found', 'research_document_parse_not_found', 'research_library_item_not_found'].includes(code)) {
     throw new RocDomainError({code, message: '综述协议、已声明查询或检索记录不存在。', category: 'not_found', retryable: false});
   }
   if (['research_review_snapshot_invalid', 'research_review_search_snapshot_invalid', 'research_review_search_state_lost',
     'research_review_search_pool_invalid', 'research_review_search_ledger_conflict', 'research_review_search_ledger_missing',
-    'research_review_search_pool_missing', 'research_review_search_closed', 'research_review_corpus_snapshot_invalid', 'research_review_duplicate_snapshot_invalid', 'research_review_screening_snapshot_invalid'].includes(code)) {
+    'research_review_search_pool_missing', 'research_review_search_closed', 'research_review_corpus_snapshot_invalid', 'research_review_duplicate_snapshot_invalid', 'research_review_screening_snapshot_invalid', 'research_review_fulltext_snapshot_invalid', 'research_document_coordinate_artifact_changed'].includes(code)) {
     throw new RocDomainError({code, message: '保存的综述版本、检索账本或结果校验失败。', category: 'degraded', retryable: false});
   }
   throw error;

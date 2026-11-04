@@ -3653,3 +3653,23 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c2c-* retained. Actual raw/ref/reviewer/arbitration repositories, absent/broken receipt and valid-new-vote transaction triggers, main101, DB33 canonical old snapshot seeding/upgrade/reopen covered. Current runtime does not write old schemas; migration fixture seeds explicit canonical pre-freeze votes/arbitration and new code verifies all original columns/values after upgrade. Prerequisite30/31 failed only test restore7-values versus new8-column table; explicit all8 original fields restored, no assertion relaxed. Initial91/build passed; last regression adds valid late revision before final91/full checks, no later production edits. No full review UI/external scientific/model-spend claim. Next fulltext source binding and two-stage decisions, then extraction/quality/inspector/count-conserving reporting; whole roadmap open.
+
+
+## ROC-PR-09A4C3A — explicit fulltext retrieval and existing source binding
+
+Verified passing. DB35 immutable binding revisions only for title-frozen included hits. Existing managed document/source SHA with explicit optional current published parse/hash/coordinate basis; no paper duplication or inferred scientific matching. Human not-retrieved reason remains separate from eligibility exclusion. Four generated/registered APIs extend actual trusted main sender boundary. Real source/preview verification, exact preflight snapshot retained across await, transactional scope/title/parent/source checks and postinsert drift rollback; main-only verifyCurrent rereads actual bytes before later scientific writes. History distinguishes latest/protocol/reference status and preserves source-only across reparse.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh generated/type/build |
+| node --test tests/unit/research-review-fulltext.test.mjs | Initial9/9; final10 included below |
+| node --test --test-name-pattern='coordinate metadata replaced' tests/unit/research-review-fulltext.test.mjs | Before fix:1 failed, Missing expected rejection; final regression passed |
+| node --test tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-document-annotations.test.mjs | Final121/121; fulltext10 |
+| pnpm test:unit / pnpm harness:eval | 1004/1004 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c3a-* retained. Real frozen PDF/parser/collector/publication/source/preview, canonical coordinate replacement after actual preview, postinsert rollback, history/corruption/archive/project unlink/new protocol, main111 and DB34 upgrade/reopen covered. Initial9 passed; added actual async source seal red regression and minimum exact snapshot comparison before final121/full build/checks. No new eligibility decisions, review UI, independent scientific matching or model spending claim. Next fulltext reviewer decisions and separate source-bound suggestions, arbitration/freeze, extraction/quality/inspector/reporting; whole roadmap open.
