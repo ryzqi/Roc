@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Loader2, ScanLine, ZoomIn, ZoomOut} from 'lucide-react';
 import {getDocument, PDFWorker, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy, type RenderTask} from 'pdfjs-dist';
 import PdfWorkerPort from 'pdfjs-dist/build/pdf.worker.min.mjs?worker';
 import type {ResearchDocument, ResearchDocumentParse} from '../../shared/types';
@@ -8,12 +8,15 @@ import type {RocClient} from '../shared/roc-client';
 import {projectParsedRegionToPdf} from '../../shared/research-document-coordinates';
 import {ErrorBar} from '../shell/ErrorBar';
 import {documentContentHash} from './document-content-hash';
+import PaperAnnotations, {type AnnotationDraft} from './PaperAnnotations';
+import type {ResearchDocumentAnnotationTarget} from '../../shared/schemas/research-document-annotations';
 
 type Location = ResearchDocumentParse['content']['blocks'][number]['locations'][number];
 type Props = {
   client: RocClient; projectId: string; document: ResearchDocument; parsed: ResearchDocumentParse;
   selection: {blockId: string; locationIndex: number} | null;
   onSelectBlock: (selection: {blockId: string; locationIndex: number}) => void
+  canAnnotate: boolean
 };
 type OpenDocument = {key: string; preview: ResearchDocumentPreview; pdf: PDFDocumentProxy};
 type ProjectedLocation = {
@@ -23,7 +26,7 @@ type ProjectedLocation = {
 const maximumCanvasPixels = 4_000_000;
 
 /** Own one PDF worker and one visible page. All geometry comes from a sealed parse and actual PDF viewport. */
-export default function PaperPdfView({client, projectId, document, parsed, selection, onSelectBlock}: Props): React.JSX.Element {
+export default function PaperPdfView({client, projectId, document, parsed, selection, onSelectBlock, canAnnotate}: Props): React.JSX.Element {
   const [revision, setRevision] = useState(0);
   const key = JSON.stringify([projectId, document.id, parsed.run.id, document.sourceHash, revision]);
   const [opened, setOpened] = useState<OpenDocument | null>(null);
@@ -35,8 +38,20 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const [width, setWidth] = useState(0);
   const areaRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [painted, setPainted] = useState<{key: string; locations: ProjectedLocation[]; region: [number, number, number, number] | null; pageOnly: boolean; wholePage: boolean} | null>(null);
+  const [painted, setPainted] = useState<{
+    key: string; locations: ProjectedLocation[]; region: [number, number, number, number] | null; pageOnly: boolean; wholePage: boolean;
+    viewport: ReturnType<PDFPageProxy['getViewport']>; ratio: number
+  } | null>(null);
   const [candidateRequest, setCandidateRequest] = useState<{key: string; locations: ProjectedLocation[]; pageOnly: boolean; fromPoint: boolean} | null>(null);
+  const [annotationsOpen, setAnnotationsOpen] = useState<{key: string; open: boolean} | null>(null);
+  const [annotationDraft, setAnnotationDraft] = useState<{key: string; draft: AnnotationDraft} | null>(null);
+  const [annotationLocation, setAnnotationLocation] = useState<{key: string; target: ResearchDocumentAnnotationTarget} | null>(null);
+  const [regionMode, setRegionMode] = useState<string | null>(null);
+  const [regionError, setRegionError] = useState<{key: string; message: string} | null>(null);
+  const annotationButtonRef = useRef<HTMLButtonElement>(null);
+  const dragOverlayRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{paintKey: string; pointerId: number; x: number; y: number} | null>(null);
+  const skipClick = useRef(false);
   const current = opened?.key === key ? opened : null;
   const block = selection === null ? null : parsed.content.blocks.find(block => block.id === selection.blockId) ?? null;
   const location: Location | null = selection === null || block === null ? null : block.locations[selection.locationIndex] ?? null;
@@ -137,7 +152,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
         location.blockId === selection.blockId && location.locationIndex === selection.locationIndex) ?? null;
       task = page.render({canvas, viewport});
       await task.promise;
-      if (!cancelled) setPainted({key: paintKey, locations, region: selected?.region ?? null,
+      if (!cancelled) setPainted({key: paintKey, locations, region: selected?.region ?? null, viewport, ratio,
         pageOnly: selected !== null && selected.region === null, wholePage: selected?.wholePage ?? false});
     })().catch((error: unknown) => {
       if (!cancelled) setError({key, message: error instanceof Error ? error.message : String(error)});
@@ -155,9 +170,26 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const failure = error?.key === key ? error.message : null;
   const candidates = failure === null && candidateRequest?.key === candidateKey ? candidateRequest : null;
   const navigate = (page: number): void => {setPageSelection({key: pageKey, page});};
+  const showAnnotations = current !== null && annotationsOpen?.key === key && annotationsOpen.open;
+  const draft = annotationDraft?.key === candidateKey ? annotationDraft.draft : null;
+  const selecting = canAnnotate && regionMode === paintKey;
+  const frame = current?.preview.coordinates?.pages.find(value => value.page === pageNumber)?.frame;
+  const beginDraft = (location: ResearchDocumentAnnotationTarget['location']): void => {
+    setRegionMode(null);
+    setRegionError(null);
+    setAnnotationsOpen({key, open: true});
+    setAnnotationDraft({key: candidateKey, draft: {id: crypto.randomUUID(), page: pageNumber, location}});
+    setAnnotationLocation(null);
+  };
+  const selectedAnnotation = annotationLocation?.key === key && annotationLocation.target.page === pageNumber ? annotationLocation.target : null;
+  const shownLocation = draft?.location ?? selectedAnnotation?.location;
+  const annotationRegion = currentPaint !== null && shownLocation?.kind === 'pdf-region' ?
+    viewportRegion(shownLocation.bbox, currentPaint.viewport, currentPaint.ratio) : null;
+  const resetDrag = (): void => {drag.current = null; if (dragOverlayRef.current !== null) dragOverlayRef.current.style.display = 'none';};
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]" data-testid="reader-pdf" tabIndex={0} aria-label="原 PDF 阅读"
       onKeyDown={event => {
+        if (event.key === 'Escape' && selecting) {event.preventDefault(); resetDrag(); setRegionMode(null); annotationButtonRef.current?.focus(); return;}
         if (current === null || ['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement).tagName)) return;
         const page = event.key === 'PageDown' ? Math.min(current.pdf.numPages, pageNumber + 1) :
           event.key === 'PageUp' ? Math.max(1, pageNumber - 1) :
@@ -194,10 +226,29 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           onClick={() => setCandidateRequest(candidates === null ? {key: candidateKey, locations: currentPaint!.locations,
             pageOnly: currentPaint!.locations.some(location => location.region === null), fromPoint: false} : null)}
           className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">本页解析块</button>
+        <button ref={annotationButtonRef} type="button" aria-expanded={showAnnotations} disabled={current === null || failure !== null}
+          data-testid="reader-annotations-toggle" onClick={() => setAnnotationsOpen({key, open: !showAnnotations})}
+          className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">批注</button>
+        {canAnnotate ? <button type="button" aria-label="框选 PDF 批注区域" aria-pressed={selecting}
+          disabled={currentPaint === null || frame?.kind !== 'pdf' || failure !== null}
+          onClick={() => {resetDrag(); setRegionError(null); setRegionMode(selecting ? null : paintKey);}}
+          className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ScanLine size={14}/></button> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 [scrollbar-gutter:stable]">
         {failure === null ? null : <ErrorBar error={{level: 'blocked', message: failure, retry: () => setRevision(revision => revision + 1)}}/>}
         {pageError === null ? null : <p role="alert" className="text-[var(--st-warn)]">{pageError}</p>}
+        {regionError?.key === candidateKey ? <p role="alert" className="text-[var(--st-warn)]">{regionError.message}</p> : null}
+        {selecting ? <p role="status" className="mb-2 text-muted">拖动框选批注区域，Escape 取消。</p> : null}
+        {!showAnnotations || current === null ? null : <PaperAnnotations key={key} client={client} projectId={projectId}
+          document={document} parsed={parsed} preview={current.preview} canAnnotate={canAnnotate} draft={draft}
+          onCreatePage={() => beginDraft({kind: 'page'})}
+          onCloseDraft={() => {setAnnotationDraft(null); annotationButtonRef.current?.focus({preventScroll: true});}}
+          onSelect={target => {
+            setAnnotationLocation({key, target});
+            setAnnotationDraft(null); resetDrag(); setRegionMode(null);
+            navigate(target.page);
+            canvasRef.current?.scrollIntoView({block: 'nearest'});
+          }}/>}
         {currentPaint?.pageOnly ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-page-only">该页未记录区域坐标，仅定位到页。</p> : null}
         {currentPaint?.wholePage ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-whole-page">解析器记录的是整页范围，未细分块区域。</p> : null}
         {candidates === null ? null : <div className="mb-2 text-[var(--font-meta-size)]" data-testid="reader-pdf-block-candidates">
@@ -218,7 +269,45 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           {failure !== null || currentPaint !== null ? null : <p role="status" className="flex items-center gap-1 text-muted"><Loader2 size={14} className="animate-spin"/>读取原文…</p>}
           <div className="relative" style={{visibility: failure === null && currentPaint !== null ? 'visible' : 'hidden'}}>
             <canvas key={paintKey} ref={canvasRef} data-testid="reader-pdf-canvas" aria-label={`原 PDF 第 ${pageNumber} 页`}
+              className={selecting ? 'cursor-crosshair touch-none' : ''}
+              onPointerDown={event => {
+                if (!selecting || currentPaint === null || event.button !== 0) return;
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                drag.current = {paintKey, pointerId: event.pointerId, x: event.clientX - rect.left, y: event.clientY - rect.top};
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={event => {
+                const start = drag.current, overlay = dragOverlayRef.current;
+                if (!selecting || start?.paintKey !== paintKey || start.pointerId !== event.pointerId || overlay === null) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                const x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
+                const y = Math.min(rect.height, Math.max(0, event.clientY - rect.top));
+                Object.assign(overlay.style, {display: 'block', left: `${Math.min(start.x,x)}px`, top: `${Math.min(start.y,y)}px`,
+                  width: `${Math.abs(x-start.x)}px`, height: `${Math.abs(y-start.y)}px`});
+              }}
+              onPointerCancel={resetDrag}
+              onPointerUp={event => {
+                const start = drag.current;
+                if (!selecting || currentPaint === null || frame?.kind !== 'pdf' || start?.paintKey !== paintKey || start.pointerId !== event.pointerId) return;
+                const rect = event.currentTarget.getBoundingClientRect(), viewport = currentPaint.viewport;
+                const x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
+                const y = Math.min(rect.height, Math.max(0, event.clientY - rect.top));
+                const points = [[start.x,start.y], [start.x,y], [x,start.y], [x,y]].map(([px,py]) =>
+                  viewport.convertToPdfPoint(px / rect.width * viewport.width, py / rect.height * viewport.height));
+                const [left, bottom, right, top] = frame.viewport.viewBox;
+                const bbox: [number, number, number, number] = [
+                  Math.max(left, Math.min(...points.map(point => point[0]))), Math.max(bottom, Math.min(...points.map(point => point[1]))),
+                  Math.min(right, Math.max(...points.map(point => point[0]))), Math.min(top, Math.max(...points.map(point => point[1])))
+                ];
+                resetDrag(); skipClick.current = true;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+                if (bbox[2] <= bbox[0] || bbox[3] <= bbox[1]) {setRegionError({key: candidateKey, message: '请拖出非空区域。'}); return;}
+                beginDraft({kind: 'pdf-region', unit: 'pdf-user-space', bbox});
+              }}
               onClick={event => {
+                if (skipClick.current) {skipClick.current = false; return;}
+                if (selecting) return;
                 if (currentPaint === null || failure !== null) return;
                 const rect = event.currentTarget.getBoundingClientRect();
                 const x = event.clientX - rect.left, y = event.clientY - rect.top;
@@ -233,9 +322,23 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
             {currentPaint?.region ? <div data-testid="reader-pdf-region" role="note" aria-label="解析区域" className="pointer-events-none absolute border-2 border-accent bg-[var(--accent-soft)]"
               style={{left: currentPaint.region[0], top: currentPaint.region[1], width: currentPaint.region[2]-currentPaint.region[0],
                 height: currentPaint.region[3]-currentPaint.region[1]}}/> : null}
+            {annotationRegion === null ? null : <div data-testid="reader-pdf-annotation-region" role="note" aria-label="用户批注区域"
+              className="pointer-events-none absolute border-2 border-dashed border-accent"
+              style={{left: annotationRegion[0], top: annotationRegion[1], width: annotationRegion[2]-annotationRegion[0],
+                height: annotationRegion[3]-annotationRegion[1]}}/>}
+            {selecting ? <div ref={dragOverlayRef} data-testid="reader-pdf-selection-drag" className="pointer-events-none absolute border-2 border-dashed border-accent"
+              style={{display: 'none'}}/> : null}
           </div>
         </div>
       </div>
     </section>
   );
+}
+
+function viewportRegion(bbox: [number, number, number, number], viewport: ReturnType<PDFPageProxy['getViewport']>,
+  ratio: number): [number, number, number, number] {
+  const [left, bottom, right, top] = bbox;
+  const points = [[left,bottom], [left,top], [right,bottom], [right,top]].map(([x,y]) => viewport.convertToViewportPoint(x,y));
+  return [Math.min(...points.map(point => point[0])) / ratio, Math.min(...points.map(point => point[1])) / ratio,
+    Math.max(...points.map(point => point[0])) / ratio, Math.max(...points.map(point => point[1])) / ratio];
 }

@@ -61,6 +61,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
         <div className="h-[480px] min-h-0 min-w-0 border-[0.5px] border-line">
           <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
             <PaperPdfView client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed}
+              canAnnotate={false}
               selection={{blockId: selected.blockId, locationIndex: selected.locationIndex}}
               onSelectBlock={selection => {
                 setSelection({key, ...selection});

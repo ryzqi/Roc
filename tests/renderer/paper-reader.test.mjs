@@ -33,6 +33,10 @@ before(async () => {
     const client={api:{research:{
       resolveDocumentParse:input=>window.readFromHost('resolveDocumentParse',input),
       previewDocument:input=>window.readFromHost('previewDocument',input),
+      createDocumentAnnotation:input=>window.readFromHost('createDocumentAnnotation',input),
+      captureDocumentAnnotation:input=>window.readFromHost('captureDocumentAnnotation',input),
+      listDocumentAnnotations:input=>window.readFromHost('listDocumentAnnotations',input),
+      getDocumentAnnotation:input=>window.readFromHost('getDocumentAnnotation',input),
       getDocumentContent:input=>window.readFromHost('getDocumentContent',input),
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}})
     }}};
@@ -98,7 +102,9 @@ before(async () => {
       } catch (error) {return {ok: false, message: error.message};}
     }
     const channel = {getDocumentContent: 'roc:research:document-content', resolveDocumentParse: 'roc:research:document-resolve-parse',
-      previewDocument: 'roc:research:document-preview'}[method];
+      previewDocument: 'roc:research:document-preview', createDocumentAnnotation: 'roc:research:annotations-create',
+      captureDocumentAnnotation: 'roc:research:annotations-capture', listDocumentAnnotations: 'roc:research:annotations-list',
+      getDocumentAnnotation: 'roc:research:annotations-get'}[method];
     api.parseIpcRequestArgs(channel, [input]);
     const result = await f.bridge.invoke(`research.${method}`, [input], 98);
     if (f.mismatchedResult && result.ok && method === 'getDocumentContent') result.data.run.id = 'wrong-returned-parse';
@@ -781,4 +787,247 @@ test('Claim relation opens its retained original source after reparse without ch
   assert.deepEqual(f.repository.evidence.relations.get(relation.id,f.project.id),relation);
   await writeFile(join(artifacts,'claim-fixed-original.json'),JSON.stringify({relation,claim:oldClaim,geometry,audits,calls},null,2));
   await open.click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+async function openAnnotationReader(f) {
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await mount(f); await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-block-source').first().click(); await waitForOriginal();
+}
+async function pageNote() {
+  await page.getByTestId('reader-annotations-toggle').click();
+  const button=page.getByRole('button',{name:'本页批注',exact:true});
+  await button.waitFor(); await button.focus(); await page.keyboard.press('Enter');
+  await page.getByTestId('reader-annotation-form').waitFor();
+}
+function scientificRows(f) {
+  return ['research_claims','research_evidence_relations','research_evidence_relation_revisions']
+    .map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
+}
+
+test('actual rotated PDF pointer selection saves its measured region and explicit block then reuses Evidence without science writes', async () => {
+  const f=await realPdfScene({pdfOptions:{rotation:90,userUnit:2,crop:[20,30,500,700]}}),science=scientificRows(f);
+  await openAnnotationReader(f);
+  const before=f.changes();
+  await page.getByRole('button',{name:'框选 PDF 批注区域',exact:true}).click();
+  const canvas=page.getByTestId('reader-pdf-canvas');
+  await canvas.evaluate(canvas=>{
+    window.annotationGesture=[];
+    for(const name of ['pointerdown','pointerup']) canvas.addEventListener(name,event=>{
+      const rect=canvas.getBoundingClientRect();
+      window.annotationGesture.push({name,x:event.clientX-rect.left,y:event.clientY-rect.top,width:rect.width,height:rect.height});
+    },{once:true});
+  });
+  const rect=await canvas.boundingBox();
+  await page.mouse.move(rect.x+rect.width*.2,rect.y+rect.height*.15); await page.mouse.down();
+  await page.mouse.move(rect.x+rect.width*.6,rect.y+rect.height*.45,{steps:8});
+  assert.equal(await page.getByTestId('reader-pdf-selection-drag').isVisible(),true);
+  await page.mouse.up();
+  await page.getByTestId('reader-annotation-form').waitFor();
+  assert.equal(await page.getByRole('combobox',{name:'批注解析块',exact:true}).inputValue(),'');
+  assert.equal(await page.getByTestId('reader-pdf-block-candidates').count(),0);
+  assert.equal(f.changes(),before);
+  await page.getByRole('combobox',{name:'批注解析块',exact:true}).selectOption(f.collected.data.content.blocks[0].id);
+  await page.getByRole('combobox',{name:'批注类型',exact:true}).selectOption('number');
+  await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('核对原 PDF 中的数字 2，批注不代表科学确认。');
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  const row=page.getByTestId('reader-annotation').first();await row.waitFor();
+  const request=calls.find(call=>call.method==='createDocumentAnnotation').input;
+  assert.equal(request.target.sourceHash,f.actual.sourceHash);
+  assert.equal(request.target.parseHash,hash(JSON.stringify(f.collected.data.content)));
+  assert.equal(request.target.location.kind,'pdf-region'); assert.equal(request.issue,'number');
+  assert.equal(request.target.coordinateBasis.snapshotHash,f.repository.documents.coordinates(f.actual.id,'actual-original-parse').snapshotHash);
+  const gesture=await page.evaluate(()=>window.annotationGesture);
+  const {withResearchPdf}=await importTypeScriptModule('src/main/plugins/research/pdf-render.ts',{
+    platform:'node',external:['@napi-rs/canvas','pdfjs-dist/legacy/build/pdf.mjs'],tempDir:'.runtime/tmp'});
+  let expected;
+  await withResearchPdf(await readFile(join(f.root,'source.pdf')),async pdf=>{
+    const pdfPage=await pdf.getPage(1),viewport=pdfPage.getViewport({scale:1});
+    const [start,end]=gesture;
+    const points=[[start.x/start.width,start.y/start.height],[start.x/start.width,end.y/end.height],
+      [end.x/end.width,start.y/start.height],[end.x/end.width,end.y/end.height]]
+      .map(([x,y])=>viewport.convertToPdfPoint(x*viewport.width,y*viewport.height));
+    expected=[Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1])),
+      Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))];
+    pdfPage.cleanup();
+  });
+  request.target.location.bbox.forEach((value,index)=>assert.ok(Math.abs(value-expected[index])<1e-8));
+  const note=f.repository.documentAnnotations.list({projectId:f.project.id,documentId:f.actual.id,parseId:'actual-original-parse'})[0];
+  assert.deepEqual(note.annotation.actor,{kind:'user',id:'window:98'});
+  assert.equal(f.repository.evidence.list(f.project.id).length,0);
+  const capture=row.getByRole('button',{name:'捕获所选块为证据',exact:true});
+  await capture.focus();await page.keyboard.press('Enter');
+  await row.getByText('已捕获证据，科学结论待审核',{exact:true}).waitFor();
+  const captured=f.repository.documentAnnotations.get({projectId:f.project.id,annotationId:note.annotation.id});
+  assert.equal(captured.capture.source.sourceLocator.blockId,request.target.blockId);
+  assert.deepEqual(captured.annotation.request.target.location,request.target.location);
+  assert.deepEqual(scientificRows(f),science);
+  await row.getByRole('button',{name:'回到批注位置',exact:true}).click();await waitForOriginal();
+  await page.getByTestId('reader-pdf-annotation-region').waitFor();
+  const geometry=await page.getByTestId('reader-pdf-annotation-region').evaluate(region=>{
+    const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]').getBoundingClientRect(),rect=region.getBoundingClientRect();
+    return {x:(rect.left-canvas.left)/canvas.width,y:(rect.top-canvas.top)/canvas.height,w:rect.width/canvas.width,h:rect.height/canvas.height};
+  });
+  assert.ok(Math.abs(geometry.x-gesture[0].x/gesture[0].width)<.002);
+  assert.ok(Math.abs(geometry.y-gesture[0].y/gesture[0].height)<.002);
+  assert.ok(Math.abs(geometry.w-(gesture[1].x/gesture[1].width-gesture[0].x/gesture[0].width))<.002);
+  const readBefore=f.changes();
+  await page.getByRole('button',{name:'重读批注',exact:true}).click();await page.getByTestId('reader-annotation').waitFor();
+  assert.equal(f.changes(),readBefore);
+  await writeFile(join(artifacts,'annotation-actual-rotated.json'),JSON.stringify({gesture,expected,geometry,note,captured,science,calls,
+    seam:'actual PDF/PDF.js/Vite/Chromium and generated main adapter through Node-host; synthetic window98'},null,2));
+});
+
+test('keyboard page-only annotation records no invented region or block; region cancellation and empty click write nothing', async () => {
+  const measured=await realPdfScene();
+  await openAnnotationReader(measured);const before=measured.changes();
+  const select=page.getByRole('button',{name:'框选 PDF 批注区域',exact:true});
+  await select.click();await page.getByTestId('reader-pdf').focus();await page.keyboard.press('Escape');
+  assert.equal(await select.getAttribute('aria-pressed'),'false');
+  assert.equal(await page.getByTestId('reader-pdf-selection-drag').count(),0);
+  await select.click();
+  await page.getByTestId('reader-pdf-canvas').click({position:{x:30,y:30}});
+  await page.getByText('请拖出非空区域。',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('reader-annotation-form').count(),0);
+  assert.equal(measured.changes(),before);
+  await page.getByTestId('reader-pdf').focus();await page.keyboard.press('Escape');
+  const f=await realPdfScene({pageOnly:true});
+  await openAnnotationReader(f);const pageBefore=f.changes();
+  assert.equal(await page.getByRole('button',{name:'框选 PDF 批注区域',exact:true}).isDisabled(),true);
+  await pageNote();
+  await page.getByText('此页未保存测量坐标，批注仅记录页。',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'批注说明',exact:true}).evaluate(element=>element===document.activeElement),true);
+  await page.keyboard.type('记录原文页上的单位问题');
+  await page.getByRole('combobox',{name:'批注类型',exact:true}).selectOption('unit');
+  const save=page.getByRole('button',{name:'保存批注',exact:true});await save.focus();await page.keyboard.press('Enter');
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  const note=f.repository.documentAnnotations.list({projectId:f.project.id,documentId:f.actual.id,parseId:'actual-original-parse'})[0];
+  assert.equal(note.annotation.block,null);
+  assert.equal(note.annotation.request.target.coordinateBasis,null);
+  assert.deepEqual(note.annotation.request.target.location,{kind:'page'});
+  assert.equal(await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).count(),0);
+  assert.equal(calls.filter(call=>call.method==='createDocumentAnnotation').length,1);
+  assert.ok(f.changes()>pageBefore);
+});
+
+test('annotation save and capture failures retain exact retry IDs and actual index/source refusals leave zero writes', async () => {
+  const f=await realPdfScene();await openAnnotationReader(f);await pageNote();
+  await page.getByRole('combobox',{name:'批注解析块',exact:true}).selectOption(f.collected.data.content.blocks[0].id);
+  await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('核对公式和原始数字');
+  const original=await readFile(join(f.root,'source.pdf'));
+  await writeFile(join(f.root,'source.pdf'),'Task-owned source corruption');
+  const before=f.changes();await page.getByRole('button',{name:'保存批注',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'原文件与记录的版本不一致'}).waitFor();
+  assert.equal(f.changes(),before);
+  const failed=calls.find(call=>call.method==='createDocumentAnnotation').input;
+  await writeFile(join(f.root,'source.pdf'),original);
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  const saves=calls.filter(call=>call.method==='createDocumentAnnotation');
+  assert.deepEqual(saves[1].input,failed);
+  const chunk=f.db.prepare("SELECT * FROM research_knowledge_chunks WHERE id='document:actual-original-parse:chunk:0'").get();
+  f.db.prepare("UPDATE research_knowledge_chunks SET content='damaged current index' WHERE id=?").run(chunk.id);
+  const after=f.changes();
+  await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'所选解析块没有一致的当前索引'}).waitFor();
+  assert.equal(f.changes(),after);
+  f.db.prepare('UPDATE research_knowledge_chunks SET content=? WHERE id=?').run(chunk.content,chunk.id);
+  await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).click();
+  await page.getByText('已捕获证据，科学结论待审核',{exact:true}).waitFor();
+  const captures=calls.filter(call=>call.method==='captureDocumentAnnotation');
+  assert.deepEqual(captures[1].input,captures[0].input);
+});
+
+test('late annotation save acknowledgment cannot cross projects and reopening reads the saved receipt without another write', async () => {
+  const first=await realPdfScene();await openAnnotationReader(first);await pageNote();
+  await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('Old project exact note');
+  const ready=new Promise(resolve=>{first.deferReady=resolve;});first.defer='createDocumentAnnotation';
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();await ready;
+  await page.getByRole('button',{name:'保存中…',exact:true}).waitFor();
+  assert.equal(await page.getByRole('combobox',{name:'批注解析块',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('combobox',{name:'批注类型',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('textbox',{name:'批注说明',exact:true}).isDisabled(),true);
+  const oldWrites=first.changes(),other=await realPdfScene();
+  await openAnnotationReader(other);
+  first.defer=null;first.finish();
+  await page.getByTestId('reader-annotations-toggle').click();
+  await page.getByText('此解析版本暂无批注。',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('reader-annotation-saved').count(),0);
+  assert.equal(await page.getByText('Old project exact note',{exact:true}).count(),0);
+  assert.equal(first.changes(),oldWrites);
+  await openAnnotationReader(first);
+  await page.getByTestId('reader-annotations-toggle').click();
+  await page.getByText('Old project exact note',{exact:true}).waitFor();
+  assert.equal(first.changes(),oldWrites);
+  assert.equal(calls.some(call=>call.method==='createDocumentAnnotation'),false);
+});
+
+test('captured annotation reads exact historical parse and original after reparse with readonly Evidence source entry', async () => {
+  const f=await realPdfScene();await openAnnotationReader(f);await pageNote();
+  await page.getByRole('combobox',{name:'批注解析块',exact:true}).selectOption(f.collected.data.content.blocks[0].id);
+  await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('Fixed old parse note');
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();await page.getByTestId('reader-annotation-saved').waitFor();
+  await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).click();
+  await page.getByText('已捕获证据，科学结论待审核',{exact:true}).waitFor();
+  const original=f.repository.documentAnnotations.list({projectId:f.project.id,documentId:f.actual.id,parseId:'actual-original-parse'})[0];
+  f.repository.documents.begin(f.actual.id,'new-annotation-reader-parse');
+  f.repository.documents.complete(f.actual.id,'new-annotation-reader-parse',f.collected.data,f.collected.coordinates);
+  const before=f.changes();
+  await mountSource(f,f.repository.evidence.inspectEvidence(original.capture.source.evidence.id,f.project.id));await waitForOriginal();
+  assert.equal(await page.getByRole('button',{name:'框选 PDF 批注区域',exact:true}).count(),0);
+  await page.getByTestId('reader-annotations-toggle').click();
+  await page.getByText('Fixed old parse note',{exact:true}).waitFor();
+  await page.getByText('已捕获证据，来源引用已失效',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'本页批注',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).count(),0);
+  const read=f.repository.documentAnnotations.get({projectId:f.project.id,annotationId:original.annotation.id});
+  assert.deepEqual(read.annotation,original.annotation);assert.deepEqual(read.capture,original.capture);
+  assert.equal(read.capturedReferenceStatus,'superseded');
+  assert.ok(calls.filter(call=>call.method==='listDocumentAnnotations').every(call=>call.input.parseId==='actual-original-parse'));
+  assert.equal(f.changes(),before);
+});
+
+test('annotation form and long saved source facts fit light800 dark1099 with actual keyboard and clipping audits', async () => {
+  const f=await realPdfScene(),audits=[];
+  await openAnnotationReader(f);await pageNote();
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  await page.mouse.move(10,10);
+  const defaultAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+  assert.equal(defaultAudit.cut,0);audits.push({width:1100,theme:'light',state:'form-default',...defaultAudit});
+  for(const [width,theme] of [[800,'light'],[1099,'dark']]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,850),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('核对数字、单位和公式，保留固定来源版本。'.repeat(30));
+    await page.getByRole('button',{name:'保存批注',exact:true}).hover();
+    const layout=await page.getByTestId('reader-annotation-form').evaluate(form=>{
+      const outer=form.getBoundingClientRect();
+      return {overflow:form.scrollWidth-form.clientWidth,controls:Array.from(form.querySelectorAll('select,textarea,button')).map(element=>{
+        const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,outerLeft:outer.left,outerRight:outer.right};
+      })};
+    });
+    assert.ok(layout.overflow<=1);assert.ok(layout.controls.every(rect=>rect.left>=rect.outerLeft-1&&rect.right<=rect.outerRight+1));
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);audits.push({width,theme,state:'form-hover',layout,...audit});
+    await page.screenshot({path:join(artifacts,`annotation-form-${theme}-${width}.png`)});
+  }
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();await page.getByTestId('reader-annotation-saved').waitFor();
+  const row=page.getByTestId('reader-annotation').first();await row.waitFor();
+  const summary=row.locator('summary');await summary.focus();await page.keyboard.press('Enter');
+  assert.equal(await row.locator('details').evaluate(details=>details.open),true);
+  await row.getByRole('button',{name:'回到批注位置',exact:true}).focus();await page.keyboard.press('Enter');await waitForOriginal();
+  await page.screenshot({path:join(artifacts,'annotation-original-page-dark-1099.png')});
+  await row.evaluate(row=>row.scrollIntoView({block:'start'}));
+  await row.locator('details p').first().waitFor({state:'visible'});
+  const savedLayout=await row.evaluate(row=>{
+    const rect=row.getBoundingClientRect(),scroller=row.closest('[class*="overflow-y-auto"]').getBoundingClientRect();
+    return {overflow:row.scrollWidth-row.clientWidth,top:rect.top,bottom:rect.bottom,scrollerTop:scroller.top,scrollerBottom:scroller.bottom};
+  });
+  assert.ok(savedLayout.overflow<=1);assert.ok(savedLayout.top>=savedLayout.scrollerTop-1);
+  const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+  assert.equal(audit.cut,0);audits.push({width:1099,theme:'dark',state:'saved-open-final',savedLayout,...audit});
+  await page.screenshot({path:join(artifacts,'annotation-saved-dark-1099.png')});
+  await writeFile(join(artifacts,'annotation-clip-audit.json'),JSON.stringify(audits,null,2));
+  assert.equal(errors.length,0);
 });

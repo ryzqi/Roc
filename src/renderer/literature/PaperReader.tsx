@@ -722,6 +722,7 @@ export function PaperReader({
             <div className="min-h-0 w-1/2 min-w-0 border-r border-line">
               <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
+                  canAnnotate={scope.writable && scope.projectId === literature.projectId}
                   selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}
                   onSelectBlock={selection => {
                     setPdfSelection({parseId: reader.parsed!.run.id, ...selection});

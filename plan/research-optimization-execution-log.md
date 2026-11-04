@@ -3410,3 +3410,20 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
 
 Initial capture tests correctly rejected extra write fields passed into strict get schemas; explicit get arguments fixed all three calls, without weakening schemas/assertions. Logs pr07-a5b-* and p0-production/research_task_fef4c59e-4ed3-4314-b16d-ff237f74bc06/document-annotation.json retain results. Native transport/window99 remains a test seam. Current-index refusal, old version reads, strict actor/project checks, captured invalidation, snapshot tampering and actual DB25→26 no-backfill preservation verified. No UI save/selection entry yet. Next: actual PDF region selection, keyboard page/block note workflow, list/capture UI, then assets and remaining PR07 acceptance. Full roadmap/external acceptances remain open.
+
+
+## ROC-PR-07A5C — actual PDF selection and annotation UI
+
+Verified passing. Existing lazy PDF view adds measured pointer region selection, explicit keyboard page note, optional user-selected page block, problem/note form, sealed note history and exact current-block Evidence action. Source/parse/page/paint/request keys isolate drafts and late results; failed unchanged requests reuse IDs. Missing measured frame disables region selection and offers explicit page note. Empty selection refused. Original Evidence/Claim view reads notes without write entry. No scientific mutation/confirmation, second shell/route or eager PDF dependency.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm typecheck / pnpm build | Final passed; fresh production build |
+| node --test --test-name-pattern='annotation\|pointer selection\|page-only annotation' tests/renderer/paper-reader.test.mjs | 6/6 |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |72/72; reader26 |
+| node --test --test-name-pattern='annotation form and long' tests/renderer/paper-reader.test.mjs | Final layout1/1, default/hover/open/final audits |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131770bytes6files |
+
+Actual rotated90/cropped/UserUnit2 pointer event observations independently compared with native PDF.js convertToPdfPoint within1e-8 and saved/reopened dashed region geometry checked. Actual current Evidence reuse/source/index refusal, original request retries, late acknowledgment/new project and old invalidated notes tested through Node-host/window98 seam, not full production kernel/preload E2E. No backend changes: preceding unit903/Harness94/native13 are previous evidence, not reruns. Logs pr07-a5c-*; annotation-actual-rotated.json, four cut0/hidden0 audits and form/saved-details/original-page screenshots inspected. Saved screenshot now explicitly scrolls actual row into view; no claim that the original-page screenshot covered offscreen notes. Next: actual parsed table/formula assets and quality/scan/large acceptance; PR07 and full roadmap still open.
