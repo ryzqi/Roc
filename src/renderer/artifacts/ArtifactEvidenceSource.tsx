@@ -4,15 +4,17 @@ import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 
 const SourceMigrations = lazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
+const SourceReplacements = lazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
 
-export function ArtifactEvidenceSource({client, source, canDecide}: {
-  client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean
+export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
+  client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean; onChanged: () => void
 }): React.JSX.Element {
   const [showMigrations, setShowMigrations] = useState(false);
+  const [showReplacements, setShowReplacements] = useState(false);
   const evidence = source.evidence;
   return <details data-reading-key={`evidence:${evidence.id}`} className="border-b-[0.5px] border-line py-2 [&::details-content]:overflow-clip!">
     <summary data-reading-key={`evidence-summary:${evidence.id}`} className="cursor-pointer break-words text-ink">{evidence.title}
-      <span className="ml-2 text-muted">{source.referenceStatus === 'superseded' ? '旧定位已失效' : '已保存的来源片段'}</span>
+      <span className="ml-2 text-muted">{source.referenceStatus === 'superseded' ? '来源引用已失效' : '已保存的来源片段'}</span>
     </summary>
     <p className="mt-2 break-words text-muted">{evidence.locator}</p>
     <blockquote className="mt-1 whitespace-pre-wrap break-words text-ink">{evidence.excerpt}</blockquote>
@@ -29,5 +31,13 @@ export function ArtifactEvidenceSource({client, source, canDecide}: {
         <SourceMigrations client={client} projectId={evidence.projectId} evidenceId={evidence.id} canDecide={canDecide}/>
       </Suspense>}
     </>}
+    <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
+      aria-expanded={showReplacements} data-testid={`artifact-source-replacements-toggle-${evidence.id}`}
+      data-reading-key={`source-replacements-toggle:${evidence.id}`} onClick={() => setShowReplacements(open => !open)}>
+      {showReplacements ? '收起来源替代' : '查看来源替代'}
+    </button>
+    {!showReplacements ? null : <Suspense fallback={<p role="status">正在加载来源替代…</p>}>
+      <SourceReplacements client={client} source={source} canDecide={canDecide} onChanged={onChanged}/>
+    </Suspense>}
   </details>;
 }

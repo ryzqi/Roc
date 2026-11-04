@@ -33,7 +33,11 @@ before(async()=>{
       evidenceRelationHistory:input=>window.relationFromMain('evidenceRelationHistory',input),
       listSourceMigrations:input=>window.relationFromMain('listSourceMigrations',input),
       captureSourceMigration:input=>window.relationFromMain('captureSourceMigration',input),
-      rejectSourceMigration:input=>window.relationFromMain('rejectSourceMigration',input)}}};
+      rejectSourceMigration:input=>window.relationFromMain('rejectSourceMigration',input),
+      listEvidence:input=>window.relationFromMain('listEvidence',input),
+      listSourceReplacements:input=>window.relationFromMain('listSourceReplacements',input),
+      replaceEvidenceSource:input=>window.relationFromMain('replaceEvidenceSource',input),
+      getExperiment:input=>window.relationFromMain('getExperiment',input)}}};
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
       const [readingLocations]=useState(()=>new Map());
@@ -93,7 +97,9 @@ before(async()=>{
     const channel={inspectEvidence:'roc:research:evidence-inspect',proposeEvidenceRelation:'roc:research:relations-propose',
       reviewEvidenceRelation:'roc:research:relations-review',evidenceRelationHistory:'roc:research:relations-history',
       listSourceMigrations:'roc:research:source-migrations-list',captureSourceMigration:'roc:research:source-migrations-capture',
-      rejectSourceMigration:'roc:research:source-migrations-reject'}[method];
+      rejectSourceMigration:'roc:research:source-migrations-reject',
+      listEvidence:'roc:research:evidence-list',listSourceReplacements:'roc:research:source-replacements-list',
+      replaceEvidenceSource:'roc:research:source-replacements-replace',getExperiment:'roc:research:experiment-get'}[method];
     api.parseIpcRequestArgs(channel,[input]);
     const result=await f.bridge.invoke(`research.${method}`,[input],windowId);
     if(f.deferRelation===method)return new Promise(resolve=>{f.finishRelation=()=>resolve(result);});
@@ -114,11 +120,15 @@ after(async()=>{
   try {await app?.close();} finally {fixtures.forEach(f=>f.close());api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
-async function scene({long=false,managed=false}={}) {
+async function scene({long=false,managed=false,experiment=false}={}) {
   const f=createResearchFixture(api,'reading');fixtures.push(f);active=f;reads.length=0;
   const excerpt=long ? '原始来源长段落与定位说明。'.repeat(120) : 'An actual retained synthetic source excerpt.';
   let evidenceId='inspector-evidence';
-  if(managed) {
+  if(experiment) {
+    f.previous=completedUiExperiment(f,'ui-previous','mean,2');
+    f.source=f.previous.evidence;
+    evidenceId=f.source.id;
+  } else if(managed) {
     f.document=f.repository.documents.import({id:'inspector-managed-document',libraryItemId:null,projectId:f.project.id,
       filename:'inspector.pdf',mediaType:'pdf',sourcePath:'documents/inspector.pdf',sourceHash:hash('synthetic original PDF'),size:22,
       entry:{metadata:{id:'inspector-managed-literature',source:'local',externalId:'inspector-managed-fixture',doi:null,
@@ -159,6 +169,7 @@ async function scene({long=false,managed=false}={}) {
   const handlers=new Map();
   api.registerResearchArtifactInspectorCapability({pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){handlers.set(descriptor.name,handler);}}},f.repository);
   api.registerResearchEvidenceCapabilities({pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){handlers.set(descriptor.name,handler);}}},f.repository.evidence);
+  handlers.set('research.experiment.get',input=>f.repository.experiments.get(input.projectId,input.runId));
   f.bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
   f.link={projectId:f.project.id,artifactId,expectedVersion:snapshot.version,title:snapshot.artifact.title,kind:snapshot.artifact.kind};
   f.empty=empty;f.snapshot=snapshot;
@@ -404,7 +415,7 @@ test('source invalidation changes the actual snapshot and requires explicit new-
   await page.getByTestId('artifact-inspector-recapture').click();
   await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-inspector-recapture"]'));
   assert.notEqual(reads.at(-1).expectedVersion,f.link.expectedVersion);
-  assert.match(await page.getByTestId('artifact-inspector-panel').innerText(),/旧定位已失效/u);
+  assert.match(await page.getByTestId('artifact-inspector-panel').innerText(),/来源引用已失效/u);
   await page.locator('details > summary').filter({hasText:'Original synthetic source'}).click();
   await page.getByText('An actual retained synthetic source excerpt.',{exact:true}).waitFor();
   assert.throws(()=>f.repository.evidence.getEvidence('inspector-evidence',f.project.id),/research_evidence_reference_superseded/u);
@@ -794,5 +805,258 @@ test('migration long targets remain keyboard readable at light800 and dark1099 w
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));
   await page.evaluate(()=>document.documentElement.dataset.theme='light');
   assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+function replacementUiDocument(f,{long=false}={}) {
+  const id='ui-replacement-document';
+  const document=f.repository.documents.import({id,libraryItemId:f.document.libraryItemId,projectId:f.project.id,
+    filename:'replacement.pdf',mediaType:'pdf',sourcePath:'documents/replacement.pdf',sourceHash:hash('synthetic replacement PDF'),size:25,entry:null},false).document;
+  const original=JSON.parse(f.db.prepare('SELECT data_json FROM research_document_parses WHERE document_id=? AND status=?').get(f.document.id,'ready').data_json).content;
+  const text=long?'新文档中的完整段落与单位需要重新科学核对。'.repeat(100):'A different actual synthetic source statement.';
+  const content={...original,sourceHash:document.sourceHash,content:text,
+    blocks:[{id:'replacement-block',kind:'paragraph',label:'Synthetic replacement',text,locator:'page:2',imageAssetId:null,
+      locations:[{page:2,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]}]};
+  f.repository.documents.begin(id,'ui-replacement-parse');
+  f.repository.documents.complete(id,'ui-replacement-parse',{outputPath:'/tmp/synthetic-ui-replacement',files:{},content});
+  return {document,evidence:f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:ui-replacement-parse:chunk:0'})};
+}
+function completedUiExperiment(f,requestId,text) {
+  const run=f.repository.experiments.create({projectId:f.project.id,requestId,label:'Same synthetic experiment label',engine:'typescript',
+    runtime:{kind:'bundled-node'},sourceVersion:1,sourcePath:'experiment.mts',inputPaths:['input.csv'],parameters:{seed:requestId},timeoutMs:1000,network:'disabled'},
+    f.project.workspacePath,f.project.workspacePath,'/tmp/synthetic-ui-experiment');
+  const environment={runtime:{kind:'bundled-node'},executable:'/synthetic/node',prefix:'/synthetic',basePrefix:'/synthetic',version:'synthetic',
+    platform:'synthetic',architecture:'synthetic',toolchainHash:hash('toolchain'),metadataHash:hash('environment'),packages:[],lockFiles:[],hash:hash(requestId+'environment')};
+  const input={area:'input',path:'input.csv',sha256:hash(requestId),size:requestId.length};
+  f.repository.experiments.start(f.project.id,run.id,environment,[input],hash(requestId+'input'));
+  const execution=f.repository.experiments.finish(f.project.id,run.id,{status:'completed',files:[input,
+    {area:'output',path:'results.csv',sha256:hash(text),size:text.length}],exitCode:0,error:null},
+    [{id:`experiment:${run.id}:results`,title:'Same synthetic experiment label',content:text,chunks:[{content:text,locator:'output/results.csv:row:2'}],
+      metadata:{path:'results.csv',sha256:hash(text)}}]);
+  return {execution,evidence:f.repository.evidence.capture({projectId:f.project.id,chunkId:`experiment:${run.id}:results:chunk:0`})};
+}
+function reviewedUiSource(f) {
+  const claim=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId})[0];
+  const proposed=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:claim.id,expectedClaimVersion:claim.version,
+    evidenceId:f.source.id,expectedSourceDigest:api.relationSourceDigest(f.repository.evidence.inspectEvidence(f.source.id,f.project.id)),
+    kind:'supports',condition:null,supersedesRelationId:null},{kind:'user',id:'synthetic-original-ui-review'});
+  return f.repository.evidence.relations.review({projectId:f.project.id,relationId:proposed.id,expectedVersion:proposed.version,
+    expectedClaimVersion:claim.version,expectedSourceDigest:proposed.sourceDigest,decision:'confirm',note:null},{kind:'user',id:'synthetic-original-ui-review'});
+}
+async function expandReplacementSource(f) {
+  const summary=page.locator(`[data-reading-key="evidence-summary:${f.source.id}"]`);
+  await summary.waitFor({state:'visible'});
+  if(!await summary.evaluate(element=>element.parentElement.open))await activateRendered(summary);
+  const toggle=page.getByTestId(`artifact-source-replacements-toggle-${f.source.id}`);
+  await toggle.waitFor({state:'visible'});
+  if(await toggle.getAttribute('aria-expanded')!=='true')await activateRendered(toggle);
+  await page.getByTestId('artifact-source-replacements').waitFor({state:'visible'});
+}
+async function chooseReplacement(targetId) {
+  const select=page.getByTestId('artifact-source-replacement-target');
+  await select.waitFor({state:'visible'});
+  await select.selectOption(targetId);
+  const selection=page.getByTestId('artifact-source-replacement-selection');
+  await selection.getByText(/新来源，/u).waitFor({state:'visible'});
+  return selection;
+}
+async function openReplacementHistory(id) {
+  const details=page.getByTestId(`artifact-source-replacement-history-${id}`);
+  await details.waitFor({state:'visible'});
+  if(!await details.evaluate(element=>element.open))await activateRendered(details.locator(':scope > summary'));
+  await details.locator(':scope > div').waitFor({state:'visible'});
+  return details;
+}
+async function settleReplacementLayout() {
+  await page.waitForFunction(()=>{
+    const root=document.querySelector('[data-testid="artifact-source-replacements"]');
+    if(root===null)return false;
+    return [root.closest('details'),...root.querySelectorAll('details[open]')].every(details=>{
+      const last=details.lastElementChild;
+      return last!==null&&details.getBoundingClientRect().bottom>=last.getBoundingClientRect().bottom-0.5;
+    });
+  });
+}
+
+test('replacement inspector requires explicit current source selection and saves fixed user lineage without altering original claims',async()=>{
+  const f=await scene({managed:true}),target=replacementUiDocument(f),review=reviewedUiSource(f);
+  const claims=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId});
+  const original=f.repository.evidence.inspectEvidence(f.source.id,f.project.id);
+  await openArtifact();await expandReplacementSource(f);
+  const panel=page.getByTestId('artifact-source-replacements');
+  await panel.getByText('重新核对当前工件后再选择；归档项目只读。',{exact:true}).waitFor();
+  assert.equal(await panel.getByTestId('artifact-source-replacement-target').count(),0);
+  await activateRendered(page.getByTestId('artifact-inspector-recapture'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});
+  await expandReplacementSource(f);
+  const select=page.getByTestId('artifact-source-replacement-target');await select.waitFor({state:'visible'});
+  assert.equal(await select.inputValue(),'');
+  assert.equal(await page.getByTestId('artifact-source-replacement-save').count(),0);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  const selection=await chooseReplacement(target.evidence.id);
+  await selection.getByTestId('artifact-source-replacement-save').waitFor({state:'visible'});
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-source-replacement-save"]').disabled);
+  assert.match(await selection.innerText(),new RegExp(target.document.sourceHash));
+  assert.match(await selection.innerText(),/A different actual synthetic source statement/u);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  await selection.getByTestId('artifact-source-replacement-note').fill('明确选择新附件；原主张仍需重新审核。');
+  await settleReplacementLayout();
+  await selection.getByTestId('artifact-source-replacement-note').scrollIntoViewIfNeeded();
+  await audit('source-replacement-selected');
+  await activateRendered(selection.getByTestId('artifact-source-replacement-save'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'visible'});
+  const [inspection]=f.repository.evidence.sourceReplacements.list({projectId:f.project.id,evidenceId:f.source.id});
+  const record=inspection.replacement;
+  assert.deepEqual(record.source,original);assert.equal(record.target.evidence.id,target.evidence.id);
+  assert.equal(record.actor.id,`window:${windowId}`);assert.equal(record.request.note,'明确选择新附件；原主张仍需重新审核。');
+  assert.deepEqual(f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.link.artifactId}),claims);
+  assert.equal(f.repository.evidence.relations.get(review.id,f.project.id).status,'invalidated');
+  assert.deepEqual(f.repository.evidence.relations.history(review.id,f.project.id)[1].relation,review);
+  await activateRendered(page.getByTestId('artifact-inspector-recapture'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});await expandReplacementSource(f);
+  const history=await openReplacementHistory(record.id);
+  assert.match(await history.innerText(),/选择时需要科学审核/u);
+  assert.match(await history.innerText(),new RegExp(record.actor.id));
+  await settleReplacementLayout();await history.scrollIntoViewIfNeeded();await audit('source-replacement-history');
+  const after=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(page.getByTestId('artifact-source-replacements-refresh'));
+  await openReplacementHistory(record.id);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),after);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('replacement inspector reports stale selection with zero writes and retries the same complete request identity',async()=>{
+  const f=await scene({managed:true}),target=replacementUiDocument(f);
+  await openArtifact();await expandReplacementSource(f);
+  let selection=await chooseReplacement(target.evidence.id);
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-source-replacement-save"]').disabled);
+  f.repository.evidence.invalidateEvidence(target.evidence.id,f.project.id);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await activateRendered(selection.getByTestId('artifact-source-replacement-save'));
+  await selection.getByRole('alert').waitFor();
+  assert.match(await selection.getByRole('alert').innerText(),/真实文档或已完成实验版本/u);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  const first=reads.filter(read=>read.relation==='replaceEvidenceSource').at(-1).input;
+  await activateRendered(selection.getByTestId('artifact-source-replacement-save'));
+  await selection.getByRole('alert').waitFor();
+  const second=reads.filter(read=>read.relation==='replaceEvidenceSource').at(-1).input;
+  assert.deepEqual(second,first);
+  await activateRendered(selection.getByTestId('artifact-source-replacement-reread'));
+  await selection.getByText('新来源已失效，请选择当前有效证据。',{exact:true}).waitFor();
+  assert.equal(await selection.getByTestId('artifact-source-replacement-save').isDisabled(),true);
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.equal(f.repository.evidence.inspectEvidence(f.source.id,f.project.id).referenceStatus,'recorded');
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('replacement inspector reads real completed experiment input environment and output before recording rerun history',async()=>{
+  const f=await scene({experiment:true}),target=completedUiExperiment(f,'ui-rerun','mean,3');
+  const previous=f.previous.execution,current=target.execution;
+  const review=reviewedUiSource(f);
+  await openArtifact();await activateRendered(page.getByTestId('artifact-inspector-recapture'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'detached'});await expandReplacementSource(f);
+  const selection=await chooseReplacement(target.evidence.id);
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-source-replacement-save"]').disabled);
+  const facts=selection.getByTestId('artifact-source-replacement-runs');
+  await activateRendered(facts.locator(':scope > summary'));await facts.locator(':scope > div').waitFor({state:'visible'});
+  const text=await facts.innerText();
+  for(const value of [previous.inputHash,current.inputHash,previous.environment.hash,current.environment.hash,
+    previous.files.at(-1).sha256,current.files.at(-1).sha256])assert.match(text,new RegExp(value));
+  assert.match(text,/科学等价需另行判断/u);
+  await selection.getByTestId('artifact-source-replacement-note').fill('重跑使用不同输入；结果变化需另行核对。');
+  await activateRendered(selection.getByTestId('artifact-source-replacement-save'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'visible'});
+  const [inspection]=f.repository.evidence.sourceReplacements.list({projectId:f.project.id,evidenceId:target.evidence.id});
+  assert.equal(inspection.replacement.request.kind,'experiment_rerun');
+  assert.deepEqual(inspection.replacement.experimentLineage.previous,previous);
+  assert.deepEqual(inspection.replacement.experimentLineage.current,current);
+  assert.equal(f.repository.evidence.relations.get(review.id,f.project.id).status,'invalidated');
+  assert.deepEqual(f.repository.experiments.get(f.project.id,previous.id),previous);
+  assert.deepEqual(f.repository.experiments.get(f.project.id,current.id),current);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('late replacement history and committed pending selection cannot change another artifact or project',async()=>{
+  const f=await scene({managed:true}),target=replacementUiDocument(f);f.deferRelation='listSourceReplacements';
+  await openArtifact();await expandReplacementSource(f);
+  await page.getByText('正在读取来源替代历史…',{exact:true}).waitFor();
+  while(typeof f.finishRelation!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finishRead=f.finishRelation;f.deferRelation=null;
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.empty.id,expectedVersion:null});
+  await page.getByText('该工件尚无已保存的角色正文。',{exact:true}).waitFor();finishRead();
+  assert.equal(await page.getByTestId('artifact-source-replacements').count(),0);
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.link.artifactId,expectedVersion:null});
+  await page.getByTestId('artifact-inspector-content').waitFor();await expandReplacementSource(f);
+  const selection=await chooseReplacement(target.evidence.id);
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-source-replacement-save"]').disabled);
+  f.deferRelation='replaceEvidenceSource';delete f.finishRelation;
+  await activateRendered(selection.getByTestId('artifact-source-replacement-save'));
+  await selection.getByText('正在保存来源替代…',{exact:true}).waitFor();
+  assert.equal(await selection.getByTestId('artifact-source-replacement-note').isDisabled(),true);
+  assert.equal(await page.getByTestId('artifact-source-replacement-target').isDisabled(),true);
+  while(typeof f.finishRelation!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finishWrite=f.finishRelation;
+  assert.equal(f.repository.evidence.sourceReplacements.list({projectId:f.project.id,evidenceId:f.source.id}).length,1);
+  const next=await scene();finishWrite();
+  await page.getByTestId('assistant-gate-artifact').last().waitFor();
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),0);
+  assert.equal(await page.getByTestId('artifact-source-replacements').count(),0);
+  assert.deepEqual(await page.evaluate(()=>decisions),[]);
+  assert.equal(next.db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
+});
+
+test('replacement long sources remain keyboard readable at light800 and dark1099 with fixed chrome and unclipped disclosure headers',async()=>{
+  const f=await scene({managed:true,long:true}),target=replacementUiDocument(f,{long:true});
+  await openArtifact();await expandReplacementSource(f);const selection=await chooseReplacement(target.evidence.id);
+  for(const [theme,width] of [['light',800],['dark',1099]]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,900),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    const note=selection.getByTestId('artifact-source-replacement-note');
+    await note.waitFor({state:'visible'});await note.focus();await page.keyboard.press('PageDown');await note.scrollIntoViewIfNeeded();
+    await settleReplacementLayout();
+    await audit(`source-replacement-${theme}-${width}`);
+    const layout=await page.evaluate(()=>{
+      const panel=document.querySelector('[data-testid="artifact-inspector-panel"]');
+      const replacement=document.querySelector('[data-testid="artifact-source-replacements"]');
+      const source= replacement.closest('details');
+      const disclosures=[source,...replacement.querySelectorAll('details[open]')];
+      return {overflow:panel.scrollWidth>panel.clientWidth||replacement.scrollWidth>replacement.clientWidth,
+        title:panel.querySelector('h2').getBoundingClientRect().top,
+        small:[...replacement.querySelectorAll('p,button,summary,span')].some(element=>parseFloat(getComputedStyle(element).fontSize)<12),
+        geometry:disclosures.map(details=>({summaryBottom:details.querySelector(':scope > summary').getBoundingClientRect().bottom,
+          bodyTop:details.querySelector(':scope > div,:scope > p').getBoundingClientRect().top}))};
+    });
+    writeFileSync(join(artifacts,`source-replacement-${theme}-${width}-layout.json`),JSON.stringify(layout,null,2));
+    assert.equal(layout.overflow,false);assert.ok(layout.title>=0);assert.equal(layout.small,false);
+    assert.ok(layout.geometry.every(value=>value.bodyTop>=value.summaryBottom),'focused native disclosures keep bodies below headers');
+    assert.equal(await note.evaluate(element=>element===document.activeElement),true);
+  }
+  assert.equal(f.db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
+  await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));await page.evaluate(()=>document.documentElement.dataset.theme='light');
+});
+
+test('replacement inspector refuses same-document locations, incompatible sources and unfinished experiment endpoints',async()=>{
+  const f=await scene({managed:true});
+  const same=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:inspector-old:chunk:1'});
+  f.repository.knowledge.upsertFromSource({id:'ui-unmanaged',projectId:f.project.id,sourceType:'experiment',sourceId:'unmanaged',
+    title:'Synthetic unrelated experiment',content:'mean,3',chunks:[{content:'mean,3',locator:'results.csv:row:2'}],embeddingPolicy:'none'});
+  const unmanaged=f.repository.evidence.capture({projectId:f.project.id,chunkId:'ui-unmanaged:chunk:0'});
+  await openArtifact();await expandReplacementSource(f);
+  let selection=await chooseReplacement(same.id);
+  await selection.getByText('同文档重解析请核对定位候选。',{exact:true}).waitFor();
+  assert.equal(await selection.getByTestId('artifact-source-replacement-save').isDisabled(),true);
+  selection=await chooseReplacement(unmanaged.id);
+  await selection.getByText('需要两个托管文档，或两个已完成实验的证据。',{exact:true}).waitFor();
+  assert.equal(await selection.getByTestId('artifact-source-replacement-save').isDisabled(),true);
+  assert.equal(f.db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
+  const next=await scene({experiment:true}),target=completedUiExperiment(next,'ui-unfinished','mean,3');
+  next.db.prepare("UPDATE research_experiment_executions SET status='running',snapshot_json=json_set(snapshot_json,'$.status','running') WHERE run_id=?")
+    .run(target.execution.id);
+  const before=next.db.prepare('SELECT total_changes()').pluck().get();
+  await openArtifact();await expandReplacementSource(next);selection=await chooseReplacement(target.evidence.id);
+  await selection.getByText('前后来源必须来自两个不同的已完成实验。',{exact:true}).waitFor();
+  assert.equal(await selection.getByTestId('artifact-source-replacement-save').isDisabled(),true);
+  assert.equal(next.db.prepare('SELECT total_changes()').pluck().get(),before);
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
 });

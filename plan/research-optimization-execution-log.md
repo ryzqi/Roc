@@ -2977,3 +2977,50 @@ invalidated scientific support with zero read writes. Final19 includes that regr
 rerun test reads complete actual repository execution snapshots through1000-character pages.
 No renderer code, dependency, frozen fixture or DB version change. Source replacement inspector
 remains next; PR-06/full plan and external/P4 acceptance gaps remain unfinished.
+
+
+## ROC-PR-06A5C2B — explicit source replacement inspector
+
+Verified passing for renderer/consumer scope. Single inspector sources lazily open replacement
+history and actual project Evidence choices. No default target or similarity-based selection.
+Fresh two-endpoint inspection binds submitted source digests; document IDs must differ, or two
+actual completed experiment executions are shown with full input/environment/output records.
+Same-document positions, unmanaged source pairs, stale targets and unfinished runs disable
+selection. Stale artifact first requires explicit current recapture; archived project is readonly.
+Fixed history identifies predecessor versus new endpoint, selection-time needs_review and
+separate current target reference status. Original source/excerpt and snapshot hashes stay readable.
+
+Successful user selection refreshes current artifact and requires renewed version review.
+No scientific confirmation, automatic rerun, historical Claim/figure/body rewrite or current gate
+approval. Exact selection/note retry preserves requestId. Pending controls disable synchronously;
+mounted guards and keyed reads prevent late responses from touching another artifact/project.
+Source banner now describes reference invalidation, including replacement/rerun, not only position.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm typecheck / pnpm build | Fresh final product build/type passed |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | 38/38 actual Electron |
+| node --test --test-name-pattern='replacement inspector\|late replacement\|replacement long' tests/renderer/artifact-inspector.test.mjs | Final6/6 after screenshot containment waits |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980bytes6files |
+
+Backend unchanged from21195f5a: prior final19/unit881/Harness94/native13 remain relevant; no
+blanket new full-unit/native run claimed for this renderer-only increment. Six new renderer flows
+cover actual registry/generated adapter user document replacement/review invalidation/history,
+unchanged original claims; stale target zero writes/exact retry; completed rerun full snapshots;
+late history/pending response isolation; same-document/unmanaged/unfinished refusal; long layouts.
+
+First focused4/5 exposed real pending propagation lag: inner saving status rendered before parent
+dropdown disabled. Moved pending update into submit before action.run; original assertion retained,
+focused5/5 then full38/38 passed. Screenshot containment check waits for real open disclosure end
+bounds before capture; CSS/motion tokens unchanged. Final additional wait changes affect only
+verification, final6/6 passed. Screenshots/audits/layout JSON under artifact-inspector-ui show
+light800/dark1099 fixed title, readable hashes/focused note/save, no horizontal overflow or hidden
+native disclosure headers; cut0. Frozen research-workflow fixtures remain unchanged.
+
+PR-06 source-locator/relation/review/invalidation/history/migration/replacement and readonly
+consumer integration is verified offline. PR-07 PDF coordinate-basis audit and implementation
+follow next; full plan remains incomplete. Earlier expanded P4/review-order defects and external
+scientific/client/L2 acceptance gaps remain recorded.

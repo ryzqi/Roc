@@ -108,7 +108,8 @@ export function ArtifactInspector({client, request, onClose, onOpenTask, onRevie
           <h2 className="font-medium text-ink">证据来源</h2>
           {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :
             snapshot.evidence.map(source => <ArtifactEvidenceSource key={`${snapshot.version}:${source.evidence.id}`}
-              client={client} source={source} canDecide={result?.status === 'current' && snapshot.projectStatus !== 'archived'}/>)}
+              client={client} source={source} canDecide={result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onChanged={() => {reading.save(); read.reload();}}/>)}
         </section>
         <Suspense fallback={<p role="status">正在加载证据关系…</p>}>
           <Relations key={snapshot.version} client={client} snapshot={snapshot} current={result?.status === 'current'}
